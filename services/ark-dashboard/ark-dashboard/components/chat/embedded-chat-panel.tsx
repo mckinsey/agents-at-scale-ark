@@ -353,7 +353,6 @@ function DebugStreamView({
       }
     }
 
-    console.log('No session ID found in data:', item);
     return 'unknown';
   };
 
