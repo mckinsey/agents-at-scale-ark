@@ -915,7 +915,7 @@ jobs:
           kubectl wait --for=condition=available -n ark-system --timeout=300s deployment/ark-controller
           kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
           kubectl wait --for=condition=ready pod -l app=ark-mcp -n default --timeout=120s
-          kubectl wait --for=condition=ready pod -l app=file-gateway -n default --timeout=120s
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=filesystem-mcp -n default --timeout=120s
 
       - name: Setup Python
         uses: actions/setup-python@v5
