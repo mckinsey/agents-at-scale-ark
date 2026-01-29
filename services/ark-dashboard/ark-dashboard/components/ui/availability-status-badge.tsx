@@ -1,9 +1,9 @@
 import Link from 'next/link';
 import type { ComponentProps } from 'react';
 
+import { Spinner } from '@/components/ui/spinner';
 import type { components } from '@/lib/api/generated/types';
 import { cn } from '@/lib/utils';
-import { Spinner } from '@/components/ui/spinner';
 
 export type AvailabilityStatus = components['schemas']['AvailabilityStatus'];
 
