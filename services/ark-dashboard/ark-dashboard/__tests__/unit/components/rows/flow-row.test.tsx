@@ -86,8 +86,9 @@ describe('FlowRow', () => {
     it('should create link to flow detail page', () => {
       render(<FlowRow flow={baseFlow} />);
 
-      const link = screen.getByRole('link');
-      expect(link).toHaveAttribute('href', '/workflow-templates/test-flow-123');
+      const links = screen.getAllByRole('link');
+      const detailPageLink = links.find(link => link.getAttribute('href')?.startsWith('/workflow-templates/'));
+      expect(detailPageLink).toHaveAttribute('href', '/workflow-templates/test-flow-123');
     });
   });
 
@@ -247,8 +248,9 @@ describe('FlowRow', () => {
       ).toBeInTheDocument();
       expect(screen.getByTestId('workflow-icon')).toBeInTheDocument();
 
-      const link = screen.getByRole('link');
-      expect(link).toHaveAttribute(
+      const links = screen.getAllByRole('link');
+      const detailPageLink = links.find(link => link.getAttribute('href')?.startsWith('/workflow-templates/'));
+      expect(detailPageLink).toHaveAttribute(
         'href',
         '/workflow-templates/complete-workflow-abc-123',
       );
@@ -265,8 +267,9 @@ describe('FlowRow', () => {
       expect(
         screen.getByText('flow-with_underscores-and.dots'),
       ).toBeInTheDocument();
-      const link = screen.getByRole('link');
-      expect(link).toHaveAttribute(
+      const links = screen.getAllByRole('link');
+      const detailPageLink = links.find(link => link.getAttribute('href')?.startsWith('/workflow-templates/'));
+      expect(detailPageLink).toHaveAttribute(
         'href',
         '/workflow-templates/flow-with_underscores-and.dots',
       );
