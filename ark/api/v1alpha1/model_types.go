@@ -1,4 +1,4 @@
-git checkout feat/aws-bedrock-augmented-crd -- services/ark-api/ark-api/src/ark_api/api/v1/models.py/* Copyright 2025. McKinsey & Company */
+/* Copyright 2025. McKinsey & Company */
 
 package v1alpha1
 
