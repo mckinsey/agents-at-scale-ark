@@ -131,31 +131,30 @@ Ark supports two storage backend configurations. Choose based on your scale and 
 
 The default Kubernetes-native deployment where Ark resources are stored in etcd alongside standard Kubernetes resources.
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         Kubernetes Cluster                              │
-│                                                                         │
-│    kubectl get queries              kubectl get pods                    │
-│         │                                │                              │
-│         └──────────────┬─────────────────┘                              │
-│                        ▼                                                │
-│         ┌──────────────────────────────┐                                │
-│         │       kube-apiserver         │                                │
-│         │                              │                                │
-│         │   All resources handled      │                                │
-│         │   by single API server       │                                │
-│         └──────────────┬───────────────┘                                │
-│                        │                                                │
-│                        ▼                                                │
-│         ┌──────────────────────────────┐      ┌─────────────────────┐   │
-│         │           etcd               │      │    Ark Controller   │   │
-│         │                              │◄────►│                     │   │
-│         │   • pods, services           │      │  • Reconciliation   │   │
-│         │   • deployments              │      │  • Query execution  │   │
-│         │   • queries, agents          │      │  • Webhooks         │   │
-│         │   • models, teams            │      └─────────────────────┘   │
-│         └──────────────────────────────┘                                │
-└─────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph cluster["Kubernetes Cluster"]
+        kubectl["kubectl"]
+
+        subgraph apiserver["kube-apiserver"]
+            api_desc["All resources handled<br/>by single API server"]
+        end
+
+        subgraph controller["Ark Controller"]
+            ctrl_reconcile["Reconciliation"]
+            ctrl_query["Query execution"]
+            ctrl_webhook["Webhooks"]
+        end
+
+        subgraph etcd_box["etcd"]
+            etcd_k8s["pods, services, deployments"]
+            etcd_ark["queries, agents, models, teams"]
+        end
+
+        kubectl --> apiserver
+        apiserver <--> controller
+        apiserver --> etcd_box
+    end
 ```
 
 **Characteristics:**
@@ -174,43 +173,39 @@ The default Kubernetes-native deployment where Ark resources are stored in etcd 
 
 Uses the Kubernetes aggregation layer to route Ark API requests to a dedicated API server backed by PostgreSQL.
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         Kubernetes Cluster                              │
-│                                                                         │
-│    kubectl get queries              kubectl get pods                    │
-│         │                                │                              │
-│         └──────────────┬─────────────────┘                              │
-│                        ▼                                                │
-│         ┌──────────────────────────────┐                                │
-│         │       kube-apiserver         │                                │
-│         │                              │                                │
-│         │   Routes ark.mckinsey.com    │                                │
-│         │   to aggregated API server   │                                │
-│         └───────┬──────────────┬───────┘                                │
-│                 │              │                                        │
-│     ┌───────────┘              └───────────┐                            │
-│     ▼                                      ▼                            │
-│  ┌──────────────────┐           ┌──────────────────────┐                │
-│  │      etcd        │           │   ark-apiserver      │                │
-│  │                  │           │   (aggregated)       │                │
-│  │  • pods          │           │                      │                │
-│  │  • services      │           │  • queries, agents   │                │
-│  │  • deployments   │           │  • models, teams     │                │
-│  │  • configmaps    │           │  • memories          │                │
-│  └──────────────────┘           └──────────┬───────────┘                │
-│                                            │                            │
-│                                            ▼                            │
-│                                 ┌──────────────────────┐                │
-│                                 │     PostgreSQL       │                │
-│  ┌─────────────────────┐        │                      │                │
-│  │   Ark Controller    │        │  • Keyset pagination │                │
-│  │                     │◄──────►│  • LISTEN/NOTIFY     │                │
-│  │  • Reconciliation   │        │  • SKIP LOCKED queue │                │
-│  │  • Query workers    │        │  • Composite indexes │                │
-│  │  • Webhooks         │        └──────────────────────┘                │
-│  └─────────────────────┘                                                │
-└─────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph cluster["Kubernetes Cluster"]
+        kubectl["kubectl"]
+
+        subgraph apiserver["kube-apiserver"]
+            api_desc["Routes ark.mckinsey.com<br/>to aggregated API server"]
+        end
+
+        subgraph controller["Ark Controller"]
+            ctrl_reconcile["Reconciliation"]
+            ctrl_workers["Query workers"]
+            ctrl_webhook["Webhooks"]
+        end
+
+        subgraph etcd_box["etcd"]
+            etcd_k8s["pods, services,<br/>deployments, configmaps"]
+        end
+
+        subgraph ark_api["ark-apiserver (aggregated)"]
+            ark_resources["queries, agents,<br/>models, teams, memories"]
+        end
+
+        subgraph postgres["PostgreSQL"]
+            pg_features["Keyset pagination<br/>LISTEN/NOTIFY<br/>SKIP LOCKED queue"]
+        end
+
+        kubectl --> apiserver
+        apiserver <--> controller
+        apiserver --> etcd_box
+        apiserver --> ark_api
+        ark_api --> postgres
+    end
 ```
 
 **Characteristics:**
