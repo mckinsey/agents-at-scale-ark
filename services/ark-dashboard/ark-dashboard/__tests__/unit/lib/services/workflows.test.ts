@@ -1,7 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { workflowsService } from '@/lib/services/workflows';
+import {
+  workflowsService,
+  calculateDuration,
+  getRootNodeId,
+  getAllNodesFlat,
+  buildNodeHierarchy,
+} from '@/lib/services/workflows';
 import { apiClient } from '@/lib/api/client';
-import type { ArgoWorkflow, ArgoWorkflowList } from '@/lib/types/argo-workflow';
+import type {
+  ArgoWorkflow,
+  ArgoWorkflowList,
+  ArgoNodeStatus,
+} from '@/lib/types/argo-workflow';
 
 vi.mock('@/lib/api/client', () => ({
   apiClient: {
@@ -286,57 +296,144 @@ describe('workflowsService', () => {
     });
   });
 
-  describe('submitFromTemplate', () => {
-    it('should submit workflow from template', async () => {
-      const mockWorkflow: ArgoWorkflow = {
-        metadata: { name: 'submitted-workflow', namespace: 'default' },
-        spec: {},
-        status: { phase: 'Pending' },
-      } as ArgoWorkflow;
+});
 
-      vi.mocked(apiClient.get).mockResolvedValue(mockWorkflow);
-
-      const result = await workflowsService.submitFromTemplate(
-        'my-template',
-        { param1: 'value1' }
-      );
-
-      expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/my-template/submit?namespace=default',
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          data: { param1: 'value1' },
-        }
-      );
-      expect(result).toEqual(mockWorkflow);
+describe('workflow utility functions', () => {
+  describe('calculateDuration', () => {
+    it('should return "Not started" when no start time', () => {
+      const result = calculateDuration();
+      expect(result).toBe('Not started');
     });
 
-    it('should submit workflow from template in custom namespace', async () => {
-      const mockWorkflow: ArgoWorkflow = {
-        metadata: { name: 'prod-workflow', namespace: 'prod' },
-        spec: {},
-        status: { phase: 'Running' },
+    it('should calculate duration in seconds', () => {
+      const start = new Date('2024-01-01T00:00:00Z');
+      const end = new Date('2024-01-01T00:00:30Z');
+
+      const result = calculateDuration(start.toISOString(), end.toISOString());
+      expect(result).toBe('30s');
+    });
+
+    it('should calculate duration in minutes and seconds', () => {
+      const start = new Date('2024-01-01T00:00:00Z');
+      const end = new Date('2024-01-01T00:02:30Z');
+
+      const result = calculateDuration(start.toISOString(), end.toISOString());
+      expect(result).toBe('2m 30s');
+    });
+
+    it('should calculate duration in hours and minutes', () => {
+      const start = new Date('2024-01-01T00:00:00Z');
+      const end = new Date('2024-01-01T03:15:00Z');
+
+      const result = calculateDuration(start.toISOString(), end.toISOString());
+      expect(result).toBe('3h 15m');
+    });
+
+    it('should calculate duration in days and hours', () => {
+      const start = new Date('2024-01-01T00:00:00Z');
+      const end = new Date('2024-01-03T05:00:00Z');
+
+      const result = calculateDuration(start.toISOString(), end.toISOString());
+      expect(result).toBe('2d 5h');
+    });
+
+    it('should use current time when no end time provided', () => {
+      const start = new Date(Date.now() - 5000);
+      const result = calculateDuration(start.toISOString());
+      expect(result).toMatch(/[0-9]+s/);
+    });
+  });
+
+  describe('getRootNodeId', () => {
+    it('should return workflow name as root node id', () => {
+      const workflow = {
+        metadata: { name: 'my-workflow', namespace: 'default' },
+        status: { nodes: { 'node-1': { id: 'node-1' } } },
       } as ArgoWorkflow;
 
-      vi.mocked(apiClient.get).mockResolvedValue(mockWorkflow);
+      const result = getRootNodeId(workflow);
+      expect(result).toBe('my-workflow');
+    });
 
-      await workflowsService.submitFromTemplate(
-        'prod-template',
-        { env: 'production' },
-        'prod'
-      );
+    it('should return null when no nodes', () => {
+      const workflow = {
+        metadata: { name: 'my-workflow', namespace: 'default' },
+        status: {},
+      } as ArgoWorkflow;
 
-      expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/prod-template/submit?namespace=prod',
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          data: { env: 'production' },
-        }
-      );
+      const result = getRootNodeId(workflow);
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('getAllNodesFlat', () => {
+    it('should return all nodes as flat array', () => {
+      const nodes = {
+        'node-1': { id: 'node-1', name: 'Node 1' } as ArgoNodeStatus,
+        'node-2': { id: 'node-2', name: 'Node 2' } as ArgoNodeStatus,
+        'node-3': { id: 'node-3', name: 'Node 3' } as ArgoNodeStatus,
+      };
+
+      const result = getAllNodesFlat(nodes);
+      expect(result).toHaveLength(3);
+      expect(result.map(n => n.id)).toEqual(['node-1', 'node-2', 'node-3']);
+    });
+
+    it('should return empty array for empty nodes', () => {
+      const result = getAllNodesFlat({});
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('buildNodeHierarchy', () => {
+    it('should return null for non-existent node', () => {
+      const nodes = {
+        'node-1': { id: 'node-1', name: 'Node 1' } as ArgoNodeStatus,
+      };
+
+      const result = buildNodeHierarchy(nodes, 'non-existent');
+      expect(result).toBeNull();
+    });
+
+    it('should build node without children', () => {
+      const nodes = {
+        'node-1': { id: 'node-1', name: 'Node 1' } as ArgoNodeStatus,
+      };
+
+      const result = buildNodeHierarchy(nodes, 'node-1');
+      expect(result).toEqual({ id: 'node-1', name: 'Node 1' });
+    });
+
+    it('should build node with children', () => {
+      const nodes = {
+        'root': {
+          id: 'root',
+          name: 'Root',
+          children: ['child-1', 'child-2']
+        } as ArgoNodeStatus,
+        'child-1': { id: 'child-1', name: 'Child 1' } as ArgoNodeStatus,
+        'child-2': { id: 'child-2', name: 'Child 2' } as ArgoNodeStatus,
+      };
+
+      const result = buildNodeHierarchy(nodes, 'root');
+      expect(result?.id).toBe('root');
+      expect(result?.children).toEqual(['child-1', 'child-2']);
+    });
+
+    it('should filter out non-existent children', () => {
+      const nodes = {
+        'root': {
+          id: 'root',
+          name: 'Root',
+          children: ['child-1', 'non-existent', 'child-2']
+        } as ArgoNodeStatus,
+        'child-1': { id: 'child-1', name: 'Child 1' } as ArgoNodeStatus,
+        'child-2': { id: 'child-2', name: 'Child 2' } as ArgoNodeStatus,
+      };
+
+      const result = buildNodeHierarchy(nodes, 'root');
+      expect(result?.children).toEqual(['child-1', 'child-2']);
     });
   });
 });
+
