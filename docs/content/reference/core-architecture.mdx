@@ -78,47 +78,48 @@ When a user creates an Ark resource (Query, Agent, Model, etc.), the Kubernetes 
 sequenceDiagram
     participant User
     participant KubeAPI as Kubernetes API
-    participant ArkAPI as Ark API Server<br/>(Aggregation Layer)
-    participant ArkDB as Ark Database
-    participant QueueWorker as Query Worker
+    participant ArkAPI as Embedded Ark API Server
+    participant ArkDB as PostgreSQL
+    participant Controller as Ark Controller
     participant Model as Model Provider
 
     Note over KubeAPI,ArkAPI: Kubernetes Aggregation Layer<br/>proxies ark.mckinsey.com requests
 
     User->>KubeAPI: Create Query
     KubeAPI->>ArkAPI: Forward to aggregated API
-    ArkAPI->>ArkDB: Insert Query + Queue item
+    ArkAPI->>ArkDB: Store Query
     ArkDB-->>ArkAPI: Stored
     ArkAPI-->>KubeAPI: Success
     KubeAPI-->>User: Query created
 
-    par Query Workers (Horizontal)
-        QueueWorker->>ArkDB: Dequeue (SELECT ... SKIP LOCKED)
-        ArkDB-->>QueueWorker: Query item
-        QueueWorker->>Model: LLM API call
-        Model-->>QueueWorker: Response
-        QueueWorker->>ArkAPI: Update Query status
-        ArkAPI->>ArkDB: Store result
-    and Other Workers
-        Note over QueueWorker: Multiple workers process<br/>queue items concurrently
-    end
+    Note over ArkDB,Controller: LISTEN/NOTIFY triggers watch event
+
+    ArkDB-->>Controller: Watch notification
+    Controller->>ArkAPI: Get Query details
+    ArkAPI->>ArkDB: Retrieve Query
+    ArkDB-->>ArkAPI: Query data
+    ArkAPI-->>Controller: Query data
+    Controller->>Model: LLM API call
+    Model-->>Controller: Response
+    Controller->>ArkAPI: Update Query status
+    ArkAPI->>ArkDB: Store result
 ```
 
-### Horizontal Scalability
+### Scalability
 
 The aggregated architecture enables:
 
-- **Ark Core replicas**: One leader (reconciliation), multiple non-leaders (webhooks, metrics, apiserver, query workers)
-- **Query workers**: Multiple workers dequeue and process queries concurrently using database-level locking
-- **Database replicas**: Postgres replication for read scalability
+- **Ark Core replicas**: One leader (reconciliation), multiple non-leaders (webhooks, metrics, embedded apiserver)
+- **Efficient storage**: PostgreSQL handles Ark resource storage more efficiently than etcd for large datasets
+- **Database replicas**: PostgreSQL replication for read scalability
 
 ### Benefits
 
 - **Kubernetes-native extension**: Uses standard Kubernetes aggregation layer pattern for seamless API integration
-- **Better scalability**: Postgres handles Ark resource storage more efficiently than etcd for large datasets
-- **Horizontal query processing**: Multiple query workers process queries concurrently from a shared queue
-- **Rich querying**: SQL indexes, triggers, foreign keys enable complex queries across conversations, sessions, messages, and chunks
-- **Enhanced observability**: Database schema supports advanced session UI and observability views
+- **Better scalability**: PostgreSQL handles Ark resource storage more efficiently than etcd for large datasets
+- **Efficient LIST operations**: Keyset pagination and indexes for fast queries
+- **Real-time watches**: PostgreSQL LISTEN/NOTIFY for efficient watch events
+- **Enhanced observability**: Database schema supports advanced observability views
 - **etcd relief**: Reduces load on etcd by storing only core Kubernetes resources
 
 ---
@@ -179,40 +180,37 @@ flowchart TB
         kubectl["kubectl"]
 
         subgraph apiserver["kube-apiserver"]
-            api_desc["Routes ark.mckinsey.com<br/>to aggregated API server"]
+            api_desc["Routes ark.mckinsey.com<br/>to embedded API server"]
         end
 
-        subgraph controller["Ark Controller"]
+        subgraph controller["Ark Controller Pod"]
             ctrl_reconcile["Reconciliation"]
-            ctrl_workers["Query workers"]
+            ctrl_query["Query execution"]
             ctrl_webhook["Webhooks"]
+            embedded_api["Embedded ark-apiserver<br/>(port 6443)"]
         end
 
         subgraph etcd_box["etcd"]
             etcd_k8s["pods, services,<br/>deployments, configmaps"]
         end
 
-        subgraph ark_api["ark-apiserver (aggregated)"]
-            ark_resources["queries, agents,<br/>models, teams, memories"]
-        end
-
         subgraph postgres["PostgreSQL"]
-            pg_features["Keyset pagination<br/>LISTEN/NOTIFY<br/>SKIP LOCKED queue"]
+            pg_features["Keyset pagination<br/>LISTEN/NOTIFY<br/>Soft deletes"]
         end
 
         kubectl --> apiserver
-        apiserver <--> controller
         apiserver --> etcd_box
-        apiserver --> ark_api
-        ark_api --> postgres
+        apiserver --> embedded_api
+        embedded_api --> postgres
+        ctrl_reconcile <--> embedded_api
     end
 ```
 
 **Characteristics:**
-- Dedicated storage for Ark resources
-- Horizontal query processing via worker pool
+- Dedicated storage for Ark resources in PostgreSQL
+- Embedded API server within controller pod
 - PostgreSQL LISTEN/NOTIFY for watch events
-- SKIP LOCKED for concurrent queue processing
+- Keyset pagination for efficient LIST operations
 
 **When to use:**
 - Large deployments (> 1,000 Ark resources)
@@ -254,16 +252,47 @@ Resources are fully compatible between configurations - the storage backend is t
 
 ## Implementation Status
 
-The aggregated architecture implementation is in progress:
+The aggregated architecture is fully implemented and ready for use:
 
 | Component | Status | Location |
 |-----------|--------|----------|
-| **Embedded API Server** | Library ready | `ark/internal/apiserver/` |
-| **PostgreSQL Storage** | Library ready | `ark/internal/storage/postgresql/` |
-| **SQLite Storage** | Library ready | `ark/internal/storage/sqlite/` |
+| **Embedded API Server** | Complete | `ark/internal/apiserver/` |
+| **PostgreSQL Storage** | Complete | `ark/internal/storage/postgresql/` |
+| **SQLite Storage** | Complete | `ark/internal/storage/sqlite/` |
 | **OpenAPI Schema Generation** | Complete | From embedded CRDs |
-| **Controller Integration** | Pending | `ark/cmd/main.go` |
-| **Helm Chart Configuration** | Pending | `ark/dist/chart/` |
+| **Controller Integration** | Complete | `ark/cmd/main.go` |
+| **Helm Chart Configuration** | Complete | `ark/dist/chart/` |
+
+### Enabling PostgreSQL Backend
+
+To deploy Ark with the PostgreSQL storage backend, configure the Helm values:
+
+```yaml
+storage:
+  backend: "postgresql"  # Options: "etcd" (default), "postgresql", "sqlite"
+  apiserver:
+    port: 6443
+  postgresql:
+    host: "postgresql.ark-system.svc.cluster.local"
+    port: 5432
+    database: "ark"
+    user: "ark"
+    passwordSecretName: "postgresql-credentials"
+    passwordSecretKey: "password"
+    sslMode: "disable"  # Options: disable, require, verify-ca, verify-full
+```
+
+Install with PostgreSQL backend:
+
+```bash
+helm install ark ./ark/dist/chart -n ark-system \
+  --set storage.backend=postgresql \
+  --set storage.postgresql.host=postgresql \
+  --set storage.postgresql.user=postgres \
+  --set storage.postgresql.passwordSecretName=postgresql-credentials
+```
+
+When using PostgreSQL backend, Ark CRDs are not installed (resources are stored in PostgreSQL instead of etcd). The embedded API server registers as a Kubernetes aggregated API server.
 
 ### Available Storage Backends
 

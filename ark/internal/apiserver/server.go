@@ -15,13 +15,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apiserver/pkg/endpoints/openapi"
 	genericrequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/rest"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	genericoptions "k8s.io/apiserver/pkg/server/options"
 	"k8s.io/apiserver/pkg/util/compatibility"
 	"k8s.io/klog/v2"
+	openapicommon "k8s.io/kube-openapi/pkg/common"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
@@ -115,6 +115,7 @@ func (s *Server) Start(ctx context.Context) error {
 	secureServing := genericoptions.NewSecureServingOptions().WithLoopback()
 	secureServing.BindPort = s.config.BindPort
 	secureServing.HTTP2MaxStreamsPerConnection = 1000
+	secureServing.ServerCert.CertDirectory = "/tmp/ark-apiserver-certs"
 
 	if err := secureServing.MaybeDefaultWithSelfSignedCerts("localhost", nil, nil); err != nil {
 		return fmt.Errorf("error creating self-signed certificates: %v", err)
@@ -128,13 +129,10 @@ func (s *Server) Start(ctx context.Context) error {
 		return true
 	}
 
-	namer := openapi.NewDefinitionNamer(Scheme)
-	serverConfig.OpenAPIConfig = genericapiserver.DefaultOpenAPIConfig(GetOpenAPIDefinitions, namer)
-	serverConfig.OpenAPIConfig.Info.Title = "Ark API"
-	serverConfig.OpenAPIConfig.Info.Version = "v1alpha1"
-	serverConfig.OpenAPIV3Config = genericapiserver.DefaultOpenAPIV3Config(GetOpenAPIDefinitions, namer)
-	serverConfig.OpenAPIV3Config.Info.Title = "Ark API"
-	serverConfig.OpenAPIV3Config.Info.Version = "v1alpha1"
+	serverConfig.OpenAPIV3Config = &openapicommon.OpenAPIV3Config{
+		GetDefinitions: GetOpenAPIDefinitions,
+	}
+	serverConfig.SkipOpenAPIInstallation = true
 
 	if err := secureServing.ApplyTo(&serverConfig.SecureServing, &serverConfig.LoopbackClientConfig); err != nil {
 		return err

@@ -114,3 +114,21 @@ customCACert:
   enabled: false
   secretName: "custom-ca-cert"
   key: "ca.crt"
+
+# [STORAGE]: Storage backend configuration for embedded API server
+# When backend is set to "postgresql" or "sqlite", an embedded API server is started
+# and Ark resources are stored in the configured database instead of etcd via CRDs.
+storage:
+  backend: "etcd"
+  apiserver:
+    port: 6443
+  sqlite:
+    path: "/data/ark.db"
+  postgresql:
+    host: ""
+    port: 5432
+    database: "ark"
+    user: ""
+    passwordSecretName: ""
+    passwordSecretKey: "password"
+    sslMode: "disable"

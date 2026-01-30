@@ -148,7 +148,7 @@ func (s *SQLiteBackend) List(ctx context.Context, kind, namespace string, opts s
 	}
 
 	query := `
-		SELECT resource_version, generation, name, uid, spec, status, labels, annotations, created_at
+		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, created_at
 		FROM resources
 		WHERE kind = ? AND deleted_at IS NULL
 	`
@@ -175,16 +175,16 @@ func (s *SQLiteBackend) List(ctx context.Context, kind, namespace string, opts s
 
 	for rows.Next() {
 		var rv, generation int64
-		var name, uid, spec, status, labels, annotations string
+		var ns, name, uid, spec, status, labels, annotations string
 		var createdAt time.Time
 
-		if err := rows.Scan(&rv, &generation, &name, &uid, &spec, &status, &labels, &annotations, &createdAt); err != nil {
+		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &createdAt); err != nil {
 			return nil, "", fmt.Errorf("failed to scan row: %w", err)
 		}
 
-		obj, err := s.reconstructObject(kind, namespace, name, rv, generation, uid, spec, status, labels, annotations, createdAt)
+		obj, err := s.reconstructObject(kind, ns, name, rv, generation, uid, spec, status, labels, annotations, createdAt)
 		if err != nil {
-			klog.Warningf("Failed to reconstruct object %s/%s: %v", namespace, name, err)
+			klog.Warningf("Failed to reconstruct object %s/%s: %v", ns, name, err)
 			continue
 		}
 
