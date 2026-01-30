@@ -27,13 +27,14 @@ dependencies = [
     "urllib3>=2.6.0",
     "pytest-asyncio>=1.3.0",
     "ark-sdk",
+    "protobuf>=6.33.4",
 ]
 
 [tool.uv]
 package = true
 
 [tool.uv.sources]
-ark-sdk = { path = "../../../out/ark-sdk/py-sdk/dist/ark_sdk-0.1.49-py3-none-any.whl" }
+ark-sdk = { path = "out/ark_sdk-0.1.50-py3-none-any.whl" }
 
 [tool.coverage.run]
 data_file = "coverage/.coverage"

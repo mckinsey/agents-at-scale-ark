@@ -76,6 +76,10 @@ export class EventBroker {
     return this.stream.paginate(params, item => item.data.data.queryId === queryId);
   }
 
+  paginateBySessionId(sessionId: string, params: PaginationParams): PaginatedList<BrokerItem<EventData>> {
+    return this.stream.paginate(params, item => item.data.data.sessionId === sessionId);
+  }
+
   getCurrentSequence(): number {
     return this.stream.getCurrentSequence();
   }

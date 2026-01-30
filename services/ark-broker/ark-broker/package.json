@@ -19,7 +19,7 @@
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
     "cors": "^2.8.5",
-    "express": "^4.21.2",
+    "express": "^5.2.1",
     "protobufjs": "^8.0.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
@@ -28,7 +28,7 @@
   "devDependencies": {
     "@eslint/js": "^9.17.0",
     "@types/cors": "^2.8.17",
-    "@types/express": "^5.0.0",
+    "@types/express": "^5.0.6",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.0.0",
     "@types/supertest": "^6.0.2",

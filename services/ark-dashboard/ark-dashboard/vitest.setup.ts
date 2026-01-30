@@ -22,6 +22,24 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 });
 
+// Mock Element.prototype.hasPointerCapture for Radix UI components
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = vi.fn(() => false);
+}
+
+if (!Element.prototype.setPointerCapture) {
+  Element.prototype.setPointerCapture = vi.fn();
+}
+
+if (!Element.prototype.releasePointerCapture) {
+  Element.prototype.releasePointerCapture = vi.fn();
+}
+
+// Mock scrollIntoView for Radix UI Select component
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = vi.fn();
+}
+
 // Mock IntersectionObserver
 global.IntersectionObserver = class IntersectionObserver {
   root: Element | null = null;

@@ -18,6 +18,7 @@ dependencies = [
     "httpx>=0.25.0",
     "click>=8.0.0",
     "urllib3>=2.6.0",
+    "protobuf>=6.33.4",
 ]
 
 [tool.setuptools.packages.find]

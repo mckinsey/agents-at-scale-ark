@@ -159,6 +159,14 @@ func (ap *AzureProvider) createClient(ctx context.Context) openai.Client {
 	return openai.NewClient(options...)
 }
 
+func (ap *AzureProvider) HealthCheck(ctx context.Context) error {
+	// Azure OpenAI deployments don't support the /models endpoint
+	// Instead, make a minimal chat completion request to verify the deployment is accessible
+	testMessages := []Message{NewUserMessage("test")}
+	_, err := ap.ChatCompletion(ctx, testMessages, 1)
+	return err
+}
+
 func (ap *AzureProvider) BuildConfig() map[string]any {
 	config := map[string]any{
 		"baseUrl": ap.BaseURL,

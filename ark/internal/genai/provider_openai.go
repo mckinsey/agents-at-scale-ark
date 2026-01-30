@@ -28,6 +28,12 @@ func (op *OpenAIProvider) SetOutputSchema(schema *runtime.RawExtension, schemaNa
 	op.schemaName = schemaName
 }
 
+func (op *OpenAIProvider) HealthCheck(ctx context.Context) error {
+	client := op.createClient(ctx)
+	_, err := client.Models.List(ctx)
+	return err
+}
+
 func (op *OpenAIProvider) ChatCompletion(ctx context.Context, messages []Message, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
 	openaiMessages := make([]openai.ChatCompletionMessageParamUnion, len(messages))
 	for i, msg := range messages {
