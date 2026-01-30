@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -159,9 +160,21 @@ func (s *SQLiteBackend) List(ctx context.Context, kind, namespace string, opts s
 		args = append(args, namespace)
 	}
 
+	if opts.Continue != "" {
+		cursor, err := strconv.ParseInt(opts.Continue, 10, 64)
+		if err == nil && cursor > 0 {
+			query += " AND resource_version < ?"
+			args = append(args, cursor)
+		}
+	}
+
+	query += " ORDER BY resource_version DESC"
+
+	fetchLimit := opts.Limit
 	if opts.Limit > 0 {
-		query += " ORDER BY resource_version DESC LIMIT ?"
-		args = append(args, opts.Limit)
+		fetchLimit = opts.Limit + 1
+		query += " LIMIT ?"
+		args = append(args, fetchLimit)
 	}
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -171,7 +184,7 @@ func (s *SQLiteBackend) List(ctx context.Context, kind, namespace string, opts s
 	defer func() { _ = rows.Close() }()
 
 	var objects []runtime.Object
-	var lastRV int64
+	var resourceVersions []int64
 
 	for rows.Next() {
 		var rv, generation int64
@@ -189,12 +202,17 @@ func (s *SQLiteBackend) List(ctx context.Context, kind, namespace string, opts s
 		}
 
 		objects = append(objects, obj)
-		if rv > lastRV {
-			lastRV = rv
-		}
+		resourceVersions = append(resourceVersions, rv)
 	}
 
-	return objects, fmt.Sprintf("%d", lastRV), nil
+	var continueToken string
+	if opts.Limit > 0 && int64(len(objects)) > opts.Limit {
+		objects = objects[:opts.Limit]
+		resourceVersions = resourceVersions[:opts.Limit]
+		continueToken = fmt.Sprintf("%d", resourceVersions[len(resourceVersions)-1])
+	}
+
+	return objects, continueToken, nil
 }
 
 func (s *SQLiteBackend) Update(ctx context.Context, kind, namespace, name string, obj runtime.Object) error {

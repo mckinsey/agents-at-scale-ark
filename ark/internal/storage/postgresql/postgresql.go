@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -281,11 +282,22 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 		argIndex++
 	}
 
+	if opts.Continue != "" {
+		cursor, err := strconv.ParseInt(opts.Continue, 10, 64)
+		if err == nil && cursor > 0 {
+			query += fmt.Sprintf(" AND resource_version < $%d", argIndex)
+			args = append(args, cursor)
+			argIndex++
+		}
+	}
+
 	query += " ORDER BY resource_version DESC"
 
+	fetchLimit := opts.Limit
 	if opts.Limit > 0 {
+		fetchLimit = opts.Limit + 1
 		query += fmt.Sprintf(" LIMIT $%d", argIndex)
-		args = append(args, opts.Limit)
+		args = append(args, fetchLimit)
 	}
 
 	rows, err := p.db.QueryContext(ctx, query, args...)
@@ -295,7 +307,7 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 	defer func() { _ = rows.Close() }()
 
 	var objects []runtime.Object
-	var lastRV int64
+	var resourceVersions []int64
 
 	for rows.Next() {
 		var rv, generation int64
@@ -314,12 +326,17 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 		}
 
 		objects = append(objects, obj)
-		if rv > lastRV {
-			lastRV = rv
-		}
+		resourceVersions = append(resourceVersions, rv)
 	}
 
-	return objects, fmt.Sprintf("%d", lastRV), nil
+	var continueToken string
+	if opts.Limit > 0 && int64(len(objects)) > opts.Limit {
+		objects = objects[:opts.Limit]
+		resourceVersions = resourceVersions[:opts.Limit]
+		continueToken = fmt.Sprintf("%d", resourceVersions[len(resourceVersions)-1])
+	}
+
+	return objects, continueToken, nil
 }
 
 func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name string, obj runtime.Object) error {
