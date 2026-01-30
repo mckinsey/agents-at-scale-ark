@@ -268,7 +268,7 @@ func (p *PostgreSQLBackend) Get(ctx context.Context, kind, namespace, name strin
 
 func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, opts storage.ListOptions) ([]runtime.Object, string, error) {
 	query := `
-		SELECT resource_version, generation, name, uid, spec, status, labels, annotations, created_at
+		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, created_at
 		FROM resources
 		WHERE kind = $1 AND deleted_at IS NULL
 	`
@@ -299,17 +299,17 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 
 	for rows.Next() {
 		var rv, generation int64
-		var name, uid string
+		var ns, name, uid string
 		var spec, status, labels, annotations []byte
 		var createdAt time.Time
 
-		if err := rows.Scan(&rv, &generation, &name, &uid, &spec, &status, &labels, &annotations, &createdAt); err != nil {
+		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &createdAt); err != nil {
 			return nil, "", fmt.Errorf("failed to scan row: %w", err)
 		}
 
-		obj, err := p.reconstructObject(kind, namespace, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), createdAt)
+		obj, err := p.reconstructObject(kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), createdAt)
 		if err != nil {
-			klog.Warningf("Failed to reconstruct object %s/%s: %v", namespace, name, err)
+			klog.Warningf("Failed to reconstruct object %s/%s: %v", ns, name, err)
 			continue
 		}
 
