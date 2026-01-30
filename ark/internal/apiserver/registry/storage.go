@@ -289,7 +289,7 @@ func getNamespace(ctx context.Context) string {
 	return "default"
 }
 
-func setListItems(list runtime.Object, objects []runtime.Object, resourceVersion string) error {
+func setListItems(list runtime.Object, objects []runtime.Object, continueToken string) error {
 	if err := meta.SetList(list, objects); err != nil {
 		return fmt.Errorf("failed to set list items: %w", err)
 	}
@@ -297,6 +297,17 @@ func setListItems(list runtime.Object, objects []runtime.Object, resourceVersion
 	if err != nil {
 		return fmt.Errorf("failed to access list metadata: %w", err)
 	}
-	accessor.SetResourceVersion(resourceVersion)
+	var maxRV string
+	for _, obj := range objects {
+		if objMeta, err := meta.Accessor(obj); err == nil {
+			if rv := objMeta.GetResourceVersion(); rv > maxRV {
+				maxRV = rv
+			}
+		}
+	}
+	accessor.SetResourceVersion(maxRV)
+	if continueToken != "" {
+		accessor.SetContinue(continueToken)
+	}
 	return nil
 }
