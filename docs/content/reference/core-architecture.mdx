@@ -249,3 +249,44 @@ Migrating from etcd to PostgreSQL configuration:
 5. Verify watch events and controller reconciliation
 
 Resources are fully compatible between configurations - the storage backend is transparent to clients using `kubectl` or the Kubernetes API.
+
+---
+
+## Implementation Status
+
+The aggregated architecture implementation is in progress:
+
+| Component | Status | Location |
+|-----------|--------|----------|
+| **Embedded API Server** | Library ready | `ark/internal/apiserver/` |
+| **PostgreSQL Storage** | Library ready | `ark/internal/storage/postgresql/` |
+| **SQLite Storage** | Library ready | `ark/internal/storage/sqlite/` |
+| **OpenAPI Schema Generation** | Complete | From embedded CRDs |
+| **Controller Integration** | Pending | `ark/cmd/main.go` |
+| **Helm Chart Configuration** | Pending | `ark/dist/chart/` |
+
+### Available Storage Backends
+
+Both storage backends implement the same interface (`ark/internal/storage/interface.go`):
+
+```go
+type Storage interface {
+    Create(ctx context.Context, obj runtime.Object) error
+    Get(ctx context.Context, name, namespace string, obj runtime.Object) error
+    List(ctx context.Context, namespace string, opts *metav1.ListOptions, listObj runtime.Object) error
+    Update(ctx context.Context, obj runtime.Object) error
+    Delete(ctx context.Context, name, namespace string) error
+    Watch(ctx context.Context, namespace string, opts *metav1.ListOptions) (watch.Interface, error)
+}
+```
+
+**PostgreSQL features:**
+- Keyset pagination for efficient LIST operations
+- LISTEN/NOTIFY for real-time watch events
+- Composite indexes for fast queries
+- Connection pooling
+
+**SQLite features:**
+- Zero-configuration local development
+- Single-file database
+- WAL mode for concurrent reads
