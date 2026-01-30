@@ -2,11 +2,8 @@
 
 import {
   ArrowLeft,
-  Check,
   CircleAlert,
   Code,
-  Copy,
-  Download,
   FileText,
   PanelLeftClose,
   PanelLeftOpen,
@@ -15,9 +12,10 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
+import { AgentYamlView } from '@/components/forms/agent-form/agent-yaml-view';
 import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { Button } from '@/components/ui/button';
@@ -65,7 +63,6 @@ export function AgentForm({
   const [allAgents, setAllAgents] = useState<Agent[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
   const [showYaml, setShowYaml] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   const isViewing = mode === AgentFormMode.VIEW;
 
@@ -115,103 +112,6 @@ export function AgentForm({
   const isEditing = mode === AgentFormMode.EDIT;
   const isDisabled = form.formState.isSubmitting;
   const hasUnavailableTools = unavailableTools.length > 0;
-
-  const agentYaml = useMemo(() => {
-    if (!agent) return '';
-
-    const selectedToolsList = availableTools.filter(t =>
-      state.selectedTools.some(st => st.name === t.name),
-    );
-
-    const lines: string[] = [
-      'apiVersion: ark.mckinsey.com/v1alpha1',
-      'kind: Agent',
-      'metadata:',
-      `  name: ${agent.name}`,
-      `  namespace: ${agent.namespace}`,
-      'spec:',
-    ];
-
-    if (descriptionValue) {
-      lines.push(`  description: ${descriptionValue}`);
-    }
-
-    if (modelNameValue && modelNameValue !== '__none__') {
-      lines.push('  modelRef:');
-      lines.push(`    name: ${modelNameValue}`);
-      if (modelNamespaceValue) {
-        lines.push(`    namespace: ${modelNamespaceValue}`);
-      }
-    }
-
-    if (promptValue) {
-      lines.push('  prompt: |');
-      promptValue.split('\n').forEach(line => {
-        lines.push(`    ${line}`);
-      });
-    }
-
-    if (parameters.length > 0) {
-      lines.push('  parameters:');
-      parameters.forEach(param => {
-        lines.push(`    - name: ${param.name}`);
-        if (param.value) {
-          lines.push(`      value: ${param.value}`);
-        }
-      });
-    }
-
-    if (selectedToolsList.length > 0) {
-      lines.push('  tools:');
-      selectedToolsList.forEach(tool => {
-        lines.push(`    - type: custom`);
-        lines.push(`      name: ${tool.name}`);
-      });
-    }
-
-    return lines.join('\n');
-  }, [
-    agent,
-    descriptionValue,
-    modelNameValue,
-    modelNamespaceValue,
-    promptValue,
-    parameters,
-    availableTools,
-    state.selectedTools,
-  ]);
-
-  const handleCopyYaml = () => {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(agentYaml).then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      });
-    } else {
-      const textArea = document.createElement('textarea');
-      textArea.value = agentYaml;
-      textArea.style.position = 'fixed';
-      textArea.style.left = '-9999px';
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const handleDownloadYaml = () => {
-    const blob = new Blob([agentYaml], { type: 'text/yaml' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${agent?.name || 'agent'}.yaml`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
 
   if (loading) {
     return (
@@ -336,33 +236,16 @@ export function AgentForm({
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto">
                   {showYaml ? (
-                    <div className="relative h-full">
-                      <div className="absolute top-2 right-4 z-10 flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleCopyYaml}
-                          className="h-7 gap-1 px-2 text-xs">
-                          {copied ? (
-                            <Check className="h-3 w-3" />
-                          ) : (
-                            <Copy className="h-3 w-3" />
-                          )}
-                          {copied ? 'Copied' : 'Copy'}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleDownloadYaml}
-                          className="h-7 gap-1 px-2 text-xs">
-                          <Download className="h-3 w-3" />
-                          Download
-                        </Button>
-                      </div>
-                      <pre className="bg-muted/30 h-full overflow-auto p-4 pt-10 font-mono text-xs">
-                        {agentYaml}
-                      </pre>
-                    </div>
+                    <AgentYamlView
+                      agent={agent}
+                      description={descriptionValue}
+                      modelName={modelNameValue}
+                      modelNamespace={modelNamespaceValue}
+                      prompt={promptValue}
+                      parameters={parameters}
+                      availableTools={availableTools}
+                      selectedTools={state.selectedTools}
+                    />
                   ) : (
                     <div className="space-y-4 p-4">
                       <Form {...form}>
