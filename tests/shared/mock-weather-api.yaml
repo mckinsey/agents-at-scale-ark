@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mock-weather-config
+data:
+  expectations.json: |
+    [
+      {
+        "httpRequest": {
+          "method": "GET",
+          "path": "/v1/forecast",
+          "queryStringParameters": {
+            "latitude": [".*"],
+            "longitude": [".*"],
+            "current_weather": ["true"]
+          }
+        },
+        "httpResponse": {
+          "statusCode": 200,
+          "headers": {
+            "Content-Type": ["application/json"]
+          },
+          "body": {
+            "type": "JSON",
+            "json": {
+              "latitude": 40.71,
+              "longitude": -74.01,
+              "current_weather": {
+                "temperature": 72.0,
+                "windspeed": 10.5,
+                "winddirection": 270,
+                "weathercode": 1,
+                "time": "2024-01-15T12:00"
+              },
+              "current_weather_units": {
+                "temperature": "°F",
+                "windspeed": "mph",
+                "winddirection": "°",
+                "weathercode": "wmo code",
+                "time": "iso8601"
+              }
+            }
+          }
+        }
+      }
+    ]
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-weather-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-weather-api
+  template:
+    metadata:
+      labels:
+        app: mock-weather-api
+    spec:
+      containers:
+      - name: mock-server
+        image: mockserver/mockserver:5.15.0
+        ports:
+        - containerPort: 1080
+        env:
+        - name: MOCKSERVER_LOG_LEVEL
+          value: INFO
+        - name: MOCKSERVER_INITIALIZATION_JSON_PATH
+          value: /config/expectations.json
+        volumeMounts:
+        - name: config
+          mountPath: /config
+      volumes:
+      - name: config
+        configMap:
+          name: mock-weather-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-weather-api
+spec:
+  selector:
+    app: mock-weather-api
+  ports:
+  - port: 80
+    targetPort: 1080

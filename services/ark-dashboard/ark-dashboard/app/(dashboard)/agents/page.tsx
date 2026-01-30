@@ -1,6 +1,7 @@
 'use client';
 
 import { Code, Plus } from 'lucide-react';
+import Link from 'next/link';
 import { useRef } from 'react';
 
 import type { BreadcrumbElement } from '@/components/common/page-header';
@@ -33,9 +34,11 @@ export default function AgentsPage() {
               <Code className="h-4 w-4" />
               Use via API
             </Button>
-            <Button onClick={() => agentsSectionRef.current?.openAddEditor()}>
-              <Plus className="h-4 w-4" />
-              Create Agent
+            <Button asChild>
+              <Link href="/agents/new">
+                <Plus className="h-4 w-4" />
+                Create Agent
+              </Link>
             </Button>
           </div>
         }

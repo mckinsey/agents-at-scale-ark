@@ -1,0 +1,84 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mock-geocoding-config
+data:
+  expectations.json: |
+    [
+      {
+        "httpRequest": {
+          "method": "GET",
+          "path": "/v1/search",
+          "queryStringParameters": {
+            "name": [".*"],
+            "count": ["1"]
+          }
+        },
+        "httpResponse": {
+          "statusCode": 200,
+          "headers": {
+            "Content-Type": ["application/json"]
+          },
+          "body": {
+            "type": "JSON",
+            "json": {
+              "results": [
+                {
+                  "id": 5128581,
+                  "name": "New York",
+                  "latitude": 40.71427,
+                  "longitude": -74.00597,
+                  "country": "United States",
+                  "admin1": "New York"
+                }
+              ]
+            }
+          }
+        }
+      }
+    ]
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-geocoding-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-geocoding-api
+  template:
+    metadata:
+      labels:
+        app: mock-geocoding-api
+    spec:
+      containers:
+      - name: mock-server
+        image: mockserver/mockserver:5.15.0
+        ports:
+        - containerPort: 1080
+        env:
+        - name: MOCKSERVER_LOG_LEVEL
+          value: INFO
+        - name: MOCKSERVER_INITIALIZATION_JSON_PATH
+          value: /config/expectations.json
+        volumeMounts:
+        - name: config
+          mountPath: /config
+      volumes:
+      - name: config
+        configMap:
+          name: mock-geocoding-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-geocoding-api
+spec:
+  selector:
+    app: mock-geocoding-api
+  ports:
+  - port: 80
+    targetPort: 1080

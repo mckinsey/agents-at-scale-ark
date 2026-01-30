@@ -28,18 +28,27 @@ vi.mock('@/components/sections/agents-section', () => {
     AgentsSection: React.forwardRef(
       (
         _props: object,
-        ref: React.ForwardedRef<{ openAddEditor: () => void; openApiDialog: () => void }>,
+        ref: React.ForwardedRef<{
+          openAddEditor: () => void;
+          openApiDialog: () => void;
+        }>,
       ) => {
         if (ref && typeof ref === 'object') {
-          (ref as React.MutableRefObject<{
-            openAddEditor: () => void;
-            openApiDialog: () => void;
-          }>).current = {
+          (
+            ref as React.MutableRefObject<{
+              openAddEditor: () => void;
+              openApiDialog: () => void;
+            }>
+          ).current = {
             openAddEditor: mockOpenAddEditor,
             openApiDialog: mockOpenApiDialog,
           };
         }
-        return React.createElement('div', { 'data-testid': 'agents-section' }, 'Agents Section');
+        return React.createElement(
+          'div',
+          { 'data-testid': 'agents-section' },
+          'Agents Section',
+        );
       },
     ),
   };
@@ -79,20 +88,16 @@ describe('AgentsPage', () => {
 
     const apiButton = screen.getByRole('button', { name: /Use via API/i });
     expect(apiButton).toBeInTheDocument();
-    
+
     await user.click(apiButton);
     expect(mockOpenApiDialog).toHaveBeenCalled();
   });
 
-  it('should call openAddEditor when "Create Agent" button is clicked', async () => {
-    const user = userEvent.setup();
+  it('should navigate to "Create Agent" page when "Create Agent" button is clicked', async () => {
     render(<AgentsPage />);
 
-    const createButton = screen.getByRole('button', { name: /Create Agent/i });
+    const createButton = screen.getByRole('link', { name: /Create Agent/i });
     expect(createButton).toBeInTheDocument();
-    
-    await user.click(createButton);
-    expect(mockOpenAddEditor).toHaveBeenCalled();
+    expect(createButton).toHaveAttribute('href', '/agents/new');
   });
 });
-

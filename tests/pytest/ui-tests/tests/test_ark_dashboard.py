@@ -33,7 +33,7 @@ class TestArkDashboard:
     ])
     def test_dashboard_tabs_navigation(self, page: Page, tab_name: str, tab_selector: str, button_selector: str):
         dashboard = DashboardPage(page)
-        page.goto("http://localhost:3274")
+        dashboard.navigate_to_dashboard()
         dashboard.wait_for_load_state("domcontentloaded")
         dashboard.wait_for_timeout(1000)
         
