@@ -1,11 +1,12 @@
 'use client';
 
-import { useAtomValue } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import {
   AlertCircle,
   Expand,
   MessageCircle,
   Minus,
+  RotateCcw,
   Send,
   Shrink,
   Square,
@@ -15,12 +16,14 @@ import type {
   ChatCompletionChunk,
   ChatCompletionMessageParam,
 } from 'openai/resources/chat/completions';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { chatHistoryAtom, createNewSessionId } from '@/atoms/chat-history';
 import {
   isChatStreamingEnabledAtom,
   queryTimeoutSettingAtom,
 } from '@/atoms/experimental-features';
+import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { ChatMessage } from '@/components/chat/chat-message';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -54,16 +57,68 @@ export default function FloatingChat({
   position,
   onClose,
 }: FloatingChatProps) {
-  const [chatMessages, setChatMessages] = useState<
-    ChatCompletionMessageParam[]
-  >([]);
+  const [chatHistory, setChatHistory] = useAtom(chatHistoryAtom);
+  const [lastConversationId, setLastConversationId] = useAtom(
+    lastConversationIdAtom,
+  );
+  const chatKey = `${type}-${name}`;
+
+  const initSessionIdRef = useRef<string>(
+    lastConversationId || createNewSessionId(),
+  );
+
+  const chatSession = useMemo(() => {
+    const existing = chatHistory?.[chatKey];
+    if (existing?.messages !== undefined && existing?.sessionId) {
+      return existing;
+    }
+    return { messages: [], sessionId: initSessionIdRef.current };
+  }, [chatHistory, chatKey]);
+
+  const chatMessages = chatSession.messages;
+  const sessionId = chatSession.sessionId;
+
+  useEffect(() => {
+    if (!chatHistory?.[chatKey]) {
+      const sessionIdToUse = initSessionIdRef.current;
+      setLastConversationId(sessionIdToUse);
+      setChatHistory(prev => ({
+        ...(prev || {}),
+        [chatKey]: { messages: [], sessionId: sessionIdToUse },
+      }));
+    }
+  }, [chatKey, chatHistory, setChatHistory, setLastConversationId]);
+
+  const updateChatMessages = useCallback(
+    (
+      updater:
+        | ChatCompletionMessageParam[]
+        | ((
+            prev: ChatCompletionMessageParam[],
+          ) => ChatCompletionMessageParam[]),
+    ) => {
+      setChatHistory(prev => {
+        const safePrev = prev || {};
+        const currentSession = safePrev[chatKey];
+        if (!currentSession) return safePrev;
+        const currentMessages = currentSession.messages || [];
+        const newMessages =
+          typeof updater === 'function' ? updater(currentMessages) : updater;
+        return {
+          ...safePrev,
+          [chatKey]: { ...currentSession, messages: newMessages },
+        };
+      });
+    },
+    [chatKey, setChatHistory],
+  );
+
   const [currentMessage, setCurrentMessage] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [windowState, setWindowState] = useState<WindowState>('default');
   const [viewMode, setViewMode] = useState<'text' | 'markdown'>('markdown');
   const [debugMode, setDebugMode] = useState(true);
-  const [sessionId] = useState(() => `session-${Date.now()}`);
   const inputRef = useRef<HTMLInputElement>(null);
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
   const queryTimeout = useAtomValue(queryTimeoutSettingAtom);
@@ -111,7 +166,7 @@ export default function FloatingChat({
 
     // Add empty assistant message that will be updated with streamed content
     const assistantMessageIndex = chatMessages.length + 1; // +1 for user message already added
-    setChatMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+    updateChatMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
     let accumulatedContent = '';
     const accumulatedToolCalls: Array<{
@@ -157,7 +212,7 @@ export default function FloatingChat({
           }
         }
       }
-      setChatMessages(prev => {
+      updateChatMessages(prev => {
         const updated = [...prev];
         updated[assistantMessageIndex] = {
           role: 'assistant',
@@ -171,7 +226,7 @@ export default function FloatingChat({
     // After streaming completes, add tool messages (OpenAI format)
     // These won't be displayed but they will be part of the history
     if (accumulatedToolCalls.length > 0) {
-      setChatMessages(prev => {
+      updateChatMessages(prev => {
         const newMessages = [...prev];
         // Add a tool message for each tool call
         accumulatedToolCalls.forEach(toolCall => {
@@ -191,7 +246,7 @@ export default function FloatingChat({
 
     // Add empty assistant message that will be updated with streamed content
     // const assistantMessageIndex = chatMessages.length + 1; // +1 for user message already added
-    // setChatMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+    // updateChatMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
     const query = await chatService.submitChatQuery(
       messageArray,
@@ -223,7 +278,7 @@ export default function FloatingChat({
             content = 'Query status unknown';
           }
 
-          setChatMessages(prev => [...prev, { role: 'assistant', content }]);
+          updateChatMessages(prev => [...prev, { role: 'assistant', content }]);
 
           pollingStopped = true;
           break;
@@ -231,7 +286,7 @@ export default function FloatingChat({
       } catch (err) {
         console.error('Error polling query status:', err);
 
-        setChatMessages(prev => [
+        updateChatMessages(prev => [
           ...prev,
           { role: 'assistant', content: 'Error while processing query' },
         ]);
@@ -263,7 +318,10 @@ export default function FloatingChat({
     });
 
     // Add user message
-    setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    updateChatMessages(prev => [
+      ...prev,
+      { role: 'user', content: userMessage },
+    ]);
 
     // Keep focus on input
     inputRef.current?.focus();
@@ -302,6 +360,17 @@ export default function FloatingChat({
       handleSendMessage();
     }
   };
+
+  const handleClearChat = useCallback(() => {
+    const newSessionId = createNewSessionId();
+    initSessionIdRef.current = newSessionId;
+    setLastConversationId(newSessionId);
+    setChatHistory(prev => ({
+      ...(prev || {}),
+      [chatKey]: { messages: [], sessionId: newSessionId },
+    }));
+    setError(null);
+  }, [chatKey, setChatHistory, setLastConversationId]);
 
   // Calculate position - each window is 420px wide (400px + 20px gap)
   const rightPosition = 16 + position * 420;
@@ -572,6 +641,15 @@ export default function FloatingChat({
                     className="text-muted-foreground cursor-pointer text-sm">
                     Show tool calls
                   </label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleClearChat}
+                    className="ml-auto h-7 gap-1 px-2 text-xs"
+                    disabled={isProcessing || chatMessages.length === 0}>
+                    <RotateCcw className="h-3 w-3" />
+                    New Chat
+                  </Button>
                 </div>
               </div>
             </div>

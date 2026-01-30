@@ -209,10 +209,22 @@ func extractQueryAttributesFromContext(ctx context.Context) []attribute.KeyValue
 		return nil
 	}
 
-	return []attribute.KeyValue{
+	attrs := []attribute.KeyValue{
 		attribute.String(telemetry.AttrQueryName, query.Name),
 		attribute.String(telemetry.AttrQueryNamespace, query.Namespace),
 	}
+
+	sessionID := query.Spec.SessionId
+	if sessionID == "" {
+		sessionID = string(query.UID)
+	}
+	attrs = append(attrs, attribute.String(telemetry.AttrSessionID, sessionID))
+
+	if conversationID := query.Status.ConversationId; conversationID != "" {
+		attrs = append(attrs, attribute.String(telemetry.AttrConversationID, conversationID))
+	}
+
+	return attrs
 }
 
 func getQueryFromContext(ctx context.Context) *arkv1alpha1.Query {

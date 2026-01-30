@@ -8,11 +8,11 @@ logger = logging.getLogger(__name__)
 
 class AgentsPage(BasePage):
     
-    ADD_AGENT_BUTTON = "button:has-text('Add Agent'), button:has-text('Create Agent'), button:has-text('New Agent'), a:has-text('Add Agent')"
+    ADD_AGENT_BUTTON = "a[href='/agents/new']:has-text('Create Agent'), button:has-text('Create Agent'), button:has-text('Add Agent'), button:has-text('New Agent'), a:has-text('Add Agent')"
     AGENT_NAME_INPUT = "input[name='name'], input[placeholder*='name' i]"
     AGENT_DESCRIPTION_INPUT = "textarea[name='description'], textarea[placeholder*='description' i], input[name='description']"
     MODEL_SELECT = "select, [role='combobox'], button:has-text('Select')"
-    SAVE_BUTTON = "button:has-text('Add Agent'), button:has-text('Create'), button:has-text('Save'), button[type='submit']"
+    SAVE_BUTTON = "button:has-text('Create Agent'), button:has-text('Save Changes'), button:has-text('Add Agent'), button:has-text('Create'), button:has-text('Save'), button[type='submit']"
     SUCCESS_POPUP = "[role='alert'], [role='status'], .notification, .toast, div:has-text('success'), div:has-text('Success'), div:has-text('created'), div:has-text('Created'), div:has-text('deleted'), div:has-text('Deleted')"
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
     CONFIRM_DELETE_BUTTON = "button:has-text('Delete'), button:has-text('Confirm'), button:has-text('Yes')"
@@ -249,13 +249,15 @@ class AgentsPage(BasePage):
         
         self.wait_for_timeout(1000)
         
-        save_button = self.page.locator("[role='dialog'] button:has-text('Create'), [data-slot='dialog-content'] button:has-text('Create')").first
+        save_button = self.page.locator("button:has-text('Create Agent'), button:has-text('Save Changes')").first
+        if not save_button.is_visible():
+            save_button = self.page.locator("[role='dialog'] button:has-text('Create'), [data-slot='dialog-content'] button:has-text('Create')").first
         if not save_button.is_visible():
             save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
         
-        logger.info("Clicking Create button in dialog")
+        logger.info("Clicking Create/Save button")
         save_button.scroll_into_view_if_needed()
-        save_button.evaluate("el => el.click()")
+        save_button.click()
         
         self.wait_for_load_state("domcontentloaded")
         self.wait_for_timeout(2000)

@@ -493,7 +493,8 @@ jobs:
           fark agent sample-agent "confirm you have read this message"
 
   e2e-ark-cli:
-    needs: [build-ark-cli]
+    needs: [setup-container-cache-registry, build-containers, build-ark-cli]
+    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -505,8 +506,12 @@ jobs:
           model-type: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL && 'azure' || 'openai' }}
           model-name: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL && 'gpt-4.1-mini' || 'gpt-4' }}
           model-api-version: 2024-12-01-preview
+          ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
+          ci-cache-registry-hostname: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry-hostname }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+          ark-image-tag: ${{ github.sha }}
+          is-fork-pr: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr }}
 
   e2e-smoke-test:
     needs: [setup-container-cache-registry, build-containers]
