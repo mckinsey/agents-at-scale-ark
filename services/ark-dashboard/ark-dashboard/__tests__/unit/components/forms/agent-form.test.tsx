@@ -179,6 +179,42 @@ describe('AgentForm', () => {
         expect(screen.getAllByText('Create Agent').length).toBeGreaterThan(0);
       });
     });
+
+    it('should call onSuccess callback when agent is created successfully', async () => {
+      const user = userEvent.setup();
+      const onSuccess = vi.fn();
+      vi.mocked(modelsService.getAll).mockResolvedValue(mockModels);
+      vi.mocked(toolsService.getAll).mockResolvedValue(mockTools);
+      vi.mocked(agentsService.create).mockResolvedValue(mockAgent);
+
+      renderAgentForm({ mode: AgentFormMode.CREATE, onSuccess });
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/name/i)).toBeInTheDocument();
+      });
+
+      const nameInput = screen.getByLabelText(/name/i);
+      await user.type(nameInput, 'new-agent');
+
+      const submitButton = screen.getAllByText('Create Agent').find(
+        el => el.tagName === 'BUTTON' || el.closest('button'),
+      );
+      expect(submitButton).toBeTruthy();
+
+      if (submitButton) {
+        const button =
+          submitButton.tagName === 'BUTTON'
+            ? submitButton
+            : submitButton.closest('button');
+        if (button) {
+          await user.click(button);
+
+          await waitFor(() => {
+            expect(onSuccess).toHaveBeenCalledTimes(1);
+          });
+        }
+      }
+    });
   });
 
   describe('EDIT mode', () => {
