@@ -13,4 +13,4 @@ spec:
         description: City name to get coordinates for
     required: ["city"]
   http:
-    url: https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1
+    url: http://mock-geocoding-api/v1/search?name={city}&count=1
