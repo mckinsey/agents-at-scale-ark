@@ -37,7 +37,11 @@ function extractItemTimestamp(item: unknown): string {
   return new Date().toISOString();
 }
 
-export function useSSEStream(endpoint: string, memory: string, agentName: string) {
+export function useSSEStream(
+  endpoint: string,
+  memory: string,
+  agentName: string,
+) {
   const [streamedEntries, setStreamedEntries] = useState<StreamEntry[]>([]);
   const [fetchedEntries, setFetchedEntries] = useState<StreamEntry[]>([]);
   const [isConnected, setIsConnected] = useState(false);

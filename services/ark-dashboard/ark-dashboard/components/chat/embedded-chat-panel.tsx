@@ -1,13 +1,7 @@
 'use client';
 
 import { useAtom, useAtomValue } from 'jotai';
-import {
-  AlertCircle,
-  Bug,
-  MessageCircle,
-  RotateCcw,
-  Send,
-} from 'lucide-react';
+import { AlertCircle, Bug, MessageCircle, RotateCcw, Send } from 'lucide-react';
 import type {
   ChatCompletionChunk,
   ChatCompletionMessageParam,

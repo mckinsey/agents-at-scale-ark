@@ -132,7 +132,11 @@ export function AgentYamlView(props: AgentYamlViewProps) {
           size="sm"
           onClick={handleCopy}
           className="h-7 gap-1 px-2 text-xs">
-          {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+          {copied ? (
+            <Check className="h-3 w-3" />
+          ) : (
+            <Copy className="h-3 w-3" />
+          )}
           {copied ? 'Copied' : 'Copy'}
         </Button>
         <Button

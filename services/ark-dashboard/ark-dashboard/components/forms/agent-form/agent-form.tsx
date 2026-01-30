@@ -15,9 +15,9 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
-import { AgentYamlView } from '@/components/forms/agent-form/agent-yaml-view';
 import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
+import { AgentYamlView } from '@/components/forms/agent-form/agent-yaml-view';
 import { Button } from '@/components/ui/button';
 import {
   Form,
