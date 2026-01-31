@@ -54,7 +54,7 @@ export function ModelRow({ model, onDelete }: ModelRowProps) {
         <div className="mr-4 flex-shrink-0">
           <AvailabilityStatusBadge
             status={model.available}
-            eventsLink={`/events?kind=Model&name=${model.name}&page=1`}
+            eventsLink="/broker"
           />
         </div>
         <div className="flex flex-shrink-0 items-center gap-1">

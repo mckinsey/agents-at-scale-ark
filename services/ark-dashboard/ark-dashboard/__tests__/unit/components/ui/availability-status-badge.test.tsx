@@ -35,14 +35,14 @@ describe('AvailabilityStatusBadge', () => {
 
   it('should render as a link when eventsLink is provided', () => {
     render(
-      <AvailabilityStatusBadge 
-        status="True" 
-        eventsLink="/events?kind=MCPServer&name=test&page=1" 
+      <AvailabilityStatusBadge
+        status="True"
+        eventsLink="/broker"
       />
     );
-    
+
     const link = screen.getByRole('link');
-    expect(link).toHaveAttribute('href', '/events?kind=MCPServer&name=test&page=1');
+    expect(link).toHaveAttribute('href', '/broker');
     expect(link).toHaveAttribute('title', 'View events');
     expect(link).toHaveTextContent('Available');
   });
@@ -86,10 +86,10 @@ describe('AvailabilityStatusBadge', () => {
 
   it('should apply custom className with link', () => {
     const { container } = render(
-      <AvailabilityStatusBadge 
-        status="True" 
-        eventsLink="/events" 
-        className="custom-class" 
+      <AvailabilityStatusBadge
+        status="True"
+        eventsLink="/broker"
+        className="custom-class"
       />
     );
     

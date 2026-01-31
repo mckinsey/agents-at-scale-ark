@@ -152,7 +152,7 @@ describe('A2AServerCard', () => {
     );
 
     const link = screen.getByTestId('availability-badge');
-    expect(link).toHaveAttribute('href', '/events?kind=A2AServer&name=test-server&page=1');
+    expect(link).toHaveAttribute('href', '/broker');
   });
 
   it('should render info button when onInfo provided', () => {

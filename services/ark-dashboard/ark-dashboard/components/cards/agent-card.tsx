@@ -74,14 +74,7 @@ export function AgentCard({ agent, onDelete }: AgentCardProps) {
             </div>
             <AvailabilityStatusBadge
               status={agent.available}
-              eventsLink={{
-                href: '/events',
-                query: {
-                  kind: 'Agent',
-                  name: agent.name,
-                  page: 1,
-                },
-              }}
+              eventsLink="/broker"
             />
           </div>
         }

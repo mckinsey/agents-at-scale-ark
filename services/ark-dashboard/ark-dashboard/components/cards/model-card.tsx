@@ -65,7 +65,7 @@ export function ModelCard({ model, onDelete }: ModelCardProps) {
             <div className="w-full">{description}</div>
             <AvailabilityStatusBadge
               status={model.available}
-              eventsLink={`/events?kind=Model&name=${model.name}&page=1`}
+              eventsLink="/broker"
             />
           </div>
         }

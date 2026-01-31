@@ -20,7 +20,6 @@ describe('dashboard-icons', () => {
       expect(DASHBOARD_SECTIONS['workflow-templates']).toBeDefined();
       expect(DASHBOARD_SECTIONS.queries).toBeDefined();
       expect(DASHBOARD_SECTIONS.evaluations).toBeDefined();
-      expect(DASHBOARD_SECTIONS.events).toBeDefined();
       expect(DASHBOARD_SECTIONS.memory).toBeDefined();
       expect(DASHBOARD_SECTIONS.files).toBeDefined();
       expect(DASHBOARD_SECTIONS.tasks).toBeDefined();
@@ -105,8 +104,5 @@ describe('dashboard-icons', () => {
       expect(DASHBOARD_SECTIONS.files.enablerFeature).toBeDefined();
     });
 
-    it('should have enabler feature for broker section', () => {
-      expect(DASHBOARD_SECTIONS.broker.enablerFeature).toBeDefined();
-    });
   });
 });

@@ -59,7 +59,7 @@ export function A2AServerRow({
               </p>
               <AvailabilityStatusBadge
                 status={availabilityStatus}
-                eventsLink={`/events?kind=A2AServer&name=${a2aServer.name}&page=1`}
+                eventsLink="/broker"
               />
             </div>
             <p

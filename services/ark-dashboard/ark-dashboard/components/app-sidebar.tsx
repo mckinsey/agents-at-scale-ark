@@ -17,9 +17,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import {
-  BROKER_FEATURE_KEY,
   FILES_BROWSER_FEATURE_KEY,
-  isBrokerEnabledAtom,
   isExperimentalDarkModeEnabledAtom,
   isFilesBrowserAvailableAtom,
 } from '@/atoms/experimental-features';
@@ -71,7 +69,6 @@ export function AppSidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useUser();
-  const isBrokerEnabled = useAtomValue(isBrokerEnabledAtom);
   const isExperimentalDarkModeEnabled = useAtomValue(
     isExperimentalDarkModeEnabledAtom,
   );
@@ -148,8 +145,6 @@ export function AppSidebar() {
 
   const enabledOperationSections = OPERATION_SECTIONS.filter(item => {
     switch (item.enablerFeature) {
-      case BROKER_FEATURE_KEY:
-        return isBrokerEnabled;
       case FILES_BROWSER_FEATURE_KEY:
         return true;
       default:

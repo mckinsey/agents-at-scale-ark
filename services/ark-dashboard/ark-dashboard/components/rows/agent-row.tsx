@@ -66,7 +66,7 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
 
         <AvailabilityStatusBadge
           status={agent.available}
-          eventsLink={`/events?kind=Agent&name=${agent.name}&page=1`}
+          eventsLink="/broker"
         />
 
         <div className="flex flex-shrink-0 items-center gap-1">

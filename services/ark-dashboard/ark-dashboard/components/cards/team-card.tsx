@@ -105,7 +105,7 @@ export function TeamCard({ team, agents, onUpdate, onDelete }: TeamCardProps) {
             </div>
             <AvailabilityStatusBadge
               status={team.available}
-              eventsLink={`/events?kind=Team&name=${team.name}&page=1`}
+              eventsLink="/broker"
             />
           </div>
         }

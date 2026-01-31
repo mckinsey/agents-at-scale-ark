@@ -734,11 +734,11 @@ function QueryDetailContent() {
                     Query
                   </h3>
                   <a
-                    href={`/events?kind=Query&name=${query.name}`}
+                    href="/broker"
                     className="text-xs text-blue-600 hover:underline dark:text-blue-400"
                     target="_blank"
                     rel="noopener noreferrer">
-                    View Events
+                    View in Broker
                   </a>
                 </div>
               </div>

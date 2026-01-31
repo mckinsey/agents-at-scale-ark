@@ -81,7 +81,7 @@ export function McpServerCard({
             <div className="w-fit">
               <AvailabilityStatusBadge
                 status={mcpServer.available}
-                eventsLink={`/events?kind=MCPServer&name=${mcpServer.name}&page=1`}
+                eventsLink="/broker"
               />
             </div>
             <div>

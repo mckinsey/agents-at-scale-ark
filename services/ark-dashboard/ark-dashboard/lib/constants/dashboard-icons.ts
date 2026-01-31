@@ -2,7 +2,6 @@ import {
   Activity,
   BarChart,
   Bot,
-  Calendar,
   CheckCircle,
   ClipboardList,
   Database,
@@ -19,10 +18,7 @@ import {
   Zap,
 } from 'lucide-react';
 
-import {
-  BROKER_FEATURE_KEY,
-  FILES_BROWSER_FEATURE_KEY,
-} from '@/atoms/experimental-features';
+import { FILES_BROWSER_FEATURE_KEY } from '@/atoms/experimental-features';
 
 export interface DashboardSection {
   key: string;
@@ -84,12 +80,6 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     icon: BarChart,
     group: 'operations',
   },
-  events: {
-    key: 'events',
-    title: 'Events',
-    icon: Calendar,
-    group: 'operations',
-  },
   memory: {
     key: 'memory',
     title: 'Memory',
@@ -114,7 +104,6 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     title: 'Broker',
     icon: Activity,
     group: 'operations',
-    enablerFeature: BROKER_FEATURE_KEY,
   },
 
   // Runtime

@@ -169,10 +169,7 @@ describe('TeamCard', () => {
     expect(membersText).toBeInTheDocument();
 
     const availabilityBadge = screen.getByTestId('availability-badge');
-    expect(availabilityBadge).toHaveAttribute(
-      'href',
-      '/events?kind=Team&name=team-name&page=1',
-    );
+    expect(availabilityBadge).toHaveAttribute('href', '/broker');
     expect(availabilityBadge).toHaveTextContent('Status: True');
   });
 
@@ -193,10 +190,7 @@ describe('TeamCard', () => {
     expect(membersText).toBeInTheDocument();
 
     const availabilityBadge = screen.getByTestId('availability-badge');
-    expect(availabilityBadge).toHaveAttribute(
-      'href',
-      '/events?kind=Team&name=team-name&page=1',
-    );
+    expect(availabilityBadge).toHaveAttribute('href', '/broker');
     expect(availabilityBadge).toHaveTextContent('Status: False');
   });
 

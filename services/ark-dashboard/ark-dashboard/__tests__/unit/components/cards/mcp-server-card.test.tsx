@@ -190,7 +190,7 @@ describe('McpServerCard', () => {
     );
 
     const link = screen.getByTestId('availability-badge');
-    expect(link).toHaveAttribute('href', '/events?kind=MCPServer&name=test-server&page=1');
+    expect(link).toHaveAttribute('href', '/broker');
   });
 
   describe('Availability Status: Unknown', () => {

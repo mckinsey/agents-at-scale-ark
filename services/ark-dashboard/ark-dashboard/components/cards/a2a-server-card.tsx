@@ -74,7 +74,7 @@ export function A2AServerCard({
             <div className="w-fit">
               <AvailabilityStatusBadge
                 status={availabilityStatus}
-                eventsLink={`/events?kind=A2AServer&name=${a2aServer.name}&page=1`}
+                eventsLink="/broker"
               />
             </div>
             <div>
