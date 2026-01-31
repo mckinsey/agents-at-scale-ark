@@ -170,11 +170,9 @@ func (s *SQLiteBackend) List(ctx context.Context, kind, namespace string, opts s
 
 	query += " ORDER BY resource_version DESC"
 
-	fetchLimit := opts.Limit
 	if opts.Limit > 0 {
-		fetchLimit = opts.Limit + 1
 		query += " LIMIT ?"
-		args = append(args, fetchLimit)
+		args = append(args, opts.Limit+1)
 	}
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
