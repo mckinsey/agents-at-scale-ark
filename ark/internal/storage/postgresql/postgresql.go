@@ -293,11 +293,9 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 
 	query += " ORDER BY resource_version DESC"
 
-	fetchLimit := opts.Limit
 	if opts.Limit > 0 {
-		fetchLimit = opts.Limit + 1
 		query += fmt.Sprintf(" LIMIT $%d", argIndex)
-		args = append(args, fetchLimit)
+		args = append(args, opts.Limit+1)
 	}
 
 	rows, err := p.db.QueryContext(ctx, query, args...)

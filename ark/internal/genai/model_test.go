@@ -15,15 +15,17 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
 
+const defaultNamespace = "default"
+
 func TestResolveModelSpec_NilModelSpec(t *testing.T) {
-	_, _, err := ResolveModelSpec(nil, "default")
+	_, _, err := ResolveModelSpec(nil, defaultNamespace)
 	if err == nil || !strings.Contains(err.Error(), "model spec is nil") {
 		t.Errorf("expected 'model spec is nil' error, got: %v", err)
 	}
 }
 
 func TestResolveModelSpec_NilAgentModelRefPointer(t *testing.T) {
-	_, _, err := ResolveModelSpec((*arkv1alpha1.AgentModelRef)(nil), "default")
+	_, _, err := ResolveModelSpec((*arkv1alpha1.AgentModelRef)(nil), defaultNamespace)
 	if err == nil || !strings.Contains(err.Error(), "AgentModelRef pointer is nil") {
 		t.Errorf("expected 'AgentModelRef pointer is nil' error, got: %v", err)
 	}
@@ -33,7 +35,7 @@ func TestResolveModelSpec_ValidAgentModelRef(t *testing.T) {
 	modelName, namespace, err := ResolveModelSpec(&arkv1alpha1.AgentModelRef{
 		Name:      "my-model",
 		Namespace: "custom-ns",
-	}, "default")
+	}, defaultNamespace)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -43,37 +45,37 @@ func TestResolveModelSpec_ValidAgentModelRef(t *testing.T) {
 }
 
 func TestResolveModelSpec_AgentModelRefUsesDefaultNamespace(t *testing.T) {
-	modelName, namespace, err := ResolveModelSpec(&arkv1alpha1.AgentModelRef{Name: "my-model"}, "default")
+	modelName, namespace, err := ResolveModelSpec(&arkv1alpha1.AgentModelRef{Name: "my-model"}, defaultNamespace)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if modelName != "my-model" || namespace != "default" {
+	if modelName != "my-model" || namespace != defaultNamespace {
 		t.Errorf("got (%q, %q), want (my-model, default)", modelName, namespace)
 	}
 }
 
 func TestResolveModelSpec_StringModelSpec(t *testing.T) {
-	modelName, namespace, err := ResolveModelSpec("string-model", "default")
+	modelName, namespace, err := ResolveModelSpec("string-model", defaultNamespace)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if modelName != "string-model" || namespace != "default" {
+	if modelName != "string-model" || namespace != defaultNamespace {
 		t.Errorf("got (%q, %q), want (string-model, default)", modelName, namespace)
 	}
 }
 
 func TestResolveModelSpec_EmptyStringUsesDefaultModel(t *testing.T) {
-	modelName, namespace, err := ResolveModelSpec("", "default")
+	modelName, namespace, err := ResolveModelSpec("", defaultNamespace)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if modelName != "default" || namespace != "default" {
+	if modelName != defaultNamespace || namespace != defaultNamespace {
 		t.Errorf("got (%q, %q), want (default, default)", modelName, namespace)
 	}
 }
 
 func TestResolveModelSpec_UnsupportedType(t *testing.T) {
-	_, _, err := ResolveModelSpec(123, "default")
+	_, _, err := ResolveModelSpec(123, defaultNamespace)
 	if err == nil || !strings.Contains(err.Error(), "unsupported model spec type") {
 		t.Errorf("expected 'unsupported model spec type' error, got: %v", err)
 	}
@@ -96,7 +98,7 @@ func TestResolveModelHeaders_DirectValue(t *testing.T) {
 	fakeClient := setupModelTestClient(nil)
 	ctx := context.Background()
 
-	got, err := resolveModelHeaders(ctx, fakeClient, headers, "default")
+	got, err := resolveModelHeaders(ctx, fakeClient, headers, defaultNamespace)
 
 	require.NoError(t, err)
 	require.Equal(t, "direct-value", got["X-Custom"])
@@ -123,7 +125,7 @@ func TestResolveModelHeaders_FromSecret(t *testing.T) {
 	fakeClient := setupModelTestClient([]client.Object{secret})
 	ctx := context.Background()
 
-	got, err := resolveModelHeaders(ctx, fakeClient, headers, "default")
+	got, err := resolveModelHeaders(ctx, fakeClient, headers, defaultNamespace)
 
 	require.NoError(t, err)
 	require.Equal(t, "secret-token", got["Authorization"])
@@ -147,7 +149,7 @@ func TestResolveModelHeaders_FromQueryParameter(t *testing.T) {
 	fakeClient := setupModelTestClient(nil)
 	ctx := context.WithValue(context.Background(), QueryContextKey, query)
 
-	got, err := resolveModelHeaders(ctx, fakeClient, headers, "default")
+	got, err := resolveModelHeaders(ctx, fakeClient, headers, defaultNamespace)
 
 	require.NoError(t, err)
 	require.Equal(t, "user-123", got["X-User-ID"])
@@ -167,7 +169,7 @@ func TestResolveModelHeaders_QueryParameterWithoutContext(t *testing.T) {
 	fakeClient := setupModelTestClient(nil)
 	ctx := context.Background()
 
-	_, err := resolveModelHeaders(ctx, fakeClient, headers, "default")
+	_, err := resolveModelHeaders(ctx, fakeClient, headers, defaultNamespace)
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "queryParameterRef requires query context")
