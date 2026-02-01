@@ -7,6 +7,7 @@ import (
 )
 
 func TestV1Alpha1Resources(t *testing.T) {
+	t.Parallel()
 	if len(V1Alpha1Resources) == 0 {
 		t.Fatal("V1Alpha1Resources should not be empty")
 	}
@@ -31,6 +32,7 @@ func TestV1Alpha1Resources(t *testing.T) {
 }
 
 func TestV1PreAlpha1Resources(t *testing.T) {
+	t.Parallel()
 	if len(V1PreAlpha1Resources) == 0 {
 		t.Fatal("V1PreAlpha1Resources should not be empty")
 	}
@@ -52,6 +54,7 @@ func TestV1PreAlpha1Resources(t *testing.T) {
 }
 
 func TestAllResources(t *testing.T) {
+	t.Parallel()
 	expectedTotal := len(V1Alpha1Resources) + len(V1PreAlpha1Resources)
 	if len(AllResources) != expectedTotal {
 		t.Errorf("AllResources has %d items, expected %d", len(AllResources), expectedTotal)
@@ -59,6 +62,7 @@ func TestAllResources(t *testing.T) {
 }
 
 func TestGetResourceByKind(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		kind        string
 		wantFound   bool
@@ -86,6 +90,7 @@ func TestGetResourceByKind(t *testing.T) {
 }
 
 func TestResourceDef_NewFunc(t *testing.T) {
+	t.Parallel()
 	for _, r := range AllResources {
 		t.Run(r.Kind, func(t *testing.T) {
 			obj := r.NewFunc()
@@ -97,6 +102,7 @@ func TestResourceDef_NewFunc(t *testing.T) {
 }
 
 func TestResourceDef_NewListFunc(t *testing.T) {
+	t.Parallel()
 	for _, r := range AllResources {
 		t.Run(r.Kind, func(t *testing.T) {
 			obj := r.NewListFunc()
@@ -108,6 +114,7 @@ func TestResourceDef_NewListFunc(t *testing.T) {
 }
 
 func TestResourceDef_Fields(t *testing.T) {
+	t.Parallel()
 	for _, r := range AllResources {
 		t.Run(r.Kind, func(t *testing.T) {
 			if r.Kind == "" {

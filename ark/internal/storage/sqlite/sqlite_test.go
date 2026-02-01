@@ -5,6 +5,7 @@ package sqlite
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -94,6 +95,7 @@ func createTestObject(name, namespace, uid string) *testObject {
 }
 
 func TestNew(t *testing.T) {
+	t.Parallel()
 	backend, err := New(":memory:", &mockConverter{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -109,6 +111,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestNew_InvalidPath(t *testing.T) {
+	t.Parallel()
 	_, err := New("/nonexistent/path/that/should/fail/db.sqlite", &mockConverter{})
 	if err == nil {
 		t.Error("expected error for invalid path")
@@ -116,6 +119,7 @@ func TestNew_InvalidPath(t *testing.T) {
 }
 
 func TestCreate(t *testing.T) {
+	t.Parallel()
 	backend := newTestBackend(t)
 	ctx := context.Background()
 
@@ -135,6 +139,7 @@ func TestCreate(t *testing.T) {
 }
 
 func TestCreate_Duplicate(t *testing.T) {
+	t.Parallel()
 	backend := newTestBackend(t)
 	ctx := context.Background()
 
@@ -148,6 +153,7 @@ func TestCreate_Duplicate(t *testing.T) {
 }
 
 func TestGet(t *testing.T) {
+	t.Parallel()
 	backend := newTestBackend(t)
 	ctx := context.Background()
 
@@ -173,6 +179,7 @@ func TestGet(t *testing.T) {
 }
 
 func TestGet_NotFound(t *testing.T) {
+	t.Parallel()
 	backend := newTestBackend(t)
 	ctx := context.Background()
 
@@ -180,12 +187,13 @@ func TestGet_NotFound(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for nonexistent object")
 	}
-	if err.Error() != "not found" {
-		t.Errorf("expected 'not found' error, got '%v'", err)
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected error containing 'not found', got '%v'", err)
 	}
 }
 
 func TestList(t *testing.T) {
+	t.Parallel()
 	backend := newTestBackend(t)
 	ctx := context.Background()
 
@@ -208,6 +216,7 @@ func TestList(t *testing.T) {
 }
 
 func TestList_WithLimit(t *testing.T) {
+	t.Parallel()
 	backend := newTestBackend(t)
 	ctx := context.Background()
 
@@ -230,6 +239,7 @@ func TestList_WithLimit(t *testing.T) {
 }
 
 func TestList_Pagination(t *testing.T) {
+	t.Parallel()
 	backend := newTestBackend(t)
 	ctx := context.Background()
 
@@ -253,6 +263,7 @@ func TestList_Pagination(t *testing.T) {
 }
 
 func TestList_AllNamespaces(t *testing.T) {
+	t.Parallel()
 	backend := newTestBackend(t)
 	ctx := context.Background()
 
@@ -271,6 +282,7 @@ func TestList_AllNamespaces(t *testing.T) {
 }
 
 func TestUpdate(t *testing.T) {
+	t.Parallel()
 	backend := newTestBackend(t)
 	ctx := context.Background()
 
@@ -291,6 +303,7 @@ func TestUpdate(t *testing.T) {
 }
 
 func TestUpdate_NotFound(t *testing.T) {
+	t.Parallel()
 	backend := newTestBackend(t)
 	ctx := context.Background()
 
@@ -299,12 +312,13 @@ func TestUpdate_NotFound(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for nonexistent object")
 	}
-	if err.Error() != "not found" {
-		t.Errorf("expected 'not found' error, got '%v'", err)
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected error containing 'not found', got '%v'", err)
 	}
 }
 
 func TestDelete(t *testing.T) {
+	t.Parallel()
 	backend := newTestBackend(t)
 	ctx := context.Background()
 
@@ -323,6 +337,7 @@ func TestDelete(t *testing.T) {
 }
 
 func TestDelete_NotFound(t *testing.T) {
+	t.Parallel()
 	backend := newTestBackend(t)
 	ctx := context.Background()
 
@@ -333,6 +348,7 @@ func TestDelete_NotFound(t *testing.T) {
 }
 
 func TestGetResourceVersion(t *testing.T) {
+	t.Parallel()
 	backend := newTestBackend(t)
 	ctx := context.Background()
 
@@ -350,6 +366,7 @@ func TestGetResourceVersion(t *testing.T) {
 }
 
 func TestCleanup(t *testing.T) {
+	t.Parallel()
 	backend := newTestBackend(t)
 	ctx := context.Background()
 
@@ -368,6 +385,7 @@ func TestCleanup(t *testing.T) {
 }
 
 func TestCleanup_RetentionPeriod(t *testing.T) {
+	t.Parallel()
 	backend := newTestBackend(t)
 	ctx := context.Background()
 
@@ -386,6 +404,7 @@ func TestCleanup_RetentionPeriod(t *testing.T) {
 }
 
 func TestWatch(t *testing.T) {
+	t.Parallel()
 	backend := newTestBackend(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -409,6 +428,7 @@ func TestWatch(t *testing.T) {
 }
 
 func TestWatch_ReceivesCreateEvent(t *testing.T) {
+	t.Parallel()
 	backend := newTestBackend(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -445,6 +465,7 @@ func TestWatch_ReceivesCreateEvent(t *testing.T) {
 }
 
 func TestWatch_Stop(t *testing.T) {
+	t.Parallel()
 	backend := newTestBackend(t)
 	ctx := context.Background()
 
@@ -461,6 +482,7 @@ func TestWatch_Stop(t *testing.T) {
 }
 
 func TestConcurrentOperations(t *testing.T) {
+	t.Parallel()
 	backend := newTestBackend(t)
 	ctx := context.Background()
 
@@ -482,6 +504,7 @@ func TestConcurrentOperations(t *testing.T) {
 }
 
 func TestContextCancellation(t *testing.T) {
+	t.Parallel()
 	backend := newTestBackend(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

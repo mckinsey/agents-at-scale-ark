@@ -12,6 +12,7 @@ import (
 )
 
 func TestNewRegistryTypeConverter(t *testing.T) {
+	t.Parallel()
 	conv := NewRegistryTypeConverter()
 	if conv == nil {
 		t.Fatal("expected non-nil converter")
@@ -19,6 +20,7 @@ func TestNewRegistryTypeConverter(t *testing.T) {
 }
 
 func TestRegistryTypeConverter_NewObject(t *testing.T) {
+	t.Parallel()
 	conv := NewRegistryTypeConverter()
 
 	tests := []struct {
@@ -50,6 +52,7 @@ func TestRegistryTypeConverter_NewObject(t *testing.T) {
 }
 
 func TestRegistryTypeConverter_NewObject_Unknown(t *testing.T) {
+	t.Parallel()
 	conv := NewRegistryTypeConverter()
 	obj := conv.NewObject("UnknownKind")
 	if obj != nil {
@@ -58,6 +61,7 @@ func TestRegistryTypeConverter_NewObject_Unknown(t *testing.T) {
 }
 
 func TestRegistryTypeConverter_NewListObject(t *testing.T) {
+	t.Parallel()
 	conv := NewRegistryTypeConverter()
 
 	tests := []struct {
@@ -80,6 +84,7 @@ func TestRegistryTypeConverter_NewListObject(t *testing.T) {
 }
 
 func TestRegistryTypeConverter_NewListObject_Unknown(t *testing.T) {
+	t.Parallel()
 	conv := NewRegistryTypeConverter()
 	obj := conv.NewListObject("UnknownKind")
 	if obj != nil {
@@ -88,6 +93,7 @@ func TestRegistryTypeConverter_NewListObject_Unknown(t *testing.T) {
 }
 
 func TestRegistryTypeConverter_Encode(t *testing.T) {
+	t.Parallel()
 	conv := NewRegistryTypeConverter()
 
 	agent := &arkv1alpha1.Agent{}
@@ -105,6 +111,7 @@ func TestRegistryTypeConverter_Encode(t *testing.T) {
 }
 
 func TestRegistryTypeConverter_Decode(t *testing.T) {
+	t.Parallel()
 	conv := NewRegistryTypeConverter()
 
 	jsonData := []byte(`{
@@ -133,6 +140,7 @@ func TestRegistryTypeConverter_Decode(t *testing.T) {
 }
 
 func TestRegistryTypeConverter_Decode_Unknown(t *testing.T) {
+	t.Parallel()
 	conv := NewRegistryTypeConverter()
 	_, err := conv.Decode("UnknownKind", []byte(`{}`))
 	if err == nil {
@@ -141,6 +149,7 @@ func TestRegistryTypeConverter_Decode_Unknown(t *testing.T) {
 }
 
 func TestRegistryTypeConverter_Decode_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	conv := NewRegistryTypeConverter()
 	_, err := conv.Decode("Agent", []byte(`invalid json`))
 	if err == nil {
@@ -149,6 +158,7 @@ func TestRegistryTypeConverter_Decode_InvalidJSON(t *testing.T) {
 }
 
 func TestRegistryTypeConverter_APIVersion(t *testing.T) {
+	t.Parallel()
 	conv := NewRegistryTypeConverter()
 
 	tests := []struct {
@@ -174,6 +184,7 @@ func TestRegistryTypeConverter_APIVersion(t *testing.T) {
 }
 
 func TestRegistryTypeConverter_RoundTrip(t *testing.T) {
+	t.Parallel()
 	conv := NewRegistryTypeConverter()
 
 	agent := &arkv1alpha1.Agent{}
