@@ -1,0 +1,18 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: azure-gpt4-managed-identity
+  namespace: default
+spec:
+  provider: azure
+  model:
+    value: gpt-4
+  config:
+    azure:
+      baseUrl:
+        value: https://your-resource.openai.azure.com
+      apiVersion:
+        value: "2024-02-15-preview"
+      auth:
+        # System-assigned managed identity (no clientId needed)
+        managedIdentity: {}

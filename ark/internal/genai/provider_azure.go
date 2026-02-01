@@ -5,26 +5,60 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"k8s.io/apimachinery/pkg/runtime"
 	"mckinsey.com/ark/internal/common"
 )
 
+type AzureManagedIdentityConfig struct {
+	ClientID string
+}
+
+type AzureWorkloadIdentityConfig struct {
+	ClientID string
+	TenantID string
+}
+
 type AzureProvider struct {
-	Model        string
-	BaseURL      string
-	APIVersion   string
-	APIKey       string
-	Headers      map[string]string
-	Properties   map[string]string
-	outputSchema *runtime.RawExtension
-	schemaName   string
+	Model            string
+	BaseURL          string
+	APIVersion       string
+	APIKey           string
+	ManagedIdentity  *AzureManagedIdentityConfig
+	WorkloadIdentity *AzureWorkloadIdentityConfig
+	Headers          map[string]string
+	Properties       map[string]string
+	outputSchema     *runtime.RawExtension
+	schemaName       string
 }
 
 func (ap *AzureProvider) SetOutputSchema(schema *runtime.RawExtension, schemaName string) {
 	ap.outputSchema = schema
 	ap.schemaName = schemaName
+}
+
+func (ap *AzureProvider) getCredential(ctx context.Context) (azcore.TokenCredential, error) {
+	if ap.ManagedIdentity != nil {
+		if ap.ManagedIdentity.ClientID == "" {
+			return azidentity.NewManagedIdentityCredential(nil)
+		}
+		return azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
+			ID: azidentity.ClientID(ap.ManagedIdentity.ClientID),
+		})
+	}
+
+	if ap.WorkloadIdentity != nil {
+		return azidentity.NewWorkloadIdentityCredential(&azidentity.WorkloadIdentityCredentialOptions{
+			ClientID: ap.WorkloadIdentity.ClientID,
+			TenantID: ap.WorkloadIdentity.TenantID,
+		})
+	}
+
+	return nil, fmt.Errorf("no identity configuration found")
 }
 
 func (ap *AzureProvider) ChatCompletion(ctx context.Context, messages []Message, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
@@ -148,10 +182,25 @@ func (ap *AzureProvider) createClient(ctx context.Context) openai.Client {
 	deploymentURL := fmt.Sprintf("%s/openai/deployments/%s", ap.BaseURL, ap.Model)
 	options := []option.RequestOption{
 		option.WithBaseURL(deploymentURL),
-		option.WithHeader("api-key", ap.APIKey),
-		option.WithAPIKey(ap.APIKey),
 		option.WithHTTPClient(httpClient),
 		option.WithQueryAdd("api-version", ap.APIVersion),
+	}
+
+	if ap.ManagedIdentity != nil || ap.WorkloadIdentity != nil {
+		cred, err := ap.getCredential(ctx)
+		if err == nil {
+			tokenResp, err := cred.GetToken(ctx, policy.TokenRequestOptions{
+				Scopes: []string{"https://cognitiveservices.azure.com/.default"},
+			})
+			if err == nil {
+				options = append(options, option.WithHeader("Authorization", fmt.Sprintf("Bearer %s", tokenResp.Token)))
+			}
+		}
+	} else {
+		options = append(options,
+			option.WithHeader("api-key", ap.APIKey),
+			option.WithAPIKey(ap.APIKey),
+		)
 	}
 
 	options = applyHeadersToOptions(ctx, ap.Headers, options, ap.Model)
