@@ -7,22 +7,9 @@ import (
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
-
-func newTestStatusStorage() (*StatusStorage, *mockBackend) {
-	backend := newMockBackend()
-	config := ResourceConfig{
-		Kind:         "Agent",
-		Resource:     "agents",
-		SingularName: "agent",
-		NewFunc:      func() runtime.Object { return &arkv1alpha1.Agent{} },
-		NewListFunc:  func() runtime.Object { return &arkv1alpha1.AgentList{} },
-	}
-	return NewStatusStorage(backend, &mockConverter{}, config), backend
-}
 
 func TestNewStatusStorage(t *testing.T) {
 	storage, _ := newTestStatusStorage()
@@ -48,14 +35,14 @@ func TestStatusStorage_NamespaceScoped(t *testing.T) {
 
 func TestStatusStorage_Get(t *testing.T) {
 	storage, backend := newTestStatusStorage()
-	ctx := contextWithNamespace("default")
+	ctx := contextWithNamespace(testNS())
 
 	agent := &arkv1alpha1.Agent{}
-	agent.Name = "test-agent"
-	agent.Namespace = "default"
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
 	backend.objects["Agent/default/test-agent"] = agent
 
-	result, err := storage.Get(ctx, "test-agent", &metav1.GetOptions{})
+	result, err := storage.Get(ctx, testAgentName, &metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
@@ -66,7 +53,7 @@ func TestStatusStorage_Get(t *testing.T) {
 
 func TestStatusStorage_Get_NotFound(t *testing.T) {
 	storage, _ := newTestStatusStorage()
-	ctx := contextWithNamespace("default")
+	ctx := contextWithNamespace(testNS())
 
 	_, err := storage.Get(ctx, "nonexistent", &metav1.GetOptions{})
 	if err == nil {
@@ -74,25 +61,13 @@ func TestStatusStorage_Get_NotFound(t *testing.T) {
 	}
 }
 
-type simpleUpdatedObjectInfo struct {
-	obj runtime.Object
-}
-
-func (s *simpleUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj runtime.Object) (runtime.Object, error) {
-	return s.obj, nil
-}
-
-func (s *simpleUpdatedObjectInfo) Preconditions() *metav1.Preconditions {
-	return nil
-}
-
 func TestStatusStorage_Update(t *testing.T) {
 	storage, backend := newTestStatusStorage()
-	ctx := contextWithNamespace("default")
+	ctx := contextWithNamespace(testNS())
 
 	agent := &arkv1alpha1.Agent{}
-	agent.Name = "test-agent"
-	agent.Namespace = "default"
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
 	backend.objects["Agent/default/test-agent"] = agent
 
 	updatedAgent := agent.DeepCopy()
@@ -102,7 +77,7 @@ func TestStatusStorage_Update(t *testing.T) {
 	})
 
 	updater := &simpleUpdatedObjectInfo{obj: updatedAgent}
-	result, created, err := storage.Update(ctx, "test-agent", updater, nil, nil, false, &metav1.UpdateOptions{})
+	result, created, err := storage.Update(ctx, testAgentName, updater, nil, nil, false, &metav1.UpdateOptions{})
 	if err != nil {
 		t.Fatalf("Update() error = %v", err)
 	}
@@ -116,7 +91,7 @@ func TestStatusStorage_Update(t *testing.T) {
 
 func TestStatusStorage_Update_NotFound(t *testing.T) {
 	storage, _ := newTestStatusStorage()
-	ctx := contextWithNamespace("default")
+	ctx := contextWithNamespace(testNS())
 
 	agent := &arkv1alpha1.Agent{}
 	agent.Name = "nonexistent"
@@ -147,7 +122,7 @@ func TestGetNamespaceFromContext(t *testing.T) {
 		{
 			name:     "without request info",
 			ctx:      context.Background(),
-			expected: "default",
+			expected: "default", //nolint:goconst
 		},
 	}
 
