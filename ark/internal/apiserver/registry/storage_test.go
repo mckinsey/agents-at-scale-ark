@@ -16,6 +16,7 @@ import (
 )
 
 func TestNewGenericStorage(t *testing.T) {
+	t.Parallel()
 	gs, _ := newTestStorage()
 	if gs == nil {
 		t.Fatal("expected non-nil storage")
@@ -23,6 +24,7 @@ func TestNewGenericStorage(t *testing.T) {
 }
 
 func TestGenericStorage_New(t *testing.T) {
+	t.Parallel()
 	gs, _ := newTestStorage()
 	obj := gs.New()
 	if _, ok := obj.(*arkv1alpha1.Agent); !ok {
@@ -31,6 +33,7 @@ func TestGenericStorage_New(t *testing.T) {
 }
 
 func TestGenericStorage_NewList(t *testing.T) {
+	t.Parallel()
 	gs, _ := newTestStorage()
 	obj := gs.NewList()
 	if _, ok := obj.(*arkv1alpha1.AgentList); !ok {
@@ -39,6 +42,7 @@ func TestGenericStorage_NewList(t *testing.T) {
 }
 
 func TestGenericStorage_NamespaceScoped(t *testing.T) {
+	t.Parallel()
 	gs, _ := newTestStorage()
 	if !gs.NamespaceScoped() {
 		t.Error("expected NamespaceScoped() to return true")
@@ -46,6 +50,7 @@ func TestGenericStorage_NamespaceScoped(t *testing.T) {
 }
 
 func TestGenericStorage_GetSingularName(t *testing.T) {
+	t.Parallel()
 	gs, _ := newTestStorage()
 	if got := gs.GetSingularName(); got != "agent" {
 		t.Errorf("GetSingularName() = %q, want %q", got, "agent")
@@ -53,6 +58,7 @@ func TestGenericStorage_GetSingularName(t *testing.T) {
 }
 
 func TestGenericStorage_Create(t *testing.T) {
+	t.Parallel()
 	gs, _ := newTestStorage()
 	ctx := contextWithNamespace(testNS())
 
@@ -69,6 +75,7 @@ func TestGenericStorage_Create(t *testing.T) {
 }
 
 func TestGenericStorage_Create_WithValidation(t *testing.T) {
+	t.Parallel()
 	gs, _ := newTestStorage()
 	ctx := contextWithNamespace(testNS())
 
@@ -87,6 +94,7 @@ func TestGenericStorage_Create_WithValidation(t *testing.T) {
 }
 
 func TestGenericStorage_Get(t *testing.T) {
+	t.Parallel()
 	gs, backend := newTestStorage()
 	ctx := contextWithNamespace(testNS())
 
@@ -110,6 +118,7 @@ func TestGenericStorage_Get(t *testing.T) {
 }
 
 func TestGenericStorage_Get_NotFound(t *testing.T) {
+	t.Parallel()
 	gs, _ := newTestStorage()
 	ctx := contextWithNamespace(testNS())
 
@@ -120,6 +129,7 @@ func TestGenericStorage_Get_NotFound(t *testing.T) {
 }
 
 func TestGenericStorage_List(t *testing.T) {
+	t.Parallel()
 	gs, backend := newTestStorage()
 	ctx := contextWithNamespace(testNS())
 
@@ -146,6 +156,7 @@ func TestGenericStorage_List(t *testing.T) {
 }
 
 func TestGenericStorage_List_WithLabelSelector(t *testing.T) {
+	t.Parallel()
 	gs, _ := newTestStorage()
 	ctx := contextWithNamespace(testNS())
 
@@ -159,6 +170,7 @@ func TestGenericStorage_List_WithLabelSelector(t *testing.T) {
 }
 
 func TestGenericStorage_Update(t *testing.T) {
+	t.Parallel()
 	gs, backend := newTestStorage()
 	ctx := contextWithNamespace(testNS())
 
@@ -181,6 +193,7 @@ func TestGenericStorage_Update(t *testing.T) {
 }
 
 func TestGenericStorage_Update_NotFound(t *testing.T) {
+	t.Parallel()
 	gs, _ := newTestStorage()
 	ctx := contextWithNamespace(testNS())
 
@@ -195,6 +208,7 @@ func TestGenericStorage_Update_NotFound(t *testing.T) {
 }
 
 func TestGenericStorage_Update_ForceCreate(t *testing.T) {
+	t.Parallel()
 	gs, _ := newTestStorage()
 	ctx := contextWithNamespace(testNS())
 
@@ -216,6 +230,7 @@ func TestGenericStorage_Update_ForceCreate(t *testing.T) {
 }
 
 func TestGenericStorage_Delete(t *testing.T) {
+	t.Parallel()
 	gs, backend := newTestStorage()
 	ctx := contextWithNamespace(testNS())
 
@@ -237,6 +252,7 @@ func TestGenericStorage_Delete(t *testing.T) {
 }
 
 func TestGenericStorage_Delete_NotFound(t *testing.T) {
+	t.Parallel()
 	gs, _ := newTestStorage()
 	ctx := contextWithNamespace(testNS())
 
@@ -247,6 +263,7 @@ func TestGenericStorage_Delete_NotFound(t *testing.T) {
 }
 
 func TestGenericStorage_Delete_WithValidation(t *testing.T) {
+	t.Parallel()
 	gs, backend := newTestStorage()
 	ctx := contextWithNamespace(testNS())
 
@@ -267,6 +284,7 @@ func TestGenericStorage_Delete_WithValidation(t *testing.T) {
 }
 
 func TestGenericStorage_Watch(t *testing.T) {
+	t.Parallel()
 	gs, _ := newTestStorage()
 	ctx := contextWithNamespace(testNS())
 
@@ -281,6 +299,7 @@ func TestGenericStorage_Watch(t *testing.T) {
 }
 
 func TestGenericStorage_ConvertToTable_Single(t *testing.T) {
+	t.Parallel()
 	gs, _ := newTestStorage()
 	ctx := context.Background()
 
@@ -302,6 +321,7 @@ func TestGenericStorage_ConvertToTable_Single(t *testing.T) {
 }
 
 func TestGenericStorage_ConvertToTable_List(t *testing.T) {
+	t.Parallel()
 	gs, _ := newTestStorage()
 	ctx := context.Background()
 
@@ -323,11 +343,13 @@ func TestGenericStorage_ConvertToTable_List(t *testing.T) {
 }
 
 func TestGenericStorage_Destroy(t *testing.T) {
+	t.Parallel()
 	gs, _ := newTestStorage()
 	gs.Destroy()
 }
 
 func TestGetNamespace(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		ctx      context.Context
@@ -356,6 +378,7 @@ func TestGetNamespace(t *testing.T) {
 }
 
 func TestSetListItems(t *testing.T) {
+	t.Parallel()
 	list := &arkv1alpha1.AgentList{}
 	objects := []runtime.Object{
 		&arkv1alpha1.Agent{ObjectMeta: metav1.ObjectMeta{Name: "a1", ResourceVersion: "1"}},

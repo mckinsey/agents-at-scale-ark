@@ -12,6 +12,7 @@ import (
 )
 
 func TestNewStatusStorage(t *testing.T) {
+	t.Parallel()
 	storage, _ := newTestStatusStorage()
 	if storage == nil {
 		t.Fatal("expected non-nil storage")
@@ -19,6 +20,7 @@ func TestNewStatusStorage(t *testing.T) {
 }
 
 func TestStatusStorage_New(t *testing.T) {
+	t.Parallel()
 	storage, _ := newTestStatusStorage()
 	obj := storage.New()
 	if _, ok := obj.(*arkv1alpha1.Agent); !ok {
@@ -27,6 +29,7 @@ func TestStatusStorage_New(t *testing.T) {
 }
 
 func TestStatusStorage_NamespaceScoped(t *testing.T) {
+	t.Parallel()
 	storage, _ := newTestStatusStorage()
 	if !storage.NamespaceScoped() {
 		t.Error("expected NamespaceScoped() to return true")
@@ -34,6 +37,7 @@ func TestStatusStorage_NamespaceScoped(t *testing.T) {
 }
 
 func TestStatusStorage_Get(t *testing.T) {
+	t.Parallel()
 	storage, backend := newTestStatusStorage()
 	ctx := contextWithNamespace(testNS())
 
@@ -52,6 +56,7 @@ func TestStatusStorage_Get(t *testing.T) {
 }
 
 func TestStatusStorage_Get_NotFound(t *testing.T) {
+	t.Parallel()
 	storage, _ := newTestStatusStorage()
 	ctx := contextWithNamespace(testNS())
 
@@ -62,6 +67,7 @@ func TestStatusStorage_Get_NotFound(t *testing.T) {
 }
 
 func TestStatusStorage_Update(t *testing.T) {
+	t.Parallel()
 	storage, backend := newTestStatusStorage()
 	ctx := contextWithNamespace(testNS())
 
@@ -90,6 +96,7 @@ func TestStatusStorage_Update(t *testing.T) {
 }
 
 func TestStatusStorage_Update_NotFound(t *testing.T) {
+	t.Parallel()
 	storage, _ := newTestStatusStorage()
 	ctx := contextWithNamespace(testNS())
 
@@ -104,11 +111,13 @@ func TestStatusStorage_Update_NotFound(t *testing.T) {
 }
 
 func TestStatusStorage_Destroy(t *testing.T) {
+	t.Parallel()
 	storage, _ := newTestStatusStorage()
 	storage.Destroy()
 }
 
 func TestGetNamespaceFromContext(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		ctx      context.Context
@@ -137,6 +146,7 @@ func TestGetNamespaceFromContext(t *testing.T) {
 }
 
 func TestCopyStatusOnly(t *testing.T) {
+	t.Parallel()
 	src := &arkv1alpha1.Agent{}
 	src.Name = "src-agent"
 	src.Spec.ModelRef = &arkv1alpha1.AgentModelRef{Name: "new-model"}
