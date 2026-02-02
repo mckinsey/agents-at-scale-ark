@@ -284,9 +284,6 @@ spec:
                   - type
                   type: object
                 type: array
-                x-kubernetes-list-map-keys:
-                - type
-                x-kubernetes-list-type: map
               contextId:
                 description: ContextID links this task to a specific A2A conversation
                   context.
