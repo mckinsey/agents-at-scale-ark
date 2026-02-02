@@ -1,6 +1,6 @@
 [project]
 name = "ark-api"
-version = "0.1.50"
+version = "0.1.51"
 description = ""
 requires-python = ">=3.11"
 dependencies = [
