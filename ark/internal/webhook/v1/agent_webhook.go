@@ -114,6 +114,10 @@ func (v *AgentCustomValidator) validateAgent(ctx context.Context, agent *arkv1al
 		return warnings, err
 	}
 
+	if err := v.validatePodConfig(agent); err != nil {
+		return warnings, err
+	}
+
 	for i, tool := range agent.Spec.Tools {
 		toolWarnings, err := v.validateTool(i, tool)
 		if err != nil {
@@ -122,10 +126,23 @@ func (v *AgentCustomValidator) validateAgent(ctx context.Context, agent *arkv1al
 		warnings = append(warnings, toolWarnings...)
 	}
 
-	// Collect migration warnings (e.g., deprecated 'custom' tool type)
 	warnings = append(warnings, collectMigrationWarnings(agent.Annotations)...)
 
 	return warnings, nil
+}
+
+func (v *AgentCustomValidator) validatePodConfig(agent *arkv1alpha1.Agent) error {
+	if agent.Spec.ExecutionEngine == nil {
+		return nil
+	}
+
+	if agent.Spec.ExecutionEngine.Name == "a2a-pod" {
+		if agent.Spec.Pod == nil || agent.Spec.Pod.Template == nil {
+			return fmt.Errorf("agents using 'a2a-pod' execution engine must specify spec.pod.template")
+		}
+	}
+
+	return nil
 }
 
 func (v *AgentCustomValidator) validateAgentModel(ctx context.Context, agent *arkv1alpha1.Agent) error {

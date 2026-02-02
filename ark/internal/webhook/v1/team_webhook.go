@@ -116,7 +116,7 @@ func (v *TeamCustomValidator) validateNoMixedTeam(ctx context.Context, team *ark
 		if err := v.Client.Get(ctx, key, &agent); err != nil {
 			return fmt.Errorf("team member %d: failed to load agent '%s': %v", i, member.Name, err)
 		}
-		isExternal := agent.Spec.ExecutionEngine != nil && agent.Spec.ExecutionEngine.Name != "" && agent.Spec.ExecutionEngine.Name != genai.ExecutionEngineA2A
+		isExternal := agent.Spec.ExecutionEngine != nil && agent.Spec.ExecutionEngine.Name != "" && agent.Spec.ExecutionEngine.Name != genai.ExecutionEngineA2A && agent.Spec.ExecutionEngine.Name != genai.ExecutionEngineA2APod
 		if isExternal {
 			hasExternalAgents = true
 		} else {

@@ -76,15 +76,18 @@ func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []M
 }
 
 func (a *Agent) executeWithExecutionEngineRouter(ctx context.Context, userInput Message, history []Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
-	if a.ExecutionEngine.Name == ExecutionEngineA2A {
+	switch a.ExecutionEngine.Name {
+	case ExecutionEngineA2A:
 		return a.executeWithA2AExecutionEngine(ctx, userInput, eventStream)
+	case ExecutionEngineA2APod:
+		return a.executeWithA2APodExecutionEngine(ctx, userInput, history, eventStream)
+	default:
+		messages, err := a.executeWithExecutionEngine(ctx, userInput, history)
+		if err != nil {
+			return nil, err
+		}
+		return &ExecutionResult{Messages: messages}, nil
 	}
-
-	messages, err := a.executeWithExecutionEngine(ctx, userInput, history)
-	if err != nil {
-		return nil, err
-	}
-	return &ExecutionResult{Messages: messages}, nil
 }
 
 func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
@@ -110,6 +113,17 @@ func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Mes
 	a2aEngine := NewA2AExecutionEngine(a.client, a.eventing.A2aRecorder())
 	contextID := GetA2AContextID(ctx)
 	return a2aEngine.Execute(ctx, a.Name, a.Namespace, a.Annotations, contextID, userInput, eventStream)
+}
+
+func (a *Agent) executeWithA2APodExecutionEngine(ctx context.Context, userInput Message, history []Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	var agentCRD arkv1alpha1.Agent
+	agentKey := types.NamespacedName{Name: a.Name, Namespace: a.Namespace}
+	if err := a.client.Get(ctx, agentKey, &agentCRD); err != nil {
+		return nil, fmt.Errorf("failed to get agent CRD: %w", err)
+	}
+
+	a2aPodEngine := NewA2APodExecutionEngine(a.client, a.eventing.A2aRecorder())
+	return a2aPodEngine.Execute(ctx, &agentCRD, userInput, history, eventStream)
 }
 
 func (a *Agent) prepareMessages(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
@@ -243,19 +257,16 @@ func (a *Agent) GetDescription() string {
 
 // ValidateExecutionEngine checks if the specified ExecutionEngine resource exists
 func ValidateExecutionEngine(ctx context.Context, k8sClient client.Client, executionEngine *arkv1alpha1.ExecutionEngineRef, defaultNamespace string) error {
-	// Resolve execution engine name and namespace
 	engineName := executionEngine.Name
 	namespace := executionEngine.Namespace
 	if namespace == "" {
 		namespace = defaultNamespace
 	}
 
-	// Pass validation for reserved 'a2a' execution engine (internal)
-	if engineName == ExecutionEngineA2A {
+	if engineName == ExecutionEngineA2A || engineName == ExecutionEngineA2APod {
 		return nil
 	}
 
-	// Check if ExecutionEngine CRD exists
 	var engineCRD arkv1prealpha1.ExecutionEngine
 	engineKey := types.NamespacedName{Name: engineName, Namespace: namespace}
 	if err := k8sClient.Get(ctx, engineKey, &engineCRD); err != nil {
@@ -346,8 +357,7 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 
 	var resolvedModel *Model
 
-	// A2A agents don't need models - they delegate to external A2A servers
-	if crd.Spec.ExecutionEngine == nil || crd.Spec.ExecutionEngine.Name != ExecutionEngineA2A {
+	if crd.Spec.ExecutionEngine == nil || (crd.Spec.ExecutionEngine.Name != ExecutionEngineA2A && crd.Spec.ExecutionEngine.Name != ExecutionEngineA2APod) {
 		var err error
 		resolvedModel, err = LoadModel(ctx, k8sClient, crd.Spec.ModelRef, crd.Namespace, modelHeaders, telemetryProvider.ModelRecorder(), eventingProvider.ModelRecorder())
 		if err != nil {

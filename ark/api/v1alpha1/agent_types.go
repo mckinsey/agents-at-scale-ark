@@ -3,6 +3,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -76,6 +77,31 @@ type ExecutionEngineRef struct {
 	// Namespace of the ExecutionEngine resource. Defaults to the agent's namespace if not specified
 	Namespace string `json:"namespace,omitempty"`
 }
+
+// PodConfig defines pod template and lifecycle settings for ephemeral A2A pod agents
+type PodConfig struct {
+	// +kubebuilder:validation:Required
+	// Template for the ephemeral pod
+	Template *corev1.PodTemplateSpec `json:"template,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Maximum duration for the pod execution
+	Timeout *metav1.Duration `json:"timeout,omitempty"`
+}
+
+// A2APodConfig defines A2A-specific settings for ephemeral pod agents
+type A2APodConfig struct {
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=8080
+	// Port where the A2A server listens inside the pod
+	Port int32 `json:"port,omitempty"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default="/.well-known/agent-card.json"
+	// Path to the agent card endpoint for readiness checking
+	AgentCardPath string `json:"agentCardPath,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Maximum time to wait for the pod to become ready
+	ReadinessTimeout *metav1.Duration `json:"readinessTimeout,omitempty"`
+}
 type AgentSpec struct {
 	Prompt      string `json:"prompt,omitempty"`
 	Description string `json:"description,omitempty"`
@@ -93,6 +119,12 @@ type AgentSpec struct {
 	OutputSchema *runtime.RawExtension `json:"outputSchema,omitempty"`
 	// +kubebuilder:validation:Optional
 	Overrides []Override `json:"overrides,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Pod configuration for a2a-pod execution engine
+	Pod *PodConfig `json:"pod,omitempty"`
+	// +kubebuilder:validation:Optional
+	// A2A-specific settings for ephemeral pod agents
+	A2APod *A2APodConfig `json:"a2aPod,omitempty"`
 }
 
 type AgentStatus struct {

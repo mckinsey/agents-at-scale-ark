@@ -6,8 +6,11 @@ import (
 	"trpc.group/trpc-go/trpc-a2a-go/server"
 )
 
-// ExecutionEngineA2A is the reserved name for A2A execution engine
+// ExecutionEngineA2A is the reserved name for external A2A execution engine
 const ExecutionEngineA2A = "a2a"
+
+// ExecutionEngineA2APod is the reserved name for ephemeral A2A pod execution engine
+const ExecutionEngineA2APod = "a2a-pod"
 
 // A2A Task states from the A2A protocol
 const (

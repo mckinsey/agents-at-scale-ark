@@ -7,6 +7,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -149,6 +150,75 @@ var _ = Describe("Agent Webhook", func() {
 			err := defaulter.Default(ctx, agent)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(agent.Annotations).ToNot(HaveKey(annotations.MigrationWarningPrefix + "tool-type-custom"))
+		})
+	})
+
+	Context("When validating a2a-pod execution engine", func() {
+		It("Should reject a2a-pod agent without pod template", func() {
+			agent.Spec.ExecutionEngine = &arkv1alpha1.ExecutionEngineRef{
+				Name: "a2a-pod",
+			}
+
+			warnings, err := validator.ValidateCreate(ctx, agent)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("must specify spec.pod.template"))
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("Should reject a2a-pod agent with empty pod config", func() {
+			agent.Spec.ExecutionEngine = &arkv1alpha1.ExecutionEngineRef{
+				Name: "a2a-pod",
+			}
+			agent.Spec.Pod = &arkv1alpha1.PodConfig{}
+
+			warnings, err := validator.ValidateCreate(ctx, agent)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("must specify spec.pod.template"))
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("Should allow a2a-pod agent with valid pod template", func() {
+			agent.Spec.ExecutionEngine = &arkv1alpha1.ExecutionEngineRef{
+				Name: "a2a-pod",
+			}
+			agent.Spec.Pod = &arkv1alpha1.PodConfig{
+				Template: &corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "agent",
+								Image: "my-a2a-agent:latest",
+							},
+						},
+					},
+				},
+			}
+
+			warnings, err := validator.ValidateCreate(ctx, agent)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("Should allow A2A pod agents without model validation", func() {
+			agent.Spec.ExecutionEngine = &arkv1alpha1.ExecutionEngineRef{
+				Name: genai.ExecutionEngineA2APod,
+			}
+			agent.Spec.Pod = &arkv1alpha1.PodConfig{
+				Template: &corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "agent",
+								Image: "my-a2a-agent:latest",
+							},
+						},
+					},
+				},
+			}
+
+			warnings, err := validator.ValidateCreate(ctx, agent)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
 		})
 	})
 })

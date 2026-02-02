@@ -1,0 +1,29 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: ephemeral-agent
+spec:
+  description: "Ephemeral A2A agent running in isolated pod"
+  executionEngine:
+    name: a2a-pod
+  pod:
+    timeout: 10m
+    template:
+      spec:
+        containers:
+        - name: agent
+          image: my-registry/my-a2a-agent:latest
+          ports:
+          - containerPort: 8080
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+        restartPolicy: Never
+  a2aPod:
+    port: 8080
+    agentCardPath: "/.well-known/agent-card.json"
+    readinessTimeout: 60s
