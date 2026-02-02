@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ark-landing-page
+description: Landing page for Ark multi-demo environment
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
