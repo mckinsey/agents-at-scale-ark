@@ -13,3 +13,7 @@ XRAY-935637 - CVE-2026-0994
 - Mitigations applied: (1) Pinned protobuf>=6.33.4 in ark-api and langchain-weather-agent, (2) Updated langchain-weather-agent from 6.33.0 to 6.33.4, (3) Documented vulnerability and upgrade path in CVE-2026-0994.md.
 - Used in services/ark-api/ark-api and samples/a2a/langchain-weather-agent via a2a-sdk dependency.
 - Will upgrade immediately when patched version is released to PyPI.
+XRAY-937734 - CVE-2026-23864
+- Resource exhaustion in React allows attackers to perform denial of service by sending crafted HTTP requests.
+- Next.js is on the last version (16.1.6) and the fix is not yet available
+- Used in docs only.
