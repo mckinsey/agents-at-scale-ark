@@ -66,7 +66,7 @@ func TestLoadAzureConfig_LegacyAPIKey_FallbackWithWarning(t *testing.T) {
 
 	config := &arkv1alpha1.AzureModelConfig{
 		BaseURL: arkv1alpha1.ValueSource{Value: "https://api.azure.com"},
-		APIKey: arkv1alpha1.ValueSource{
+		APIKey: &arkv1alpha1.ValueSource{
 			ValueFrom: &arkv1alpha1.ValueFromSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{Name: "azure-secret"},

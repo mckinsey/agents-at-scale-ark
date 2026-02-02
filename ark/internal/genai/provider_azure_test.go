@@ -1,7 +1,6 @@
 package genai
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,8 +16,7 @@ func TestAzureProvider_GetCredential_ManagedIdentity_System(t *testing.T) {
 		ManagedIdentity: &AzureManagedIdentityConfig{},
 	}
 
-	ctx := context.Background()
-	cred, err := provider.getCredential(ctx)
+	cred, err := provider.getCredential()
 
 	require.NoError(t, err)
 	require.NotNil(t, cred)
@@ -35,8 +33,7 @@ func TestAzureProvider_GetCredential_ManagedIdentity_UserAssigned(t *testing.T) 
 		},
 	}
 
-	ctx := context.Background()
-	cred, err := provider.getCredential(ctx)
+	cred, err := provider.getCredential()
 
 	require.NoError(t, err)
 	require.NotNil(t, cred)
@@ -47,7 +44,7 @@ func TestAzureProvider_GetCredential_ManagedIdentity_UserAssigned(t *testing.T) 
 func TestAzureProvider_GetCredential_WorkloadIdentity(t *testing.T) {
 	tmpDir := t.TempDir()
 	tokenFile := filepath.Join(tmpDir, "token")
-	err := os.WriteFile(tokenFile, []byte("fake-token"), 0600)
+	err := os.WriteFile(tokenFile, []byte("fake-token"), os.ModeAppend)
 	require.NoError(t, err)
 
 	t.Setenv("AZURE_FEDERATED_TOKEN_FILE", tokenFile)
@@ -61,8 +58,7 @@ func TestAzureProvider_GetCredential_WorkloadIdentity(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
-	cred, err := provider.getCredential(ctx)
+	cred, err := provider.getCredential()
 
 	require.NoError(t, err)
 	require.NotNil(t, cred)

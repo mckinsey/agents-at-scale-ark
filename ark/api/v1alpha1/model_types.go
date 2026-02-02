@@ -48,7 +48,7 @@ type AzureModelConfig struct {
 	Auth *AzureAuth `json:"auth,omitempty"`
 	// +kubebuilder:validation:Optional
 	// Deprecated: Use auth.apiKey instead
-	APIKey ValueSource `json:"apiKey,omitempty"`
+	APIKey *ValueSource `json:"apiKey,omitempty"`
 	// +kubebuilder:validation:Optional
 	APIVersion *ValueSource `json:"apiVersion,omitempty"`
 	// +kubebuilder:validation:Optional

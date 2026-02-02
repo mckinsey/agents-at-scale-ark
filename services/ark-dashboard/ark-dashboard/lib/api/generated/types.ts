@@ -2419,18 +2419,47 @@ export interface components {
          */
         AvailabilityStatus: "True" | "False" | "Unknown";
         /**
+         * AzureAuthConfig
+         * @description Azure authentication configuration.
+         */
+        AzureAuthConfig: {
+            /** Apikey */
+            apiKey?: string | components["schemas"]["ModelValueSource"] | null;
+            managedIdentity?: components["schemas"]["AzureManagedIdentityConfig"] | null;
+            workloadIdentity?: components["schemas"]["AzureWorkloadIdentityConfig"] | null;
+        };
+        /**
          * AzureConfig
          * @description Azure model configuration.
          */
         AzureConfig: {
             /** Apikey */
-            apiKey: string | components["schemas"]["ModelValueSource"];
+            apiKey?: string | components["schemas"]["ModelValueSource"] | null;
             /** Apiversion */
             apiVersion?: string | components["schemas"]["ModelValueSource"] | null;
+            auth?: components["schemas"]["AzureAuthConfig"] | null;
             /** Baseurl */
             baseUrl: string | components["schemas"]["ModelValueSource"];
             /** Headers */
             headers?: components["schemas"]["AgentHeader-Input"][] | null;
+        };
+        /**
+         * AzureManagedIdentityConfig
+         * @description Azure Managed Identity configuration.
+         */
+        AzureManagedIdentityConfig: {
+            /** Clientid */
+            clientId?: string | components["schemas"]["ModelValueSource"] | null;
+        };
+        /**
+         * AzureWorkloadIdentityConfig
+         * @description Azure Workload Identity configuration.
+         */
+        AzureWorkloadIdentityConfig: {
+            /** Clientid */
+            clientId: string | components["schemas"]["ModelValueSource"];
+            /** Tenantid */
+            tenantId: string | components["schemas"]["ModelValueSource"];
         };
         /**
          * BaselineEvaluationMetadata

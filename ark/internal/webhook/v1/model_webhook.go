@@ -168,7 +168,7 @@ func (v *ModelValidator) validateAzureConfig(ctx context.Context, model *arkv1al
 	if err := v.validateValueSource(ctx, &model.Spec.Config.Azure.BaseURL, model.GetNamespace(), "spec.config.azure.baseUrl"); err != nil {
 		return err
 	}
-	if err := v.validateValueSource(ctx, &model.Spec.Config.Azure.APIKey, model.GetNamespace(), "spec.config.azure.apiKey"); err != nil {
+	if err := v.validateValueSource(ctx, model.Spec.Config.Azure.APIKey, model.GetNamespace(), "spec.config.azure.apiKey"); err != nil {
 		return err
 	}
 	if model.Spec.Config.Azure.APIVersion != nil {

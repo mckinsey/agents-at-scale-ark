@@ -41,7 +41,7 @@ func (ap *AzureProvider) SetOutputSchema(schema *runtime.RawExtension, schemaNam
 	ap.schemaName = schemaName
 }
 
-func (ap *AzureProvider) getCredential(ctx context.Context) (azcore.TokenCredential, error) {
+func (ap *AzureProvider) getCredential() (azcore.TokenCredential, error) {
 	if ap.ManagedIdentity != nil {
 		if ap.ManagedIdentity.ClientID == "" {
 			return azidentity.NewManagedIdentityCredential(nil)
@@ -187,7 +187,7 @@ func (ap *AzureProvider) createClient(ctx context.Context) openai.Client {
 	}
 
 	if ap.ManagedIdentity != nil || ap.WorkloadIdentity != nil {
-		cred, err := ap.getCredential(ctx)
+		cred, err := ap.getCredential()
 		if err == nil {
 			tokenResp, err := cred.GetToken(ctx, policy.TokenRequestOptions{
 				Scopes: []string{"https://cognitiveservices.azure.com/.default"},
