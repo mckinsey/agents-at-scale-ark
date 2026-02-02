@@ -62,7 +62,7 @@ helm install kyc-demo ./chart -n kyc-demo --create-namespace
 - File gateway and workflows
 - Namespace with demo labels
 
-**The demo automatically appears on the landing page!** ✨
+The demo automatically appears on the landing page.
 
 > **Note:** The marketplace bundle should include dashboard and API as dependencies. If it doesn't yet, see the manual setup below.
 
@@ -159,26 +159,42 @@ Dashboard Helm chart follows this convention automatically when you deploy.
 
 ## Development
 
-### Run Locally
+### Quick Start
 
 ```bash
-npm install
-PORT=3002 npm run dev
+make demo-page
 ```
 
-The landing page runs on `http://localhost:3002`.
+This command:
+1. Installs dependencies
+2. Checks if kyc-demo is deployed (deploys if needed)
+3. Starts port-forwards (dashboard + API)
+4. Runs landing page on `http://localhost:3002`
 
-**Required port-forwards:**
+### Manual Setup
 
-For each demo to work locally, you need two port-forwards running:
+If you prefer manual control:
 
 ```bash
-# Dashboard (required for UI)
-kubectl port-forward -n kyc-demo svc/ark-dashboard 3003:3000
+# Install dependencies
+make install
 
-# API (required for data)
-kubectl port-forward -n kyc-demo svc/ark-api 8000:80
+# Deploy demo (if not already deployed)
+make setup-demo
+
+# Start port-forwards
+make port-forwards
+
+# Run landing page
+make dev
 ```
+
+**Other useful commands:**
+- `make check-demo` - Verify demo is deployed
+- `make stop-port-forwards` - Stop all port-forwards
+- `make help` - Show all available commands
+
+### How It Works Locally
 
 The landing page automatically:
 - Detects `localhost` and uses port-forward URLs
