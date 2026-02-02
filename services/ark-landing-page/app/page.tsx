@@ -53,15 +53,15 @@ export default function LandingPage() {
 
   // Map demo names to localhost ports for development
   const demoPortMap: Record<string, number> = {
-    'kyc-demo': 3004,
-    'demo-sales': 3004, // Legacy compatibility
+    'kyc-demo': 3003,
+    'demo-sales': 3003, // Legacy compatibility
   };
 
   const getDemoUrl = (demoName: string) => {
     // In development with port-forward, use localhost:PORT
     if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
       const port = demoPortMap[demoName] || 3000;
-      return `http://localhost:${port}`;
+      return `http://localhost:${port}?namespace=${demoName}`;
     }
     // In production, use proper DNS
     return `http://${demoName}.127.0.0.1.nip.io`;
