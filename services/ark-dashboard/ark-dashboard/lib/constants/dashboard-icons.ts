@@ -28,7 +28,7 @@ export interface DashboardSection {
   key: string;
   title: string;
   icon: LucideIcon;
-  group: 'configurations' | 'operations' | 'runtime' | 'service';
+  group: 'configurations' | 'operations' | 'runtime' | 'service' | 'agent-builder';
   enablerFeature?: string;
 }
 
@@ -38,13 +38,13 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     key: 'agents',
     title: 'Agents',
     icon: Bot,
-    group: 'configurations',
+    group: 'agent-builder',
   },
   teams: {
     key: 'teams',
     title: 'Teams',
     icon: Users,
-    group: 'configurations',
+    group: 'agent-builder',
   },
   models: {
     key: 'models',
@@ -175,4 +175,8 @@ export const RUNTIME_SECTIONS = Object.values(DASHBOARD_SECTIONS).filter(
 
 export const SERVICE_SECTIONS = Object.values(DASHBOARD_SECTIONS).filter(
   section => section.group === 'service',
+);
+
+export const AGENT_BUILDER_SECTIONS = Object.values(DASHBOARD_SECTIONS).filter(
+  section => section.group === 'agent-builder',
 );

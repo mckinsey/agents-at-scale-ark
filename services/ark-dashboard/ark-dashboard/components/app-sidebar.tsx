@@ -3,6 +3,7 @@
 import { useAtomValue, useSetAtom } from 'jotai';
 import {
   AlertCircle,
+  Bot,
   Check,
   ChevronRight,
   ChevronsUpDown,
@@ -53,6 +54,7 @@ import {
 import { trackEvent } from '@/lib/analytics/singleton';
 import { signout } from '@/lib/auth/signout';
 import {
+  AGENT_BUILDER_SECTIONS,
   CONFIGURATION_SECTIONS,
   OPERATION_SECTIONS,
   RUNTIME_SECTIONS,
@@ -92,6 +94,7 @@ export function AppSidebar() {
   const [loading, setLoading] = useState(true);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [namespaceEditorOpen, setNamespaceEditorOpen] = useState(false);
+  const [agentBuilderOpen, setAgentBuilderOpen] = useState(true);
 
   const isPlaceholderSection = (key: string): boolean => {
     const placeholderKeys: string[] = [];
@@ -144,6 +147,11 @@ export function AppSidebar() {
 
   const getCurrentSection = () => {
     return pathname.split('/')[1];
+  };
+
+  const isAnySectionActive = (sections: typeof AGENT_BUILDER_SECTIONS) => {
+    const currentSection = getCurrentSection();
+    return sections.some(item => item.key === currentSection);
   };
 
   const enabledOperationSections = OPERATION_SECTIONS.filter(item => {
@@ -241,6 +249,10 @@ export function AppSidebar() {
                 </DropdownMenuContent>
               </DropdownMenu>
             </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarHeader>
+        <SidebarMenu>
+          <SidebarContent>
             <SidebarMenuItem>
               <SidebarMenuButton
                 onClick={() => navigateToSection('')}
@@ -249,50 +261,66 @@ export function AppSidebar() {
                 <span>Home</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarHeader>
-
-        <SidebarContent>
-          <SidebarGroup>
-            <Collapsible defaultOpen className="group/collapsible">
+            <Collapsible
+              open={agentBuilderOpen}
+              onOpenChange={setAgentBuilderOpen}
+              className="group/collapsible">
               <SidebarGroupLabel
                 asChild
                 className="group/label text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-sm">
-                <CollapsibleTrigger className="flex w-full items-center">
-                  Configurations
-                  <ChevronRight className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                <CollapsibleTrigger
+                  open={agentBuilderOpen}
+                  isActive={isAnySectionActive(AGENT_BUILDER_SECTIONS)}
+                  className="flex w-full items-center gap-2">
+                  <Bot />
+                  Agent Builder
                 </CollapsibleTrigger>
               </SidebarGroupLabel>
               <CollapsibleContent>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {CONFIGURATION_SECTIONS.map(item => {
-                      const isPlaceholder = isPlaceholderSection(item.key);
-                      const isDisabled =
-                        !isNamespaceResolved || loading || isPlaceholder;
-                      const isActive = getCurrentSection() === item.key;
-                      return (
-                        <SidebarMenuItem key={item.key}>
-                          <SidebarMenuButton
-                            onClick={() =>
-                              !isPlaceholder &&
-                              isNamespaceResolved &&
-                              navigateToSection(item.key)
-                            }
-                            isActive={isActive}
-                            disabled={isDisabled}>
-                            <item.icon />
-                            <span>{item.title}</span>
-                          </SidebarMenuButton>
-                        </SidebarMenuItem>
-                      );
-                    })}
-                  </SidebarMenu>
-                </SidebarGroupContent>
+                {AGENT_BUILDER_SECTIONS.map(item => {
+                  const isPlaceholder = isPlaceholderSection(item.key);
+                  const isDisabled =
+                    !isNamespaceResolved || loading || isPlaceholder;
+                  return (
+                    <SidebarMenuItem key={item.key}>
+                      <SidebarMenuButton
+                        onClick={() =>
+                          !isPlaceholder &&
+                          isNamespaceResolved &&
+                          navigateToSection(item.key)
+                        }
+                        disabled={isDisabled}>
+                        <span>{item.title}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
               </CollapsibleContent>
             </Collapsible>
-          </SidebarGroup>
-
+            {CONFIGURATION_SECTIONS.map(item => {
+              const isPlaceholder = isPlaceholderSection(item.key);
+              const isDisabled =
+                !isNamespaceResolved || loading || isPlaceholder;
+              const isActive = getCurrentSection() === item.key;
+              return (
+                <SidebarMenuItem key={item.key}>
+                  <SidebarMenuButton
+                    onClick={() =>
+                      !isPlaceholder &&
+                      isNamespaceResolved &&
+                      navigateToSection(item.key)
+                    }
+                    isActive={isActive}
+                    disabled={isDisabled}>
+                    {item.icon && <item.icon />}
+                    <span>{item.title}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              );
+            })}
+          </SidebarContent>
+        </SidebarMenu>
+        <SidebarContent>
           <SidebarGroup>
             <Collapsible defaultOpen className="group/collapsible">
               <SidebarGroupLabel
@@ -321,7 +349,7 @@ export function AppSidebar() {
                             }
                             isActive={isActive}
                             disabled={isDisabled}>
-                            <item.icon />
+                            {item.icon && <item.icon />}
                             <span>{item.title}</span>
                           </SidebarMenuButton>
                         </SidebarMenuItem>
@@ -361,7 +389,7 @@ export function AppSidebar() {
                             }
                             isActive={isActive}
                             disabled={isDisabled}>
-                            <item.icon />
+                            {item.icon && <item.icon />}
                             <span>{item.title}</span>
                           </SidebarMenuButton>
                         </SidebarMenuItem>
@@ -401,7 +429,7 @@ export function AppSidebar() {
                             }
                             isActive={isActive}
                             disabled={isDisabled}>
-                            <item.icon />
+                            {item.icon && <item.icon />}
                             <span>{item.title}</span>
                           </SidebarMenuButton>
                         </SidebarMenuItem>
@@ -459,7 +487,7 @@ export function AppSidebar() {
             </SidebarMenu>
           )}
         </SidebarFooter>
-      </Sidebar>
+      </Sidebar >
 
       <NamespaceEditor
         open={namespaceEditorOpen}
