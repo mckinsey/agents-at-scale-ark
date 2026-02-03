@@ -6,6 +6,7 @@ import {
   CheckCircle,
   ClipboardList,
   Database,
+  Download,
   FileText,
   Key,
   Lock,
@@ -148,6 +149,12 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     key: 'api-keys',
     title: 'Service API Keys',
     icon: Key,
+    group: 'service',
+  },
+  export: {
+    key: 'export',
+    title: 'Export',
+    icon: Download,
     group: 'service',
   },
 } as const satisfies Record<string, DashboardSection>;
