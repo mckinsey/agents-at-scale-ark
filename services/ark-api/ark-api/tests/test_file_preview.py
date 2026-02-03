@@ -136,9 +136,7 @@ class TestFilePreview(unittest.TestCase):
         data = response.json()
         # Should be truncated to MAX_ROWS (1000) + 1 for header = 1001
         self.assertLessEqual(len(data["sheets"][0]["rows"]), 1001)
-        # Check metadata exists and has expected fields
-        self.assertIn("metadata", data)
-        self.assertIn("fileType", data["metadata"])
+        self.assertTrue(data["metadata"]["truncated"])
 
     def test_preview_spreadsheet_tsv(self):
         """Test TSV (tab-separated values) file preview"""
