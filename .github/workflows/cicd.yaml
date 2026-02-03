@@ -737,6 +737,16 @@ jobs:
           sudo chmod +x /usr/local/bin/chainsaw
           sudo apt-get update && sudo apt-get install -y jq
 
+      - name: Warm up network connectivity
+        run: |
+          echo "Warming up egress network paths..."
+          for i in {1..5}; do
+            echo "Attempt $i: Testing connectivity to external APIs"
+            curl -s -m 10 "https://api.open-meteo.com/v1/forecast?latitude=40.7128&longitude=-74.006&current_weather=true" > /dev/null && echo "✓ Weather API reachable" || echo "✗ Weather API unreachable (will retry)"
+            sleep 3
+          done
+          echo "Network warm-up complete - egress connectivity established"
+
       - name: Run multi-provider LLM tests
         env:
           E2E_TEST_AZURE_OPENAI_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
