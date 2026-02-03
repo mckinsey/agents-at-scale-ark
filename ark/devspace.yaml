@@ -1,5 +1,6 @@
 # DevSpace configuration for ark service
 version: v2beta1
+name: ark
 
 vars:
   STORAGE_BACKEND:
@@ -40,10 +41,10 @@ deployments:
               tag: ${runtime.images.ark-controller.tag}
             resources:
               limits:
-                memory: "2048Mi"
+                memory: "4096Mi"
                 cpu: "2000m"
               requests:
-                memory: "256Mi"
+                memory: "512Mi"
                 cpu: "200m"
           securityContext:
             runAsNonRoot: false
@@ -82,6 +83,16 @@ profiles:
           kubectl:
             manifests:
               - ./manifests/postgresql-dev.yaml
+      - op: add
+        path: deployments.ark-controller.helm.values.storage
+        value:
+          backend: postgresql
+          postgresql:
+            host: postgresql
+            port: 5432
+            database: ark
+            user: postgres
+            passwordSecretName: postgresql-password
       - op: replace
         path: dev.ark-controller.command
         value:

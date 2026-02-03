@@ -1,11 +1,12 @@
 # DevSpace configuration for local ARK services development
 version: v2beta1
+name: ark-stack
 
 # Dependencies - include other DevSpace configurations
 dependencies:
   localhost-gateway:
     path: ./services/localhost-gateway
-  ark:
+  ark-controller:
     path: ./ark
   ark-broker:
     path: ./services/ark-broker
@@ -114,13 +115,13 @@ pipelines:
       create_deployments gateway-api
     fi
     
-    run_dependency_pipelines ark --pipeline=deploy
+    run_dependency_pipelines ark-controller --pipeline=deploy
     
     if [ "${ENABLE_ARK_TENANT}" == "true" ]; then
       create_deployments ark-tenant
     fi
     
-    run_dependency_pipelines --all --exclude ark --pipeline=deploy
+    run_dependency_pipelines --all --exclude ark-controller --pipeline=deploy
   dev: |-
     
     if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
@@ -131,10 +132,10 @@ pipelines:
       create_deployments gateway-api
     fi
     
-    run_dependency_pipelines ark --pipeline=dev
+    run_dependency_pipelines ark-controller --pipeline=dev
     
     if [ "${ENABLE_ARK_TENANT}" == "true" ]; then
       create_deployments ark-tenant
     fi
     
-    run_dependency_pipelines --all --exclude ark --pipeline=dev
+    run_dependency_pipelines --all --exclude ark-controller --pipeline=dev
