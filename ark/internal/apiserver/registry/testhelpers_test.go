@@ -87,6 +87,10 @@ func (m *mockBackend) Update(ctx context.Context, kind, namespace, name string, 
 	return nil
 }
 
+func (m *mockBackend) UpdateStatus(ctx context.Context, kind, namespace, name string, obj runtime.Object) error {
+	return m.Update(ctx, kind, namespace, name, obj)
+}
+
 func (m *mockBackend) Delete(ctx context.Context, kind, namespace, name string) error {
 	if m.err != nil {
 		return m.err

@@ -255,6 +255,39 @@ func (s *SQLiteBackend) Update(ctx context.Context, kind, namespace, name string
 	return nil
 }
 
+func (s *SQLiteBackend) UpdateStatus(ctx context.Context, kind, namespace, name string, obj runtime.Object) error {
+	data, err := s.converter.Encode(obj)
+	if err != nil {
+		return fmt.Errorf("failed to encode object: %w", err)
+	}
+
+	var resource struct {
+		Status json.RawMessage `json:"status"`
+	}
+
+	if err := json.Unmarshal(data, &resource); err != nil {
+		return fmt.Errorf("failed to parse object: %w", err)
+	}
+
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE resources
+		SET status = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE kind = ? AND namespace = ? AND name = ? AND deleted_at IS NULL
+	`, string(resource.Status), kind, namespace, name)
+	if err != nil {
+		return fmt.Errorf("failed to update resource status: %w", err)
+	}
+
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		return fmt.Errorf("not found")
+	}
+
+	rv, _ := s.GetResourceVersion(ctx, kind, namespace, name)
+	s.notifyWatchers(kind, namespace, watch.Modified, obj, rv)
+	return nil
+}
+
 func (s *SQLiteBackend) Delete(ctx context.Context, kind, namespace, name string) error {
 	obj, err := s.Get(ctx, kind, namespace, name)
 	if err != nil {

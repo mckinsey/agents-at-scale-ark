@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lib/pq"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/klog/v2"
@@ -102,11 +103,13 @@ func (p *PostgreSQLBackend) initSchema() error {
 		status JSONB DEFAULT '{}',
 		labels JSONB DEFAULT '{}',
 		annotations JSONB DEFAULT '{}',
+		finalizers JSONB DEFAULT '[]',
 		created_at TIMESTAMPTZ DEFAULT NOW(),
 		updated_at TIMESTAMPTZ DEFAULT NOW(),
 		deleted_at TIMESTAMPTZ,
 		UNIQUE(kind, namespace, name)
 	);
+	ALTER TABLE resources ADD COLUMN IF NOT EXISTS finalizers JSONB DEFAULT '[]';
 
 	CREATE INDEX IF NOT EXISTS idx_resources_kind_namespace ON resources(kind, namespace);
 	CREATE INDEX IF NOT EXISTS idx_resources_kind_namespace_name ON resources(kind, namespace, name);
@@ -194,8 +197,24 @@ func (p *PostgreSQLBackend) handleNotification(payload string) {
 	}
 
 	obj, err := p.Get(context.Background(), notification.Kind, notification.Namespace, notification.Name)
-	if err != nil && eventType != watch.Deleted {
-		klog.Warningf("Failed to get object for notification: %v", err)
+	if err != nil {
+		if eventType == watch.Deleted {
+			obj = p.converter.NewObject(notification.Kind)
+			if obj != nil {
+				if accessor, aerr := meta.Accessor(obj); aerr == nil {
+					accessor.SetName(notification.Name)
+					accessor.SetNamespace(notification.Namespace)
+					accessor.SetResourceVersion(fmt.Sprintf("%d", notification.ResourceVersion))
+				}
+			}
+		} else {
+			klog.Warningf("Failed to get object for notification: %v", err)
+			return
+		}
+	}
+
+	if obj == nil {
+		klog.Warningf("Object is nil for notification %s %s/%s", notification.Operation, notification.Namespace, notification.Name)
 		return
 	}
 
@@ -213,6 +232,7 @@ func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name st
 			UID         string            `json:"uid"`
 			Labels      map[string]string `json:"labels"`
 			Annotations map[string]string `json:"annotations"`
+			Finalizers  []string          `json:"finalizers"`
 		} `json:"metadata"`
 		Spec   json.RawMessage `json:"spec"`
 		Status json.RawMessage `json:"status"`
@@ -222,8 +242,18 @@ func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name st
 		return fmt.Errorf("failed to parse object: %w", err)
 	}
 
+	if resource.Metadata.Labels == nil {
+		resource.Metadata.Labels = map[string]string{}
+	}
+	if resource.Metadata.Annotations == nil {
+		resource.Metadata.Annotations = map[string]string{}
+	}
+	if resource.Metadata.Finalizers == nil {
+		resource.Metadata.Finalizers = []string{}
+	}
 	labelsJSON, _ := json.Marshal(resource.Metadata.Labels)
 	annotationsJSON, _ := json.Marshal(resource.Metadata.Annotations)
+	finalizersJSON, _ := json.Marshal(resource.Metadata.Finalizers)
 
 	specJSON := string(resource.Spec)
 	if specJSON == "" || specJSON == jsonNull {
@@ -235,9 +265,9 @@ func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name st
 	}
 
 	_, err = p.db.ExecContext(ctx, `
-		INSERT INTO resources (kind, namespace, name, uid, spec, status, labels, annotations)
-		VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb)
-	`, kind, namespace, name, resource.Metadata.UID, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON))
+		INSERT INTO resources (kind, namespace, name, uid, spec, status, labels, annotations, finalizers)
+		VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb)
+	`, kind, namespace, name, resource.Metadata.UID, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON))
 	if err != nil {
 		return fmt.Errorf("failed to insert resource: %w", err)
 	}
@@ -247,29 +277,29 @@ func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name st
 
 func (p *PostgreSQLBackend) Get(ctx context.Context, kind, namespace, name string) (runtime.Object, error) {
 	row := p.db.QueryRowContext(ctx, `
-		SELECT resource_version, generation, uid, spec, status, labels, annotations, created_at, updated_at
+		SELECT resource_version, generation, uid, spec, status, labels, annotations, finalizers, created_at, updated_at
 		FROM resources
 		WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL
 	`, kind, namespace, name)
 
 	var rv, generation int64
 	var uid string
-	var spec, status, labels, annotations []byte
+	var spec, status, labels, annotations, finalizers []byte
 	var createdAt, updatedAt time.Time
 
-	if err := row.Scan(&rv, &generation, &uid, &spec, &status, &labels, &annotations, &createdAt, &updatedAt); err != nil {
+	if err := row.Scan(&rv, &generation, &uid, &spec, &status, &labels, &annotations, &finalizers, &createdAt, &updatedAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("not found")
 		}
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
 
-	return p.reconstructObject(kind, namespace, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), createdAt)
+	return p.reconstructObject(kind, namespace, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), createdAt)
 }
 
 func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, opts storage.ListOptions) ([]runtime.Object, string, error) {
 	query := `
-		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, created_at
+		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, created_at
 		FROM resources
 		WHERE kind = $1 AND deleted_at IS NULL
 	`
@@ -310,14 +340,14 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 	for rows.Next() {
 		var rv, generation int64
 		var ns, name, uid string
-		var spec, status, labels, annotations []byte
+		var spec, status, labels, annotations, finalizers []byte
 		var createdAt time.Time
 
-		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &createdAt); err != nil {
+		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &createdAt); err != nil {
 			return nil, "", fmt.Errorf("failed to scan row: %w", err)
 		}
 
-		obj, err := p.reconstructObject(kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), createdAt)
+		obj, err := p.reconstructObject(kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), createdAt)
 		if err != nil {
 			klog.Warningf("Failed to reconstruct object %s/%s: %v", ns, name, err)
 			continue
@@ -347,6 +377,7 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 		Metadata struct {
 			Labels      map[string]string `json:"labels"`
 			Annotations map[string]string `json:"annotations"`
+			Finalizers  []string          `json:"finalizers"`
 		} `json:"metadata"`
 		Spec   json.RawMessage `json:"spec"`
 		Status json.RawMessage `json:"status"`
@@ -356,8 +387,18 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 		return fmt.Errorf("failed to parse object: %w", err)
 	}
 
+	if resource.Metadata.Labels == nil {
+		resource.Metadata.Labels = map[string]string{}
+	}
+	if resource.Metadata.Annotations == nil {
+		resource.Metadata.Annotations = map[string]string{}
+	}
+	if resource.Metadata.Finalizers == nil {
+		resource.Metadata.Finalizers = []string{}
+	}
 	labelsJSON, _ := json.Marshal(resource.Metadata.Labels)
 	annotationsJSON, _ := json.Marshal(resource.Metadata.Annotations)
+	finalizersJSON, _ := json.Marshal(resource.Metadata.Finalizers)
 
 	specJSON := string(resource.Spec)
 	if specJSON == "" || specJSON == jsonNull {
@@ -371,11 +412,47 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 	result, err := p.db.ExecContext(ctx, `
 		UPDATE resources
 		SET spec = $1::jsonb, status = $2::jsonb, labels = $3::jsonb, annotations = $4::jsonb,
-		    generation = generation + 1, updated_at = NOW()
-		WHERE kind = $5 AND namespace = $6 AND name = $7 AND deleted_at IS NULL
-	`, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), kind, namespace, name)
+		    finalizers = $5::jsonb, generation = generation + 1, updated_at = NOW()
+		WHERE kind = $6 AND namespace = $7 AND name = $8 AND deleted_at IS NULL
+	`, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), kind, namespace, name)
 	if err != nil {
 		return fmt.Errorf("failed to update resource: %w", err)
+	}
+
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		return fmt.Errorf("not found")
+	}
+
+	return nil
+}
+
+func (p *PostgreSQLBackend) UpdateStatus(ctx context.Context, kind, namespace, name string, obj runtime.Object) error {
+	data, err := p.converter.Encode(obj)
+	if err != nil {
+		return fmt.Errorf("failed to encode object: %w", err)
+	}
+
+	var resource struct {
+		Status json.RawMessage `json:"status"`
+	}
+
+	if err := json.Unmarshal(data, &resource); err != nil {
+		return fmt.Errorf("failed to parse object: %w", err)
+	}
+
+	statusJSON := string(resource.Status)
+	if statusJSON == "" || statusJSON == jsonNull {
+		statusJSON = "{}"
+	}
+
+	result, err := p.db.ExecContext(ctx, `
+		UPDATE resources
+		SET status = $1::jsonb, updated_at = NOW()
+		WHERE kind = $2 AND namespace = $3 AND name = $4 AND deleted_at IS NULL
+	`, statusJSON, kind, namespace, name)
+	if err != nil {
+		return fmt.Errorf("failed to update resource status: %w", err)
 	}
 
 	affected, _ := result.RowsAffected()
@@ -444,25 +521,32 @@ func (p *PostgreSQLBackend) Cleanup(ctx context.Context, retention time.Duration
 	return result.RowsAffected()
 }
 
-func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, generation int64, uid, spec, status, labels, annotations string, createdAt time.Time) (runtime.Object, error) {
+func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, generation int64, uid, spec, status, labels, annotations, finalizers string, createdAt time.Time) (runtime.Object, error) {
 	var labelsMap map[string]string
 	var annotationsMap map[string]string
+	var finalizersList []string
 	_ = json.Unmarshal([]byte(labels), &labelsMap)
 	_ = json.Unmarshal([]byte(annotations), &annotationsMap)
+	_ = json.Unmarshal([]byte(finalizers), &finalizersList)
+
+	metadata := map[string]interface{}{
+		"name":              name,
+		"namespace":         namespace,
+		"uid":               uid,
+		"resourceVersion":   fmt.Sprintf("%d", rv),
+		"generation":        generation,
+		"creationTimestamp": createdAt.Format(time.RFC3339),
+		"labels":            labelsMap,
+		"annotations":       annotationsMap,
+	}
+	if len(finalizersList) > 0 {
+		metadata["finalizers"] = finalizersList
+	}
 
 	obj := map[string]interface{}{
 		"apiVersion": p.converter.APIVersion(kind),
 		"kind":       kind,
-		"metadata": map[string]interface{}{
-			"name":              name,
-			"namespace":         namespace,
-			"uid":               uid,
-			"resourceVersion":   fmt.Sprintf("%d", rv),
-			"generation":        generation,
-			"creationTimestamp": createdAt.Format(time.RFC3339),
-			"labels":            labelsMap,
-			"annotations":       annotationsMap,
-		},
+		"metadata":   metadata,
 	}
 
 	if spec != "" && spec != "{}" {

@@ -80,7 +80,7 @@ func (s *StatusStorage) Update(ctx context.Context, name string, objInfo rest.Up
 		return nil, false, fmt.Errorf("failed to access object metadata: %w", err)
 	}
 
-	if err := s.backend.Update(storageContext(ctx), s.config.Kind, namespace, name, existing); err != nil {
+	if err := s.backend.UpdateStatus(storageContext(ctx), s.config.Kind, namespace, name, existing); err != nil {
 		metrics.RecordStorageOperation("update_status", s.config.Kind, "error")
 		metrics.RecordStorageLatency("update_status", s.config.Kind, start)
 		return nil, false, fmt.Errorf("failed to update %s status: %w", s.config.SingularName, err)

@@ -28,6 +28,7 @@ type Backend interface {
 	Get(ctx context.Context, kind, namespace, name string) (runtime.Object, error)
 	List(ctx context.Context, kind, namespace string, opts ListOptions) ([]runtime.Object, string, error)
 	Update(ctx context.Context, kind, namespace, name string, obj runtime.Object) error
+	UpdateStatus(ctx context.Context, kind, namespace, name string, obj runtime.Object) error
 	Delete(ctx context.Context, kind, namespace, name string) error
 	Watch(ctx context.Context, kind, namespace string, opts WatchOptions) (watch.Interface, error)
 	GetResourceVersion(ctx context.Context, kind, namespace, name string) (int64, error)
