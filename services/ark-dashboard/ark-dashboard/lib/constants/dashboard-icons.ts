@@ -28,7 +28,14 @@ export interface DashboardSection {
   key: string;
   title: string;
   icon: LucideIcon;
-  group: 'configurations' | 'operations' | 'runtime' | 'service' | 'agent-builder' | 'workflow-templates' | 'monitoring';
+  group:
+    | 'configurations'
+    | 'operations'
+    | 'runtime'
+    | 'service'
+    | 'agent-builder'
+    | 'workflow-templates'
+    | 'monitoring';
   enablerFeature?: string;
 }
 

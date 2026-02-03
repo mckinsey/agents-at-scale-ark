@@ -24,7 +24,6 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import {
-  isBrokerEnabledAtom,
   isExperimentalDarkModeEnabledAtom,
   isFilesBrowserAvailableAtom,
 } from '@/atoms/experimental-features';
@@ -47,8 +46,6 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
@@ -68,8 +65,8 @@ import { useUser } from '@/providers/UserProvider';
 
 import qbLogoDark from '../app/img/qb-logo-dark.svg';
 import qbLogoLight from '../app/img/qb-logo-light.svg';
-import { UserDetails } from './user';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { UserDetails } from './user';
 
 export function AppSidebar() {
   const router = useRouter();
@@ -132,6 +129,19 @@ export function AppSidebar() {
     checkFilesAPIHealth();
   }, [router, pathname, setIsFilesBrowserAvailable]);
 
+  useEffect(() => {
+    const currentSection = pathname.split('/')[1];
+    const isAgentBuilderSection = AGENT_BUILDER_SECTIONS.some(
+      item => item.key === currentSection,
+    );
+    const isMonitoringSection =
+      MONITORING_SECTIONS.some(item => item.key === currentSection) ||
+      currentSection === 'evals';
+
+    setAgentBuilderOpen(isAgentBuilderSection);
+    setMonitoringOpen(isMonitoringSection);
+  }, [pathname]);
+
   const handleCreateNamespace = (name: string) => {
     createNamespace(name);
   };
@@ -155,7 +165,6 @@ export function AppSidebar() {
     const currentSection = getCurrentSection();
     return sections.some(item => item.key === currentSection);
   };
-
 
   const enabledMonitoringSections = MONITORING_SECTIONS.filter(
     item => item.key !== 'evaluators' && item.key !== 'evaluations',
@@ -352,9 +361,7 @@ export function AppSidebar() {
                   );
                 })}
                 <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={() => navigateToSection('evals')}
-                    isActive={getCurrentSection() === 'evals'}>
+                  <SidebarMenuButton onClick={() => navigateToSection('evals')}>
                     <span>Evals</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -363,20 +370,23 @@ export function AppSidebar() {
             <SidebarMenuItem>
               <Popover open={morePopoverOpen} onOpenChange={setMorePopoverOpen}>
                 <PopoverTrigger asChild>
-                  <SidebarMenuButton
-                    isActive={morePopoverOpen}>
+                  <SidebarMenuButton isActive={morePopoverOpen}>
                     <MoreHorizontal />
                     <span>More</span>
                   </SidebarMenuButton>
                 </PopoverTrigger>
-                <PopoverContent side="right" align="start" sideOffset={-125} className="w-56 p-2">
+                <PopoverContent
+                  side="right"
+                  align="start"
+                  sideOffset={-125}
+                  className="w-56 p-2">
                   <div className="flex flex-col gap-1">
                     <button
                       onClick={() => {
                         navigateToSection('files');
                         setMorePopoverOpen(false);
                       }}
-                      className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground">
+                      className="hover:bg-accent hover:text-accent-foreground flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm">
                       <File className="h-4 w-4" />
                       <span>Files</span>
                     </button>
@@ -385,7 +395,7 @@ export function AppSidebar() {
                         navigateToSection('tasks');
                         setMorePopoverOpen(false);
                       }}
-                      className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground">
+                      className="hover:bg-accent hover:text-accent-foreground flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm">
                       <ListTodo className="h-4 w-4" />
                       <span>A2A Tasks</span>
                     </button>
@@ -395,8 +405,7 @@ export function AppSidebar() {
             </SidebarMenuItem>
           </SidebarContent>
         </SidebarMenu>
-        <SidebarContent>
-        </SidebarContent>
+        <SidebarContent></SidebarContent>
 
         <SidebarFooter>
           {systemInfo && (
@@ -443,7 +452,7 @@ export function AppSidebar() {
             </SidebarMenu>
           )}
         </SidebarFooter>
-      </Sidebar >
+      </Sidebar>
 
       <NamespaceEditor
         open={namespaceEditorOpen}

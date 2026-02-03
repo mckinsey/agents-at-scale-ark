@@ -1,6 +1,5 @@
 'use client';
 
-import { Plus } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useRef, useState } from 'react';
 
@@ -29,13 +28,13 @@ export default function EvalsPage() {
         actions={
           <div className="flex gap-2">
             <Button
-              onClick={() => evaluatorsSectionRef.current?.openAddEditor()}>
-              <Plus className="h-4 w-4" />
+              onClick={() => evaluatorsSectionRef.current?.openAddEditor()}
+              variant="ghost"
+              className="flex border-1 border-white text-white">
               Add Evaluator
             </Button>
             <Button
               onClick={() => evaluationsSectionRef.current?.openAddEditor()}>
-              <Plus className="h-4 w-4" />
               Create Evaluation
             </Button>
           </div>
@@ -43,9 +42,17 @@ export default function EvalsPage() {
       />
       <div className="flex flex-1 flex-col gap-4 p-4">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList>
-            <TabsTrigger value="evaluations">Evaluations</TabsTrigger>
-            <TabsTrigger value="evaluators">Evaluators</TabsTrigger>
+          <TabsList className="border-border w-full justify-start border-b bg-transparent">
+            <TabsTrigger
+              value="evaluations"
+              className="flex-none cursor-pointer border-0 !bg-transparent text-lg shadow-none data-[state=active]:rounded-none data-[state=active]:border-0 data-[state=active]:border-b-2 data-[state=active]:!border-white data-[state=active]:!bg-transparent data-[state=active]:shadow-none">
+              Evaluations
+            </TabsTrigger>
+            <TabsTrigger
+              value="evaluators"
+              className="flex-none cursor-pointer border-0 !bg-transparent text-lg shadow-none data-[state=active]:rounded-none data-[state=active]:border-0 data-[state=active]:border-b-2 data-[state=active]:!border-white data-[state=active]:!bg-transparent data-[state=active]:shadow-none">
+              Evaluators
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="evaluations">
             <EvaluationsSection

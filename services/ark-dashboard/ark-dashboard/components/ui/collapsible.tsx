@@ -11,7 +11,8 @@ function Collapsible({
   return <CollapsiblePrimitive.Root data-slot="collapsible" {...props} />;
 }
 
-interface CollapsibleTriggerProps extends React.ComponentProps<typeof CollapsiblePrimitive.CollapsibleTrigger> {
+interface CollapsibleTriggerProps
+  extends React.ComponentProps<typeof CollapsiblePrimitive.CollapsibleTrigger> {
   open?: boolean;
   showChevron?: boolean;
   isActive?: boolean;
@@ -31,15 +32,14 @@ function CollapsibleTrigger({
       className={cn(
         'group/collapsible-trigger',
         'data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground',
-        className
+        className,
       )}
-      {...props}
-    >
+      {...props}>
       {props.children}
       {showChevron && (
         <>
-          <ChevronUp className="ml-auto transition-all group-data-[state=open]/collapsible:block group-data-[state=closed]/collapsible:hidden" />
-          <ChevronDown className="ml-auto transition-all opacity-0 group-hover/collapsible-trigger:opacity-100 group-data-[state=open]/collapsible:hidden group-data-[state=closed]/collapsible:block" />
+          <ChevronUp className="ml-auto transition-all group-data-[state=closed]/collapsible:hidden group-data-[state=open]/collapsible:block" />
+          <ChevronDown className="ml-auto opacity-0 transition-all group-hover/collapsible-trigger:opacity-100 group-data-[state=closed]/collapsible:block group-data-[state=open]/collapsible:hidden" />
         </>
       )}
       {!showChevron && open !== undefined && (
@@ -47,7 +47,7 @@ function CollapsibleTrigger({
           {open ? (
             <ChevronUp className="ml-auto transition-all" />
           ) : (
-            <ChevronDown className="ml-auto transition-all opacity-0 group-hover/collapsible-trigger:opacity-100" />
+            <ChevronDown className="ml-auto opacity-0 transition-all group-hover/collapsible-trigger:opacity-100" />
           )}
         </>
       )}
@@ -62,7 +62,7 @@ function CollapsibleContent({
     <CollapsiblePrimitive.CollapsibleContent
       data-slot="collapsible-content"
       style={{
-        marginLeft: '32px'
+        marginLeft: '32px',
       }}
       {...props}
     />
