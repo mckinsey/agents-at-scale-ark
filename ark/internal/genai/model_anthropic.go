@@ -1,3 +1,4 @@
+//nolint:dupl // Provider-specific config loading, intentional similarity with model_openai.go
 package genai
 
 import (

@@ -1,3 +1,4 @@
+//nolint:dupl // Provider-specific config loading, intentional similarity with model_anthropic.go
 package genai
 
 import (

@@ -13,6 +13,12 @@ import (
 	"mckinsey.com/ark/internal/common"
 )
 
+const (
+	finishReasonStop      = "stop"
+	finishReasonToolCalls = "tool_calls"
+	finishReasonToolUse   = "tool_use"
+)
+
 type AnthropicProvider struct {
 	Model        string
 	BaseURL      string
@@ -111,6 +117,7 @@ func (ap *AnthropicProvider) ChatCompletion(ctx context.Context, messages []Mess
 	return ap.convertAnthropicToOpenAI(response), nil
 }
 
+//nolint:gocognit // Complex streaming logic required for proper SDK event handling
 func (ap *AnthropicProvider) ChatCompletionStream(ctx context.Context, messages []Message, n int64, streamFunc func(*openai.ChatCompletionChunk) error, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
 	client := ap.createClient(ctx)
 
@@ -161,7 +168,7 @@ func (ap *AnthropicProvider) ChatCompletionStream(ctx context.Context, messages 
 		case anthropic.MessageStartEvent:
 			messageID = e.Message.ID
 			modelName = string(e.Message.Model)
-			usage.PromptTokens = int64(e.Message.Usage.InputTokens)
+			usage.PromptTokens = e.Message.Usage.InputTokens
 
 		case anthropic.ContentBlockStartEvent:
 			if toolUse, ok := e.ContentBlock.AsAny().(anthropic.ToolUseBlock); ok {
@@ -206,7 +213,7 @@ func (ap *AnthropicProvider) ChatCompletionStream(ctx context.Context, messages 
 			}
 
 		case anthropic.MessageDeltaEvent:
-			usage.CompletionTokens = int64(e.Usage.OutputTokens)
+			usage.CompletionTokens = e.Usage.OutputTokens
 			usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 		}
 	}
@@ -215,9 +222,9 @@ func (ap *AnthropicProvider) ChatCompletionStream(ctx context.Context, messages 
 		return nil, err
 	}
 
-	finishReason := "stop"
+	finishReason := finishReasonStop
 	if len(toolCalls) > 0 {
-		finishReason = "tool_calls"
+		finishReason = finishReasonToolCalls
 	}
 
 	responseMessage := openai.ChatCompletionMessage{
@@ -245,6 +252,8 @@ func (ap *AnthropicProvider) ChatCompletionStream(ctx context.Context, messages 
 }
 
 // convertMessagesToAnthropic converts OpenAI format messages to Anthropic MessageParam format
+//
+//nolint:gocognit,nestif // Complex conversion logic required for proper message type handling
 func (ap *AnthropicProvider) convertMessagesToAnthropic(messages []Message) ([]anthropic.MessageParam, string) {
 	var anthropicMessages []anthropic.MessageParam
 	var systemPrompt string
@@ -283,7 +292,10 @@ func (ap *AnthropicProvider) convertMessagesToAnthropic(messages []Message) ([]a
 			for _, toolCall := range assistantMsg.ToolCalls {
 				var input map[string]interface{}
 				if toolCall.Function.Arguments != "" {
-					json.Unmarshal([]byte(toolCall.Function.Arguments), &input)
+					if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &input); err != nil {
+						// Use empty map if unmarshal fails
+						input = make(map[string]interface{})
+					}
 				}
 
 				contentBlocks = append(contentBlocks, anthropic.NewToolUseBlock(
@@ -311,6 +323,8 @@ func (ap *AnthropicProvider) convertMessagesToAnthropic(messages []Message) ([]a
 }
 
 // convertToolsToAnthropic converts OpenAI format tools to Anthropic ToolUnionParam format
+//
+//nolint:gocognit,nestif // Complex conversion logic required for proper tool schema handling
 func (ap *AnthropicProvider) convertToolsToAnthropic(tools []openai.ChatCompletionToolParam) []anthropic.ToolUnionParam {
 	var anthropicTools []anthropic.ToolUnionParam
 
@@ -379,12 +393,12 @@ func (ap *AnthropicProvider) convertAnthropicToOpenAI(response *anthropic.Messag
 		}
 	}
 
-	finishReason := "stop"
+	finishReason := finishReasonStop
 	switch response.StopReason {
 	case "max_tokens":
 		finishReason = "length"
-	case "tool_use":
-		finishReason = "tool_calls"
+	case finishReasonToolUse:
+		finishReason = finishReasonToolCalls
 	}
 
 	message := openai.ChatCompletionMessage{
@@ -408,9 +422,9 @@ func (ap *AnthropicProvider) convertAnthropicToOpenAI(response *anthropic.Messag
 			},
 		},
 		Usage: openai.CompletionUsage{
-			PromptTokens:     int64(response.Usage.InputTokens),
-			CompletionTokens: int64(response.Usage.OutputTokens),
-			TotalTokens:      int64(response.Usage.InputTokens + response.Usage.OutputTokens),
+			PromptTokens:     response.Usage.InputTokens,
+			CompletionTokens: response.Usage.OutputTokens,
+			TotalTokens:      response.Usage.InputTokens + response.Usage.OutputTokens,
 		},
 	}
 }

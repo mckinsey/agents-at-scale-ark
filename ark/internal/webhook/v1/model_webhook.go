@@ -195,6 +195,7 @@ func (v *ModelValidator) validateAzureConfig(ctx context.Context, model *arkv1al
 	return nil
 }
 
+//nolint:dupl // Provider-specific validation, intentional similarity with validateAnthropicConfig
 func (v *ModelValidator) validateOpenAIConfig(ctx context.Context, model *arkv1alpha1.Model) error {
 	if model.Spec.Config.OpenAI == nil {
 		return fmt.Errorf("openai configuration is required for openai model type")
@@ -257,6 +258,7 @@ func (v *ModelValidator) validateBedrockConfig(ctx context.Context, model *arkv1
 	return nil
 }
 
+//nolint:dupl // Provider-specific validation, intentional similarity with validateOpenAIConfig
 func (v *ModelValidator) validateAnthropicConfig(ctx context.Context, model *arkv1alpha1.Model) error {
 	if model.Spec.Config.Anthropic == nil {
 		return fmt.Errorf("anthropic configuration is required for anthropic model type")
