@@ -7,9 +7,10 @@ const (
 
 // Provider constants - specifies which AI provider client to use.
 const (
-	ProviderAzure   = "azure"
-	ProviderOpenAI  = "openai"
-	ProviderBedrock = "bedrock"
+	ProviderAzure     = "azure"
+	ProviderOpenAI    = "openai"
+	ProviderBedrock   = "bedrock"
+	ProviderAnthropic = "anthropic"
 )
 
 // Model type constants - specifies the API capability of the model.
@@ -30,7 +31,7 @@ const (
 // IsDeprecatedProviderInType returns true if the type value is a provider name.
 // Deprecated format (spec.type as provider) will be removed in release 1.0.
 func IsDeprecatedProviderInType(typeValue string) bool {
-	return typeValue == ProviderOpenAI || typeValue == ProviderAzure || typeValue == ProviderBedrock
+	return typeValue == ProviderOpenAI || typeValue == ProviderAzure || typeValue == ProviderBedrock || typeValue == ProviderAnthropic
 }
 
 // Agent tool type constants

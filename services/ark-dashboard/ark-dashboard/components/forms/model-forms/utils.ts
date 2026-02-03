@@ -62,6 +62,19 @@ export function createConfig(
         ...(formValues.modelARN && { modelArn: formValues.modelARN }),
       };
       return config;
+    case 'anthropic':
+      config.anthropic = {
+        apiKey: {
+          valueFrom: {
+            secretKeyRef: {
+              name: formValues.secret,
+              key: 'token',
+            },
+          },
+        },
+        baseUrl: formValues.baseUrl,
+      };
+      return config;
   }
 }
 
@@ -99,6 +112,14 @@ export function getResetValues(currentFormValues: FormValues): FormValues {
         bedrockSecretAccessKeySecretName: '',
         region: '',
         modelARN: '',
+      };
+    case 'anthropic':
+      return {
+        name: currentFormValues.name,
+        provider: currentFormValues.provider,
+        model: currentFormValues.model,
+        secret: currentFormValues.secret ?? '',
+        baseUrl: currentFormValues.baseUrl ?? '',
       };
   }
 }
@@ -202,6 +223,26 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
           getConfigValue<string>(model.config, [
             'bedrock',
             'modelArn',
+            'value',
+          ]) || '',
+      };
+    case 'anthropic':
+      return {
+        name: model.name,
+        provider: model.provider,
+        model: model.model,
+        secret:
+          getConfigValue<string>(model.config, [
+            'anthropic',
+            'apiKey',
+            'valueFrom',
+            'secretKeyRef',
+            'name',
+          ]) || '',
+        baseUrl:
+          getConfigValue<string>(model.config, [
+            'anthropic',
+            'baseUrl',
             'value',
           ]) || '',
       };

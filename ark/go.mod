@@ -25,6 +25,7 @@ require (
 )
 
 require (
+	github.com/anthropics/anthropic-sdk-go v1.20.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.38.0 // indirect

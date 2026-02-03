@@ -89,4 +89,36 @@ spec:
           value: "4096"
       region:
         value: "us-west-2"
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: anthropic-with-properties
+spec:
+  provider: anthropic
+  type: completions
+  model:
+    value: claude-3-5-sonnet-20241022
+  config:
+    anthropic:
+      properties:
+        # Temperature controls randomness (0.0-1.0, default: 1.0)
+        temperature:
+          value: "0.7"
+        # Maximum tokens to generate (required by Anthropic)
+        max_tokens:
+          value: "4096"
+        # Nucleus sampling parameter (0.0-1.0)
+        top_p:
+          value: "0.9"
+        # Top-k sampling parameter
+        top_k:
+          value: "40"
+      baseUrl:
+        value: "https://api.anthropic.com/v1"
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            name: anthropic-api-key
+            key: apiKey
 

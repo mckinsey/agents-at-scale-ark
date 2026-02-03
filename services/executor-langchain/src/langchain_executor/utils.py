@@ -7,6 +7,7 @@ from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_anthropic import ChatAnthropic
 from pydantic import SecretStr
 
 logger = logging.getLogger(__name__)
@@ -89,15 +90,46 @@ def create_chat_client(model) -> ChatOpenAI:
         
         return ChatOpenAI(**kwargs)
         
+    elif model.type == "anthropic":
+        anthropic_config = config.get("anthropic", {})
+        api_key = anthropic_config.get("apiKey", "")
+        base_url = anthropic_config.get("baseUrl", "")
+        properties = anthropic_config.get("properties", {})
+
+        if not api_key:
+            raise ValueError("Anthropic requires apiKey")
+
+        # Get properties with defaults
+        temperature = float(properties.get("temperature", "1.0"))
+        max_tokens = properties.get("max_tokens", "4096")
+        top_p = properties.get("top_p")
+        top_k = properties.get("top_k")
+
+        kwargs = {
+            "model": model.name,
+            "anthropic_api_key": SecretStr(api_key),
+            "temperature": temperature,
+            "max_tokens": int(max_tokens),
+        }
+
+        if base_url:
+            kwargs["anthropic_api_url"] = base_url
+        if top_p:
+            kwargs["top_p"] = float(top_p)
+        if top_k:
+            kwargs["top_k"] = int(top_k)
+
+        return ChatAnthropic(**kwargs)
+
     elif model.type == "bedrock":
         bedrock_config = config.get("bedrock", {})
         temperature = bedrock_config.get("temperature")
         max_tokens = bedrock_config.get("maxTokens")
-        
+
         # For Bedrock, we'd need to use a different client
         # This is a placeholder - actual Bedrock integration would be different
         raise NotImplementedError("Bedrock support not implemented in LangChain executor")
-    
+
     else:
         raise ValueError(f"Unsupported model type: {model.type}")
 
@@ -129,16 +161,19 @@ def create_embeddings_client(model, embeddings_model_name: Optional[str] = None)
         openai_config = config.get("openai", {})
         api_key = openai_config.get("apiKey", "")
         base_url = openai_config.get("baseUrl", "")
-        
+
         if not api_key:
             raise ValueError("OpenAI requires apiKey")
-            
+
         return OpenAIEmbeddings(
-            model=model_name, 
+            model=model_name,
             api_key=SecretStr(api_key),
             base_url=base_url or None
         )
-    
+
+    elif model.type == "anthropic":
+        raise ValueError("Anthropic does not provide embeddings models. Use OpenAI or Azure for embeddings.")
+
     else:
         raise ValueError(f"Unsupported model type for embeddings: {model.type}")
 

@@ -10,17 +10,18 @@ from .agents import AgentHeader
 PROVIDER_OPENAI = "openai"
 PROVIDER_AZURE = "azure"
 PROVIDER_BEDROCK = "bedrock"
+PROVIDER_ANTHROPIC = "anthropic"
 
 # Model type constants
 MODEL_TYPE_COMPLETIONS = "completions"
 
 # Type aliases for Pydantic models
-ProviderType = Literal["openai", "azure", "bedrock"]
+ProviderType = Literal["openai", "azure", "bedrock", "anthropic"]
 ModelTypeType = Literal["completions"]
 
 # Deprecated: spec.type values that were used as provider before the provider field was added.
 # Will be removed in release 1.0.
-DEPRECATED_PROVIDER_TYPES = {PROVIDER_OPENAI, PROVIDER_AZURE, PROVIDER_BEDROCK}
+DEPRECATED_PROVIDER_TYPES = {PROVIDER_OPENAI, PROVIDER_AZURE, PROVIDER_BEDROCK, PROVIDER_ANTHROPIC}
 
 
 class ModelValueSource(BaseModel):
@@ -55,11 +56,19 @@ class BedrockConfig(BaseModel):
     temperature: Optional[str] = Field(None, pattern=r"^(0(\.\d+)?|1(\.0+)?)$")
 
 
+class AnthropicConfig(BaseModel):
+    """Anthropic model configuration."""
+    api_key: Union[str, ModelValueSource] = Field(..., alias="apiKey")
+    base_url: Union[str, ModelValueSource] = Field(..., alias="baseUrl")
+    headers: Optional[List[AgentHeader]] = None
+
+
 class ModelConfig(BaseModel):
     """Model configuration container."""
     openai: Optional[OpenAIConfig] = None
     azure: Optional[AzureConfig] = None
     bedrock: Optional[BedrockConfig] = None
+    anthropic: Optional[AnthropicConfig] = None
 
 
 class ModelResponse(BaseModel):

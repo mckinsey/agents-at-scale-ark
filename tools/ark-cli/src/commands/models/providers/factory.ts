@@ -2,6 +2,7 @@ import {ProviderConfigCollector} from './types.js';
 import {OpenAIConfigCollector} from './openai.js';
 import {AzureConfigCollector} from './azure.js';
 import {BedrockConfigCollector} from './bedrock.js';
+import {AnthropicConfigCollector} from './anthropic.js';
 
 /**
  * Factory for creating provider-specific configuration collectors.
@@ -14,7 +15,7 @@ export class ProviderConfigCollectorFactory {
   /**
    * Creates a configuration collector for the specified provider type.
    *
-   * @param type - The provider type ('openai', 'azure', or 'bedrock')
+   * @param type - The provider type ('openai', 'azure', 'bedrock', or 'anthropic')
    * @returns A collector instance for the specified provider
    * @throws Error if the provider type is not recognized
    */
@@ -26,6 +27,8 @@ export class ProviderConfigCollectorFactory {
         return new AzureConfigCollector();
       case 'bedrock':
         return new BedrockConfigCollector();
+      case 'anthropic':
+        return new AnthropicConfigCollector();
       default:
         throw new Error(`Unknown provider type: ${type}`);
     }

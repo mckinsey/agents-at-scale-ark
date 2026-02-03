@@ -174,6 +174,11 @@ class ModelResolver:
             base_url = openai_config.get('baseUrl', {}).get('value', 'https://api.openai.com/v1')
             api_key = self._resolve_value_source(openai_config.get('apiKey', {}), model_crd.get('metadata', {}).get('namespace', 'default'))
             api_version = openai_config.get('apiVersion', {}).get('value', '2024-02-15')
+        elif provider == 'anthropic' or model_type == 'anthropic':
+            anthropic_config = config.get('anthropic', {})
+            base_url = anthropic_config.get('baseUrl', {}).get('value', 'https://api.anthropic.com/v1')
+            api_key = self._resolve_value_source(anthropic_config.get('apiKey', {}), model_crd.get('metadata', {}).get('namespace', 'default'))
+            api_version = anthropic_config.get('apiVersion', {}).get('value', '2023-06-01')
         else:
             logger.warning(f"Unknown provider: {provider} and type: {model_type}, using default OpenAI config")
             base_url = "https://api.openai.com/v1"

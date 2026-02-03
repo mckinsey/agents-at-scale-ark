@@ -2355,6 +2355,18 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * AnthropicConfig
+         * @description Anthropic model configuration.
+         */
+        AnthropicConfig: {
+            /** Apikey */
+            apiKey: string | components["schemas"]["ModelValueSource"];
+            /** Baseurl */
+            baseUrl: string | components["schemas"]["ModelValueSource"];
+            /** Headers */
+            headers?: components["schemas"]["AgentHeader-Input"][] | null;
+        };
+        /**
          * ArkService
          * @description Response model for a single ARK service.
          *
@@ -3914,6 +3926,7 @@ export interface components {
          * @description Model configuration container.
          */
         ModelConfig: {
+            anthropic?: components["schemas"]["AnthropicConfig"] | null;
             azure?: components["schemas"]["AzureConfig"] | null;
             bedrock?: components["schemas"]["BedrockConfig"] | null;
             openai?: components["schemas"]["OpenAIConfig"] | null;
@@ -3932,7 +3945,7 @@ export interface components {
              * Provider
              * @enum {string}
              */
-            provider: "openai" | "azure" | "bedrock";
+            provider: "openai" | "azure" | "bedrock" | "anthropic";
         };
         /**
          * ModelDetailResponse
@@ -3962,7 +3975,7 @@ export interface components {
              * Provider
              * @enum {string}
              */
-            provider: "openai" | "azure" | "bedrock";
+            provider: "openai" | "azure" | "bedrock" | "anthropic";
             /** Resolved Address */
             resolved_address?: string | null;
             /**
@@ -4012,7 +4025,7 @@ export interface components {
              * Provider
              * @enum {string}
              */
-            provider: "openai" | "azure" | "bedrock";
+            provider: "openai" | "azure" | "bedrock" | "anthropic";
             /**
              * Type
              * @default completions
