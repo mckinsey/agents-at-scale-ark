@@ -28,7 +28,7 @@ export interface DashboardSection {
   key: string;
   title: string;
   icon: LucideIcon;
-  group: 'configurations' | 'operations' | 'runtime' | 'service' | 'agent-builder';
+  group: 'configurations' | 'operations' | 'runtime' | 'service' | 'agent-builder' | 'workflow-templates' | 'monitoring';
   enablerFeature?: string;
 }
 
@@ -46,50 +46,65 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     icon: Users,
     group: 'agent-builder',
   },
+  queries: {
+    key: 'queries',
+    title: 'Queries',
+    icon: Search,
+    group: 'agent-builder',
+  },
+
+  // Workflow Templates
+  'workflow-templates': {
+    key: 'workflow-templates',
+    title: 'Workflows',
+    icon: Workflow,
+    group: 'workflow-templates',
+  },
+
+  // Models
   models: {
     key: 'models',
     title: 'Models',
     icon: Zap,
     group: 'configurations',
   },
+
+  // Secrets
   secrets: {
     key: 'secrets',
     title: 'Secrets',
     icon: Lock,
     group: 'configurations',
   },
+
+  // Monitoring
+  events: {
+    key: 'events',
+    title: 'Query Logs',
+    icon: Calendar,
+    group: 'monitoring',
+  },
+  broker: {
+    key: 'broker',
+    title: 'Broker',
+    icon: Activity,
+    group: 'monitoring',
+    enablerFeature: BROKER_FEATURE_KEY,
+  },
   evaluators: {
     key: 'evaluators',
     title: 'Evaluators',
     icon: CheckCircle,
-    group: 'configurations',
-  },
-  'workflow-templates': {
-    key: 'workflow-templates',
-    title: 'Workflow Templates',
-    icon: Workflow,
-    group: 'configurations',
-  },
-
-  // Operations
-  queries: {
-    key: 'queries',
-    title: 'Queries',
-    icon: Search,
-    group: 'operations',
+    group: 'monitoring',
   },
   evaluations: {
     key: 'evaluations',
     title: 'Evaluations',
     icon: BarChart,
-    group: 'operations',
+    group: 'monitoring',
   },
-  events: {
-    key: 'events',
-    title: 'Events',
-    icon: Calendar,
-    group: 'operations',
-  },
+
+  // Operations
   memory: {
     key: 'memory',
     title: 'Memory',
@@ -108,13 +123,6 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     title: 'A2A Tasks',
     icon: ClipboardList,
     group: 'operations',
-  },
-  broker: {
-    key: 'broker',
-    title: 'Broker',
-    icon: Activity,
-    group: 'operations',
-    enablerFeature: BROKER_FEATURE_KEY,
   },
 
   // Runtime
@@ -179,4 +187,8 @@ export const SERVICE_SECTIONS = Object.values(DASHBOARD_SECTIONS).filter(
 
 export const AGENT_BUILDER_SECTIONS = Object.values(DASHBOARD_SECTIONS).filter(
   section => section.group === 'agent-builder',
+);
+
+export const MONITORING_SECTIONS = Object.values(DASHBOARD_SECTIONS).filter(
+  section => section.group === 'monitoring',
 );

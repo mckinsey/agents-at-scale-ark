@@ -2,16 +2,22 @@
 
 import { useAtomValue, useSetAtom } from 'jotai';
 import {
+  Activity,
   AlertCircle,
   Bot,
   Check,
-  ChevronRight,
   ChevronsUpDown,
   ChevronsUpDownIcon,
+  File,
   Home,
+  ListTodo,
   LogOut,
+  MoreHorizontal,
   Plus,
+  Server,
   Settings,
+  Workflow,
+  Zap,
 } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
@@ -55,10 +61,8 @@ import { trackEvent } from '@/lib/analytics/singleton';
 import { signout } from '@/lib/auth/signout';
 import {
   AGENT_BUILDER_SECTIONS,
-  CONFIGURATION_SECTIONS,
+  MONITORING_SECTIONS,
   OPERATION_SECTIONS,
-  RUNTIME_SECTIONS,
-  SERVICE_SECTIONS,
 } from '@/lib/constants/dashboard-icons';
 import { type SystemInfo, systemInfoService } from '@/lib/services';
 import { proxyService } from '@/lib/services/proxy';
@@ -68,6 +72,7 @@ import { useUser } from '@/providers/UserProvider';
 import qbLogoDark from '../app/img/qb-logo-dark.svg';
 import qbLogoLight from '../app/img/qb-logo-light.svg';
 import { UserDetails } from './user';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 
 export function AppSidebar() {
   const router = useRouter();
@@ -94,8 +99,9 @@ export function AppSidebar() {
   const [loading, setLoading] = useState(true);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [namespaceEditorOpen, setNamespaceEditorOpen] = useState(false);
-  const [agentBuilderOpen, setAgentBuilderOpen] = useState(true);
-
+  const [agentBuilderOpen, setAgentBuilderOpen] = useState(false);
+  const [monitoringOpen, setMonitoringOpen] = useState(false);
+  const [morePopoverOpen, setMorePopoverOpen] = useState(false);
   const isPlaceholderSection = (key: string): boolean => {
     const placeholderKeys: string[] = [];
     return placeholderKeys.includes(key);
@@ -297,149 +303,102 @@ export function AppSidebar() {
                 })}
               </CollapsibleContent>
             </Collapsible>
-            {CONFIGURATION_SECTIONS.map(item => {
-              const isPlaceholder = isPlaceholderSection(item.key);
-              const isDisabled =
-                !isNamespaceResolved || loading || isPlaceholder;
-              const isActive = getCurrentSection() === item.key;
-              return (
-                <SidebarMenuItem key={item.key}>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={() => navigateToSection('workflow-templates')}
+                isActive={getCurrentSection() === 'workflow-templates'}>
+                <Workflow />
+                <span>Workflows</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={() => navigateToSection('mcp')}
+                isActive={getCurrentSection() === 'mcp'}>
+                <Server />
+                <span>MCPs</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={() => navigateToSection('models')}
+                isActive={getCurrentSection() === 'models'}>
+                <Zap />
+                <span>Models</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <Collapsible
+              open={monitoringOpen}
+              onOpenChange={setMonitoringOpen}
+              className="group/collapsible">
+              <SidebarGroupLabel
+                asChild
+                className="group/label text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-sm">
+                <CollapsibleTrigger
+                  open={monitoringOpen}
+                  isActive={isAnySectionActive(MONITORING_SECTIONS)}
+                  className="flex w-full items-center gap-2">
+                  <Activity />
+                  Monitoring
+                </CollapsibleTrigger>
+              </SidebarGroupLabel>
+              <CollapsibleContent>
+                {MONITORING_SECTIONS.map(item => {
+                  const isPlaceholder = isPlaceholderSection(item.key);
+                  const isDisabled =
+                    !isNamespaceResolved || loading || isPlaceholder;
+                  return (
+                    <SidebarMenuItem key={item.key}>
+                      <SidebarMenuButton
+                        onClick={() =>
+                          !isPlaceholder &&
+                          isNamespaceResolved &&
+                          navigateToSection(item.key)
+                        }
+                        disabled={isDisabled}>
+                        <span>{item.title}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </CollapsibleContent>
+            </Collapsible>
+            <SidebarMenuItem>
+              <Popover open={morePopoverOpen} onOpenChange={setMorePopoverOpen}>
+                <PopoverTrigger asChild>
                   <SidebarMenuButton
-                    onClick={() =>
-                      !isPlaceholder &&
-                      isNamespaceResolved &&
-                      navigateToSection(item.key)
-                    }
-                    isActive={isActive}
-                    disabled={isDisabled}>
-                    {item.icon && <item.icon />}
-                    <span>{item.title}</span>
+                    isActive={morePopoverOpen}>
+                    <MoreHorizontal />
+                    <span>More</span>
                   </SidebarMenuButton>
-                </SidebarMenuItem>
-              );
-            })}
+                </PopoverTrigger>
+                <PopoverContent side="right" align="start" sideOffset={-125} className="w-56 p-2">
+                  <div className="flex flex-col gap-1">
+                    <button
+                      onClick={() => {
+                        navigateToSection('files');
+                        setMorePopoverOpen(false);
+                      }}
+                      className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground">
+                      <File className="h-4 w-4" />
+                      <span>Files</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        navigateToSection('tasks');
+                        setMorePopoverOpen(false);
+                      }}
+                      className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground">
+                      <ListTodo className="h-4 w-4" />
+                      <span>A2A Tasks</span>
+                    </button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </SidebarMenuItem>
           </SidebarContent>
         </SidebarMenu>
         <SidebarContent>
-          <SidebarGroup>
-            <Collapsible defaultOpen className="group/collapsible">
-              <SidebarGroupLabel
-                asChild
-                className="group/label text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-sm">
-                <CollapsibleTrigger className="flex w-full items-center">
-                  Runtime
-                  <ChevronRight className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-90" />
-                </CollapsibleTrigger>
-              </SidebarGroupLabel>
-              <CollapsibleContent>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {RUNTIME_SECTIONS.map(item => {
-                      const isPlaceholder = isPlaceholderSection(item.key);
-                      const isDisabled =
-                        !isNamespaceResolved || loading || isPlaceholder;
-                      const isActive = getCurrentSection() === item.key;
-                      return (
-                        <SidebarMenuItem key={item.key}>
-                          <SidebarMenuButton
-                            onClick={() =>
-                              !isPlaceholder &&
-                              isNamespaceResolved &&
-                              navigateToSection(item.key)
-                            }
-                            isActive={isActive}
-                            disabled={isDisabled}>
-                            {item.icon && <item.icon />}
-                            <span>{item.title}</span>
-                          </SidebarMenuButton>
-                        </SidebarMenuItem>
-                      );
-                    })}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </CollapsibleContent>
-            </Collapsible>
-          </SidebarGroup>
-
-          <SidebarGroup>
-            <Collapsible defaultOpen className="group/collapsible">
-              <SidebarGroupLabel
-                asChild
-                className="group/label text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-sm">
-                <CollapsibleTrigger className="flex w-full items-center">
-                  Operations
-                  <ChevronRight className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-90" />
-                </CollapsibleTrigger>
-              </SidebarGroupLabel>
-              <CollapsibleContent>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {enabledOperationSections.map(item => {
-                      const isPlaceholder = isPlaceholderSection(item.key);
-                      const isDisabled =
-                        !isNamespaceResolved || loading || isPlaceholder;
-                      const isActive = getCurrentSection() === item.key;
-                      return (
-                        <SidebarMenuItem key={item.key}>
-                          <SidebarMenuButton
-                            onClick={() =>
-                              !isPlaceholder &&
-                              isNamespaceResolved &&
-                              navigateToSection(item.key)
-                            }
-                            isActive={isActive}
-                            disabled={isDisabled}>
-                            {item.icon && <item.icon />}
-                            <span>{item.title}</span>
-                          </SidebarMenuButton>
-                        </SidebarMenuItem>
-                      );
-                    })}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </CollapsibleContent>
-            </Collapsible>
-          </SidebarGroup>
-
-          <SidebarGroup>
-            <Collapsible defaultOpen className="group/collapsible">
-              <SidebarGroupLabel
-                asChild
-                className="group/label text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-sm">
-                <CollapsibleTrigger className="flex w-full items-center">
-                  Service
-                  <ChevronRight className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-90" />
-                </CollapsibleTrigger>
-              </SidebarGroupLabel>
-              <CollapsibleContent>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {SERVICE_SECTIONS.map(item => {
-                      const isPlaceholder = isPlaceholderSection(item.key);
-                      const isDisabled =
-                        !isNamespaceResolved || loading || isPlaceholder;
-                      const isActive = getCurrentSection() === item.key;
-                      return (
-                        <SidebarMenuItem key={item.key}>
-                          <SidebarMenuButton
-                            onClick={() =>
-                              !isPlaceholder &&
-                              isNamespaceResolved &&
-                              navigateToSection(item.key)
-                            }
-                            isActive={isActive}
-                            disabled={isDisabled}>
-                            {item.icon && <item.icon />}
-                            <span>{item.title}</span>
-                          </SidebarMenuButton>
-                        </SidebarMenuItem>
-                      );
-                    })}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </CollapsibleContent>
-            </Collapsible>
-          </SidebarGroup>
         </SidebarContent>
 
         <SidebarFooter>
