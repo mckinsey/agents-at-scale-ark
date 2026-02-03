@@ -112,8 +112,12 @@ class TestFilePreview(unittest.TestCase):
         }
 
         response = client.post("/v1/file-preview/spreadsheet", json=request_data)
-        # Empty CSV returns 400 in the current implementation
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 200)
+
+        data = response.json()
+        self.assertIn("sheets", data)
+        self.assertEqual(len(data["sheets"]), 1)
+        self.assertEqual(len(data["sheets"][0]["rows"]), 0)
 
     def test_preview_spreadsheet_large_csv(self):
         """Test CSV with many rows gets truncated to MAX_ROWS"""
@@ -134,8 +138,8 @@ class TestFilePreview(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
 
         data = response.json()
-        # Should be truncated to MAX_ROWS (1000) + 1 for header = 1001
-        self.assertLessEqual(len(data["sheets"][0]["rows"]), 1001)
+        # Should be truncated to MAX_ROWS (1000)
+        self.assertLessEqual(len(data["sheets"][0]["rows"]), 1000)
         self.assertTrue(data["metadata"]["truncated"])
 
     def test_preview_spreadsheet_tsv(self):
@@ -156,8 +160,8 @@ class TestFilePreview(unittest.TestCase):
         self.assertIn("sheets", data)
         self.assertEqual(len(data["sheets"]), 1)
         self.assertEqual(len(data["sheets"][0]["rows"]), 3)
-        # Verify tab separation worked by checking first row has 3 columns
-        self.assertEqual(len(data["sheets"][0]["rows"][0]), 3)
+        # Verify tab separation worked
+        self.assertEqual(len(data["sheets"][0]["rows"][0]["cells"]), 3)
 
 
 if __name__ == "__main__":
