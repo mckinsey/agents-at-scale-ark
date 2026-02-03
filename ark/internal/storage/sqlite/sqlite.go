@@ -60,10 +60,11 @@ func New(path string, converter storage.TypeConverter) (*SQLiteBackend, error) {
 func (s *SQLiteBackend) initSchema() error {
 	schema := `
 	CREATE TABLE IF NOT EXISTS resources (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		kind TEXT NOT NULL,
 		namespace TEXT NOT NULL,
 		name TEXT NOT NULL,
-		resource_version INTEGER PRIMARY KEY AUTOINCREMENT,
+		resource_version INTEGER DEFAULT 1,
 		generation INTEGER DEFAULT 1,
 		uid TEXT NOT NULL,
 		spec TEXT NOT NULL,
@@ -149,7 +150,7 @@ func (s *SQLiteBackend) List(ctx context.Context, kind, namespace string, opts s
 	}
 
 	query := `
-		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, created_at
+		SELECT id, resource_version, generation, namespace, name, uid, spec, status, labels, annotations, created_at
 		FROM resources
 		WHERE kind = ? AND deleted_at IS NULL
 	`
@@ -163,12 +164,12 @@ func (s *SQLiteBackend) List(ctx context.Context, kind, namespace string, opts s
 	if opts.Continue != "" {
 		cursor, err := strconv.ParseInt(opts.Continue, 10, 64)
 		if err == nil && cursor > 0 {
-			query += " AND resource_version < ?"
+			query += " AND id < ?"
 			args = append(args, cursor)
 		}
 	}
 
-	query += " ORDER BY resource_version DESC"
+	query += " ORDER BY id DESC"
 
 	if opts.Limit > 0 {
 		query += " LIMIT ?"
@@ -182,14 +183,14 @@ func (s *SQLiteBackend) List(ctx context.Context, kind, namespace string, opts s
 	defer func() { _ = rows.Close() }()
 
 	var objects []runtime.Object
-	var resourceVersions []int64
+	var ids []int64
 
 	for rows.Next() {
-		var rv, generation int64
+		var id, rv, generation int64
 		var ns, name, uid, spec, status, labels, annotations string
 		var createdAt time.Time
 
-		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &createdAt); err != nil {
+		if err := rows.Scan(&id, &rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &createdAt); err != nil {
 			return nil, "", fmt.Errorf("failed to scan row: %w", err)
 		}
 
@@ -200,14 +201,14 @@ func (s *SQLiteBackend) List(ctx context.Context, kind, namespace string, opts s
 		}
 
 		objects = append(objects, obj)
-		resourceVersions = append(resourceVersions, rv)
+		ids = append(ids, id)
 	}
 
 	var continueToken string
 	if opts.Limit > 0 && int64(len(objects)) > opts.Limit {
 		objects = objects[:opts.Limit]
-		resourceVersions = resourceVersions[:opts.Limit]
-		continueToken = fmt.Sprintf("%d", resourceVersions[len(resourceVersions)-1])
+		ids = ids[:opts.Limit]
+		continueToken = fmt.Sprintf("%d", ids[len(ids)-1])
 	}
 
 	return objects, continueToken, nil
@@ -221,8 +222,9 @@ func (s *SQLiteBackend) Update(ctx context.Context, kind, namespace, name string
 
 	var resource struct {
 		Metadata struct {
-			Labels      map[string]string `json:"labels"`
-			Annotations map[string]string `json:"annotations"`
+			ResourceVersion string            `json:"resourceVersion"`
+			Labels          map[string]string `json:"labels"`
+			Annotations     map[string]string `json:"annotations"`
 		} `json:"metadata"`
 		Spec   json.RawMessage `json:"spec"`
 		Status json.RawMessage `json:"status"`
@@ -235,23 +237,36 @@ func (s *SQLiteBackend) Update(ctx context.Context, kind, namespace, name string
 	labelsJSON, _ := json.Marshal(resource.Metadata.Labels)
 	annotationsJSON, _ := json.Marshal(resource.Metadata.Annotations)
 
+	var rv int64
+	if resource.Metadata.ResourceVersion != "" {
+		rv, _ = strconv.ParseInt(resource.Metadata.ResourceVersion, 10, 64)
+	}
+
+	if rv == 0 {
+		return fmt.Errorf("resourceVersion is required for update")
+	}
+
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE resources
 		SET spec = ?, status = ?, labels = ?, annotations = ?,
-		    generation = generation + 1, updated_at = CURRENT_TIMESTAMP
-		WHERE kind = ? AND namespace = ? AND name = ? AND deleted_at IS NULL
-	`, string(resource.Spec), string(resource.Status), string(labelsJSON), string(annotationsJSON), kind, namespace, name)
+		    generation = generation + 1, resource_version = resource_version + 1, updated_at = CURRENT_TIMESTAMP
+		WHERE kind = ? AND namespace = ? AND name = ? AND resource_version = ? AND deleted_at IS NULL
+	`, string(resource.Spec), string(resource.Status), string(labelsJSON), string(annotationsJSON), kind, namespace, name, rv)
 	if err != nil {
 		return fmt.Errorf("failed to update resource: %w", err)
 	}
 
 	affected, _ := result.RowsAffected()
 	if affected == 0 {
-		return fmt.Errorf("not found")
+		exists, _ := s.resourceExists(ctx, kind, namespace, name)
+		if exists {
+			return storage.ErrConflict
+		}
+		return storage.ErrNotFound
 	}
 
-	rv, _ := s.GetResourceVersion(ctx, kind, namespace, name)
-	s.notifyWatchers(kind, namespace, watch.Modified, obj, rv)
+	newRV, _ := s.GetResourceVersion(ctx, kind, namespace, name)
+	s.notifyWatchers(kind, namespace, watch.Modified, obj, newRV)
 	return nil
 }
 
@@ -262,6 +277,9 @@ func (s *SQLiteBackend) UpdateStatus(ctx context.Context, kind, namespace, name 
 	}
 
 	var resource struct {
+		Metadata struct {
+			ResourceVersion string `json:"resourceVersion"`
+		} `json:"metadata"`
 		Status json.RawMessage `json:"status"`
 	}
 
@@ -269,23 +287,45 @@ func (s *SQLiteBackend) UpdateStatus(ctx context.Context, kind, namespace, name 
 		return fmt.Errorf("failed to parse object: %w", err)
 	}
 
+	var rv int64
+	if resource.Metadata.ResourceVersion != "" {
+		rv, _ = strconv.ParseInt(resource.Metadata.ResourceVersion, 10, 64)
+	}
+
+	if rv == 0 {
+		return fmt.Errorf("resourceVersion is required for status update")
+	}
+
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE resources
-		SET status = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE kind = ? AND namespace = ? AND name = ? AND deleted_at IS NULL
-	`, string(resource.Status), kind, namespace, name)
+		SET status = ?, resource_version = resource_version + 1, updated_at = CURRENT_TIMESTAMP
+		WHERE kind = ? AND namespace = ? AND name = ? AND resource_version = ? AND deleted_at IS NULL
+	`, string(resource.Status), kind, namespace, name, rv)
 	if err != nil {
 		return fmt.Errorf("failed to update resource status: %w", err)
 	}
 
 	affected, _ := result.RowsAffected()
 	if affected == 0 {
-		return fmt.Errorf("not found")
+		exists, _ := s.resourceExists(ctx, kind, namespace, name)
+		if exists {
+			return storage.ErrConflict
+		}
+		return storage.ErrNotFound
 	}
 
-	rv, _ := s.GetResourceVersion(ctx, kind, namespace, name)
-	s.notifyWatchers(kind, namespace, watch.Modified, obj, rv)
+	newRV, _ := s.GetResourceVersion(ctx, kind, namespace, name)
+	s.notifyWatchers(kind, namespace, watch.Modified, obj, newRV)
 	return nil
+}
+
+func (s *SQLiteBackend) resourceExists(ctx context.Context, kind, namespace, name string) (bool, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM resources
+		WHERE kind = ? AND namespace = ? AND name = ? AND deleted_at IS NULL
+	`, kind, namespace, name).Scan(&count)
+	return count > 0, err
 }
 
 func (s *SQLiteBackend) Delete(ctx context.Context, kind, namespace, name string) error {

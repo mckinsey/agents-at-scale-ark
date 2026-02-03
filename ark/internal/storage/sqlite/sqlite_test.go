@@ -20,11 +20,12 @@ type testObject struct {
 	APIVersion string `json:"apiVersion"`
 	Kind       string `json:"kind"`
 	Metadata   struct {
-		Name        string            `json:"name"`
-		Namespace   string            `json:"namespace"`
-		UID         string            `json:"uid"`
-		Labels      map[string]string `json:"labels,omitempty"`
-		Annotations map[string]string `json:"annotations,omitempty"`
+		Name            string            `json:"name"`
+		Namespace       string            `json:"namespace"`
+		UID             string            `json:"uid"`
+		ResourceVersion string            `json:"resourceVersion,omitempty"`
+		Labels          map[string]string `json:"labels,omitempty"`
+		Annotations     map[string]string `json:"annotations,omitempty"`
 	} `json:"metadata"`
 	Spec   map[string]interface{} `json:"spec,omitempty"`
 	Status map[string]interface{} `json:"status,omitempty"`
@@ -79,11 +80,12 @@ func createTestObject(name, namespace, uid string) *testObject {
 		APIVersion: "ark.mckinsey.com/v1alpha1",
 		Kind:       "Agent",
 		Metadata: struct {
-			Name        string            `json:"name"`
-			Namespace   string            `json:"namespace"`
-			UID         string            `json:"uid"`
-			Labels      map[string]string `json:"labels,omitempty"`
-			Annotations map[string]string `json:"annotations,omitempty"`
+			Name            string            `json:"name"`
+			Namespace       string            `json:"namespace"`
+			UID             string            `json:"uid"`
+			ResourceVersion string            `json:"resourceVersion,omitempty"`
+			Labels          map[string]string `json:"labels,omitempty"`
+			Annotations     map[string]string `json:"annotations,omitempty"`
 		}{
 			Name:      name,
 			Namespace: namespace,
@@ -289,14 +291,17 @@ func TestUpdate(t *testing.T) {
 	obj := createTestObject("agent1", "default", "uid-123")
 	_ = backend.Create(ctx, "Agent", "default", "agent1", obj)
 
-	obj.Spec["model"] = "gpt-4-turbo"
-	err := backend.Update(ctx, "Agent", "default", "agent1", obj)
+	got, _ := backend.Get(ctx, "Agent", "default", "agent1")
+	testObj := got.(*testObject)
+
+	testObj.Spec["model"] = "gpt-4-turbo"
+	err := backend.Update(ctx, "Agent", "default", "agent1", testObj)
 	if err != nil {
 		t.Fatalf("Update() error = %v", err)
 	}
 
-	got, _ := backend.Get(ctx, "Agent", "default", "agent1")
-	testObj := got.(*testObject)
+	got, _ = backend.Get(ctx, "Agent", "default", "agent1")
+	testObj = got.(*testObject)
 	if testObj.Spec["model"] != "gpt-4-turbo" {
 		t.Errorf("expected updated spec, got '%v'", testObj.Spec["model"])
 	}
@@ -308,12 +313,40 @@ func TestUpdate_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	obj := createTestObject("nonexistent", "default", "uid-123")
+	obj.Metadata.ResourceVersion = "999"
 	err := backend.Update(ctx, "Agent", "default", "nonexistent", obj)
 	if err == nil {
 		t.Error("expected error for nonexistent object")
 	}
-	if !strings.Contains(err.Error(), "not found") {
-		t.Errorf("expected error containing 'not found', got '%v'", err)
+	if err != storage.ErrNotFound {
+		t.Errorf("expected ErrNotFound, got '%v'", err)
+	}
+}
+
+func TestUpdate_Conflict(t *testing.T) {
+	t.Parallel()
+	backend := newTestBackend(t)
+	ctx := context.Background()
+
+	obj := createTestObject("agent1", "default", "uid-123")
+	_ = backend.Create(ctx, "Agent", "default", "agent1", obj)
+
+	got, _ := backend.Get(ctx, "Agent", "default", "agent1")
+	testObj := got.(*testObject)
+	originalRV := testObj.Metadata.ResourceVersion
+
+	testObj.Spec["model"] = "gpt-4-turbo"
+	err := backend.Update(ctx, "Agent", "default", "agent1", testObj)
+	if err != nil {
+		t.Fatalf("First Update() error = %v", err)
+	}
+
+	staleObj := createTestObject("agent1", "default", "uid-123")
+	staleObj.Metadata.ResourceVersion = originalRV
+	staleObj.Spec["model"] = "gpt-3.5"
+	err = backend.Update(ctx, "Agent", "default", "agent1", staleObj)
+	if err != storage.ErrConflict {
+		t.Errorf("expected ErrConflict for stale update, got '%v'", err)
 	}
 }
 

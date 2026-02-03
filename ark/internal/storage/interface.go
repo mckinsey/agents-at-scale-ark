@@ -4,10 +4,16 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
+)
+
+var (
+	ErrNotFound = errors.New("not found")
+	ErrConflict = errors.New("conflict: resource version mismatch")
 )
 
 type ListOptions struct {
