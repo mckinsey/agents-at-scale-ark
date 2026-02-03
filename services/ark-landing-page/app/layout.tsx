@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Ark Demos',
-  description: 'Explore Ark AI agent demonstrations',
+  title: 'ARK Demos',
+  description: 'Explore ARK demonstrations',
 };
 
 export default function RootLayout({
