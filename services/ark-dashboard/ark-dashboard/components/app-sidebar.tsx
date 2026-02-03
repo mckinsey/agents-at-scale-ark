@@ -24,8 +24,6 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import {
-  BROKER_FEATURE_KEY,
-  FILES_BROWSER_FEATURE_KEY,
   isBrokerEnabledAtom,
   isExperimentalDarkModeEnabledAtom,
   isFilesBrowserAvailableAtom,
@@ -62,7 +60,6 @@ import { signout } from '@/lib/auth/signout';
 import {
   AGENT_BUILDER_SECTIONS,
   MONITORING_SECTIONS,
-  OPERATION_SECTIONS,
 } from '@/lib/constants/dashboard-icons';
 import { type SystemInfo, systemInfoService } from '@/lib/services';
 import { proxyService } from '@/lib/services/proxy';
@@ -78,7 +75,6 @@ export function AppSidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useUser();
-  const isBrokerEnabled = useAtomValue(isBrokerEnabledAtom);
   const isExperimentalDarkModeEnabled = useAtomValue(
     isExperimentalDarkModeEnabledAtom,
   );
@@ -160,16 +156,10 @@ export function AppSidebar() {
     return sections.some(item => item.key === currentSection);
   };
 
-  const enabledOperationSections = OPERATION_SECTIONS.filter(item => {
-    switch (item.enablerFeature) {
-      case BROKER_FEATURE_KEY:
-        return isBrokerEnabled;
-      case FILES_BROWSER_FEATURE_KEY:
-        return true;
-      default:
-        return true;
-    }
-  });
+
+  const enabledMonitoringSections = MONITORING_SECTIONS.filter(
+    item => item.key !== 'evaluators' && item.key !== 'evaluations',
+  );
 
   return (
     <>
@@ -343,7 +333,7 @@ export function AppSidebar() {
                 </CollapsibleTrigger>
               </SidebarGroupLabel>
               <CollapsibleContent>
-                {MONITORING_SECTIONS.map(item => {
+                {enabledMonitoringSections.map(item => {
                   const isPlaceholder = isPlaceholderSection(item.key);
                   const isDisabled =
                     !isNamespaceResolved || loading || isPlaceholder;
@@ -361,6 +351,13 @@ export function AppSidebar() {
                     </SidebarMenuItem>
                   );
                 })}
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => navigateToSection('evals')}
+                    isActive={getCurrentSection() === 'evals'}>
+                    <span>Evals</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </CollapsibleContent>
             </Collapsible>
             <SidebarMenuItem>

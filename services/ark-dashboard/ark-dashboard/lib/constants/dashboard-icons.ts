@@ -91,6 +91,12 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     group: 'monitoring',
     enablerFeature: BROKER_FEATURE_KEY,
   },
+  evals: {
+    key: 'evals',
+    title: 'Evals',
+    icon: BarChart,
+    group: 'monitoring',
+  },
   evaluators: {
     key: 'evaluators',
     title: 'Evaluators',
