@@ -5475,6 +5475,8 @@ export interface operations {
                 limit?: number;
                 /** @description Cursor for pagination */
                 cursor?: number | null;
+                /** @description Filter by session ID */
+                session_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -5661,6 +5663,8 @@ export interface operations {
                 limit?: number;
                 /** @description Cursor for pagination */
                 cursor?: number | null;
+                /** @description Filter by session ID */
+                session_id?: string | null;
             };
             header?: never;
             path?: never;

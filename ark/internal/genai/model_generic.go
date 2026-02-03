@@ -98,3 +98,22 @@ func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStr
 
 	return response, nil
 }
+
+func (m *Model) HealthCheck(ctx context.Context) error {
+	if m.Provider == nil {
+		return fmt.Errorf("provider is nil")
+	}
+
+	switch provider := m.Provider.(type) {
+	case *OpenAIProvider:
+		return provider.HealthCheck(ctx)
+	case *AzureProvider:
+		return provider.HealthCheck(ctx)
+	case *BedrockModel:
+		return provider.HealthCheck(ctx)
+	default:
+		testMessages := []Message{NewUserMessage("Hello")}
+		_, err := m.ChatCompletion(ctx, testMessages, nil, 1)
+		return err
+	}
+}

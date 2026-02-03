@@ -394,3 +394,7 @@ func (bm *BedrockModel) BuildConfig() map[string]any {
 
 	return cfg
 }
+
+func (bm *BedrockModel) HealthCheck(ctx context.Context) error {
+	return bm.initClient(ctx)
+}

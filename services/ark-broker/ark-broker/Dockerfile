@@ -21,6 +21,9 @@ RUN npm ci --only=production && npm cache clean --force
 # Copy built application
 COPY --from=builder --chown=nodejs:nodejs /workspace/dist ./dist
 
+# Copy proto definitions needed for OTLP trace parsing
+COPY --from=builder --chown=nodejs:nodejs /workspace/proto ./proto
+
 USER nodejs
 
 EXPOSE 8080

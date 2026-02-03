@@ -1,6 +1,6 @@
 {
   "name": "@agents-at-scale/ark",
-  "version": "0.1.50",
+  "version": "0.1.52",
   "description": "Ark CLI - Interactive terminal interface for ARK agents",
   "main": "dist/index.js",
   "type": "module",
@@ -60,7 +60,7 @@
     "open": "^10.2.0",
     "openai": "^5.19.1",
     "ora": "^8.2.0",
-    "react": "^19.1.0",
+    "react": "^19.1.5",
     "yaml": "^2.6.1"
   },
   "devDependencies": {
