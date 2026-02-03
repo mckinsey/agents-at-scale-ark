@@ -3,7 +3,6 @@
 import { AppSidebar } from '@/components/app-sidebar';
 import ChatManager from '@/components/chat-manager';
 import { ExperimentalFeaturesDialog } from '@/components/experimental-features-dialog';
-import { ExportBanner } from '@/components/export-banner';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { Spinner } from '@/components/ui/spinner';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -30,10 +29,7 @@ export default function DashboardLayout({
     <>
       <SidebarProvider>
         <AppSidebar />
-        <SidebarInset>
-          <ExportBanner />
-          {children}
-        </SidebarInset>
+        <SidebarInset>{children}</SidebarInset>
       </SidebarProvider>
       <ExperimentalFeaturesDialog />
       <ChatManager />
