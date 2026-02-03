@@ -109,6 +109,8 @@ func (m *Model) HealthCheck(ctx context.Context) error {
 		return provider.HealthCheck(ctx)
 	case *AzureProvider:
 		return provider.HealthCheck(ctx)
+	case *AnthropicProvider:
+		return provider.HealthCheck(ctx)
 	case *BedrockModel:
 		return provider.HealthCheck(ctx)
 	default:

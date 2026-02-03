@@ -555,6 +555,15 @@ func TestModel_HealthCheck_ProviderErrors(t *testing.T) {
 			expectedInErr: "401",
 			pathSuffix:    "/openai",
 		},
+		{
+			name:          "Anthropic provider overloaded",
+			providerType:  "anthropic",
+			statusCode:    http.StatusTooManyRequests,
+			errorMessage:  "Rate limit exceeded",
+			errorType:     "rate_limit_error",
+			expectedInErr: "429",
+			pathSuffix:    "",
+		},
 	}
 
 	for _, tt := range tests {
@@ -573,7 +582,8 @@ func TestModel_HealthCheck_ProviderErrors(t *testing.T) {
 
 			var model *Model
 
-			if tt.providerType == "openai" {
+			switch tt.providerType {
+			case "openai":
 				provider := &OpenAIProvider{
 					Model:   "gpt-4",
 					BaseURL: server.URL + tt.pathSuffix,
@@ -584,7 +594,7 @@ func TestModel_HealthCheck_ProviderErrors(t *testing.T) {
 					Type:     tt.providerType,
 					Provider: provider,
 				}
-			} else {
+			case "azure":
 				provider := &AzureProvider{
 					Model:   "gpt-4",
 					BaseURL: server.URL + tt.pathSuffix,
@@ -595,6 +605,17 @@ func TestModel_HealthCheck_ProviderErrors(t *testing.T) {
 					Type:     tt.providerType,
 					Provider: provider,
 				}
+			case "anthropic":
+				provider := &AnthropicProvider{
+					Model:   "claude-3-haiku-20240307",
+					BaseURL: server.URL + tt.pathSuffix,
+					APIKey:  "test-key",
+				}
+				model = &Model{
+					Model:    "claude-3-haiku-20240307",
+					Type:     tt.providerType,
+					Provider: provider,
+				}
 			}
 
 			ctx := context.Background()
@@ -602,6 +623,335 @@ func TestModel_HealthCheck_ProviderErrors(t *testing.T) {
 
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.expectedInErr)
+		})
+	}
+}
+
+func TestAnthropicProvider_HealthCheck_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/messages", r.URL.Path)
+		assert.Equal(t, "POST", r.Method)
+		assert.Contains(t, r.Header.Get("X-Api-Key"), "test-key")
+		assert.Equal(t, "2023-06-01", r.Header.Get("anthropic-version"))
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":            "msg_test123",
+			"type":          "message",
+			"role":          "assistant",
+			"content":       []map[string]interface{}{{"type": "text", "text": "Hello"}},
+			"model":         "claude-3-haiku-20240307",
+			"stop_reason":   "end_turn",
+			"stop_sequence": nil,
+			"usage": map[string]interface{}{
+				"input_tokens":  10,
+				"output_tokens": 1,
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := &AnthropicProvider{
+		Model:   "claude-3-haiku-20240307",
+		BaseURL: server.URL,
+		APIKey:  "test-key",
+	}
+
+	ctx := context.Background()
+	err := provider.HealthCheck(ctx)
+
+	require.NoError(t, err)
+}
+
+func TestAnthropicProvider_HealthCheck_Unauthorized(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/messages", r.URL.Path)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"type": "error",
+			"error": map[string]interface{}{
+				"type":    "authentication_error",
+				"message": "Invalid API Key",
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := &AnthropicProvider{
+		Model:   "claude-3-haiku-20240307",
+		BaseURL: server.URL,
+		APIKey:  "invalid-key",
+	}
+
+	ctx := context.Background()
+	err := provider.HealthCheck(ctx)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "401")
+}
+
+func TestAnthropicProvider_HealthCheck_ServerError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/messages", r.URL.Path)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"type": "error",
+			"error": map[string]interface{}{
+				"type":    "overloaded_error",
+				"message": "Service temporarily unavailable",
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := &AnthropicProvider{
+		Model:   "claude-3-haiku-20240307",
+		BaseURL: server.URL,
+		APIKey:  "test-key",
+	}
+
+	ctx := context.Background()
+	err := provider.HealthCheck(ctx)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "503")
+}
+
+func TestAnthropicProvider_HealthCheck_NetworkError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	serverURL := server.URL
+	server.Close()
+
+	provider := &AnthropicProvider{
+		Model:   "claude-3-haiku-20240307",
+		BaseURL: serverURL,
+		APIKey:  "test-key",
+	}
+
+	ctx := context.Background()
+	err := provider.HealthCheck(ctx)
+
+	require.Error(t, err)
+}
+
+func TestModel_HealthCheck_AnthropicProvider(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/messages", r.URL.Path)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":            "msg_test123",
+			"type":          "message",
+			"role":          "assistant",
+			"content":       []map[string]interface{}{{"type": "text", "text": "Hello"}},
+			"model":         "claude-3-haiku-20240307",
+			"stop_reason":   "end_turn",
+			"stop_sequence": nil,
+			"usage": map[string]interface{}{
+				"input_tokens":  10,
+				"output_tokens": 1,
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := &AnthropicProvider{
+		Model:   "claude-3-haiku-20240307",
+		BaseURL: server.URL,
+		APIKey:  "test-key",
+	}
+
+	model := &Model{
+		Model:    "claude-3-haiku-20240307",
+		Type:     "anthropic",
+		Provider: provider,
+	}
+
+	ctx := context.Background()
+	err := model.HealthCheck(ctx)
+
+	require.NoError(t, err)
+}
+
+func TestAnthropicProvider_HealthCheck_ModelAvailable(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		assert.Equal(t, "/v1/messages", r.URL.Path)
+		assert.Equal(t, "POST", r.Method)
+		assert.Contains(t, r.Header.Get("X-Api-Key"), "test-key")
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":            "msg_test123",
+			"type":          "message",
+			"role":          "assistant",
+			"content":       []map[string]interface{}{{"type": "text", "text": "Hello"}},
+			"model":         "claude-3-haiku-20240307",
+			"stop_reason":   "end_turn",
+			"stop_sequence": nil,
+			"usage": map[string]interface{}{
+				"input_tokens":  10,
+				"output_tokens": 1,
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := &AnthropicProvider{
+		Model:   "claude-3-haiku-20240307",
+		BaseURL: server.URL,
+		APIKey:  "test-key",
+	}
+
+	ctx := context.Background()
+	err := provider.HealthCheck(ctx)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, callCount, "HealthCheck should make exactly one API call")
+}
+
+func TestModel_HealthCheck_DelegatesToAnthropicProvider(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/messages", r.URL.Path, "Should call messages endpoint")
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":            "msg_test123",
+			"type":          "message",
+			"role":          "assistant",
+			"content":       []map[string]interface{}{{"type": "text", "text": "Hello"}},
+			"model":         "claude-3-haiku-20240307",
+			"stop_reason":   "end_turn",
+			"stop_sequence": nil,
+			"usage": map[string]interface{}{
+				"input_tokens":  10,
+				"output_tokens": 1,
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := &AnthropicProvider{
+		Model:   "claude-3-haiku-20240307",
+		BaseURL: server.URL,
+		APIKey:  "test-key",
+	}
+
+	model := &Model{
+		Model:    "claude-3-haiku-20240307",
+		Type:     "anthropic",
+		Provider: provider,
+	}
+
+	ctx := context.Background()
+	err := model.HealthCheck(ctx)
+
+	require.NoError(t, err)
+}
+
+func TestAnthropicProvider_HealthCheck_WithCustomHeaders(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/messages", r.URL.Path)
+		assert.Equal(t, "custom-value", r.Header.Get("X-Custom-Header"))
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":            "msg_test123",
+			"type":          "message",
+			"role":          "assistant",
+			"content":       []map[string]interface{}{{"type": "text", "text": "Hello"}},
+			"model":         "claude-3-haiku-20240307",
+			"stop_reason":   "end_turn",
+			"stop_sequence": nil,
+			"usage": map[string]interface{}{
+				"input_tokens":  10,
+				"output_tokens": 1,
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := &AnthropicProvider{
+		Model:   "claude-3-haiku-20240307",
+		BaseURL: server.URL,
+		APIKey:  "test-key",
+		Headers: map[string]string{
+			"X-Custom-Header": "custom-value",
+		},
+	}
+
+	ctx := context.Background()
+	err := provider.HealthCheck(ctx)
+
+	require.NoError(t, err)
+}
+
+func TestAnthropicProvider_HealthCheck_BaseURLHandling(t *testing.T) {
+	tests := []struct {
+		name         string
+		baseURL      string
+		expectedPath string
+	}{
+		{
+			name:         "BaseURL without /v1",
+			baseURL:      "",
+			expectedPath: "/v1/messages",
+		},
+		{
+			name:         "BaseURL with trailing slash",
+			baseURL:      "",
+			expectedPath: "/v1/messages",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, tt.expectedPath, r.URL.Path)
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
+					"id":            "msg_test123",
+					"type":          "message",
+					"role":          "assistant",
+					"content":       []map[string]interface{}{{"type": "text", "text": "Hello"}},
+					"model":         "claude-3-haiku-20240307",
+					"stop_reason":   "end_turn",
+					"stop_sequence": nil,
+					"usage": map[string]interface{}{
+						"input_tokens":  10,
+						"output_tokens": 1,
+					},
+				})
+			}))
+			defer server.Close()
+
+			baseURL := server.URL
+			if tt.baseURL != "" {
+				baseURL = tt.baseURL
+			}
+
+			provider := &AnthropicProvider{
+				Model:   "claude-3-haiku-20240307",
+				BaseURL: baseURL,
+				APIKey:  "test-key",
+			}
+
+			ctx := context.Background()
+			err := provider.HealthCheck(ctx)
+
+			require.NoError(t, err)
 		})
 	}
 }
