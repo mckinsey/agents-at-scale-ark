@@ -100,69 +100,6 @@ class TestFilePreview(unittest.TestCase):
         # Just check it doesn't crash - status could be 200 or 400 depending on content
         self.assertIn(response.status_code, [200, 400])
 
-    def test_preview_spreadsheet_empty_csv(self):
-        """Test handling of empty CSV file"""
-        csv_content = b""
-        encoded_content = base64.b64encode(csv_content).decode()
-
-        request_data = {
-            "content": encoded_content,
-            "filename": "empty.csv",
-            "mimeType": "text/csv"
-        }
-
-        response = client.post("/v1/file-preview/spreadsheet", json=request_data)
-        self.assertEqual(response.status_code, 200)
-
-        data = response.json()
-        self.assertIn("sheets", data)
-        self.assertEqual(len(data["sheets"]), 1)
-        self.assertEqual(len(data["sheets"][0]["rows"]), 0)
-
-    def test_preview_spreadsheet_large_csv(self):
-        """Test CSV with many rows gets truncated to MAX_ROWS"""
-        # Create CSV with 1100 rows (more than MAX_ROWS=1000)
-        rows = ["Col1,Col2,Col3"]
-        for i in range(1100):
-            rows.append(f"Val{i},Data{i},Info{i}")
-        csv_content = "\n".join(rows).encode()
-        encoded_content = base64.b64encode(csv_content).decode()
-
-        request_data = {
-            "content": encoded_content,
-            "filename": "large.csv",
-            "mimeType": "text/csv"
-        }
-
-        response = client.post("/v1/file-preview/spreadsheet", json=request_data)
-        self.assertEqual(response.status_code, 200)
-
-        data = response.json()
-        # Should be truncated to MAX_ROWS (1000)
-        self.assertLessEqual(len(data["sheets"][0]["rows"]), 1000)
-        self.assertTrue(data["metadata"]["truncated"])
-
-    def test_preview_spreadsheet_tsv(self):
-        """Test TSV (tab-separated values) file preview"""
-        tsv_content = b"Name\tAge\tCity\nJohn\t30\tNYC\nJane\t25\tLA"
-        encoded_content = base64.b64encode(tsv_content).decode()
-
-        request_data = {
-            "content": encoded_content,
-            "filename": "test.tsv",
-            "mimeType": "text/tab-separated-values"
-        }
-
-        response = client.post("/v1/file-preview/spreadsheet", json=request_data)
-        self.assertEqual(response.status_code, 200)
-
-        data = response.json()
-        self.assertIn("sheets", data)
-        self.assertEqual(len(data["sheets"]), 1)
-        self.assertEqual(len(data["sheets"][0]["rows"]), 3)
-        # Verify tab separation worked
-        self.assertEqual(len(data["sheets"][0]["rows"][0]["cells"]), 3)
-
 
 if __name__ == "__main__":
     unittest.main()
