@@ -72,7 +72,7 @@ async def create_namespace(body: NamespaceCreateRequest) -> NamespaceResponse:
 
 
 @router.get("/context", response_model=ContextResponse)
-async def get_context_endpoint() -> ContextResponse:
+async def get_context_endpoint(namespace: str = None) -> ContextResponse:
     """
     Get the current Kubernetes context information.
 
@@ -81,14 +81,34 @@ async def get_context_endpoint() -> ContextResponse:
     2. Kubeconfig context (when running locally)
     3. Fallback to default
 
+    Args:
+        namespace: Optional namespace to check for demo mode
+
     Returns:
         ContextResponse: The current namespace, cluster, and read-only mode status
     """
     current_context = get_current_context()
-    read_only_mode = os.getenv("READ_ONLY_MODE", "false").lower() == "true"
+    
+    # Use provided namespace or fall back to current context namespace
+    target_namespace = namespace or current_context["namespace"]
+    
+    # Check if this specific namespace has demo label
+    read_only_mode = False
+    try:
+        async with ApiClient() as api:
+            v1 = client.CoreV1Api(api)
+            ns = await v1.read_namespace(name=target_namespace)
+            
+            # Check if namespace has demo label
+            if ns.metadata.labels and ns.metadata.labels.get("ark.mckinsey.com/demo") == "true":
+                read_only_mode = True
+    except Exception as e:
+        logger.warning(f"Could not check namespace labels for {target_namespace}: {e}")
+        # Fall back to environment variable if we can't check the namespace
+        read_only_mode = os.getenv("READ_ONLY_MODE", "false").lower() == "true"
 
     return ContextResponse(
-        namespace=current_context["namespace"],
+        namespace=target_namespace,
         cluster=current_context["cluster"],
         read_only_mode=read_only_mode
     )
