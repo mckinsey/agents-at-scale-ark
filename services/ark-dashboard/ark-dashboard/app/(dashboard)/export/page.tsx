@@ -26,7 +26,6 @@ interface ResourceSection {
   type: ResourceType;
   title: string;
   description: string;
-  priority: 1 | 2 | 3;
 }
 
 const resourceSections: ResourceSection[] = [
@@ -34,61 +33,51 @@ const resourceSections: ResourceSection[] = [
     type: 'agents',
     title: 'Agents',
     description: 'AI agent configurations and prompts',
-    priority: 1,
   },
   {
     type: 'models',
     title: 'Models',
     description: 'Model configurations and parameters',
-    priority: 1,
   },
   {
     type: 'secrets',
     title: 'Secrets',
     description: 'Secret references (values not included)',
-    priority: 1,
   },
   {
     type: 'teams',
     title: 'Teams',
     description: 'Team configurations and hierarchies',
-    priority: 2,
   },
   {
     type: 'a2a',
     title: 'Agent-to-Agent',
     description: 'A2A server configurations',
-    priority: 2,
   },
   {
     type: 'mcp',
     title: 'MCP Servers',
     description: 'Model Context Protocol server configs',
-    priority: 2,
   },
   {
     type: 'evaluators',
     title: 'Evaluators',
     description: 'Evaluation criteria and metrics',
-    priority: 2,
   },
   {
     type: 'memory',
     title: 'Memory',
     description: 'Memory store configurations',
-    priority: 2,
   },
   {
     type: 'workflows',
     title: 'Workflow Templates',
     description: 'Workflow definitions and templates',
-    priority: 3,
   },
   {
     type: 'evaluations',
     title: 'Evaluations',
     description: 'Evaluation results and reports',
-    priority: 3,
   },
 ];
 
@@ -97,7 +86,7 @@ export default function ExportPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
   const [selectedCount, setSelectedCount] = useState(0);
-  const [activeTab, setActiveTab] = useState<'priority-1' | 'priority-2' | 'priority-3'>('priority-1');
+  const [activeTab, setActiveTab] = useState<ResourceType>('agents');
 
   useEffect(() => {
     loadResources();
@@ -341,51 +330,37 @@ export default function ExportPage() {
         </Alert>
 
         {/* Resources in Tabs */}
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)}>
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="priority-1" className="flex items-center gap-2">
-              <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700 dark:bg-red-900 dark:text-red-200">
-                Priority 1
-              </span>
-              Core Resources
-            </TabsTrigger>
-            <TabsTrigger value="priority-2" className="flex items-center gap-2">
-              <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs text-yellow-700 dark:bg-yellow-900 dark:text-yellow-200">
-                Priority 2
-              </span>
-              Supporting Resources
-            </TabsTrigger>
-            <TabsTrigger value="priority-3" className="flex items-center gap-2">
-              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700 dark:bg-blue-900 dark:text-blue-200">
-                Priority 3
-              </span>
-              Operational Resources
-            </TabsTrigger>
+        <Tabs
+          value={activeTab}
+          onValueChange={value => setActiveTab(value as ResourceType)}>
+          <TabsList className="grid w-full grid-cols-5 lg:flex lg:w-auto lg:grid-cols-none">
+            {resourceSections.map(section => {
+              const items = resources[section.type] || [];
+              const selectedItems = items.filter(item => item.selected);
+              return (
+                <TabsTrigger
+                  key={section.type}
+                  value={section.type}
+                  className="flex items-center gap-2">
+                  {section.title}
+                  {selectedItems.length > 0 && (
+                    <span className="bg-primary/10 rounded-full px-2 py-0.5 text-xs">
+                      {selectedItems.length}
+                    </span>
+                  )}
+                </TabsTrigger>
+              );
+            })}
           </TabsList>
 
-          <TabsContent value="priority-1" className="space-y-4 mt-4">
-            <div className="grid gap-4">
-              {resourceSections
-                .filter(s => s.priority === 1)
-                .map(renderResourceSection)}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="priority-2" className="space-y-4 mt-4">
-            <div className="grid gap-4">
-              {resourceSections
-                .filter(s => s.priority === 2)
-                .map(renderResourceSection)}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="priority-3" className="space-y-4 mt-4">
-            <div className="grid gap-4">
-              {resourceSections
-                .filter(s => s.priority === 3)
-                .map(renderResourceSection)}
-            </div>
-          </TabsContent>
+          {resourceSections.map(section => (
+            <TabsContent
+              key={section.type}
+              value={section.type}
+              className="mt-4 space-y-4">
+              {renderResourceSection(section)}
+            </TabsContent>
+          ))}
         </Tabs>
       </div>
     </div>
