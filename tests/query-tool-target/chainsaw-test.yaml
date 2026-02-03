@@ -5,6 +5,33 @@ metadata:
 spec:
   description: Test query direct execution targeting tools without agents
   steps:
+  - name: setup-mock-service
+    try:
+    - apply:
+        file: ../shared/mock-geocoding-api.yaml
+    - assert:
+        resource:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: mock-geocoding-api
+          status:
+            readyReplicas: 1
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Endpoints
+          metadata:
+            name: mock-geocoding-api
+    - script:
+        content: |
+          MOCK_URL="http://mock-geocoding-api.$NAMESPACE.svc.cluster.local"
+          kubectl run test-mock-ready --image=curlimages/curl --rm -i --restart=Never -n $NAMESPACE -- \
+            curl -f -s "${MOCK_URL}/v1/search?name=New+York&count=1"
+        env:
+          - name: NAMESPACE
+            value: ($namespace)
+        timeout: 30s
   - name: step-1
     try:
     - script:
@@ -13,8 +40,34 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
+    - script:
+        content: |
+          MOCK_URL="http://mock-geocoding-api.$NAMESPACE.svc.cluster.local"
+
+          kubectl apply -f - <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: test-tool
+            namespace: $NAMESPACE
+          spec:
+            type: http
+            description: "Returns coordinates for the given city name for testing tool targets."
+            inputSchema:
+              type: object
+              properties:
+                city:
+                  type: string
+                  description: City name to get coordinates for
+              required: ["city"]
+            http:
+              url: $MOCK_URL/v1/search?name={city}&count=1
+          EOF
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - apply:
-        file: manifests/*.yaml
+        file: manifests/a02-query.yaml
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
