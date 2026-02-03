@@ -4,15 +4,19 @@ package registry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	genericrequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/rest"
 
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/apiserver/metrics"
 	"mckinsey.com/ark/internal/storage"
 )
@@ -81,8 +85,16 @@ func (s *StatusStorage) Update(ctx context.Context, name string, objInfo rest.Up
 	}
 
 	if err := s.backend.UpdateStatus(storageContext(ctx), s.config.Kind, namespace, name, existing); err != nil {
-		metrics.RecordStorageOperation("update_status", s.config.Kind, "error")
 		metrics.RecordStorageLatency("update_status", s.config.Kind, start)
+		if errors.Is(err, storage.ErrConflict) {
+			metrics.RecordStorageOperation("update_status", s.config.Kind, "conflict")
+			return nil, false, apierrors.NewConflict(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}, name, err)
+		}
+		if errors.Is(err, storage.ErrNotFound) {
+			metrics.RecordStorageOperation("update_status", s.config.Kind, "not_found")
+			return nil, false, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}, name)
+		}
+		metrics.RecordStorageOperation("update_status", s.config.Kind, "error")
 		return nil, false, fmt.Errorf("failed to update %s status: %w", s.config.SingularName, err)
 	}
 

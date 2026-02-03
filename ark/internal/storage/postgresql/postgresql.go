@@ -59,9 +59,10 @@ func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetMaxOpenConns(50)
+	db.SetMaxIdleConns(25)
+	db.SetConnMaxLifetime(30 * time.Minute)
+	db.SetConnMaxIdleTime(5 * time.Minute)
 
 	if err := db.Ping(); err != nil {
 		_ = db.Close()
@@ -115,6 +116,7 @@ func (p *PostgreSQLBackend) initSchema() error {
 	CREATE INDEX IF NOT EXISTS idx_resources_kind_namespace_name ON resources(kind, namespace, name);
 	CREATE INDEX IF NOT EXISTS idx_resources_labels ON resources USING GIN(labels);
 	CREATE INDEX IF NOT EXISTS idx_resources_deleted ON resources(deleted_at) WHERE deleted_at IS NULL;
+	CREATE INDEX IF NOT EXISTS idx_resources_lookup ON resources(kind, namespace, name, resource_version) WHERE deleted_at IS NULL;
 
 	CREATE OR REPLACE FUNCTION notify_resource_change()
 	RETURNS TRIGGER AS $$
@@ -375,9 +377,10 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 
 	var resource struct {
 		Metadata struct {
-			Labels      map[string]string `json:"labels"`
-			Annotations map[string]string `json:"annotations"`
-			Finalizers  []string          `json:"finalizers"`
+			ResourceVersion string            `json:"resourceVersion"`
+			Labels          map[string]string `json:"labels"`
+			Annotations     map[string]string `json:"annotations"`
+			Finalizers      []string          `json:"finalizers"`
 		} `json:"metadata"`
 		Spec   json.RawMessage `json:"spec"`
 		Status json.RawMessage `json:"status"`
@@ -409,19 +412,37 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 		statusJSON = "{}"
 	}
 
-	result, err := p.db.ExecContext(ctx, `
-		UPDATE resources
-		SET spec = $1::jsonb, status = $2::jsonb, labels = $3::jsonb, annotations = $4::jsonb,
-		    finalizers = $5::jsonb, generation = generation + 1, updated_at = NOW()
-		WHERE kind = $6 AND namespace = $7 AND name = $8 AND deleted_at IS NULL
-	`, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), kind, namespace, name)
+	var rv int64
+	if resource.Metadata.ResourceVersion != "" {
+		rv, _ = strconv.ParseInt(resource.Metadata.ResourceVersion, 10, 64)
+	}
+
+	if rv == 0 {
+		return fmt.Errorf("resourceVersion is required for update")
+	}
+
+	var updated, exists bool
+	err = p.db.QueryRowContext(ctx, `
+		WITH upd AS (
+			UPDATE resources
+			SET spec = $1::jsonb, status = $2::jsonb, labels = $3::jsonb, annotations = $4::jsonb,
+			    finalizers = $5::jsonb, generation = generation + 1, resource_version = resource_version + 1, updated_at = NOW()
+			WHERE kind = $6 AND namespace = $7 AND name = $8 AND resource_version = $9 AND deleted_at IS NULL
+			RETURNING 1
+		)
+		SELECT
+			(SELECT COUNT(*) > 0 FROM upd) as updated,
+			(SELECT COUNT(*) > 0 FROM resources WHERE kind = $6 AND namespace = $7 AND name = $8 AND deleted_at IS NULL) as exists
+	`, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), kind, namespace, name, rv).Scan(&updated, &exists)
 	if err != nil {
 		return fmt.Errorf("failed to update resource: %w", err)
 	}
 
-	affected, _ := result.RowsAffected()
-	if affected == 0 {
-		return fmt.Errorf("not found")
+	if !updated {
+		if exists {
+			return storage.ErrConflict
+		}
+		return storage.ErrNotFound
 	}
 
 	return nil
@@ -434,6 +455,9 @@ func (p *PostgreSQLBackend) UpdateStatus(ctx context.Context, kind, namespace, n
 	}
 
 	var resource struct {
+		Metadata struct {
+			ResourceVersion string `json:"resourceVersion"`
+		} `json:"metadata"`
 		Status json.RawMessage `json:"status"`
 	}
 
@@ -446,18 +470,36 @@ func (p *PostgreSQLBackend) UpdateStatus(ctx context.Context, kind, namespace, n
 		statusJSON = "{}"
 	}
 
-	result, err := p.db.ExecContext(ctx, `
-		UPDATE resources
-		SET status = $1::jsonb, updated_at = NOW()
-		WHERE kind = $2 AND namespace = $3 AND name = $4 AND deleted_at IS NULL
-	`, statusJSON, kind, namespace, name)
+	var rv int64
+	if resource.Metadata.ResourceVersion != "" {
+		rv, _ = strconv.ParseInt(resource.Metadata.ResourceVersion, 10, 64)
+	}
+
+	if rv == 0 {
+		return fmt.Errorf("resourceVersion is required for status update")
+	}
+
+	var updated, exists bool
+	err = p.db.QueryRowContext(ctx, `
+		WITH upd AS (
+			UPDATE resources
+			SET status = $1::jsonb, resource_version = resource_version + 1, updated_at = NOW()
+			WHERE kind = $2 AND namespace = $3 AND name = $4 AND resource_version = $5 AND deleted_at IS NULL
+			RETURNING 1
+		)
+		SELECT
+			(SELECT COUNT(*) > 0 FROM upd) as updated,
+			(SELECT COUNT(*) > 0 FROM resources WHERE kind = $2 AND namespace = $3 AND name = $4 AND deleted_at IS NULL) as exists
+	`, statusJSON, kind, namespace, name, rv).Scan(&updated, &exists)
 	if err != nil {
 		return fmt.Errorf("failed to update resource status: %w", err)
 	}
 
-	affected, _ := result.RowsAffected()
-	if affected == 0 {
-		return fmt.Errorf("not found")
+	if !updated {
+		if exists {
+			return storage.ErrConflict
+		}
+		return storage.ErrNotFound
 	}
 
 	return nil

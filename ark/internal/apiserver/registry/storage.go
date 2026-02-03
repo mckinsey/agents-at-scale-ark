@@ -4,6 +4,7 @@ package registry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -197,8 +198,16 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 	}
 
 	if err := s.backend.Update(storageContext(ctx), s.config.Kind, namespace, name, updated); err != nil {
-		metrics.RecordStorageOperation("update", s.config.Kind, "error")
 		metrics.RecordStorageLatency("update", s.config.Kind, start)
+		if errors.Is(err, storage.ErrConflict) {
+			metrics.RecordStorageOperation("update", s.config.Kind, "conflict")
+			return nil, false, apierrors.NewConflict(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}, name, err)
+		}
+		if errors.Is(err, storage.ErrNotFound) {
+			metrics.RecordStorageOperation("update", s.config.Kind, "not_found")
+			return nil, false, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}, name)
+		}
+		metrics.RecordStorageOperation("update", s.config.Kind, "error")
 		return nil, false, fmt.Errorf("failed to update %s: %w", s.config.SingularName, err)
 	}
 
