@@ -153,7 +153,7 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
   },
   export: {
     key: 'export',
-    title: 'Export',
+    title: 'Exports',
     icon: Download,
     group: 'service',
   },

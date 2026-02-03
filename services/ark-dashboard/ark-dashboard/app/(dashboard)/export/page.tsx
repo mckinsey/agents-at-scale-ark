@@ -282,7 +282,7 @@ export default function ExportPage() {
 
   return (
     <div className="flex-1 space-y-6">
-      <PageHeader currentPage="Export Resources" />
+      <PageHeader currentPage="Exports" />
 
       <div className="mx-auto max-w-7xl space-y-6 p-6">
         {/* Export Actions */}
