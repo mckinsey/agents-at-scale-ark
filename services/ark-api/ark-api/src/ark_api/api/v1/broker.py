@@ -131,11 +131,12 @@ async def get_traces(
     memory: str = Query("default", description="Memory resource name"),
     limit: int = Query(100, description="Max traces to return"),
     cursor: Optional[int] = Query(None, description="Cursor for pagination"),
+    session_id: Optional[str] = Query(None, description="Filter by session ID"),
 ):
     """Get or stream OTEL traces from the broker."""
     return await proxy_broker_request(
         memory, "/traces", watch,
-        {"limit": limit, "cursor": cursor}
+        {"limit": limit, "cursor": cursor, "session_id": session_id}
     )
 
 
@@ -176,11 +177,12 @@ async def get_events(
     memory: str = Query("default", description="Memory resource name"),
     limit: int = Query(100, description="Max events to return"),
     cursor: Optional[int] = Query(None, description="Cursor for pagination"),
+    session_id: Optional[str] = Query(None, description="Filter by session ID"),
 ):
     """Get or stream operation events from the broker."""
     return await proxy_broker_request(
         memory, "/events", watch,
-        {"limit": limit, "cursor": cursor}
+        {"limit": limit, "cursor": cursor, "session_id": session_id}
     )
 
 

@@ -9,10 +9,35 @@ spec:
   steps:
     - name: setup-mock-service
       try:
+        - apply:
+            file: ../shared/mock-geocoding-api.yaml
+        - assert:
+            resource:
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: mock-geocoding-api
+              status:
+                readyReplicas: 1
+        - assert:
+            resource:
+              apiVersion: v1
+              kind: Endpoints
+              metadata:
+                name: mock-geocoding-api
+        - script:
+            content: |
+              MOCK_URL="http://mock-geocoding-api.$NAMESPACE.svc.cluster.local"
+              kubectl run test-mock-ready --image=curlimages/curl --rm -i --restart=Never -n $NAMESPACE -- \
+                curl -f -s "${MOCK_URL}/v1/search?name=New+York&count=1"
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+            timeout: 30s
         - script:
             content: |
               helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
-                --version 0.1.27 \
+                --version 0.1.28 \
                 --namespace $NAMESPACE \
                 --values mock-llm-values.yaml
             env:
