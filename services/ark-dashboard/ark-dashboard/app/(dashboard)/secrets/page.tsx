@@ -31,6 +31,9 @@ export default function SecretsPage() {
         }
       />
       <div className="flex flex-1 flex-col">
+        <div className="px-6 pt-6">
+          <h1 className="text-3xl font-bold">Secrets</h1>
+        </div>
         <SecretsSection ref={secretsSectionRef} namespace={namespace} />
       </div>
     </>

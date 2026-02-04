@@ -1,7 +1,8 @@
+'use client';
+
 import { ArrowUpRightIcon, Check, Copy, Plus } from 'lucide-react';
 import { useState } from 'react';
 
-import { PageHeader } from '@/components/common/page-header';
 import { AddAPIKeyDialog } from '@/components/dialogs/add-api-key-dialog';
 import { APIKeyCreatedDialog } from '@/components/dialogs/api-key-created-dialog';
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
@@ -174,7 +175,7 @@ function DataTable({
   );
 }
 
-export function ApiKeysSection() {
+export function ApiKeysSettings() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [createdApiKey, setCreatedApiKey] =
     useState<APIKeyCreateResponse | null>(null);
@@ -207,56 +208,37 @@ export function ApiKeysSection() {
 
   if (loading) {
     return (
-      <>
-        <PageHeader currentPage="Service API Keys" />
-        <div className="flex flex-1 flex-col">
-          <main className="flex-1 overflow-auto p-4">
-            <div className="py-8 text-center">Loading API keys...</div>
-          </main>
-        </div>
-      </>
+      <div className="flex items-center justify-center py-8">
+        <div className="text-muted-foreground">Loading API keys...</div>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <>
-        <PageHeader currentPage="Service API Keys" />
-        <div className="flex flex-1 flex-col">
-          <main className="flex-1 overflow-auto p-4">
-            <div className="rounded-md border border-red-200 bg-red-50 p-4 text-red-600">
-              <p className="font-medium">Error loading API keys</p>
-              <p className="mt-1 text-sm">
-                {error instanceof Error ? error.message : String(error)}
-              </p>
-            </div>
-          </main>
-        </div>
-      </>
+      <div className="rounded-md border border-red-200 bg-red-50 p-4 text-red-600">
+        <p className="font-medium">Error loading API keys</p>
+        <p className="mt-1 text-sm">
+          {error instanceof Error ? error.message : String(error)}
+        </p>
+      </div>
     );
   }
 
   return (
-    <>
-      <PageHeader
-        currentPage="Service API Keys"
-        actions={
-          <Button onClick={() => setAddDialogOpen(true)}>
-            <Plus className="h-4 w-4" />
-            Create API Key
-          </Button>
-        }
-      />
-      <div className="flex flex-1 flex-col">
-        <main className="flex-1 overflow-auto p-4">
-          <h1 className="text-3xl font-bold mb-4 px-2">Service API Keys</h1>
-          <DataTable
-            data={apiKeys}
-            onRevoke={handleRevoke}
-            onCreate={() => setAddDialogOpen(true)}
-          />
-        </main>
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button onClick={() => setAddDialogOpen(true)}>
+          <Plus className="h-4 w-4" />
+          Create API Key
+        </Button>
       </div>
+
+      <DataTable
+        data={apiKeys}
+        onRevoke={handleRevoke}
+        onCreate={() => setAddDialogOpen(true)}
+      />
 
       <AddAPIKeyDialog
         open={addDialogOpen}
@@ -286,6 +268,6 @@ export function ApiKeysSection() {
         onConfirm={confirmRevoke}
         variant="destructive"
       />
-    </>
+    </div>
   );
 }

@@ -32,6 +32,9 @@ export default function A2APage() {
         }
       />
       <div className="flex flex-1 flex-col">
+        <div className="px-6 pt-6">
+          <h1 className="text-3xl font-bold">A2A Servers</h1>
+        </div>
         <A2AServersSection ref={a2aSectionRef} namespace={namespace} />
       </div>
     </>

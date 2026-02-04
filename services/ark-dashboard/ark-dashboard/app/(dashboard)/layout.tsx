@@ -2,7 +2,7 @@
 
 import { AppSidebar } from '@/components/app-sidebar';
 import ChatManager from '@/components/chat-manager';
-import { ExperimentalFeaturesDialog } from '@/components/experimental-features-dialog';
+import { SettingsModal } from '@/components/settings-modal';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { Spinner } from '@/components/ui/spinner';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -31,7 +31,7 @@ export default function DashboardLayout({
         <AppSidebar />
         <SidebarInset className="p-6">{children}</SidebarInset>
       </SidebarProvider>
-      <ExperimentalFeaturesDialog />
+      <SettingsModal />
       <ChatManager />
     </>
   );

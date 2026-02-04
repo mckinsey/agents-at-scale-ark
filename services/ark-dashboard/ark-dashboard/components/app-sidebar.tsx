@@ -31,7 +31,7 @@ import {
   isFilesBrowserAvailableAtom,
   storedIsExperimentalDarkModeEnabledAtom,
 } from '@/atoms/experimental-features';
-import { experimentalFeaturesDialogOpenAtom } from '@/atoms/internal-states';
+import { settingsModalOpenAtom } from '@/atoms/settings-modal';
 import { NamespaceEditor } from '@/components/editors';
 import {
   Collapsible,
@@ -80,9 +80,7 @@ export function AppSidebar() {
   const isExperimentalDarkModeEnabled = useAtomValue(
     isExperimentalDarkModeEnabledAtom,
   );
-  const setExperimentalFeaturesDialogOpen = useSetAtom(
-    experimentalFeaturesDialogOpenAtom,
-  );
+  const setSettingsModalOpen = useSetAtom(settingsModalOpenAtom);
   const setIsFilesBrowserAvailable = useSetAtom(isFilesBrowserAvailableAtom);
   const setStoredIsExperimentalDarkModeEnabled = useSetAtom(
     storedIsExperimentalDarkModeEnabledAtom,
@@ -421,7 +419,10 @@ export function AppSidebar() {
         <Separator className="!w-10 my-4" />
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton>
+            <SidebarMenuButton
+              onClick={() => {
+                setSettingsModalOpen(true);
+              }}>
               <Settings className="mr-2 h-4 w-4" />
               <span>Settings</span>
             </SidebarMenuButton>

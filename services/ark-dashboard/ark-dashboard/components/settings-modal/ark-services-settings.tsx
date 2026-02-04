@@ -7,10 +7,8 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import { ExternalLink } from 'lucide-react';
-import { Suspense, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import type { BreadcrumbElement } from '@/components/common/page-header';
-import { PageHeader } from '@/components/common/page-header';
 import { Badge } from '@/components/ui/badge';
 import {
   Table,
@@ -28,11 +26,6 @@ import {
 } from '@/components/ui/tooltip';
 import { type ArkService, arkServicesService } from '@/lib/services';
 
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-];
-
-// Column definitions
 const columnDefinitions: ColumnDef<ArkService>[] = [
   {
     accessorKey: 'name',
@@ -181,7 +174,6 @@ const columnDefinitions: ColumnDef<ArkService>[] = [
   },
 ];
 
-// Data table component
 function DataTable<TData, TValue>({
   columns,
   data,
@@ -242,7 +234,7 @@ function DataTable<TData, TValue>({
   );
 }
 
-function ServicesContent() {
+export function ArkServicesSettings() {
   const [services, setServices] = useState<ArkService[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -268,57 +260,20 @@ function ServicesContent() {
 
   if (loading) {
     return (
-      <>
-        <PageHeader breadcrumbs={breadcrumbs} currentPage="ARK Services" />
-        <div className="flex flex-1 flex-col">
-          <main className="flex-1 overflow-auto p-4">
-            <div className="flex h-32 items-center justify-center">
-              <div className="text-muted-foreground">Loading services...</div>
-            </div>
-          </main>
-        </div>
-      </>
+      <div className="flex h-32 items-center justify-center">
+        <div className="text-muted-foreground">Loading services...</div>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <>
-        <PageHeader breadcrumbs={breadcrumbs} currentPage="ARK Services" />
-        <div className="flex flex-1 flex-col">
-          <main className="flex-1 overflow-auto p-4">
-            <div className="rounded-md border border-red-200 bg-red-50 p-4 text-red-600">
-              <p className="font-medium">Error loading ARK services</p>
-              <p className="mt-1 text-sm">{error}</p>
-            </div>
-          </main>
-        </div>
-      </>
+      <div className="rounded-md border border-red-200 bg-red-50 p-4 text-red-600">
+        <p className="font-medium">Error loading ARK services</p>
+        <p className="mt-1 text-sm">{error}</p>
+      </div>
     );
   }
 
-  return (
-    <>
-      <PageHeader breadcrumbs={breadcrumbs} currentPage="ARK Services" />
-      <div className="flex flex-1 flex-col">
-        <main className="flex-1 overflow-auto p-4">
-          <h1 className="text-3xl font-bold mb-4 px-2">ARK Services</h1>
-          <DataTable columns={columnDefinitions} data={services} />
-        </main>
-      </div>
-    </>
-  );
-}
-
-export default function ServicesPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex h-full items-center justify-center">
-          Loading...
-        </div>
-      }>
-      <ServicesContent />
-    </Suspense>
-  );
+  return <DataTable columns={columnDefinitions} data={services} />;
 }

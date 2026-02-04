@@ -11,6 +11,9 @@ export default function MemoryPage() {
     <>
       <PageHeader breadcrumbs={breadcrumbs} currentPage="Memory" />
       <div className="flex flex-1 flex-col">
+        <div className="px-6 pt-6">
+          <h1 className="text-3xl font-bold">Memory</h1>
+        </div>
         <MemorySection />
       </div>
     </>
