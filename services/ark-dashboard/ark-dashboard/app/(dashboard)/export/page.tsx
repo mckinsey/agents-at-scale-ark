@@ -220,12 +220,12 @@ export default function ExportPage() {
     const Icon = section.icon;
 
     return (
-      <Card key={section.type} className="relative">
-        <CardHeader>
+      <div key={section.type} className="space-y-4">
+        <div>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Icon className="text-muted-foreground h-5 w-5" />
-              <CardTitle className="text-lg">{section.title}</CardTitle>
+              <h3 className="text-lg font-medium">{section.title}</h3>
               <span className="text-muted-foreground text-sm">
                 ({selectedItems.length}/{items.length})
               </span>
@@ -239,11 +239,11 @@ export default function ExportPage() {
               />
             )}
           </div>
-          <CardDescription className="mt-1 text-sm">
+          <p className="text-muted-foreground mt-1 text-sm">
             {section.description}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+          </p>
+        </div>
+        <div>
           {items.length === 0 ? (
             <p className="text-muted-foreground text-sm">
               No {section.title.toLowerCase()} found
@@ -268,8 +268,8 @@ export default function ExportPage() {
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   };
 
@@ -287,73 +287,74 @@ export default function ExportPage() {
     <div className="flex-1 space-y-6">
       <PageHeader currentPage="Exports" />
 
-      <div className="mx-auto max-w-7xl space-y-6 p-6">
-        {/* Export Actions */}
+      <div className="mx-auto max-w-7xl p-6">
         <Card>
           <CardHeader>
-            <CardTitle>Select Resources to Export</CardTitle>
-            <CardDescription>
-              Choose specific resource to export individually or in groups
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Select Resources to Export</CardTitle>
+                <CardDescription>
+                  Choose specific resource to export individually or in groups
+                </CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleExportAll}
+                  disabled={isExporting || totalCount === 0}
+                  variant="outline">
+                  {isExporting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                  )}
+                  Export All
+                </Button>
+                <Button
+                  onClick={handleExportSelected}
+                  disabled={isExporting || selectedCount === 0}
+                  variant="default">
+                  {isExporting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="mr-2 h-4 w-4" />
+                  )}
+                  Export Selected ({selectedCount})
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="flex gap-2">
-              <Button
-                onClick={handleExportAll}
-                disabled={isExporting || totalCount === 0}
-                variant="outline">
-                {isExporting ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <CheckCircle className="mr-2 h-4 w-4" />
-                )}
-                Export All
-              </Button>
-              <Button
-                onClick={handleExportSelected}
-                disabled={isExporting || selectedCount === 0}
-                variant="default">
-                {isExporting ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Download className="mr-2 h-4 w-4" />
-                )}
-                Export Selected ({selectedCount})
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+            <Tabs
+              value={activeTab}
+              onValueChange={value => setActiveTab(value as ResourceType)}>
+              <TabsList className="grid w-full grid-cols-5 lg:flex lg:w-auto lg:grid-cols-none">
+                {resourceSections.map(section => {
+                  const items = resources[section.type] || [];
+                  const selectedItems = items.filter(item => item.selected);
+                  const Icon = section.icon;
+                  return (
+                    <TabsTrigger
+                      key={section.type}
+                      value={section.type}
+                      className="flex items-center gap-2">
+                      <Icon className="h-4 w-4" />
+                      {section.title} ({selectedItems.length})
+                    </TabsTrigger>
+                  );
+                })}
+              </TabsList>
 
-        {/* Resources in Tabs */}
-        <Tabs
-          value={activeTab}
-          onValueChange={value => setActiveTab(value as ResourceType)}>
-          <TabsList className="grid w-full grid-cols-5 lg:flex lg:w-auto lg:grid-cols-none">
-            {resourceSections.map(section => {
-              const items = resources[section.type] || [];
-              const selectedItems = items.filter(item => item.selected);
-              const Icon = section.icon;
-              return (
-                <TabsTrigger
+              {resourceSections.map(section => (
+                <TabsContent
                   key={section.type}
                   value={section.type}
-                  className="flex items-center gap-2">
-                  <Icon className="h-4 w-4" />
-                  {section.title} ({selectedItems.length})
-                </TabsTrigger>
-              );
-            })}
-          </TabsList>
-
-          {resourceSections.map(section => (
-            <TabsContent
-              key={section.type}
-              value={section.type}
-              className="mt-4 space-y-4">
-              {renderResourceSection(section)}
-            </TabsContent>
-          ))}
-        </Tabs>
+                  className="mt-4 space-y-4">
+                  {renderResourceSection(section)}
+                </TabsContent>
+              ))}
+            </Tabs>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
