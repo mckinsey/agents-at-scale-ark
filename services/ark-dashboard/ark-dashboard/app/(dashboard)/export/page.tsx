@@ -361,12 +361,7 @@ export default function ExportPage() {
                   value={section.type}
                   className="flex items-center gap-2">
                   <Icon className="h-4 w-4" />
-                  {section.title}
-                  {selectedItems.length > 0 && (
-                    <span className="bg-primary/10 rounded-full px-2 py-0.5 text-xs">
-                      {selectedItems.length}
-                    </span>
-                  )}
+                  {section.title} ({selectedItems.length})
                 </TabsTrigger>
               );
             })}
