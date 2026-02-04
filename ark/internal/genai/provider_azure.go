@@ -63,6 +63,9 @@ func (ap *AzureProvider) prepareStreamParams(messages []Message, n int64, tools 
 		Model:    ap.Model,
 		Messages: openaiMessages,
 		N:        openai.Int(n),
+		StreamOptions: openai.ChatCompletionStreamOptionsParam{
+			IncludeUsage: openai.Bool(true),
+		},
 	}
 
 	applyPropertiesToParams(ap.Properties, &params)
@@ -94,6 +97,15 @@ func (ap *AzureProvider) ChatCompletionStream(ctx context.Context, messages []Me
 
 		// Use the same accumulation logic as OpenAIProvider
 		accumulateStreamChunk(&chunk, &fullResponse, toolCallsMap)
+
+		// Accumulate usage if present in chunk
+		if chunk.Usage.TotalTokens > 0 {
+			fullResponse.Usage = openai.CompletionUsage{
+				PromptTokens:     chunk.Usage.PromptTokens,
+				CompletionTokens: chunk.Usage.CompletionTokens,
+				TotalTokens:      chunk.Usage.TotalTokens,
+			}
+		}
 	}
 
 	// Add accumulated tool calls to the response in index order
@@ -123,15 +135,6 @@ func (ap *AzureProvider) ChatCompletionStream(ctx context.Context, messages []Me
 	// Ensure we have a valid response
 	if fullResponse == nil {
 		return nil, fmt.Errorf("streaming completed but no response was accumulated")
-	}
-
-	// Initialize usage if not present (streaming responses may not include usage)
-	if fullResponse.Usage.TotalTokens == 0 {
-		fullResponse.Usage = openai.CompletionUsage{
-			PromptTokens:     0,
-			CompletionTokens: 0,
-			TotalTokens:      0,
-		}
 	}
 
 	return fullResponse, nil

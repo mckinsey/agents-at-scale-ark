@@ -3,9 +3,17 @@ import { atomWithStorage, createJSONStorage } from 'jotai/utils';
 
 export const CHAT_HISTORY_KEY = 'agent-chat-history';
 
+export interface TokenUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
 export interface ChatSession {
   messages: ChatCompletionMessageParam[];
   sessionId: string;
+  tokenUsage?: TokenUsage;
+  messageTokenUsage?: Record<number, TokenUsage>;
 }
 
 type ChatHistoryMap = Record<string, ChatSession>;

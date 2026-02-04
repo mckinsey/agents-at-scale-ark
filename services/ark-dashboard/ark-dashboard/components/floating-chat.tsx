@@ -18,7 +18,11 @@ import type {
 } from 'openai/resources/chat/completions';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { chatHistoryAtom, createNewSessionId } from '@/atoms/chat-history';
+import {
+  type TokenUsage,
+  chatHistoryAtom,
+  createNewSessionId,
+} from '@/atoms/chat-history';
 import {
   isChatStreamingEnabledAtom,
   queryTimeoutSettingAtom,
@@ -113,6 +117,34 @@ export default function FloatingChat({
     [chatKey, setChatHistory],
   );
 
+  const updateTokenUsage = useCallback(
+    (usage: TokenUsage) => {
+      setChatHistory(prev => {
+        const safePrev = prev || {};
+        const currentSession = safePrev[chatKey];
+        if (!currentSession) return safePrev;
+        const currentUsage = currentSession.tokenUsage || {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+        };
+        return {
+          ...safePrev,
+          [chatKey]: {
+            ...currentSession,
+            tokenUsage: {
+              prompt_tokens: currentUsage.prompt_tokens + usage.prompt_tokens,
+              completion_tokens:
+                currentUsage.completion_tokens + usage.completion_tokens,
+              total_tokens: currentUsage.total_tokens + usage.total_tokens,
+            },
+          },
+        };
+      });
+    },
+    [chatKey, setChatHistory],
+  );
+
   const [currentMessage, setCurrentMessage] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -164,11 +196,11 @@ export default function FloatingChat({
   const handleStreamChatResponse = async (userMessage: string) => {
     const messageArray = buildChatMessages(chatMessages, userMessage);
 
-    // Add empty assistant message that will be updated with streamed content
-    const assistantMessageIndex = chatMessages.length + 1; // +1 for user message already added
+    const assistantMessageIndex = chatMessages.length + 1;
     updateChatMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
     let accumulatedContent = '';
+    let messageTokenUsage: TokenUsage | null = null;
     const accumulatedToolCalls: Array<{
       id: string;
       type: 'function';
@@ -182,8 +214,29 @@ export default function FloatingChat({
       sessionId,
       queryTimeout,
     )) {
-      // Extract content from the chunk (OpenAI format)
       const typedChunk = chunk as unknown as ChatCompletionChunk;
+
+      if (typedChunk?.usage) {
+        const usage = {
+          prompt_tokens: typedChunk.usage.prompt_tokens,
+          completion_tokens: typedChunk.usage.completion_tokens,
+          total_tokens: typedChunk.usage.total_tokens,
+        };
+        messageTokenUsage = usage;
+        updateTokenUsage(usage);
+      }
+
+      const arkMetadata = (chunk as any)?.ark?.completedQuery?.status?.tokenUsage;
+      if (arkMetadata) {
+        const usage = {
+          prompt_tokens: arkMetadata.promptTokens || 0,
+          completion_tokens: arkMetadata.completionTokens || 0,
+          total_tokens: arkMetadata.totalTokens || 0,
+        };
+        messageTokenUsage = usage;
+        updateTokenUsage(usage);
+      }
+
       const delta = typedChunk?.choices?.[0]?.delta;
       if (delta?.content) {
         accumulatedContent += delta.content;
@@ -192,7 +245,6 @@ export default function FloatingChat({
       if (delta?.tool_calls) {
         let index = accumulatedToolCalls.length - 1;
         for (const toolCallDelta of delta.tool_calls) {
-          // name is only defined when starting a new tool invocation
           if (toolCallDelta.function?.name) {
             index += 1;
             accumulatedToolCalls.push({
@@ -223,12 +275,27 @@ export default function FloatingChat({
       });
     }
 
-    // After streaming completes, add tool messages (OpenAI format)
-    // These won't be displayed but they will be part of the history
+    if (messageTokenUsage) {
+      setChatHistory(prev => {
+        const safePrev = prev || {};
+        const currentSession = safePrev[chatKey];
+        if (!currentSession) return safePrev;
+        return {
+          ...safePrev,
+          [chatKey]: {
+            ...currentSession,
+            messageTokenUsage: {
+              ...(currentSession.messageTokenUsage || {}),
+              [assistantMessageIndex]: messageTokenUsage,
+            },
+          },
+        };
+      });
+    }
+
     if (accumulatedToolCalls.length > 0) {
       updateChatMessages(prev => {
         const newMessages = [...prev];
-        // Add a tool message for each tool call
         accumulatedToolCalls.forEach(toolCall => {
           newMessages.push({
             role: 'tool',
@@ -367,7 +434,16 @@ export default function FloatingChat({
     setLastConversationId(newSessionId);
     setChatHistory(prev => ({
       ...(prev || {}),
-      [chatKey]: { messages: [], sessionId: newSessionId },
+      [chatKey]: {
+        messages: [],
+        sessionId: newSessionId,
+        tokenUsage: {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+        },
+        messageTokenUsage: {},
+      },
     }));
     setError(null);
   }, [chatKey, setChatHistory, setLastConversationId]);
@@ -506,12 +582,10 @@ export default function FloatingChat({
                 )}
 
                 {chatMessages.map((message, index) => {
-                  // Don't show tool messages (role='tool') - tool call will show up with assistant message
                   if (message.role === 'tool') {
                     return '';
                   }
 
-                  // Handle regular messages
                   let content = '';
                   if (typeof message.content === 'string') {
                     content = message.content;
@@ -536,6 +610,7 @@ export default function FloatingChat({
 
                   const toolCalls =
                     'tool_calls' in message ? message.tool_calls : undefined;
+                  const tokenUsage = chatSession.messageTokenUsage?.[index];
 
                   return (
                     <div key={index} className="contents">
@@ -567,6 +642,7 @@ export default function FloatingChat({
                             }
                             content={content}
                             viewMode={viewMode}
+                            tokenUsage={tokenUsage}
                           />
                         </div>
                       )}
@@ -641,6 +717,37 @@ export default function FloatingChat({
                     className="text-muted-foreground cursor-pointer text-sm">
                     Show tool calls
                   </label>
+                  {chatSession.tokenUsage &&
+                    chatSession.tokenUsage.total_tokens > 0 && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="text-muted-foreground ml-2 flex items-center gap-1 text-xs">
+                              <span className="font-mono">
+                                {chatSession.tokenUsage.total_tokens.toLocaleString()}{' '}
+                                tokens
+                              </span>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <div className="space-y-1 text-xs">
+                              <div>
+                                Prompt:{' '}
+                                {chatSession.tokenUsage.prompt_tokens.toLocaleString()}
+                              </div>
+                              <div>
+                                Completion:{' '}
+                                {chatSession.tokenUsage.completion_tokens.toLocaleString()}
+                              </div>
+                              <div className="border-t pt-1 font-medium">
+                                Total:{' '}
+                                {chatSession.tokenUsage.total_tokens.toLocaleString()}
+                              </div>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                   <Button
                     variant="ghost"
                     size="sm"
