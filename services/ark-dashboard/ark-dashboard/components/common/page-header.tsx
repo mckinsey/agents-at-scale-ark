@@ -74,25 +74,6 @@ function BreadcrumbsLinks({ elements }: BreadcrumbsLinksProps) {
   );
 }
 
-function HeaderTooltip() {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button variant="ghost" asChild>
-          <a
-            href="https://mckinsey.github.io/agents-at-scale-ark/"
-            target="_blank">
-            <Info className="h-4 w-4" />
-          </a>
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>
-        <span>Help</span>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
 type PageHeaderProps = {
   breadcrumbs?: BreadcrumbElement[];
   currentPage: string;
@@ -163,7 +144,6 @@ export function PageHeader({
       </Breadcrumb>
       <div className="ml-auto flex items-center space-x-2">
         {actions && actions}
-        <HeaderTooltip />
       </div>
     </header>
   );
