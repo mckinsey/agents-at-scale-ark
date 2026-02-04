@@ -21,7 +21,22 @@ app:
     limits:
       memory: "512Mi"
       cpu: "200m"
-  
+
+  # L2 FIX: Pod security context for hardening
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
+
+  # L2 FIX: Container security context for hardening
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop:
+        - ALL
 
 # Service configuration
 service:
@@ -36,7 +51,15 @@ service:
 ingress:
   enabled: false
   className: ""  # e.g., "nginx", "traefik", "kong"
-  annotations: {}
+  annotations:
+    # Security headers for clickjacking protection (M1) and general hardening (L3)
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "Content-Security-Policy: frame-ancestors 'none'";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+      more_set_headers "Strict-Transport-Security: max-age=31536000; includeSubDomains";
+      more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
     # kubernetes.io/ingress.class: nginx
     # kubernetes.io/tls-acme: "true"
     # cert-manager.io/cluster-issuer: letsencrypt-prod

@@ -44,6 +44,7 @@ export interface BaseCardProps {
   className?: string;
   cardClassName?: string;
   footer?: React.ReactNode;
+  onClick?: () => void;
 }
 
 export function BaseCard({
@@ -56,6 +57,7 @@ export function BaseCard({
   className,
   cardClassName,
   footer,
+  onClick,
 }: BaseCardProps) {
   const titleRef = useRef<HTMLSpanElement>(null);
   const [isTruncated, setIsTruncated] = useState(false);
@@ -81,7 +83,9 @@ export function BaseCard({
   );
 
   return (
-    <Card className={cn('relative', cardClassName)}>
+    <Card
+      className={cn('relative', onClick && 'cursor-pointer', cardClassName)}
+      onClick={onClick}>
       <CardHeader className="flex flex-row pr-3.5">
         <CardTitle className="flex max-w-full items-center gap-2 overflow-hidden text-lg">
           {Icon &&
@@ -113,7 +117,10 @@ export function BaseCard({
                   variant={action.variant || 'ghost'}
                   size="sm"
                   className="h-8 w-8 p-0"
-                  onClick={action.onClick}
+                  onClick={e => {
+                    e.stopPropagation();
+                    action.onClick();
+                  }}
                   aria-label={action.label}
                   disabled={action.disabled}>
                   <IconComponent className={cn('h-4 w-4', action.className)} />

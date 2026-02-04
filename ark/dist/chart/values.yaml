@@ -10,6 +10,8 @@ controllerManager:
       - "--leader-elect"
       - "--metrics-bind-address=:8443"
       - "--health-probe-bind-address=:8081"
+    env:
+      ARK_MODEL_PROBE_TIMEOUT_SECONDS: "60"
     resources:
       limits:
         cpu: 500m

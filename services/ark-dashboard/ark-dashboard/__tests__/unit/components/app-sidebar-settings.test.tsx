@@ -42,7 +42,7 @@ vi.mock('@/lib/services/system-info', () => ({
   },
 }));
 
-describe('AppSidebar - Experimental Features Menu Item', () => {
+describe('AppSidebar - Settings Menu Item', () => {
   const mockPush = vi.fn();
 
   beforeEach(() => {
@@ -53,7 +53,7 @@ describe('AppSidebar - Experimental Features Menu Item', () => {
     });
   });
 
-  it('should show Experimental Features option in the namespace dropdown', async () => {
+  it('should show Settings option in the namespace dropdown', async () => {
     const user = userEvent.setup();
 
     render(
@@ -69,12 +69,12 @@ describe('AppSidebar - Experimental Features Menu Item', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole('menuitem', { name: 'Experimental Features' }),
+        screen.getByRole('menuitem', { name: 'Settings' }),
       ).toBeInTheDocument();
     });
   });
 
-  it('should open experimental features dialog when Experimental Features is clicked', async () => {
+  it('should open settings dialog when Settings is clicked', async () => {
     const user = userEvent.setup();
 
     render(
@@ -90,17 +90,17 @@ describe('AppSidebar - Experimental Features Menu Item', () => {
     await user.click(dropdownTrigger);
 
     await waitFor(() => {
-      expect(screen.getByText('Experimental Features')).toBeInTheDocument();
+      expect(screen.getByText('Settings')).toBeInTheDocument();
     });
 
     const settingsItem = screen.getByRole('menuitem', {
-      name: 'Experimental Features',
+      name: 'Settings',
     });
     await user.click(settingsItem);
 
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
-      expect(screen.getByText('Experimental features')).toBeInTheDocument();
+      expect(screen.getByText('Settings')).toBeInTheDocument();
     });
   });
 });

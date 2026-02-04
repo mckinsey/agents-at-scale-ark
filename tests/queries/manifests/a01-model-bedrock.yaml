@@ -1,0 +1,20 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: default
+spec:
+  type: bedrock
+  model:
+    value: anthropic.claude-3-5-sonnet-20241022-v2:0
+  config:
+    bedrock:
+      region:
+        value: ($provider.region)
+      token:
+        valueFrom:
+          secretKeyRef:
+            name: test-model-token
+            key: token
+      endpointUrl:
+        value: ($provider.endpoint || '')
+

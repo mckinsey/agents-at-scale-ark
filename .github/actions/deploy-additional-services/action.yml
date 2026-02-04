@@ -32,6 +32,38 @@ inputs:
     description: "Helm timeout for each release (e.g. 5m)"
     required: false
     default: "5m"
+  auth_mode:
+    description: "Authentication mode (open, sso, basic, hybrid)"
+    required: false
+    default: "open"
+  oidc_issuer_url:
+    description: "OIDC issuer URL"
+    required: false
+    default: ""
+  oidc_client_id:
+    description: "OIDC client ID"
+    required: false
+    default: ""
+  oidc_client_secret:
+    description: "OIDC client secret"
+    required: false
+    default: ""
+  oidc_provider_id:
+    description: "OIDC provider ID (used in callback URL)"
+    required: false
+    default: ""
+  oidc_provider_name:
+    description: "OIDC provider display name"
+    required: false
+    default: ""
+  dashboard_base_url:
+    description: "Dashboard base URL (e.g. https://ark.example.com)"
+    required: false
+    default: ""
+  auth_secret:
+    description: "Secret key for signing JWT tokens"
+    required: false
+    default: ""
 runs:
   using: "composite"
   steps:
@@ -49,6 +81,9 @@ runs:
             --namespace ingress-nginx \
             --create-namespace \
             --set controller.service.type=LoadBalancer \
+            --set controller.config.proxy-buffer-size="16k" \
+            --set controller.config.proxy-buffers-number="4" \
+            --set controller.config.large-client-header-buffers="4 16k" \
             $( [ -n "${{ inputs.load_balancer_annotations }}" ] && echo "--set controller.service.annotations={${{ inputs.load_balancer_annotations }}}" ) \
             --wait
         
@@ -74,6 +109,36 @@ runs:
             IMAGE_REPO="${NAME}"
           fi
 
+          # Build extra helm args for ark-dashboard OIDC configuration
+          EXTRA_ARGS=()
+          VALUES_FILE=""
+          if [ "${NAME}" = "ark-dashboard" ]; then
+            VALUES_FILE=$(mktemp)
+            cat > "${VALUES_FILE}" <<EOF
+        app:
+          env:
+            - name: AUTH_MODE
+              value: "${{ inputs.auth_mode }}"
+            - name: BASE_URL
+              value: "${{ inputs.dashboard_base_url }}"
+            - name: AUTH_URL
+              value: "${{ inputs.dashboard_base_url }}/api/auth"
+            - name: AUTH_SECRET
+              value: "${{ inputs.auth_secret }}"
+            - name: OIDC_ISSUER_URL
+              value: "${{ inputs.oidc_issuer_url }}"
+            - name: OIDC_CLIENT_ID
+              value: "${{ inputs.oidc_client_id }}"
+            - name: OIDC_CLIENT_SECRET
+              value: "${{ inputs.oidc_client_secret }}"
+            - name: OIDC_PROVIDER_NAME
+              value: "${{ inputs.oidc_provider_name }}"
+            - name: OIDC_PROVIDER_ID
+              value: "${{ inputs.oidc_provider_id }}"
+        EOF
+            EXTRA_ARGS+=(--values "${VALUES_FILE}")
+          fi
+
           echo "=== Deploying ${NAME} ==="
           helm upgrade --install "${NAME}" "services/${NAME}/chart" \
             --namespace "${{ inputs.namespace }}" \
@@ -81,8 +146,14 @@ runs:
             --set app.image.repository="${IMAGE_REPO}" \
             --set app.image.tag="${{ inputs.clean_version }}" \
             --set app.image.pullPolicy="${{ inputs.pull_policy }}" \
+            "${EXTRA_ARGS[@]}" \
             --wait \
             --timeout="${{ inputs.timeout }}"
+
+          # Cleanup temp file
+          if [ -n "${VALUES_FILE}" ] && [ -f "${VALUES_FILE}" ]; then
+            rm -f "${VALUES_FILE}"
+          fi
         done
 
     - name: Verify deployment

@@ -1,5 +1,88 @@
 # Changelog
 
+## [0.1.52](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.51...v0.1.52) (2026-02-02)
+
+
+### Bug Fixes
+
+* Resolve CVE-2026-23864: bump next to 16.1.6 ([#1006](https://github.com/mckinsey/agents-at-scale-ark/issues/1006)) ([1b8fafd](https://github.com/mckinsey/agents-at-scale-ark/commit/1b8fafd921e40b8bde599765c1fc965057407a31))
+
+## [0.1.51](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.50...v0.1.51) (2026-01-30)
+
+
+### Features
+
+* add configurable proxy timeout ([#873](https://github.com/mckinsey/agents-at-scale-ark/issues/873)) ([462d276](https://github.com/mckinsey/agents-at-scale-ark/commit/462d2764b38680ae3d5ceb772a567fc2ff2be930))
+* Adding a separate action for publishing docs ([#858](https://github.com/mckinsey/agents-at-scale-ark/issues/858)) ([0a7784a](https://github.com/mckinsey/agents-at-scale-ark/commit/0a7784a80fc5d286de917fd344c72def4c097532))
+* Adding OIDC configuration parameters to the deployment to AWS and GCP ([#832](https://github.com/mckinsey/agents-at-scale-ark/issues/832)) ([8b08076](https://github.com/mckinsey/agents-at-scale-ark/commit/8b0807608064e923d24ffcb518c3f452d691c421))
+* agent consumption ([#631](https://github.com/mckinsey/agents-at-scale-ark/issues/631)) ([fef9553](https://github.com/mckinsey/agents-at-scale-ark/commit/fef95538a3d69ce33c16c0214e0b3bec68fb7663))
+* agent studio ([#922](https://github.com/mckinsey/agents-at-scale-ark/issues/922)) ([9da2142](https://github.com/mckinsey/agents-at-scale-ark/commit/9da2142bd0079f084b3f0c6aaf1d40a21df91477))
+* Link to docs in empty workflow templates page ([#870](https://github.com/mckinsey/agents-at-scale-ark/issues/870)) ([ec9434a](https://github.com/mckinsey/agents-at-scale-ark/commit/ec9434a25b232cdbcfa94459107257eb44dee680))
+* make chat not overflow ([#938](https://github.com/mckinsey/agents-at-scale-ark/issues/938)) ([40c4e4c](https://github.com/mckinsey/agents-at-scale-ark/commit/40c4e4c6aac567cd8dd9d0cbb7ec4da1f61783a5))
+* Proxy APIs for A2A & MCP ([#648](https://github.com/mckinsey/agents-at-scale-ark/issues/648)) ([0b8b9db](https://github.com/mckinsey/agents-at-scale-ark/commit/0b8b9db58a660b23d930855754912269a4fb252c))
+* remove development feature flag for a2a tasks ([#497](https://github.com/mckinsey/agents-at-scale-ark/issues/497)) ([25b81e5](https://github.com/mckinsey/agents-at-scale-ark/commit/25b81e58628d66ae5f14c907525673913657e45c))
+* Sessions tab for the broker view ([#862](https://github.com/mckinsey/agents-at-scale-ark/issues/862)) ([9777773](https://github.com/mckinsey/agents-at-scale-ark/commit/97777734e7ca177371b3fe167f263794d6d9ccd8))
+* uismall ([#987](https://github.com/mckinsey/agents-at-scale-ark/issues/987)) ([18bcce4](https://github.com/mckinsey/agents-at-scale-ark/commit/18bcce4103627901cc909d4e8a256aeacf2b3622))
+* update MCP documentation ([#875](https://github.com/mckinsey/agents-at-scale-ark/issues/875)) ([488dc73](https://github.com/mckinsey/agents-at-scale-ark/commit/488dc73b6b0e1545e5f542210d514513a6e17259))
+
+
+### Bug Fixes
+
+* Add watch permission to restart job sa ([#999](https://github.com/mckinsey/agents-at-scale-ark/issues/999)) ([4bbdf2e](https://github.com/mckinsey/agents-at-scale-ark/commit/4bbdf2ee1e9cc2e1b414bd6cddaeb5849777e3e2))
+* broker not working via ark install ([#966](https://github.com/mckinsey/agents-at-scale-ark/issues/966)) ([b14bcf7](https://github.com/mckinsey/agents-at-scale-ark/commit/b14bcf7993c29ba8e0fec4e220cc0fc6ebcc10fb))
+* Bump next to fix XRAY-93740 ([#968](https://github.com/mckinsey/agents-at-scale-ark/issues/968)) ([ca1ac7f](https://github.com/mckinsey/agents-at-scale-ark/commit/ca1ac7ff7714e532182c7bc22caf029f7c627b37))
+* CVE-2026-24842 in node-tar ([#971](https://github.com/mckinsey/agents-at-scale-ark/issues/971)) ([3a42f35](https://github.com/mckinsey/agents-at-scale-ark/commit/3a42f3501831b48fb770e3054b17eafb53feef40))
+* DataArt penetration testing findings ([#626](https://github.com/mckinsey/agents-at-scale-ark/issues/626)) ([0f333fd](https://github.com/mckinsey/agents-at-scale-ark/commit/0f333fd9ab4972034dbae67dccbe18d6f0e9fc42))
+* Fix Codecov Project Coverage CI ([#871](https://github.com/mckinsey/agents-at-scale-ark/issues/871)) ([b0711b7](https://github.com/mckinsey/agents-at-scale-ark/commit/b0711b7c5145fbd263047dcbfca4c8915d335996))
+* fixed "Dialog & DropdownMenu adds pointer-events: none" shadcn bug  ([#679](https://github.com/mckinsey/agents-at-scale-ark/issues/679)) ([bffcdb4](https://github.com/mckinsey/agents-at-scale-ark/commit/bffcdb44832754f1412b419a97cc1c0ca5e347e9))
+* handle existing secrets gracefully when creating models ([#940](https://github.com/mckinsey/agents-at-scale-ark/issues/940)) ([bc60532](https://github.com/mckinsey/agents-at-scale-ark/commit/bc605327a7102314e24caee9f029a1eea3e6b1b3))
+* handling broken deployments when running ark install ([#884](https://github.com/mckinsey/agents-at-scale-ark/issues/884)) ([d6c83bf](https://github.com/mckinsey/agents-at-scale-ark/commit/d6c83bf6a5040c79008f860a673aed4fc1c69da5))
+* Install file gateway from the marketplace ([#876](https://github.com/mckinsey/agents-at-scale-ark/issues/876)) ([a27ed8b](https://github.com/mckinsey/agents-at-scale-ark/commit/a27ed8bf0f969899e24c7a3c91c63627ad39c554))
+* make jfrog run ID search more likely to find something ([#901](https://github.com/mckinsey/agents-at-scale-ark/issues/901)) ([f0fb0be](https://github.com/mckinsey/agents-at-scale-ark/commit/f0fb0bef5d43793adca9240e2d204778d1882808))
+* make mcp validation message appear at the right field ([#923](https://github.com/mckinsey/agents-at-scale-ark/issues/923)) ([6b7c7d0](https://github.com/mckinsey/agents-at-scale-ark/commit/6b7c7d010bd7276e44b472cf6748c05cc8a4a74c))
+* override security context in devspace for dev mode ([#872](https://github.com/mckinsey/agents-at-scale-ark/issues/872)) ([b2d5b54](https://github.com/mckinsey/agents-at-scale-ark/commit/b2d5b548dc3c7724941a291c1ef28fe02eb4993b))
+* **performance:** optimize model probe to avoid overwhelming the controller ([#959](https://github.com/mckinsey/agents-at-scale-ark/issues/959)) ([eba8b10](https://github.com/mckinsey/agents-at-scale-ark/commit/eba8b105ef3e19b7013178e9e92d2fdedb2e6b85))
+* Remove low timeouts for team-round-robin test ([#920](https://github.com/mckinsey/agents-at-scale-ark/issues/920)) ([2467cec](https://github.com/mckinsey/agents-at-scale-ark/commit/2467cec5233e4b057522e9001abcaf3f4d5d7f9d))
+* replace external open-meteo API calls with mock servers in tests ([#989](https://github.com/mckinsey/agents-at-scale-ark/issues/989)) ([42491d8](https://github.com/mckinsey/agents-at-scale-ark/commit/42491d88cdc2277eef152a573a122203e319b35f))
+* Set PR preview to manual for now ([#911](https://github.com/mckinsey/agents-at-scale-ark/issues/911)) ([99e8632](https://github.com/mckinsey/agents-at-scale-ark/commit/99e86327425e3d7bce8b4cac17fbbcb15ea74918))
+* Treat dependabot as a forked PR ([#879](https://github.com/mckinsey/agents-at-scale-ark/issues/879)) ([a230bd1](https://github.com/mckinsey/agents-at-scale-ark/commit/a230bd16ff201c860087dbbc41037ce9b4c309a3))
+* update Node.js versions to patch CVE-2026-22036 in undici ([#921](https://github.com/mckinsey/agents-at-scale-ark/issues/921)) ([fd073bb](https://github.com/mckinsey/agents-at-scale-ark/commit/fd073bb1929c6b44e8da16c9f1cc58dce16f8dde))
+* use locally built images when testing ark-cli instead of ghcr.io ([#1002](https://github.com/mckinsey/agents-at-scale-ark/issues/1002)) ([9cd5889](https://github.com/mckinsey/agents-at-scale-ark/commit/9cd5889612948538c5edb0c0993a429dd9405561))
+
+## [0.1.50](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.49...v0.1.50) (2026-01-14)
+
+
+### Features
+
+* add npm trusted publishing support ([#671](https://github.com/mckinsey/agents-at-scale-ark/issues/671)) ([189a3e9](https://github.com/mckinsey/agents-at-scale-ark/commit/189a3e9686f3a266dd1acce210cde96b42dd6e2f))
+* add PR preview workflow for docs site ([#678](https://github.com/mckinsey/agents-at-scale-ark/issues/678)) ([d769de3](https://github.com/mckinsey/agents-at-scale-ark/commit/d769de3c8531a579691d2e67cac8dd3687642175))
+* Add skills/agents for Claude code ([#665](https://github.com/mckinsey/agents-at-scale-ark/issues/665)) ([a2e3dba](https://github.com/mckinsey/agents-at-scale-ark/commit/a2e3dbaf297e352ab5211b4ee9310c7b8f530b08))
+* add user analytics tags ([#807](https://github.com/mckinsey/agents-at-scale-ark/issues/807)) ([dbe4e2d](https://github.com/mckinsey/agents-at-scale-ark/commit/dbe4e2d874aaa88a872e9e6c7b9a86b628349b7a))
+* added files section to navigate the filesystem in use by the filesystem MCP server ([#613](https://github.com/mckinsey/agents-at-scale-ark/issues/613)) ([8101438](https://github.com/mckinsey/agents-at-scale-ark/commit/8101438718636950fbc8608ec3707c4672c862b9))
+* Adding xray container scan ([#691](https://github.com/mckinsey/agents-at-scale-ark/issues/691)) ([a001807](https://github.com/mckinsey/agents-at-scale-ark/commit/a001807b25d85e56a87ea58a33db9facd6762416))
+* Display tool calls in dashboard chat ([#651](https://github.com/mckinsey/agents-at-scale-ark/issues/651)) ([b53a7fe](https://github.com/mckinsey/agents-at-scale-ark/commit/b53a7fe54fb6c1fdbe872e5b945b075e0ee84af7))
+* standardise broker interfaces, SSE, file storage, pagination and cursors ([#645](https://github.com/mckinsey/agents-at-scale-ark/issues/645)) ([8674768](https://github.com/mckinsey/agents-at-scale-ark/commit/8674768b1aeacc3742e6c3af8547d37f98e77ff5)), closes [#656](https://github.com/mckinsey/agents-at-scale-ark/issues/656)
+* Toggle switch for debug mode in dashboard chat ([#677](https://github.com/mckinsey/agents-at-scale-ark/issues/677)) ([0171090](https://github.com/mckinsey/agents-at-scale-ark/commit/0171090cd684f252e0b0d353ecccf6ca74b2dbf2))
+* v0.50.0 integration ([#668](https://github.com/mckinsey/agents-at-scale-ark/issues/668)) ([b4a8df6](https://github.com/mckinsey/agents-at-scale-ark/commit/b4a8df60aa6b3856f6364b026f7f65cf5b59d32d))
+* Workflow Templates Viewer ([#856](https://github.com/mckinsey/agents-at-scale-ark/issues/856)) ([18c12d3](https://github.com/mckinsey/agents-at-scale-ark/commit/18c12d374fb23cbe0222648fbb584c7b7c6397e0))
+
+
+### Bug Fixes
+
+* add conversationId to API and rename session models to conversation ([#682](https://github.com/mckinsey/agents-at-scale-ark/issues/682)) ([9de3f72](https://github.com/mckinsey/agents-at-scale-ark/commit/9de3f72b5f6d7fcadbc23318756bd5e58f0632a5))
+* Add padding to tool calls in dashboard chat ([#836](https://github.com/mckinsey/agents-at-scale-ark/issues/836)) ([dd5a2fc](https://github.com/mckinsey/agents-at-scale-ark/commit/dd5a2fc55ffe74ee296325bb86f97bc6b27c340a))
+* Allow for editing MCP server URLs & trim whitespace ([#689](https://github.com/mckinsey/agents-at-scale-ark/issues/689)) ([3e88ea8](https://github.com/mckinsey/agents-at-scale-ark/commit/3e88ea80bed1566d1366f10fa30ef498ca6487f7))
+* **ark-cli:** auto-uninstall legacy releases before service install ([#676](https://github.com/mckinsey/agents-at-scale-ark/issues/676)) ([c19f44c](https://github.com/mckinsey/agents-at-scale-ark/commit/c19f44c1e2fb9db636624b6a3a3f057a4e4cfa56))
+* CVE-2025-15284 in qs package ([#663](https://github.com/mckinsey/agents-at-scale-ark/issues/663)) ([02e67e0](https://github.com/mckinsey/agents-at-scale-ark/commit/02e67e0374e6e06de7585d950d8e8b0cdfabb966))
+* Dependabot  clean up git access ([#688](https://github.com/mckinsey/agents-at-scale-ark/issues/688)) ([44357f0](https://github.com/mckinsey/agents-at-scale-ark/commit/44357f0f9d1985f5c08bc4ba9d83cb99fa8d521e))
+* Dependabot: change to env git PAT token ([#662](https://github.com/mckinsey/agents-at-scale-ark/issues/662)) ([45d6909](https://github.com/mckinsey/agents-at-scale-ark/commit/45d69091cf68f55538d10b8927457ede7b84b62a))
+* fix pipeline failures by checking for provider in model resolver ([#693](https://github.com/mckinsey/agents-at-scale-ark/issues/693)) ([590d2e7](https://github.com/mckinsey/agents-at-scale-ark/commit/590d2e75153a18beeefcae01f47778b9631c023b))
+* High level timestamps on the broker page should show data time ([#694](https://github.com/mckinsey/agents-at-scale-ark/issues/694)) ([70abd42](https://github.com/mckinsey/agents-at-scale-ark/commit/70abd429c3d8474c9999f698dcf8abc1b1552435))
+* jFrog issue and ark-cli issue ([#683](https://github.com/mckinsey/agents-at-scale-ark/issues/683)) ([dca94ae](https://github.com/mckinsey/agents-at-scale-ark/commit/dca94aee51658ee0a92e8380a48a113f923ab45a))
+* Limit to 1 PR per ecosystem ([#834](https://github.com/mckinsey/agents-at-scale-ark/issues/834)) ([a0caf6c](https://github.com/mckinsey/agents-at-scale-ark/commit/a0caf6c5c5c1648b81d8db39f779130622646c93))
+* **prometheus:** restore ServiceMonitor TLS and add monitoring docs ([#687](https://github.com/mckinsey/agents-at-scale-ark/issues/687)) ([185280a](https://github.com/mckinsey/agents-at-scale-ark/commit/185280abb1c143e0ee5f4c2c5dde80e3ad525b8a))
+* rename Pydantic models to avoid OpenAPI schema collisions ([#656](https://github.com/mckinsey/agents-at-scale-ark/issues/656)) ([#657](https://github.com/mckinsey/agents-at-scale-ark/issues/657)) ([c05680f](https://github.com/mckinsey/agents-at-scale-ark/commit/c05680f7e89c1a0aa6553fd780dfb64980689647))
+
 ## [0.1.49](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.48...v0.1.49) (2025-12-23)
 
 

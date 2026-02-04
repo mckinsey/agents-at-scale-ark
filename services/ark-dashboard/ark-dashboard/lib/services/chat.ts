@@ -182,6 +182,7 @@ export const chatService = {
     targetName: string,
     sessionId?: string,
     enableStreaming?: boolean,
+    timeout?: string,
   ): Promise<QueryDetailResponse> {
     const queryRequest: QueryCreateRequest = {
       name: `chat-query-${generateUUID()}`,
@@ -193,6 +194,7 @@ export const chatService = {
         name: targetName,
       },
       sessionId,
+      timeout,
     };
 
     // Add streaming annotation if enabled
@@ -355,6 +357,7 @@ export const chatService = {
     targetType: string,
     targetName: string,
     sessionId?: string,
+    timeout?: string,
   ): AsyncGenerator<Record<string, unknown>, void, unknown> {
     const model = `${targetType}/${targetName}`;
     const response = await fetch('/api/openai/v1/chat/completions', {
@@ -366,7 +369,10 @@ export const chatService = {
         model,
         messages,
         stream: true,
-        metadata: sessionId ? { sessionId } : undefined,
+        metadata: {
+          ...(sessionId ? { sessionId } : {}),
+          ...(timeout ? { timeout } : {}),
+        },
       }),
     });
 

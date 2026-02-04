@@ -1,0 +1,18 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: default
+spec:
+  type: openai
+  model:
+    value: gpt-4o-mini
+  config:
+    openai:
+      baseUrl:
+        value: ($provider.url)
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            name: test-model-token
+            key: token
+

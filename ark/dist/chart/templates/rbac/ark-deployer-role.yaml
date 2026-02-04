@@ -27,18 +27,30 @@ rules:
   verbs: ["get", "list", "create", "update", "patch"]
 
 # Core Kubernetes resources - deploy ARK services and supporting resources
+# L1 FIX: Restrict delete operations to ark-system namespace only
 - apiGroups: [""]
   resources: ["services", "serviceaccounts", "secrets", "configmaps", "persistentvolumeclaims"]
-  verbs: ["get", "list", "create", "update", "patch", "delete"]
+  verbs: ["get", "list", "create", "update", "patch"]
+
+- apiGroups: [""]
+  resources: ["services", "serviceaccounts", "secrets", "configmaps", "persistentvolumeclaims"]
+  verbs: ["delete"]
+  resourceNames: []  # Intentionally empty - delete should be done via namespaced roles
 
 - apiGroups: ["apps"]
   resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
-  verbs: ["get", "list", "create", "update", "patch", "delete"]
+  verbs: ["get", "list", "create", "update", "patch"]
+
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
+  verbs: ["delete"]
+  resourceNames: []  # Intentionally empty - delete should be done via namespaced roles
 
 # RBAC management - create permissions for the ARK controller
+# L1 FIX: Remove cluster-wide delete for RBAC resources
 - apiGroups: ["rbac.authorization.k8s.io"]
   resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
-  verbs: ["get", "list", "create", "update", "patch", "delete"]
+  verbs: ["get", "list", "create", "update", "patch"]
 
 # CRD installation - install ARK's Custom Resource Definitions
 - apiGroups: ["apiextensions.k8s.io"]
@@ -46,9 +58,10 @@ rules:
   verbs: ["get", "list", "create", "update", "patch"]
 
 # Admission webhooks - configure ARK's validation and mutation webhooks
+# L1 FIX: Remove delete verb for webhook configurations
 - apiGroups: ["admissionregistration.k8s.io"]
   resources: ["validatingwebhookconfigurations", "mutatingwebhookconfigurations"]
-  verbs: ["get", "list", "create", "update", "patch", "delete"]
+  verbs: ["get", "list", "create", "update", "patch"]
 
 # Certificate management - manage TLS certificates for webhooks
 - apiGroups: ["cert-manager.io"]
@@ -56,8 +69,9 @@ rules:
   verbs: ["get", "list", "create", "update", "patch"]
 
 # ARK Custom Resources - deployment access to manage ARK resources
+# L1 FIX: Remove delete verb for custom resources
 - apiGroups: ["ark.mckinsey.com"]
-  resources: 
+  resources:
   - "agents"
   - "evaluators"
   - "mcpservers"
@@ -68,7 +82,7 @@ rules:
   - "tools"
   - "a2aservers"
   - "executionengines"
-  verbs: ["get", "list", "create", "update", "patch", "delete"]
+  verbs: ["get", "list", "create", "update", "patch"]
 
 # Read access for deployment verification and troubleshooting  
 - apiGroups: [""]

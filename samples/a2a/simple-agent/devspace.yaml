@@ -45,6 +45,9 @@ dev:
       - -c
       - "cd /app && pip install uv && uv sync && uv run uvicorn simple_a2a_server.main:app --reload --host 0.0.0.0 --port 8000"
     # Show the server logs on the screen.
+    env:
+      - name: A2A_SERVER_URL
+        value: "http://127.0.0.1.nip.io:8080/api/v1/proxy/a2a/simple-agent"
     logs:
       lastLines: 50
     sync:
@@ -52,6 +55,8 @@ dev:
       # file changes from in the container back to the host, and don't upload
       # files in '.dockerignore'.
       - path: .:/app
+        excludePaths: 
+        - .venv/
         startContainer: true
         disableDownload: true
         uploadExcludeFile: .dockerignore

@@ -40,6 +40,10 @@ rules:
   - apiGroups: ["ark.mckinsey.com"]
     resources: ["models", "agents", "queries", "teams", "tools", "workflows", "arktemplates", "mcpservers", "a2aservers", "memories", "evaluations", "evaluators", "a2atasks"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Argo Workflows resources
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflows", "workflowtemplates", "cronworkflows", "clusterworkflowtemplates"]
+    verbs: ["get", "list", "watch"]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1

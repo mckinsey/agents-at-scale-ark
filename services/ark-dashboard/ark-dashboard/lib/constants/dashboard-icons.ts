@@ -6,6 +6,7 @@ import {
   CheckCircle,
   ClipboardList,
   Database,
+  FileText,
   Key,
   Lock,
   type LucideIcon,
@@ -13,13 +14,14 @@ import {
   Server,
   Settings,
   Users,
+  Workflow,
   Wrench,
   Zap,
 } from 'lucide-react';
 
 import {
-  A2A_TASKS_FEATURE_KEY,
   BROKER_FEATURE_KEY,
+  FILES_BROWSER_FEATURE_KEY,
 } from '@/atoms/experimental-features';
 
 export interface DashboardSection {
@@ -62,6 +64,12 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     icon: CheckCircle,
     group: 'configurations',
   },
+  'workflow-templates': {
+    key: 'workflow-templates',
+    title: 'Workflow Templates',
+    icon: Workflow,
+    group: 'configurations',
+  },
 
   // Operations
   queries: {
@@ -88,12 +96,18 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     icon: Database,
     group: 'operations',
   },
+  files: {
+    key: 'files',
+    title: 'Files',
+    icon: FileText,
+    group: 'operations',
+    enablerFeature: FILES_BROWSER_FEATURE_KEY,
+  },
   tasks: {
     key: 'tasks',
     title: 'A2A Tasks',
     icon: ClipboardList,
     group: 'operations',
-    enablerFeature: A2A_TASKS_FEATURE_KEY,
   },
   broker: {
     key: 'broker',

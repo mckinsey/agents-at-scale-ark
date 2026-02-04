@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_serializer
 
 from .common import AvailabilityStatus
 
@@ -39,6 +39,17 @@ class MCPServerValueSource(BaseModel):
     """ValueSource for configuration (supports direct value or valueFrom)."""
     value: Optional[str] = None
     valueFrom: Optional[MCPServerValueFrom] = None
+
+    @model_serializer(mode='plain')  
+    def serialize_model(self) -> dict:  
+        if self.valueFrom:
+            return {
+                "valueFrom": self.valueFrom
+            }
+        else:
+            return {
+                "value": self.value
+            }
 
 
 class MCPServerHeader(BaseModel):

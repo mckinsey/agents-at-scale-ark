@@ -7,7 +7,7 @@ from kubernetes_asyncio.client.rest import ApiException
 from ark_sdk.k8s import SecretClient
 
 
-class TestSecretClient(unittest.TestCase):
+class TestSecretClient(unittest.IsolatedAsyncioTestCase):
     """Test cases for SecretClient class - adapted from ark-api secret tests."""
 
     def setUp(self):
@@ -126,14 +126,14 @@ class TestSecretClient(unittest.TestCase):
         # Setup async context manager mock
         mock_api_client_instance = AsyncMock()
         mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
-        
+        secret_value = "dGVzdC10b2tlbg=="
         # Mock the secret response
         mock_secret = Mock()
         mock_secret.metadata.name = "test-secret"
         mock_secret.metadata.uid = "uuid-12345"
         mock_secret.metadata.annotations = {}
         mock_secret.type = "Opaque"
-        mock_secret.data = {"token": "dGVzdC10b2tlbg=="}  # base64 encoded "test-token"
+        mock_secret.data = {"token": secret_value}  # base64 encoded "test-token"
         
         mock_api_instance = mock_v1_api.return_value
         mock_api_instance.read_namespaced_secret = AsyncMock(return_value=mock_secret)
@@ -145,7 +145,7 @@ class TestSecretClient(unittest.TestCase):
         self.assertEqual(result["name"], "test-secret")
         self.assertEqual(result["id"], "uuid-12345")
         self.assertEqual(result["type"], "Opaque")
-        self.assertEqual(result["secret_length"], 10)  # length of "test-token"
+        self.assertEqual(result["secret_length"], len(secret_value))
 
     @patch('ark_sdk.k8s.ApiClient')
     @patch('ark_sdk.k8s.client.CoreV1Api')
@@ -283,6 +283,66 @@ class TestSecretClient(unittest.TestCase):
         # Test that exception is propagated
         with self.assertRaises(ApiException):
             await self.client.update_secret("nonexistent", {"token": "new-token"})
+
+    @patch('ark_sdk.k8s.ApiClient')
+    @patch('ark_sdk.k8s.client.CoreV1Api')
+    async def test_get_secret_value_success(self, mock_v1_api, mock_api_client):
+        """Test retrieving specific key value from an Opaque secret."""
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_secret = Mock()
+        mock_secret.metadata.name = "test-secret"
+        mock_secret.metadata.uid = "uuid-12345"
+        mock_secret.type = "Opaque"
+        mock_secret.data = {"token": "dGVzdC10b2tlbg=="}  # base64 encoded "test-token"
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_secret = AsyncMock(return_value=mock_secret)
+
+        result = await self.client.get_secret_value("test-secret", "token")
+
+        self.assertEqual(result["name"], "test-secret")
+        self.assertEqual(result["id"], "uuid-12345")
+        self.assertEqual(result["type"], "Opaque")
+        self.assertEqual(result["value"], "dGVzdC10b2tlbg==")
+
+    @patch('ark_sdk.k8s.ApiClient')
+    @patch('ark_sdk.k8s.client.CoreV1Api')
+    async def test_get_secret_value_invalid_key(self, mock_v1_api, mock_api_client):
+        """Test ValueError is raised when key does not exist in secret."""
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_secret = Mock()
+        mock_secret.metadata.name = "test-secret"
+        mock_secret.metadata.uid = "uuid-12345"
+        mock_secret.type = "Opaque"
+        mock_secret.data = {"token": "dGVzdC10b2tlbg=="}
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_secret = AsyncMock(return_value=mock_secret)
+
+        with self.assertRaises(ValueError) as context:
+            await self.client.get_secret_value("test-secret", "missing-key")
+
+        self.assertIn("Invalid key missing-key for secret test-secret", str(context.exception))
+
+    @patch('ark_sdk.k8s.ApiClient')
+    @patch('ark_sdk.k8s.client.CoreV1Api')
+    async def test_get_secret_value_secret_not_found(self, mock_v1_api, mock_api_client):
+        """Test exception is raised when secret does not exist."""
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespaced_secret = AsyncMock(side_effect=ApiException(
+            status=404,
+            reason="Not Found"
+        ))
+
+        with self.assertRaises(ApiException):
+            await self.client.get_secret_value("nonexistent-secret", "token")
 
     @patch('ark_sdk.k8s.ApiClient')
     @patch('ark_sdk.k8s.client.CoreV1Api')

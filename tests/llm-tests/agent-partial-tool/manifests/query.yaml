@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: partial-tool-query
+spec:
+  input: What are the coordinates?
+  timeout: 2m
+  target:
+    type: agent
+    name: partial-tool-agent

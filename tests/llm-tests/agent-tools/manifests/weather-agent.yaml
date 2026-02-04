@@ -1,0 +1,13 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: weather-agent
+spec:
+  prompt: |
+    You are a helpful weather assistant. When asked about weather, use the weather-tool to get current weather information.
+    Always provide a friendly and informative response about the weather conditions you retrieve.
+  modelRef:
+    name: test-model
+  tools:
+  - type: custom
+    name: weather-tool

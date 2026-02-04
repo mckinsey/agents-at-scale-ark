@@ -1,0 +1,15 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: partial-tool-agent
+spec:
+  description: Agent with a tool using partial parameters
+  modelRef:
+    name: test-model
+  tools:
+    - type: custom
+      name: get-coordinates
+      partial:
+        parameters:
+          - name: city
+            value: New York

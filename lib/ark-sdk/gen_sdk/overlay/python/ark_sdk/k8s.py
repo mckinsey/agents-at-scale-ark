@@ -210,6 +210,25 @@ class SecretClient:
                 "annotations": secret.metadata.annotations
             }
     
+    async def get_secret_value(self, name: str, key: str):
+        """Get a specific secret."""
+        async with ApiClient() as api:
+            v1 = client.CoreV1Api(api)
+            secret = await v1.read_namespaced_secret(
+                name=name, 
+                namespace=self.namespace
+            )
+            if key not in secret.data:
+                raise ValueError(f"Invalid key {key} for secret {name}")
+                
+            return {
+                "name": secret.metadata.name,
+                "id": str(secret.metadata.uid),
+                "type": secret.type,
+                "value": secret.data[key],
+            }
+
+    
     async def update_secret(self, name: str, string_data: Dict[str, str]):
         """Update an existing secret."""
         validated_data = self.validate_and_encode_token(string_data)

@@ -1,11 +1,16 @@
 """ARK services utilities for Helm release management."""
 import logging
-from typing import List, Dict, Any
+from enum import Enum
+from typing import List, Dict, Any, Optional
+
+import base64
 
 from pyhelm3 import Client
-
+from ark_sdk.k8s import SecretClient
 logger = logging.getLogger(__name__)
 
+class SecretType(str, Enum):
+    OPAQUE = "Opaque"
 
 async def _extract_chart_metadata(chart_metadata_obj) -> Dict[str, Any]:
     """Extract chart metadata from chart metadata object."""
@@ -93,3 +98,32 @@ def get_chart_description(release_data: Dict[str, Any]) -> str:
     """Get chart description from Helm release data."""
     chart_metadata = release_data.get('chart_metadata', {})
     return chart_metadata.get('description', "")
+
+
+async def get_headers(resource_spec: dict,
+    output: dict[str, str],
+    namespace: Optional[str]=None) -> None:
+    if resource_spec and "headers" in resource_spec:
+        for header in resource_spec["headers"]:
+            if "value" in header:
+                if "value" in header["value"]:
+                    # Header value stored as direct
+                    output[header["name"]] = header["value"]["value"] 
+                elif "valueFrom" in header["value"]:
+                    if "secretKeyRef" in header["value"]["valueFrom"]:
+                        secret_name = header["value"]["valueFrom"]["secretKeyRef"].get("name", "")
+                        secret_key = header["value"]["valueFrom"]["secretKeyRef"].get("key", "")
+                        output[header["name"]] = await get_secret(secret_name, secret_key, namespace)
+                        
+                    
+    
+async def get_secret(secret_name: str, 
+    secret_key: str,
+    namespace: Optional[str]=None) -> str:
+    client = SecretClient(namespace=namespace)
+    result = await client.get_secret_value(secret_name, secret_key)
+    secret_val = ""
+    if "type" in result and "value" in result:
+        if result["type"] == SecretType.OPAQUE:
+            secret_val = base64.b64decode(result["value"])
+    return secret_val

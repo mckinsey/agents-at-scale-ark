@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: weather-query
+spec:
+  input: What's the current weather like in New York City?
+  timeout: 2m
+  target:
+    type: agent
+    name: weather-agent

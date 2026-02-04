@@ -1,0 +1,113 @@
+#!/bin/bash
+
+set +e  # Don't exit on errors
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Updated list - 7 working tests
+CONVERTED_TESTS=(
+    "agents"
+    "queries"
+    "models"
+    "agent-parameters"
+    "agent-tools"
+    "agent-structured-output"
+    "agent-partial-tool"
+)
+
+ALL_PROVIDERS=$(bash "$SCRIPT_DIR/scripts/setup-model-provider.sh" list)
+
+# Filter out bedrock - CRD doesn't support bearer token auth
+PROVIDERS=$(echo "$ALL_PROVIDERS" | jq '[.[] | select(. != "bedrock")]')
+
+if [ "$PROVIDERS" = "[]" ]; then
+    echo "Error: No supported model provider credentials configured" >&2
+    echo "Note: Bedrock requires AWS credentials and is not currently supported" >&2
+    exit 1
+fi
+
+PROVIDER_COUNT=$(echo "$PROVIDERS" | jq 'length')
+TOTAL_TESTS=${#CONVERTED_TESTS[@]}
+EXPECTED_RUNS=$((PROVIDER_COUNT * TOTAL_TESTS))
+
+echo "========================================"
+echo "Running $TOTAL_TESTS working tests"
+echo "with $PROVIDER_COUNT providers (Azure, OpenAI)"
+echo "Expected test runs: $EXPECTED_RUNS"
+echo "Note: Bedrock tests skipped (requires AWS credentials)"
+echo "========================================"
+echo ""
+
+PASSED=0
+FAILED=0
+TIMEOUT_COUNT=0
+FAILED_COMBINATIONS=()
+
+TEST_TIMEOUT=240  # 4 minutes per test
+
+for provider in $(echo "$PROVIDERS" | jq -r '.[]'); do
+    export E2E_TEST_PROVIDER="$provider"
+    
+
+    echo "========================================"
+    echo "Provider: $provider"
+    echo "========================================"
+    
+    for test in "${CONVERTED_TESTS[@]}"; do
+        echo "----------------------------------------"
+        echo "Running: $test with $provider"
+        echo "----------------------------------------"
+        
+        # Run with timeout and show full output
+        (
+            timeout "$TEST_TIMEOUT" chainsaw test --test-dir "./$test" 2>&1
+            echo "EXIT_CODE:$?" > /tmp/chainsaw-exit-${test}.txt
+        ) | tee /tmp/chainsaw-output-${test}.txt
+        
+        EXIT_CODE=$(cat /tmp/chainsaw-exit-${test}.txt 2>/dev/null | cut -d: -f2)
+        OUTPUT=$(cat /tmp/chainsaw-output-${test}.txt)
+        
+        if [ "$EXIT_CODE" = "142" ] || [ "$EXIT_CODE" = "124" ]; then
+            # Timeout
+            ((TIMEOUT_COUNT++))
+            ((FAILED++))
+            FAILED_COMBINATIONS+=("$provider/$test (TIMEOUT)")
+            echo ""
+            echo "RESULT: TIMEOUT (>${TEST_TIMEOUT}s)"
+        elif echo "$OUTPUT" | grep -q "Passed  tests [1-9]"; then
+            # Real pass
+            ((PASSED++))
+            echo ""
+            echo "RESULT: PASS"
+        else
+            # Failed
+            ((FAILED++))
+            FAILED_COMBINATIONS+=("$provider/$test")
+            echo ""
+            echo "RESULT: FAIL"
+        fi
+        echo ""
+    done
+done
+
+echo ""
+echo "========================================"
+echo "FINAL SUMMARY"
+echo "========================================"
+echo "Total test runs: $EXPECTED_RUNS"
+echo "Passed: $PASSED"
+echo "Failed: $FAILED"
+echo "Timeouts: $TIMEOUT_COUNT"
+
+if [ $FAILED -gt 0 ]; then
+    echo ""
+    echo "Failed combinations:"
+    for combo in "${FAILED_COMBINATIONS[@]}"; do
+        echo "  - $combo"
+    done
+    exit 1
+fi
+
+echo ""
+echo "All tests passed!"
+exit 0

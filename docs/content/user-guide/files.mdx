@@ -1,0 +1,64 @@
+---
+title: Files
+description: Manage files through the dashboard
+---
+
+# Files
+
+The Files section provides a visual interface for managing files that agents can access through the filesystem MCP server. Files are stored in an S3-compatible storage backend and can be organized into directories.
+
+## Overview
+
+The Files section enables uploading, browsing, downloading, and deleting files through the dashboard. Files can be organized in directories and are accessible to agents configured with the filesystem MCP server. This allows agents to read from and work with files stored in a centralized location.
+
+The Files section connects to the [File Gateway Service](https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/), which provides an API layer over S3-compatible storage. When you upload files through the dashboard, they are stored in the configured S3 bucket and made available through REST endpoints for listing, uploading, downloading, and deleting operations.
+
+## Features
+
+- Directory-based organization with breadcrumb navigation
+- Drag-and-drop file upload with progress tracking
+- File size limit of 1MB for direct context loading
+- Copy file paths to clipboard for use in agent prompts
+- Delete individual files or entire directories
+- Automatic availability detection
+
+## Installation
+
+The Files section requires the [File Gateway Service](https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/) from the Ark marketplace.
+
+Install the [File Gateway Service](https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/):
+
+```bash
+ark install marketplace/services/file-gateway
+```
+
+The dashboard automatically detects when the [File Gateway Service](https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/) is available and enables the Files section.
+
+## Configuration
+
+The [File Gateway Service](https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/) requires an S3-compatible storage backend (AWS S3, MinIO, etc.). Configure the service with:
+
+- S3 bucket name
+- AWS credentials or IAM role
+- Optional prefix for file organization
+
+See the [File Gateway Service documentation](https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/) for detailed configuration options.
+
+## Using the Files Section
+
+Access the Files section from the dashboard sidebar. The interface provides:
+
+- Current directory contents with files and subdirectories
+- Breadcrumb navigation for directory traversal
+- Upload area for drag-and-drop file uploads
+- Actions menu for downloading, copying paths, and deleting
+
+To upload a file, drag and drop it into the upload area or click to browse. Enter the desired filename and the file will be uploaded to the current directory.
+
+### File Size Limitations
+
+The File Gateway service enforces a 1MB limit for file uploads, see the [File Gateway Service documentation](https://mckinsey.github.io/agents-at-scale-marketplace/services/file-gateway/#file-size-limitations) for more.
+
+## Connecting Files to Agents
+
+To give agents access to uploaded files, configure the [filesystem MCP server](/user-guide/tools) in your agent definitions.

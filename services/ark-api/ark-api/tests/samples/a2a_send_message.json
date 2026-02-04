@@ -1,0 +1,17 @@
+{
+  "jsonrpc": "2.0",
+  "method": "message/send",
+  "id": 1,
+  "params": {
+    "message": {
+      "role": "user",
+      "parts": [
+        {
+          "kind": "text", 
+          "text": "how much is 10 USD in INR?"
+        }
+      ],
+      "messageId": "test"
+    }
+  } 
+}

@@ -2,16 +2,18 @@ apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   name: queries
+  labels:
+    multi-provider: "true"
 spec:
   steps:
-    - try:
+    - name: setup-and-test
+      try:
       - script:
           skipLogOutput: true
           content: |
-            set -u
-            echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
+            ../scripts/setup-model-provider.sh auto
           outputs:
-          - name: azure
+          - name: provider
             value: (json_parse($stdout))
       - script:
           content: |
@@ -20,13 +22,26 @@ spec:
           - name: NAMESPACE
             value: ($namespace)
       - apply:
-          file: "manifests/*.yaml"
+          resource:
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: test-model-token
+            type: Opaque
+            data:
+              token: (base64_encode($provider.token))
+      - apply:
+          file: (join('', ['manifests/a01-model-', $provider.type, '.yaml']))
+      - apply:
+          file: manifests/a03-agent.yaml
+      - apply:
+          file: manifests/a04-query.yaml
       - assert:
           resource:
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Model
             metadata:
-              name: test-model
+              name: default
             status:
               conditions:
               - type: ModelAvailable
