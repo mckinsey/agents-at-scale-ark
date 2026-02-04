@@ -652,6 +652,7 @@ export default function BrokerPage() {
     <>
       <PageHeader breadcrumbs={breadcrumbs} currentPage="Broker" />
       <div className="flex flex-1 flex-col gap-4 p-4">
+        <h1 className="text-xl px-2">Broker</h1>
         <Tabs
           defaultValue="traces"
           className="flex-1"

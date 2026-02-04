@@ -41,6 +41,7 @@ export default function EvalsPage() {
         }
       />
       <div className="flex flex-1 flex-col gap-4 p-4">
+        <h1 className="text-xl px-2">Evals</h1>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="border-border w-full justify-start border-b bg-transparent">
             <TabsTrigger

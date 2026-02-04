@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/common/page-header';
 import { FilesSection } from '@/components/sections/files-section';
 import { FilesSetupInstructions } from '@/components/sections/files-setup-instructions';
 import { Button } from '@/components/ui/button';
+import { useGetFilesCount } from '@/lib/services/files-count-hooks';
 
 const breadcrumbs: BreadcrumbElement[] = [
   { href: '/', label: 'ARK Dashboard' },
@@ -18,6 +19,10 @@ const breadcrumbs: BreadcrumbElement[] = [
 export default function FilesPage() {
   const filesSectionRef = useRef<{ refresh: () => void }>(null);
   const isFilesBrowserAvailable = useAtomValue(isFilesBrowserAvailableAtom);
+  const { data: filesCount } = useGetFilesCount();
+
+  const pageTitle =
+    filesCount !== undefined ? `Files (${filesCount})` : 'Files';
 
   return (
     <>
@@ -34,6 +39,9 @@ export default function FilesPage() {
         }
       />
       <div className="flex flex-1 flex-col">
+        <div className="px-6 pt-6">
+          <h1 className="text-xl">{pageTitle}</h1>
+        </div>
         {isFilesBrowserAvailable ? (
           <FilesSection ref={filesSectionRef} />
         ) : (

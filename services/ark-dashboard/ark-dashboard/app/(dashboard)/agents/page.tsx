@@ -8,6 +8,7 @@ import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { AgentsSection } from '@/components/sections/agents-section';
 import { Button } from '@/components/ui/button';
+import { useGetAllAgents } from '@/lib/services/agents-hooks';
 
 const breadcrumbs: BreadcrumbElement[] = [
   { href: '/', label: 'ARK Dashboard' },
@@ -20,6 +21,9 @@ interface AgentsSectionHandle {
 
 export default function AgentsPage() {
   const agentsSectionRef = useRef<AgentsSectionHandle>(null);
+  const { data: agents } = useGetAllAgents();
+
+  const pageTitle = agents ? `Agents (${agents.length})` : 'Agents';
 
   return (
     <>
@@ -44,6 +48,9 @@ export default function AgentsPage() {
         }
       />
       <div className="flex flex-1 flex-col">
+        <div className="px-6 pt-6">
+          <h1 className="text-xl">{pageTitle}</h1>
+        </div>
         <AgentsSection ref={agentsSectionRef} />
       </div>
     </>

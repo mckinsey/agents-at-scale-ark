@@ -7,6 +7,7 @@ import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { TeamsSection } from '@/components/sections/teams-section';
 import { Button } from '@/components/ui/button';
+import { useGetAllTeams } from '@/lib/services/teams-hooks';
 
 const breadcrumbs: BreadcrumbElement[] = [
   { href: '/', label: 'ARK Dashboard' },
@@ -14,6 +15,9 @@ const breadcrumbs: BreadcrumbElement[] = [
 
 export default function TeamsPage() {
   const teamsSectionRef = useRef<{ openAddEditor: () => void }>(null);
+  const { data: teams } = useGetAllTeams();
+
+  const pageTitle = teams ? `Teams (${teams.length})` : 'Teams';
 
   return (
     <>
@@ -28,6 +32,9 @@ export default function TeamsPage() {
         }
       />
       <div className="flex flex-1 flex-col">
+        <div className="px-6 pt-6">
+          <h1 className="text-xl">{pageTitle}</h1>
+        </div>
         <TeamsSection ref={teamsSectionRef} />
       </div>
     </>
