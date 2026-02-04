@@ -418,50 +418,36 @@ export function AppSidebar() {
           </SidebarContent>
         </SidebarMenu>
         <SidebarContent></SidebarContent>
-        <Separator className="!w-12 my-4" />
-        <SidebarMenuItem>
-          <SidebarMenuButton>
-            <Settings className="mr-2 h-4 w-4" />
-            <span>Settings</span>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton asChild>
-            <a
-              href="https://mckinsey.github.io/agents-at-scale-ark/"
-              target="_blank"
-              rel="noopener noreferrer">
-              <HelpCircle className="mr-2 h-4 w-4" />
-              <span>Help</span>
-            </a>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            onClick={() => {
-              setStoredIsExperimentalDarkModeEnabled(!isExperimentalDarkModeEnabled);
-            }}>
-            {isExperimentalDarkModeEnabled ? <Moon className="mr-2 h-4 w-4" /> : <Sun className="mr-2 h-4 w-4" />}
-            <span>{isExperimentalDarkModeEnabled ? 'Dark Mode' : 'Light Mode'}</span>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
+        <Separator className="!w-10 my-4" />
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton>
+              <Settings className="mr-2 h-4 w-4" />
+              <span>Settings</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild>
+              <a
+                href="https://mckinsey.github.io/agents-at-scale-ark/"
+                target="_blank"
+                rel="noopener noreferrer">
+                <HelpCircle className="mr-2 h-4 w-4" />
+                <span>Help</span>
+              </a>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              onClick={() => {
+                setStoredIsExperimentalDarkModeEnabled(!isExperimentalDarkModeEnabled);
+              }}>
+              {isExperimentalDarkModeEnabled ? <Moon className="mr-2 h-4 w-4" /> : <Sun className="mr-2 h-4 w-4" />}
+              <span>{isExperimentalDarkModeEnabled ? 'Dark Mode' : 'Light Mode'}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
         <SidebarFooter>
-          {systemInfo && (
-            <div className="text-muted-foreground px-2 py-2 text-xs">
-              <p>
-                ARK {systemInfo.system_version} (
-                <a
-                  href="/api/docs"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-500 underline hover:text-blue-700">
-                  APIs
-                </a>
-                )
-              </p>
-              <p>Kubernetes {systemInfo.kubernetes_version}</p>
-            </div>
-          )}
           {user && (
             <SidebarMenu>
               <SidebarMenuItem>
