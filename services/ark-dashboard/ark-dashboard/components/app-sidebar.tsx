@@ -9,13 +9,16 @@ import {
   ChevronsUpDown,
   ChevronsUpDownIcon,
   File,
+  HelpCircle,
   Home,
   ListTodo,
   LogOut,
+  Moon,
   MoreHorizontal,
   Plus,
   Server,
   Settings,
+  Sun,
   Workflow,
   Zap,
 } from 'lucide-react';
@@ -26,6 +29,7 @@ import { useEffect, useState } from 'react';
 import {
   isExperimentalDarkModeEnabledAtom,
   isFilesBrowserAvailableAtom,
+  storedIsExperimentalDarkModeEnabledAtom,
 } from '@/atoms/experimental-features';
 import { experimentalFeaturesDialogOpenAtom } from '@/atoms/internal-states';
 import { NamespaceEditor } from '@/components/editors';
@@ -67,6 +71,7 @@ import qbLogoDark from '../app/img/qb-logo-dark.svg';
 import qbLogoLight from '../app/img/qb-logo-light.svg';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { UserDetails } from './user';
+import { Separator } from './ui/separator';
 
 export function AppSidebar() {
   const router = useRouter();
@@ -79,6 +84,9 @@ export function AppSidebar() {
     experimentalFeaturesDialogOpenAtom,
   );
   const setIsFilesBrowserAvailable = useSetAtom(isFilesBrowserAvailableAtom);
+  const setStoredIsExperimentalDarkModeEnabled = useSetAtom(
+    storedIsExperimentalDarkModeEnabledAtom,
+  );
 
   const {
     availableNamespaces,
@@ -172,7 +180,7 @@ export function AppSidebar() {
 
   return (
     <>
-      <Sidebar>
+      <Sidebar className="p-2">
         <SidebarHeader>
           <SidebarMenu>
             <SidebarMenuItem>
@@ -401,7 +409,33 @@ export function AppSidebar() {
           </SidebarContent>
         </SidebarMenu>
         <SidebarContent></SidebarContent>
-
+        <Separator className="!w-12 my-4" />
+        <SidebarMenuItem>
+          <SidebarMenuButton>
+            <Settings className="mr-2 h-4 w-4" />
+            <span>Settings</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton asChild>
+            <a
+              href="https://mckinsey.github.io/agents-at-scale-ark/"
+              target="_blank"
+              rel="noopener noreferrer">
+              <HelpCircle className="mr-2 h-4 w-4" />
+              <span>Help</span>
+            </a>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+          onClick={() => {
+            setStoredIsExperimentalDarkModeEnabled(!isExperimentalDarkModeEnabled);
+          }}>
+            {isExperimentalDarkModeEnabled ? <Moon className="mr-2 h-4 w-4" /> : <Sun className="mr-2 h-4 w-4" />}
+            <span>{isExperimentalDarkModeEnabled ? 'Dark Mode' : 'Light Mode'}</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
         <SidebarFooter>
           {systemInfo && (
             <div className="text-muted-foreground px-2 py-2 text-xs">
