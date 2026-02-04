@@ -101,9 +101,13 @@ export default function ExportPage() {
   const [isExporting, setIsExporting] = useState(false);
   const [selectedCount, setSelectedCount] = useState(0);
   const [activeTab, setActiveTab] = useState<ResourceType>('agents');
+  const [lastExportTime, setLastExportTime] = useState<string | null>(null);
 
   useEffect(() => {
     loadResources();
+    // Load last export time from localStorage
+    const lastTime = exportService.getLastExportTime();
+    setLastExportTime(lastTime);
   }, []);
 
   useEffect(() => {
@@ -177,6 +181,8 @@ export default function ExportPage() {
       toast.success('Export successful', {
         description: `Successfully exported ${selectedCount} resources`,
       });
+      // Update last export time
+      setLastExportTime(exportService.getLastExportTime());
     } catch (error) {
       toast.error('Export failed', {
         description: error instanceof Error ? error.message : 'Unknown error',
@@ -193,6 +199,8 @@ export default function ExportPage() {
       toast.success('Export successful', {
         description: 'Successfully exported all resources',
       });
+      // Update last export time
+      setLastExportTime(exportService.getLastExportTime());
     } catch (error) {
       toast.error('Export failed', {
         description: error instanceof Error ? error.message : 'Unknown error',
@@ -210,6 +218,20 @@ export default function ExportPage() {
       }
     }
     return total;
+  };
+
+  const formatLastExportTime = () => {
+    if (!lastExportTime) {
+      return 'Never';
+    }
+    const date = new Date(lastExportTime);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   };
 
   const renderResourceSection = (section: ResourceSection) => {
@@ -330,6 +352,9 @@ export default function ExportPage() {
             </div>
           </CardHeader>
           <CardContent>
+            <div className="text-muted-foreground mb-4 text-sm">
+              Last export: {formatLastExportTime()}
+            </div>
             <Tabs
               value={activeTab}
               onValueChange={value => setActiveTab(value as ResourceType)}>
