@@ -47,7 +47,7 @@ jobs:
         uses: ./.github/actions/setup-container-cache-registry
         with:
           docker-cicd-cache-registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY }}
-
+  # Code quality scan with SonarQube
   sonar_scan:
     uses: ./.github/workflows/sonar_scan.yaml
     secrets: inherit
