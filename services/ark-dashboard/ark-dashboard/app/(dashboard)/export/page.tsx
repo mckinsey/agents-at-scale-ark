@@ -16,7 +16,6 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { PageHeader } from '@/components/common/page-header';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -336,15 +335,6 @@ export default function ExportPage() {
             </div>
           </CardContent>
         </Card>
-
-        {/* Info Alert */}
-        <Alert>
-          <AlertDescription>
-            Exported resources will be saved as YAML files in a ZIP archive. The
-            archive will be organized with folders for each resource type
-            (agents/, models/, teams/, etc.).
-          </AlertDescription>
-        </Alert>
 
         {/* Resources in Tabs */}
         <Tabs
