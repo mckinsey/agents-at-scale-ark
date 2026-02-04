@@ -25,7 +25,6 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { ExportItem, ResourceExportData } from '@/lib/services/export';
 import { exportService } from '@/lib/services/export';
@@ -283,8 +282,6 @@ export default function ExportPage() {
   }
 
   const totalCount = getTotalCount();
-  const exportProgress =
-    totalCount > 0 ? (selectedCount / totalCount) * 100 : 0;
 
   return (
     <div className="flex-1 space-y-6">
@@ -300,38 +297,30 @@ export default function ExportPage() {
               organized in folders and packaged as a ZIP archive.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="text-sm font-medium">
-                  {selectedCount} of {totalCount} resources selected
-                </p>
-                <Progress value={exportProgress} className="w-48" />
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  onClick={handleExportAll}
-                  disabled={isExporting || totalCount === 0}
-                  variant="outline">
-                  {isExporting ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <CheckCircle className="mr-2 h-4 w-4" />
-                  )}
-                  Export All
-                </Button>
-                <Button
-                  onClick={handleExportSelected}
-                  disabled={isExporting || selectedCount === 0}
-                  variant="default">
-                  {isExporting ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="mr-2 h-4 w-4" />
-                  )}
-                  Export Selected ({selectedCount})
-                </Button>
-              </div>
+          <CardContent>
+            <div className="flex gap-2">
+              <Button
+                onClick={handleExportAll}
+                disabled={isExporting || totalCount === 0}
+                variant="outline">
+                {isExporting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle className="mr-2 h-4 w-4" />
+                )}
+                Export All
+              </Button>
+              <Button
+                onClick={handleExportSelected}
+                disabled={isExporting || selectedCount === 0}
+                variant="default">
+                {isExporting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
+                Export Selected ({selectedCount})
+              </Button>
             </div>
           </CardContent>
         </Card>
