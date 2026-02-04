@@ -1,6 +1,17 @@
 'use client';
 
-import { CheckCircle, Download, Loader2 } from 'lucide-react';
+import {
+  BarChart,
+  Bot,
+  CheckCircle,
+  Download,
+  Loader2,
+  Search,
+  Server,
+  Users,
+  Workflow,
+  Zap,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -26,6 +37,7 @@ interface ResourceSection {
   type: ResourceType;
   title: string;
   description: string;
+  icon: React.ElementType;
 }
 
 const resourceSections: ResourceSection[] = [
@@ -33,46 +45,55 @@ const resourceSections: ResourceSection[] = [
     type: 'agents',
     title: 'Agents',
     description: 'AI agent configurations and prompts',
+    icon: Bot,
   },
   {
     type: 'teams',
     title: 'Teams',
     description: 'Team configurations and hierarchies',
+    icon: Users,
   },
   {
     type: 'models',
     title: 'Models',
     description: 'Model configurations and parameters',
+    icon: Zap,
   },
   {
     type: 'queries',
     title: 'Queries',
     description: 'Query configurations and templates',
+    icon: Search,
   },
   {
     type: 'a2a',
     title: 'A2A Servers',
     description: 'Agent-to-Agent server configurations',
+    icon: Server,
   },
   {
     type: 'mcp',
     title: 'MCP Servers',
     description: 'Model Context Protocol server configs',
+    icon: Server,
   },
   {
     type: 'workflows',
     title: 'Workflows',
     description: 'Workflow definitions and templates',
+    icon: Workflow,
   },
   {
     type: 'evaluators',
     title: 'Evaluators',
     description: 'Evaluation criteria and metrics',
+    icon: CheckCircle,
   },
   {
     type: 'evaluations',
     title: 'Evaluations',
     description: 'Evaluation results and reports',
+    icon: BarChart,
   },
 ];
 
@@ -198,12 +219,14 @@ export default function ExportPage() {
     const selectedItems = items.filter(item => item.selected);
     const allSelected =
       items.length > 0 && selectedItems.length === items.length;
+    const Icon = section.icon;
 
     return (
       <Card key={section.type} className="relative">
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
+              <Icon className="text-muted-foreground h-5 w-5" />
               <CardTitle className="text-lg">{section.title}</CardTitle>
               <span className="text-muted-foreground text-sm">
                 ({selectedItems.length}/{items.length})
@@ -331,11 +354,13 @@ export default function ExportPage() {
             {resourceSections.map(section => {
               const items = resources[section.type] || [];
               const selectedItems = items.filter(item => item.selected);
+              const Icon = section.icon;
               return (
                 <TabsTrigger
                   key={section.type}
                   value={section.type}
                   className="flex items-center gap-2">
+                  <Icon className="h-4 w-4" />
                   {section.title}
                   {selectedItems.length > 0 && (
                     <span className="bg-primary/10 rounded-full px-2 py-0.5 text-xs">
