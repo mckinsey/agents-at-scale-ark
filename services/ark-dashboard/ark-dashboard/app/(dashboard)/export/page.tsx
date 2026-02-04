@@ -25,6 +25,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { ExportItem, ResourceExportData } from '@/lib/services/export';
 import { exportService } from '@/lib/services/export';
@@ -352,6 +353,7 @@ export default function ExportPage() {
             </div>
           </CardHeader>
           <CardContent>
+            <Separator className="mb-4" />
             <div className="text-muted-foreground mb-4 text-sm">
               Last export: {formatLastExportTime()}
             </div>
