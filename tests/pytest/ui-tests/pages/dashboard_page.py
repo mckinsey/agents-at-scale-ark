@@ -15,7 +15,7 @@ class DashboardPage(BasePage):
     MAIN_CONTENT = "main, [role='main'], body"
     SIDEBAR = "[data-testid='sidebar'], aside, nav"
     
-    ADD_AGENT_BUTTON = "button:has-text('Add Agent'), button:has-text('Create Agent'), a:has-text('Add Agent')"
+    ADD_AGENT_BUTTON = "a[href='/agents/new']:has-text('Create Agent')"
     ADD_MODEL_BUTTON = "button:has-text('Add Model'), button:has-text('Create Model'), a:has-text('Add Model')"
     ADD_QUERY_BUTTON = "button:has-text('Add Query'), button:has-text('Create Query'), a:has-text('Add Query')"
     ADD_TOOL_BUTTON = "button:has-text('Add Tool'), button:has-text('Create Tool'), a:has-text('Add Tool')"

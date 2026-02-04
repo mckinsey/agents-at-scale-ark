@@ -1,6 +1,11 @@
-import { BrokerItem } from './broker-item.js';
-import { BrokerItemStream } from './broker-item-stream.js';
-import { PaginatedList, PaginationParams, DEFAULT_LIMIT } from './pagination.js';
+import { BrokerItem } from "./broker-item.js";
+import { BrokerItemStream } from "./broker-item-stream.js";
+import {
+  PaginatedList,
+  PaginationParams,
+  DEFAULT_LIMIT,
+} from "./pagination.js";
+import { spanMatchesSessionId } from "./routes/traces.js";
 
 /** OTEL span data */
 export interface OTELSpan {
@@ -11,7 +16,10 @@ export interface OTELSpan {
   kind?: number;
   startTimeUnixNano?: string;
   endTimeUnixNano?: string;
-  attributes?: Array<{ key: string; value: { stringValue?: string; intValue?: number; boolValue?: boolean } }>;
+  attributes?: Array<{
+    key: string;
+    value: { stringValue?: string; intValue?: number; boolValue?: boolean };
+  }>;
   status?: { code?: number; message?: string };
   resource?: Record<string, unknown>;
   [key: string]: unknown;
@@ -25,7 +33,7 @@ export class TraceBroker {
   private stream: BrokerItemStream<OTELSpan>;
 
   constructor(path?: string, maxItems?: number) {
-    this.stream = new BrokerItemStream<OTELSpan>('Trace', path, maxItems);
+    this.stream = new BrokerItemStream<OTELSpan>("Trace", path, maxItems);
   }
 
   addSpan(span: OTELSpan): BrokerItem<OTELSpan> {
@@ -33,26 +41,28 @@ export class TraceBroker {
   }
 
   addSpans(spans: OTELSpan[]): BrokerItem<OTELSpan>[] {
-    const items = spans.map(span => this.stream.append(span));
+    const items = spans.map((span) => this.stream.append(span));
     this.save();
     return items;
   }
 
   getByTraceId(traceId: string): BrokerItem<OTELSpan>[] {
-    return this.stream.filter(item => item.data.traceId === traceId);
+    return this.stream.filter((item) => item.data.traceId === traceId);
   }
 
   getSpansByTraceId(traceId: string): OTELSpan[] {
-    return this.getByTraceId(traceId).map(item => item.data);
+    return this.getByTraceId(traceId).map((item) => item.data);
   }
 
   getTraceIds(): string[] {
-    const ids = new Set(this.stream.all().map(item => item.data.traceId));
+    const ids = new Set(this.stream.all().map((item) => item.data.traceId));
     return Array.from(ids);
   }
 
   hasTrace(traceId: string): boolean {
-    return this.stream.filter(item => item.data.traceId === traceId).length > 0;
+    return (
+      this.stream.filter((item) => item.data.traceId === traceId).length > 0
+    );
   }
 
   all(): BrokerItem<OTELSpan>[] {
@@ -71,8 +81,11 @@ export class TraceBroker {
     return this.stream.subscribe(callback);
   }
 
-  subscribeToTrace(traceId: string, callback: (item: BrokerItem<OTELSpan>) => void): () => void {
-    return this.stream.subscribe(item => {
+  subscribeToTrace(
+    traceId: string,
+    callback: (item: BrokerItem<OTELSpan>) => void,
+  ): () => void {
+    return this.stream.subscribe((item) => {
       if (item.data.traceId === traceId) {
         callback(item);
       }
@@ -83,10 +96,20 @@ export class TraceBroker {
    * Get paginated traces grouped by trace ID.
    * Returns traces in reverse chronological order (newest first).
    */
-  paginateTraces(params: PaginationParams): PaginatedList<{ traceId: string; spans: OTELSpan[] }> {
+  paginateTraces(
+    params: PaginationParams,
+    sessionId?: string,
+  ): PaginatedList<{ traceId: string; spans: OTELSpan[] }> {
     const limit = params.limit ?? DEFAULT_LIMIT;
 
-    const allItems = this.stream.all();
+    let allItems = this.stream.all();
+
+    if (sessionId) {
+      allItems = allItems.filter((item) =>
+        spanMatchesSessionId(item.data, sessionId),
+      );
+    }
+
     const traceMap = new Map<string, { firstSeq: number; spans: OTELSpan[] }>();
 
     for (const item of allItems) {
@@ -97,30 +120,37 @@ export class TraceBroker {
       } else {
         traceMap.set(item.data.traceId, {
           firstSeq: item.sequenceNumber,
-          spans: [item.data]
+          spans: [item.data],
         });
       }
     }
 
     let traces = Array.from(traceMap.entries())
-      .map(([traceId, data]) => ({ traceId, spans: data.spans, firstSeq: data.firstSeq }))
+      .map(([traceId, data]) => ({
+        traceId,
+        spans: data.spans,
+        firstSeq: data.firstSeq,
+      }))
       .sort((a, b) => b.firstSeq - a.firstSeq);
 
     const total = traces.length;
 
     if (params.cursor !== undefined) {
-      traces = traces.filter(t => t.firstSeq < params.cursor!);
+      traces = traces.filter((t) => t.firstSeq < params.cursor!);
     }
 
-    const items = traces.slice(0, limit).map(({ traceId, spans }) => ({ traceId, spans }));
+    const items = traces
+      .slice(0, limit)
+      .map(({ traceId, spans }) => ({ traceId, spans }));
     const hasMore = traces.length > limit;
-    const nextCursor = items.length > 0 ? traces[items.length - 1]?.firstSeq : undefined;
+    const nextCursor =
+      items.length > 0 ? traces[items.length - 1]?.firstSeq : undefined;
 
     return {
       items,
       total,
       hasMore,
-      nextCursor: hasMore ? nextCursor : undefined
+      nextCursor: hasMore ? nextCursor : undefined,
     };
   }
 

@@ -1,0 +1,165 @@
+{{- if .Values.restartController.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "ark-broker.fullname" . }}-restart-controller
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "10"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+  labels:
+    {{- include "ark-broker.labels" . | nindent 4 }}
+    app.kubernetes.io/component: restart-hook
+spec:
+  ttlSecondsAfterFinished: 60
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        {{- include "ark-broker.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: restart-hook
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "ark-broker.fullname" . }}-restart-hook
+      containers:
+      - name: restart-controller
+        image: bitnami/kubectl:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          echo "Waiting for ark-broker deployment to be ready..."
+
+          # Wait for ark-broker deployment to be ready
+          if ! kubectl rollout status deployment/{{ include "ark-broker.fullname" . }} -n {{ .Release.Namespace }} --timeout=120s; then
+            echo "Error: ark-broker deployment did not become ready"
+            exit 1
+          fi
+
+          echo "ark-broker is ready. Restarting ark-controller to pick up broker OTEL configuration..."
+
+          # Check if ark-controller-devspace exists first (DevSpace deployment)
+          if kubectl get deployment ark-controller-devspace -n {{ .Values.restartController.namespace }} >/dev/null 2>&1; then
+            echo "Found ark-controller-devspace, restarting..."
+            kubectl rollout restart deployment/ark-controller-devspace -n {{ .Values.restartController.namespace }}
+            kubectl rollout status deployment/ark-controller-devspace -n {{ .Values.restartController.namespace }} --timeout=120s
+          # Otherwise check for regular ark-controller deployment
+          elif kubectl get deployment ark-controller -n {{ .Values.restartController.namespace }} >/dev/null 2>&1; then
+            echo "Found ark-controller, restarting..."
+            kubectl rollout restart deployment/ark-controller -n {{ .Values.restartController.namespace }}
+            kubectl rollout status deployment/ark-controller -n {{ .Values.restartController.namespace }} --timeout=120s
+          else
+            echo "Warning: No ark-controller deployment found in {{ .Values.restartController.namespace }} namespace"
+            exit 0
+          fi
+
+          echo "Successfully restarted ark-controller"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "ark-broker.fullname" . }}-restart-hook
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "5"
+    helm.sh/hook-delete-policy: before-hook-creation
+  labels:
+    {{- include "ark-broker.labels" . | nindent 4 }}
+    app.kubernetes.io/component: restart-hook
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "ark-broker.fullname" . }}-restart-hook-broker
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "5"
+    helm.sh/hook-delete-policy: before-hook-creation
+  labels:
+    {{- include "ark-broker.labels" . | nindent 4 }}
+    app.kubernetes.io/component: restart-hook
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments/status"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "ark-broker.fullname" . }}-restart-hook-broker
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "5"
+    helm.sh/hook-delete-policy: before-hook-creation
+  labels:
+    {{- include "ark-broker.labels" . | nindent 4 }}
+    app.kubernetes.io/component: restart-hook
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "ark-broker.fullname" . }}-restart-hook-broker
+subjects:
+- kind: ServiceAccount
+  name: {{ include "ark-broker.fullname" . }}-restart-hook
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "ark-broker.fullname" . }}-restart-hook-controller
+  namespace: {{ .Values.restartController.namespace }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "5"
+    helm.sh/hook-delete-policy: before-hook-creation
+  labels:
+    {{- include "ark-broker.labels" . | nindent 4 }}
+    app.kubernetes.io/component: restart-hook
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "patch", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments/status"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "ark-broker.fullname" . }}-restart-hook-controller
+  namespace: {{ .Values.restartController.namespace }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "5"
+    helm.sh/hook-delete-policy: before-hook-creation
+  labels:
+    {{- include "ark-broker.labels" . | nindent 4 }}
+    app.kubernetes.io/component: restart-hook
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "ark-broker.fullname" . }}-restart-hook-controller
+subjects:
+- kind: ServiceAccount
+  name: {{ include "ark-broker.fullname" . }}-restart-hook
+  namespace: {{ .Release.Namespace }}
+{{- end }}

@@ -36,6 +36,12 @@ export const experimentalFeatureGroups: ExperimentalFeatureGroup[] = [
         ),
         atom: storedIsExperimentalExecutionEngineEnabledAtom,
       },
+    ],
+  },
+  {
+    groupKey: 'observability',
+    groupLabel: 'Observability',
+    features: [
       {
         type: 'boolean',
         feature: 'Broker',

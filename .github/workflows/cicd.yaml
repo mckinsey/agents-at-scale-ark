@@ -493,7 +493,8 @@ jobs:
           fark agent sample-agent "confirm you have read this message"
 
   e2e-ark-cli:
-    needs: [build-ark-cli]
+    needs: [setup-container-cache-registry, build-containers, build-ark-cli]
+    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -505,8 +506,12 @@ jobs:
           model-type: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL && 'azure' || 'openai' }}
           model-name: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL && 'gpt-4.1-mini' || 'gpt-4' }}
           model-api-version: 2024-12-01-preview
+          ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
+          ci-cache-registry-hostname: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry-hostname }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+          ark-image-tag: ${{ github.sha }}
+          is-fork-pr: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr }}
 
   e2e-smoke-test:
     needs: [setup-container-cache-registry, build-containers]
@@ -732,6 +737,16 @@ jobs:
           sudo chmod +x /usr/local/bin/chainsaw
           sudo apt-get update && sudo apt-get install -y jq
 
+      - name: Warm up network connectivity
+        run: |
+          echo "Warming up egress network paths..."
+          for i in {1..5}; do
+            echo "Attempt $i: Testing connectivity to external APIs"
+            curl -s -m 10 "https://api.open-meteo.com/v1/forecast?latitude=40.7128&longitude=-74.006&current_weather=true" > /dev/null && echo "✓ Weather API reachable" || echo "✗ Weather API unreachable (will retry)"
+            sleep 3
+          done
+          echo "Network warm-up complete - egress connectivity established"
+
       - name: Run multi-provider LLM tests
         env:
           E2E_TEST_AZURE_OPENAI_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
@@ -850,6 +865,106 @@ jobs:
         with:
           name: ui-test-screenshots-${{ github.sha }}
           path: tests/pytest/ui-tests/screenshots/
+          retention-days: 7
+
+  e2e-cli-tests:
+    needs: [setup-container-cache-registry, build-containers]
+    runs-on: ubuntu-24.04
+    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-e2e
+        with:
+          ark-image-tag: ${{ github.sha }}
+          install-coverage: "false"
+          install-evaluator: "false"
+          ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
+          ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
+          ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+
+      - name: Build and install ark-cli
+        run: |
+          cd tools/ark-cli
+          npm ci
+          npm run build
+          npm install -g .
+
+      - name: Deploy ark-api
+        run: |
+          helm upgrade --install ark-api services/ark-api/chart \
+            --namespace default \
+            --create-namespace \
+            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/ark-api" \
+            --set app.image.tag="${{ github.sha }}" \
+            --set app.image.pullPolicy="Always" \
+            --wait \
+            --timeout=5m
+
+      - name: Deploy ark-mcp
+        run: |
+          helm upgrade --install ark-mcp services/ark-mcp/chart \
+            --namespace default \
+            --create-namespace \
+            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/ark-mcp" \
+            --set app.image.tag="${{ github.sha }}" \
+            --set app.image.pullPolicy="Always" \
+            --wait \
+            --timeout=5m
+
+      - name: Wait for services to be ready
+        run: |
+          kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
+          kubectl wait --for=condition=ready pod -l app=ark-mcp -n default --timeout=120s
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install CLI test dependencies
+        run: |
+          pip install -r tests/pytest/ui-tests/requirements.txt
+
+      - name: Wait for MCP server to be ready
+        run: |
+          # Wait for File Gateway MCP server to be reconciled by ark-mcp
+          echo "Waiting for MCPServer resource to be ready..."
+          for i in {1..60}; do
+            if kubectl get mcpserver file-gateway-mcpserver -o jsonpath='{.status.toolCount}' 2>/dev/null | grep -q '[0-9]'; then
+              echo "MCP server ready!"
+              exit 0
+            fi
+            echo "Waiting for ark-mcp reconciliation... (attempt $i/60)"
+            sleep 5
+          done
+          echo "Warning: MCP server not ready after 5 minutes, tests may fail"
+
+      - name: Run File Gateway CLI tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
+        run: |
+          cd tests/pytest/cli-tests/tests
+          pytest test_file_gateway.py -v --tb=short
+
+      - name: Run complete ARK workflow tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}/tests/pytest
+        run: |
+          cd tests/pytest
+          pytest test_complete_ark_workflow.py -v --tb=short
+
+      - name: Upload CLI test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-test-logs-${{ github.sha }}
+          path: tests/pytest/cli-tests/tests/*.log
           retention-days: 7
 
   build-charts:
@@ -983,6 +1098,7 @@ jobs:
         e2e-tests-standard,
         e2e-tests-evaluated,
         e2e-ui-tests,
+        e2e-cli-tests,
         build-and-test-ark,
         build-and-test-services,
         build-docs,

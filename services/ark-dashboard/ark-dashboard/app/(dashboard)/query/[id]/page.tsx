@@ -4,7 +4,7 @@ import { useAtomValue } from 'jotai';
 import { Copy } from 'lucide-react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { queryTimeoutSettingAtom } from '@/atoms/experimental-features';
@@ -18,6 +18,8 @@ import { QueryTargetsField } from '@/components/query-fields/query-targets-field
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { PromptEditor } from '@/components/ui/prompt-editor';
+import { QueryParameterEditor } from '@/components/ui/query-parameter-editor';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -37,8 +39,16 @@ import {
   teamsService,
   toolsService,
 } from '@/lib/services';
+import type { Agent } from '@/lib/services/agents';
 import { queriesService } from '@/lib/services/queries';
 import type { ToolDetail } from '@/lib/services/tools';
+import { cn } from '@/lib/utils';
+import {
+  type QueryParameter,
+  extractAgentRequiredParams,
+  transformApiToQueryParameters,
+  transformQueryParametersToApi,
+} from '@/lib/utils/query-parameters';
 import { simplifyDuration } from '@/lib/utils/time';
 
 const breadcrumbs: BreadcrumbElement[] = [
@@ -371,6 +381,9 @@ function QueryDetailContent() {
   const [toolSchema, setToolSchema] = useState<ToolDetail | null>(null);
   const [streaming, setStreaming] = useState(false);
   const defaultQueryTimeout = useAtomValue(queryTimeoutSettingAtom);
+  const [queryParameters, setQueryParameters] = useState<QueryParameter[]>([]);
+  const [selectedAgentDetails, setSelectedAgentDetails] =
+    useState<Agent | null>(null);
 
   // Copy schema to clipboard
   const copySchemaToClipboard = async () => {
@@ -466,6 +479,7 @@ function QueryDetailContent() {
       }
 
       // Prepare the query data for the API
+      const apiParameters = transformQueryParametersToApi(queryParameters);
       const queryData = {
         name: queryName,
         type: Array.isArray(query.input)
@@ -477,6 +491,7 @@ function QueryDetailContent() {
         ttl: query.ttl,
         sessionId: query.sessionId,
         memory: query.memory,
+        ...(apiParameters.length > 0 && { parameters: apiParameters }),
         ...(streaming && {
           metadata: {
             [ARK_ANNOTATIONS.STREAMING_ENABLED]: 'true',
@@ -579,6 +594,14 @@ function QueryDetailContent() {
         const queryData = await queriesService.get(queryId);
         setQuery(queryData as TypedQueryDetailResponse);
 
+        // Load existing parameters
+        const typedQueryData = queryData as TypedQueryDetailResponse;
+        if (typedQueryData.parameters) {
+          setQueryParameters(
+            transformApiToQueryParameters(typedQueryData.parameters),
+          );
+        }
+
         // Set streaming state based on annotation
         const isStreamingEnabled =
           (queryData as TypedQueryDetailResponse).metadata?.[
@@ -622,6 +645,25 @@ function QueryDetailContent() {
       setToolSchema(null);
     }
   }, [query?.target]);
+
+  // Fetch agent details when target is an agent (for AC2: agent-required params)
+  useEffect(() => {
+    if (query?.target?.type === 'agent') {
+      const agentName = query.target.name;
+      agentsService
+        .getByName(agentName)
+        .then(setSelectedAgentDetails)
+        .catch(() => setSelectedAgentDetails(null));
+    } else {
+      setSelectedAgentDetails(null);
+    }
+  }, [query?.target]);
+
+  // Extract agent-required query parameters
+  const agentRequiredParams = useMemo(
+    () => extractAgentRequiredParams(selectedAgentDetails?.parameters),
+    [selectedAgentDetails],
+  );
 
   if (loading) {
     return (
@@ -888,7 +930,7 @@ function QueryDetailContent() {
         <div className="flex min-h-0 flex-1 flex-col">
           <ScrollArea className="flex-1 p-3">
             <div className="space-y-3">
-              {/* Input Table */}
+              {/* Input Section */}
               <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
                 {/* Header */}
                 {mode === 'new' &&
@@ -924,37 +966,41 @@ function QueryDetailContent() {
                 {/* Content */}
                 {mode === 'new' ? (
                   <div
-                    className={
+                    className={cn(
                       toolSchema && query.target?.type === 'tool'
                         ? 'grid grid-cols-2 gap-0'
-                        : 'p-3'
-                    }>
+                        : 'p-3',
+                    )}>
                     {/* Input Section */}
                     <div
-                      className={
+                      className={cn(
+                        'min-h-[260px] flex-1',
                         toolSchema && query.target?.type === 'tool'
-                          ? 'border-r border-gray-200 p-3 dark:border-gray-700'
-                          : ''
-                      }>
-                      <Textarea
+                          ? 'border-r border-gray-200 dark:border-gray-700'
+                          : '',
+                      )}>
+                      <PromptEditor
                         value={
                           typeof query.input === 'string'
                             ? query.input || ''
                             : ''
                         }
-                        onChange={e =>
+                        onChange={value =>
                           setQuery(prev =>
-                            prev ? { ...prev, input: e.target.value } : null,
+                            prev ? { ...prev, input: value } : null,
                           )
                         }
-                        placeholder="Enter your query input..."
-                        className="min-h-[200px] resize-none border-0 bg-transparent font-mono text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                        placeholder="Enter your query input... Use {{.paramName}} for variables."
+                        parameters={queryParameters}
+                        className="h-full min-h-[260px]"
+                        textareaClassName="border-0 rounded-none focus:ring-0 focus:ring-offset-0"
+                        highlightClassName="rounded-none"
                       />
                     </div>
 
                     {/* Tool Schema Example - only show for tool target */}
                     {toolSchema && query.target?.type === 'tool' && (
-                      <div className="p-3">
+                      <div className="flex min-h-[260px] flex-col">
                         <Textarea
                           value={
                             toolSchema.spec?.inputSchema
@@ -963,7 +1009,7 @@ function QueryDetailContent() {
                               : '{}'
                           }
                           readOnly
-                          className="min-h-[200px] resize-none border-0 bg-transparent font-mono text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                          className="h-full min-h-[260px] w-full resize-none border-0 bg-transparent font-mono text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
                         />
                       </div>
                     )}
@@ -978,6 +1024,59 @@ function QueryDetailContent() {
                   </pre>
                 )}
               </div>
+
+              {/* Parameters Section */}
+              {mode === 'new' ? (
+                <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
+                  <div className="border-b bg-gray-100 px-3 py-2 dark:bg-gray-800">
+                    <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                      Parameters
+                    </h3>
+                  </div>
+                  <div className="p-3">
+                    <QueryParameterEditor
+                      parameters={queryParameters}
+                      onChange={setQueryParameters}
+                      inputText={
+                        typeof query.input === 'string' ? query.input : ''
+                      }
+                      agentRequiredParams={agentRequiredParams}
+                    />
+                  </div>
+                </div>
+              ) : queryParameters.length > 0 ? (
+                <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
+                  <div className="border-b bg-gray-100 px-3 py-2 dark:bg-gray-800">
+                    <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                      Parameters
+                    </h3>
+                  </div>
+                  <div className="p-3">
+                    <div className="space-y-2">
+                      {queryParameters.map((param, index) => (
+                        <div
+                          key={index}
+                          className="bg-muted/30 flex items-center gap-4 rounded-md border px-3 py-2">
+                          <div className="flex-1">
+                            <span className="text-muted-foreground font-mono text-xs">
+                              {param.name}
+                            </span>
+                          </div>
+                          <div className="flex-1">
+                            <span className="text-sm">
+                              {param.value || (
+                                <span className="text-muted-foreground italic">
+                                  empty
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               {/* Conditional Response or Error Section */}
               {query.status?.response ? (

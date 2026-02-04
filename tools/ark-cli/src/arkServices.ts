@@ -9,6 +9,10 @@ import type {
   ArkDependency,
   DependencyCollection,
 } from './types/arkService.js';
+import {createRequire} from 'module';
+
+const require = createRequire(import.meta.url);
+const packageJson = require('../package.json');
 
 export type {
   ArkService,
@@ -18,6 +22,7 @@ export type {
 };
 
 const REGISTRY_BASE = 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts';
+const CHART_VERSION = `${packageJson.version as string}`;
 
 /**
  * Dependencies that should be installed before ARK services
@@ -84,7 +89,7 @@ const defaultArkServices: ServiceCollection = {
     enabled: true,
     category: 'core',
     namespace: 'ark-system',
-    chartPath: `${REGISTRY_BASE}/ark-controller`,
+    chartPath: `${REGISTRY_BASE}/ark-controller:${CHART_VERSION}`,
     installArgs: ['--create-namespace', '--set', 'rbac.enable=true'],
     k8sDeploymentName: 'ark-controller',
     k8sDevDeploymentName: 'ark-controller-devspace',
@@ -96,7 +101,7 @@ const defaultArkServices: ServiceCollection = {
     description: 'Tenant provisioning with RBAC and resource quotas',
     enabled: true,
     category: 'core',
-    chartPath: `${REGISTRY_BASE}/ark-tenant`,
+    chartPath: `${REGISTRY_BASE}/ark-tenant:${CHART_VERSION}`,
     installArgs: [],
   },
 
@@ -106,7 +111,7 @@ const defaultArkServices: ServiceCollection = {
     description: 'API layer for interacting with Ark resources',
     enabled: true,
     category: 'service',
-    chartPath: `${REGISTRY_BASE}/ark-api`,
+    chartPath: `${REGISTRY_BASE}/ark-api:${CHART_VERSION}`,
     installArgs: [],
     k8sServiceName: 'ark-api',
     k8sServicePort: 80,
@@ -122,7 +127,7 @@ const defaultArkServices: ServiceCollection = {
     enabled: true,
     category: 'service',
     // namespace: undefined - uses current context namespace
-    chartPath: `${REGISTRY_BASE}/ark-dashboard`,
+    chartPath: `${REGISTRY_BASE}/ark-dashboard:${CHART_VERSION}`,
     installArgs: [],
     k8sServiceName: 'ark-dashboard',
     k8sServicePort: 3000,
@@ -138,7 +143,7 @@ const defaultArkServices: ServiceCollection = {
     enabled: true,
     category: 'service',
     // namespace: undefined - uses current context namespace
-    chartPath: `${REGISTRY_BASE}/ark-mcp`,
+    chartPath: `${REGISTRY_BASE}/ark-mcp:${CHART_VERSION}`,
     installArgs: [],
     k8sDeploymentName: 'ark-mcp',
     k8sDevDeploymentName: 'ark-mcp-devspace',
@@ -154,24 +159,28 @@ const defaultArkServices: ServiceCollection = {
       'In-memory storage service with streaming support for Ark queries',
     enabled: true,
     category: 'service',
-    chartPath: `${REGISTRY_BASE}/ark-broker`,
+    chartPath: `${REGISTRY_BASE}/ark-broker:${CHART_VERSION}`,
     installArgs: [],
     prerequisiteUninstalls: [{releaseName: 'ark-cluster-memory'}],
     k8sDeploymentName: 'ark-broker',
     k8sDevDeploymentName: 'ark-broker-devspace',
   },
 
-  'mcp-filesystem': {
-    name: 'mcp-filesystem',
-    helmReleaseName: 'mcp-filesystem',
-    description: 'Stateful filesystem MCP server with workspace isolation',
-    enabled: false,
+  'file-gateway': {
+    name: 'file-gateway',
+    helmReleaseName: 'file-gateway',
+    description:
+      'S3-compatible file storage gateway with REST API for shared storage access',
+    enabled: true,
     category: 'service',
-    // namespace: undefined - uses current context namespace
-    chartPath: `${REGISTRY_BASE}/mcp-filesystem`,
-    installArgs: [],
-    k8sDeploymentName: 'mcp-filesystem',
-    k8sDevDeploymentName: 'mcp-filesystem-devspace',
+    namespace: 'default',
+    chartPath: `${getMarketplaceRegistry()}/file-gateway`,
+    installArgs: ['--create-namespace'],
+    k8sServiceName: 'file-gateway-file-api',
+    k8sServicePort: 8080,
+    k8sPortForwardLocalPort: undefined,
+    k8sDeploymentName: 'file-gateway-file-api',
+    k8sDevDeploymentName: undefined,
   },
 
   'localhost-gateway': {
@@ -181,11 +190,11 @@ const defaultArkServices: ServiceCollection = {
     enabled: false, // Disabled - not needed for most users
     category: 'service',
     namespace: 'ark-system',
-    chartPath: `${REGISTRY_BASE}/localhost-gateway`,
+    chartPath: `${REGISTRY_BASE}/localhost-gateway:${CHART_VERSION}`,
     installArgs: [],
   },
 
-  'noah': {
+  noah: {
     name: 'noah',
     helmReleaseName: 'noah',
     description: 'Runtime administration agent with cluster privileges',
@@ -207,7 +216,9 @@ function applyConfigOverrides(defaults: ServiceCollection): ServiceCollection {
   for (const [key, service] of Object.entries(defaults)) {
     const override = overrides[key];
     result[key] =
-      override && typeof override === 'object' ? {...service, ...override} : service;
+      override && typeof override === 'object'
+        ? {...service, ...override}
+        : service;
   }
 
   return result;

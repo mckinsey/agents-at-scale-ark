@@ -10,30 +10,65 @@ ark:
 
 config:
   rules:
-    # Catch-all - matches everything but gets overridden by more specific rules.
-    # This catches model probes which don't match the agent-specific rules below.
-    - path: "/v1/chat/completions"
-      response:
-        status: 200
-        content: '{"choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}]}'
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "gpt-4",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            },
+            {
+              "id": "gpt-4o-mini",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            },
+            {
+              "id": "gpt-4.1",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            },
+            {
+              "id": "gpt-5",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            }
+          ]
+        }
 
-    # Researcher Agent
-    - path: "/v1/chat/completions"
-      match: "contains(body.messages[0].content || '', 'Researcher Agent')"
-      response:
+  # Catch-all - matches everything but gets overridden by more specific rules.
+  # This catches model probes which don't match the agent-specific rules below.
+  - path: "/v1/chat/completions"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}]}'
+
+  # Researcher Agent
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'Researcher Agent')"
+    response:
         status: 200
         content: '{"choices":[{"message":{"role":"assistant","content":"RESEARCH: AI adoption increased 270% in 4 years."},"finish_reason":"stop"}]}'
 
-    # Analyst Agent
-    - path: "/v1/chat/completions"
-      match: "contains(body.messages[0].content || '', 'Analyst Agent')"
-      response:
+  # Analyst Agent
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'Analyst Agent')"
+    response:
         status: 200
         content: '{"choices":[{"message":{"role":"assistant","content":"ANALYSIS: AI is transitioning from optional to mandatory."},"finish_reason":"stop"}]}'
 
-    # Summarizer Agent
-    - path: "/v1/chat/completions"
-      match: "contains(body.messages[0].content || '', 'Summarizer Agent')"
-      response:
+  # Summarizer Agent
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'Summarizer Agent')"
+    response:
         status: 200
         content: '{"choices":[{"message":{"role":"assistant","content":"SUMMARY: AI is reshaping business with 77% adoption."},"finish_reason":"stop"}]}'
