@@ -360,11 +360,6 @@ export function AppSidebar() {
                     </SidebarMenuItem>
                   );
                 })}
-                <SidebarMenuItem>
-                  <SidebarMenuButton onClick={() => navigateToSection('evals')}>
-                    <span>Evals</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
               </CollapsibleContent>
             </Collapsible>
             <SidebarMenuItem>
