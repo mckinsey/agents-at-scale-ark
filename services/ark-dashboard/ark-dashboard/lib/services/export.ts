@@ -7,7 +7,6 @@ import type { components } from '@/lib/api/generated/types';
 // Resource types from the API
 export type AgentListResponse = components['schemas']['AgentListResponse'];
 export type ModelListResponse = components['schemas']['ModelListResponse'];
-export type SecretListResponse = components['schemas']['SecretListResponse'];
 export type TeamListResponse = components['schemas']['TeamListResponse'];
 export type MCPServerListResponse =
   components['schemas']['MCPServerListResponse'];
@@ -22,7 +21,6 @@ export type EvaluationListResponse =
 export interface ExportConfig {
   agents?: boolean;
   models?: boolean;
-  secrets?: boolean;
   teams?: boolean;
   a2a?: boolean;
   mcp?: boolean;
@@ -42,7 +40,6 @@ export interface ExportItem {
 export interface ResourceExportData {
   agents?: ExportItem[];
   models?: ExportItem[];
-  secrets?: ExportItem[];
   teams?: ExportItem[];
   a2a?: ExportItem[];
   mcp?: ExportItem[];
@@ -75,7 +72,6 @@ export const exportService = {
     const [
       agents,
       models,
-      secrets,
       teams,
       mcpServers,
       evaluators,
@@ -84,7 +80,6 @@ export const exportService = {
     ] = await Promise.allSettled([
       apiClient.get<AgentListResponse>('/api/v1/agents'),
       apiClient.get<ModelListResponse>('/api/v1/models'),
-      apiClient.get<SecretListResponse>('/api/v1/secrets'),
       apiClient.get<TeamListResponse>('/api/v1/teams'),
       apiClient.get<MCPServerListResponse>('/api/v1/mcp-servers'),
       apiClient.get<EvaluatorListResponse>('/api/v1/evaluators'),
@@ -107,14 +102,6 @@ export const exportService = {
         id: model.name || '',
         name: model.name || '',
         type: 'model',
-      }));
-    }
-
-    if (secrets.status === 'fulfilled' && secrets.value?.items) {
-      data.secrets = secrets.value.items.map(secret => ({
-        id: secret.name || '',
-        name: secret.name || '',
-        type: 'secret',
       }));
     }
 
@@ -205,11 +192,6 @@ export const exportService = {
     if (selectedItems.models) {
       exportPromises.push(
         addResourceToZip('models', 'models', selectedItems.models),
-      );
-    }
-    if (selectedItems.secrets) {
-      exportPromises.push(
-        addResourceToZip('secrets', 'secrets', selectedItems.secrets),
       );
     }
     if (selectedItems.teams) {

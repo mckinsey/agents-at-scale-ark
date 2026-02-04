@@ -40,11 +40,6 @@ const resourceSections: ResourceSection[] = [
     description: 'Model configurations and parameters',
   },
   {
-    type: 'secrets',
-    title: 'Secrets',
-    description: 'Secret references (values not included)',
-  },
-  {
     type: 'teams',
     title: 'Teams',
     description: 'Team configurations and hierarchies',
@@ -322,10 +317,9 @@ export default function ExportPage() {
         {/* Info Alert */}
         <Alert>
           <AlertDescription>
-            Exported resources will be saved as YAML files in a ZIP archive.
-            Secret values are not included in exports for security reasons. The
+            Exported resources will be saved as YAML files in a ZIP archive. The
             archive will be organized with folders for each resource type
-            (agents/, models/, secrets/, etc.).
+            (agents/, models/, teams/, etc.).
           </AlertDescription>
         </Alert>
 
