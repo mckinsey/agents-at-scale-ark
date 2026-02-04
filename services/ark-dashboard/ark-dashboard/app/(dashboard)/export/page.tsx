@@ -287,7 +287,15 @@ export default function ExportPage() {
     <div className="flex-1 space-y-6">
       <PageHeader currentPage="Exports" />
 
-      <div className="mx-auto max-w-7xl p-6">
+      <div className="mx-auto max-w-7xl space-y-6 p-6">
+        <div>
+          <h1 className="text-3xl font-bold">Exports</h1>
+          <p className="text-muted-foreground mt-2">
+            Export your Ark resources to YAML files for backup or version
+            control.
+          </p>
+        </div>
+
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
