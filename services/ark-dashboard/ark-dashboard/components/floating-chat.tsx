@@ -216,25 +216,27 @@ export default function FloatingChat({
     )) {
       const typedChunk = chunk as unknown as ChatCompletionChunk;
 
-      if (typedChunk?.usage) {
-        const usage = {
-          prompt_tokens: typedChunk.usage.prompt_tokens,
-          completion_tokens: typedChunk.usage.completion_tokens,
-          total_tokens: typedChunk.usage.total_tokens,
-        };
-        messageTokenUsage = usage;
-        updateTokenUsage(usage);
-      }
+      if (typedChunk?.id === 'chatcmpl-final') {
+        if (typedChunk?.usage) {
+          const usage = {
+            prompt_tokens: typedChunk.usage.prompt_tokens,
+            completion_tokens: typedChunk.usage.completion_tokens,
+            total_tokens: typedChunk.usage.total_tokens,
+          };
+          messageTokenUsage = usage;
+          updateTokenUsage(usage);
+        }
 
-      const arkMetadata = (chunk as any)?.ark?.completedQuery?.status?.tokenUsage;
-      if (arkMetadata) {
-        const usage = {
-          prompt_tokens: arkMetadata.promptTokens || 0,
-          completion_tokens: arkMetadata.completionTokens || 0,
-          total_tokens: arkMetadata.totalTokens || 0,
-        };
-        messageTokenUsage = usage;
-        updateTokenUsage(usage);
+        const arkMetadata = (chunk as any)?.ark?.completedQuery?.status?.tokenUsage;
+        if (arkMetadata) {
+          const usage = {
+            prompt_tokens: arkMetadata.promptTokens || 0,
+            completion_tokens: arkMetadata.completionTokens || 0,
+            total_tokens: arkMetadata.totalTokens || 0,
+          };
+          messageTokenUsage = usage;
+          updateTokenUsage(usage);
+        }
       }
 
       const delta = typedChunk?.choices?.[0]?.delta;
