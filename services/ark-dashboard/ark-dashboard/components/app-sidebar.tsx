@@ -182,7 +182,21 @@ export function AppSidebar() {
     <>
       <Sidebar className="p-2">
         <SidebarHeader>
-          <SidebarMenu>
+          <div className="flex items-center gap-2 mb-8">
+            <Image
+              src={
+                isExperimentalDarkModeEnabled
+                  ? qbLogoDark
+                  : qbLogoLight
+              }
+              alt="ARK"
+              width={32}
+              height={32}
+            />
+            <span className="text-sidebar-accent-foreground">ARK</span>
+          </div>
+          <SidebarMenu
+          >
             <SidebarMenuItem>
               <DropdownMenu
                 // Dialog & DropdownMenu adds pointer-events: none
@@ -191,7 +205,7 @@ export function AppSidebar() {
                 <DropdownMenuTrigger asChild>
                   <SidebarMenuButton
                     size="lg"
-                    className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
+                    className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground !p-0">
                     <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
                       <Image
                         src={
@@ -199,13 +213,13 @@ export function AppSidebar() {
                             ? qbLogoDark
                             : qbLogoLight
                         }
-                        alt="ARK"
+                        alt="ARK Dashboard Logo"
                         width={32}
                         height={32}
                       />
                     </div>
                     <div className="flex flex-col gap-0.5 leading-none">
-                      <span className="font-medium">ARK Dashboard</span>
+                      <span className="font-medium text-sidebar-accent-foreground">ARK Dashboard</span>
                       <span className="text-xs">
                         {isPending
                           ? 'Loading...'
@@ -253,11 +267,6 @@ export function AppSidebar() {
                     onSelect={() => setNamespaceEditorOpen(true)}>
                     <Plus className="mr-2 h-4 w-4" />
                     Add Namespace
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onSelect={() => setExperimentalFeaturesDialogOpen(true)}>
-                    <Settings className="mr-2 h-4 w-4" />
-                    Settings
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -381,7 +390,7 @@ export function AppSidebar() {
                 <PopoverContent
                   side="right"
                   align="start"
-                  sideOffset={-125}
+                  sideOffset={-110}
                   className="w-56 p-2">
                   <div className="flex flex-col gap-1">
                     <button
@@ -429,9 +438,9 @@ export function AppSidebar() {
         </SidebarMenuItem>
         <SidebarMenuItem>
           <SidebarMenuButton
-          onClick={() => {
-            setStoredIsExperimentalDarkModeEnabled(!isExperimentalDarkModeEnabled);
-          }}>
+            onClick={() => {
+              setStoredIsExperimentalDarkModeEnabled(!isExperimentalDarkModeEnabled);
+            }}>
             {isExperimentalDarkModeEnabled ? <Moon className="mr-2 h-4 w-4" /> : <Sun className="mr-2 h-4 w-4" />}
             <span>{isExperimentalDarkModeEnabled ? 'Dark Mode' : 'Light Mode'}</span>
           </SidebarMenuButton>
