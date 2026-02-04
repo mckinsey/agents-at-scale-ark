@@ -1,7 +1,55 @@
-interface StreamEntry {
+export interface StreamEntry {
   id: string;
   timestamp: string;
   data: unknown;
+}
+
+const DISPLAY_NAME_KEYS = [
+  'input',
+  'message',
+  'content',
+  'prompt',
+  'query',
+  'text',
+] as const;
+const MAX_DISPLAY_LENGTH = 48;
+
+function getFirstEntryText(data: unknown): string | undefined {
+  if (data == null || typeof data !== 'object') return undefined;
+  const obj = data as Record<string, unknown>;
+  for (const key of DISPLAY_NAME_KEYS) {
+    const val = obj[key];
+    if (typeof val === 'string' && val.trim().length > 0) return val.trim();
+    if (
+      typeof val === 'object' &&
+      val !== null &&
+      Array.isArray(val) &&
+      val.length > 0
+    ) {
+      const first = val[0] as Record<string, unknown> | undefined;
+      if (first && typeof first.text === 'string' && first.text.trim().length > 0)
+        return first.text.trim();
+    }
+  }
+  const inner = obj?.data as Record<string, unknown> | undefined;
+  if (inner) {
+    for (const key of DISPLAY_NAME_KEYS) {
+      const val = inner[key];
+      if (typeof val === 'string' && val.trim().length > 0) return val.trim();
+    }
+  }
+  return undefined;
+}
+
+export function getSessionDisplayNameFromEntries(
+  entries: StreamEntry[],
+  sessionId: string,
+): string {
+  if (entries.length === 0) return sessionId;
+  const text = getFirstEntryText(entries[0].data);
+  if (!text) return sessionId;
+  if (text.length <= MAX_DISPLAY_LENGTH) return text;
+  return text.slice(0, MAX_DISPLAY_LENGTH - 3) + '...';
 }
 
 export function extractQueryIdAndSessionId(entry: StreamEntry): {

@@ -25,8 +25,10 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { hashPromptSync } from '@/lib/analytics/utils';
+import { getSessionDisplayNameFromEntries } from '@/lib/broker/session-utils';
 import { chatService } from '@/lib/services';
 
 type ChatType = 'model' | 'team' | 'agent';
@@ -440,7 +442,14 @@ function DebugStreamView({
                       ) : (
                         <ChevronRight className="text-muted-foreground h-3 w-3 shrink-0" />
                       )}
-                      <span>Session: {sessionId}</span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span>
+                            Session: {getSessionDisplayNameFromEntries(sessionEntries, sessionId)}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>{sessionId}</TooltipContent>
+                      </Tooltip>
                       <span className="text-muted-foreground ml-auto text-xs">
                         {sessionEntries.length}{' '}
                         {sessionEntries.length === 1 ? 'entry' : 'entries'}

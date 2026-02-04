@@ -335,7 +335,9 @@ describe('EmbeddedChatPanel', () => {
     const eventsTab = screen.getByRole('tab', { name: /Cluster Events/i });
     await user.click(eventsTab);
 
-    expect(await screen.findByText(/Session: session-X/i)).toBeInTheDocument();
-    expect(await screen.findByText(/Session: session-Y/i)).toBeInTheDocument();
+    const sessionHeaders = await screen.findAllByText(/Session: Test execution completed/i);
+    expect(sessionHeaders.length).toBe(2);
+    expect(screen.getByText(/2 entries/)).toBeInTheDocument();
+    expect(screen.getByText(/1 entry/)).toBeInTheDocument();
   });
 });

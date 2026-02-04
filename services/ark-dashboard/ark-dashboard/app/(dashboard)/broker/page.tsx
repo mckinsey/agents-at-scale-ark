@@ -17,8 +17,10 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { trackEvent } from '@/lib/analytics/singleton';
 import {
+  getSessionDisplayNameFromEntries,
   groupEntriesBySession,
   sortEntriesByTimestampAndSequence,
 } from '@/lib/broker/session-utils';
@@ -568,9 +570,14 @@ function SessionsView({
                       ) : (
                         <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
                       )}
-                      <span className="font-semibold">
-                        Session: {sessionId}
-                      </span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="font-semibold">
+                            Session: {getSessionDisplayNameFromEntries(sessionEntries, sessionId)}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>{sessionId}</TooltipContent>
+                      </Tooltip>
                       <span className="text-muted-foreground ml-auto">
                         ({sessionEntries.length} events)
                       </span>
