@@ -1287,7 +1287,53 @@ class TestModelsEndpoint(unittest.TestCase):
         self.assertEqual(data["config"]["bedrock"]["region"]["value"], "us-east-1")
         self.assertEqual(data["config"]["bedrock"]["maxTokens"]["value"], "1000")
         self.assertEqual(data["config"]["bedrock"]["temperature"]["value"], "0.7")
-    
+
+    @patch('ark_api.api.v1.models.with_ark_client')
+    def test_create_model_anthropic_success(self, mock_ark_client):
+        """Test successful Anthropic model creation."""
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        mock_model = Mock()
+        mock_model.to_dict.return_value = {
+            "metadata": {"name": "claude-sonnet", "namespace": "default"},
+            "spec": {
+                "type": "completions",
+                "provider": "anthropic",
+                "model": {"value": "claude-3-5-sonnet-20241022"},
+                "config": {
+                    "anthropic": {
+                        "apiKey": {"value": "sk-ant-test"},
+                        "baseUrl": {"value": "https://api.anthropic.com/v1"}
+                    }
+                }
+            }
+        }
+
+        mock_client.models.a_create = AsyncMock(return_value=mock_model)
+
+        request_data = {
+            "name": "claude-sonnet",
+            "provider": "anthropic",
+            "model": "claude-3-5-sonnet-20241022",
+            "config": {
+                "anthropic": {
+                    "apiKey": "sk-ant-test",
+                    "baseUrl": "https://api.anthropic.com/v1"
+                }
+            }
+        }
+        response = self.client.post("/v1/models?namespace=default", json=request_data)
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["name"], "claude-sonnet")
+        self.assertEqual(data["provider"], "anthropic")
+        self.assertEqual(data["type"], "completions")
+        self.assertEqual(data["model"], "claude-3-5-sonnet-20241022")
+        self.assertEqual(data["config"]["anthropic"]["apiKey"]["value"], "sk-ant-test")
+        self.assertEqual(data["config"]["anthropic"]["baseUrl"]["value"], "https://api.anthropic.com/v1")
+
     @patch('ark_api.api.v1.models.with_ark_client')
     def test_get_model_success(self, mock_ark_client):
         """Test successfully retrieving a model."""
