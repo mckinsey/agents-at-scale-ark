@@ -37,7 +37,7 @@ class TestReadOnlyMiddleware(unittest.IsolatedAsyncioTestCase):
 
         call_next.assert_not_called()
         self.assertEqual(response.status_code, 403)
-        self.assertIn(b"read-only mode", response.body)
+        self.assertIn(b"demo environment", response.body)
 
     @patch.dict(os.environ, {"READ_ONLY_MODE": "true"})
     async def test_read_only_enabled_blocks_put(self):
