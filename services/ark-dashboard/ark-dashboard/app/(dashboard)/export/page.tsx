@@ -305,7 +305,7 @@ export default function ExportPage() {
                   {isExporting ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
-                    <CheckCircle className="mr-2 h-4 w-4" />
+                    <Download className="mr-2 h-4 w-4" />
                   )}
                   Export All
                 </Button>
