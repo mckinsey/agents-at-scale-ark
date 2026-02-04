@@ -17,7 +17,11 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { trackEvent } from '@/lib/analytics/singleton';
 import {
   getSessionDisplayNameFromEntries,
@@ -573,7 +577,11 @@ function SessionsView({
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <span className="font-semibold">
-                            Session: {getSessionDisplayNameFromEntries(sessionEntries, sessionId)}
+                            Session:{' '}
+                            {getSessionDisplayNameFromEntries(
+                              sessionEntries,
+                              sessionId,
+                            )}
                           </span>
                         </TooltipTrigger>
                         <TooltipContent>{sessionId}</TooltipContent>

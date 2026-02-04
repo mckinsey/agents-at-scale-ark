@@ -25,7 +25,11 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { hashPromptSync } from '@/lib/analytics/utils';
 import { getSessionDisplayNameFromEntries } from '@/lib/broker/session-utils';
@@ -445,7 +449,11 @@ function DebugStreamView({
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <span>
-                            Session: {getSessionDisplayNameFromEntries(sessionEntries, sessionId)}
+                            Session:{' '}
+                            {getSessionDisplayNameFromEntries(
+                              sessionEntries,
+                              sessionId,
+                            )}
                           </span>
                         </TooltipTrigger>
                         <TooltipContent>{sessionId}</TooltipContent>

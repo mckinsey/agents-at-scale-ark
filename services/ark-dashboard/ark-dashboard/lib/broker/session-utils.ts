@@ -15,7 +15,8 @@ const DISPLAY_NAME_KEYS = [
 const MAX_DISPLAY_LENGTH = 48;
 
 function getFirstEntryText(data: unknown): string | undefined {
-  if (data == null || typeof data !== 'object') return undefined;
+  if (data === null || data === undefined || typeof data !== 'object')
+    return undefined;
   const obj = data as Record<string, unknown>;
   for (const key of DISPLAY_NAME_KEYS) {
     const val = obj[key];
@@ -27,7 +28,11 @@ function getFirstEntryText(data: unknown): string | undefined {
       val.length > 0
     ) {
       const first = val[0] as Record<string, unknown> | undefined;
-      if (first && typeof first.text === 'string' && first.text.trim().length > 0)
+      if (
+        first &&
+        typeof first.text === 'string' &&
+        first.text.trim().length > 0
+      )
         return first.text.trim();
     }
   }
