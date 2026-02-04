@@ -291,10 +291,9 @@ export default function ExportPage() {
         {/* Export Actions */}
         <Card>
           <CardHeader>
-            <CardTitle>Export Configuration</CardTitle>
+            <CardTitle>Select Resources to Export</CardTitle>
             <CardDescription>
-              Select resources to export as YAML files. Exported files will be
-              organized in folders and packaged as a ZIP archive.
+              Choose specific resource to export individually or in groups
             </CardDescription>
           </CardHeader>
           <CardContent>
