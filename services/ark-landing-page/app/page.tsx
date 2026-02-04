@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import Image from 'next/image';
+import qbLogoLight from './img/qb-logo-light.svg';
 
 interface Demo {
   name: string;
@@ -75,7 +76,7 @@ export default function LandingPage() {
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-4 mb-6">
             <Image
-              src="/qb-logo-light.svg"
+              src={qbLogoLight}
               alt="QuantumBlack"
               width={48}
               height={42}
