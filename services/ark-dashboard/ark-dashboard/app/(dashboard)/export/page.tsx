@@ -297,38 +297,36 @@ export default function ExportPage() {
         </div>
 
         <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Select Resources to Export</CardTitle>
-                <CardDescription>
-                  Choose specific resource to export individually or in groups
-                </CardDescription>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  onClick={handleExportAll}
-                  disabled={isExporting || totalCount === 0}
-                  variant="outline">
-                  {isExporting ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="mr-2 h-4 w-4" />
-                  )}
-                  Export All
-                </Button>
-                <Button
-                  onClick={handleExportSelected}
-                  disabled={isExporting || selectedCount === 0}
-                  variant="default">
-                  {isExporting ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="mr-2 h-4 w-4" />
-                  )}
-                  Export Selected ({selectedCount})
-                </Button>
-              </div>
+          <CardHeader className="flex flex-row items-start justify-between">
+            <div className="space-y-1.5">
+              <CardTitle>Select Resources to Export</CardTitle>
+              <CardDescription>
+                Choose specific resource to export individually or in groups
+              </CardDescription>
+            </div>
+            <div className="ml-auto flex gap-2">
+              <Button
+                onClick={handleExportAll}
+                disabled={isExporting || totalCount === 0}
+                variant="outline">
+                {isExporting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
+                Export All
+              </Button>
+              <Button
+                onClick={handleExportSelected}
+                disabled={isExporting || selectedCount === 0}
+                variant="default">
+                {isExporting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
+                Export Selected ({selectedCount})
+              </Button>
             </div>
           </CardHeader>
           <CardContent>
