@@ -17,4 +17,4 @@ app:
     - name: ARK_A2A_AGENT_CARD_PROTOCOL
       value: "http"
     - name: READ_ONLY_MODE
-      value: "false"
+      value: "true"

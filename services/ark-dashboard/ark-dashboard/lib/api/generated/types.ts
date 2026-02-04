@@ -577,8 +577,11 @@ export interface paths {
          *     2. Kubeconfig context (when running locally)
          *     3. Fallback to default
          *
+         *     Args:
+         *         namespace: Optional namespace to check for demo mode
+         *
          *     Returns:
-         *         ContextResponse: The current namespace and cluster information
+         *         ContextResponse: The current namespace, cluster, and read-only mode status
          */
         get: operations["get_context_endpoint_v1_context_get"];
         put?: never;
@@ -2975,15 +2978,14 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /**
-         * ContextResponse
-         * @description Response model for current Kubernetes context.
-         */
+        /** ContextResponse */
         ContextResponse: {
             /** Cluster */
             cluster: string | null;
             /** Namespace */
             namespace: string;
+            /** Read Only Mode */
+            read_only_mode: boolean;
         };
         /**
          * ConversationListResponse
@@ -5766,7 +5768,9 @@ export interface operations {
     };
     get_context_endpoint_v1_context_get: {
         parameters: {
-            query?: never;
+            query?: {
+                namespace?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5780,6 +5784,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ContextResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
