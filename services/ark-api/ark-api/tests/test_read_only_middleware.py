@@ -101,6 +101,54 @@ class TestReadOnlyMiddleware(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200)
 
     @patch.dict(os.environ, {"READ_ONLY_MODE": "true"})
+    async def test_read_only_enabled_allows_get_teams(self):
+        middleware = ReadOnlyMiddleware(Mock())
+
+        request = Mock()
+        request.method = "GET"
+        request.url.path = "/v1/teams"
+
+        call_next = AsyncMock()
+        call_next.return_value = Mock(status_code=200)
+
+        response = await middleware.dispatch(request, call_next)
+
+        call_next.assert_called_once_with(request)
+        self.assertEqual(response.status_code, 200)
+
+    @patch.dict(os.environ, {"READ_ONLY_MODE": "true"})
+    async def test_read_only_enabled_allows_get_queries(self):
+        middleware = ReadOnlyMiddleware(Mock())
+
+        request = Mock()
+        request.method = "GET"
+        request.url.path = "/v1/queries"
+
+        call_next = AsyncMock()
+        call_next.return_value = Mock(status_code=200)
+
+        response = await middleware.dispatch(request, call_next)
+
+        call_next.assert_called_once_with(request)
+        self.assertEqual(response.status_code, 200)
+
+    @patch.dict(os.environ, {"READ_ONLY_MODE": "true"})
+    async def test_read_only_enabled_allows_get_agent_by_id(self):
+        middleware = ReadOnlyMiddleware(Mock())
+
+        request = Mock()
+        request.method = "GET"
+        request.url.path = "/v1/agents/my-agent"
+
+        call_next = AsyncMock()
+        call_next.return_value = Mock(status_code=200)
+
+        response = await middleware.dispatch(request, call_next)
+
+        call_next.assert_called_once_with(request)
+        self.assertEqual(response.status_code, 200)
+
+    @patch.dict(os.environ, {"READ_ONLY_MODE": "true"})
     async def test_read_only_enabled_allows_chat_completions(self):
         middleware = ReadOnlyMiddleware(Mock())
 
