@@ -35,19 +35,24 @@ const resourceSections: ResourceSection[] = [
     description: 'AI agent configurations and prompts',
   },
   {
-    type: 'models',
-    title: 'Models',
-    description: 'Model configurations and parameters',
-  },
-  {
     type: 'teams',
     title: 'Teams',
     description: 'Team configurations and hierarchies',
   },
   {
+    type: 'models',
+    title: 'Models',
+    description: 'Model configurations and parameters',
+  },
+  {
+    type: 'queries',
+    title: 'Queries',
+    description: 'Query configurations and templates',
+  },
+  {
     type: 'a2a',
-    title: 'Agent-to-Agent',
-    description: 'A2A server configurations',
+    title: 'A2A Servers',
+    description: 'Agent-to-Agent server configurations',
   },
   {
     type: 'mcp',
@@ -55,19 +60,14 @@ const resourceSections: ResourceSection[] = [
     description: 'Model Context Protocol server configs',
   },
   {
+    type: 'workflows',
+    title: 'Workflows',
+    description: 'Workflow definitions and templates',
+  },
+  {
     type: 'evaluators',
     title: 'Evaluators',
     description: 'Evaluation criteria and metrics',
-  },
-  {
-    type: 'memory',
-    title: 'Memory',
-    description: 'Memory store configurations',
-  },
-  {
-    type: 'workflows',
-    title: 'Workflow Templates',
-    description: 'Workflow definitions and templates',
   },
   {
     type: 'evaluations',

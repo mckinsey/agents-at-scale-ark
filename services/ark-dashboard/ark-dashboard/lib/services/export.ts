@@ -8,11 +8,11 @@ import type { components } from '@/lib/api/generated/types';
 export type AgentListResponse = components['schemas']['AgentListResponse'];
 export type ModelListResponse = components['schemas']['ModelListResponse'];
 export type TeamListResponse = components['schemas']['TeamListResponse'];
+export type QueryListResponse = components['schemas']['QueryListResponse'];
 export type MCPServerListResponse =
   components['schemas']['MCPServerListResponse'];
 export type EvaluatorListResponse =
   components['schemas']['EvaluatorListResponse'];
-export type MemoryListResponse = components['schemas']['MemoryListResponse'];
 // Note: WorkflowTemplateListResponse doesn't exist in current API
 export type EvaluationListResponse =
   components['schemas']['EvaluationListResponse'];
@@ -20,13 +20,13 @@ export type EvaluationListResponse =
 // Export configuration types
 export interface ExportConfig {
   agents?: boolean;
-  models?: boolean;
   teams?: boolean;
+  models?: boolean;
+  queries?: boolean;
   a2a?: boolean;
   mcp?: boolean;
-  evaluators?: boolean;
-  memory?: boolean;
   workflows?: boolean;
+  evaluators?: boolean;
   evaluations?: boolean;
 }
 
@@ -39,13 +39,13 @@ export interface ExportItem {
 
 export interface ResourceExportData {
   agents?: ExportItem[];
-  models?: ExportItem[];
   teams?: ExportItem[];
+  models?: ExportItem[];
+  queries?: ExportItem[];
   a2a?: ExportItem[];
   mcp?: ExportItem[];
-  evaluators?: ExportItem[];
-  memory?: ExportItem[];
   workflows?: ExportItem[];
+  evaluators?: ExportItem[];
   evaluations?: ExportItem[];
 }
 
@@ -71,19 +71,19 @@ export const exportService = {
   async fetchAllResources(): Promise<ResourceExportData> {
     const [
       agents,
-      models,
       teams,
+      models,
+      queries,
       mcpServers,
       evaluators,
-      memories,
       evaluations,
     ] = await Promise.allSettled([
       apiClient.get<AgentListResponse>('/api/v1/agents'),
-      apiClient.get<ModelListResponse>('/api/v1/models'),
       apiClient.get<TeamListResponse>('/api/v1/teams'),
+      apiClient.get<ModelListResponse>('/api/v1/models'),
+      apiClient.get<QueryListResponse>('/api/v1/queries'),
       apiClient.get<MCPServerListResponse>('/api/v1/mcp-servers'),
       apiClient.get<EvaluatorListResponse>('/api/v1/evaluators'),
-      apiClient.get<MemoryListResponse>('/api/v1/memories'),
       apiClient.get<EvaluationListResponse>('/api/v1/evaluations'),
     ]);
 
@@ -97,6 +97,14 @@ export const exportService = {
       }));
     }
 
+    if (teams.status === 'fulfilled' && teams.value?.items) {
+      data.teams = teams.value.items.map(team => ({
+        id: team.name || '',
+        name: team.name || '',
+        type: 'team',
+      }));
+    }
+
     if (models.status === 'fulfilled' && models.value?.items) {
       data.models = models.value.items.map(model => ({
         id: model.name || '',
@@ -105,11 +113,11 @@ export const exportService = {
       }));
     }
 
-    if (teams.status === 'fulfilled' && teams.value?.items) {
-      data.teams = teams.value.items.map(team => ({
-        id: team.name || '',
-        name: team.name || '',
-        type: 'team',
+    if (queries.status === 'fulfilled' && queries.value?.items) {
+      data.queries = queries.value.items.map(query => ({
+        id: query.name || '',
+        name: query.name || '',
+        type: 'query',
       }));
     }
 
@@ -126,14 +134,6 @@ export const exportService = {
         id: evaluator.name || '',
         name: evaluator.name || '',
         type: 'evaluator',
-      }));
-    }
-
-    if (memories.status === 'fulfilled' && memories.value?.items) {
-      data.memory = memories.value.items.map(memory => ({
-        id: memory.name || '',
-        name: memory.name || '',
-        type: 'memory',
       }));
     }
 
@@ -189,14 +189,24 @@ export const exportService = {
         addResourceToZip('agents', 'agents', selectedItems.agents),
       );
     }
+    if (selectedItems.teams) {
+      exportPromises.push(
+        addResourceToZip('teams', 'teams', selectedItems.teams),
+      );
+    }
     if (selectedItems.models) {
       exportPromises.push(
         addResourceToZip('models', 'models', selectedItems.models),
       );
     }
-    if (selectedItems.teams) {
+    if (selectedItems.queries) {
       exportPromises.push(
-        addResourceToZip('teams', 'teams', selectedItems.teams),
+        addResourceToZip('queries', 'queries', selectedItems.queries),
+      );
+    }
+    if (selectedItems.a2a) {
+      exportPromises.push(
+        addResourceToZip('a2a-servers', 'a2a', selectedItems.a2a),
       );
     }
     if (selectedItems.mcp) {
@@ -207,11 +217,6 @@ export const exportService = {
     if (selectedItems.evaluators) {
       exportPromises.push(
         addResourceToZip('evaluators', 'evaluators', selectedItems.evaluators),
-      );
-    }
-    if (selectedItems.memory) {
-      exportPromises.push(
-        addResourceToZip('memories', 'memory', selectedItems.memory),
       );
     }
     if (selectedItems.workflows) {
