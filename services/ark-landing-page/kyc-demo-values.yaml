@@ -1,20 +1,9 @@
+# KYC Demo configuration for ark-api (read-only mode enabled)
 app:
   env:
-    - name: CORS_ORIGINS
-      value: "*"
-    - name: OIDC_ISSUER_URL
-      value: ""
-    - name: OIDC_APPLICATION_ID
-      value: ""
-    - name: AUTH_MODE
-      value: "open"
-    - name: PROXY_TIMEOUT
-      value: "10.0"
-    - name: ARK_A2A_AGENT_CARD_PORT
-      value: "8000"
-    - name: ARK_A2A_AGENT_CARD_HOST
-      value: "ark-api.127.0.0.1.nip.io"
-    - name: ARK_A2A_AGENT_CARD_PROTOCOL
-      value: "http"
     - name: READ_ONLY_MODE
       value: "true"
+    - name: AUTH_MODE
+      value: "open"
+    - name: CORS_ORIGINS
+      value: "*"

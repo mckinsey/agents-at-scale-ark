@@ -99,3 +99,96 @@ class TestReadOnlyMiddleware(unittest.IsolatedAsyncioTestCase):
 
         call_next.assert_called_once_with(request)
         self.assertEqual(response.status_code, 200)
+
+    @patch.dict(os.environ, {"READ_ONLY_MODE": "true"})
+    async def test_read_only_enabled_allows_chat_completions(self):
+        middleware = ReadOnlyMiddleware(Mock())
+
+        request = Mock()
+        request.method = "POST"
+        request.url.path = "/openai/v1/chat/completions"
+
+        call_next = AsyncMock()
+        call_next.return_value = Mock(status_code=200)
+
+        response = await middleware.dispatch(request, call_next)
+
+        call_next.assert_called_once_with(request)
+        self.assertEqual(response.status_code, 200)
+
+    @patch.dict(os.environ, {"READ_ONLY_MODE": "true"})
+    async def test_read_only_enabled_allows_queries(self):
+        middleware = ReadOnlyMiddleware(Mock())
+
+        request = Mock()
+        request.method = "POST"
+        request.url.path = "/v1/queries"
+
+        call_next = AsyncMock()
+        call_next.return_value = Mock(status_code=201)
+
+        response = await middleware.dispatch(request, call_next)
+
+        call_next.assert_called_once_with(request)
+        self.assertEqual(response.status_code, 201)
+
+    @patch.dict(os.environ, {"READ_ONLY_MODE": "true"})
+    async def test_read_only_enabled_blocks_create_agent(self):
+        middleware = ReadOnlyMiddleware(Mock())
+
+        request = Mock()
+        request.method = "POST"
+        request.url.path = "/v1/agents"
+
+        call_next = AsyncMock()
+
+        response = await middleware.dispatch(request, call_next)
+
+        call_next.assert_not_called()
+        self.assertEqual(response.status_code, 403)
+        self.assertIn(b"demo environment", response.body)
+
+    @patch.dict(os.environ, {"READ_ONLY_MODE": "true"})
+    async def test_read_only_enabled_blocks_create_team(self):
+        middleware = ReadOnlyMiddleware(Mock())
+
+        request = Mock()
+        request.method = "POST"
+        request.url.path = "/v1/teams"
+
+        call_next = AsyncMock()
+
+        response = await middleware.dispatch(request, call_next)
+
+        call_next.assert_not_called()
+        self.assertEqual(response.status_code, 403)
+
+    @patch.dict(os.environ, {"READ_ONLY_MODE": "true"})
+    async def test_read_only_enabled_blocks_create_model(self):
+        middleware = ReadOnlyMiddleware(Mock())
+
+        request = Mock()
+        request.method = "POST"
+        request.url.path = "/v1/models"
+
+        call_next = AsyncMock()
+
+        response = await middleware.dispatch(request, call_next)
+
+        call_next.assert_not_called()
+        self.assertEqual(response.status_code, 403)
+
+    @patch.dict(os.environ, {"READ_ONLY_MODE": "true"})
+    async def test_read_only_enabled_blocks_update_agent(self):
+        middleware = ReadOnlyMiddleware(Mock())
+
+        request = Mock()
+        request.method = "PUT"
+        request.url.path = "/v1/agents/my-agent"
+
+        call_next = AsyncMock()
+
+        response = await middleware.dispatch(request, call_next)
+
+        call_next.assert_not_called()
+        self.assertEqual(response.status_code, 403)

@@ -54,19 +54,28 @@ export default function LandingPage() {
     );
   }
 
-  // Map demo names to localhost ports for development
-  const demoPortMap: Record<string, number> = {
-    'kyc-demo': 3003,
-    'demo-sales': 3003, // Legacy compatibility
-  };
-
   const getDemoUrl = (demoName: string) => {
-    // In development with port-forward, use localhost:PORT
-    if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-      const port = demoPortMap[demoName] || 3000;
-      return `http://localhost:${port}?namespace=${demoName}`;
+    if (typeof window === 'undefined') return '';
+
+    const dashboardUrl = process.env.NEXT_PUBLIC_ARK_DASHBOARD_URL;
+    const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN;
+
+    // Use explicit dashboard URL or subdomain routing
+    if (dashboardUrl) {
+      const url = new URL(dashboardUrl);
+      url.searchParams.set('namespace', demoName);
+      return url.toString();
     }
-    // In production, use proper DNS
+
+    if (baseDomain) {
+      return `${window.location.protocol}//${demoName}.${baseDomain}`;
+    }
+
+    // Fallback to localhost port-forward
+    if (window.location.hostname === 'localhost') {
+      return `http://localhost:3003?namespace=${demoName}`;
+    }
+
     return `http://${demoName}.127.0.0.1.nip.io`;
   };
 
