@@ -311,17 +311,6 @@ export default function ExportPage() {
               </div>
               <div className="flex gap-2">
                 <Button
-                  onClick={handleExportSelected}
-                  disabled={isExporting || selectedCount === 0}
-                  variant="default">
-                  {isExporting ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="mr-2 h-4 w-4" />
-                  )}
-                  Export Selected ({selectedCount})
-                </Button>
-                <Button
                   onClick={handleExportAll}
                   disabled={isExporting || totalCount === 0}
                   variant="outline">
@@ -331,6 +320,17 @@ export default function ExportPage() {
                     <CheckCircle className="mr-2 h-4 w-4" />
                   )}
                   Export All
+                </Button>
+                <Button
+                  onClick={handleExportSelected}
+                  disabled={isExporting || selectedCount === 0}
+                  variant="default">
+                  {isExporting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="mr-2 h-4 w-4" />
+                  )}
+                  Export Selected ({selectedCount})
                 </Button>
               </div>
             </div>
