@@ -1497,7 +1497,65 @@ class TestModelsEndpoint(unittest.TestCase):
         self.assertEqual(data["model"], "gpt-4")
         # Config should remain unchanged
         self.assertEqual(data["config"]["openai"]["apiKey"]["value"], "test-key")
-    
+
+    @patch('ark_api.api.v1.models.with_ark_client')
+    def test_update_model_anthropic_success(self, mock_ark_client):
+        """Test successful Anthropic model update."""
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        existing_model = Mock()
+        existing_model.to_dict.return_value = {
+            "metadata": {"name": "claude-model", "namespace": "default"},
+            "spec": {
+                "provider": "anthropic",
+                "type": "completions",
+                "model": {"value": "claude-3-haiku-20240307"},
+                "config": {
+                    "anthropic": {
+                        "apiKey": {"value": "old-key"},
+                        "baseUrl": {"value": "https://api.anthropic.com/v1"}
+                    }
+                }
+            }
+        }
+
+        updated_model = Mock()
+        updated_model.to_dict.return_value = {
+            "metadata": {"name": "claude-model", "namespace": "default"},
+            "spec": {
+                "provider": "anthropic",
+                "type": "completions",
+                "model": {"value": "claude-3-5-sonnet-20241022"},
+                "config": {
+                    "anthropic": {
+                        "apiKey": {"value": "new-key"},
+                        "baseUrl": {"value": "https://api.anthropic.com/v1"}
+                    }
+                }
+            }
+        }
+
+        mock_client.models.a_get = AsyncMock(return_value=existing_model)
+        mock_client.models.a_update = AsyncMock(return_value=updated_model)
+
+        request_data = {
+            "model": "claude-3-5-sonnet-20241022",
+            "config": {
+                "anthropic": {
+                    "apiKey": "new-key",
+                    "baseUrl": "https://api.anthropic.com/v1"
+                }
+            }
+        }
+        response = self.client.put("/v1/models/claude-model?namespace=default", json=request_data)
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["name"], "claude-model")
+        self.assertEqual(data["model"], "claude-3-5-sonnet-20241022")
+        self.assertEqual(data["config"]["anthropic"]["apiKey"]["value"], "new-key")
+
     @patch('ark_api.api.v1.models.with_ark_client')
     def test_delete_model_success(self, mock_ark_client):
         """Test successful model deletion."""
