@@ -242,31 +242,24 @@ export default function ExportPage() {
     const selectedItems = items.filter(item => item.selected);
     const allSelected =
       items.length > 0 && selectedItems.length === items.length;
-    const Icon = section.icon;
 
     return (
       <div key={section.type} className="space-y-4">
-        <div>
-          <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-4">
+          <span className="text-muted-foreground text-sm">
+            {selectedItems.length} of {items.length} selected
+          </span>
+          {items.length > 0 && (
             <div className="flex items-center gap-2">
-              <Icon className="text-muted-foreground h-5 w-5" />
-              <h3 className="text-lg font-medium">{section.title}</h3>
-              <span className="text-muted-foreground text-sm">
-                ({selectedItems.length}/{items.length})
-              </span>
-            </div>
-            {items.length > 0 && (
+              <span className="text-sm text-muted-foreground">Select all</span>
               <Checkbox
                 checked={allSelected}
                 onCheckedChange={checked =>
                   handleSelectAll(section.type, !!checked)
                 }
               />
-            )}
-          </div>
-          <p className="text-muted-foreground mt-1 text-sm">
-            {section.description}
-          </p>
+            </div>
+          )}
         </div>
         <div>
           {items.length === 0 ? (
