@@ -43,7 +43,7 @@ function NamespaceProvider({ children }: PropsWithChildren) {
     },
   ]);
   const [isNamespaceResolved, setIsNamespaceResolved] = useState(false);
-  const [readOnlyMode, setReadOnlyMode] = useState(false);
+  const [readOnlyMode, setReadOnlyMode] = useState(true);
 
   const { data, isPending, error } = useGetContext();
 
@@ -99,7 +99,8 @@ function NamespaceProvider({ children }: PropsWithChildren) {
       } else {
         setIsNamespaceResolved(true);
       }
-      setReadOnlyMode(data.read_only_mode || false);
+      const newReadOnlyMode = data.read_only_mode ?? false;
+      setReadOnlyMode(newReadOnlyMode);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, namespaceFromQueryParams]);

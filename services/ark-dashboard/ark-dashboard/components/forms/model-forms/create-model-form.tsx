@@ -8,6 +8,7 @@ import { useForm } from 'react-hook-form';
 import { Spinner } from '@/components/ui/spinner';
 import { TrackedButton } from '@/components/ui/tracked-button';
 import { useCreateModel } from '@/lib/services/models-hooks';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { ModelConfiguratorForm } from './model-configuration-form';
 import { ModelConfigurationFormContext } from './model-configuration-form-context';
@@ -23,6 +24,7 @@ type CreateModelFormProps = {
 
 export function CreateModelForm({ defaultName }: CreateModelFormProps) {
   const router = useRouter();
+  const { readOnlyMode } = useNamespace();
   const form = useForm<FormValues>({
     mode: 'onChange',
     resolver: zodResolver(schema),
@@ -84,7 +86,7 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
           <TrackedButton
             type="submit"
             form={formId}
-            disabled={isPending}
+            disabled={isPending || readOnlyMode}
             className="mt-8 w-full"
             trackingEvent="create_model_clicked"
             trackingProperties={{ modelType: provider }}>
