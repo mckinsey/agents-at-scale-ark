@@ -219,6 +219,11 @@ jobs:
           version: "0.12.2"
           args: "--version"
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+
       - run: make -j24 build-all
 
       - name: Check generated types are unchanged
