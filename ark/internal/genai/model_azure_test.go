@@ -147,56 +147,6 @@ func TestLoadAzureConfig_ManagedIdentity_WithClientID(t *testing.T) {
 	require.Equal(t, "my-client-id-123", azureProvider.ManagedIdentity.ClientID)
 }
 
-func TestLoadAzureConfig_WorkloadIdentity(t *testing.T) {
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "workload-identity", Namespace: "default"},
-		Data: map[string][]byte{
-			"client-id": []byte("workload-client-id"),
-			"tenant-id": []byte("workload-tenant-id"),
-		},
-	}
-	fakeClient := setupAzureTestClient([]client.Object{secret})
-	resolver := common.NewValueSourceResolver(fakeClient)
-	ctx := context.Background()
-
-	config := &arkv1alpha1.AzureModelConfig{
-		BaseURL: arkv1alpha1.ValueSource{Value: "https://api.azure.com"},
-		Auth: &arkv1alpha1.AzureAuth{
-			WorkloadIdentity: &arkv1alpha1.AzureWorkloadIdentity{
-				ClientID: arkv1alpha1.ValueSource{
-					ValueFrom: &arkv1alpha1.ValueFromSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: "workload-identity"},
-							Key:                  "client-id",
-						},
-					},
-				},
-				TenantID: arkv1alpha1.ValueSource{
-					ValueFrom: &arkv1alpha1.ValueFromSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: "workload-identity"},
-							Key:                  "tenant-id",
-						},
-					},
-				},
-			},
-		},
-	}
-
-	model := &Model{}
-	err := loadAzureConfig(ctx, resolver, config, "default", model, nil)
-
-	require.NoError(t, err)
-	require.NotNil(t, model.Provider)
-	azureProvider, ok := model.Provider.(*AzureProvider)
-	require.True(t, ok)
-	require.Empty(t, azureProvider.APIKey)
-	require.Nil(t, azureProvider.ManagedIdentity)
-	require.NotNil(t, azureProvider.WorkloadIdentity)
-	require.Equal(t, "workload-client-id", azureProvider.WorkloadIdentity.ClientID)
-	require.Equal(t, "workload-tenant-id", azureProvider.WorkloadIdentity.TenantID)
-}
-
 func TestLoadAzureConfig_MultipleAuthMethods_Error(t *testing.T) {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "azure-secret", Namespace: "default"},

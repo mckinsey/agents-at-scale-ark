@@ -2426,7 +2426,6 @@ export interface components {
             /** Apikey */
             apiKey?: string | components["schemas"]["ModelValueSource"] | null;
             managedIdentity?: components["schemas"]["AzureManagedIdentityConfig"] | null;
-            workloadIdentity?: components["schemas"]["AzureWorkloadIdentityConfig"] | null;
         };
         /**
          * AzureConfig
@@ -2450,16 +2449,6 @@ export interface components {
         AzureManagedIdentityConfig: {
             /** Clientid */
             clientId?: string | components["schemas"]["ModelValueSource"] | null;
-        };
-        /**
-         * AzureWorkloadIdentityConfig
-         * @description Azure Workload Identity configuration.
-         */
-        AzureWorkloadIdentityConfig: {
-            /** Clientid */
-            clientId: string | components["schemas"]["ModelValueSource"];
-            /** Tenantid */
-            tenantId: string | components["schemas"]["ModelValueSource"];
         };
         /**
          * BaselineEvaluationMetadata
