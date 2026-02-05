@@ -106,36 +106,40 @@ profiles:
 
 pipelines:
   deploy: |-
-    
+
     if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
       create_deployments cert-manager
     fi
-    
+
     if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then
       create_deployments gateway-api
     fi
-    
+
     run_dependency_pipelines ark-controller --pipeline=deploy
-    
+
     if [ "${ENABLE_ARK_TENANT}" == "true" ]; then
+      echo "Waiting for Ark CRDs to be established..."
+      kubectl wait --for=condition=Established crd/tools.ark.mckinsey.com --timeout=60s
       create_deployments ark-tenant
     fi
-    
+
     run_dependency_pipelines --all --exclude ark-controller --pipeline=deploy
   dev: |-
-    
+
     if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
       create_deployments cert-manager
     fi
-    
+
     if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then
       create_deployments gateway-api
     fi
-    
+
     run_dependency_pipelines ark-controller --pipeline=dev
-    
+
     if [ "${ENABLE_ARK_TENANT}" == "true" ]; then
+      echo "Waiting for Ark CRDs to be established..."
+      kubectl wait --for=condition=Established crd/tools.ark.mckinsey.com --timeout=60s
       create_deployments ark-tenant
     fi
-    
+
     run_dependency_pipelines --all --exclude ark-controller --pipeline=dev
