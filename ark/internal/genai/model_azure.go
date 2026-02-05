@@ -11,8 +11,9 @@ import (
 )
 
 type azureAuthResult struct {
-	apiKey          string
-	managedIdentity *AzureManagedIdentityConfig
+	apiKey           string
+	managedIdentity  *AzureManagedIdentityConfig
+	workloadIdentity *AzureWorkloadIdentityConfig
 }
 
 func resolveAzureAuth(ctx context.Context, resolver *common.ValueSourceResolver, config *arkv1alpha1.AzureModelConfig, namespace string) (*azureAuthResult, error) {
@@ -36,8 +37,11 @@ func resolveAzureAuth(ctx context.Context, resolver *common.ValueSourceResolver,
 	if config.Auth.ManagedIdentity != nil {
 		authMethodCount++
 	}
+	if config.Auth.WorkloadIdentity != nil {
+		authMethodCount++
+	}
 	if authMethodCount != 1 {
-		return nil, fmt.Errorf("exactly one authentication method must be specified in auth (apiKey or managedIdentity)")
+		return nil, fmt.Errorf("exactly one authentication method must be specified in auth (apiKey, managedIdentity, or workloadIdentity)")
 	}
 
 	switch {
@@ -55,6 +59,19 @@ func resolveAzureAuth(ctx context.Context, resolver *common.ValueSourceResolver,
 				return nil, fmt.Errorf("failed to resolve managed identity clientID: %w", err)
 			}
 			result.managedIdentity.ClientID = clientID
+		}
+	case config.Auth.WorkloadIdentity != nil:
+		clientID, err := resolver.ResolveValueSource(ctx, config.Auth.WorkloadIdentity.ClientID, namespace)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve workload identity clientID: %w", err)
+		}
+		tenantID, err := resolver.ResolveValueSource(ctx, config.Auth.WorkloadIdentity.TenantID, namespace)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve workload identity tenantID: %w", err)
+		}
+		result.workloadIdentity = &AzureWorkloadIdentityConfig{
+			ClientID: clientID,
+			TenantID: tenantID,
 		}
 	}
 
@@ -106,13 +123,14 @@ func loadAzureConfig(ctx context.Context, resolver *common.ValueSourceResolver, 
 	}
 
 	azureProvider := &AzureProvider{
-		Model:           model.Model,
-		BaseURL:         baseURL,
-		APIKey:          authResult.apiKey,
-		APIVersion:      apiVersion,
-		ManagedIdentity: authResult.managedIdentity,
-		Headers:         headers,
-		Properties:      properties,
+		Model:            model.Model,
+		BaseURL:          baseURL,
+		APIKey:           authResult.apiKey,
+		APIVersion:       apiVersion,
+		ManagedIdentity:  authResult.managedIdentity,
+		WorkloadIdentity: authResult.workloadIdentity,
+		Headers:          headers,
+		Properties:       properties,
 	}
 	model.Provider = azureProvider
 	model.Properties = properties

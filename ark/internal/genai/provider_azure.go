@@ -18,16 +18,22 @@ type AzureManagedIdentityConfig struct {
 	ClientID string
 }
 
+type AzureWorkloadIdentityConfig struct {
+	ClientID string
+	TenantID string
+}
+
 type AzureProvider struct {
-	Model           string
-	BaseURL         string
-	APIVersion      string
-	APIKey          string
-	ManagedIdentity *AzureManagedIdentityConfig
-	Headers         map[string]string
-	Properties      map[string]string
-	outputSchema    *runtime.RawExtension
-	schemaName      string
+	Model            string
+	BaseURL          string
+	APIVersion       string
+	APIKey           string
+	ManagedIdentity  *AzureManagedIdentityConfig
+	WorkloadIdentity *AzureWorkloadIdentityConfig
+	Headers          map[string]string
+	Properties       map[string]string
+	outputSchema     *runtime.RawExtension
+	schemaName       string
 }
 
 func (ap *AzureProvider) SetOutputSchema(schema *runtime.RawExtension, schemaName string) {
@@ -42,6 +48,13 @@ func (ap *AzureProvider) getCredential() (azcore.TokenCredential, error) {
 		}
 		return azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
 			ID: azidentity.ClientID(ap.ManagedIdentity.ClientID),
+		})
+	}
+
+	if ap.WorkloadIdentity != nil {
+		return azidentity.NewWorkloadIdentityCredential(&azidentity.WorkloadIdentityCredentialOptions{
+			ClientID: ap.WorkloadIdentity.ClientID,
+			TenantID: ap.WorkloadIdentity.TenantID,
 		})
 	}
 
@@ -173,7 +186,7 @@ func (ap *AzureProvider) createClient(ctx context.Context) openai.Client {
 		option.WithQueryAdd("api-version", ap.APIVersion),
 	}
 
-	if ap.ManagedIdentity != nil {
+	if ap.ManagedIdentity != nil || ap.WorkloadIdentity != nil {
 		cred, err := ap.getCredential()
 		if err == nil {
 			tokenResp, err := cred.GetToken(ctx, policy.TokenRequestOptions{
