@@ -26,6 +26,7 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark/internal/apiserver/registry"
+	"mckinsey.com/ark/internal/apiserver/validation"
 	"mckinsey.com/ark/internal/storage"
 	"mckinsey.com/ark/internal/storage/postgresql"
 	"mckinsey.com/ark/internal/storage/sqlite"
@@ -164,6 +165,8 @@ func (s *Server) Start(ctx context.Context) error {
 func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, converter storage.TypeConverter) error {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(arkv1alpha1.GroupVersion.Group, Scheme, ParameterCodec, Codecs)
 
+	storageValidator := validation.NewStorageValidator(s.backend, nil)
+
 	v1alpha1Storage := make(map[string]rest.Storage)
 	for _, res := range V1Alpha1Resources {
 		cfg := registry.ResourceConfig{
@@ -173,7 +176,8 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 			NewFunc:      res.NewFunc,
 			NewListFunc:  res.NewListFunc,
 		}
-		v1alpha1Storage[res.Resource] = registry.NewGenericStorage(s.backend, converter, cfg)
+		storage := s.buildStorage(cfg, converter, storageValidator)
+		v1alpha1Storage[res.Resource] = storage
 		v1alpha1Storage[res.Resource+"/status"] = registry.NewStatusStorage(s.backend, converter, cfg)
 	}
 	apiGroupInfo.VersionedResourcesStorageMap[arkv1alpha1.GroupVersion.Version] = v1alpha1Storage
@@ -187,7 +191,8 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 			NewFunc:      res.NewFunc,
 			NewListFunc:  res.NewListFunc,
 		}
-		v1prealpha1Storage[res.Resource] = registry.NewGenericStorage(s.backend, converter, cfg)
+		storage := s.buildStorage(cfg, converter, storageValidator)
+		v1prealpha1Storage[res.Resource] = storage
 		v1prealpha1Storage[res.Resource+"/status"] = registry.NewStatusStorage(s.backend, converter, cfg)
 	}
 	apiGroupInfo.VersionedResourcesStorageMap[arkv1prealpha1.GroupVersion.Version] = v1prealpha1Storage
@@ -197,6 +202,22 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 	}
 
 	return nil
+}
+
+func (s *Server) buildStorage(cfg registry.ResourceConfig, converter storage.TypeConverter, storageValidator *validation.StorageValidator) rest.Storage {
+	genericStorage := registry.NewGenericStorage(s.backend, converter, cfg)
+
+	var storage rest.Storage = genericStorage
+
+	if validator, ok := validation.GetValidator(cfg.Kind, storageValidator); ok {
+		storage = registry.NewValidatingStorage(genericStorage, validator)
+	}
+
+	if defaulter, ok := validation.GetDefaulter(cfg.Kind); ok {
+		storage = registry.NewDefaultingStorage(storage, defaulter)
+	}
+
+	return storage
 }
 
 func (s *Server) NeedLeaderElection() bool {
