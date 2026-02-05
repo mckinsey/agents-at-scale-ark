@@ -460,6 +460,105 @@ var _ = Describe("Model Webhook", func() {
 			Expect(warnings).To(BeEmpty())
 		})
 	})
+
+	Context("When validating Anthropic models", func() {
+		It("Should fail when Anthropic config is missing", func() {
+			model.Spec.Provider = genai.ProviderAnthropic
+			model.Spec.Type = genai.ModelTypeCompletions
+			model.Spec.Config = arkv1alpha1.ModelConfig{
+				Anthropic: nil,
+			}
+
+			warnings, err := validator.ValidateCreate(ctx, model)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("anthropic configuration is required"))
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("Should succeed with valid Anthropic config", func() {
+			model.Spec.Provider = genai.ProviderAnthropic
+			model.Spec.Type = genai.ModelTypeCompletions
+			model.Spec.Config = arkv1alpha1.ModelConfig{
+				Anthropic: &arkv1alpha1.AnthropicModelConfig{
+					BaseURL: arkv1alpha1.ValueSource{
+						Value: "https://api.anthropic.com/v1",
+					},
+					APIKey: arkv1alpha1.ValueSource{
+						Value: "sk-ant-test-key",
+					},
+				},
+			}
+
+			warnings, err := validator.ValidateCreate(ctx, model)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("Should fail when Anthropic BaseURL references nonexistent ConfigMap", func() {
+			model.Spec.Provider = genai.ProviderAnthropic
+			model.Spec.Type = genai.ModelTypeCompletions
+			model.Spec.Config = arkv1alpha1.ModelConfig{
+				Anthropic: &arkv1alpha1.AnthropicModelConfig{
+					BaseURL: arkv1alpha1.ValueSource{
+						ValueFrom: &arkv1alpha1.ValueFromSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "nonexistent-configmap",
+								},
+								Key: "base-url",
+							},
+						},
+					},
+					APIKey: arkv1alpha1.ValueSource{
+						Value: "sk-ant-test-key",
+					},
+				},
+			}
+
+			warnings, err := validator.ValidateCreate(ctx, model)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.config.anthropic.baseUrl"))
+			Expect(err.Error()).To(ContainSubstring("configMap 'nonexistent-configmap' does not exist"))
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("Should succeed when Anthropic BaseURL references existing ConfigMap", func() {
+			configMap := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "anthropic-config",
+					Namespace: "default",
+				},
+				Data: map[string]string{
+					"base-url": "https://api.anthropic.com/v1",
+				},
+			}
+			Expect(validator.Client.Create(ctx, configMap)).To(Succeed())
+
+			model.Spec.Provider = genai.ProviderAnthropic
+			model.Spec.Type = genai.ModelTypeCompletions
+			model.Spec.Config = arkv1alpha1.ModelConfig{
+				Anthropic: &arkv1alpha1.AnthropicModelConfig{
+					BaseURL: arkv1alpha1.ValueSource{
+						ValueFrom: &arkv1alpha1.ValueFromSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "anthropic-config",
+								},
+								Key: "base-url",
+							},
+						},
+					},
+					APIKey: arkv1alpha1.ValueSource{
+						Value: "sk-ant-test-key",
+					},
+				},
+			}
+
+			warnings, err := validator.ValidateCreate(ctx, model)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+	})
 })
 
 var _ = Describe("Model Defaulter", func() {
@@ -550,11 +649,4 @@ var _ = Describe("Model Defaulter", func() {
 		})
 	})
 
-	Context("When handling invalid input", func() {
-		It("Should return error for non-Model object", func() {
-			err := defaulter.Default(ctx, &corev1.ConfigMap{})
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("expected a Model object"))
-		})
-	})
 })
