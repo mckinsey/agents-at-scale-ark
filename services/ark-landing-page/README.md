@@ -9,6 +9,7 @@ Multi-demo landing page that discovers and lists Ark demos running in the cluste
 - [Helm](https://helm.sh/docs/intro/install/)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/)
 - Node.js 20+
+- `localhost-gateway` chart deployed in `ark-system` namespace (see `services/localhost-gateway/`)
 
 ## Quick Start (Local Development)
 
