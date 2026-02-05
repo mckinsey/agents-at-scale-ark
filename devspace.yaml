@@ -118,8 +118,12 @@ pipelines:
     run_dependency_pipelines ark-controller --pipeline=deploy
 
     if [ "${ENABLE_ARK_TENANT}" == "true" ]; then
-      echo "Waiting for Ark CRDs to be established..."
-      kubectl wait --for=condition=Established crd/tools.ark.mckinsey.com --timeout=60s
+      echo "Waiting for Ark API to be available..."
+      if [ "${STORAGE_BACKEND:-etcd}" == "etcd" ]; then
+        kubectl wait --for=condition=Established crd/tools.ark.mckinsey.com --timeout=60s
+      else
+        kubectl wait --for=condition=Available apiservice/v1alpha1.ark.mckinsey.com --timeout=300s
+      fi
       create_deployments ark-tenant
     fi
 
@@ -137,8 +141,12 @@ pipelines:
     run_dependency_pipelines ark-controller --pipeline=dev
 
     if [ "${ENABLE_ARK_TENANT}" == "true" ]; then
-      echo "Waiting for Ark CRDs to be established..."
-      kubectl wait --for=condition=Established crd/tools.ark.mckinsey.com --timeout=60s
+      echo "Waiting for Ark API to be available..."
+      if [ "${STORAGE_BACKEND:-etcd}" == "etcd" ]; then
+        kubectl wait --for=condition=Established crd/tools.ark.mckinsey.com --timeout=60s
+      else
+        kubectl wait --for=condition=Available apiservice/v1alpha1.ark.mckinsey.com --timeout=300s
+      fi
       create_deployments ark-tenant
     fi
 
