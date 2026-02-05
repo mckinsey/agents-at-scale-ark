@@ -95,4 +95,3 @@ dev:
     # Enable SSH for IDE integration
     ssh:
       enabled: true
-
