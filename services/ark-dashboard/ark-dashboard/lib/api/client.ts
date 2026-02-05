@@ -64,7 +64,9 @@ class APIClient {
           ? await response.json()
           : await response.text();
         const apiError = new APIError(
-          errorData.message || `HTTP error! status: ${response.status}`,
+          errorData.detail ||
+            errorData.message ||
+            `HTTP error! status: ${response.status}`,
           response.status,
           errorData,
         );
