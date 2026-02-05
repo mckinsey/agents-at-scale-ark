@@ -6,7 +6,7 @@ COPY package*.json tsconfig.json ./
 RUN npm ci
 
 COPY src ./src
-RUN NODE_OPTIONS="--max-old-space-size=4096" npm run build
+RUN npm run build
 
 RUN addgroup -S mcp && adduser -S -G mcp mcp && \
     mkdir -p /data/sessions && \

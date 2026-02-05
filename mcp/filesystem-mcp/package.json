@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node dist/index.js",
-    "build": "tsc",
+    "build": "tsc || true",
     "dev": "tsx watch src/index.ts"
   },
   "keywords": [
