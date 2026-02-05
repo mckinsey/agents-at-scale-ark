@@ -17,12 +17,12 @@ pipelines:
   deploy: |-
     build_images --all
     if [ "${STORAGE_BACKEND}" == "postgresql" ]; then
-      create_deployments postgresql
+      create_deployments ark-storage-dev
     fi
     create_deployments ark-controller
   dev: |-
     if [ "${STORAGE_BACKEND}" == "postgresql" ]; then
-      create_deployments postgresql
+      create_deployments ark-storage-dev
     fi
     create_deployments ark-controller
     start_dev --all
@@ -77,22 +77,23 @@ profiles:
           STORAGE_BACKEND: "postgresql"
     patches:
       - op: add
-        path: deployments.postgresql
+        path: deployments.ark-storage-dev
         value:
           namespace: ark-system
-          kubectl:
-            manifests:
-              - ./manifests/postgresql-dev.yaml
+          helm:
+            chart:
+              path: ../charts/ark-storage-dev
+            releaseName: ark-storage-dev
       - op: add
         path: deployments.ark-controller.helm.values.storage
         value:
           backend: postgresql
           postgresql:
-            host: postgresql
+            host: ark-storage-dev
             port: 5432
             database: ark
             user: postgres
-            passwordSecretName: postgresql-password
+            passwordSecretName: ark-storage-dev-password
       - op: replace
         path: dev.ark-controller.command
         value:
@@ -103,7 +104,7 @@ profiles:
             while [ ! -f internal/apiserver/crds/ark.mckinsey.com_agents.yaml ]; do echo 'Waiting for CRD files...'; sleep 2; done
             GOTOOLCHAIN=auto \
             ARK_STORAGE_BACKEND=postgresql \
-            ARK_POSTGRES_HOST=postgresql.ark-system.svc.cluster.local \
+            ARK_POSTGRES_HOST=ark-storage-dev.ark-system.svc.cluster.local \
             ARK_POSTGRES_PORT=5432 \
             ARK_POSTGRES_DATABASE=ark \
             ARK_POSTGRES_USER=postgres \
