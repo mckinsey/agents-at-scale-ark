@@ -2,56 +2,48 @@
 
 Multi-demo landing page that discovers and lists Ark demos running in the cluster by checking namespaces with label `ark.mckinsey.com/demo=true`.
 
-## Quick Start
+## Prerequisites
+
+- [Minikube](https://minikube.sigs.k8s.io/docs/start/)
+- [Docker](https://docs.docker.com/get-docker/)
+- [Helm](https://helm.sh/docs/intro/install/)
+- [kubectl](https://kubernetes.io/docs/tasks/tools/)
+- Node.js 20+
+
+## Quick Start (Local Development)
+
+From scratch, one command builds images, deploys everything to Minikube, and starts the landing page:
 
 ```bash
 cd services/ark-landing-page
-helm install ark-landing-page ./chart -n ark-system
-kubectl port-forward -n ark-system svc/ark-landing-page 3002:3000
-# Access: http://localhost:3002
+make demo-page
 ```
 
-## Creating a Demo
+This will:
+1. Build `ark-dashboard` and `ark-api` Docker images and load them into Minikube
+2. Create the `kyc-demo` namespace with the demo label
+3. Deploy `ark-dashboard` (with HTTPRoute) and `ark-api` (with read-only mode) via Helm
+4. Start port-forwards for dashboard (`:3003`) and API (`:8000`)
+5. Run the landing page dev server on `http://localhost:3002`
 
-Install a complete demo bundle:
+### Step by Step (if you prefer)
 
 ```bash
-cd agents-at-scale-marketplace/demos/kyc-demo-bundle
-helm install kyc-demo ./chart -n kyc-demo --create-namespace
+make build-images       # Build Docker images and load into Minikube
+make setup-demo         # Create namespace, deploy dashboard + API
+make port-forwards      # Start port-forwards
+make dev                # Run landing page dev server on http://localhost:3002
 ```
 
-Or create just the namespace (requires manual dashboard/API deployment):
+### Access
 
-```bash
-kubectl apply -f examples/demo-namespaces/kyc-demo.yaml
-```
-
-### Access Demo
-
-```bash
-# Port-forward all services
-kubectl port-forward -n ark-system svc/ark-landing-page 3002:3000
-kubectl port-forward -n kyc-demo svc/ark-dashboard 3003:3000
-kubectl port-forward -n kyc-demo svc/ark-api 8000:80
-
-# Landing page: http://localhost:3002
-# Dashboard: http://localhost:3003?namespace=kyc-demo
-```
+- Landing page: http://localhost:3002
+- Dashboard (direct): http://localhost:3003?namespace=kyc-demo
+- API (direct): http://localhost:8000
 
 ## Read-Only Demo Mode
 
-Deploy ark-api with read-only mode to prevent modifications:
-
-```bash
-helm install ark-api ./services/ark-api/chart -n kyc-demo \
-  -f ./services/ark-landing-page/kyc-demo-values.yaml
-```
-
-Allows: viewing, chat, workflow runs. Blocks: create/edit/delete (returns 403).
-
-## Demo Requirements
-
-Namespace must have label `ark.mckinsey.com/demo: "true"` and an HTTPRoute (created by dashboard chart with `httpRoute.enabled=true`).
+The `kyc-demo-values.yaml` enables `READ_ONLY_MODE=true` on the API. This allows viewing, chat, and workflow runs, but blocks create/edit/delete operations (returns 403). The dashboard also disables all mutation buttons when read-only mode is active.
 
 ## Architecture
 
@@ -88,22 +80,7 @@ Landing page assumes: `namespace name = hostname`
 - HTTPRoute hostname: `kyc-demo.127.0.0.1.nip.io`
 - Landing page URL: `http://kyc-demo.127.0.0.1.nip.io`
 
-Dashboard Helm chart follows this convention automatically when you deploy.
-
-## Development
-
-```bash
-make demo-page  # Installs deps, deploys demo, starts port-forwards and dev server
-```
-
-Or manually:
-
-```bash
-make install         # Install dependencies
-make setup-demo      # Deploy demo
-make port-forwards   # Start port-forwards
-make dev            # Run dev server on http://localhost:3002
-```
+Dashboard Helm chart follows this convention automatically when you deploy with `httpRoute.enabled=true`.
 
 ## Production
 

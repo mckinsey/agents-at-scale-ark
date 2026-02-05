@@ -1,14 +1,15 @@
-.PHONY: help dev build install deploy check-demo setup-demo port-forwards demo-page stop-port-forwards
+.PHONY: help dev build install deploy check-demo setup-demo port-forwards demo-page stop-port-forwards build-images
 
 help:
 	@echo "Available targets:"
-	@echo "  make demo-page          - Setup demo + port-forwards + run dev"
+	@echo "  make demo-page          - Build images, setup demo, port-forwards, run dev"
 	@echo "  make dev                - Run in development mode"
 	@echo "  make build              - Build Docker image"
 	@echo "  make install            - Install dependencies"
 	@echo "  make deploy             - Deploy to ark-system namespace"
 	@echo ""
 	@echo "Demo setup:"
+	@echo "  make build-images       - Build and load Docker images into Minikube"
 	@echo "  make check-demo         - Check if demo is deployed"
 	@echo "  make setup-demo         - Deploy kyc-demo namespace with dashboard + API"
 	@echo "  make port-forwards      - Start port-forwards for demo"
@@ -26,6 +27,16 @@ build:
 deploy:
 	helm install ark-landing-page ./chart -n ark-system --create-namespace
 
+build-images:
+	@echo "Building ark-dashboard..."
+	docker build -t ark-dashboard:local ../ark-dashboard
+	@echo "Building ark-api..."
+	docker build -t ark-api:local ../ark-api
+	@echo "Loading images into Minikube..."
+	minikube image load ark-dashboard:local
+	minikube image load ark-api:local
+	@echo "Images ready."
+
 check-demo:
 	@kubectl get namespace kyc-demo >/dev/null 2>&1 || \
 		(echo "Namespace kyc-demo not found" && exit 1)
@@ -40,11 +51,18 @@ setup-demo:
 		kubectl apply -f ../../examples/demo-namespaces/kyc-demo.yaml
 	@helm upgrade --install ark-dashboard ../ark-dashboard/chart \
 		-n kyc-demo \
+		--set app.image.repository=ark-dashboard \
+		--set app.image.tag=local \
+		--set app.image.pullPolicy=Never \
 		--set httpRoute.enabled=true \
 		--set "httpRoute.hostnames={kyc-demo.127.0.0.1.nip.io}" \
 		--wait --timeout=5m
 	@helm upgrade --install ark-api ../ark-api/chart \
 		-n kyc-demo \
+		--set app.image.repository=ark-api \
+		--set app.image.tag=local \
+		--set app.image.pullPolicy=Never \
+		-f ./kyc-demo-values.yaml \
 		--wait --timeout=5m
 
 port-forwards:
@@ -59,8 +77,8 @@ port-forwards:
 stop-port-forwards:
 	@pkill -f "port-forward.*kyc-demo" 2>/dev/null || true
 
-demo-page: install
-	@$(MAKE) check-demo 2>/dev/null || $(MAKE) setup-demo
+demo-page: install build-images
+	@$(MAKE) setup-demo
 	@$(MAKE) port-forwards
 	@echo ""
 	@echo "Landing page: http://localhost:3002"
