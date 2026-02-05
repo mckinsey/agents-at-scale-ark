@@ -245,22 +245,22 @@ export default function ExportPage() {
 
     return (
       <div key={section.type} className="space-y-4">
-        <div className="flex items-center justify-between mb-4">
-          <span className="text-muted-foreground text-sm">
-            {selectedItems.length} of {items.length} selected
-          </span>
-          {items.length > 0 && (
+        {items.length > 0 && (
+          <>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Select all</span>
               <Checkbox
                 checked={allSelected}
                 onCheckedChange={checked =>
                   handleSelectAll(section.type, !!checked)
                 }
               />
+              <span className="text-sm">
+                Select all ({selectedItems.length} of {items.length})
+              </span>
             </div>
-          )}
-        </div>
+            <Separator className="my-4" />
+          </>
+        )}
         <div>
           {items.length === 0 ? (
             <p className="text-muted-foreground text-sm">
