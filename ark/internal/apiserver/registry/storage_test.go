@@ -312,8 +312,11 @@ func TestGenericStorage_ConvertToTable_Single(t *testing.T) {
 		t.Fatalf("ConvertToTable() error = %v", err)
 	}
 
-	if len(table.ColumnDefinitions) != 2 {
-		t.Errorf("expected 2 columns, got %d", len(table.ColumnDefinitions))
+	if len(table.ColumnDefinitions) < 1 {
+		t.Errorf("expected at least 1 column, got %d", len(table.ColumnDefinitions))
+	}
+	if table.ColumnDefinitions[0].Name != "Name" {
+		t.Errorf("expected first column to be 'Name', got %q", table.ColumnDefinitions[0].Name)
 	}
 	if len(table.Rows) != 1 {
 		t.Errorf("expected 1 row, got %d", len(table.Rows))

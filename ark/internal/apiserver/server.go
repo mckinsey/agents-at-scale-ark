@@ -166,6 +166,7 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(arkv1alpha1.GroupVersion.Group, Scheme, ParameterCodec, Codecs)
 
 	storageValidator := validation.NewStorageValidator(s.backend, nil)
+	printerColumns := GetPrinterColumnRegistry()
 
 	v1alpha1Storage := make(map[string]rest.Storage)
 	for _, res := range V1Alpha1Resources {
@@ -176,7 +177,7 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 			NewFunc:      res.NewFunc,
 			NewListFunc:  res.NewListFunc,
 		}
-		storage := s.buildStorage(cfg, converter, storageValidator)
+		storage := s.buildStorage(cfg, converter, storageValidator, printerColumns)
 		v1alpha1Storage[res.Resource] = storage
 		v1alpha1Storage[res.Resource+"/status"] = registry.NewStatusStorage(s.backend, converter, cfg)
 	}
@@ -191,7 +192,7 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 			NewFunc:      res.NewFunc,
 			NewListFunc:  res.NewListFunc,
 		}
-		storage := s.buildStorage(cfg, converter, storageValidator)
+		storage := s.buildStorage(cfg, converter, storageValidator, printerColumns)
 		v1prealpha1Storage[res.Resource] = storage
 		v1prealpha1Storage[res.Resource+"/status"] = registry.NewStatusStorage(s.backend, converter, cfg)
 	}
@@ -204,8 +205,8 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 	return nil
 }
 
-func (s *Server) buildStorage(cfg registry.ResourceConfig, converter storage.TypeConverter, storageValidator *validation.StorageValidator) rest.Storage {
-	genericStorage := registry.NewGenericStorage(s.backend, converter, cfg)
+func (s *Server) buildStorage(cfg registry.ResourceConfig, converter storage.TypeConverter, storageValidator *validation.StorageValidator, printerColumns *registry.PrinterColumnRegistry) rest.Storage {
+	genericStorage := registry.NewGenericStorage(s.backend, converter, cfg, printerColumns)
 
 	var storage rest.Storage = genericStorage
 

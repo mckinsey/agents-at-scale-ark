@@ -38,9 +38,10 @@ type ResourceConfig struct {
 }
 
 type GenericStorage struct {
-	backend   storage.Backend
-	converter storage.TypeConverter
-	config    ResourceConfig
+	backend        storage.Backend
+	converter      storage.TypeConverter
+	config         ResourceConfig
+	printerColumns *PrinterColumnRegistry
 }
 
 var (
@@ -54,11 +55,12 @@ var (
 	_ rest.SingularNameProvider = &GenericStorage{}
 )
 
-func NewGenericStorage(backend storage.Backend, converter storage.TypeConverter, config ResourceConfig) *GenericStorage {
+func NewGenericStorage(backend storage.Backend, converter storage.TypeConverter, config ResourceConfig, printerColumns *PrinterColumnRegistry) *GenericStorage {
 	return &GenericStorage{
-		backend:   backend,
-		converter: converter,
-		config:    config,
+		backend:        backend,
+		converter:      converter,
+		config:         config,
+		printerColumns: printerColumns,
 	}
 }
 
@@ -262,32 +264,59 @@ func (s *GenericStorage) Watch(ctx context.Context, options *metainternalversion
 }
 
 func (s *GenericStorage) ConvertToTable(ctx context.Context, obj, tableOptions runtime.Object) (*metav1.Table, error) {
+	columns := s.getColumnDefinitions()
 	table := &metav1.Table{
-		ColumnDefinitions: []metav1.TableColumnDefinition{
-			{Name: "Name", Type: "string", Format: "name"},
-			{Name: "Age", Type: "string", Format: "date"},
-		},
+		ColumnDefinitions: columns,
 	}
 
 	if items, err := meta.ExtractList(obj); err == nil {
 		for _, item := range items {
-			table.Rows = append(table.Rows, objectToTableRow(item))
+			table.Rows = append(table.Rows, s.objectToTableRow(item))
 		}
 		return table, nil
 	}
 
-	table.Rows = append(table.Rows, objectToTableRow(obj))
+	table.Rows = append(table.Rows, s.objectToTableRow(obj))
 	return table, nil
 }
 
-func objectToTableRow(obj runtime.Object) metav1.TableRow {
+func (s *GenericStorage) getColumnDefinitions() []metav1.TableColumnDefinition {
+	defs := []metav1.TableColumnDefinition{
+		{Name: "Name", Type: "string", Format: "name"},
+	}
+
+	if s.printerColumns != nil {
+		for _, col := range s.printerColumns.GetColumns(s.config.Kind) {
+			format := ""
+			if col.Type == "date" {
+				format = "date"
+			}
+			defs = append(defs, metav1.TableColumnDefinition{
+				Name:        col.Name,
+				Type:        col.Type,
+				Format:      format,
+				Description: col.Description,
+				Priority:    col.Priority,
+			})
+		}
+	}
+
+	return defs
+}
+
+func (s *GenericStorage) objectToTableRow(obj runtime.Object) metav1.TableRow {
 	accessor, _ := meta.Accessor(obj)
+	cells := []interface{}{accessor.GetName()}
+
+	if s.printerColumns != nil {
+		for _, col := range s.printerColumns.GetColumns(s.config.Kind) {
+			cells = append(cells, s.printerColumns.EvaluateCell(col, obj))
+		}
+	}
+
 	return metav1.TableRow{
 		Object: runtime.RawExtension{Object: obj},
-		Cells: []interface{}{
-			accessor.GetName(),
-			accessor.GetCreationTimestamp().Time,
-		},
+		Cells:  cells,
 	}
 }
 

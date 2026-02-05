@@ -176,7 +176,7 @@ func newTestStorage() (*GenericStorage, *mockBackend) {
 		NewFunc:      func() runtime.Object { return &arkv1alpha1.Agent{} },
 		NewListFunc:  func() runtime.Object { return &arkv1alpha1.AgentList{} },
 	}
-	return NewGenericStorage(backend, &mockConverter{}, config), backend
+	return NewGenericStorage(backend, &mockConverter{}, config, nil), backend
 }
 
 func newTestStatusStorage() (*StatusStorage, *mockBackend) {
