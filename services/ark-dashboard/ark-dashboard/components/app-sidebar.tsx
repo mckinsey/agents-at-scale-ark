@@ -6,6 +6,10 @@ import {
   AlertCircle,
   Bot,
   Check,
+  ChevronDown,
+  ChevronUp,
+  ChevronsLeft,
+  ChevronsRight,
   ChevronsUpDown,
   ChevronsUpDownIcon,
   File,
@@ -55,6 +59,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { signout } from '@/lib/auth/signout';
@@ -77,6 +82,7 @@ export function AppSidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useUser();
+  const { state: sidebarState, setOpen: setSidebarOpen } = useSidebar();
   const isExperimentalDarkModeEnabled = useAtomValue(
     isExperimentalDarkModeEnabledAtom,
   );
@@ -148,6 +154,13 @@ export function AppSidebar() {
     setMonitoringOpen(isMonitoringSection);
   }, [pathname]);
 
+  useEffect(() => {
+    if (sidebarState === 'collapsed') {
+      setAgentBuilderOpen(false);
+      setMonitoringOpen(false);
+    }
+  }, [sidebarState]);
+
   const handleCreateNamespace = (name: string) => {
     createNamespace(name);
   };
@@ -178,21 +191,29 @@ export function AppSidebar() {
 
   return (
     <>
-      <Sidebar className="p-2">
+      <Sidebar collapsible="icon" className="p-2">
         <SidebarHeader>
-          <div className="flex items-center gap-2 mb-8">
-            <Image
-              src={
-                isExperimentalDarkModeEnabled
-                  ? qbLogoDark
-                  : qbLogoLight
-              }
-              alt="ARK"
-              width={32}
-              height={32}
-            />
-            <span className="text-sidebar-accent-foreground">ARK</span>
-          </div>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton size="lg" className="pointer-events-none mb-4 !p-0">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
+                  <Image
+                    src={
+                      isExperimentalDarkModeEnabled
+                        ? qbLogoDark
+                        : qbLogoLight
+                    }
+                    alt="ARK"
+                    width={32}
+                    height={32}
+                  />
+                </div>
+                <div className="flex flex-col gap-0.5 leading-none">
+                  <span className="font-medium text-sidebar-accent-foreground">ARK</span>
+                </div>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
           <SidebarMenu
           >
             <SidebarMenuItem>
@@ -271,7 +292,7 @@ export function AppSidebar() {
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>
-        <SidebarMenu>
+        <SidebarMenu className='ml-2'>
           <SidebarContent>
             <SidebarMenuItem>
               <SidebarMenuButton
@@ -285,17 +306,31 @@ export function AppSidebar() {
               open={agentBuilderOpen}
               onOpenChange={setAgentBuilderOpen}
               className="group/collapsible">
-              <SidebarGroupLabel
-                asChild
-                className="group/label text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-sm">
-                <CollapsibleTrigger
-                  open={agentBuilderOpen}
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
                   isActive={isAnySectionActive(AGENT_BUILDER_SECTIONS)}
-                  className="flex w-full items-center gap-2">
-                  <Bot />
-                  Agent Builder
-                </CollapsibleTrigger>
-              </SidebarGroupLabel>
+                  tooltip="Agent Builder"
+                  className="group/button">
+                  <CollapsibleTrigger
+                    className="flex w-full items-center gap-2"
+                    onClick={(e) => {
+                      if (sidebarState === 'collapsed') {
+                        e.preventDefault();
+                        setSidebarOpen(true);
+                        setTimeout(() => setAgentBuilderOpen(true), 100);
+                      }
+                    }}>
+                    <Bot />
+                    <span>Agent Builder</span>
+                    {agentBuilderOpen ? (
+                      <ChevronUp className="ml-auto h-4 w-4 transition-opacity" />
+                    ) : (
+                      <ChevronDown className="ml-auto h-4 w-4 opacity-0 transition-opacity group-hover/button:opacity-100" />
+                    )}
+                  </CollapsibleTrigger>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
               <CollapsibleContent>
                 {AGENT_BUILDER_SECTIONS.map(item => {
                   const isPlaceholder = isPlaceholderSection(item.key);
@@ -345,17 +380,31 @@ export function AppSidebar() {
               open={monitoringOpen}
               onOpenChange={setMonitoringOpen}
               className="group/collapsible">
-              <SidebarGroupLabel
-                asChild
-                className="group/label text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-sm">
-                <CollapsibleTrigger
-                  open={monitoringOpen}
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
                   isActive={isAnySectionActive(MONITORING_SECTIONS)}
-                  className="flex w-full items-center gap-2">
-                  <Activity />
-                  Monitoring
-                </CollapsibleTrigger>
-              </SidebarGroupLabel>
+                  tooltip="Monitoring"
+                  className="group/button">
+                  <CollapsibleTrigger
+                    className="flex w-full items-center gap-2"
+                    onClick={(e) => {
+                      if (sidebarState === 'collapsed') {
+                        e.preventDefault();
+                        setSidebarOpen(true);
+                        setTimeout(() => setMonitoringOpen(true), 100);
+                      }
+                    }}>
+                    <Activity />
+                    <span>Monitoring</span>
+                    {monitoringOpen ? (
+                      <ChevronUp className="ml-auto h-4 w-4 transition-opacity" />
+                    ) : (
+                      <ChevronDown className="ml-auto h-4 w-4 opacity-0 transition-opacity group-hover/button:opacity-100" />
+                    )}
+                  </CollapsibleTrigger>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
               <CollapsibleContent>
                 {enabledMonitoringSections.map(item => {
                   const isPlaceholder = isPlaceholderSection(item.key);
@@ -417,7 +466,7 @@ export function AppSidebar() {
         </SidebarMenu>
         <SidebarContent></SidebarContent>
         <Separator className="!w-10 my-4" />
-        <SidebarMenu>
+        <SidebarMenu className='ml-2'>
           <SidebarMenuItem>
             <SidebarMenuButton
               onClick={() => {
@@ -445,6 +494,14 @@ export function AppSidebar() {
               }}>
               {isExperimentalDarkModeEnabled ? <Moon className="mr-2 h-4 w-4" /> : <Sun className="mr-2 h-4 w-4" />}
               <span>{isExperimentalDarkModeEnabled ? 'Dark Mode' : 'Light Mode'}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              onClick={() => {
+                setSidebarOpen(sidebarState === 'expanded' ? false : true);
+              }}>
+              {sidebarState === 'expanded' ? <ChevronsLeft className="mr-2 h-4 w-4" /> : <ChevronsRight className="mr-2 h-4 w-4" />}
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
