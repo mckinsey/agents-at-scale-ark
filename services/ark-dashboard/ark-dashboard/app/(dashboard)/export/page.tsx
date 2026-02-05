@@ -242,6 +242,7 @@ export default function ExportPage() {
     const selectedItems = items.filter(item => item.selected);
     const allSelected =
       items.length > 0 && selectedItems.length === items.length;
+    const Icon = section.icon;
 
     return (
       <div key={section.type} className="space-y-4">
@@ -267,11 +268,11 @@ export default function ExportPage() {
               No {section.title.toLowerCase()} found
             </p>
           ) : (
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="flex flex-col gap-2">
               {items.map(item => (
                 <div
                   key={item.id}
-                  className="hover:bg-muted/50 flex cursor-pointer items-center gap-2 rounded p-2"
+                  className="hover:bg-muted/50 flex cursor-pointer items-center gap-3 rounded-lg border p-3"
                   onClick={() =>
                     handleSelectItem(section.type, item.id, !item.selected)
                   }>
@@ -281,7 +282,8 @@ export default function ExportPage() {
                       handleSelectItem(section.type, item.id, !!checked)
                     }
                   />
-                  <span className="flex-1 truncate text-sm">{item.name}</span>
+                  <Icon className="h-4 w-4 text-muted-foreground" />
+                  <span className="flex-1 text-sm">{item.name}</span>
                 </div>
               ))}
             </div>
