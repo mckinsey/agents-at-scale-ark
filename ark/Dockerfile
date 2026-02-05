@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM golang:1.24-bullseye AS builder
+FROM golang:1.24.13-bullseye AS builder
 ARG TARGETOS
 ARG TARGETARCH
 ARG ENABLE_COVERAGE=false
