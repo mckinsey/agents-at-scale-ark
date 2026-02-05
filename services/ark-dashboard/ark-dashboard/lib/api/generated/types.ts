@@ -835,6 +835,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/file-preview/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Health */
+        get: operations["health_v1_file_preview_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/file-preview/spreadsheet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Spreadsheet */
+        post: operations["preview_spreadsheet_v1_file_preview_spreadsheet_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/mcp-servers": {
         parameters: {
             query?: never;
@@ -3526,6 +3560,15 @@ export interface components {
             /** Filename */
             filename?: string;
         };
+        /** FilePreviewRequest */
+        FilePreviewRequest: {
+            /** Content */
+            content: string;
+            /** Filename */
+            filename: string;
+            /** Mimetype */
+            mimeType?: string | null;
+        };
         /**
          * Function
          * @description The function that the model called.
@@ -4502,6 +4545,17 @@ export interface components {
             /** Tags */
             tags?: string[] | null;
         };
+        /** SpreadsheetData */
+        SpreadsheetData: {
+            /** Metadata */
+            metadata: {
+                [key: string]: unknown;
+            };
+            /** Sheets */
+            sheets: {
+                [key: string]: unknown;
+            }[];
+        };
         /** SystemInfo */
         SystemInfo: {
             /** Kubernetes Version */
@@ -5475,8 +5529,6 @@ export interface operations {
                 limit?: number;
                 /** @description Cursor for pagination */
                 cursor?: number | null;
-                /** @description Filter by session ID */
-                session_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -5663,8 +5715,6 @@ export interface operations {
                 limit?: number;
                 /** @description Cursor for pagination */
                 cursor?: number | null;
-                /** @description Filter by session ID */
-                session_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -6380,6 +6430,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EventResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    health_v1_file_preview_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    preview_spreadsheet_v1_file_preview_spreadsheet_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FilePreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpreadsheetData"];
                 };
             };
             /** @description Validation Error */
