@@ -648,5 +648,4 @@ var _ = Describe("Model Defaulter", func() {
 			Expect(model.Spec.Type).To(Equal("custom-type"))
 		})
 	})
-
 })
