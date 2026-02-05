@@ -1137,8 +1137,8 @@ export function SessionsSection() {
 
   return (
     <ErrorBoundary>
-      <div className="flex flex-1 flex-col gap-3 p-2 sm:p-4">
-        <div className="bg-muted/20 flex flex-col gap-1.5 rounded-md px-2 py-2 sm:px-3">
+      <div className="flex flex-1 flex-col gap-3 sm:p-4">
+        <div className="bg-muted/20 flex flex-col gap-1.5 rounded-md py-3">
           <div className="flex flex-col gap-2 md:flex-row md:items-center">
             <div className="relative flex-1 min-w-0">
               <Search className="text-muted-foreground absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2" />
@@ -1259,7 +1259,7 @@ export function SessionsSection() {
               </Button>
             </div>
           </div>
-          <div className="flex items-center justify-between text-xs">
+          <div className="flex items-center justify-between text-xs mt-3">
             <span className="text-muted-foreground font-medium">
               {filteredAndSortedSessions.length} session
               {filteredAndSortedSessions.length !== 1 ? 's' : ''}
