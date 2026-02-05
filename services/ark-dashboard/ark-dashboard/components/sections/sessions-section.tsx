@@ -298,23 +298,23 @@ function WorkflowStepDetail({
     shouldFetchLogs,
   ]);
   return (
-    <div className="bg-muted/30 mt-2 space-y-3 rounded-md border p-3 text-sm">
+    <div className="bg-muted/30 mt-2 space-y-3 rounded-md border p-2 sm:p-3 text-sm">
       {detail.image && (
         <div className="flex items-start gap-2">
-          <Container className="text-muted-foreground mt-0.5 h-4 w-4" />
-          <div>
+          <Container className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+          <div className="min-w-0 flex-1">
             <span className="text-muted-foreground text-xs">Image</span>
-            <p className="font-mono text-xs">{detail.image}</p>
+            <p className="font-mono text-xs break-all">{detail.image}</p>
           </div>
         </div>
       )}
 
       {detail.command && (
         <div className="flex items-start gap-2">
-          <Terminal className="text-muted-foreground mt-0.5 h-4 w-4" />
-          <div>
+          <Terminal className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+          <div className="min-w-0 flex-1">
             <span className="text-muted-foreground text-xs">Command</span>
-            <p className="font-mono text-xs">
+            <p className="font-mono text-xs break-all">
               {detail.command.join(' ')} {detail.args?.join(' ')}
             </p>
           </div>
@@ -323,14 +323,14 @@ function WorkflowStepDetail({
 
       {detail.inputs && Object.keys(detail.inputs).length > 0 && (
         <div className="flex items-start gap-2">
-          <FileText className="text-muted-foreground mt-0.5 h-4 w-4" />
-          <div className="flex-1">
+          <FileText className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+          <div className="flex-1 min-w-0">
             <span className="text-muted-foreground text-xs">Inputs</span>
             <div className="bg-background mt-1 rounded border p-2">
               {Object.entries(detail.inputs).map(([key, value]) => (
-                <div key={key} className="flex gap-2 font-mono text-xs">
-                  <span className="text-muted-foreground">{key}:</span>
-                  <span>{value}</span>
+                <div key={key} className="flex flex-col sm:flex-row gap-1 sm:gap-2 font-mono text-xs break-all">
+                  <span className="text-muted-foreground shrink-0">{key}:</span>
+                  <span className="break-all">{value}</span>
                 </div>
               ))}
             </div>
@@ -340,14 +340,14 @@ function WorkflowStepDetail({
 
       {detail.outputs && Object.keys(detail.outputs).length > 0 && (
         <div className="flex items-start gap-2">
-          <Zap className="text-muted-foreground mt-0.5 h-4 w-4" />
-          <div className="flex-1">
+          <Zap className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+          <div className="flex-1 min-w-0">
             <span className="text-muted-foreground text-xs">Outputs</span>
             <div className="bg-background mt-1 rounded border p-2">
               {Object.entries(detail.outputs).map(([key, value]) => (
-                <div key={key} className="flex gap-2 font-mono text-xs">
-                  <span className="text-muted-foreground">{key}:</span>
-                  <span>{value}</span>
+                <div key={key} className="flex flex-col sm:flex-row gap-1 sm:gap-2 font-mono text-xs break-all">
+                  <span className="text-muted-foreground shrink-0">{key}:</span>
+                  <span className="break-all">{value}</span>
                 </div>
               ))}
             </div>
@@ -356,11 +356,11 @@ function WorkflowStepDetail({
       )}
       {message && (
         <div className="flex items-start gap-2">
-          <AlertCircle className="text-muted-foreground mt-0.5 h-4 w-4" />
-          <div className="flex-1">
+          <AlertCircle className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+          <div className="flex-1 min-w-0">
             <span className="text-muted-foreground text-xs">Message</span>
             <div className="bg-background mt-1 rounded border p-2">
-              <div className="flex gap-2 font-mono text-xs">
+              <div className="font-mono text-xs break-all">
                 <span>{message}</span>
               </div>
             </div>
@@ -370,10 +370,10 @@ function WorkflowStepDetail({
 
       {shouldFetchLogs && (
         <div className="flex items-start gap-2">
-          <Terminal className="text-muted-foreground mt-0.5 h-4 w-4" />
-          <div className="flex-1">
+          <Terminal className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+          <div className="flex-1 min-w-0">
             <span className="text-muted-foreground text-xs">Logs</span>
-            <div className="mt-1 max-h-64 overflow-auto rounded border bg-black p-3">
+            <div className="mt-1 max-h-64 overflow-auto rounded border bg-black p-2 sm:p-3">
               {loadingLogs && (
                 <div className="flex items-center gap-2">
                   <RefreshCw className="h-3 w-3 animate-spin text-gray-400" />
@@ -392,15 +392,15 @@ function WorkflowStepDetail({
                       href={`http://argo.127.0.0.1.nip.io:8080/workflows/${detail.namespace}/${detail.workflowName}?tab=workflow&nodeId=${detail.nodeId}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-blue-400 underline hover:text-blue-300">
+                      className="inline-flex items-center gap-1 text-xs text-blue-400 underline hover:text-blue-300 break-all">
                       View logs in Argo UI
-                      <ExternalLink className="h-3 w-3" />
+                      <ExternalLink className="h-3 w-3 shrink-0" />
                     </a>
                   )}
                 </div>
               )}
               {logs && !loadingLogs && !logsError && (
-                <pre className="font-mono text-xs whitespace-pre-wrap text-gray-100">
+                <pre className="font-mono text-xs whitespace-pre-wrap break-all text-gray-100">
                   {logs}
                 </pre>
               )}
@@ -415,7 +415,7 @@ function WorkflowStepDetail({
       )}
 
       {detail.resources && (
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
           {detail.resources.cpu && (
             <div className="flex items-center gap-1">
               <Cpu className="text-muted-foreground h-3 w-3" />
@@ -438,19 +438,19 @@ function WorkflowStepDetail({
 
 function TeamStepDetail({ detail }: { detail: TeamStepDetail }) {
   return (
-    <div className="bg-muted/30 mt-2 space-y-3 rounded-md border p-3 text-sm">
+    <div className="bg-muted/30 mt-2 space-y-3 rounded-md border p-2 sm:p-3 text-sm">
       {detail.model && (
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
           <div className="flex items-center gap-1">
             <Bot className="text-muted-foreground h-3 w-3" />
             <span className="text-muted-foreground text-xs">Model:</span>
-            <span className="text-xs font-medium">{detail.model}</span>
+            <span className="text-xs font-medium break-all">{detail.model}</span>
           </div>
           {detail.tokensUsed && (
             <div className="flex items-center gap-1">
               <Zap className="text-muted-foreground h-3 w-3" />
               <span className="text-muted-foreground text-xs">Tokens:</span>
-              <span className="text-xs">
+              <span className="text-xs whitespace-nowrap">
                 {detail.tokensUsed.input.toLocaleString()} in /{' '}
                 {detail.tokensUsed.output.toLocaleString()} out
               </span>
@@ -461,11 +461,11 @@ function TeamStepDetail({ detail }: { detail: TeamStepDetail }) {
 
       {detail.input && (
         <div className="flex items-start gap-2">
-          <MessageSquare className="text-muted-foreground mt-0.5 h-4 w-4" />
-          <div className="flex-1">
+          <MessageSquare className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+          <div className="flex-1 min-w-0">
             <span className="text-muted-foreground text-xs">Input</span>
             <div className="bg-background mt-1 rounded border p-2">
-              <p className="text-xs whitespace-pre-wrap">{detail.input}</p>
+              <p className="text-xs whitespace-pre-wrap break-all">{detail.input}</p>
             </div>
           </div>
         </div>
@@ -473,11 +473,11 @@ function TeamStepDetail({ detail }: { detail: TeamStepDetail }) {
 
       {detail.thinking && (
         <div className="flex items-start gap-2">
-          <Bot className="text-muted-foreground mt-0.5 h-4 w-4" />
-          <div className="flex-1">
+          <Bot className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+          <div className="flex-1 min-w-0">
             <span className="text-muted-foreground text-xs">Thinking</span>
             <div className="bg-background mt-1 rounded border border-blue-200 p-2 dark:border-blue-800">
-              <p className="text-xs text-blue-600 italic dark:text-blue-400">
+              <p className="text-xs text-blue-600 italic dark:text-blue-400 whitespace-pre-wrap break-all">
                 {detail.thinking}
               </p>
             </div>
@@ -487,11 +487,11 @@ function TeamStepDetail({ detail }: { detail: TeamStepDetail }) {
 
       {detail.toolInput && (
         <div className="flex items-start gap-2">
-          <Workflow className="text-muted-foreground mt-0.5 h-4 w-4" />
-          <div className="flex-1">
+          <Workflow className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+          <div className="flex-1 min-w-0">
             <span className="text-muted-foreground text-xs">Tool Input</span>
-            <div className="bg-background mt-1 rounded border p-2">
-              <pre className="overflow-auto text-xs">
+            <div className="bg-background mt-1 rounded border p-2 overflow-auto">
+              <pre className="text-xs break-all whitespace-pre-wrap">
                 {JSON.stringify(detail.toolInput, null, 2)}
               </pre>
             </div>
@@ -501,11 +501,11 @@ function TeamStepDetail({ detail }: { detail: TeamStepDetail }) {
 
       {detail.toolOutput !== undefined && (
         <div className="flex items-start gap-2">
-          <Zap className="text-muted-foreground mt-0.5 h-4 w-4" />
-          <div className="flex-1">
+          <Zap className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+          <div className="flex-1 min-w-0">
             <span className="text-muted-foreground text-xs">Tool Output</span>
-            <div className="bg-background mt-1 rounded border p-2">
-              <pre className="overflow-auto text-xs">
+            <div className="bg-background mt-1 rounded border p-2 overflow-auto">
+              <pre className="text-xs break-all whitespace-pre-wrap">
                 {JSON.stringify(detail.toolOutput, null, 2)}
               </pre>
             </div>
@@ -515,11 +515,11 @@ function TeamStepDetail({ detail }: { detail: TeamStepDetail }) {
 
       {detail.output && (
         <div className="flex items-start gap-2">
-          <MessageSquare className="text-muted-foreground mt-0.5 h-4 w-4" />
-          <div className="flex-1">
+          <MessageSquare className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+          <div className="flex-1 min-w-0">
             <span className="text-muted-foreground text-xs">Output</span>
             <div className="bg-background mt-1 rounded border border-green-200 p-2 dark:border-green-800">
-              <p className="text-xs whitespace-pre-wrap">{detail.output}</p>
+              <p className="text-xs whitespace-pre-wrap break-all">{detail.output}</p>
             </div>
           </div>
         </div>
@@ -549,50 +549,50 @@ function WorkflowStepNode({
   };
 
   return (
-    <div className={cn('relative flex', depth > 0 && 'ml-5')}>
+    <div className={cn('relative flex', depth > 0 && 'ml-3 sm:ml-5')}>
       {depth > 0 && (
         <>
-          <div className="absolute top-0 -left-5 h-full w-5">
+          <div className="absolute top-0 -left-3 sm:-left-5 h-full w-3 sm:w-5">
             <div
               className="bg-border absolute top-0 left-0 w-px"
               style={{ height: isLast ? '16px' : '100%' }}
             />
           </div>
-          <div className="bg-border absolute top-4 -left-5 h-px w-3" />
+          <div className="bg-border absolute top-4 -left-3 sm:-left-5 h-px w-2 sm:w-3" />
         </>
       )}
 
       <div className="min-w-0 flex-1 pb-2.5">
         <div
           className={cn(
-            'hover:bg-accent/50 group bg-card relative flex min-w-0 items-center gap-3 rounded-md border border-l-4 px-3 py-2.5 transition-all',
+            'hover:bg-accent/50 group bg-card relative flex min-w-0 flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 rounded-md border border-l-4 px-2 py-2 sm:px-3 sm:py-2.5 transition-all',
             getBorderColor(),
             step.status === 'running' && 'bg-blue-50/30 dark:bg-blue-950/10',
             step.status === 'failed' && 'bg-red-50/30 dark:bg-red-950/10',
           )}>
-          {hasDetail ? (
-            <button
-              onClick={() => setShowDetail(!showDetail)}
-              className="hover:bg-muted -m-1 shrink-0 rounded p-1 transition-colors hover:cursor-pointer"
-              aria-label={showDetail ? 'Hide details' : 'Show details'}>
-              {showDetail ? (
-                <ChevronDown className="text-muted-foreground h-4 w-4" />
-              ) : (
-                <ChevronRight className="text-muted-foreground h-4 w-4" />
-              )}
-            </button>
-          ) : (
-            <div className="w-4 shrink-0" />
-          )}
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3 overflow-hidden">
+            {hasDetail ? (
+              <button
+                onClick={() => setShowDetail(!showDetail)}
+                className="hover:bg-muted -m-1 shrink-0 rounded p-1 transition-colors hover:cursor-pointer"
+                aria-label={showDetail ? 'Hide details' : 'Show details'}>
+                {showDetail ? (
+                  <ChevronDown className="text-muted-foreground h-4 w-4" />
+                ) : (
+                  <ChevronRight className="text-muted-foreground h-4 w-4" />
+                )}
+              </button>
+            ) : (
+              <div className="w-4 shrink-0" />
+            )}
 
-          <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
             <div className="flex shrink-0 items-center gap-2">
               {getStatusIcon(step.status)}
               <div className="text-muted-foreground">
                 {getWorkflowTypeIcon(step.type)}
               </div>
             </div>
-            <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+            <div className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 overflow-hidden">
               <span
                 className="truncate text-sm font-medium"
                 title={step.displayName}>
@@ -608,7 +608,7 @@ function WorkflowStepNode({
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3 self-end sm:self-auto">
             {step.duration && (
               <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium whitespace-nowrap">
                 <Clock className="h-3.5 w-3.5" />
@@ -625,7 +625,7 @@ function WorkflowStepNode({
         </div>
 
         {hasDetail && showDetail && (
-          <div className="mt-3 ml-6">
+          <div className="mt-3 ml-2 sm:ml-6">
             <WorkflowStepDetail detail={step.detail!} message={step.message} />
           </div>
         )}
@@ -668,50 +668,50 @@ function TeamStepNode({
   };
 
   return (
-    <div className={cn('relative flex', depth > 0 && 'ml-5')}>
+    <div className={cn('relative flex', depth > 0 && 'ml-3 sm:ml-5')}>
       {depth > 0 && (
         <>
-          <div className="absolute top-0 -left-5 h-full w-5">
+          <div className="absolute top-0 -left-3 sm:-left-5 h-full w-3 sm:w-5">
             <div
               className="bg-border absolute top-0 left-0 w-px"
               style={{ height: isLast ? '16px' : '100%' }}
             />
           </div>
-          <div className="bg-border absolute top-4 -left-5 h-px w-3" />
+          <div className="bg-border absolute top-4 -left-3 sm:-left-5 h-px w-2 sm:w-3" />
         </>
       )}
 
       <div className="min-w-0 flex-1 pb-2.5">
         <div
           className={cn(
-            'hover:bg-accent/50 group bg-card relative flex min-w-0 items-center gap-3 rounded-md border border-l-4 px-3 py-2.5 transition-all',
+            'hover:bg-accent/50 group bg-card relative flex min-w-0 flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 rounded-md border border-l-4 px-2 py-2 sm:px-3 sm:py-2.5 transition-all',
             getBorderColor(),
             step.status === 'running' && 'bg-blue-50/30 dark:bg-blue-950/10',
             step.status === 'failed' && 'bg-red-50/30 dark:bg-red-950/10',
           )}>
-          {hasDetail ? (
-            <button
-              onClick={() => setShowDetail(!showDetail)}
-              className="hover:bg-muted -m-1 shrink-0 rounded p-1 transition-colors"
-              aria-label={showDetail ? 'Hide details' : 'Show details'}>
-              {showDetail ? (
-                <ChevronDown className="text-muted-foreground h-4 w-4" />
-              ) : (
-                <ChevronRight className="text-muted-foreground h-4 w-4" />
-              )}
-            </button>
-          ) : (
-            <div className="w-4 shrink-0" />
-          )}
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3 overflow-hidden">
+            {hasDetail ? (
+              <button
+                onClick={() => setShowDetail(!showDetail)}
+                className="hover:bg-muted -m-1 shrink-0 rounded p-1 transition-colors"
+                aria-label={showDetail ? 'Hide details' : 'Show details'}>
+                {showDetail ? (
+                  <ChevronDown className="text-muted-foreground h-4 w-4" />
+                ) : (
+                  <ChevronRight className="text-muted-foreground h-4 w-4" />
+                )}
+              </button>
+            ) : (
+              <div className="w-4 shrink-0" />
+            )}
 
-          <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
             <div className="flex shrink-0 items-center gap-2">
               {getStatusIcon(step.status)}
               <div className="text-muted-foreground">
                 {getTeamTypeIcon(step.type)}
               </div>
             </div>
-            <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+            <div className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 overflow-hidden">
               <span
                 className="truncate text-sm font-medium"
                 title={step.displayName}>
@@ -725,7 +725,7 @@ function TeamStepNode({
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-3">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:gap-3 self-end sm:self-auto">
             {step.message && (
               <span
                 className="text-muted-foreground max-w-[200px] truncate text-xs"
@@ -750,7 +750,7 @@ function TeamStepNode({
         </div>
 
         {hasDetail && showDetail && (
-          <div className="mt-3 ml-6">
+          <div className="mt-3 ml-2 sm:ml-6">
             <TeamStepDetail detail={step.detail!} />
           </div>
         )}
@@ -782,13 +782,13 @@ function SessionDetailView({
   return (
     <Card className="min-h-0 min-w-0 flex-1 overflow-auto">
       <CardHeader className="border-b">
-        <div className="mb-3 flex min-w-0 items-start justify-between gap-4">
-          <div className="flex min-w-0 flex-1 items-start gap-3 overflow-hidden">
+        <div className="mb-3 flex min-w-0 flex-col lg:flex-row items-start gap-3 lg:gap-4">
+          <div className="flex min-w-0 flex-1 items-start gap-2 sm:gap-3 overflow-hidden w-full">
             <div className="text-muted-foreground mt-1 shrink-0">
               {getSessionTypeIcon(session.type)}
             </div>
             <div className="min-w-0 flex-1 overflow-hidden">
-              <CardTitle className="truncate text-xl" title={session.name}>
+              <CardTitle className="truncate text-lg sm:text-xl" title={session.name}>
                 {session.name}
               </CardTitle>
               <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -815,8 +815,8 @@ function SessionDetailView({
               </div>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <span className="text-muted-foreground text-sm whitespace-nowrap">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 w-full lg:w-auto">
+            <span className="text-muted-foreground text-xs sm:text-sm whitespace-nowrap">
               {new Date(session.startedAt).toLocaleString()}
             </span>
             {session.type === 'workflow' &&
@@ -830,14 +830,15 @@ function SessionDetailView({
                     title="View in Argo Workflows"
                     className="gap-2">
                     <ExternalLink className="h-4 w-4" />
-                    View in Argo
+                    <span className="hidden sm:inline">View in Argo</span>
+                    <span className="sm:hidden">Argo</span>
                   </a>
                 </Button>
               )}
           </div>
         </div>
       </CardHeader>
-      <CardContent className="min-w-0 pt-6">
+      <CardContent className="min-w-0 pt-4 sm:pt-6 px-3 sm:px-6">
         <div className="min-w-0">
           {session.type === 'workflow'
             ? session.steps.map(step => (
@@ -866,7 +867,7 @@ function SessionListItem({
       onClick={onClick}
       title={session.name}
       className={cn(
-        'hover:bg-accent/50 flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-all hover:cursor-pointer',
+        'hover:bg-accent/50 flex w-full items-start gap-2 sm:gap-3 rounded-lg border p-2 sm:p-3 text-left transition-all hover:cursor-pointer',
         isSelected && 'bg-accent border-primary shadow-sm',
       )}>
       <div className="text-muted-foreground mt-0.5 shrink-0">
@@ -892,11 +893,11 @@ function SessionListItem({
             {session.type}
           </Badge>
         </div>
-        <div className="text-muted-foreground mt-2 flex items-center gap-1.5 text-xs">
-          <Clock className="h-3 w-3" />
-          <span className="font-medium">{session.duration}</span>
+        <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+          <Clock className="h-3 w-3 shrink-0" />
+          <span className="font-medium whitespace-nowrap">{session.duration}</span>
           <span>·</span>
-          <span>{new Date(session.startedAt).toLocaleTimeString()}</span>
+          <span className="whitespace-nowrap">{new Date(session.startedAt).toLocaleTimeString()}</span>
         </div>
       </div>
       <div className="mt-0.5 shrink-0">{getStatusIcon(session.status)}</div>
@@ -1110,10 +1111,10 @@ export function SessionsSection() {
 
   return (
     <ErrorBoundary>
-      <div className="flex flex-1 flex-col gap-3 p-4">
-        <div className="bg-muted/20 flex flex-col gap-1.5 rounded-md px-3 py-2">
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
+      <div className="flex flex-1 flex-col gap-3 p-2 sm:p-4">
+        <div className="bg-muted/20 flex flex-col gap-1.5 rounded-md px-2 py-2 sm:px-3">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center">
+            <div className="relative flex-1 min-w-0">
               <Search className="text-muted-foreground absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2" />
               <Input
                 type="text"
@@ -1123,7 +1124,7 @@ export function SessionsSection() {
                 className="bg-background h-8 border-0 pl-8 text-sm shadow-sm"
               />
             </div>
-            <div className="relative flex-1" ref={templateInputRef}>
+            <div className="relative flex-1 min-w-0" ref={templateInputRef}>
               <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 h-3.5 w-3.5 -translate-y-1/2" />
               <Input
                 type="text"
@@ -1175,11 +1176,11 @@ export function SessionsSection() {
                 </div>
               )}
             </div>
-            <div className="ml-auto flex shrink-0 items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 md:ml-auto md:shrink-0">
               <Select
                 value={statusFilter || 'all'}
                 onValueChange={setStatusFilter}>
-                <SelectTrigger className="h-8 w-40 border-2 text-sm shadow-sm">
+                <SelectTrigger className="h-8 w-full sm:w-36 md:w-40 border-2 text-sm shadow-sm">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1212,7 +1213,7 @@ export function SessionsSection() {
               <Select
                 value={sortOrder}
                 onValueChange={value => setSortOrder(value as SortOrder)}>
-                <SelectTrigger className="h-8 w-40 border-2 text-sm shadow-sm">
+                <SelectTrigger className="h-8 w-full sm:w-36 md:w-40 border-2 text-sm shadow-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1225,10 +1226,10 @@ export function SessionsSection() {
                 size="sm"
                 onClick={clearFilters}
                 title="Clear Filters"
-                className="h-8 border-2 px-2 hover:cursor-pointer"
+                className="h-8 border-2 px-2 hover:cursor-pointer w-full sm:w-auto"
                 disabled={!hasActiveFilters}>
                 <X className="h-3.5 w-3.5" />
-                Clear Filters
+                <span className="sm:inline">Clear Filters</span>
               </Button>
             </div>
           </div>
@@ -1237,11 +1238,6 @@ export function SessionsSection() {
               {filteredAndSortedSessions.length} session
               {filteredAndSortedSessions.length !== 1 ? 's' : ''}
             </span>
-            {error && (
-              <span className="font-medium text-red-500">
-                Error: {error.message}
-              </span>
-            )}
           </div>
         </div>
 
@@ -1251,8 +1247,8 @@ export function SessionsSection() {
             <span className="text-base font-medium">Loading sessions...</span>
           </div>
         ) : filteredAndSortedSessions.length > 0 ? (
-          <div className="flex flex-1 gap-4 overflow-hidden">
-            <div className="flex w-80 flex-col gap-3 overflow-auto pr-2">
+          <div className="flex flex-1 flex-col lg:flex-row gap-3 lg:gap-4 overflow-hidden">
+            <div className="flex flex-col gap-3 overflow-auto pr-2 w-full lg:w-64 xl:w-80 2xl:w-96 lg:min-w-[16rem] lg:max-w-[24rem]">
               {filteredAndSortedSessions.map(session => (
                 <SessionListItem
                   key={session.id}
@@ -1286,7 +1282,7 @@ export function SessionsSection() {
               {hasActiveFilters ? (
                 <>
                   <Search className="h-16 w-16 opacity-20" />
-                  <span className="text-base font-medium">
+                  <span className="text-base font-medium text-center">
                     No sessions found matching your filters
                   </span>
                   <Button variant="outline" onClick={clearFilters}>
@@ -1296,7 +1292,7 @@ export function SessionsSection() {
               ) : (
                 <>
                   <Workflow className="h-16 w-16 opacity-20" />
-                  <span className="text-base font-medium">
+                  <span className="text-base font-medium text-center">
                     No {sourceFilter === 'all' ? '' : sourceFilter} sessions to
                     display
                   </span>
