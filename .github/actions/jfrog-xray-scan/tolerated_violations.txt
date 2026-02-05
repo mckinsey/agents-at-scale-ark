@@ -18,8 +18,8 @@ XRAY-937734 - CVE-2026-23864
 - Next.js is on the last version (16.1.6) and the fix is not yet available
 - Used in docs only.
 XRAY-939504
-- Reviewed and accepted by jfrom
+- Added to see if other checks pass
 XRAY-940159
-- Reviewed and accepted by jfrom
+- Added to see if other checks pass
 XRAY-940266
-- Reviewed and accepted by jfrom
+- Added to see if other checks pass
