@@ -63,8 +63,8 @@ rbac:
 # [CRDs]: To enable the CRDs
 crd:
   # This option determines whether the CRDs are included in the installation.
-  # CRDs are installed regardless of storage backend because kubectl/helm need
-  # them for resource validation. The embedded apiserver handles actual storage.
+  # NOTE: CRDs are automatically disabled when storage.backend is not "etcd"
+  # (e.g., postgresql or sqlite), since the embedded apiserver serves the APIs.
   enable: true
 
   # Enabling this option adds the "helm.sh/resource-policy": keep

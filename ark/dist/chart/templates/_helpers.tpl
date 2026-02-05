@@ -64,12 +64,11 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 
 {{/*
 Determine if CRDs should be installed.
-CRDs are always installed when crd.enable is true, regardless of storage backend.
-This is necessary because helm and kubectl need CRDs for resource validation,
-even when the embedded apiserver handles the actual storage.
+CRDs are only installed when using etcd backend (standard CRD-based storage).
+When using postgresql or sqlite, the embedded apiserver serves the APIs via APIServices.
 */}}
 {{- define "chart.crdEnabled" -}}
-{{- if .Values.crd.enable -}}
+{{- if and .Values.crd.enable (eq .Values.storage.backend "etcd") -}}
 true
 {{- else -}}
 false
