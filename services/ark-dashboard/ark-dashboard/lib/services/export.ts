@@ -1,7 +1,5 @@
-import { saveAs } from 'file-saver';
-import JSZip from 'jszip';
-
 import { apiClient } from '@/lib/api/client';
+import { API_CONFIG } from '@/lib/api/config';
 import type { components } from '@/lib/api/generated/types';
 
 // Resource types from the API
@@ -13,6 +11,8 @@ export type MCPServerListResponse =
   components['schemas']['MCPServerListResponse'];
 export type EvaluatorListResponse =
   components['schemas']['EvaluatorListResponse'];
+export type A2AServerListResponse =
+  components['schemas']['A2AServerListResponse'];
 // Note: WorkflowTemplateListResponse doesn't exist in current API
 export type EvaluationListResponse =
   components['schemas']['EvaluationListResponse'];
@@ -49,22 +49,53 @@ export interface ResourceExportData {
   evaluations?: ExportItem[];
 }
 
-// Local storage keys for tracking exports
-const LAST_EXPORT_KEY = 'ark-dashboard-last-export';
+export type ResourceType =
+  | 'agents'
+  | 'teams'
+  | 'models'
+  | 'queries'
+  | 'a2a'
+  | 'mcp'
+  | 'workflows'
+  | 'evaluators'
+  | 'evaluations';
+
+// Export request/response types
+export interface ExportRequest {
+  resource_types: ResourceType[];
+  resource_ids?: Record<string, string[]>;
+  namespace?: string;
+}
+
+export interface ExportHistoryResponse {
+  last_export: string | null;
+  export_count: number;
+}
 
 // Export service
 export const exportService = {
-  // Get last export timestamp
-  getLastExportTime(): string | null {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem(LAST_EXPORT_KEY);
+  // Get last export timestamp from backend
+  async getLastExportTime(): Promise<string | null> {
+    try {
+      const response = await apiClient.get<ExportHistoryResponse>(
+        '/api/v1/export/last-export-time',
+      );
+      return response.last_export;
+    } catch (error) {
+      console.error('Failed to get last export time:', error);
+      // Fallback to local storage
+      if (typeof window !== 'undefined') {
+        return localStorage.getItem('ark-dashboard-last-export');
+      }
+      return null;
+    }
   },
 
-  // Update last export timestamp
+  // Update last export timestamp (kept for backward compatibility)
   updateLastExportTime(): void {
     if (typeof window === 'undefined') return;
     const timestamp = new Date().toISOString();
-    localStorage.setItem(LAST_EXPORT_KEY, timestamp);
+    localStorage.setItem('ark-dashboard-last-export', timestamp);
   },
 
   // Fetch all resources for export selection
@@ -74,6 +105,7 @@ export const exportService = {
       teams,
       models,
       queries,
+      a2aServers,
       mcpServers,
       evaluators,
       evaluations,
@@ -82,6 +114,7 @@ export const exportService = {
       apiClient.get<TeamListResponse>('/api/v1/teams'),
       apiClient.get<ModelListResponse>('/api/v1/models'),
       apiClient.get<QueryListResponse>('/api/v1/queries'),
+      apiClient.get<A2AServerListResponse>('/api/v1/a2a-servers'),
       apiClient.get<MCPServerListResponse>('/api/v1/mcp-servers'),
       apiClient.get<EvaluatorListResponse>('/api/v1/evaluators'),
       apiClient.get<EvaluationListResponse>('/api/v1/evaluations'),
@@ -121,6 +154,14 @@ export const exportService = {
       }));
     }
 
+    if (a2aServers.status === 'fulfilled' && a2aServers.value?.items) {
+      data.a2a = a2aServers.value.items.map(server => ({
+        id: server.name || '',
+        name: server.name || '',
+        type: 'a2a',
+      }));
+    }
+
     if (mcpServers.status === 'fulfilled' && mcpServers.value?.items) {
       data.mcp = mcpServers.value.items.map(server => ({
         id: server.name || '',
@@ -151,121 +192,98 @@ export const exportService = {
     return data;
   },
 
-  // Export selected resources
+  // Export selected resources using new backend endpoint
   async exportResources(selectedItems: ResourceExportData): Promise<void> {
-    const zip = new JSZip();
-    const exportPromises: Promise<void>[] = [];
+    // Build request for backend
+    const resourceTypes: ResourceType[] = [];
+    const resourceIds: Record<string, string[]> = {};
 
-    // Helper function to fetch and add resource YAML to zip
-    const addResourceToZip = async (
-      type: string,
-      folderName: string,
-      items?: ExportItem[],
-    ) => {
-      if (!items || items.length === 0) return;
-
-      const selected = items.filter(item => item.selected);
-      if (selected.length === 0) return;
-
-      const folder = zip.folder(folderName);
-      if (!folder) return;
-
-      for (const item of selected) {
-        try {
-          const yaml = await apiClient.get<string>(
-            `/api/v1/${type}/${item.id}/export`,
-            { headers: { Accept: 'text/yaml' } },
-          );
-          folder.file(`${item.name}.yaml`, yaml);
-        } catch (error) {
-          console.error(`Failed to export ${type} ${item.name}:`, error);
+    // Collect selected resources
+    for (const [type, items] of Object.entries(selectedItems)) {
+      if (items && Array.isArray(items)) {
+        const selected = items.filter(item => item.selected);
+        if (selected.length > 0) {
+          resourceTypes.push(type as ResourceType);
+          resourceIds[type] = selected.map(item => item.id);
         }
       }
-    };
-
-    // Export each resource type
-    if (selectedItems.agents) {
-      exportPromises.push(
-        addResourceToZip('agents', 'agents', selectedItems.agents),
-      );
-    }
-    if (selectedItems.teams) {
-      exportPromises.push(
-        addResourceToZip('teams', 'teams', selectedItems.teams),
-      );
-    }
-    if (selectedItems.models) {
-      exportPromises.push(
-        addResourceToZip('models', 'models', selectedItems.models),
-      );
-    }
-    if (selectedItems.queries) {
-      exportPromises.push(
-        addResourceToZip('queries', 'queries', selectedItems.queries),
-      );
-    }
-    if (selectedItems.a2a) {
-      exportPromises.push(
-        addResourceToZip('a2a-servers', 'a2a', selectedItems.a2a),
-      );
-    }
-    if (selectedItems.mcp) {
-      exportPromises.push(
-        addResourceToZip('mcp-servers', 'mcp', selectedItems.mcp),
-      );
-    }
-    if (selectedItems.evaluators) {
-      exportPromises.push(
-        addResourceToZip('evaluators', 'evaluators', selectedItems.evaluators),
-      );
-    }
-    if (selectedItems.workflows) {
-      exportPromises.push(
-        addResourceToZip(
-          'workflow-templates',
-          'workflows',
-          selectedItems.workflows,
-        ),
-      );
-    }
-    if (selectedItems.evaluations) {
-      exportPromises.push(
-        addResourceToZip(
-          'evaluations',
-          'evaluations',
-          selectedItems.evaluations,
-        ),
-      );
     }
 
-    await Promise.all(exportPromises);
+    if (resourceTypes.length === 0) {
+      throw new Error('No resources selected for export');
+    }
 
-    // Generate and download the zip file
-    const blob = await zip.generateAsync({ type: 'blob' });
+    // Call backend export endpoint using fetch directly for blob response
+    const response = await fetch(
+      `${API_CONFIG.baseURL}/api/v1/export/resources`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          resource_types: resourceTypes,
+          resource_ids: resourceIds,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Export failed: ${response.statusText}`);
+    }
+
+    const blob = await response.blob();
+
+    // Download the file
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    saveAs(blob, `ark-export-${timestamp}.zip`);
+    const filename = `ark-export-${timestamp}.zip`;
 
-    // Update last export time
+    // Create a download link
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+
+    // Update last export time locally for immediate UI update
     this.updateLastExportTime();
   },
 
-  // Export all resources
+  // Export all resources using new backend endpoint
   async exportAll(): Promise<void> {
-    const resources = await this.fetchAllResources();
+    // Call backend export all endpoint using fetch directly for blob response
+    const response = await fetch(`${API_CONFIG.baseURL}/api/v1/export/all`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
 
-    // Mark all items as selected
-    const selectedResources: ResourceExportData = {};
-    for (const [key, items] of Object.entries(resources)) {
-      if (items && Array.isArray(items)) {
-        selectedResources[key as keyof ResourceExportData] = items.map(
-          item => ({
-            ...item,
-            selected: true,
-          }),
-        );
-      }
+    if (!response.ok) {
+      throw new Error(`Export failed: ${response.statusText}`);
     }
 
-    await this.exportResources(selectedResources);
+    const blob = await response.blob();
+
+    // Download the file
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `ark-export-all-${timestamp}.zip`;
+
+    // Create a download link
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+
+    // Update last export time locally for immediate UI update
+    this.updateLastExportTime();
   },
 };

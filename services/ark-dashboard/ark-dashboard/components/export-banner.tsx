@@ -14,13 +14,15 @@ export function ExportBanner() {
 
   useEffect(() => {
     // Load last export time on mount
-    const time = exportService.getLastExportTime();
-    setLastExportTime(time);
+    exportService.getLastExportTime().then(time => {
+      setLastExportTime(time);
+    });
 
     // Check for updates every minute
     const interval = setInterval(() => {
-      const updatedTime = exportService.getLastExportTime();
-      setLastExportTime(updatedTime);
+      exportService.getLastExportTime().then(updatedTime => {
+        setLastExportTime(updatedTime);
+      });
     }, 60000);
 
     return () => clearInterval(interval);

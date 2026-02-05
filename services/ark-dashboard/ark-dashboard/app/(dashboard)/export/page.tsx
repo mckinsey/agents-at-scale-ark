@@ -108,8 +108,9 @@ export default function ExportPage() {
   useEffect(() => {
     loadResources();
     // Load last export time from localStorage
-    const lastTime = exportService.getLastExportTime();
-    setLastExportTime(lastTime);
+    exportService.getLastExportTime().then(lastTime => {
+      setLastExportTime(lastTime);
+    });
   }, []);
 
   useEffect(() => {
@@ -184,7 +185,7 @@ export default function ExportPage() {
         description: `Successfully exported ${selectedCount} resources`,
       });
       // Update last export time
-      setLastExportTime(exportService.getLastExportTime());
+      exportService.getLastExportTime().then(time => setLastExportTime(time));
     } catch (error) {
       toast.error('Export failed', {
         description: error instanceof Error ? error.message : 'Unknown error',
@@ -202,7 +203,7 @@ export default function ExportPage() {
         description: 'Successfully exported all resources',
       });
       // Update last export time
-      setLastExportTime(exportService.getLastExportTime());
+      exportService.getLastExportTime().then(time => setLastExportTime(time));
     } catch (error) {
       toast.error('Export failed', {
         description: error instanceof Error ? error.message : 'Unknown error',
