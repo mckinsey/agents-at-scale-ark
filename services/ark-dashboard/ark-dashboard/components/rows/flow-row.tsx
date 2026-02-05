@@ -68,7 +68,7 @@ export function FlowRow({ flow, parameters, onRun, onDelete }: FlowRowProps) {
           <Workflow className="text-muted-foreground h-5 w-5 flex-shrink-0" />
         </div>
 
-        <div className="flex max-w-[400px] min-w-0 flex-col gap-1">
+        <div className="flex max-w-[850px] min-w-0 flex-col gap-1">
           <p className="truncate text-sm font-medium" title={flow.id}>
             {flow.id}
           </p>
