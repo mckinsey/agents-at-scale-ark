@@ -14,7 +14,6 @@ spec:
       apiVersion:
         value: "2024-02-15-preview"
       auth:
-        # User-assigned managed identity with clientId
         managedIdentity:
           clientId:
             valueFrom:
