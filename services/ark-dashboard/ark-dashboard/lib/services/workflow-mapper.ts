@@ -163,7 +163,6 @@ function mapArgoNodeToStep(
   visitedNodes: Set<string> = new Set(),
   parentIsDag = false,
 ): MappedWorkflowStep | null {
-
   if (visitedNodes.has(node.id)) {
     return null;
   }
@@ -184,7 +183,9 @@ function mapArgoNodeToStep(
 
   if (node.type === 'DAG') {
     const dagTaskIds = Object.keys(allNodes).filter(
-      nodeId => allNodes[nodeId].boundaryID === node.id && allNodes[nodeId].type === 'Pod'
+      nodeId =>
+        allNodes[nodeId].boundaryID === node.id &&
+        allNodes[nodeId].type === 'Pod',
     );
 
     const dagChildren = dagTaskIds
@@ -289,7 +290,10 @@ function processStepGroup(
         status: mapArgoPhaseToStatus(stepGroupNode.phase),
         startedAt: stepGroupNode.startedAt,
         finishedAt: stepGroupNode.finishedAt,
-        duration: calculateDuration(stepGroupNode.startedAt, stepGroupNode.finishedAt),
+        duration: calculateDuration(
+          stepGroupNode.startedAt,
+          stepGroupNode.finishedAt,
+        ),
         children: parallelSteps,
       };
       result.push(parallelContainer);

@@ -430,10 +430,18 @@ export default function FlowDetailPage() {
                     YAML
                   </TabsTrigger>
                 </TabsList>
-                <TabsContent value="tree" forceMount tabIndex={-1} className={activeTab !== 'tree' ? 'hidden' : ''}>
+                <TabsContent
+                  value="tree"
+                  forceMount
+                  tabIndex={-1}
+                  className={activeTab !== 'tree' ? 'hidden' : ''}>
                   <WorkflowDagViewer manifest={flow.manifest} />
                 </TabsContent>
-                <TabsContent value="yaml" forceMount tabIndex={-1} className={activeTab !== 'yaml' ? 'hidden' : ''}>
+                <TabsContent
+                  value="yaml"
+                  forceMount
+                  tabIndex={-1}
+                  className={activeTab !== 'yaml' ? 'hidden' : ''}>
                   <CodeViewer code={flow.manifest} language="yaml" />
                 </TabsContent>
               </Tabs>

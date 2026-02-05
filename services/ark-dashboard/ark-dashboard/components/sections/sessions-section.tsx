@@ -298,7 +298,7 @@ function WorkflowStepDetail({
     shouldFetchLogs,
   ]);
   return (
-    <div className="bg-muted/30 mt-2 space-y-3 rounded-md border p-2 sm:p-3 text-sm">
+    <div className="bg-muted/30 mt-2 space-y-3 rounded-md border p-2 text-sm sm:p-3">
       {detail.image && (
         <div className="flex items-start gap-2">
           <Container className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
@@ -324,11 +324,13 @@ function WorkflowStepDetail({
       {detail.inputs && Object.keys(detail.inputs).length > 0 && (
         <div className="flex items-start gap-2">
           <FileText className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <span className="text-muted-foreground text-xs">Inputs</span>
             <div className="bg-background mt-1 rounded border p-2">
               {Object.entries(detail.inputs).map(([key, value]) => (
-                <div key={key} className="flex flex-col sm:flex-row gap-1 sm:gap-2 font-mono text-xs break-all">
+                <div
+                  key={key}
+                  className="flex flex-col gap-1 font-mono text-xs break-all sm:flex-row sm:gap-2">
                   <span className="text-muted-foreground shrink-0">{key}:</span>
                   <span className="break-all">{value}</span>
                 </div>
@@ -341,11 +343,13 @@ function WorkflowStepDetail({
       {detail.outputs && Object.keys(detail.outputs).length > 0 && (
         <div className="flex items-start gap-2">
           <Zap className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <span className="text-muted-foreground text-xs">Outputs</span>
             <div className="bg-background mt-1 rounded border p-2">
               {Object.entries(detail.outputs).map(([key, value]) => (
-                <div key={key} className="flex flex-col sm:flex-row gap-1 sm:gap-2 font-mono text-xs break-all">
+                <div
+                  key={key}
+                  className="flex flex-col gap-1 font-mono text-xs break-all sm:flex-row sm:gap-2">
                   <span className="text-muted-foreground shrink-0">{key}:</span>
                   <span className="break-all">{value}</span>
                 </div>
@@ -357,7 +361,7 @@ function WorkflowStepDetail({
       {message && (
         <div className="flex items-start gap-2">
           <AlertCircle className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <span className="text-muted-foreground text-xs">Message</span>
             <div className="bg-background mt-1 rounded border p-2">
               <div className="font-mono text-xs break-all">
@@ -371,7 +375,7 @@ function WorkflowStepDetail({
       {shouldFetchLogs && (
         <div className="flex items-start gap-2">
           <Terminal className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <span className="text-muted-foreground text-xs">Logs</span>
             <div className="mt-1 max-h-64 overflow-auto rounded border bg-black p-2 sm:p-3">
               {loadingLogs && (
@@ -392,7 +396,7 @@ function WorkflowStepDetail({
                       href={`http://argo.127.0.0.1.nip.io:8080/workflows/${detail.namespace}/${detail.workflowName}?tab=workflow&nodeId=${detail.nodeId}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-blue-400 underline hover:text-blue-300 break-all">
+                      className="inline-flex items-center gap-1 text-xs break-all text-blue-400 underline hover:text-blue-300">
                       View logs in Argo UI
                       <ExternalLink className="h-3 w-3 shrink-0" />
                     </a>
@@ -400,7 +404,7 @@ function WorkflowStepDetail({
                 </div>
               )}
               {logs && !loadingLogs && !logsError && (
-                <pre className="font-mono text-xs whitespace-pre-wrap break-all text-gray-100">
+                <pre className="font-mono text-xs break-all whitespace-pre-wrap text-gray-100">
                   {logs}
                 </pre>
               )}
@@ -438,13 +442,15 @@ function WorkflowStepDetail({
 
 function TeamStepDetail({ detail }: { detail: TeamStepDetail }) {
   return (
-    <div className="bg-muted/30 mt-2 space-y-3 rounded-md border p-2 sm:p-3 text-sm">
+    <div className="bg-muted/30 mt-2 space-y-3 rounded-md border p-2 text-sm sm:p-3">
       {detail.model && (
         <div className="flex flex-wrap items-center gap-3 sm:gap-4">
           <div className="flex items-center gap-1">
             <Bot className="text-muted-foreground h-3 w-3" />
             <span className="text-muted-foreground text-xs">Model:</span>
-            <span className="text-xs font-medium break-all">{detail.model}</span>
+            <span className="text-xs font-medium break-all">
+              {detail.model}
+            </span>
           </div>
           {detail.tokensUsed && (
             <div className="flex items-center gap-1">
@@ -462,10 +468,12 @@ function TeamStepDetail({ detail }: { detail: TeamStepDetail }) {
       {detail.input && (
         <div className="flex items-start gap-2">
           <MessageSquare className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <span className="text-muted-foreground text-xs">Input</span>
             <div className="bg-background mt-1 rounded border p-2">
-              <p className="text-xs whitespace-pre-wrap break-all">{detail.input}</p>
+              <p className="text-xs break-all whitespace-pre-wrap">
+                {detail.input}
+              </p>
             </div>
           </div>
         </div>
@@ -474,10 +482,10 @@ function TeamStepDetail({ detail }: { detail: TeamStepDetail }) {
       {detail.thinking && (
         <div className="flex items-start gap-2">
           <Bot className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <span className="text-muted-foreground text-xs">Thinking</span>
             <div className="bg-background mt-1 rounded border border-blue-200 p-2 dark:border-blue-800">
-              <p className="text-xs text-blue-600 italic dark:text-blue-400 whitespace-pre-wrap break-all">
+              <p className="text-xs break-all whitespace-pre-wrap text-blue-600 italic dark:text-blue-400">
                 {detail.thinking}
               </p>
             </div>
@@ -488,9 +496,9 @@ function TeamStepDetail({ detail }: { detail: TeamStepDetail }) {
       {detail.toolInput && (
         <div className="flex items-start gap-2">
           <Workflow className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <span className="text-muted-foreground text-xs">Tool Input</span>
-            <div className="bg-background mt-1 rounded border p-2 overflow-auto">
+            <div className="bg-background mt-1 overflow-auto rounded border p-2">
               <pre className="text-xs break-all whitespace-pre-wrap">
                 {JSON.stringify(detail.toolInput, null, 2)}
               </pre>
@@ -502,9 +510,9 @@ function TeamStepDetail({ detail }: { detail: TeamStepDetail }) {
       {detail.toolOutput !== undefined && (
         <div className="flex items-start gap-2">
           <Zap className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <span className="text-muted-foreground text-xs">Tool Output</span>
-            <div className="bg-background mt-1 rounded border p-2 overflow-auto">
+            <div className="bg-background mt-1 overflow-auto rounded border p-2">
               <pre className="text-xs break-all whitespace-pre-wrap">
                 {JSON.stringify(detail.toolOutput, null, 2)}
               </pre>
@@ -516,10 +524,12 @@ function TeamStepDetail({ detail }: { detail: TeamStepDetail }) {
       {detail.output && (
         <div className="flex items-start gap-2">
           <MessageSquare className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <span className="text-muted-foreground text-xs">Output</span>
             <div className="bg-background mt-1 rounded border border-green-200 p-2 dark:border-green-800">
-              <p className="text-xs whitespace-pre-wrap break-all">{detail.output}</p>
+              <p className="text-xs break-all whitespace-pre-wrap">
+                {detail.output}
+              </p>
             </div>
           </div>
         </div>
@@ -578,25 +588,25 @@ function WorkflowStepNode({
     <div className={cn('relative flex', depth > 0 && 'ml-3 sm:ml-5')}>
       {depth > 0 && (
         <>
-          <div className="absolute top-0 -left-3 sm:-left-5 h-full w-3 sm:w-5">
+          <div className="absolute top-0 -left-3 h-full w-3 sm:-left-5 sm:w-5">
             <div
               className="bg-border absolute top-0 left-0 w-px"
               style={{ height: isLast ? '16px' : '100%' }}
             />
           </div>
-          <div className="bg-border absolute top-4 -left-3 sm:-left-5 h-px w-2 sm:w-3" />
+          <div className="bg-border absolute top-4 -left-3 h-px w-2 sm:-left-5 sm:w-3" />
         </>
       )}
 
       <div className="min-w-0 flex-1 pb-2.5">
         <div
           className={cn(
-            'hover:bg-accent/50 group bg-card relative flex min-w-0 flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 rounded-md border border-l-4 px-2 py-2 sm:px-3 sm:py-2.5 transition-all',
+            'hover:bg-accent/50 group bg-card relative flex min-w-0 flex-col gap-2 rounded-md border border-l-4 px-2 py-2 transition-all sm:flex-row sm:items-center sm:gap-3 sm:px-3 sm:py-2.5',
             getBorderColor(),
             step.status === 'running' && 'bg-blue-50/30 dark:bg-blue-950/10',
             step.status === 'failed' && 'bg-red-50/30 dark:bg-red-950/10',
           )}>
-          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3 overflow-hidden">
+          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">
             {hasDetail ? (
               <button
                 onClick={() => setShowDetail(!showDetail)}
@@ -618,7 +628,7 @@ function WorkflowStepNode({
                 {getWorkflowTypeIcon(step.type)}
               </div>
             </div>
-            <div className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 overflow-hidden">
+            <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-hidden sm:flex-row sm:items-center sm:gap-2">
               <span
                 className="truncate text-sm font-medium"
                 title={step.displayName}>
@@ -634,7 +644,7 @@ function WorkflowStepNode({
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2 sm:gap-3 self-end sm:self-auto">
+          <div className="flex shrink-0 items-center gap-2 self-end sm:gap-3 sm:self-auto">
             {step.duration && (
               <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium whitespace-nowrap">
                 <Clock className="h-3.5 w-3.5" />
@@ -697,25 +707,25 @@ function TeamStepNode({
     <div className={cn('relative flex', depth > 0 && 'ml-3 sm:ml-5')}>
       {depth > 0 && (
         <>
-          <div className="absolute top-0 -left-3 sm:-left-5 h-full w-3 sm:w-5">
+          <div className="absolute top-0 -left-3 h-full w-3 sm:-left-5 sm:w-5">
             <div
               className="bg-border absolute top-0 left-0 w-px"
               style={{ height: isLast ? '16px' : '100%' }}
             />
           </div>
-          <div className="bg-border absolute top-4 -left-3 sm:-left-5 h-px w-2 sm:w-3" />
+          <div className="bg-border absolute top-4 -left-3 h-px w-2 sm:-left-5 sm:w-3" />
         </>
       )}
 
       <div className="min-w-0 flex-1 pb-2.5">
         <div
           className={cn(
-            'hover:bg-accent/50 group bg-card relative flex min-w-0 flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 rounded-md border border-l-4 px-2 py-2 sm:px-3 sm:py-2.5 transition-all',
+            'hover:bg-accent/50 group bg-card relative flex min-w-0 flex-col gap-2 rounded-md border border-l-4 px-2 py-2 transition-all sm:flex-row sm:items-center sm:gap-3 sm:px-3 sm:py-2.5',
             getBorderColor(),
             step.status === 'running' && 'bg-blue-50/30 dark:bg-blue-950/10',
             step.status === 'failed' && 'bg-red-50/30 dark:bg-red-950/10',
           )}>
-          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3 overflow-hidden">
+          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">
             {hasDetail ? (
               <button
                 onClick={() => setShowDetail(!showDetail)}
@@ -737,7 +747,7 @@ function TeamStepNode({
                 {getTeamTypeIcon(step.type)}
               </div>
             </div>
-            <div className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 overflow-hidden">
+            <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-hidden sm:flex-row sm:items-center sm:gap-2">
               <span
                 className="truncate text-sm font-medium"
                 title={step.displayName}>
@@ -751,7 +761,7 @@ function TeamStepNode({
             </div>
           </div>
 
-          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:gap-3 self-end sm:self-auto">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 self-end sm:gap-3 sm:self-auto">
             {step.message && (
               <span
                 className="text-muted-foreground max-w-[200px] truncate text-xs"
@@ -808,13 +818,15 @@ function SessionDetailView({
   return (
     <Card className="min-h-0 min-w-0 flex-1 overflow-auto">
       <CardHeader className="border-b">
-        <div className="mb-3 flex min-w-0 flex-col lg:flex-row items-start gap-3 lg:gap-4">
-          <div className="flex min-w-0 flex-1 items-start gap-2 sm:gap-3 overflow-hidden w-full">
+        <div className="mb-3 flex min-w-0 flex-col items-start gap-3 lg:flex-row lg:gap-4">
+          <div className="flex w-full min-w-0 flex-1 items-start gap-2 overflow-hidden sm:gap-3">
             <div className="text-muted-foreground mt-1 shrink-0">
               {getSessionTypeIcon(session.type)}
             </div>
             <div className="min-w-0 flex-1 overflow-hidden">
-              <CardTitle className="truncate text-lg sm:text-xl" title={session.name}>
+              <CardTitle
+                className="truncate text-lg sm:text-xl"
+                title={session.name}>
                 {session.name}
               </CardTitle>
               <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -841,8 +853,8 @@ function SessionDetailView({
               </div>
             </div>
           </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2 w-full lg:w-auto">
-            <span className="text-muted-foreground text-xs sm:text-sm whitespace-nowrap">
+          <div className="flex w-full shrink-0 flex-wrap items-center gap-2 lg:w-auto">
+            <span className="text-muted-foreground text-xs whitespace-nowrap sm:text-sm">
               {new Date(session.startedAt).toLocaleString()}
             </span>
             {session.type === 'workflow' &&
@@ -864,7 +876,7 @@ function SessionDetailView({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="min-w-0 pt-4 sm:pt-6 px-3 sm:px-6">
+      <CardContent className="min-w-0 px-3 pt-4 sm:px-6 sm:pt-6">
         <div className="min-w-0">
           {session.type === 'workflow'
             ? session.steps.map(step => (
@@ -893,7 +905,7 @@ function SessionListItem({
       onClick={onClick}
       title={session.name}
       className={cn(
-        'hover:bg-accent/50 flex w-full items-start gap-2 sm:gap-3 rounded-lg border p-2 sm:p-3 text-left transition-all hover:cursor-pointer',
+        'hover:bg-accent/50 flex w-full items-start gap-2 rounded-lg border p-2 text-left transition-all hover:cursor-pointer sm:gap-3 sm:p-3',
         isSelected && 'bg-accent border-primary shadow-sm',
       )}>
       <div className="text-muted-foreground mt-0.5 shrink-0">
@@ -921,9 +933,13 @@ function SessionListItem({
         </div>
         <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-1.5 text-xs">
           <Clock className="h-3 w-3 shrink-0" />
-          <span className="font-medium whitespace-nowrap">{session.duration}</span>
+          <span className="font-medium whitespace-nowrap">
+            {session.duration}
+          </span>
           <span>·</span>
-          <span className="whitespace-nowrap">{new Date(session.startedAt).toLocaleTimeString()}</span>
+          <span className="whitespace-nowrap">
+            {new Date(session.startedAt).toLocaleTimeString()}
+          </span>
         </div>
       </div>
       <div className="mt-0.5 shrink-0">{getStatusIcon(session.status)}</div>
@@ -1018,7 +1034,6 @@ export function SessionsSection() {
   const {
     workflows,
     loading,
-    error,
     refetch: refetchWorkflows,
   } = useWorkflows('default', filters);
 
@@ -1140,7 +1155,7 @@ export function SessionsSection() {
       <div className="flex flex-1 flex-col gap-3 sm:p-4">
         <div className="bg-muted/20 flex flex-col gap-1.5 rounded-md py-3">
           <div className="flex flex-col gap-2 md:flex-row md:items-center">
-            <div className="relative flex-1 min-w-0">
+            <div className="relative min-w-0 flex-1">
               <Search className="text-muted-foreground absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2" />
               <Input
                 type="text"
@@ -1150,7 +1165,7 @@ export function SessionsSection() {
                 className="bg-background h-8 border-0 pl-8 text-sm shadow-sm"
               />
             </div>
-            <div className="relative flex-1 min-w-0" ref={templateInputRef}>
+            <div className="relative min-w-0 flex-1" ref={templateInputRef}>
               <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 h-3.5 w-3.5 -translate-y-1/2" />
               <Input
                 type="text"
@@ -1206,7 +1221,7 @@ export function SessionsSection() {
               <Select
                 value={statusFilter || 'all'}
                 onValueChange={setStatusFilter}>
-                <SelectTrigger className="h-8 w-full sm:w-36 md:w-40 border-2 text-sm shadow-sm">
+                <SelectTrigger className="h-8 w-full border-2 text-sm shadow-sm sm:w-36 md:w-40">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1239,7 +1254,7 @@ export function SessionsSection() {
               <Select
                 value={sortOrder}
                 onValueChange={value => setSortOrder(value as SortOrder)}>
-                <SelectTrigger className="h-8 w-full sm:w-36 md:w-40 border-2 text-sm shadow-sm">
+                <SelectTrigger className="h-8 w-full border-2 text-sm shadow-sm sm:w-36 md:w-40">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1252,14 +1267,14 @@ export function SessionsSection() {
                 size="sm"
                 onClick={clearFilters}
                 title="Clear Filters"
-                className="h-8 border-2 px-2 hover:cursor-pointer w-full sm:w-auto"
+                className="h-8 w-full border-2 px-2 hover:cursor-pointer sm:w-auto"
                 disabled={!hasActiveFilters}>
                 <X className="h-3.5 w-3.5" />
                 <span className="sm:inline">Clear Filters</span>
               </Button>
             </div>
           </div>
-          <div className="flex items-center justify-between text-xs mt-3">
+          <div className="mt-3 flex items-center justify-between text-xs">
             <span className="text-muted-foreground font-medium">
               {filteredAndSortedSessions.length} session
               {filteredAndSortedSessions.length !== 1 ? 's' : ''}
@@ -1273,8 +1288,8 @@ export function SessionsSection() {
             <span className="text-base font-medium">Loading sessions...</span>
           </div>
         ) : filteredAndSortedSessions.length > 0 ? (
-          <div className="flex flex-1 flex-col lg:flex-row gap-3 lg:gap-4 overflow-hidden">
-            <div className="flex flex-col gap-3 overflow-auto pr-2 w-full lg:w-64 xl:w-80 2xl:w-96 lg:min-w-[16rem] lg:max-w-[24rem]">
+          <div className="flex flex-1 flex-col gap-3 overflow-hidden lg:flex-row lg:gap-4">
+            <div className="flex w-full flex-col gap-3 overflow-auto pr-2 lg:w-64 lg:max-w-[24rem] lg:min-w-[16rem] xl:w-80 2xl:w-96">
               {filteredAndSortedSessions.map(session => (
                 <SessionListItem
                   key={session.id}
@@ -1308,7 +1323,7 @@ export function SessionsSection() {
               {hasActiveFilters ? (
                 <>
                   <Search className="h-16 w-16 opacity-20" />
-                  <span className="text-base font-medium text-center">
+                  <span className="text-center text-base font-medium">
                     No sessions found matching your filters
                   </span>
                   <Button variant="outline" onClick={clearFilters}>
@@ -1318,7 +1333,7 @@ export function SessionsSection() {
               ) : (
                 <>
                   <Workflow className="h-16 w-16 opacity-20" />
-                  <span className="text-base font-medium text-center">
+                  <span className="text-center text-base font-medium">
                     No {sourceFilter === 'all' ? '' : sourceFilter} sessions to
                     display
                   </span>
