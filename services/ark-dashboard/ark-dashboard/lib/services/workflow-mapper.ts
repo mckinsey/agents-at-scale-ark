@@ -160,7 +160,15 @@ function mapArgoNodeToStep(
   allNodes: Record<string, ArgoNodeStatus>,
   workflowName: string,
   workflowNamespace?: string,
-): MappedWorkflowStep {
+  visitedNodes: Set<string> = new Set(),
+  parentIsDag = false,
+): MappedWorkflowStep | null {
+
+  if (visitedNodes.has(node.id)) {
+    return null;
+  }
+  visitedNodes.add(node.id);
+
   const step: MappedWorkflowStep = {
     id: node.id,
     name: node.name,
@@ -174,40 +182,202 @@ function mapArgoNodeToStep(
     detail: buildNodeDetail(node, workflowName, workflowNamespace),
   };
 
-  if (node.children && node.children.length > 0) {
-    step.children = node.children.flatMap(childId => {
-      const childNode = allNodes[childId];
-      if (!childNode) return [];
+  if (node.type === 'DAG') {
+    const dagTaskIds = Object.keys(allNodes).filter(
+      nodeId => allNodes[nodeId].boundaryID === node.id && allNodes[nodeId].type === 'Pod'
+    );
 
-      if (isStepGroupNode(childNode)) {
-        if (childNode.children && childNode.children.length > 0) {
-          return childNode.children
-            .map(grandchildId => {
-              const grandchildNode = allNodes[grandchildId];
-              return grandchildNode
-                ? mapArgoNodeToStep(
-                    grandchildNode,
-                    allNodes,
-                    workflowName,
-                    workflowNamespace,
-                  )
-                : null;
-            })
-            .filter(
-              (grandchild): grandchild is MappedWorkflowStep =>
-                grandchild !== null,
-            );
+    const dagChildren = dagTaskIds
+      .map(taskId => {
+        const taskNode = allNodes[taskId];
+        if (!taskNode) return null;
+
+        return mapArgoNodeToStep(
+          taskNode,
+          allNodes,
+          workflowName,
+          workflowNamespace,
+          visitedNodes,
+          true,
+        );
+      })
+      .filter((child): child is MappedWorkflowStep => child !== null);
+
+    if (dagChildren.length > 0) {
+      step.children = dagChildren;
+    }
+  } else if (!parentIsDag && node.children && node.children.length > 0) {
+    // For non-DAG nodes, process children normally
+    // But if parent is a DAG, don't process children (they represent dependencies)
+    const childSteps = node.children
+      .map(childId => {
+        const childNode = allNodes[childId];
+        if (!childNode) return null;
+
+        // Skip StepGroup nodes, process their children directly
+        if (isStepGroupNode(childNode)) {
+          return null;
         }
-        return [];
-      }
 
-      return [
-        mapArgoNodeToStep(childNode, allNodes, workflowName, workflowNamespace),
-      ];
-    });
+        return mapArgoNodeToStep(
+          childNode,
+          allNodes,
+          workflowName,
+          workflowNamespace,
+          visitedNodes,
+          false,
+        );
+      })
+      .filter((child): child is MappedWorkflowStep => child !== null);
+
+    if (childSteps.length > 0) {
+      step.children = childSteps;
+    }
   }
 
   return step;
+}
+
+function processStepGroup(
+  stepGroupNode: ArgoNodeStatus,
+  allNodes: Record<string, ArgoNodeStatus>,
+  workflowName: string,
+  workflowNamespace?: string,
+  visitedStepGroups: Set<string> = new Set(),
+): MappedWorkflowStep[] {
+  if (visitedStepGroups.has(stepGroupNode.id)) {
+    return [];
+  }
+  visitedStepGroups.add(stepGroupNode.id);
+
+  if (!stepGroupNode.children || stepGroupNode.children.length === 0) {
+    return [];
+  }
+
+  const result: MappedWorkflowStep[] = [];
+  const visitedPods = new Set<string>();
+
+  const isParallel = stepGroupNode.children.length > 1;
+
+  if (isParallel) {
+    const parallelSteps: MappedWorkflowStep[] = [];
+
+    for (const childId of stepGroupNode.children) {
+      const childNode = allNodes[childId];
+      if (!childNode) continue;
+
+      const mappedStep = mapArgoNodeToStep(
+        childNode,
+        allNodes,
+        workflowName,
+        workflowNamespace,
+        visitedPods,
+        false,
+      );
+      if (mappedStep) {
+        parallelSteps.push(mappedStep);
+      }
+    }
+
+    if (parallelSteps.length > 0) {
+      // Create a container that will show the parallel steps as nested
+      const parallelContainer: MappedWorkflowStep = {
+        id: stepGroupNode.id,
+        name: stepGroupNode.name,
+        displayName: stepGroupNode.displayName || stepGroupNode.name,
+        type: 'steps',
+        status: mapArgoPhaseToStatus(stepGroupNode.phase),
+        startedAt: stepGroupNode.startedAt,
+        finishedAt: stepGroupNode.finishedAt,
+        duration: calculateDuration(stepGroupNode.startedAt, stepGroupNode.finishedAt),
+        children: parallelSteps,
+      };
+      result.push(parallelContainer);
+    }
+
+    // Continue with the next StepGroup (all parallel steps point to the same next one)
+    const firstChild = allNodes[stepGroupNode.children[0]];
+    if (firstChild?.children && firstChild.children.length > 0) {
+      for (const nextId of firstChild.children) {
+        const nextNode = allNodes[nextId];
+        if (nextNode && isStepGroupNode(nextNode)) {
+          const nextSteps = processStepGroup(
+            nextNode,
+            allNodes,
+            workflowName,
+            workflowNamespace,
+            visitedStepGroups,
+          );
+          result.push(...nextSteps);
+          break;
+        }
+      }
+    }
+  } else {
+    // Sequential execution: process single child and continue
+    const childNode = allNodes[stepGroupNode.children[0]];
+    if (childNode) {
+      const mappedStep = mapArgoNodeToStep(
+        childNode,
+        allNodes,
+        workflowName,
+        workflowNamespace,
+        visitedPods,
+        false,
+      );
+      if (mappedStep) {
+        result.push(mappedStep);
+      }
+
+      // Continue with next StepGroups
+      if (childNode.type === 'DAG') {
+        // For DAG nodes, check outboundNodes to find the exit tasks
+        // Then check those tasks' children for the next StepGroup
+        if (childNode.outboundNodes && childNode.outboundNodes.length > 0) {
+          for (const outboundId of childNode.outboundNodes) {
+            const outboundNode = allNodes[outboundId];
+            if (outboundNode?.children && outboundNode.children.length > 0) {
+              for (const nextId of outboundNode.children) {
+                const nextNode = allNodes[nextId];
+                if (nextNode && isStepGroupNode(nextNode)) {
+                  const nextSteps = processStepGroup(
+                    nextNode,
+                    allNodes,
+                    workflowName,
+                    workflowNamespace,
+                    visitedStepGroups,
+                  );
+                  result.push(...nextSteps);
+                  break;
+                }
+              }
+            }
+            break; // Only check first outbound node's children
+          }
+        }
+      } else {
+        // For non-DAG nodes, check children directly
+        if (childNode.children && childNode.children.length > 0) {
+          for (const nextId of childNode.children) {
+            const nextNode = allNodes[nextId];
+            if (nextNode && isStepGroupNode(nextNode)) {
+              const nextSteps = processStepGroup(
+                nextNode,
+                allNodes,
+                workflowName,
+                workflowNamespace,
+                visitedStepGroups,
+              );
+              result.push(...nextSteps);
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return result;
 }
 
 export function mapArgoWorkflowToSession(
@@ -219,22 +389,42 @@ export function mapArgoWorkflowToSession(
   const rootNode = nodes[rootNodeId];
   const workflowNamespace = workflow.metadata.namespace;
 
-  const steps: MappedWorkflowStep[] = [];
+  let steps: MappedWorkflowStep[] = [];
 
-  if (rootNode) {
-    steps.push(
-      mapArgoNodeToStep(rootNode, nodes, workflowName, workflowNamespace),
-    );
+  if (rootNode && rootNode.children && rootNode.children.length > 0) {
+    // Find the first StepGroup and process from there
+    const visitedStepGroups = new Set<string>();
+    for (const childId of rootNode.children) {
+      const childNode = nodes[childId];
+      if (childNode && isStepGroupNode(childNode)) {
+        steps = processStepGroup(
+          childNode,
+          nodes,
+          workflowName,
+          workflowNamespace,
+          visitedStepGroups,
+        );
+        break;
+      }
+    }
   } else {
     const allNodesFlat = getAllNodesFlat(nodes);
     const topLevelNodes = allNodesFlat.filter(
       node => !node.boundaryID || node.boundaryID === rootNodeId,
     );
 
+    const visitedNodes = new Set<string>();
     for (const node of topLevelNodes) {
-      steps.push(
-        mapArgoNodeToStep(node, nodes, workflowName, workflowNamespace),
+      const mappedStep = mapArgoNodeToStep(
+        node,
+        nodes,
+        workflowName,
+        workflowNamespace,
+        visitedNodes,
       );
+      if (mappedStep) {
+        steps.push(mappedStep);
+      }
     }
   }
 

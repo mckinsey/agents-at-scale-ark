@@ -541,6 +541,32 @@ function WorkflowStepNode({
   const hasChildren = step.children && step.children.length > 0;
   const hasDetail = step.detail && Object.keys(step.detail).length > 0;
 
+  const isParallelContainer =
+    step.type === 'steps' &&
+    hasChildren &&
+    step.children!.length > 1 &&
+    /^\[\d+\]$/.test(step.displayName);
+
+  if (isParallelContainer) {
+    return (
+      <>
+        {step.children!.map((child, index) => (
+          <WorkflowStepNode
+            key={child.id}
+            step={child}
+            depth={depth + 1}
+            isLast={index === step.children!.length - 1}
+          />
+        ))}
+      </>
+    );
+  }
+
+  const isParallelNode =
+    step.type === 'dag' || (hasChildren && step.children!.length > 1);
+
+  const childDepth = isParallelNode ? depth + 1 : depth;
+
   const getBorderColor = () => {
     if (step.status === 'running') return 'border-l-blue-500';
     if (step.status === 'succeeded') return 'border-l-green-500';
@@ -636,7 +662,7 @@ function WorkflowStepNode({
               <WorkflowStepNode
                 key={child.id}
                 step={child}
-                depth={depth + 1}
+                depth={childDepth}
                 isLast={index === step.children!.length - 1}
               />
             ))}
