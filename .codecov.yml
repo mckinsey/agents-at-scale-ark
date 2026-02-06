@@ -12,6 +12,12 @@ coverage:
         target: auto
         threshold: 0.1%
 
+ignore:
+  - "ark/api/**/zz_generated.*.go"
+  - "**/*_gen.go"
+  - "**/*.pb.go"
+  - "**/mock_*.go"
+
 flags:
   ark-cli:
     paths:
