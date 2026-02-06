@@ -81,7 +81,16 @@ def parse_excel_file(content_bytes: bytes, filename: str) -> SpreadsheetData:
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to parse Excel file: {str(e)}")
 
-def parse_csv_file(content_bytes: bytes, filename: str) -> SpreadsheetData:
+def parse_delimited_file(content_bytes: bytes, filename: str, separator: str = ',', file_type: str = 'csv') -> SpreadsheetData:
+    """
+    Parse CSV or TSV files with a specified separator.
+
+    Args:
+        content_bytes: The file content as bytes
+        filename: Name of the file
+        separator: Delimiter character (',' for CSV, '\t' for TSV)
+        file_type: Type identifier for metadata ('csv' or 'tsv')
+    """
     try:
         # Try different encodings
         encodings = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
@@ -89,13 +98,13 @@ def parse_csv_file(content_bytes: bytes, filename: str) -> SpreadsheetData:
 
         for encoding in encodings:
             try:
-                df = pd.read_csv(io.BytesIO(content_bytes), encoding=encoding)
+                df = pd.read_csv(io.BytesIO(content_bytes), sep=separator, encoding=encoding)
                 break
             except UnicodeDecodeError:
                 continue
 
         if df is None:
-            raise ValueError("Could not decode CSV with any common encoding")
+            raise ValueError(f"Could not decode {file_type.upper()} with any common encoding")
 
         # Limit preview size
         preview_df = df.head(1000)
@@ -133,7 +142,7 @@ def parse_csv_file(content_bytes: bytes, filename: str) -> SpreadsheetData:
         }]
 
         metadata = {
-            "fileType": "csv",
+            "fileType": file_type,
             "filename": filename,
             "sheetCount": 1,
             "hasFormulas": False,
@@ -143,71 +152,7 @@ def parse_csv_file(content_bytes: bytes, filename: str) -> SpreadsheetData:
         return SpreadsheetData(sheets=sheets, metadata=metadata)
 
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to parse CSV file: {str(e)}")
-
-def parse_tsv_file(content_bytes: bytes, filename: str) -> SpreadsheetData:
-    try:
-        # Try different encodings
-        encodings = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
-        df = None
-
-        for encoding in encodings:
-            try:
-                df = pd.read_csv(io.BytesIO(content_bytes), sep='\t', encoding=encoding)
-                break
-            except UnicodeDecodeError:
-                continue
-
-        if df is None:
-            raise ValueError("Could not decode TSV with any common encoding")
-
-        # Limit preview size
-        preview_df = df.head(1000)
-
-        # Convert to list of lists format
-        rows = []
-
-        # Add header row
-        headers = list(df.columns)
-        rows.append(headers)
-
-        # Add data rows
-        for _, row in preview_df.iterrows():
-            row_data = []
-            for value in row:
-                if pd.isna(value):
-                    value = ""
-                elif hasattr(value, 'isoformat'):  # datetime
-                    value = value.isoformat()
-                else:
-                    value = str(value)
-                row_data.append(value)
-            rows.append(row_data)
-
-        # Generate column letters
-        columns = [get_column_letter(i) for i in range(1, len(headers) + 1)]
-
-        sheets = [{
-            "name": "Sheet1",
-            "columns": columns,
-            "rows": rows,
-            "totalRows": len(df) + 1,  # +1 for header
-            "totalColumns": len(headers),
-            "previewLimited": len(df) > 999
-        }]
-
-        metadata = {
-            "fileType": "tsv",
-            "filename": filename,
-            "sheetCount": 1,
-            "hasFormulas": False,
-            "encoding": "auto-detected"
-        }
-
-        return SpreadsheetData(sheets=sheets, metadata=metadata)
-
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to parse TSV file: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Failed to parse {file_type.upper()} file: {str(e)}")
 
 @router.post("/spreadsheet", response_model=SpreadsheetData)
 async def preview_spreadsheet(request: FilePreviewRequest = Body(...)) -> SpreadsheetData:
@@ -221,9 +166,9 @@ async def preview_spreadsheet(request: FilePreviewRequest = Body(...)) -> Spread
         if file_ext in ['.xlsx', '.xlsm', '.xls']:
             return parse_excel_file(content_bytes, request.filename)
         elif file_ext == '.csv' or (request.mimeType and 'csv' in request.mimeType):
-            return parse_csv_file(content_bytes, request.filename)
+            return parse_delimited_file(content_bytes, request.filename, separator=',', file_type='csv')
         elif file_ext in ['.tsv', '.tab'] or (request.mimeType and 'tab-separated' in request.mimeType):
-            return parse_tsv_file(content_bytes, request.filename)
+            return parse_delimited_file(content_bytes, request.filename, separator='\t', file_type='tsv')
         else:
             # Try to detect format by content
             try:
@@ -232,10 +177,10 @@ async def preview_spreadsheet(request: FilePreviewRequest = Body(...)) -> Spread
             except:
                 try:
                     # Try CSV
-                    return parse_csv_file(content_bytes, request.filename)
+                    return parse_delimited_file(content_bytes, request.filename, separator=',', file_type='csv')
                 except:
                     # Try TSV
-                    return parse_tsv_file(content_bytes, request.filename)
+                    return parse_delimited_file(content_bytes, request.filename, separator='\t', file_type='tsv')
 
     except HTTPException:
         raise
