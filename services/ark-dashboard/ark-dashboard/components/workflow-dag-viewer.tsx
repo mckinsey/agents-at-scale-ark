@@ -48,15 +48,23 @@ interface WorkflowManifest {
   };
 }
 
-const nodeWidth = 180;
+const minNodeWidth = 120;
+const maxNodeWidth = 400;
 const nodeHeight = 40;
+const charWidth = 6.5;
 
-function CustomNode({ data }: { data: { label: string } }) {
+function calculateNodeWidth(label: string): number {
+  const padding = 24;
+  const calculatedWidth = label.length * charWidth + padding;
+  return Math.min(Math.max(calculatedWidth, minNodeWidth), maxNodeWidth);
+}
+
+function CustomNode({ data }: { data: { label: string; width: number } }) {
   return (
     <div
       className="border-border bg-card text-card-foreground dark:border-border dark:bg-card dark:text-card-foreground flex items-center justify-center rounded-md border-2 px-2 py-2 text-xs font-medium"
       style={{
-        width: nodeWidth,
+        width: data.width,
         height: nodeHeight,
       }}>
       <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
@@ -75,12 +83,16 @@ function getLayoutedElements(tasks: DagTask[]) {
   dagreGraph.setDefaultEdgeLabel(() => ({}));
   dagreGraph.setGraph({ rankdir: 'LR', nodesep: 50, ranksep: 100 });
 
-  const nodes: Node[] = tasks.map(task => ({
-    id: task.name,
-    type: 'custom',
-    data: { label: task.name },
-    position: { x: 0, y: 0 },
-  }));
+  const nodes: Node[] = tasks.map(task => {
+    const width = calculateNodeWidth(task.name);
+    return {
+      id: task.name,
+      type: 'custom',
+      data: { label: task.name, width },
+      position: { x: 0, y: 0 },
+      width,
+    };
+  });
 
   const edges: Edge[] = [];
   tasks.forEach(task => {
@@ -108,7 +120,7 @@ function getLayoutedElements(tasks: DagTask[]) {
   });
 
   nodes.forEach(node => {
-    dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
+    dagreGraph.setNode(node.id, { width: node.width || minNodeWidth, height: nodeHeight });
   });
 
   edges.forEach(edge => {
@@ -119,8 +131,9 @@ function getLayoutedElements(tasks: DagTask[]) {
 
   nodes.forEach(node => {
     const nodeWithPosition = dagreGraph.node(node.id);
+    const width = node.width || minNodeWidth;
     node.position = {
-      x: nodeWithPosition.x - nodeWidth / 2,
+      x: nodeWithPosition.x - width / 2,
       y: nodeWithPosition.y - nodeHeight / 2,
     };
   });
