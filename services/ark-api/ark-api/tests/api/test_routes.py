@@ -1067,19 +1067,21 @@ class TestModelsEndpoint(unittest.TestCase):
         mock_model1.to_dict.return_value = {
             "metadata": {"name": "gpt-4-model", "namespace": "default"},
             "spec": {
-                "type": "openai",
+                "type": "completions",
+                "provider": "openai",
                 "model": {"value": "gpt-4"}
             },
             "status": {"conditions": [
                 {"type": "ModelAvailable", "status": "True"}
             ]}
         }
-        
+
         mock_model2 = Mock()
         mock_model2.to_dict.return_value = {
             "metadata": {"name": "claude-model", "namespace": "default"},
             "spec": {
-                "type": "bedrock",
+                "type": "completions",
+                "provider": "bedrock",
                 "model": {"value": "anthropic.claude-v2"}
             },
             "status": {"conditions": [
