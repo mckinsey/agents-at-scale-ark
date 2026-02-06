@@ -42,6 +42,7 @@
     "@napi-rs/simple-git-linux-x64-musl": "^0.1.19"
   },
   "overrides": {
-    "undici": "^7.18.2"
+    "undici": "^7.18.2",
+    "@isaacs/brace-expansion": ">=5.0.1"
   }
 }
