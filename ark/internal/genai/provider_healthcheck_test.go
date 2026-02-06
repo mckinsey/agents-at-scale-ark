@@ -398,6 +398,36 @@ func TestOpenAIProvider_HealthCheck_ModelAvailable(t *testing.T) {
 	assert.Equal(t, 1, callCount, "HealthCheck should make exactly one API call")
 }
 
+func TestOpenAIProvider_HealthCheck_ModelNotAvailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/models", r.URL.Path)
+		assert.Equal(t, "GET", r.Method)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": []map[string]string{
+				{"id": "gpt-3.5-turbo", "object": "model"},
+				{"id": "gpt-4-turbo", "object": "model"},
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := &OpenAIProvider{
+		Model:   "gpt-4",
+		BaseURL: server.URL + "/v1",
+		APIKey:  "test-key",
+	}
+
+	ctx := context.Background()
+	err := provider.HealthCheck(ctx)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "gpt-4")
+	assert.Contains(t, err.Error(), "not available")
+}
+
 func TestAzureProvider_HealthCheck_ModelAvailable(t *testing.T) {
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
