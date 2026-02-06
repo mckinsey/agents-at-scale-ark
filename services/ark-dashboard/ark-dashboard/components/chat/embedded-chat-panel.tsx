@@ -715,17 +715,37 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
         const result = await chatService.getQueryResult(query.name);
 
         if (result.terminal) {
-          let content = '';
-
-          if (result.status === 'done' && result.response) {
-            content = result.response;
+          if (result.status === 'done') {
+            if (result.messages && result.messages.length > 0) {
+              setChatMessages(prev => [
+                ...prev,
+                ...result.messages!.map(msg => ({
+                  role: msg.role as 'assistant' | 'user' | 'system',
+                  content: msg.content,
+                  name: msg.name,
+                })),
+              ]);
+            } else if (result.response) {
+              setChatMessages(prev => [
+                ...prev,
+                { role: 'assistant', content: result.response! },
+              ]);
+            }
           } else if (result.status === 'error') {
-            content = result.response || 'Query failed';
+            setChatMessages(prev => [
+              ...prev,
+              {
+                role: 'assistant',
+                content: result.response || 'Query failed',
+              },
+            ]);
           } else if (result.status === 'unknown') {
-            content = 'Query status unknown';
+            setChatMessages(prev => [
+              ...prev,
+              { role: 'assistant', content: 'Query status unknown' },
+            ]);
           }
 
-          setChatMessages(prev => [...prev, { role: 'assistant', content }]);
           pollingStopped = true;
           break;
         }
@@ -766,7 +786,7 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
     setIsProcessing(true);
 
     try {
-      if (isChatStreamingEnabled) {
+      if (isChatStreamingEnabled && type !== 'team') {
         await handleStreamChatResponse(userMessage);
       } else {
         await handlePollChatResponse(userMessage);
@@ -868,14 +888,14 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
                 const toolCalls =
                   'tool_calls' in message ? message.tool_calls : undefined;
 
+                const senderName = 'name' in message ? message.name : undefined;
+
                 return (
-                  <div key={index} className="contents">
+                  <div key={index} className="flex flex-col gap-2">
                     {debugMode &&
                       toolCalls &&
                       toolCalls.map((toolCall, toolIndex) => (
-                        <div
-                          key={`${index}-tool-${toolIndex}`}
-                          className={toolIndex > 0 ? 'mt-2' : ''}>
+                        <div key={`${index}-tool-${toolIndex}`}>
                           <ChatMessage
                             role="assistant"
                             content=""
@@ -891,13 +911,12 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
                         </div>
                       ))}
                     {content && (
-                      <div className={toolCalls ? 'mt-2' : ''}>
-                        <ChatMessage
-                          role={message.role as 'user' | 'assistant' | 'system'}
-                          content={content}
-                          viewMode="markdown"
-                        />
-                      </div>
+                      <ChatMessage
+                        role={message.role as 'user' | 'assistant' | 'system'}
+                        content={content}
+                        viewMode="markdown"
+                        sender={senderName}
+                      />
                     )}
                   </div>
                 );
