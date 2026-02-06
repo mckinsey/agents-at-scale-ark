@@ -3982,7 +3982,7 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "completions" | "messages";
+            type: "completions" | "messages" | "openai" | "azure" | "bedrock" | "anthropic";
         };
         /**
          * ModelListResponse
@@ -4029,7 +4029,7 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "completions" | "messages";
+            type: "completions" | "messages" | "openai" | "azure" | "bedrock" | "anthropic";
         };
         /**
          * ModelUpdateRequest

@@ -18,7 +18,10 @@ MODEL_TYPE_MESSAGES = "messages"
 
 # Type aliases for Pydantic models
 ProviderType = Literal["openai", "azure", "bedrock", "anthropic"]
-ModelTypeType = Literal["completions", "messages"]
+# ModelTypeType includes deprecated values for backward compatibility with existing resources.
+# Deprecated values: "openai", "azure", "bedrock", "anthropic" - these were used as type before the provider field was added.
+# Will be removed in release 1.0.
+ModelTypeType = Literal["completions", "messages", "openai", "azure", "bedrock", "anthropic"]
 
 # Deprecated: spec.type values that were used as provider before the provider field was added.
 # Will be removed in release 1.0.
