@@ -17,6 +17,8 @@ ignore:
   - "**/*_gen.go"
   - "**/*.pb.go"
   - "**/mock_*.go"
+  - "**/generated/**"
+  - "**/lib/api/generated/**"
 
 flags:
   ark-cli:
