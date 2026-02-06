@@ -128,6 +128,164 @@ function getLayoutedElements(tasks: DagTask[]) {
   return { nodes, edges };
 }
 
+interface ExpandResult {
+  tasks: DagTask[];
+  entryNodes: string[];
+  exitNodes: string[];
+}
+
+function expandTemplate(
+  templateName: string,
+  templates: WorkflowTemplate[],
+  prefix: string = '',
+  visited: Set<string> = new Set(),
+): ExpandResult {
+  const fullName = prefix ? `${prefix}.${templateName}` : templateName;
+
+  if (visited.has(fullName)) {
+    return { tasks: [], entryNodes: [], exitNodes: [] };
+  }
+  visited.add(fullName);
+
+  const template = templates.find(t => t.name === templateName);
+  if (!template) {
+    return {
+      tasks: [
+        {
+          name: fullName,
+          template: templateName,
+          dependencies: [],
+        },
+      ],
+      entryNodes: [fullName],
+      exitNodes: [fullName],
+    };
+  }
+
+  const expandedTasks: DagTask[] = [];
+  let entryNodes: string[] = [];
+  let exitNodes: string[] = [];
+
+  if (template.dag?.tasks) {
+    const taskExpansions = new Map<string, ExpandResult>();
+
+    template.dag.tasks.forEach(task => {
+      const taskFullName = prefix ? `${prefix}.${task.name}` : task.name;
+      const expansion = expandTemplate(
+        task.template,
+        templates,
+        taskFullName,
+        visited,
+      );
+      taskExpansions.set(task.name, expansion);
+      expandedTasks.push(...expansion.tasks);
+    });
+
+    const tasksWithoutDeps = template.dag.tasks.filter(
+      t => !t.dependencies || t.dependencies.length === 0,
+    );
+    tasksWithoutDeps.forEach(task => {
+      const expansion = taskExpansions.get(task.name)!;
+      entryNodes.push(...expansion.entryNodes);
+    });
+
+    const allDepTasks = new Set(
+      template.dag.tasks.flatMap(t => t.dependencies || []),
+    );
+    const tasksNotDependedOn = template.dag.tasks.filter(
+      t => !allDepTasks.has(t.name),
+    );
+    tasksNotDependedOn.forEach(task => {
+      const expansion = taskExpansions.get(task.name)!;
+      exitNodes.push(...expansion.exitNodes);
+    });
+
+    template.dag.tasks.forEach(task => {
+      if (task.dependencies && task.dependencies.length > 0) {
+        const targetExpansion = taskExpansions.get(task.name)!;
+        const depExitNodes: string[] = [];
+
+        task.dependencies.forEach(depTaskName => {
+          const depExpansion = taskExpansions.get(depTaskName);
+          if (depExpansion) {
+            depExitNodes.push(...depExpansion.exitNodes);
+          }
+        });
+
+        targetExpansion.entryNodes.forEach(entryNode => {
+          const taskObj = expandedTasks.find(t => t.name === entryNode);
+          if (taskObj) {
+            taskObj.dependencies = [
+              ...(taskObj.dependencies || []),
+              ...depExitNodes,
+            ];
+          }
+        });
+      }
+    });
+  } else if (template.steps) {
+    const stepExpansions: ExpandResult[][] = [];
+
+    template.steps.forEach((step, stepIndex) => {
+      const currentStepExpansions: ExpandResult[] = [];
+
+      step.forEach(stepTask => {
+        const stepTaskFullName = prefix
+          ? `${prefix}.${stepTask.name}`
+          : stepTask.name;
+        const stepTaskTemplate = stepTask.template || stepTask.name;
+
+        const expansion = expandTemplate(
+          stepTaskTemplate,
+          templates,
+          stepTaskFullName,
+          visited,
+        );
+        currentStepExpansions.push(expansion);
+        expandedTasks.push(...expansion.tasks);
+      });
+
+      stepExpansions.push(currentStepExpansions);
+    });
+
+    if (stepExpansions.length > 0) {
+      entryNodes = stepExpansions[0].flatMap(exp => exp.entryNodes);
+      exitNodes = stepExpansions[stepExpansions.length - 1].flatMap(
+        exp => exp.exitNodes,
+      );
+    }
+
+    for (let i = 1; i < stepExpansions.length; i++) {
+      const prevStepExitNodes = stepExpansions[i - 1].flatMap(
+        exp => exp.exitNodes,
+      );
+      const currStepEntryNodes = stepExpansions[i].flatMap(
+        exp => exp.entryNodes,
+      );
+
+      currStepEntryNodes.forEach(entryNode => {
+        const taskObj = expandedTasks.find(t => t.name === entryNode);
+        if (taskObj) {
+          taskObj.dependencies = [
+            ...(taskObj.dependencies || []),
+            ...prevStepExitNodes,
+          ];
+        }
+      });
+    }
+  } else {
+    expandedTasks.push({
+      name: fullName,
+      template: templateName,
+      dependencies: [],
+    });
+    entryNodes = [fullName];
+    exitNodes = [fullName];
+  }
+
+  return { tasks: expandedTasks, entryNodes, exitNodes };
+}
+
 export function WorkflowDagViewer({ manifest }: WorkflowDagViewerProps) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -142,53 +300,25 @@ export function WorkflowDagViewer({ manifest }: WorkflowDagViewerProps) {
         return;
       }
 
-      const dagTemplate = parsed.spec.templates.find(t => t.dag?.tasks);
+      const entrypoint =
+        parsed.spec.entrypoint ||
+        parsed.spec.templates.find(t => t.dag?.tasks)?.name ||
+        parsed.spec.templates.find(t => t.steps)?.name;
 
-      const stepsTemplate = parsed.spec.templates.find(t => t.steps);
+      if (!entrypoint) {
+        setError('No entrypoint, DAG, or steps found in workflow');
+        return;
+      }
 
-      let tasks: DagTask[] = [];
+      const expansion = expandTemplate(entrypoint, parsed.spec.templates);
 
-      if (dagTemplate && dagTemplate.dag) {
-        tasks = dagTemplate.dag.tasks.map(task => ({
-          name: task.name,
-          template: task.template,
-          dependencies: task.dependencies || [],
-        }));
-      } else if (stepsTemplate && stepsTemplate.steps) {
-        const allStepTasks: string[][] = stepsTemplate.steps.map(step => {
-          return step.map(s => s.name);
-        });
-
-        const flatTasks: DagTask[] = [];
-        allStepTasks.forEach((stepTasks, stepIndex) => {
-          const previousStepTasks =
-            stepIndex > 0 ? allStepTasks[stepIndex - 1] : [];
-
-          stepTasks.forEach(taskName => {
-            flatTasks.push({
-              name: taskName,
-              template: taskName,
-              dependencies: previousStepTasks,
-            });
-          });
-        });
-
-        tasks = flatTasks;
-      } else if (parsed.spec?.entrypoint) {
-        tasks = [
-          {
-            name: parsed.spec.entrypoint,
-            template: parsed.spec.entrypoint,
-            dependencies: [],
-          },
-        ];
-      } else {
-        setError('No DAG, Steps, or entrypoint found in workflow');
+      if (expansion.tasks.length === 0) {
+        setError('No tasks found after expanding templates');
         return;
       }
 
       const { nodes: layoutedNodes, edges: layoutedEdges } =
-        getLayoutedElements(tasks);
+        getLayoutedElements(expansion.tasks);
       setNodes(layoutedNodes);
       setEdges(layoutedEdges);
       setError(null);
