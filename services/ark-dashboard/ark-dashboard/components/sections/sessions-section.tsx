@@ -1034,6 +1034,7 @@ export function SessionsSection() {
   const {
     workflows,
     loading,
+    error,
     refetch: refetchWorkflows,
   } = useWorkflows('default', filters);
 
@@ -1282,7 +1283,18 @@ export function SessionsSection() {
           </div>
         </div>
 
-        {loading ? (
+        {error ? (
+          <Card className="flex flex-1 items-center justify-center">
+            <div className="flex flex-col items-center gap-4 p-8 text-center">
+              <AlertCircle className="h-16 w-16 text-red-500 opacity-80" />
+              <div className="flex flex-col gap-2">
+                <span className="text-base font-semibold">
+                  Error: {error.message}
+                </span>
+              </div>
+            </div>
+          </Card>
+        ) : loading ? (
           <div className="text-muted-foreground flex flex-1 flex-col items-center justify-center gap-4">
             <RefreshCw className="h-10 w-10 animate-spin" />
             <span className="text-base font-medium">Loading sessions...</span>
