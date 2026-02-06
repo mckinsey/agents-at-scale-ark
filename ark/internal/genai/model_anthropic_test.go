@@ -18,7 +18,7 @@ func TestLoadAnthropicConfig_NilConfig(t *testing.T) {
 
 	model := &Model{
 		Model: "claude-3-haiku-20240307",
-		Type:  "anthropic",
+		Type:  "messages",
 	}
 
 	ctx := context.Background()
@@ -43,7 +43,7 @@ func TestLoadAnthropicConfig_Success(t *testing.T) {
 
 	model := &Model{
 		Model: "claude-3-haiku-20240307",
-		Type:  "anthropic",
+		Type:  "messages",
 	}
 
 	ctx := context.Background()
@@ -194,7 +194,7 @@ func TestLoadAnthropicConfig_WithAdditionalHeaders(t *testing.T) {
 
 	model := &Model{
 		Model: "claude-3-haiku-20240307",
-		Type:  "anthropic",
+		Type:  "messages",
 	}
 
 	additionalHeaders := map[string]string{
@@ -232,7 +232,7 @@ func TestLoadAnthropicConfig_BaseURLResolutionError(t *testing.T) {
 
 	model := &Model{
 		Model: "claude-3-haiku-20240307",
-		Type:  "anthropic",
+		Type:  "messages",
 	}
 
 	ctx := context.Background()
@@ -264,7 +264,7 @@ func TestLoadAnthropicConfig_APIKeyResolutionError(t *testing.T) {
 
 	model := &Model{
 		Model: "claude-3-haiku-20240307",
-		Type:  "anthropic",
+		Type:  "messages",
 	}
 
 	ctx := context.Background()

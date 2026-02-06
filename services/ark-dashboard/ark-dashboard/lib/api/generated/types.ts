@@ -3980,10 +3980,9 @@ export interface components {
             resolved_address?: string | null;
             /**
              * Type
-             * @default completions
-             * @constant
+             * @enum {string}
              */
-            type: "completions";
+            type: "completions" | "messages";
         };
         /**
          * ModelListResponse
@@ -4028,10 +4027,9 @@ export interface components {
             provider: "openai" | "azure" | "bedrock" | "anthropic";
             /**
              * Type
-             * @default completions
-             * @constant
+             * @enum {string}
              */
-            type: "completions";
+            type: "completions" | "messages";
         };
         /**
          * ModelUpdateRequest

@@ -14,10 +14,11 @@ PROVIDER_ANTHROPIC = "anthropic"
 
 # Model type constants
 MODEL_TYPE_COMPLETIONS = "completions"
+MODEL_TYPE_MESSAGES = "messages"
 
 # Type aliases for Pydantic models
 ProviderType = Literal["openai", "azure", "bedrock", "anthropic"]
-ModelTypeType = Literal["completions"]
+ModelTypeType = Literal["completions", "messages"]
 
 # Deprecated: spec.type values that were used as provider before the provider field was added.
 # Will be removed in release 1.0.
@@ -75,7 +76,7 @@ class ModelResponse(BaseModel):
     """Model resource response model."""
     name: str
     namespace: str
-    type: ModelTypeType = MODEL_TYPE_COMPLETIONS
+    type: ModelTypeType
     provider: ProviderType
     model: str
     available: Optional[AvailabilityStatus] = None
@@ -106,7 +107,7 @@ class ModelDetailResponse(BaseModel):
     """Detailed model response model."""
     name: str
     namespace: str
-    type: ModelTypeType = MODEL_TYPE_COMPLETIONS
+    type: ModelTypeType
     provider: ProviderType
     model: str
     config: Dict[str, Dict[str, Union[str, Dict[str, Any], List[Any]]]]

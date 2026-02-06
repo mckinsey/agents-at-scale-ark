@@ -18,6 +18,7 @@ from ...models.models import (
     PROVIDER_BEDROCK,
     PROVIDER_ANTHROPIC,
     MODEL_TYPE_COMPLETIONS,
+    MODEL_TYPE_MESSAGES,
 )
 from ...models.common import extract_availability_from_conditions
 from .exceptions import handle_k8s_errors
@@ -54,6 +55,7 @@ def model_to_response(model: dict) -> ModelResponse:
     return ModelResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
+        type=spec.get("type", MODEL_TYPE_COMPLETIONS),
         provider=get_provider_from_spec(spec),
         model=spec.get("model", {}).get("value", "") if isinstance(spec.get("model"), dict) else "",
         available=availability,
@@ -92,6 +94,7 @@ def model_to_detail_response(model: dict) -> ModelDetailResponse:
     return ModelDetailResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
+        type=spec.get("type", MODEL_TYPE_COMPLETIONS),
         provider=get_provider_from_spec(spec),
         model=spec.get("model", {}).get("value", "") if isinstance(spec.get("model"), dict) else spec.get("model", ""),
         config=processed_config,
@@ -187,8 +190,11 @@ async def create_model(body: ModelCreateRequest, namespace: Optional[str] = Quer
                     config_dict[PROVIDER_ANTHROPIC][field] = {"value": value}
 
         # Build the model spec
+        # Set type based on provider - Anthropic uses "messages", others use "completions"
+        model_type = MODEL_TYPE_MESSAGES if body.provider == PROVIDER_ANTHROPIC else MODEL_TYPE_COMPLETIONS
+
         model_spec = {
-            "type": MODEL_TYPE_COMPLETIONS,
+            "type": model_type,
             "provider": body.provider,
             "model": {
                 "value": body.model

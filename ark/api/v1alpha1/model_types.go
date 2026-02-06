@@ -84,11 +84,11 @@ type AnthropicModelConfig struct {
 type ModelSpec struct {
 	// +kubebuilder:validation:Required
 	Model ValueSource `json:"model"`
-	// Type specifies the API capability of the model (e.g., completions, embeddings).
+	// Type specifies the API capability of the model (e.g., completions, embeddings, messages).
 	// Deprecated: The values "openai", "azure", "bedrock", "anthropic" are accepted for backward
 	// compatibility but will be removed in release 1.0. Use spec.provider instead.
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Enum=completions;openai;azure;bedrock;anthropic
+	// +kubebuilder:validation:Enum=completions;messages;openai;azure;bedrock
 	// +kubebuilder:default=completions
 	Type string `json:"type,omitempty"`
 	// Provider specifies the AI provider client to use (openai, azure, bedrock, anthropic).
