@@ -17,9 +17,3 @@ XRAY-937734 - CVE-2026-23864
 - Resource exhaustion in React allows attackers to perform denial of service by sending crafted HTTP requests.
 - Next.js is on the last version (16.1.6) and the fix is not yet available
 - Used in docs only.
-XRAY-939504
-- Added to see if other checks pass
-XRAY-940159
-- Added to see if other checks pass
-XRAY-940266
-- Added to see if other checks pass
