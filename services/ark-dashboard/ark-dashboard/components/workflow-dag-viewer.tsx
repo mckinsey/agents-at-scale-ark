@@ -120,7 +120,10 @@ function getLayoutedElements(tasks: DagTask[]) {
   });
 
   nodes.forEach(node => {
-    dagreGraph.setNode(node.id, { width: node.width || minNodeWidth, height: nodeHeight });
+    dagreGraph.setNode(node.id, {
+      width: node.width || minNodeWidth,
+      height: nodeHeight,
+    });
   });
 
   edges.forEach(edge => {
@@ -239,7 +242,7 @@ function expandTemplate(
   } else if (template.steps) {
     const stepExpansions: ExpandResult[][] = [];
 
-    template.steps.forEach((step, stepIndex) => {
+    template.steps.forEach((step, _stepIndex) => {
       const currentStepExpansions: ExpandResult[] = [];
 
       step.forEach(stepTask => {

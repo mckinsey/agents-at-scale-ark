@@ -598,7 +598,7 @@ function WorkflowStepNode({
         </>
       )}
 
-      <div className="min-w-0 flex-1 pb-2.5">
+      <div className={cn('min-w-0 flex-1', !hasChildren && 'pb-2.5')}>
         <div
           className={cn(
             'hover:bg-accent/50 group bg-card relative flex min-w-0 flex-col gap-2 rounded-md border border-l-4 px-2 py-2 transition-all sm:flex-row sm:items-center sm:gap-3 sm:px-3 sm:py-2.5',
@@ -667,7 +667,7 @@ function WorkflowStepNode({
         )}
 
         {hasChildren && (
-          <div className="mt-0">
+          <div>
             {step.children!.map((child, index) => (
               <WorkflowStepNode
                 key={child.id}
@@ -876,7 +876,7 @@ function SessionDetailView({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="min-w-0 px-3 pt-4 sm:px-6 sm:pt-6">
+      <CardContent className="min-w-0 px-3 pt-2 sm:px-6 sm:pt-3">
         <div className="min-w-0">
           {session.type === 'workflow'
             ? session.steps.map(step => (
