@@ -1,6 +1,6 @@
 'use client';
 
-import { Bot, MessageCircle, Pencil, Trash2 } from 'lucide-react';
+import { MessageCircle, Pencil, Trash2, Users } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -15,60 +15,74 @@ import {
 } from '@/components/ui/tooltip';
 import { useChatState } from '@/lib/chat-context';
 import { toggleFloatingChat } from '@/lib/chat-events';
-import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
-import type { Agent } from '@/lib/services';
+import type {
+  Agent,
+  Team,
+  TeamCreateRequest,
+  TeamUpdateRequest,
+} from '@/lib/services';
 import { cn } from '@/lib/utils';
-import { getCustomIcon } from '@/lib/utils/icon-resolver';
 
-interface AgentRowProps {
-  readonly agent: Agent;
+interface TeamRowProps {
+  readonly team: Team;
+  readonly agents: Agent[];
+  readonly onUpdate?: (
+    team: (TeamCreateRequest | TeamUpdateRequest) & { id?: string },
+  ) => void;
   readonly onDelete?: (id: string) => void;
 }
 
-export function AgentRow({ agent, onDelete }: AgentRowProps) {
+export function TeamRow({
+  team,
+  agents: _agents,
+  onUpdate: _onUpdate,
+  onDelete,
+}: TeamRowProps) {
   const router = useRouter();
   const { isOpen } = useChatState();
-  const isChatOpen = isOpen(agent.name);
+  const isChatOpen = isOpen(team.name);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
-  const modelName = agent.modelRef?.name || 'No model assigned';
-  const isA2A = agent.isA2A || false;
-
-  const IconComponent = getCustomIcon(
-    agent.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON],
-    Bot,
-  );
+  const memberCount = team.members?.length || 0;
+  const strategyDisplay =
+    team.strategy === 'round-robin'
+      ? 'Round Robin'
+      : team.strategy === 'selector'
+        ? 'Selector'
+        : team.strategy === 'graph'
+          ? 'Graph'
+          : team.strategy === 'sequential'
+            ? 'Sequential'
+            : team.strategy || 'No strategy';
 
   return (
     <>
-      <div
-        className="bg-card hover:bg-accent/5 flex w-full cursor-pointer flex-wrap items-center gap-4 rounded-md border px-4 py-3 transition-colors"
-        onClick={() =>
-          router.push(`/agents/${encodeURIComponent(agent.name)}`)
-        }>
+      <div className="bg-card flex w-full flex-wrap items-center gap-4 rounded-md border px-4 py-3">
         <div className="flex flex-grow items-center gap-3 overflow-hidden">
-          <IconComponent className="text-muted-foreground h-5 w-5 flex-shrink-0" />
+          <Users className="text-muted-foreground h-5 w-5 flex-shrink-0" />
 
           <div className="flex max-w-[400px] min-w-0 flex-col gap-1">
-            <p className="truncate text-sm font-medium" title={agent.name}>
-              {agent.name}
+            <p className="truncate text-sm font-medium" title={team.name}>
+              {team.name}
             </p>
             <p
               className="text-muted-foreground truncate text-xs"
-              title={agent.description || ''}>
-              {agent.description || 'No description'}
+              title={team.description || ''}>
+              {team.description || 'No description'}
             </p>
           </div>
         </div>
 
         <div className="text-muted-foreground mr-4 flex-shrink-0 text-sm">
-          {!isA2A && <span>Model: {modelName}</span>}
-          {isA2A && <span>A2A Agent</span>}
+          <span>
+            {memberCount} member{memberCount !== 1 ? 's' : ''} ·{' '}
+            {strategyDisplay}
+          </span>
         </div>
 
         <AvailabilityStatusBadge
-          status={agent.available}
-          eventsLink={`/events?kind=Agent&name=${agent.name}&page=1`}
+          status={team.available}
+          eventsLink={`/events?kind=Team&name=${team.name}&page=1`}
         />
 
         <div className="flex flex-shrink-0 items-center gap-1">
@@ -81,12 +95,12 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
                   className="h-8 w-8 p-0"
                   onClick={e => {
                     e.stopPropagation();
-                    router.push(`/agents/${agent.name}`);
+                    router.push(`/teams/${encodeURIComponent(team.name)}`);
                   }}>
                   <Pencil className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Edit agent</TooltipContent>
+              <TooltipContent>View team</TooltipContent>
             </Tooltip>
           </TooltipProvider>
 
@@ -110,31 +124,33 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {isChatOpen ? 'Cannot delete agent in use' : 'Delete agent'}
+                  {isChatOpen ? 'Cannot delete team in use' : 'Delete team'}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
           )}
 
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={cn('h-8 w-8 p-0', isChatOpen && 'text-primary')}
-                  onClick={e => {
-                    e.stopPropagation();
-                    toggleFloatingChat(agent.name, 'agent');
-                  }}>
-                  <MessageCircle
-                    className={cn('h-4 w-4', isChatOpen && 'fill-primary')}
-                  />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Chat with agent</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          {memberCount > 0 && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={cn('h-8 w-8 p-0', isChatOpen && 'text-primary')}
+                    onClick={e => {
+                      e.stopPropagation();
+                      toggleFloatingChat(team.name, 'team');
+                    }}>
+                    <MessageCircle
+                      className={cn('h-4 w-4', isChatOpen && 'fill-primary')}
+                    />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Chat with team</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
         </div>
       </div>
 
@@ -142,11 +158,11 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
         <ConfirmationDialog
           open={deleteConfirmOpen}
           onOpenChange={setDeleteConfirmOpen}
-          title="Delete Agent"
-          description={`Do you want to delete "${agent.name}" agent? This action cannot be undone.`}
+          title="Delete Team"
+          description={`Do you want to delete "${team.name}" team? This action cannot be undone.`}
           confirmText="Delete"
           cancelText="Cancel"
-          onConfirm={() => onDelete(agent.id)}
+          onConfirm={() => onDelete(team.id)}
           variant="destructive"
         />
       )}

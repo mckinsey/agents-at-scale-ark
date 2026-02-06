@@ -14,10 +14,6 @@ vi.mock('@/lib/api/client', () => ({
   },
 }));
 
-vi.mock('./member-editor', () => ({
-  TeamMemberSelectionSection: () => null,
-}));
-
 describe('TeamEditor', () => {
   const mockAgents: Agent[] = [
     {

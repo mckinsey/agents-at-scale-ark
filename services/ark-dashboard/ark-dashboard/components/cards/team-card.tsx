@@ -1,10 +1,10 @@
 'use client';
 
 import { MessageCircle, Pencil, Trash2, Users } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
-import { TeamEditor } from '@/components/editors';
 import { AvailabilityStatusBadge } from '@/components/ui/availability-status-badge';
 import {
   Tooltip,
@@ -32,10 +32,15 @@ interface TeamCardProps {
   onDelete?: (id: string) => void;
 }
 
-export function TeamCard({ team, agents, onUpdate, onDelete }: TeamCardProps) {
+export function TeamCard({
+  team,
+  agents,
+  onUpdate: _onUpdate,
+  onDelete,
+}: TeamCardProps) {
+  const router = useRouter();
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(team.name);
-  const [editorOpen, setEditorOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   // Get the names of member agents
@@ -48,13 +53,11 @@ export function TeamCard({ team, agents, onUpdate, onDelete }: TeamCardProps) {
 
   const actions: BaseCardAction[] = [];
 
-  if (onUpdate) {
-    actions.push({
-      icon: Pencil,
-      label: 'Edit team',
-      onClick: () => setEditorOpen(true),
-    });
-  }
+  actions.push({
+    icon: Pencil,
+    label: 'View team',
+    onClick: () => router.push(`/teams/${encodeURIComponent(team.name)}`),
+  });
 
   if (onDelete) {
     actions.push({
@@ -109,13 +112,6 @@ export function TeamCard({ team, agents, onUpdate, onDelete }: TeamCardProps) {
             />
           </div>
         }
-      />
-      <TeamEditor
-        open={editorOpen}
-        onOpenChange={setEditorOpen}
-        team={team}
-        agents={agents}
-        onSave={onUpdate || (() => {})}
       />
       {onDelete && (
         <ConfirmationDialog
