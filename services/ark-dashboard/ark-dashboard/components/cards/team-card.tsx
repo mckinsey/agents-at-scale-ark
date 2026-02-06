@@ -81,6 +81,7 @@ export function TeamCard({
         title={team.name}
         description={team.description}
         icon={<Users className="h-5 w-5" />}
+        onClick={() => router.push(`/teams/${encodeURIComponent(team.name)}`)}
         actions={
           team.members.length === 0
             ? actions.filter(a => a.label !== 'Chat with team')

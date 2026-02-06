@@ -57,7 +57,9 @@ export function TeamRow({
 
   return (
     <>
-      <div className="bg-card flex w-full flex-wrap items-center gap-4 rounded-md border px-4 py-3">
+      <div
+        className="bg-card hover:bg-accent/5 flex w-full cursor-pointer flex-wrap items-center gap-4 rounded-md border px-4 py-3 transition-colors"
+        onClick={() => router.push(`/teams/${encodeURIComponent(team.name)}`)}>
         <div className="flex flex-grow items-center gap-3 overflow-hidden">
           <Users className="text-muted-foreground h-5 w-5 flex-shrink-0" />
 
