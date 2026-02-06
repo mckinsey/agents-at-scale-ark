@@ -43,7 +43,7 @@ deployments:
 dev:
   ark-controller:
     imageSelector: ark-controller
-    devImage: golang:1.24.11-bookworm
+    devImage: golang:1.24.13-bookworm
     command:
       ["sh", "-c", "cd /app && GOTOOLCHAIN=auto go run cmd/main.go --leader-elect=false"]
     namespace: ark-system
