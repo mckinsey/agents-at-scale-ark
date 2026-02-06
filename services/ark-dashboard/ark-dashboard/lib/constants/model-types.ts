@@ -2,6 +2,7 @@
 // Maps internal model type values to user-friendly display names
 export const MODEL_TYPE_DISPLAY_NAMES: Record<string, string> = {
   completions: 'Chat Completions (OpenAI V1)',
+  messages: 'Messages (Anthropic)',
 };
 
 export function getModelTypeDisplayName(type: string | undefined): string {

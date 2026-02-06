@@ -106,7 +106,9 @@ export function ModelConfiguratorForm() {
             <FormLabel>Type</FormLabel>
             <FormControl>
               <Input
-                value={getModelTypeDisplayName('completions')}
+                value={getModelTypeDisplayName(
+                  provider === 'anthropic' ? 'messages' : 'completions',
+                )}
                 disabled={true}
                 className="bg-muted"
               />

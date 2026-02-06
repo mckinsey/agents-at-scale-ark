@@ -1967,15 +1967,15 @@ spec:
               type:
                 default: completions
                 description: |-
-                  Type specifies the API capability of the model (e.g., completions, embeddings).
+                  Type specifies the API capability of the model (e.g., completions, embeddings, messages).
                   Deprecated: The values "openai", "azure", "bedrock", "anthropic" are accepted for backward
                   compatibility but will be removed in release 1.0. Use spec.provider instead.
                 enum:
                 - completions
+                - messages
                 - openai
                 - azure
                 - bedrock
-                - anthropic
                 type: string
             required:
             - config
