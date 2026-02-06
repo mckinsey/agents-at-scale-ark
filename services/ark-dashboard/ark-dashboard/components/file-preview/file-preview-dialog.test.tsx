@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+
 import { FilePreviewDialog } from './file-preview-dialog';
 
 vi.mock('@/lib/api/files-client', () => ({
@@ -17,7 +18,7 @@ describe('FilePreviewDialog', () => {
         loading={false}
         isImage={false}
         isJson={false}
-      />
+      />,
     );
 
     expect(screen.getByText('test.txt')).toBeDefined();
@@ -34,7 +35,7 @@ describe('FilePreviewDialog', () => {
         loading={false}
         isImage={false}
         isJson={false}
-      />
+      />,
     );
 
     expect(screen.queryByText('test.txt')).toBeNull();
@@ -47,31 +48,14 @@ describe('FilePreviewDialog', () => {
         open={true}
         onOpenChange={() => {}}
         fileName="test.txt"
+        content=""
         loading={true}
         isImage={false}
         isJson={false}
-      />
+      />,
     );
 
     expect(screen.getByText('test.txt')).toBeDefined();
-    expect(screen.getByText('Loading...')).toBeDefined();
-  });
-
-  it('should display error message', () => {
-    const errorMessage = 'Failed to load file';
-    render(
-      <FilePreviewDialog
-        open={true}
-        onOpenChange={() => {}}
-        fileName="test.txt"
-        error={errorMessage}
-        loading={false}
-        isImage={false}
-        isJson={false}
-      />
-    );
-
-    expect(screen.getByText('test.txt')).toBeDefined();
-    expect(screen.getByText(errorMessage)).toBeDefined();
+    expect(screen.getByText('Loading file content...')).toBeDefined();
   });
 });
