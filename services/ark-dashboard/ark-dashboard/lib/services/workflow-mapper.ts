@@ -201,7 +201,7 @@ function mapArgoNodeToStep(
           workflowName,
           workflowNamespace,
           visitedNodes,
-          false,
+          true,
           false,
         );
       })
@@ -214,7 +214,7 @@ function mapArgoNodeToStep(
     if (dagChildren.length > 0) {
       step.children = dagChildren;
     }
-  } else if (node.children && node.children.length > 0 && !inBoundedContext) {
+  } else if (node.children && node.children.length > 0) {
     if (node.type === 'Steps') {
       const firstChild = allNodes[node.children[0]];
       if (firstChild && isStepGroupNode(firstChild)) {
@@ -232,7 +232,7 @@ function mapArgoNodeToStep(
           step.children = stepsChildren;
         }
       }
-    } else if (!parentIsDag) {
+    } else if (!parentIsDag && !inBoundedContext) {
       const childSteps = node.children
         .map(childId => {
           const childNode = allNodes[childId];
@@ -365,9 +365,9 @@ function processStepGroup(
         result.push(mappedStep);
       }
 
-      // Continue with next StepGroups
-      if (childNode.type === 'DAG') {
-        // For DAG nodes, check outboundNodes to find the exit tasks
+      // Continue with next StepGroups only if not already processed
+      if (childNode.type === 'DAG' || childNode.type === 'Steps') {
+        // For DAG/Steps nodes, check outboundNodes to find the exit tasks
         // Then check those tasks' children for the next StepGroup
         if (childNode.outboundNodes && childNode.outboundNodes.length > 0) {
           for (const outboundId of childNode.outboundNodes) {
@@ -375,7 +375,11 @@ function processStepGroup(
             if (outboundNode?.children && outboundNode.children.length > 0) {
               for (const nextId of outboundNode.children) {
                 const nextNode = allNodes[nextId];
-                if (nextNode && isStepGroupNode(nextNode)) {
+                if (
+                  nextNode &&
+                  isStepGroupNode(nextNode) &&
+                  !visitedStepGroups.has(nextNode.id)
+                ) {
                   if (boundaryId && nextNode.boundaryID !== boundaryId) {
                     break;
                   }
@@ -397,11 +401,15 @@ function processStepGroup(
           }
         }
       } else {
-        // For non-DAG nodes, check children directly
+        // For Pod/Container nodes, check children directly
         if (childNode.children && childNode.children.length > 0) {
           for (const nextId of childNode.children) {
             const nextNode = allNodes[nextId];
-            if (nextNode && isStepGroupNode(nextNode)) {
+            if (
+              nextNode &&
+              isStepGroupNode(nextNode) &&
+              !visitedStepGroups.has(nextNode.id)
+            ) {
               if (boundaryId && nextNode.boundaryID !== boundaryId) {
                 break;
               }
@@ -465,6 +473,7 @@ export function mapArgoWorkflowToSession(
             workflowNamespace,
             visitedStepGroups,
             visitedNodes,
+            rootNode.id,
           );
           break;
         }

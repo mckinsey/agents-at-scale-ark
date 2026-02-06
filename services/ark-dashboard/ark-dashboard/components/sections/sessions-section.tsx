@@ -585,7 +585,7 @@ function WorkflowStepNode({
   };
 
   return (
-    <div className={cn('relative flex', depth > 0 && 'ml-3 sm:ml-5')}>
+    <div className={cn('relative flex min-w-0', depth > 0 && 'ml-3 sm:ml-5')}>
       {depth > 0 && (
         <>
           <div className="absolute top-0 -left-3 h-full w-3 sm:-left-5 sm:w-5">
@@ -598,7 +598,11 @@ function WorkflowStepNode({
         </>
       )}
 
-      <div className={cn('min-w-0 flex-1', !hasChildren && 'pb-2.5')}>
+      <div
+        className={cn(
+          'min-w-0 flex-1 overflow-hidden',
+          !hasChildren && 'pb-2.5',
+        )}>
         <div
           className={cn(
             'hover:bg-accent/50 group bg-card relative flex min-w-0 flex-col gap-2 rounded-md border border-l-4 px-2 py-2 transition-all sm:flex-row sm:items-center sm:gap-3 sm:px-3 sm:py-2.5',
@@ -630,13 +634,13 @@ function WorkflowStepNode({
             </div>
             <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-hidden sm:flex-row sm:items-center sm:gap-2">
               <span
-                className="truncate text-sm font-medium"
+                className="line-clamp-1 text-sm font-medium break-all"
                 title={step.displayName}>
                 {step.displayName}
               </span>
               {step.name !== step.displayName && (
                 <span
-                  className="text-muted-foreground truncate font-mono text-xs"
+                  className="text-muted-foreground line-clamp-1 font-mono text-xs break-all"
                   title={step.name}>
                   {step.name}
                 </span>
@@ -816,8 +820,8 @@ function SessionDetailView({
   isLoading?: boolean;
 }) {
   return (
-    <Card className="min-h-0 min-w-0 flex-1 overflow-auto">
-      <CardHeader className="border-b">
+    <Card className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
+      <CardHeader className="shrink-0 border-b">
         <div className="mb-3 flex min-w-0 flex-col items-start gap-3 lg:flex-row lg:gap-4">
           <div className="flex w-full min-w-0 flex-1 items-start gap-2 overflow-hidden sm:gap-3">
             <div className="text-muted-foreground mt-1 shrink-0">
@@ -876,8 +880,8 @@ function SessionDetailView({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="min-w-0 px-3 pt-2 sm:px-6 sm:pt-3">
-        <div className="min-w-0">
+      <CardContent className="min-w-0 overflow-x-hidden px-3 pt-2 sm:px-6 sm:pt-3">
+        <div className="min-w-0 overflow-hidden">
           {session.type === 'workflow'
             ? session.steps.map(step => (
                 <WorkflowStepNode key={step.id} step={step} />
@@ -1153,7 +1157,7 @@ export function SessionsSection() {
 
   return (
     <ErrorBoundary>
-      <div className="flex flex-1 flex-col gap-3 sm:p-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden sm:p-4">
         <div className="bg-muted/20 flex flex-col gap-1.5 rounded-md py-3">
           <div className="flex flex-col gap-2 md:flex-row md:items-center">
             <div className="relative min-w-0 flex-1">
@@ -1300,8 +1304,8 @@ export function SessionsSection() {
             <span className="text-base font-medium">Loading sessions...</span>
           </div>
         ) : filteredAndSortedSessions.length > 0 ? (
-          <div className="flex flex-1 flex-col gap-3 overflow-hidden lg:flex-row lg:gap-4">
-            <div className="flex w-full flex-col gap-3 overflow-auto pr-2 lg:w-64 lg:max-w-[24rem] lg:min-w-[16rem] xl:w-80 2xl:w-96">
+          <div className="flex max-h-[calc(100vh-10rem)] min-h-0 flex-1 flex-col gap-3 lg:flex-row lg:gap-4">
+            <div className="flex h-full min-h-0 w-full flex-col gap-3 overflow-y-auto pr-2 lg:w-64 lg:max-w-[24rem] lg:min-w-[16rem] xl:w-80 2xl:w-96">
               {filteredAndSortedSessions.map(session => (
                 <SessionListItem
                   key={session.id}
@@ -1311,7 +1315,7 @@ export function SessionsSection() {
                 />
               ))}
             </div>
-            <div className="flex min-w-0 flex-1 overflow-hidden">
+            <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
               {selectedSession ? (
                 <SessionDetailView
                   session={selectedSession}
