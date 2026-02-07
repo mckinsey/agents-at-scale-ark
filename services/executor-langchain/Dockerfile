@@ -14,11 +14,11 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 COPY pyproject.toml setup.cfg README.md ./
 COPY src/ ./src/
 
-# Copy ark-sdk wheel
-COPY build-context/*.whl /tmp/
+# Copy dependency wheels
+COPY build-context/*.whl /app/deps/
 
-# Add ark-sdk wheel as dependency and sync
-RUN uv add /tmp/ark_sdk-*.whl && \
+# Add dependency wheels and sync
+RUN uv add /app/deps/ark_executor_common-*.whl /app/deps/ark_sdk-*.whl && \
     HOME=/home/executor uv sync --no-dev && \
     HOME=/home/executor uv pip install -e . && \
     chown -R executor:executor /home/executor && \
