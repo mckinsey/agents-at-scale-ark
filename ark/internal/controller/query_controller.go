@@ -257,12 +257,14 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 			autoCommit := resolvedWorkspace.AutoCommit
 			if releaseErr := wsClient.ReleaseWorkspace(opCtx, provisionedWorkspace.ID, string(obj.UID), autoCommit); releaseErr != nil {
 				logf.FromContext(opCtx).Error(releaseErr, "failed to release workspace")
+				r.Eventing.WorkspaceRecorder().ReleaseFailed(opCtx, &obj, releaseErr.Error())
 			}
 			if !isRefWorkspace {
 				ttl := resolvedWorkspace.TTL
 				if ttl == nil || ttl.Duration == 0 {
 					if cleanupErr := wsClient.CleanupWorkspace(opCtx, provisionedWorkspace.ID); cleanupErr != nil {
 						logf.FromContext(opCtx).Error(cleanupErr, "failed to cleanup workspace")
+						r.Eventing.WorkspaceRecorder().CleanupFailed(opCtx, &obj, cleanupErr.Error())
 					}
 				}
 			}
@@ -653,6 +655,7 @@ func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query
 		wsClient := genai.NewWorkspaceClient(r.Eventing.WorkspaceRecorder())
 		if err := wsClient.CleanupWorkspace(ctx, wsID); err != nil {
 			log.Error(err, "failed to cleanup workspace during finalization", "workspaceId", wsID)
+			r.Eventing.WorkspaceRecorder().CleanupFailed(ctx, query, err.Error())
 		}
 	}
 }

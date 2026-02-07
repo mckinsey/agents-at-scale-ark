@@ -362,7 +362,7 @@ Key configuration options in `chart/values.yaml`:
 
 ```yaml
 securityContext:
-  readOnlyRootFilesystem: true
+  readOnlyRootFilesystem: false  # required for UV cache, workspace writes, and SDK temp files
 
 workspace:
   enabled: true

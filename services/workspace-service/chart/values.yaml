@@ -7,6 +7,20 @@ app:
   basePath: /workspaces
   orphanGracePeriod: 1h
 
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
 storage:
   size: 10Gi
   storageClass: ""

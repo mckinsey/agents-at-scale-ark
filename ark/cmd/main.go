@@ -286,7 +286,7 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 			Scheme:   mgr.GetScheme(),
 			Eventing: eventingProvider,
 		}},
-		{"Workspace", &controller.WorkspaceReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
+		{"Workspace", &controller.WorkspaceReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Eventing: eventingProvider}},
 	}
 
 	for _, reconciler := range controllers {

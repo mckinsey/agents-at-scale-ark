@@ -18,12 +18,15 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
+	"mckinsey.com/ark/internal/eventing"
+	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	"mckinsey.com/ark/internal/genai"
 )
 
 type WorkspaceReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Eventing *eventingconfig.Provider
 }
 
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=workspaces,verbs=get;list;watch;create;update;patch;delete
@@ -106,7 +109,11 @@ func (r *WorkspaceReconciler) reconcileWorkspace(ctx context.Context, ws *arkv1a
 
 func (r *WorkspaceReconciler) provisionWorkspace(ctx context.Context, ws *arkv1alpha1.Workspace) error {
 	log := logf.FromContext(ctx)
-	wsClient := genai.NewWorkspaceClient(nil)
+	var recorder eventing.WorkspaceRecorder
+	if r.Eventing != nil {
+		recorder = r.Eventing.WorkspaceRecorder()
+	}
+	wsClient := genai.NewWorkspaceClient(recorder)
 
 	persistent := true
 	if ws.Spec.Persistent != nil {
@@ -133,6 +140,9 @@ func (r *WorkspaceReconciler) provisionWorkspace(ctx context.Context, ws *arkv1a
 	if provisioned != nil {
 		if err := wsClient.ReleaseWorkspace(ctx, provisioned.ID, string(ws.UID), nil); err != nil {
 			log.Error(err, "failed to release workspace after provisioning", "workspaceId", provisioned.ID)
+			if r.Eventing != nil {
+				r.Eventing.WorkspaceRecorder().ReleaseFailed(ctx, ws, err.Error())
+			}
 		}
 
 		if ws.Annotations == nil {
@@ -204,9 +214,16 @@ func (r *WorkspaceReconciler) handleDeletion(ctx context.Context, ws *arkv1alpha
 		}
 
 		if wsID := ws.Annotations[annotations.WorkspaceID]; wsID != "" {
-			wsClient := genai.NewWorkspaceClient(nil)
+			var recorder eventing.WorkspaceRecorder
+			if r.Eventing != nil {
+				recorder = r.Eventing.WorkspaceRecorder()
+			}
+			wsClient := genai.NewWorkspaceClient(recorder)
 			if err := wsClient.CleanupWorkspace(ctx, wsID); err != nil {
 				log.Error(err, "failed to cleanup workspace during deletion", "workspaceId", wsID)
+				if r.Eventing != nil {
+					r.Eventing.WorkspaceRecorder().CleanupFailed(ctx, ws, err.Error())
+				}
 			}
 		}
 

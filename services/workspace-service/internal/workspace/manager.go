@@ -46,10 +46,10 @@ func (m *Manager) Provision(req ProvisionRequest) (*ProvisionResponse, error) {
 	id := uuid.New().String()
 	wsPath := filepath.Join(m.basePath, "ephemeral", req.QueryUID, id)
 
-	if err := os.MkdirAll(wsPath, 0o777); err != nil {
+	if err := os.MkdirAll(wsPath, 0o775); err != nil {
 		return nil, fmt.Errorf("failed to create workspace directory: %w", err)
 	}
-	if err := os.Chmod(wsPath, 0o777); err != nil {
+	if err := os.Chmod(wsPath, 0o775); err != nil {
 		return nil, fmt.Errorf("failed to set workspace directory permissions: %w", err)
 	}
 
@@ -79,9 +79,9 @@ func (m *Manager) Provision(req ProvisionRequest) (*ProvisionResponse, error) {
 			return nil
 		}
 		if d.IsDir() {
-			os.Chmod(path, 0o777)
+			os.Chmod(path, 0o775)
 		} else {
-			os.Chmod(path, 0o666)
+			os.Chmod(path, 0o664)
 		}
 		return nil
 	})
@@ -192,6 +192,13 @@ func (m *Manager) Acquire(id string, req AcquireRequest) (*AcquireResponse, erro
 		return nil, &WorkspaceNotFoundError{WorkspaceID: id}
 	}
 
+	if ws.Phase == "Releasing" {
+		return nil, &WorkspaceInUseError{
+			WorkspaceID: id,
+			OwnerUID:    "releasing",
+		}
+	}
+
 	if ws.QueryUID != "" && ws.QueryUID != req.QueryUID {
 		return nil, &WorkspaceInUseError{
 			WorkspaceID: id,
@@ -237,6 +244,7 @@ func (m *Manager) Release(id string, req ReleaseRequest) error {
 		return &WorkspaceNotFoundError{WorkspaceID: id}
 	}
 	ws.QueryUID = ""
+	ws.Phase = "Releasing"
 	m.mu.Unlock()
 
 	if req.AutoCommit != nil && req.AutoCommit.Enabled && ws.ContentType == "git" {
@@ -256,6 +264,10 @@ func (m *Manager) Release(id string, req ReleaseRequest) error {
 			}
 		}
 	}
+
+	m.mu.Lock()
+	ws.Phase = "Ready"
+	m.mu.Unlock()
 
 	m.logger.Info("workspace released", zap.String("id", id))
 	return nil
