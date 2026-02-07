@@ -17,7 +17,7 @@ A workspace has two components:
 | Component   | Purpose                  | Source           | Mutable             |
 | ----------- | ------------------------ | ---------------- | ------------------- |
 | Environment | Tools, binaries, runtime | Docker image     | No (read-only)      |
-| Content     | Code, data to work on   | Git, S3, archive | Yes (if persistent) |
+| Content     | Code, data to work on    | Git, S3, archive | Yes (if persistent) |
 
 ## Query Workspace Configuration
 
@@ -193,6 +193,7 @@ spec:
 Workspace configuration replaces the label-based git configuration. Existing git labels (`git-repo-url`, `git-branch`, etc.) continue to work during the migration period.
 
 **Before (labels)**:
+
 ```yaml
 kind: Agent
 metadata:
@@ -203,6 +204,7 @@ metadata:
 ```
 
 **After (workspace)**:
+
 ```yaml
 kind: Query
 spec:
@@ -216,6 +218,7 @@ spec:
 ```
 
 The workspace model offers:
+
 - Per-query isolation (no race conditions)
 - Dynamic branch configuration from the API
 - Environment support (tools from Docker images)

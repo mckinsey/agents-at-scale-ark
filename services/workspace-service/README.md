@@ -270,12 +270,12 @@ For Git-backed workspaces, changes can be automatically committed and pushed on 
 
 When configuring a workspace in a Query, additional options control behavior:
 
-| Field | Default | Description |
-| ------------- | ------------ | ------------------------------------------------- |
-| `mountPath` | `/workspace` | Path where content is mounted for the agent |
-| `persistent` | `true` | Keep workspace across query completions |
-| `sessionId` | - | Resume a previous session (for persistent workspaces) |
-| `ttl` | - | Time before workspace is cleaned up |
+| Field        | Default      | Description                                           |
+| ------------ | ------------ | ----------------------------------------------------- |
+| `mountPath`  | `/workspace` | Path where content is mounted for the agent           |
+| `persistent` | `true`       | Keep workspace across query completions               |
+| `sessionId`  | -            | Resume a previous session (for persistent workspaces) |
+| `ttl`        | -            | Time before workspace is cleaned up                   |
 
 **Inline vs Reference**: Queries can define workspaces inline or reference a Workspace CR:
 
