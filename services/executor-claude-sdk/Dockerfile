@@ -18,9 +18,9 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
 
-COPY build-context/*.whl /tmp/
+COPY build-context/*.whl /app/deps/
 
-RUN uv add /tmp/ark_executor_common-*.whl && \
+RUN uv add /app/deps/ark_executor_common-*.whl && \
     HOME=/home/executor uv sync --no-dev && \
     HOME=/home/executor uv pip install -e . && \
     chown -R executor:executor /home/executor && \

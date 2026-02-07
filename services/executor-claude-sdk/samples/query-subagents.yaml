@@ -1,0 +1,7 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-claude-subagents
+spec:
+  agent: claude-feature-developer
+  input: "Research best practices for error handling in Go, then create a utility package with structured error types and wrapping helpers."

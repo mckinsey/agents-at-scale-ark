@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sync"
@@ -45,8 +46,11 @@ func (m *Manager) Provision(req ProvisionRequest) (*ProvisionResponse, error) {
 	id := uuid.New().String()
 	wsPath := filepath.Join(m.basePath, "ephemeral", req.QueryUID, id)
 
-	if err := os.MkdirAll(wsPath, 0o755); err != nil {
+	if err := os.MkdirAll(wsPath, 0o777); err != nil {
 		return nil, fmt.Errorf("failed to create workspace directory: %w", err)
+	}
+	if err := os.Chmod(wsPath, 0o777); err != nil {
+		return nil, fmt.Errorf("failed to set workspace directory permissions: %w", err)
 	}
 
 	if req.Environment != nil && req.Environment.Image != nil && m.imageProvisioner != nil {
@@ -68,6 +72,23 @@ func (m *Manager) Provision(req ProvisionRequest) (*ProvisionResponse, error) {
 			return nil, fmt.Errorf("failed to provision content: %w", err)
 		}
 		contentType = ct
+	}
+
+	filepath.WalkDir(wsPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			os.Chmod(path, 0o777)
+		} else {
+			os.Chmod(path, 0o666)
+		}
+		return nil
+	})
+
+	var gitInfo *GitInfoResponse
+	if contentType == "git" {
+		gitInfo = m.getGitInfo(wsPath)
 	}
 
 	m.mu.Lock()
@@ -92,6 +113,7 @@ func (m *Manager) Provision(req ProvisionRequest) (*ProvisionResponse, error) {
 		ID:          id,
 		Path:        wsPath,
 		ContentType: contentType,
+		GitInfo:     gitInfo,
 	}, nil
 }
 
@@ -268,11 +290,37 @@ func (m *Manager) Status(id string) (*StatusResponse, error) {
 		return nil, &WorkspaceNotFoundError{WorkspaceID: id}
 	}
 
+	var gitInfo *GitInfoResponse
+	if ws.ContentType == "git" {
+		gitInfo = m.getGitInfo(ws.Path)
+	}
+
 	return &StatusResponse{
 		ID:          ws.ID,
 		Path:        ws.Path,
 		Phase:       ws.Phase,
 		ContentType: ws.ContentType,
 		QueryUID:    ws.QueryUID,
+		GitInfo:     gitInfo,
 	}, nil
+}
+
+func (m *Manager) getGitInfo(repoPath string) *GitInfoResponse {
+	p, ok := m.provisioners["git"]
+	if !ok {
+		return nil
+	}
+	gitP, ok := p.(*content.GitProvisioner)
+	if !ok {
+		return nil
+	}
+	info, err := gitP.GetInfo(repoPath)
+	if err != nil {
+		m.logger.Warn("failed to get git info", zap.String("path", repoPath), zap.Error(err))
+		return nil
+	}
+	return &GitInfoResponse{
+		LastCommit: info.LastCommit,
+		Dirty:      info.Dirty,
+	}
 }

@@ -24,12 +24,14 @@ make dev
 
 Configure agent behavior using labels on the Agent CRD:
 
-| Label                              | Default | Description                                      |
-| ---------------------------------- | ------- | ------------------------------------------------ |
-| `openai-web-search`                | `true`  | Enable built-in web search tool                  |
-| `openai-code-interpreter`          | `false` | Enable code interpreter for Python execution     |
-| `openai-file-search-vector-stores` | -       | Comma-separated vector store IDs for file search |
-| `openai-codex`                     | `true`  | Enable Codex tool when workspace is available    |
+| Label                                  | Default | Description                                      |
+| -------------------------------------- | ------- | ------------------------------------------------ |
+| `openai-web-search`                    | `true`  | Enable built-in web search tool                  |
+| `openai-code-interpreter`              | `false` | Enable code interpreter for Python execution     |
+| `openai-code-interpreter-memory-limit` | `1g`    | Container memory: `1g`, `4g`, `16g`, or `64g`    |
+| `openai-code-interpreter-container-id` | -       | Use explicit container ID instead of auto mode   |
+| `openai-file-search-vector-stores`     | -       | Comma-separated vector store IDs for file search |
+| `openai-codex`                         | `true`  | Enable Codex tool when workspace is available    |
 
 ### Example Agent
 
@@ -41,6 +43,7 @@ metadata:
   labels:
     openai-web-search: "true"
     openai-code-interpreter: "true"
+    openai-code-interpreter-memory-limit: "4g"
     openai-file-search-vector-stores: "vs_abc123,vs_def456"
 spec:
   executionEngine: openai-sdk
@@ -261,6 +264,41 @@ ARK_MCP_SERVER_CONFLUENCE_URL=https://mcp.example.com/confluence
 MCP tools execute without approval. When a configured MCP server exposes a tool, the agent can invoke it automatically. Only configure MCP servers you trust and use authentication headers to restrict access.
 
 Unlike OpenAI's hosted tools (WebSearch, CodeInterpreter, FileSearch) which run in OpenAI's sandboxed infrastructure, MCP tools run wherever the MCP server is deployed.
+
+## Telemetry
+
+The executor integrates with OpenTelemetry for distributed tracing. Traces are automatically created for:
+
+- Overall execution span
+- Tool calls via ArkAgentHooks
+
+### Configuration
+
+| Environment Variable          | Description                             |
+| ----------------------------- | --------------------------------------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint                 |
+| `OTEL_SERVICE_NAME`           | Service name (default: openai-executor) |
+
+## Handoffs
+
+Define agents for handoff via `agent.parameters.handoffs`. The main agent can transfer control to these agents.
+
+```yaml
+spec:
+  parameters:
+    handoffs:
+      researcher:
+        instructions: "Research technical topics"
+        model: "gpt-4o"
+      developer:
+        instructions: "Implement code changes"
+        model: "gpt-4o"
+```
+
+| Field          | Required | Description                    |
+| -------------- | -------- | ------------------------------ |
+| `instructions` | Yes      | Instructions for handoff agent |
+| `model`        | No       | Model (default: gpt-4o)        |
 
 ## Environment Variables
 

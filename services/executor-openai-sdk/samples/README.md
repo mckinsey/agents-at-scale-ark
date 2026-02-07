@@ -27,6 +27,7 @@ kubectl apply -f model-openai.yaml
 | `simple-assistant`   | None                        | Basic conversational assistant                 |
 | `multi-tool-analyst` | WebSearch + CodeInterpreter | Combined research and analysis                 |
 | `codex-developer`    | Codex                       | Workspace file operations via Codex            |
+| `project-manager`    | Handoffs                    | Multi-agent delegation via handoffs            |
 
 ### Tool Configuration via Labels
 
@@ -35,6 +36,8 @@ metadata:
   labels:
     openai-web-search: "true" # Default: true
     openai-code-interpreter: "true" # Default: false
+    openai-code-interpreter-memory-limit: "4g" # Default: 1g (options: 1g, 4g, 16g, 64g)
+    openai-code-interpreter-container-id: "cntr_abc123" # Default: auto-created
     openai-file-search-vector-stores: "vs_abc123,vs_def456"
     openai-codex: "true" # Default: true (when workspace provided)
     openai-max-turns: "10" # Default: unlimited

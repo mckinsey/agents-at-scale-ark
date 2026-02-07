@@ -39,6 +39,12 @@ spec:
             - name: http
               containerPort: 8000
               protocol: TCP
+          {{- if .Values.otel.secretRef.enabled }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.otel.secretRef.name }}
+                optional: true
+          {{- end }}
           env:
             {{- range $key, $value := .Values.env }}
             - name: {{ $key }}
@@ -75,6 +81,10 @@ spec:
             - name: tmp
               mountPath: /tmp
             {{- end }}
+            {{- if .Values.workspaceStorage.enabled }}
+            - name: workspace-storage
+              mountPath: {{ .Values.workspaceStorage.mountPath }}
+            {{- end }}
       volumes:
         {{- if .Values.workspace.enabled }}
         - name: workspace
@@ -85,6 +95,11 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: {{ .Values.tmpVolume.sizeLimit }}
+        {{- end }}
+        {{- if .Values.workspaceStorage.enabled }}
+        - name: workspace-storage
+          persistentVolumeClaim:
+            claimName: {{ .Values.workspaceStorage.pvcName }}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

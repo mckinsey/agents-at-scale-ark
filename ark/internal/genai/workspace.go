@@ -15,6 +15,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/eventing"
 )
 
@@ -24,12 +25,18 @@ const (
 	defaultWorkspaceServiceURL     = "http://workspace-service:8090"
 )
 
-func ResolveQueryWorkspace(ctx context.Context, k8sClient client.Client, ws *arkv1alpha1.QueryWorkspace, defaultNamespace string) (*arkv1alpha1.QueryWorkspace, error) {
+type ResolvedWorkspace struct {
+	Workspace          *arkv1alpha1.QueryWorkspace
+	ExistingWorkspaceID string
+	ExistingPath        string
+}
+
+func ResolveQueryWorkspace(ctx context.Context, k8sClient client.Client, ws *arkv1alpha1.QueryWorkspace, defaultNamespace string) (*ResolvedWorkspace, error) {
 	if ws == nil {
 		return nil, nil
 	}
 	if !ws.IsRef() {
-		return ws, nil
+		return &ResolvedWorkspace{Workspace: ws}, nil
 	}
 
 	namespace := ws.Ref.Namespace
@@ -52,9 +59,19 @@ func ResolveQueryWorkspace(ctx context.Context, k8sClient client.Client, ws *ark
 	resolved.SessionId = ws.SessionId
 	resolved.Ref = ws.Ref
 
-	logf.FromContext(ctx).Info("resolved workspace ref", "workspace", key, "hasOverrides", ws.Overrides != nil)
+	result := &ResolvedWorkspace{Workspace: resolved}
 
-	return resolved, nil
+	if wsCRD.Status.Phase == "Ready" && wsCRD.Status.Path != "" {
+		if wsID, ok := wsCRD.Annotations[annotations.WorkspaceID]; ok && wsID != "" {
+			result.ExistingWorkspaceID = wsID
+			result.ExistingPath = wsCRD.Status.Path
+			logf.FromContext(ctx).Info("resolved workspace ref with existing provisioned path", "workspace", key, "workspaceId", wsID, "path", wsCRD.Status.Path)
+		}
+	} else {
+		logf.FromContext(ctx).Info("resolved workspace ref", "workspace", key, "hasOverrides", ws.Overrides != nil)
+	}
+
+	return result, nil
 }
 
 func ResolveWorkspaceCredentials(ctx context.Context, k8sClient client.Client, content *arkv1alpha1.WorkspaceContent, namespace string) (map[string]string, error) {
@@ -313,10 +330,16 @@ type wsArchive struct {
 
 type wsEmpty struct{}
 
+type wsGitInfo struct {
+	LastCommit string `json:"lastCommit,omitempty"`
+	Dirty      bool   `json:"dirty,omitempty"`
+}
+
 type workspaceProvisionResponse struct {
-	ID          string `json:"id"`
-	Path        string `json:"path"`
-	ContentType string `json:"contentType,omitempty"`
+	ID          string     `json:"id"`
+	Path        string     `json:"path"`
+	ContentType string     `json:"contentType,omitempty"`
+	GitInfo     *wsGitInfo `json:"gitInfo,omitempty"`
 }
 
 type workspaceReleaseRequest struct {
@@ -332,11 +355,17 @@ type wsAutoCommit struct {
 	UserEmail  string `json:"userEmail,omitempty"`
 }
 
+type ProvisionedGitInfo struct {
+	LastCommit string
+	Dirty      bool
+}
+
 type ProvisionedWorkspace struct {
 	ID          string
 	Path        string
 	Config      *WorkspaceConfig
 	ContentType string
+	GitInfo     *ProvisionedGitInfo
 }
 
 func (wc *WorkspaceClient) ProvisionWorkspace(ctx context.Context, queryUID string, ws *arkv1alpha1.QueryWorkspace, credentials map[string]string) (*ProvisionedWorkspace, error) {
@@ -375,7 +404,7 @@ func (wc *WorkspaceClient) ProvisionWorkspace(ctx context.Context, queryUID stri
 
 	persistent := ws.Persistent != nil && *ws.Persistent
 
-	return &ProvisionedWorkspace{
+	pw := &ProvisionedWorkspace{
 		ID:          provResp.ID,
 		Path:        provResp.Path,
 		ContentType: provResp.ContentType,
@@ -386,7 +415,16 @@ func (wc *WorkspaceClient) ProvisionWorkspace(ctx context.Context, queryUID stri
 			HasEnvironment: ws.Environment != nil,
 			HasGit:         provResp.ContentType == "git",
 		},
-	}, nil
+	}
+
+	if provResp.GitInfo != nil {
+		pw.GitInfo = &ProvisionedGitInfo{
+			LastCommit: provResp.GitInfo.LastCommit,
+			Dirty:      provResp.GitInfo.Dirty,
+		}
+	}
+
+	return pw, nil
 }
 
 func (wc *WorkspaceClient) detectContentType(ws *arkv1alpha1.QueryWorkspace) string {
@@ -489,6 +527,86 @@ func (wc *WorkspaceClient) sendProvisionRequest(ctx context.Context, req workspa
 	}
 
 	return &provResp, nil
+}
+
+func (wc *WorkspaceClient) AcquireWorkspace(ctx context.Context, workspaceID string, queryUID string, sessionID string, ws *arkv1alpha1.QueryWorkspace, existingPath string) (*ProvisionedWorkspace, error) {
+	operationData := map[string]string{
+		"workspaceId": workspaceID,
+	}
+
+	if wc.recorder != nil {
+		ctx = wc.recorder.Start(ctx, "WorkspaceProvision", "Acquiring existing workspace", operationData)
+	}
+
+	req := struct {
+		QueryUID  string `json:"queryUid"`
+		SessionID string `json:"sessionId,omitempty"`
+	}{
+		QueryUID:  queryUID,
+		SessionID: sessionID,
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		if wc.recorder != nil {
+			wc.recorder.Fail(ctx, "WorkspaceProvision", fmt.Sprintf("Failed to marshal acquire request: %v", err), err, operationData)
+		}
+		return nil, fmt.Errorf("failed to marshal acquire request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/workspaces/%s/acquire", wc.serviceURL, workspaceID), bytes.NewBuffer(body))
+	if err != nil {
+		if wc.recorder != nil {
+			wc.recorder.Fail(ctx, "WorkspaceProvision", fmt.Sprintf("Failed to create acquire request: %v", err), err, operationData)
+		}
+		return nil, fmt.Errorf("failed to create acquire request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := wc.httpClient.Do(httpReq)
+	if err != nil {
+		if wc.recorder != nil {
+			wc.recorder.Fail(ctx, "WorkspaceProvision", fmt.Sprintf("Workspace acquire request failed: %v", err), err, operationData)
+		}
+		return nil, fmt.Errorf("workspace acquire request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		if wc.recorder != nil {
+			wc.recorder.Fail(ctx, "WorkspaceProvision", fmt.Sprintf("Workspace acquire failed with status %d", resp.StatusCode), fmt.Errorf("status %d", resp.StatusCode), operationData)
+		}
+		return nil, fmt.Errorf("workspace acquire failed with status %d", resp.StatusCode)
+	}
+
+	var acquireResp struct {
+		Path      string `json:"path"`
+		SessionID string `json:"sessionId"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&acquireResp); err != nil {
+		return nil, fmt.Errorf("failed to decode acquire response: %w", err)
+	}
+
+	operationData["workspacePath"] = acquireResp.Path
+	if wc.recorder != nil {
+		wc.recorder.Complete(ctx, "WorkspaceProvision", "Workspace provisioned successfully", operationData)
+	}
+
+	logf.FromContext(ctx).Info("workspace acquired", "id", workspaceID, "path", acquireResp.Path)
+
+	persistent := ws.Persistent != nil && *ws.Persistent
+
+	return &ProvisionedWorkspace{
+		ID:   workspaceID,
+		Path: acquireResp.Path,
+		Config: &WorkspaceConfig{
+			Path:           acquireResp.Path,
+			SessionId:      acquireResp.SessionID,
+			Persistent:     persistent,
+			HasEnvironment: ws.Environment != nil,
+			HasGit:         ws.Content != nil && ws.Content.Git != nil,
+		},
+	}, nil
 }
 
 func (wc *WorkspaceClient) ReleaseWorkspace(ctx context.Context, workspaceID string, queryUID string, autoCommit *arkv1alpha1.WorkspaceAutoCommit) error {

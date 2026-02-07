@@ -84,12 +84,13 @@ metadata:
 
 ### Code Interpreter
 
-Enable sandboxed code execution per-agent:
+Enable sandboxed code execution per-agent. The `memory_limit` controls the container RAM tier (`1g`, `4g`, `16g`, or `64g`). Use `container-id` to reuse a specific container across requests.
 
 ```yaml
 metadata:
   labels:
     openai-code-interpreter: "true"
+    openai-code-interpreter-memory-limit: "4g"
 ```
 
 ### File Search (Vector Stores)

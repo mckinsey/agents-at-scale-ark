@@ -22,6 +22,7 @@ from .git import (
     prepare_workspace_with_git,
 )
 from .history import format_history_as_prompt
+from .telemetry import TraceContext, extract_trace_context, get_tracer, pre_tool_hook, post_tool_hook
 
 __all__ = [
     "AgentConfig",
@@ -40,6 +41,11 @@ __all__ = [
     "clone_repository",
     "commit_and_push",
     "finalize_workspace_git",
+    "TraceContext",
+    "extract_trace_context",
     "format_history_as_prompt",
+    "get_tracer",
+    "post_tool_hook",
+    "pre_tool_hook",
     "prepare_workspace_with_git",
 ]

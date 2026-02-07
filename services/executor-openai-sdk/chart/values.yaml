@@ -52,6 +52,11 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
+otel:
+  secretRef:
+    enabled: true
+    name: otel-environment-variables
+
 env:
   HOST: "0.0.0.0"
   PORT: "8000"
@@ -63,6 +68,11 @@ workspace:
 tmpVolume:
   enabled: true
   sizeLimit: "256Mi"
+
+workspaceStorage:
+  enabled: true
+  mountPath: /workspaces
+  pvcName: workspace-service-pvc
 
 healthCheck:
   enabled: true

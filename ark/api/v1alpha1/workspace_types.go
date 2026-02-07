@@ -183,9 +183,20 @@ type WorkspaceGitStatus struct {
 	Dirty      bool   `json:"dirty,omitempty"`
 }
 
+type WorkspaceObjectStorageStatus struct {
+	Provider   string       `json:"provider,omitempty"`
+	LastSynced *metav1.Time `json:"lastSynced,omitempty"`
+}
+
+type WorkspaceArchiveStatus struct {
+	ExtractedAt *metav1.Time `json:"extractedAt,omitempty"`
+}
+
 type WorkspaceContentStatus struct {
-	Type string              `json:"type,omitempty"`
-	Git  *WorkspaceGitStatus `json:"git,omitempty"`
+	Type          string                        `json:"type,omitempty"`
+	Git           *WorkspaceGitStatus           `json:"git,omitempty"`
+	ObjectStorage *WorkspaceObjectStorageStatus `json:"objectStorage,omitempty"`
+	Archive       *WorkspaceArchiveStatus       `json:"archive,omitempty"`
 }
 
 type WorkspaceStatus struct {

@@ -1,10 +1,12 @@
 """OpenAI Agents SDK execution logic."""
 
+import json
 import logging
 import os
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from openai import AsyncOpenAI
+from openai.types.responses.tool_param import CodeInterpreter
 from agents import (
     Agent,
     Runner,
@@ -15,6 +17,7 @@ from agents import (
     CodeInterpreterTool,
     FileSearchTool,
     HostedMCPTool,
+    handoff,
     set_default_openai_client,
 )
 from agents.lifecycle import AgentHooksBase
@@ -28,6 +31,7 @@ from agents.extensions.experimental.codex import (
 
 from ark_executor_common import BaseExecutor, ExecutionEngineRequest, Message, WorkspaceConfig
 from ark_executor_common.models import resolve_api_key, resolve_base_url, resolve_model_properties
+from ark_executor_common.telemetry import TraceContext, get_tracer
 
 DEFAULT_WORKSPACE = "/workspace"
 DEFAULT_CODEX_MODEL = "gpt-5.2-codex"
@@ -71,6 +75,8 @@ class ArkAgentHooks(AgentHooksBase):
     def __init__(self, agent_name: str, namespace: str):
         self.agent_name = agent_name
         self.namespace = namespace
+        self._tracer = get_tracer("openai-executor")
+        self._tool_spans: Dict[str, Any] = {}
 
     async def on_start(self, context, agent) -> None:
         logger.info(f"[{self.namespace}/{self.agent_name}] Agent starting execution")
@@ -80,9 +86,18 @@ class ArkAgentHooks(AgentHooksBase):
 
     async def on_tool_start(self, context, agent, tool) -> None:
         logger.info(f"[{self.namespace}/{self.agent_name}] Tool '{tool.name}' starting")
+        span = self._tracer.start_span(f"tool.{tool.name}")
+        span.set_attribute("tool.name", tool.name)
+        self._tool_spans[tool.name] = span
 
     async def on_tool_end(self, context, agent, tool, result) -> None:
         logger.info(f"[{self.namespace}/{self.agent_name}] Tool '{tool.name}' completed")
+        span = self._tool_spans.pop(tool.name, None)
+        if span:
+            from opentelemetry.trace import Status, StatusCode
+            span.set_attribute("tool.result", str(result)[:1024])
+            span.set_status(Status(StatusCode.OK))
+            span.end()
 
     async def on_llm_start(self, context, agent, system_prompt, input_items) -> None:
         logger.debug(f"[{self.namespace}/{self.agent_name}] LLM call starting")
@@ -105,7 +120,7 @@ class OpenAIAgentsExecutor(BaseExecutor):
         logger.info(f"[{agent_id}] No workspace provided, using default: {DEFAULT_WORKSPACE}")
         return DEFAULT_WORKSPACE
 
-    async def execute_agent(self, request: ExecutionEngineRequest) -> List[Message]:
+    async def execute_agent(self, request: ExecutionEngineRequest, trace_context: Optional[TraceContext] = None) -> List[Message]:
         agent_id = f"{request.agent.namespace}/{request.agent.name}"
         logger.info(f"[{agent_id}] Executing OpenAI Agents SDK query")
 
@@ -196,6 +211,30 @@ class OpenAIAgentsExecutor(BaseExecutor):
                 return {"type": "content", "content": delta.content, "agent": agent_name}
         return None
 
+    def _parse_handoffs(self, parameters: List) -> list:
+        handoffs_json = None
+        for param in parameters:
+            if param.name == "handoffs":
+                handoffs_json = param.value
+                break
+        if not handoffs_json:
+            return []
+        try:
+            handoffs_config = json.loads(handoffs_json) if isinstance(handoffs_json, str) else handoffs_json
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("Invalid handoffs configuration, skipping")
+            return []
+        handoff_agents = []
+        for name, config in handoffs_config.items():
+            agent = Agent(
+                name=name,
+                instructions=config.get("instructions", ""),
+                model=config.get("model", "gpt-4o"),
+            )
+            handoff_agents.append(handoff(agent=agent))
+        logger.info(f"Configured {len(handoff_agents)} handoff agent(s): {list(handoffs_config.keys())}")
+        return handoff_agents
+
     def _build_agent(self, request: ExecutionEngineRequest, workspace_path: Optional[str] = None) -> Agent:
         resolved_prompt = self._resolve_prompt(request.agent)
         model_settings = self._build_model_settings(request)
@@ -214,6 +253,10 @@ class OpenAIAgentsExecutor(BaseExecutor):
         if request.agent.outputSchema:
             kwargs["output_type"] = request.agent.outputSchema
 
+        handoffs_list = self._parse_handoffs(request.agent.parameters)
+        if handoffs_list:
+            kwargs["handoffs"] = handoffs_list
+
         return Agent(**kwargs)
 
     def _build_tools(self, request: ExecutionEngineRequest, workspace_path: Optional[str] = None) -> list:
@@ -224,7 +267,18 @@ class OpenAIAgentsExecutor(BaseExecutor):
             tools.append(WebSearchTool())
 
         if _to_bool(labels.get("openai-code-interpreter", "false")):
-            tools.append(CodeInterpreterTool())
+            memory_limit = labels.get("openai-code-interpreter-memory-limit", "1g")
+            container_id = labels.get("openai-code-interpreter-container-id")
+
+            if container_id:
+                container_config = container_id
+            else:
+                container_config = {"type": "auto", "memory_limit": memory_limit}
+
+            tools.append(CodeInterpreterTool(tool_config=CodeInterpreter(
+                type="code_interpreter",
+                container=container_config,
+            )))
 
         file_search_ids = labels.get("openai-file-search-vector-stores", "")
         if file_search_ids:

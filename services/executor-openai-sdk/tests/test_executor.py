@@ -342,6 +342,96 @@ class TestOpenAIAgentsExecutor:
         
         mock_file_search.assert_called_once_with(vector_store_ids=["vs_123", "vs_456"])
 
+    def test_build_tools_code_interpreter_default_container(self, sample_model, sample_user_message):
+        from openai_executor.executor import OpenAIAgentsExecutor
+        from agents import CodeInterpreterTool
+        from ark_executor_common import AgentConfig, ExecutionEngineRequest
+
+        agent_config = AgentConfig(
+            name="test-agent",
+            namespace="default",
+            prompt="You are helpful.",
+            model=sample_model,
+            labels={
+                "openai-web-search": "false",
+                "openai-code-interpreter": "true",
+            },
+        )
+        request = ExecutionEngineRequest(
+            agent=agent_config,
+            userInput=sample_user_message,
+            history=[],
+            tools=[],
+        )
+
+        executor = OpenAIAgentsExecutor()
+        tools = executor._build_tools(request)
+
+        ci_tool = next((t for t in tools if isinstance(t, CodeInterpreterTool)), None)
+        assert ci_tool is not None
+        assert ci_tool.tool_config["container"]["type"] == "auto"
+        assert ci_tool.tool_config["container"]["memory_limit"] == "1g"
+
+    def test_build_tools_code_interpreter_custom_memory_limit(self, sample_model, sample_user_message):
+        from openai_executor.executor import OpenAIAgentsExecutor
+        from agents import CodeInterpreterTool
+        from ark_executor_common import AgentConfig, ExecutionEngineRequest
+
+        agent_config = AgentConfig(
+            name="test-agent",
+            namespace="default",
+            prompt="You are helpful.",
+            model=sample_model,
+            labels={
+                "openai-web-search": "false",
+                "openai-code-interpreter": "true",
+                "openai-code-interpreter-memory-limit": "16g",
+            },
+        )
+        request = ExecutionEngineRequest(
+            agent=agent_config,
+            userInput=sample_user_message,
+            history=[],
+            tools=[],
+        )
+
+        executor = OpenAIAgentsExecutor()
+        tools = executor._build_tools(request)
+
+        ci_tool = next((t for t in tools if isinstance(t, CodeInterpreterTool)), None)
+        assert ci_tool is not None
+        assert ci_tool.tool_config["container"]["memory_limit"] == "16g"
+
+    def test_build_tools_code_interpreter_explicit_container_id(self, sample_model, sample_user_message):
+        from openai_executor.executor import OpenAIAgentsExecutor
+        from agents import CodeInterpreterTool
+        from ark_executor_common import AgentConfig, ExecutionEngineRequest
+
+        agent_config = AgentConfig(
+            name="test-agent",
+            namespace="default",
+            prompt="You are helpful.",
+            model=sample_model,
+            labels={
+                "openai-web-search": "false",
+                "openai-code-interpreter": "true",
+                "openai-code-interpreter-container-id": "cntr_abc123",
+            },
+        )
+        request = ExecutionEngineRequest(
+            agent=agent_config,
+            userInput=sample_user_message,
+            history=[],
+            tools=[],
+        )
+
+        executor = OpenAIAgentsExecutor()
+        tools = executor._build_tools(request)
+
+        ci_tool = next((t for t in tools if isinstance(t, CodeInterpreterTool)), None)
+        assert ci_tool is not None
+        assert ci_tool.tool_config["container"] == "cntr_abc123"
+
     @patch("openai_executor.executor.MCP_SERVERS", [
         {"url": "https://mcp.example.com", "label": "test-mcp", "headers": {"Auth": "token"}}
     ])
@@ -550,9 +640,8 @@ class TestOpenAIAgentsExecutor:
     @pytest.mark.asyncio
     @patch("openai_executor.executor.Runner")
     @patch("openai_executor.executor.Agent")
-    @patch("openai_executor.executor.OpenAIProvider")
     async def test_execute_agent(
-        self, mock_provider_class, mock_agent_class, mock_runner, sample_request, mock_run_result
+        self, mock_agent_class, mock_runner, sample_request, mock_run_result
     ):
         from openai_executor.executor import OpenAIAgentsExecutor
         
@@ -568,9 +657,8 @@ class TestOpenAIAgentsExecutor:
     @pytest.mark.asyncio
     @patch("openai_executor.executor.Runner")
     @patch("openai_executor.executor.Agent")
-    @patch("openai_executor.executor.OpenAIProvider")
     async def test_execute_agent_error(
-        self, mock_provider_class, mock_agent_class, mock_runner, sample_request
+        self, mock_agent_class, mock_runner, sample_request
     ):
         from openai_executor.executor import OpenAIAgentsExecutor
         
@@ -584,9 +672,8 @@ class TestOpenAIAgentsExecutor:
     @pytest.mark.asyncio
     @patch("openai_executor.executor.Runner")
     @patch("openai_executor.executor.Agent")
-    @patch("openai_executor.executor.OpenAIProvider")
     async def test_execute_agent_streaming(
-        self, mock_provider_class, mock_agent_class, mock_runner, sample_request
+        self, mock_agent_class, mock_runner, sample_request
     ):
         from openai_executor.executor import OpenAIAgentsExecutor
         from agents.stream_events import RawResponsesStreamEvent
@@ -698,9 +785,8 @@ class TestResolveWorkspacePath:
     @pytest.mark.asyncio
     @patch("openai_executor.executor.Runner")
     @patch("openai_executor.executor.Agent")
-    @patch("openai_executor.executor.OpenAIProvider")
     async def test_execute_agent_uses_workspace_path(
-        self, mock_provider_class, mock_agent_class, mock_runner,
+        self, mock_agent_class, mock_runner,
         sample_agent_config, sample_user_message, mock_run_result
     ):
         from openai_executor.executor import OpenAIAgentsExecutor
@@ -725,9 +811,8 @@ class TestResolveWorkspacePath:
     @pytest.mark.asyncio
     @patch("openai_executor.executor.Runner")
     @patch("openai_executor.executor.Agent")
-    @patch("openai_executor.executor.OpenAIProvider")
     async def test_streaming_uses_workspace_path(
-        self, mock_provider_class, mock_agent_class, mock_runner,
+        self, mock_agent_class, mock_runner,
         sample_agent_config, sample_user_message
     ):
         from openai_executor.executor import OpenAIAgentsExecutor

@@ -105,6 +105,7 @@ func (r *WorkspaceReconciler) reconcileWorkspace(ctx context.Context, ws *arkv1a
 }
 
 func (r *WorkspaceReconciler) provisionWorkspace(ctx context.Context, ws *arkv1alpha1.Workspace) error {
+	log := logf.FromContext(ctx)
 	wsClient := genai.NewWorkspaceClient(nil)
 
 	persistent := true
@@ -130,6 +131,10 @@ func (r *WorkspaceReconciler) provisionWorkspace(ctx context.Context, ws *arkv1a
 	}
 
 	if provisioned != nil {
+		if err := wsClient.ReleaseWorkspace(ctx, provisioned.ID, string(ws.UID), nil); err != nil {
+			log.Error(err, "failed to release workspace after provisioning", "workspaceId", provisioned.ID)
+		}
+
 		if ws.Annotations == nil {
 			ws.Annotations = make(map[string]string)
 		}
@@ -143,6 +148,7 @@ func (r *WorkspaceReconciler) provisionWorkspace(ctx context.Context, ws *arkv1a
 		}
 
 		ws.Status.Path = provisioned.Path
+		now := metav1.Now()
 
 		if ws.Spec.Environment != nil && ws.Spec.Environment.Image != nil {
 			ws.Status.EnvironmentStatus = &arkv1alpha1.WorkspaceEnvironmentStatus{
@@ -151,16 +157,37 @@ func (r *WorkspaceReconciler) provisionWorkspace(ctx context.Context, ws *arkv1a
 			}
 		}
 
-		if ws.Spec.Content != nil && ws.Spec.Content.Git != nil {
-			ws.Status.ContentStatus = &arkv1alpha1.WorkspaceContentStatus{
-				Type: "git",
-				Git: &arkv1alpha1.WorkspaceGitStatus{
+		if ws.Spec.Content != nil {
+			if ws.Spec.Content.Git != nil {
+				gitStatus := &arkv1alpha1.WorkspaceGitStatus{
 					Branch: ws.Spec.Content.Git.Branch,
-				},
+				}
+				if provisioned.GitInfo != nil {
+					gitStatus.LastCommit = provisioned.GitInfo.LastCommit
+					gitStatus.Dirty = provisioned.GitInfo.Dirty
+				}
+				ws.Status.ContentStatus = &arkv1alpha1.WorkspaceContentStatus{
+					Type: "git",
+					Git:  gitStatus,
+				}
+			} else if ws.Spec.Content.ObjectStorage != nil {
+				ws.Status.ContentStatus = &arkv1alpha1.WorkspaceContentStatus{
+					Type: "objectStorage",
+					ObjectStorage: &arkv1alpha1.WorkspaceObjectStorageStatus{
+						Provider:   ws.Spec.Content.ObjectStorage.Provider,
+						LastSynced: &now,
+					},
+				}
+			} else if ws.Spec.Content.Archive != nil {
+				ws.Status.ContentStatus = &arkv1alpha1.WorkspaceContentStatus{
+					Type: "archive",
+					Archive: &arkv1alpha1.WorkspaceArchiveStatus{
+						ExtractedAt: &now,
+					},
+				}
 			}
 		}
 
-		now := metav1.Now()
 		ws.Status.LastSynced = &now
 	}
 

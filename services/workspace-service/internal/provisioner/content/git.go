@@ -114,6 +114,34 @@ func (g *GitProvisioner) CommitAndPush(repoPath string, config *GitCommitConfig)
 	return nil
 }
 
+type GitInfo struct {
+	LastCommit string
+	Dirty      bool
+}
+
+func (g *GitProvisioner) GetInfo(repoPath string) (*GitInfo, error) {
+	env := append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd.Dir = repoPath
+	cmd.Env = env
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git rev-parse HEAD failed: %w", err)
+	}
+	lastCommit := strings.TrimSpace(string(output))
+
+	dirty, err := g.hasChanges(repoPath, env)
+	if err != nil {
+		return nil, err
+	}
+
+	return &GitInfo{
+		LastCommit: lastCommit,
+		Dirty:      dirty,
+	}, nil
+}
+
 func (g *GitProvisioner) hasChanges(repoPath string, env []string) (bool, error) {
 	cmd := exec.Command("git", "status", "--porcelain")
 	cmd.Dir = repoPath

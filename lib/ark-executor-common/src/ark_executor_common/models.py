@@ -8,33 +8,46 @@ from .base import Model
 logger = logging.getLogger(__name__)
 
 
+def _detect_provider(model: Model) -> str:
+    if model.type in ("azure", "openai", "bedrock"):
+        return model.type
+    config = model.config
+    for provider in ("openai", "azure", "bedrock"):
+        if provider in config:
+            return provider
+    return model.type
+
+
 def resolve_api_key(model: Model) -> str:
     config = model.config
-    if model.type == "azure":
+    provider = _detect_provider(model)
+    if provider == "azure":
         return config.get("azure", {}).get("apiKey", "")
-    elif model.type == "openai":
+    elif provider == "openai":
         return config.get("openai", {}).get("apiKey", "")
-    elif model.type == "bedrock":
+    elif provider == "bedrock":
         return config.get("bedrock", {}).get("accessKeyId", "")
     return ""
 
 
 def resolve_base_url(model: Model) -> str:
     config = model.config
-    if model.type == "azure":
+    provider = _detect_provider(model)
+    if provider == "azure":
         return config.get("azure", {}).get("baseUrl", "")
-    elif model.type == "openai":
+    elif provider == "openai":
         return config.get("openai", {}).get("baseUrl", "")
     return ""
 
 
 def resolve_model_properties(model: Model) -> Dict[str, Any]:
     config = model.config
-    if model.type == "azure":
+    provider = _detect_provider(model)
+    if provider == "azure":
         return config.get("azure", {}).get("properties", {})
-    elif model.type == "openai":
+    elif provider == "openai":
         return config.get("openai", {}).get("properties", {})
-    elif model.type == "bedrock":
+    elif provider == "bedrock":
         return config.get("bedrock", {}).get("properties", {})
     return {}
 

@@ -8,8 +8,10 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
+from starlette.requests import Request
 
 from .base import BaseExecutor, ExecutionEngineRequest, ExecutionEngineResponse, TokenUsage
+from .telemetry import extract_trace_context
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +41,12 @@ class ExecutorApp:
             return {"status": "healthy", "engine": self.engine_name}
 
         @self.app.post("/execute", response_model=ExecutionEngineResponse)
-        async def execute(request: ExecutionEngineRequest):
+        async def execute(http_request: Request):
+            request = ExecutionEngineRequest(**(await http_request.json()))
+            trace_context = extract_trace_context(dict(http_request.headers))
             try:
                 logger.info(f"Processing execution request for agent: {request.agent.name}")
-                response_messages = await self.executor.execute_agent(request)
+                response_messages = await self.executor.execute_agent(request, trace_context=trace_context)
                 logger.info(f"Execution successful, returned {len(response_messages)} messages")
                 token_usage = None
                 if response_messages:
@@ -61,12 +65,14 @@ class ExecutorApp:
                 return ExecutionEngineResponse(messages=[], error=error_msg)
 
         @self.app.post("/execute-stream")
-        async def execute_stream(request: ExecutionEngineRequest):
+        async def execute_stream(http_request: Request):
+            request = ExecutionEngineRequest(**(await http_request.json()))
+            trace_context = extract_trace_context(dict(http_request.headers))
             return StreamingResponse(
-                self._stream_events(request), media_type="text/event-stream"
+                self._stream_events(request, trace_context=trace_context), media_type="text/event-stream"
             )
 
-    async def _stream_events(self, request: ExecutionEngineRequest) -> AsyncGenerator[str, None]:
+    async def _stream_events(self, request: ExecutionEngineRequest, trace_context=None) -> AsyncGenerator[str, None]:
         from .base import Message as Msg
 
         try:

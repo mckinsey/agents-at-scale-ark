@@ -1,0 +1,33 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: openai-project-manager
+  labels:
+    openai-web-search: "true"
+    openai-codex: "true"
+spec:
+  description: Project manager that delegates to specialized agents via handoffs
+  modelRef:
+    name: gpt-4o
+  executionEngine:
+    name: executor-openai-sdk
+  parameters:
+    - name: handoffs
+      value: |
+        {
+          "researcher": {
+            "instructions": "You are a research specialist. Search the web for documentation, examples, and best practices. Provide thorough summaries with sources.",
+            "model": "gpt-4o"
+          },
+          "developer": {
+            "instructions": "You are a software developer. Implement code changes, write tests, and fix bugs. Focus on clean, well-tested code.",
+            "model": "gpt-4o"
+          }
+        }
+  prompt: |
+    You are a project manager coordinating a software development task.
+    You can hand off to specialized agents:
+    - researcher: for gathering information and documentation
+    - developer: for implementing code changes
+
+    Coordinate the work by delegating to the right specialist.

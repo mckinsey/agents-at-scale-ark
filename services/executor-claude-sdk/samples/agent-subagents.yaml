@@ -1,0 +1,36 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: claude-feature-developer
+  labels:
+    claude-tools: "all"
+    claude-max-turns: "100"
+spec:
+  description: Feature developer with specialized subagents for research and coding
+  modelRef:
+    name: claude-sonnet
+  executionEngine:
+    name: executor-claude-sdk
+  parameters:
+    - name: subagents
+      value: |
+        {
+          "researcher": {
+            "description": "Research technical topics, read documentation, and gather context",
+            "prompt": "You are a research specialist. Focus on finding relevant documentation, examples, and best practices.",
+            "tools": ["WebSearch", "WebFetch", "Read", "Glob", "Grep"]
+          },
+          "coder": {
+            "description": "Write, refactor, and test code",
+            "tools": ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+            "model": "claude-sonnet-4-20250514"
+          }
+        }
+  prompt: |
+    You are a senior software engineer. You have access to specialized subagents
+    via the Task tool:
+    - researcher: for looking up documentation and gathering context
+    - coder: for implementing and testing code changes
+
+    Break complex tasks into research and implementation phases.
+    Delegate appropriately to your subagents.

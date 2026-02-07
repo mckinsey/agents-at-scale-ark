@@ -13,18 +13,21 @@ import (
 )
 
 func (a *Agent) resolvePrompt(ctx context.Context) (string, error) {
-	templateData := make(map[string]any)
-
 	agentParams, err := a.resolveParameters(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve parameters: %w", err)
 	}
-	for name, value := range agentParams {
-		templateData[name] = value
+	return a.resolvePromptWithParams(agentParams)
+}
+
+func (a *Agent) resolvePromptWithParams(params map[string]string) (string, error) {
+	if len(params) == 0 {
+		return a.Prompt, nil
 	}
 
-	if len(templateData) == 0 {
-		return a.Prompt, nil
+	templateData := make(map[string]any, len(params))
+	for name, value := range params {
+		templateData[name] = value
 	}
 
 	resolved, err := common.ResolveTemplate(a.Prompt, templateData)

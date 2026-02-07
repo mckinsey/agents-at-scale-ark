@@ -1,0 +1,7 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-openai-handoffs
+spec:
+  agent: openai-project-manager
+  input: "Research current best practices for REST API pagination, then implement a pagination helper library in Python with cursor-based and offset-based strategies."

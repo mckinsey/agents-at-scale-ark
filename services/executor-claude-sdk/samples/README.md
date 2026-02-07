@@ -33,6 +33,7 @@ kubectl apply -f agent-basic.yaml
 | `claude-json-output`       | Structured JSON output          | `outputSchema`                      |
 | `claude-all-tools`         | All tools including subagents   | `claude-tools=all` label            |
 | `claude-with-parameters`   | Parameter substitution demo     | `parameters` with defaults          |
+| `claude-feature-developer` | Multi-agent with subagents      | `parameters.subagents`              |
 
 ## Run Queries
 
@@ -52,6 +53,9 @@ kubectl apply -f query-json-output.yaml
 
 # All tools
 kubectl apply -f query-all-tools.yaml
+
+# Subagents
+kubectl apply -f query-subagents.yaml
 ```
 
 ## Configuration Labels

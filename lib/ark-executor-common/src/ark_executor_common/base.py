@@ -1,10 +1,15 @@
 """Base executor types and abstract class for Ark execution engines."""
 
+from __future__ import annotations
+
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from pydantic import BaseModel
+
+if TYPE_CHECKING:
+    from .telemetry import TraceContext
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +85,7 @@ class BaseExecutor(ABC):
         logger.info(f"{engine_name} executor initialized")
 
     @abstractmethod
-    async def execute_agent(self, request: ExecutionEngineRequest) -> List[Message]:
+    async def execute_agent(self, request: ExecutionEngineRequest, trace_context: Optional[TraceContext] = None) -> List[Message]:
         pass
 
     def _resolve_prompt(self, agent_config: AgentConfig, base_prompt: str = None) -> str:

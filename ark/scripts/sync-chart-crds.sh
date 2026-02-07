@@ -25,22 +25,37 @@ fi
 for crd in "$SOURCE_DIR"/*.yaml; do
     name=$(basename "$crd")
     helm_crd="$CHART_DIR/$name"
+    crd_name=$(grep "^  name:" "$crd" | head -1 | awk '{print $2}')
+    spec_start=$(grep -n "^spec:" "$crd" | head -1 | cut -d: -f1)
 
-    if [ -f "$helm_crd" ]; then
-        # Extract Helm header (up to and including "name:" line in metadata)
+    if [ -f "$helm_crd" ] && head -1 "$helm_crd" | grep -q '{{-'; then
         header_end=$(grep -n "^  name:" "$helm_crd" | head -1 | cut -d: -f1)
-        # Extract source spec (from "spec:" line onwards)
-        spec_start=$(grep -n "^spec:" "$crd" | head -1 | cut -d: -f1)
-
-        # Combine: Helm header + source spec + Helm footer
         {
             head -n "$header_end" "$helm_crd"
             tail -n +"$spec_start" "$crd"
-            echo "{{- end }}"
+            echo '{{- end }}'
         } > "$helm_crd.tmp"
-
-        mv "$helm_crd.tmp" "$helm_crd"
+    else
+        {
+            echo '{{- if .Values.crd.enable }}'
+            echo '---'
+            echo 'apiVersion: apiextensions.k8s.io/v1'
+            echo 'kind: CustomResourceDefinition'
+            echo 'metadata:'
+            echo '  labels:'
+            echo '    {{- include "chart.labels" . | nindent 4 }}'
+            echo '  annotations:'
+            echo '    {{- if .Values.crd.keep }}'
+            echo '    "helm.sh/resource-policy": keep'
+            echo '    {{- end }}'
+            echo "    controller-gen.kubebuilder.io/version: v0.18.0"
+            echo "  name: ${crd_name}"
+            tail -n +"$spec_start" "$crd"
+            echo '{{- end }}'
+        } > "$helm_crd.tmp"
     fi
+
+    mv "$helm_crd.tmp" "$helm_crd"
 done
 
 echo "CRDs synced to Helm chart"

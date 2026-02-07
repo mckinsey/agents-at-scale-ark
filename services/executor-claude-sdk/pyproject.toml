@@ -55,8 +55,12 @@ profile = "black"
 line_length = 120
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = ["src", "."]
 testpaths = ["tests"]
+
+[tool.pyright]
+pythonVersion = "3.11"
+extraPaths = ["src"]
 
 [tool.uv.sources]
 ark-executor-common = { path = "../../lib/ark-executor-common" }

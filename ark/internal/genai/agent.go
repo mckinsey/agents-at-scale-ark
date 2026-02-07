@@ -96,11 +96,17 @@ func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Messag
 		return nil, fmt.Errorf("failed to build agent config: %w", err)
 	}
 
-	resolvedPrompt, err := a.resolvePrompt(ctx)
+	resolvedParams, err := a.resolveParameters(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("agent %s parameter resolution failed: %w", a.FullName(), err)
+	}
+
+	resolvedPrompt, err := a.resolvePromptWithParams(resolvedParams)
 	if err != nil {
 		return nil, fmt.Errorf("agent %s prompt resolution failed: %w", a.FullName(), err)
 	}
 	agentConfig.Prompt = resolvedPrompt
+	agentConfig.Parameters = convertResolvedParameters(resolvedParams)
 
 	toolDefinitions := buildToolDefinitions(a.Tools)
 

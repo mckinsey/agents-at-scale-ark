@@ -19,6 +19,7 @@ from claude_agent_sdk import (
 from ark_executor_common import BaseExecutor, ExecutionEngineRequest, Message, TokenUsage, format_history_as_prompt
 from ark_executor_common.git import GitWorkspaceResult, finalize_workspace_git, prepare_workspace_with_git
 from ark_executor_common.models import resolve_api_key, resolve_base_url
+from ark_executor_common.telemetry import TraceContext, get_tracer, pre_tool_hook as telemetry_pre_hook, post_tool_hook as telemetry_post_hook
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +121,7 @@ async def _pre_tool_use_hook(
     tool_name = input_data.get("tool_name", "unknown")
     tool_input = input_data.get("tool_input", {})
     logger.info(f"[hook:PreToolUse] Tool '{tool_name}' called with input keys: {list(tool_input.keys())}")
+    await telemetry_pre_hook(input_data, tool_use_id, context)
     return {}
 
 
@@ -130,6 +132,7 @@ async def _post_tool_use_hook(
 ) -> Dict[str, Any]:
     tool_name = input_data.get("tool_name", "unknown")
     logger.info(f"[hook:PostToolUse] Tool '{tool_name}' completed")
+    await telemetry_post_hook(input_data, tool_use_id, context)
     return {}
 
 
@@ -151,8 +154,9 @@ class ClaudeSDKExecutor(BaseExecutor):
             logger.info(f"Git repository prepared at {result.repo_path}")
         return result
 
-    async def execute_agent(self, request: ExecutionEngineRequest) -> List[Message]:
+    async def execute_agent(self, request: ExecutionEngineRequest, trace_context: Optional[TraceContext] = None) -> List[Message]:
         logger.info(f"Executing Claude Agent SDK query for agent {request.agent.name}")
+        tracer = get_tracer("claude-executor")
 
         git_result = None
         try:
@@ -300,7 +304,40 @@ class ClaudeSDKExecutor(BaseExecutor):
                 "schema": request.agent.outputSchema,
             }
 
+        agents = self._parse_subagents(request.agent.parameters)
+        if agents:
+            options.agents = agents
+
         return options
+
+    def _parse_subagents(self, parameters: List) -> Optional[Dict[str, Any]]:
+        subagents_json = None
+        for param in parameters:
+            if param.name == "subagents":
+                subagents_json = param.value
+                break
+        if not subagents_json:
+            return None
+        try:
+            from claude_agent_sdk import AgentDefinition
+        except ImportError:
+            logger.warning("AgentDefinition not available in claude_agent_sdk, skipping subagents")
+            return None
+        try:
+            subagents_config = json.loads(subagents_json) if isinstance(subagents_json, str) else subagents_json
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("Invalid subagents configuration, skipping")
+            return None
+        agents = {}
+        for name, config in subagents_config.items():
+            agents[name] = AgentDefinition(
+                description=config.get("description", f"Subagent {name}"),
+                prompt=config.get("prompt"),
+                tools=config.get("tools"),
+                model=config.get("model"),
+            )
+        logger.info(f"Configured {len(agents)} subagent(s): {list(agents.keys())}")
+        return agents
 
     def _resolve_tools(self, labels: Optional[Dict[str, str]]) -> list:
         tools_label = _get_label(labels, "claude-tools")

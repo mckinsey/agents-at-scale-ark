@@ -50,7 +50,7 @@ func TestResolveQueryWorkspace_Inline(t *testing.T) {
 
 	result, err := ResolveQueryWorkspace(context.Background(), k8sClient, ws, "default")
 	require.NoError(t, err)
-	require.Equal(t, ws, result)
+	require.Equal(t, ws, result.Workspace)
 }
 
 func TestResolveQueryWorkspace_RefNotFound(t *testing.T) {
@@ -100,16 +100,17 @@ func TestResolveQueryWorkspace_RefBasic(t *testing.T) {
 	result, err := ResolveQueryWorkspace(context.Background(), k8sClient, ws, "default")
 	require.NoError(t, err)
 	require.NotNil(t, result)
+	require.NotNil(t, result.Workspace)
 
-	require.Equal(t, "python:3.11-slim", result.Environment.Image.Ref)
-	require.Equal(t, "git@github.com:org/repo.git", result.Content.Git.URL)
-	require.Equal(t, "main", result.Content.Git.Branch)
-	require.Equal(t, "/workspace", result.MountPath)
-	require.Equal(t, true, *result.Persistent)
-	require.Equal(t, true, result.AutoCommit.Enabled)
-	require.Equal(t, "Changes by agent", result.AutoCommit.Message)
-	require.Equal(t, "session-123", result.SessionId)
-	require.Equal(t, "my-workspace", result.Ref.Name)
+	require.Equal(t, "python:3.11-slim", result.Workspace.Environment.Image.Ref)
+	require.Equal(t, "git@github.com:org/repo.git", result.Workspace.Content.Git.URL)
+	require.Equal(t, "main", result.Workspace.Content.Git.Branch)
+	require.Equal(t, "/workspace", result.Workspace.MountPath)
+	require.Equal(t, true, *result.Workspace.Persistent)
+	require.Equal(t, true, result.Workspace.AutoCommit.Enabled)
+	require.Equal(t, "Changes by agent", result.Workspace.AutoCommit.Message)
+	require.Equal(t, "session-123", result.Workspace.SessionId)
+	require.Equal(t, "my-workspace", result.Workspace.Ref.Name)
 }
 
 func TestResolveQueryWorkspace_RefCrossNamespace(t *testing.T) {
@@ -136,7 +137,7 @@ func TestResolveQueryWorkspace_RefCrossNamespace(t *testing.T) {
 
 	result, err := ResolveQueryWorkspace(context.Background(), k8sClient, ws, "default")
 	require.NoError(t, err)
-	require.Equal(t, "git@github.com:org/shared.git", result.Content.Git.URL)
+	require.Equal(t, "git@github.com:org/shared.git", result.Workspace.Content.Git.URL)
 }
 
 func TestResolveQueryWorkspace_RefWithOverrides(t *testing.T) {
@@ -187,17 +188,18 @@ func TestResolveQueryWorkspace_RefWithOverrides(t *testing.T) {
 	result, err := ResolveQueryWorkspace(context.Background(), k8sClient, ws, "default")
 	require.NoError(t, err)
 	require.NotNil(t, result)
+	require.NotNil(t, result.Workspace)
 
-	require.Equal(t, "git@github.com:org/repo.git", result.Content.Git.URL)
-	require.Equal(t, "feature/new-api", result.Content.Git.Branch)
-	require.Equal(t, 1, result.Content.Git.Depth)
-	require.Equal(t, "git-creds", result.Content.Git.AuthSecretRef.Name)
+	require.Equal(t, "git@github.com:org/repo.git", result.Workspace.Content.Git.URL)
+	require.Equal(t, "feature/new-api", result.Workspace.Content.Git.Branch)
+	require.Equal(t, 1, result.Workspace.Content.Git.Depth)
+	require.Equal(t, "git-creds", result.Workspace.Content.Git.AuthSecretRef.Name)
 
-	require.Equal(t, true, result.AutoCommit.Enabled)
-	require.Equal(t, "Default commit", result.AutoCommit.Message)
-	require.Equal(t, "review/new-api", result.AutoCommit.PushBranch)
-	require.Equal(t, "Agent", result.AutoCommit.UserName)
-	require.Equal(t, "agent@example.com", result.AutoCommit.UserEmail)
+	require.Equal(t, true, result.Workspace.AutoCommit.Enabled)
+	require.Equal(t, "Default commit", result.Workspace.AutoCommit.Message)
+	require.Equal(t, "review/new-api", result.Workspace.AutoCommit.PushBranch)
+	require.Equal(t, "Agent", result.Workspace.AutoCommit.UserName)
+	require.Equal(t, "agent@example.com", result.Workspace.AutoCommit.UserEmail)
 }
 
 func TestMergeWorkspaceContent_NilBase(t *testing.T) {

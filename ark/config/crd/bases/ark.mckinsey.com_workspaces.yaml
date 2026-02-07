@@ -313,6 +313,12 @@ spec:
                 type: array
               contentStatus:
                 properties:
+                  archive:
+                    properties:
+                      extractedAt:
+                        format: date-time
+                        type: string
+                    type: object
                   git:
                     properties:
                       branch:
@@ -320,6 +326,14 @@ spec:
                       dirty:
                         type: boolean
                       lastCommit:
+                        type: string
+                    type: object
+                  objectStorage:
+                    properties:
+                      lastSynced:
+                        format: date-time
+                        type: string
+                      provider:
                         type: string
                     type: object
                   type:

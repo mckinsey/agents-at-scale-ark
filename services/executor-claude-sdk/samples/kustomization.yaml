@@ -9,3 +9,4 @@ resources:
   - agent-json-output.yaml
   - agent-all-tools.yaml
   - agent-with-parameters.yaml
+  - agent-subagents.yaml

@@ -49,10 +49,16 @@ type ArchiveSpec struct {
 
 type EmptySpec struct{}
 
+type GitInfoResponse struct {
+	LastCommit string `json:"lastCommit,omitempty"`
+	Dirty      bool   `json:"dirty,omitempty"`
+}
+
 type ProvisionResponse struct {
-	ID          string `json:"id"`
-	Path        string `json:"path"`
-	ContentType string `json:"contentType,omitempty"`
+	ID          string           `json:"id"`
+	Path        string           `json:"path"`
+	ContentType string           `json:"contentType,omitempty"`
+	GitInfo     *GitInfoResponse `json:"gitInfo,omitempty"`
 }
 
 type AcquireRequest struct {
@@ -79,9 +85,10 @@ type AutoCommitConfig struct {
 }
 
 type StatusResponse struct {
-	ID          string `json:"id"`
-	Path        string `json:"path"`
-	Phase       string `json:"phase"`
-	ContentType string `json:"contentType,omitempty"`
-	QueryUID    string `json:"queryUid,omitempty"`
+	ID          string           `json:"id"`
+	Path        string           `json:"path"`
+	Phase       string           `json:"phase"`
+	ContentType string           `json:"contentType,omitempty"`
+	QueryUID    string           `json:"queryUid,omitempty"`
+	GitInfo     *GitInfoResponse `json:"gitInfo,omitempty"`
 }

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -512,6 +513,18 @@ func buildParameters(agentParams []arkv1alpha1.Parameter) []Parameter {
 	return parameters
 }
 
+func convertResolvedParameters(resolved map[string]string) []Parameter {
+	if len(resolved) == 0 {
+		return nil
+	}
+	params := make([]Parameter, 0, len(resolved))
+	for name, value := range resolved {
+		params = append(params, Parameter{Name: name, Value: value})
+	}
+	sort.Slice(params, func(i, j int) bool { return params[i].Name < params[j].Name })
+	return params
+}
+
 func buildModelConfig(model *Model) map[string]any {
 	modelConfig := make(map[string]any)
 
@@ -523,6 +536,15 @@ func buildModelConfig(model *Model) map[string]any {
 			modelConfig["openai"] = configProvider.BuildConfig()
 		case ModelTypeBedrock:
 			modelConfig["bedrock"] = configProvider.BuildConfig()
+		case ModelTypeCompletions:
+			switch model.Provider.(type) {
+			case *OpenAIProvider:
+				modelConfig["openai"] = configProvider.BuildConfig()
+			case *AzureProvider:
+				modelConfig["azure"] = configProvider.BuildConfig()
+			case *BedrockModel:
+				modelConfig["bedrock"] = configProvider.BuildConfig()
+			}
 		}
 	}
 

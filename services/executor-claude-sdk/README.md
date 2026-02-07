@@ -308,6 +308,46 @@ The executor includes built-in hooks for logging and auditing:
 
 Hook output appears in executor logs at INFO level.
 
+## Telemetry
+
+The executor integrates with OpenTelemetry for distributed tracing. Traces are automatically created for:
+
+- Overall execution span
+- Individual tool calls
+
+Traces link to Ark's parent trace via W3C trace context headers (`traceparent`, `tracestate`).
+
+### Configuration
+
+| Environment Variable          | Description                             |
+| ----------------------------- | --------------------------------------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint                 |
+| `OTEL_SERVICE_NAME`           | Service name (default: claude-executor) |
+
+## Subagents
+
+Define specialized subagents via `agent.parameters.subagents`. The main agent can spawn these using the `Task` tool.
+
+```yaml
+spec:
+  parameters:
+    subagents:
+      researcher:
+        description: "Research technical topics"
+        tools: ["WebSearch", "WebFetch", "Read"]
+      coder:
+        description: "Write code"
+        tools: ["Read", "Write", "Edit", "Bash"]
+        model: "claude-sonnet-4-20250514"
+```
+
+| Field         | Required | Description                      |
+| ------------- | -------- | -------------------------------- |
+| `description` | Yes      | What the subagent does           |
+| `prompt`      | No       | System prompt for subagent       |
+| `tools`       | No       | Allowed tools (subset of parent) |
+| `model`       | No       | Model override                   |
+
 ## Environment Variables
 
 | Variable | Default | Description |

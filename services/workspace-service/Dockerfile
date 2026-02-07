@@ -11,7 +11,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /workspace-service ./cmd/main.go
 
 FROM alpine:3.20
 
-RUN apk add --no-cache git openssh-client ca-certificates
+RUN apk add --no-cache git openssh-client ca-certificates unzip
 RUN adduser -D -u 1000 appuser
 USER appuser
 
