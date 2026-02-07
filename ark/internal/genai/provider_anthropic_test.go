@@ -46,11 +46,11 @@ func TestAnthropicProvider_ChatCompletion_SimpleMessage(t *testing.T) {
 		assert.Equal(t, float64(1024), reqBody["max_tokens"])
 
 		response := map[string]interface{}{
-			"id":           "msg_test123",
-			"type":         "message",
-			"role":         "assistant",
-			"model":        "claude-3-haiku-20240307",
-			"stop_reason":  "end_turn",
+			"id":            "msg_test123",
+			"type":          "message",
+			"role":          "assistant",
+			"model":         "claude-3-haiku-20240307",
+			"stop_reason":   "end_turn",
 			"stop_sequence": nil,
 			"content": []map[string]interface{}{
 				{
@@ -65,7 +65,7 @@ func TestAnthropicProvider_ChatCompletion_SimpleMessage(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	})
 	defer server.Close()
 
@@ -102,11 +102,11 @@ func TestAnthropicProvider_ChatCompletion_WithSystemPrompt(t *testing.T) {
 		assert.Equal(t, "You are a helpful assistant", systemBlock["text"])
 
 		response := map[string]interface{}{
-			"id":           "msg_test456",
-			"type":         "message",
-			"role":         "assistant",
-			"model":        "claude-3-haiku-20240307",
-			"stop_reason":  "end_turn",
+			"id":          "msg_test456",
+			"type":        "message",
+			"role":        "assistant",
+			"model":       "claude-3-haiku-20240307",
+			"stop_reason": "end_turn",
 			"content": []map[string]interface{}{
 				{
 					"type": "text",
@@ -120,7 +120,7 @@ func TestAnthropicProvider_ChatCompletion_WithSystemPrompt(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	})
 	defer server.Close()
 
@@ -149,11 +149,11 @@ func TestAnthropicProvider_ChatCompletion_WithTools(t *testing.T) {
 		assert.Equal(t, "Get weather for a location", tool["description"])
 
 		response := map[string]interface{}{
-			"id":           "msg_tool123",
-			"type":         "message",
-			"role":         "assistant",
-			"model":        "claude-3-haiku-20240307",
-			"stop_reason":  "tool_use",
+			"id":          "msg_tool123",
+			"type":        "message",
+			"role":        "assistant",
+			"model":       "claude-3-haiku-20240307",
+			"stop_reason": "tool_use",
 			"content": []map[string]interface{}{
 				{
 					"type": "text",
@@ -175,7 +175,7 @@ func TestAnthropicProvider_ChatCompletion_WithTools(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	})
 	defer server.Close()
 
@@ -239,11 +239,11 @@ func TestAnthropicProvider_ChatCompletion_WithToolResults(t *testing.T) {
 		assert.Equal(t, "toolu_abc123", toolResult["tool_use_id"])
 
 		response := map[string]interface{}{
-			"id":           "msg_final",
-			"type":         "message",
-			"role":         "assistant",
-			"model":        "claude-3-haiku-20240307",
-			"stop_reason":  "end_turn",
+			"id":          "msg_final",
+			"type":        "message",
+			"role":        "assistant",
+			"model":       "claude-3-haiku-20240307",
+			"stop_reason": "end_turn",
 			"content": []map[string]interface{}{
 				{
 					"type": "text",
@@ -257,7 +257,7 @@ func TestAnthropicProvider_ChatCompletion_WithToolResults(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	})
 	defer server.Close()
 
@@ -289,11 +289,11 @@ func TestAnthropicProvider_ChatCompletion_WithToolResults(t *testing.T) {
 func TestAnthropicProvider_ChatCompletion_MaxTokensStopReason(t *testing.T) {
 	server, provider := setupAnthropicMockServer(t, func(w http.ResponseWriter, r *http.Request) {
 		response := map[string]interface{}{
-			"id":           "msg_truncated",
-			"type":         "message",
-			"role":         "assistant",
-			"model":        "claude-3-haiku-20240307",
-			"stop_reason":  "max_tokens",
+			"id":          "msg_truncated",
+			"type":        "message",
+			"role":        "assistant",
+			"model":       "claude-3-haiku-20240307",
+			"stop_reason": "max_tokens",
 			"content": []map[string]interface{}{
 				{
 					"type": "text",
@@ -307,7 +307,7 @@ func TestAnthropicProvider_ChatCompletion_MaxTokensStopReason(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	})
 	defer server.Close()
 
@@ -363,7 +363,7 @@ data: {"type":"message_stop"}
 		}
 
 		for _, event := range events {
-			w.Write([]byte(event))
+			_, _ = w.Write([]byte(event))
 			flusher.Flush()
 		}
 	})
@@ -447,7 +447,7 @@ data: {"type":"message_stop"}
 		}
 
 		for _, event := range events {
-			w.Write([]byte(event))
+			_, _ = w.Write([]byte(event))
 			flusher.Flush()
 		}
 	})
@@ -514,11 +514,11 @@ func TestAnthropicProvider_ConvertMessagesToAnthropic_MultipleRoles(t *testing.T
 		assert.Equal(t, "You are helpful", systemBlock["text"])
 
 		response := map[string]interface{}{
-			"id":           "msg_multi",
-			"type":         "message",
-			"role":         "assistant",
-			"model":        "claude-3-haiku-20240307",
-			"stop_reason":  "end_turn",
+			"id":          "msg_multi",
+			"type":        "message",
+			"role":        "assistant",
+			"model":       "claude-3-haiku-20240307",
+			"stop_reason": "end_turn",
 			"content": []map[string]interface{}{
 				{
 					"type": "text",
@@ -532,7 +532,7 @@ func TestAnthropicProvider_ConvertMessagesToAnthropic_MultipleRoles(t *testing.T
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	})
 	defer server.Close()
 
@@ -558,7 +558,7 @@ func TestAnthropicProvider_ChatCompletion_ErrorResponse(t *testing.T) {
 				"message": "Invalid API key",
 			},
 		}
-		json.NewEncoder(w).Encode(errorResp)
+		_ = json.NewEncoder(w).Encode(errorResp)
 	})
 	defer server.Close()
 
@@ -591,11 +591,11 @@ func TestAnthropicProvider_ConvertToolsToAnthropic_ComplexSchema(t *testing.T) {
 		assert.Contains(t, properties, "array_field")
 
 		response := map[string]interface{}{
-			"id":           "msg_complex",
-			"type":         "message",
-			"role":         "assistant",
-			"model":        "claude-3-haiku-20240307",
-			"stop_reason":  "end_turn",
+			"id":          "msg_complex",
+			"type":        "message",
+			"role":        "assistant",
+			"model":       "claude-3-haiku-20240307",
+			"stop_reason": "end_turn",
 			"content": []map[string]interface{}{
 				{
 					"type": "text",
@@ -609,7 +609,7 @@ func TestAnthropicProvider_ConvertToolsToAnthropic_ComplexSchema(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	})
 	defer server.Close()
 
