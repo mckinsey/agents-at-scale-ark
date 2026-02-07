@@ -211,65 +211,17 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	effectiveWorkspace := r.resolveEffectiveWorkspace(opCtx, obj, impersonatedClient)
 
-	var provisionedWorkspace *genai.ProvisionedWorkspace
-	var resolvedWorkspace *arkv1alpha1.QueryWorkspace
-	var isRefWorkspace bool
+	var wsState *queryWorkspaceState
 	if effectiveWorkspace != nil {
-		resolved, err := genai.ResolveQueryWorkspace(opCtx, impersonatedClient, effectiveWorkspace, obj.Namespace)
-		if err != nil {
-			r.Telemetry.QueryRecorder().RecordError(span, err)
+		var wsErr error
+		opCtx, wsState, wsErr = r.setupQueryWorkspace(opCtx, &obj, effectiveWorkspace, impersonatedClient)
+		if wsErr != nil {
+			r.Telemetry.QueryRecorder().RecordError(span, wsErr)
 			_ = r.updateStatus(opCtx, &obj, statusError)
 			return
-		}
-		resolvedWorkspace = resolved.Workspace
-		isRefWorkspace = resolved.ExistingWorkspaceID != ""
-
-		wsClient := genai.NewWorkspaceClient(r.Eventing.WorkspaceRecorder())
-
-		if isRefWorkspace {
-			provisionedWorkspace, err = wsClient.AcquireWorkspace(opCtx, resolved.ExistingWorkspaceID, string(obj.UID), resolvedWorkspace.SessionId, resolvedWorkspace, resolved.ExistingPath)
-		} else {
-			credentials, err2 := genai.ResolveWorkspaceCredentials(opCtx, impersonatedClient, resolvedWorkspace.Content, obj.Namespace)
-			if err2 != nil {
-				r.Telemetry.QueryRecorder().RecordError(span, err2)
-				_ = r.updateStatus(opCtx, &obj, statusError)
-				return
-			}
-			provisionedWorkspace, err = wsClient.ProvisionWorkspace(opCtx, string(obj.UID), resolvedWorkspace, credentials)
-		}
-		if err != nil {
-			r.Telemetry.QueryRecorder().RecordError(span, err)
-			_ = r.updateStatus(opCtx, &obj, statusError)
-			return
-		}
-		if provisionedWorkspace != nil {
-			opCtx = genai.WithWorkspaceConfig(opCtx, provisionedWorkspace.Config)
-			if obj.Annotations == nil {
-				obj.Annotations = make(map[string]string)
-			}
-			obj.Annotations[annotations.WorkspaceID] = provisionedWorkspace.ID
-			_ = r.Update(opCtx, &obj)
 		}
 	}
-	defer func() {
-		if provisionedWorkspace != nil {
-			wsClient := genai.NewWorkspaceClient(r.Eventing.WorkspaceRecorder())
-			autoCommit := resolvedWorkspace.AutoCommit
-			if releaseErr := wsClient.ReleaseWorkspace(opCtx, provisionedWorkspace.ID, string(obj.UID), autoCommit); releaseErr != nil {
-				logf.FromContext(opCtx).Error(releaseErr, "failed to release workspace")
-				r.Eventing.WorkspaceRecorder().ReleaseFailed(opCtx, &obj, releaseErr.Error())
-			}
-			if !isRefWorkspace {
-				ttl := resolvedWorkspace.TTL
-				if ttl == nil || ttl.Duration == 0 {
-					if cleanupErr := wsClient.CleanupWorkspace(opCtx, provisionedWorkspace.ID); cleanupErr != nil {
-						logf.FromContext(opCtx).Error(cleanupErr, "failed to cleanup workspace")
-						r.Eventing.WorkspaceRecorder().CleanupFailed(opCtx, &obj, cleanupErr.Error())
-					}
-				}
-			}
-		}
-	}()
+	defer r.cleanupQueryWorkspace(opCtx, &obj, wsState)
 
 	inputMessages, err := genai.GetQueryInputMessages(opCtx, obj, impersonatedClient)
 	if err == nil {
@@ -361,6 +313,76 @@ func (r *QueryReconciler) setupQueryExecution(opCtx context.Context, obj arkv1al
 	}
 
 	return impersonatedClient, memory, nil
+}
+
+type queryWorkspaceState struct {
+	provisioned       *genai.ProvisionedWorkspace
+	resolvedWorkspace *arkv1alpha1.QueryWorkspace
+	isRefWorkspace    bool
+}
+
+func (r *QueryReconciler) setupQueryWorkspace(ctx context.Context, obj *arkv1alpha1.Query, effectiveWorkspace *arkv1alpha1.QueryWorkspace, impersonatedClient client.Client) (context.Context, *queryWorkspaceState, error) {
+	resolved, err := genai.ResolveQueryWorkspace(ctx, impersonatedClient, effectiveWorkspace, obj.Namespace)
+	if err != nil {
+		return ctx, nil, err
+	}
+
+	state := &queryWorkspaceState{
+		resolvedWorkspace: resolved.Workspace,
+		isRefWorkspace:    resolved.ExistingWorkspaceID != "",
+	}
+
+	wsClient := genai.NewWorkspaceClient(r.Eventing.WorkspaceRecorder())
+
+	if state.isRefWorkspace {
+		state.provisioned, err = wsClient.AcquireWorkspace(ctx, resolved.ExistingWorkspaceID, string(obj.UID), state.resolvedWorkspace.SessionId, state.resolvedWorkspace, resolved.ExistingPath)
+	} else {
+		credentials, credErr := genai.ResolveWorkspaceCredentials(ctx, impersonatedClient, state.resolvedWorkspace.Content, obj.Namespace)
+		if credErr != nil {
+			return ctx, nil, credErr
+		}
+		state.provisioned, err = wsClient.ProvisionWorkspace(ctx, string(obj.UID), state.resolvedWorkspace, credentials)
+	}
+	if err != nil {
+		return ctx, nil, err
+	}
+
+	if state.provisioned != nil {
+		ctx = genai.WithWorkspaceConfig(ctx, state.provisioned.Config)
+		if obj.Annotations == nil {
+			obj.Annotations = make(map[string]string)
+		}
+		obj.Annotations[annotations.WorkspaceID] = state.provisioned.ID
+		_ = r.Update(ctx, obj)
+	}
+
+	return ctx, state, nil
+}
+
+func (r *QueryReconciler) cleanupQueryWorkspace(ctx context.Context, obj *arkv1alpha1.Query, state *queryWorkspaceState) {
+	if state == nil || state.provisioned == nil {
+		return
+	}
+
+	wsClient := genai.NewWorkspaceClient(r.Eventing.WorkspaceRecorder())
+	if releaseErr := wsClient.ReleaseWorkspace(ctx, state.provisioned.ID, string(obj.UID), state.resolvedWorkspace.AutoCommit); releaseErr != nil {
+		logf.FromContext(ctx).Error(releaseErr, "failed to release workspace")
+		r.Eventing.WorkspaceRecorder().ReleaseFailed(ctx, obj, releaseErr.Error())
+	}
+
+	if state.isRefWorkspace {
+		return
+	}
+
+	ttl := state.resolvedWorkspace.TTL
+	if ttl != nil && ttl.Duration != 0 {
+		return
+	}
+
+	if cleanupErr := wsClient.CleanupWorkspace(ctx, state.provisioned.ID); cleanupErr != nil {
+		logf.FromContext(ctx).Error(cleanupErr, "failed to cleanup workspace")
+		r.Eventing.WorkspaceRecorder().CleanupFailed(ctx, obj, cleanupErr.Error())
+	}
 }
 
 func (r *QueryReconciler) resolveTarget(ctx context.Context, query arkv1alpha1.Query, impersonatedClient client.Client) (*arkv1alpha1.QueryTarget, error) {

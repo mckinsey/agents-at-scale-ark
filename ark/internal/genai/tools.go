@@ -215,7 +215,7 @@ func (tr *ToolRegistry) GetToolDefinitions() []ToolDefinition {
 func (tr *ToolRegistry) GetToolType(toolName string) string {
 	executor, exists := tr.executors[toolName]
 	if !exists {
-		return "unknown"
+		return PhaseUnknown
 	}
 
 	switch executor.(type) {
@@ -230,7 +230,7 @@ func (tr *ToolRegistry) GetToolType(toolName string) string {
 	case *FilteredToolExecutor:
 		return "filtered"
 	default:
-		return "unknown"
+		return PhaseUnknown
 	}
 }
 

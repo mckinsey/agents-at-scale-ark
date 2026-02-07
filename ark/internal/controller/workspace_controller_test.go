@@ -203,7 +203,7 @@ func TestWorkspaceReconcile_TTLExpired_Deletes(t *testing.T) {
 			Name:              "ttl-ws",
 			Namespace:         "default",
 			Finalizers:        []string{annotations.WorkspaceFinalizer},
-			CreationTimestamp:  metav1.NewTime(time.Now().Add(-2 * time.Hour)),
+			CreationTimestamp: metav1.NewTime(time.Now().Add(-2 * time.Hour)),
 		},
 		Spec: arkv1alpha1.WorkspaceSpec{
 			Content: &arkv1alpha1.WorkspaceContent{
@@ -234,7 +234,7 @@ func TestWorkspaceReconcile_ReadyWithTTL_RequeuesAtExpiry(t *testing.T) {
 			Name:              "ttl-ready-ws",
 			Namespace:         "default",
 			Finalizers:        []string{annotations.WorkspaceFinalizer},
-			CreationTimestamp:  metav1.NewTime(time.Now()),
+			CreationTimestamp: metav1.NewTime(time.Now()),
 		},
 		Spec: arkv1alpha1.WorkspaceSpec{
 			Content: &arkv1alpha1.WorkspaceContent{

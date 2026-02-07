@@ -26,7 +26,7 @@ const (
 )
 
 type ResolvedWorkspace struct {
-	Workspace          *arkv1alpha1.QueryWorkspace
+	Workspace           *arkv1alpha1.QueryWorkspace
 	ExistingWorkspaceID string
 	ExistingPath        string
 }
@@ -515,7 +515,7 @@ func (wc *WorkspaceClient) sendProvisionRequest(ctx context.Context, req workspa
 	if err != nil {
 		return nil, fmt.Errorf("workspace provision request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated {
 		return nil, fmt.Errorf("workspace provision failed with status %d", resp.StatusCode)
@@ -529,7 +529,7 @@ func (wc *WorkspaceClient) sendProvisionRequest(ctx context.Context, req workspa
 	return &provResp, nil
 }
 
-func (wc *WorkspaceClient) AcquireWorkspace(ctx context.Context, workspaceID string, queryUID string, sessionID string, ws *arkv1alpha1.QueryWorkspace, existingPath string) (*ProvisionedWorkspace, error) {
+func (wc *WorkspaceClient) AcquireWorkspace(ctx context.Context, workspaceID, queryUID, sessionID string, ws *arkv1alpha1.QueryWorkspace, existingPath string) (*ProvisionedWorkspace, error) {
 	operationData := map[string]string{
 		"workspaceId": workspaceID,
 	}
@@ -570,7 +570,7 @@ func (wc *WorkspaceClient) AcquireWorkspace(ctx context.Context, workspaceID str
 		}
 		return nil, fmt.Errorf("workspace acquire request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		if wc.recorder != nil {
@@ -609,7 +609,7 @@ func (wc *WorkspaceClient) AcquireWorkspace(ctx context.Context, workspaceID str
 	}, nil
 }
 
-func (wc *WorkspaceClient) ReleaseWorkspace(ctx context.Context, workspaceID string, queryUID string, autoCommit *arkv1alpha1.WorkspaceAutoCommit) error {
+func (wc *WorkspaceClient) ReleaseWorkspace(ctx context.Context, workspaceID, queryUID string, autoCommit *arkv1alpha1.WorkspaceAutoCommit) error {
 	log := logf.FromContext(ctx)
 
 	operationData := map[string]string{
@@ -664,7 +664,7 @@ func (wc *WorkspaceClient) ReleaseWorkspace(ctx context.Context, workspaceID str
 		}
 		return fmt.Errorf("workspace release request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusNoContent {
 		err := fmt.Errorf("workspace release failed with status %d", resp.StatusCode)
@@ -708,7 +708,7 @@ func (wc *WorkspaceClient) CleanupWorkspace(ctx context.Context, workspaceID str
 		}
 		return fmt.Errorf("workspace cleanup request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusNoContent {
 		err := fmt.Errorf("workspace cleanup failed with status %d", resp.StatusCode)

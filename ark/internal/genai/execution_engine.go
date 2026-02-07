@@ -367,7 +367,7 @@ func handleSSEEvent(ctx context.Context, event sseEvent, eventStream EventStream
 	switch event.Type {
 	case "chunk":
 		if eventStream != nil && event.Chunk != nil {
-			if streamErr := eventStream.StreamChunk(ctx, json.RawMessage(event.Chunk)); streamErr != nil {
+			if streamErr := eventStream.StreamChunk(ctx, event.Chunk); streamErr != nil {
 				logf.Log.Error(streamErr, "failed to forward chunk to event stream")
 			}
 		}

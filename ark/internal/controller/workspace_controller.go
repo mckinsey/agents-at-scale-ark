@@ -23,6 +23,13 @@ import (
 	"mckinsey.com/ark/internal/genai"
 )
 
+const (
+	phaseReady        = "Ready"
+	phaseError        = "Error"
+	phaseProvisioning = "Provisioning"
+	phaseTerminating  = "Terminating"
+)
+
 type WorkspaceReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
@@ -75,24 +82,24 @@ func (r *WorkspaceReconciler) reconcileWorkspace(ctx context.Context, ws *arkv1a
 	log := logf.FromContext(ctx)
 
 	switch ws.Status.Phase {
-	case "Ready":
+	case phaseReady:
 		if requeueAfter > 0 {
 			return ctrl.Result{RequeueAfter: requeueAfter}, nil
 		}
 		return ctrl.Result{}, nil
-	case "Error":
+	case phaseError:
 		return ctrl.Result{}, nil
-	case "Provisioning":
+	case phaseProvisioning:
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	default:
-		r.setPhase(ws, "Provisioning")
+		r.setPhase(ws, phaseProvisioning)
 		if err := r.provisionWorkspace(ctx, ws); err != nil {
 			log.Error(err, "failed to provision workspace")
-			r.setPhase(ws, "Error")
-			r.setCondition(ws, "Ready", metav1.ConditionFalse, "ProvisionFailed", err.Error())
+			r.setPhase(ws, phaseError)
+			r.setCondition(ws, phaseReady, metav1.ConditionFalse, "ProvisionFailed", err.Error())
 		} else {
-			r.setPhase(ws, "Ready")
-			r.setCondition(ws, "Ready", metav1.ConditionTrue, "Provisioned", "Workspace provisioned successfully")
+			r.setPhase(ws, phaseReady)
+			r.setCondition(ws, phaseReady, metav1.ConditionTrue, "Provisioned", "Workspace provisioned successfully")
 		}
 
 		if err := r.Status().Update(ctx, ws); err != nil {
@@ -107,13 +114,16 @@ func (r *WorkspaceReconciler) reconcileWorkspace(ctx context.Context, ws *arkv1a
 	}
 }
 
+func (r *WorkspaceReconciler) workspaceRecorder() eventing.WorkspaceRecorder {
+	if r.Eventing != nil {
+		return r.Eventing.WorkspaceRecorder()
+	}
+	return nil
+}
+
 func (r *WorkspaceReconciler) provisionWorkspace(ctx context.Context, ws *arkv1alpha1.Workspace) error {
 	log := logf.FromContext(ctx)
-	var recorder eventing.WorkspaceRecorder
-	if r.Eventing != nil {
-		recorder = r.Eventing.WorkspaceRecorder()
-	}
-	wsClient := genai.NewWorkspaceClient(recorder)
+	wsClient := genai.NewWorkspaceClient(r.workspaceRecorder())
 
 	persistent := true
 	if ws.Spec.Persistent != nil {
@@ -137,106 +147,120 @@ func (r *WorkspaceReconciler) provisionWorkspace(ctx context.Context, ws *arkv1a
 		return fmt.Errorf("failed to provision workspace: %w", err)
 	}
 
-	if provisioned != nil {
-		if err := wsClient.ReleaseWorkspace(ctx, provisioned.ID, string(ws.UID), nil); err != nil {
-			log.Error(err, "failed to release workspace after provisioning", "workspaceId", provisioned.ID)
-			if r.Eventing != nil {
-				r.Eventing.WorkspaceRecorder().ReleaseFailed(ctx, ws, err.Error())
-			}
-		}
-
-		if ws.Annotations == nil {
-			ws.Annotations = make(map[string]string)
-		}
-		ws.Annotations[annotations.WorkspaceID] = provisioned.ID
-		if err := r.Update(ctx, ws); err != nil {
-			return err
-		}
-
-		if err := r.Get(ctx, client.ObjectKeyFromObject(ws), ws); err != nil {
-			return fmt.Errorf("failed to re-fetch workspace after annotation update: %w", err)
-		}
-
-		ws.Status.Path = provisioned.Path
-		now := metav1.Now()
-
-		if ws.Spec.Environment != nil && ws.Spec.Environment.Image != nil {
-			ws.Status.EnvironmentStatus = &arkv1alpha1.WorkspaceEnvironmentStatus{
-				Image: ws.Spec.Environment.Image.Ref,
-				Ready: true,
-			}
-		}
-
-		if ws.Spec.Content != nil {
-			if ws.Spec.Content.Git != nil {
-				gitStatus := &arkv1alpha1.WorkspaceGitStatus{
-					Branch: ws.Spec.Content.Git.Branch,
-				}
-				if provisioned.GitInfo != nil {
-					gitStatus.LastCommit = provisioned.GitInfo.LastCommit
-					gitStatus.Dirty = provisioned.GitInfo.Dirty
-				}
-				ws.Status.ContentStatus = &arkv1alpha1.WorkspaceContentStatus{
-					Type: "git",
-					Git:  gitStatus,
-				}
-			} else if ws.Spec.Content.ObjectStorage != nil {
-				ws.Status.ContentStatus = &arkv1alpha1.WorkspaceContentStatus{
-					Type: "objectStorage",
-					ObjectStorage: &arkv1alpha1.WorkspaceObjectStorageStatus{
-						Provider:   ws.Spec.Content.ObjectStorage.Provider,
-						LastSynced: &now,
-					},
-				}
-			} else if ws.Spec.Content.Archive != nil {
-				ws.Status.ContentStatus = &arkv1alpha1.WorkspaceContentStatus{
-					Type: "archive",
-					Archive: &arkv1alpha1.WorkspaceArchiveStatus{
-						ExtractedAt: &now,
-					},
-				}
-			}
-		}
-
-		ws.Status.LastSynced = &now
+	if provisioned == nil {
+		return nil
 	}
 
+	if err := wsClient.ReleaseWorkspace(ctx, provisioned.ID, string(ws.UID), nil); err != nil {
+		log.Error(err, "failed to release workspace after provisioning", "workspaceId", provisioned.ID)
+		if rec := r.workspaceRecorder(); rec != nil {
+			rec.ReleaseFailed(ctx, ws, err.Error())
+		}
+	}
+
+	if err := r.saveWorkspaceAnnotation(ctx, ws, provisioned.ID); err != nil {
+		return err
+	}
+
+	r.updateProvisionedStatus(ws, provisioned)
 	return nil
 }
 
-func (r *WorkspaceReconciler) handleDeletion(ctx context.Context, ws *arkv1alpha1.Workspace) (ctrl.Result, error) {
-	log := logf.FromContext(ctx)
+func (r *WorkspaceReconciler) saveWorkspaceAnnotation(ctx context.Context, ws *arkv1alpha1.Workspace, workspaceID string) error {
+	if ws.Annotations == nil {
+		ws.Annotations = make(map[string]string)
+	}
+	ws.Annotations[annotations.WorkspaceID] = workspaceID
+	if err := r.Update(ctx, ws); err != nil {
+		return err
+	}
 
-	if controllerutil.ContainsFinalizer(ws, annotations.WorkspaceFinalizer) {
-		r.setPhase(ws, "Terminating")
-		if err := r.Status().Update(ctx, ws); err != nil {
-			return ctrl.Result{}, err
-		}
+	if err := r.Get(ctx, client.ObjectKeyFromObject(ws), ws); err != nil {
+		return fmt.Errorf("failed to re-fetch workspace after annotation update: %w", err)
+	}
+	return nil
+}
 
-		if wsID := ws.Annotations[annotations.WorkspaceID]; wsID != "" {
-			var recorder eventing.WorkspaceRecorder
-			if r.Eventing != nil {
-				recorder = r.Eventing.WorkspaceRecorder()
-			}
-			wsClient := genai.NewWorkspaceClient(recorder)
-			if err := wsClient.CleanupWorkspace(ctx, wsID); err != nil {
-				log.Error(err, "failed to cleanup workspace during deletion", "workspaceId", wsID)
-				if r.Eventing != nil {
-					r.Eventing.WorkspaceRecorder().CleanupFailed(ctx, ws, err.Error())
-				}
-			}
-		}
+func (r *WorkspaceReconciler) updateProvisionedStatus(ws *arkv1alpha1.Workspace, provisioned *genai.ProvisionedWorkspace) {
+	ws.Status.Path = provisioned.Path
+	now := metav1.Now()
 
-		if err := r.Get(ctx, client.ObjectKeyFromObject(ws), ws); err != nil {
-			return ctrl.Result{}, err
-		}
-		controllerutil.RemoveFinalizer(ws, annotations.WorkspaceFinalizer)
-		if err := r.Update(ctx, ws); err != nil {
-			return ctrl.Result{}, err
+	if ws.Spec.Environment != nil && ws.Spec.Environment.Image != nil {
+		ws.Status.EnvironmentStatus = &arkv1alpha1.WorkspaceEnvironmentStatus{
+			Image: ws.Spec.Environment.Image.Ref,
+			Ready: true,
 		}
 	}
 
+	if ws.Spec.Content != nil {
+		ws.Status.ContentStatus = r.buildContentStatus(ws, provisioned, &now)
+	}
+
+	ws.Status.LastSynced = &now
+}
+
+func (r *WorkspaceReconciler) buildContentStatus(ws *arkv1alpha1.Workspace, provisioned *genai.ProvisionedWorkspace, now *metav1.Time) *arkv1alpha1.WorkspaceContentStatus {
+	switch {
+	case ws.Spec.Content.Git != nil:
+		gitStatus := &arkv1alpha1.WorkspaceGitStatus{
+			Branch: ws.Spec.Content.Git.Branch,
+		}
+		if provisioned.GitInfo != nil {
+			gitStatus.LastCommit = provisioned.GitInfo.LastCommit
+			gitStatus.Dirty = provisioned.GitInfo.Dirty
+		}
+		return &arkv1alpha1.WorkspaceContentStatus{Type: "git", Git: gitStatus}
+	case ws.Spec.Content.ObjectStorage != nil:
+		return &arkv1alpha1.WorkspaceContentStatus{
+			Type:          "objectStorage",
+			ObjectStorage: &arkv1alpha1.WorkspaceObjectStorageStatus{Provider: ws.Spec.Content.ObjectStorage.Provider, LastSynced: now},
+		}
+	case ws.Spec.Content.Archive != nil:
+		return &arkv1alpha1.WorkspaceContentStatus{
+			Type:    "archive",
+			Archive: &arkv1alpha1.WorkspaceArchiveStatus{ExtractedAt: now},
+		}
+	default:
+		return nil
+	}
+}
+
+func (r *WorkspaceReconciler) handleDeletion(ctx context.Context, ws *arkv1alpha1.Workspace) (ctrl.Result, error) {
+	if !controllerutil.ContainsFinalizer(ws, annotations.WorkspaceFinalizer) {
+		return ctrl.Result{}, nil
+	}
+
+	r.setPhase(ws, phaseTerminating)
+	if err := r.Status().Update(ctx, ws); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	r.cleanupWorkspaceOnDeletion(ctx, ws)
+
+	if err := r.Get(ctx, client.ObjectKeyFromObject(ws), ws); err != nil {
+		return ctrl.Result{}, err
+	}
+	controllerutil.RemoveFinalizer(ws, annotations.WorkspaceFinalizer)
+	if err := r.Update(ctx, ws); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	return ctrl.Result{}, nil
+}
+
+func (r *WorkspaceReconciler) cleanupWorkspaceOnDeletion(ctx context.Context, ws *arkv1alpha1.Workspace) {
+	wsID := ws.Annotations[annotations.WorkspaceID]
+	if wsID == "" {
+		return
+	}
+
+	wsClient := genai.NewWorkspaceClient(r.workspaceRecorder())
+	if err := wsClient.CleanupWorkspace(ctx, wsID); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to cleanup workspace during deletion", "workspaceId", wsID)
+		if rec := r.workspaceRecorder(); rec != nil {
+			rec.CleanupFailed(ctx, ws, err.Error())
+		}
+	}
 }
 
 func (r *WorkspaceReconciler) setPhase(ws *arkv1alpha1.Workspace, phase string) {
