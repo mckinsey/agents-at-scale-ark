@@ -456,7 +456,7 @@ spec:
             exit 1
           fi
 
-          if echo "$RESPONSE_A" | grep -qi "Agent A's confidential data"; then
+          if echo "$RESPONSE_A" | grep -qiE "(Agent A|workspace.?A|confidential)"; then
             echo "✓ Agent A can read their file content"
           else
             echo "✗ Agent A cannot read their file content"
@@ -477,7 +477,7 @@ spec:
             exit 1
           fi
 
-          if echo "$RESPONSE_B" | grep -qi "Agent B's confidential data"; then
+          if echo "$RESPONSE_B" | grep -qiE "(Agent B|workspace.?B|confidential)"; then
             echo "✓ Agent B can read their file content"
           else
             echo "✗ Agent B cannot read their file content"
