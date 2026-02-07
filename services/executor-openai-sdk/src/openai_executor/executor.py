@@ -24,6 +24,7 @@ from agents.lifecycle import AgentHooksBase
 from agents.stream_events import RawResponsesStreamEvent
 
 from agents.extensions.experimental.codex import (
+    Codex,
     codex_tool,
     ThreadOptions,
     TurnOptions,
@@ -298,7 +299,7 @@ class OpenAIAgentsExecutor(BaseExecutor):
             tools.append(HostedMCPTool(tool_config=tool_config))
 
         if workspace_path and _to_bool(labels.get("openai-codex", "true")):
-            codex = self._build_codex_tool(workspace_path, labels, request.workspace)
+            codex = self._build_codex_tool(workspace_path, labels, request.workspace, request)
             tools.append(codex)
             logger.info(f"Codex tool enabled for workspace: {workspace_path}")
 
@@ -309,6 +310,7 @@ class OpenAIAgentsExecutor(BaseExecutor):
         workspace_path: str,
         labels: Dict[str, str],
         workspace: Optional[WorkspaceConfig] = None,
+        request: Optional[ExecutionEngineRequest] = None,
     ):
         codex_model = labels.get("openai-codex-model", os.environ.get("CODEX_MODEL", DEFAULT_CODEX_MODEL))
         idle_timeout = int(labels.get("openai-codex-idle-timeout", os.environ.get("CODEX_IDLE_TIMEOUT", str(DEFAULT_CODEX_IDLE_TIMEOUT))))
@@ -328,6 +330,17 @@ class OpenAIAgentsExecutor(BaseExecutor):
         if extra_dirs:
             additional_dirs.extend([d.strip() for d in extra_dirs.split(",") if d.strip()])
 
+        codex_kwargs: Dict[str, Any] = {}
+        if request and request.agent and request.agent.model:
+            api_key = resolve_api_key(request.agent.model)
+            base_url = resolve_base_url(request.agent.model)
+            if api_key:
+                codex_kwargs["api_key"] = api_key
+            if base_url:
+                codex_kwargs["base_url"] = base_url
+
+        codex_instance = Codex(**codex_kwargs) if codex_kwargs else None
+
         kwargs: Dict[str, Any] = {
             "working_directory": workspace_path,
             "sandbox_mode": sandbox_mode,
@@ -344,6 +357,8 @@ class OpenAIAgentsExecutor(BaseExecutor):
             "persist_session": persist_session,
         }
 
+        if codex_instance:
+            kwargs["codex"] = codex_instance
         if additional_dirs:
             kwargs["additional_directories"] = additional_dirs
         if skip_git_check:

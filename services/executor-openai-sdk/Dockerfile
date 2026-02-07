@@ -7,6 +7,10 @@ RUN groupadd -r executor && \
     mkdir -p /home/executor/.cache/uv && \
     chown -R executor:executor /home/executor
 
+RUN apt-get update && apt-get install -y --no-install-recommends nodejs npm && \
+    npm install -g @openai/codex && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
 COPY pyproject.toml README.md ./
