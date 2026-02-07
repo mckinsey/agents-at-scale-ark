@@ -21,23 +21,23 @@ kubectl apply -f model-openai.yaml
 
 | Agent                | Tools                       | Description                                    |
 | -------------------- | --------------------------- | ---------------------------------------------- |
-| `researcher`         | WebSearch                   | Research agent that searches the web            |
-| `code-assistant`     | CodeInterpreter             | Python code execution in sandboxed environment  |
-| `document-analyst`   | FileSearch                  | RAG over OpenAI Vector Stores                   |
-| `simple-assistant`   | None                        | Basic conversational assistant                  |
-| `multi-tool-analyst` | WebSearch + CodeInterpreter | Combined research and analysis                  |
-| `codex-developer`    | Codex                       | Workspace file operations via Codex             |
+| `researcher`         | WebSearch                   | Research agent that searches the web           |
+| `code-assistant`     | CodeInterpreter             | Python code execution in sandboxed environment |
+| `document-analyst`   | FileSearch                  | RAG over OpenAI Vector Stores                  |
+| `simple-assistant`   | None                        | Basic conversational assistant                 |
+| `multi-tool-analyst` | WebSearch + CodeInterpreter | Combined research and analysis                 |
+| `codex-developer`    | Codex                       | Workspace file operations via Codex            |
 
 ### Tool Configuration via Labels
 
 ```yaml
 metadata:
   labels:
-    openai-web-search: "true"           # Default: true
-    openai-code-interpreter: "true"     # Default: false
+    openai-web-search: "true" # Default: true
+    openai-code-interpreter: "true" # Default: false
     openai-file-search-vector-stores: "vs_abc123,vs_def456"
-    openai-codex: "true"                # Default: true (when workspace provided)
-    openai-max-turns: "10"              # Default: unlimited
+    openai-codex: "true" # Default: true (when workspace provided)
+    openai-max-turns: "10" # Default: unlimited
 ```
 
 ### Codex Configuration via Labels
@@ -45,14 +45,14 @@ metadata:
 ```yaml
 metadata:
   labels:
-    openai-codex-model: "gpt-5.2-codex"         # Default: gpt-5.2-codex
-    openai-codex-sandbox: "workspace-write"      # Default: workspace-write
-    openai-codex-approval-policy: "never"        # Default: never
-    openai-codex-network: "true"                 # Default: true
-    openai-codex-idle-timeout: "120"             # Default: 120
-    openai-codex-reasoning-effort: "low"         # Default: low
-    openai-codex-persist-session: "false"        # Default: false
-    openai-codex-skip-git-check: "false"         # Default: false
+    openai-codex-model: "gpt-5.2-codex" # Default: gpt-5.2-codex
+    openai-codex-sandbox: "workspace-write" # Default: workspace-write
+    openai-codex-approval-policy: "never" # Default: never
+    openai-codex-network: "true" # Default: true
+    openai-codex-idle-timeout: "120" # Default: 120
+    openai-codex-reasoning-effort: "low" # Default: low
+    openai-codex-persist-session: "false" # Default: false
+    openai-codex-skip-git-check: "false" # Default: false
     openai-codex-additional-dirs: "/data,/config" # Default: none
 ```
 

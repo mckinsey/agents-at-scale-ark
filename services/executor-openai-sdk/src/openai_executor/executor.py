@@ -15,10 +15,10 @@ from agents import (
     CodeInterpreterTool,
     FileSearchTool,
     HostedMCPTool,
+    set_default_openai_client,
 )
 from agents.lifecycle import AgentHooksBase
 from agents.stream_events import RawResponsesStreamEvent
-from agents.models.openai_provider import OpenAIProvider
 
 from agents.extensions.experimental.codex import (
     codex_tool,
@@ -113,7 +113,7 @@ class OpenAIAgentsExecutor(BaseExecutor):
             workspace_path = self._resolve_workspace_path(request, agent_id)
 
             openai_client = self._create_openai_client(request)
-            provider = OpenAIProvider(openai_client=openai_client)
+            set_default_openai_client(openai_client, use_for_tracing=False)
             agent = self._build_agent(request, workspace_path)
             input_messages = self._build_input(request)
             run_config = self._build_run_config(request)
@@ -122,7 +122,6 @@ class OpenAIAgentsExecutor(BaseExecutor):
             run_kwargs: Dict[str, Any] = {
                 "starting_agent": agent,
                 "input": input_messages,
-                "model_provider": provider,
                 "run_config": run_config,
             }
             if max_turns is not None:
@@ -147,7 +146,7 @@ class OpenAIAgentsExecutor(BaseExecutor):
             workspace_path = self._resolve_workspace_path(request, agent_id)
 
             openai_client = self._create_openai_client(request)
-            provider = OpenAIProvider(openai_client=openai_client)
+            set_default_openai_client(openai_client, use_for_tracing=False)
             agent = self._build_agent(request, workspace_path)
             input_messages = self._build_input(request)
             run_config = self._build_run_config(request)
@@ -156,7 +155,6 @@ class OpenAIAgentsExecutor(BaseExecutor):
             stream_kwargs: Dict[str, Any] = {
                 "starting_agent": agent,
                 "input": input_messages,
-                "model_provider": provider,
                 "run_config": run_config,
             }
             if max_turns is not None:

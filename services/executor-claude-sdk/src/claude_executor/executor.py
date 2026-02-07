@@ -18,7 +18,7 @@ from claude_agent_sdk import (
 
 from ark_executor_common import BaseExecutor, ExecutionEngineRequest, Message, TokenUsage, format_history_as_prompt
 from ark_executor_common.git import GitWorkspaceResult, finalize_workspace_git, prepare_workspace_with_git
-from ark_executor_common.models import resolve_api_key
+from ark_executor_common.models import resolve_api_key, resolve_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -254,6 +254,10 @@ class ClaudeSDKExecutor(BaseExecutor):
         api_key = resolve_api_key(request.agent.model)
         if api_key:
             env["ANTHROPIC_API_KEY"] = api_key
+
+        base_url = resolve_base_url(request.agent.model)
+        if base_url:
+            env["ANTHROPIC_BASE_URL"] = base_url
 
         max_turns = _safe_int(_get_label(labels, "claude-max-turns", "50"), 50)
         permission_mode = _get_label(labels, "claude-permission-mode", "bypassPermissions")
