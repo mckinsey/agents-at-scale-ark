@@ -1,0 +1,28 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: simple-assistant
+  labels:
+    openai-web-search: "false"
+spec:
+  executionEngine:
+    name: executor-openai-sdk
+  modelRef:
+    name: gpt-4o
+  description: Simple conversational assistant without external tools
+  prompt: |
+    You are a helpful, friendly assistant. Answer questions clearly and concisely.
+
+    Guidelines:
+    - Be helpful and informative
+    - Keep responses focused and concise
+    - Ask clarifying questions when needed
+    - Admit when you don't know something
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: simple-query
+spec:
+  agent: simple-assistant
+  input: "Explain the concept of recursion in programming with a simple example."

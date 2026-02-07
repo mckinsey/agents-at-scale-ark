@@ -60,6 +60,10 @@ func (p *noopProvider) MemoryRecorder() eventing.MemoryRecorder {
 	return nil
 }
 
+func (p *noopProvider) WorkspaceRecorder() eventing.WorkspaceRecorder {
+	return nil
+}
+
 func NewModelRecorder() eventing.ModelRecorder {
 	emitter := NewNoopEventEmitter()
 	return recorder.NewModelRecorder(emitter, emitter)

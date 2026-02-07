@@ -1,0 +1,13 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-claude-extended-thinking
+spec:
+  agentRef:
+    name: claude-extended-thinking
+  messages:
+    - role: user
+      content: |
+        A farmer has 100 meters of fencing and wants to enclose a rectangular area
+        along a river (no fencing needed on the river side). What dimensions will
+        maximize the enclosed area? Show your reasoning.

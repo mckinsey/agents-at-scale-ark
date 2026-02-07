@@ -78,6 +78,14 @@ type MemoryRecorder interface {
 	OperationTracker
 }
 
+type WorkspaceRecorder interface {
+	OperationTracker
+	ProvisionFailed(ctx context.Context, obj runtime.Object, reason string)
+	ReleaseFailed(ctx context.Context, obj runtime.Object, reason string)
+	CleanupFailed(ctx context.Context, obj runtime.Object, reason string)
+	AutoCommitFailed(ctx context.Context, obj runtime.Object, reason string)
+}
+
 type Provider interface {
 	ModelRecorder() ModelRecorder
 	A2aRecorder() A2aRecorder
@@ -88,4 +96,5 @@ type Provider interface {
 	QueryRecorder() QueryRecorder
 	ToolRecorder() ToolRecorder
 	MemoryRecorder() MemoryRecorder
+	WorkspaceRecorder() WorkspaceRecorder
 }

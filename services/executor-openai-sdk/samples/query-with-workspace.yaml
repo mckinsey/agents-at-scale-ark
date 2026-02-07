@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: analyze-repo
+spec:
+  agent: openai-codex-developer
+  input: "Analyze the repository structure and summarize the project architecture."
+  workspace:
+    ref:
+      name: my-repo

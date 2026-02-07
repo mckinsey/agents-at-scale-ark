@@ -294,5 +294,8 @@ func (op *OpenAIProvider) BuildConfig() map[string]any {
 	if op.APIKey != "" {
 		config["apiKey"] = op.APIKey
 	}
+	if len(op.Properties) > 0 {
+		config["properties"] = op.Properties
+	}
 	return config
 }

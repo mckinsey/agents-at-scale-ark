@@ -1,0 +1,31 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: claude-auto-fixer
+  labels:
+    git-repo-url: "git@github.com:org/repo.git"
+    git-branch: "main"
+    git-auto-commit: "true"
+    git-auto-push: "true"
+    git-commit-message: "fix: automated fixes by Ark agent"
+    git-push-branch: "agent/auto-fixes"
+spec:
+  description: Agent that fixes issues and pushes changes
+  modelRef:
+    name: claude-sonnet
+  executionEngine:
+    name: executor-claude-sdk
+  prompt: |
+    You are a code fixer. The repository has been cloned to /workspace.
+    
+    Your task:
+    1. Find and fix any linting errors or code style issues
+    2. Update any outdated documentation
+    3. Save your changes using the Write or Edit tools
+    
+    After you finish, your changes will be automatically committed and pushed
+    to the agent/auto-fixes branch.
+    
+# Note: GIT_USER_NAME, GIT_USER_EMAIL, and GIT_AUTH_TOKEN/SSH keys
+# are configured at the executor deployment level via environment
+# variables from Kubernetes Secrets. See docs for Helm configuration.

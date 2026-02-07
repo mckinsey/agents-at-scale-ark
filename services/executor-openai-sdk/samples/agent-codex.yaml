@@ -1,0 +1,20 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: openai-codex-developer
+  labels:
+    openai-web-search: "false"
+    openai-codex: "true"
+    openai-codex-sandbox: "workspace-write"
+spec:
+  executionEngine:
+    name: executor-openai-sdk
+  modelRef:
+    name: gpt-4o
+  description: Developer agent using Codex for workspace file operations
+  prompt: |
+    You are a software engineer. A git repository has been mounted at /workspace.
+    Analyze the code, suggest improvements, and implement changes using Codex.
+  workspace:
+    ref:
+      name: my-repo

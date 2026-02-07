@@ -1,0 +1,13 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: refactoring-step-2
+spec:
+  target:
+    type: agent
+    name: refactoring-agent
+  input: "Replace the deprecated patterns you identified"
+  workspace:
+    ref:
+      name: refactoring-workspace
+    sessionId: "abc123-previous-session"

@@ -1,0 +1,14 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-claude-conversation
+spec:
+  agentRef:
+    name: claude-basic
+  messages:
+    - role: user
+      content: "My name is Alice and I'm learning Python."
+    - role: assistant
+      content: "Hello Alice! That's great that you're learning Python. It's a versatile language. How can I help you today?"
+    - role: user
+      content: "What's my name and what am I learning?"

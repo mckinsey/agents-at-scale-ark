@@ -43,6 +43,7 @@ const (
 // General annotations
 const (
 	Finalizer            = ARKPrefix + "finalizer"
+	WorkspaceFinalizer   = "workspace." + ARKPrefix + "cleanup"
 	TriggeredFrom        = ARKPrefix + "triggered-from"
 	LocalhostGatewayPort = ARKPrefix + "localhost-gateway-port"
 )
@@ -56,6 +57,11 @@ const (
 const (
 	StreamingEnabled = ARKPrefix + "streaming-enabled"
 	StreamingURL     = ARKPrefix + "streaming-url"
+)
+
+// Workspace annotations
+const (
+	WorkspaceID = ARKPrefix + "workspace-id"
 )
 
 // Migration annotations - used by mutating webhooks to record deprecation warnings.

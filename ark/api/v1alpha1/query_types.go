@@ -82,6 +82,8 @@ type QuerySpec struct {
 	Cancel bool `json:"cancel,omitempty"`
 	// +kubebuilder:validation:Optional
 	Overrides []Override `json:"overrides,omitempty"`
+	// +kubebuilder:validation:Optional
+	Workspace *QueryWorkspace `json:"workspace,omitempty"`
 }
 
 // A2AMetadata contains optional A2A protocol metadata

@@ -20,3 +20,9 @@ spec:
         path: {{ .Values.executionEngine.address.serviceRef.path }}
         {{- end }}
   description: {{ .Values.executionEngine.description | quote }}
+  {{- if .Values.executionEngine.timeout }}
+  timeout: {{ .Values.executionEngine.timeout | quote }}
+  {{- end }}
+  {{- if .Values.executionEngine.streaming }}
+  streaming: {{ .Values.executionEngine.streaming }}
+  {{- end }}

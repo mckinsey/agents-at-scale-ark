@@ -1,0 +1,17 @@
+apiVersion: v2
+name: executor-openai-sdk
+description: >-
+  OpenAI Agents SDK Executor for Ark - Executes agents using the OpenAI Agents SDK
+type: application
+version: 0.1.0
+appVersion: 0.1.0
+keywords:
+  - openai
+  - agents-sdk
+  - ai
+  - agents
+  - execution-engine
+maintainers:
+  - name: Ark Team
+sources:
+  - https://github.com/mckinsey/agents-at-scale-ark

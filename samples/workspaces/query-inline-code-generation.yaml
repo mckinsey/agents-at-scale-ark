@@ -1,0 +1,22 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: generate-api-client
+spec:
+  target:
+    type: agent
+    name: code-generator
+  input: "Generate a Python API client for the OpenAPI spec"
+  workspace:
+    environment:
+      image:
+        ref: python:3.11-slim
+    content:
+      empty: {}
+    mountPath: /workspace
+    persistent: true
+    ttl: "0s"
+    autoCommit:
+      enabled: true
+      message: "Generated API client"
+      pushBranch: "generated/api-client"

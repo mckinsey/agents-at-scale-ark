@@ -208,6 +208,113 @@ var _ = Describe("Query Controller", func() {
 	})
 })
 
+var _ = Describe("Query Controller Workspace Resolution", func() {
+	Context("resolveEffectiveWorkspace", func() {
+		ctx := context.Background()
+
+		reconciler := &QueryReconciler{}
+
+		AfterEach(func() {
+			var agents arkv1alpha1.AgentList
+			_ = k8sClient.List(ctx, &agents)
+			for i := range agents.Items {
+				_ = k8sClient.Delete(ctx, &agents.Items[i])
+			}
+		})
+
+		It("should return query workspace when query specifies one", func() {
+			queryWs := &arkv1alpha1.QueryWorkspace{MountPath: "/query-ws"}
+			agent := &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{Name: "ws-agent-1", Namespace: "default"},
+				Spec: arkv1alpha1.AgentSpec{
+					Workspace: &arkv1alpha1.QueryWorkspace{MountPath: "/agent-ws"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+			query := arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{Name: "ws-query-1", Namespace: "default"},
+				Spec: arkv1alpha1.QuerySpec{
+					Target:    &arkv1alpha1.QueryTarget{Type: "agent", Name: "ws-agent-1"},
+					Workspace: queryWs,
+				},
+			}
+
+			reconciler.Client = k8sClient
+			result := reconciler.resolveEffectiveWorkspace(ctx, query, k8sClient)
+			Expect(result).To(Equal(queryWs))
+		})
+
+		It("should fall back to agent workspace when query has none", func() {
+			agentWs := &arkv1alpha1.QueryWorkspace{MountPath: "/agent-ws"}
+			agent := &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{Name: "ws-agent-2", Namespace: "default"},
+				Spec: arkv1alpha1.AgentSpec{
+					Workspace: agentWs,
+				},
+			}
+			Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+			query := arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{Name: "ws-query-2", Namespace: "default"},
+				Spec: arkv1alpha1.QuerySpec{
+					Target: &arkv1alpha1.QueryTarget{Type: "agent", Name: "ws-agent-2"},
+				},
+			}
+
+			reconciler.Client = k8sClient
+			result := reconciler.resolveEffectiveWorkspace(ctx, query, k8sClient)
+			Expect(result).NotTo(BeNil())
+			Expect(result.MountPath).To(Equal("/agent-ws"))
+		})
+
+		It("should return nil when neither query nor agent has workspace", func() {
+			agent := &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{Name: "ws-agent-3", Namespace: "default"},
+				Spec:       arkv1alpha1.AgentSpec{},
+			}
+			Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+
+			query := arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{Name: "ws-query-3", Namespace: "default"},
+				Spec: arkv1alpha1.QuerySpec{
+					Target: &arkv1alpha1.QueryTarget{Type: "agent", Name: "ws-agent-3"},
+				},
+			}
+
+			reconciler.Client = k8sClient
+			result := reconciler.resolveEffectiveWorkspace(ctx, query, k8sClient)
+			Expect(result).To(BeNil())
+		})
+
+		It("should return nil for non-agent targets", func() {
+			query := arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{Name: "ws-query-4", Namespace: "default"},
+				Spec: arkv1alpha1.QuerySpec{
+					Target: &arkv1alpha1.QueryTarget{Type: "model", Name: "some-model"},
+				},
+			}
+
+			reconciler.Client = k8sClient
+			result := reconciler.resolveEffectiveWorkspace(ctx, query, k8sClient)
+			Expect(result).To(BeNil())
+		})
+
+		It("should return nil when agent does not exist", func() {
+			query := arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{Name: "ws-query-5", Namespace: "default"},
+				Spec: arkv1alpha1.QuerySpec{
+					Target: &arkv1alpha1.QueryTarget{Type: "agent", Name: "nonexistent-agent"},
+				},
+			}
+
+			reconciler.Client = k8sClient
+			result := reconciler.resolveEffectiveWorkspace(ctx, query, k8sClient)
+			Expect(result).To(BeNil())
+		})
+	})
+})
+
 var _ = Describe("Query Controller Message Serialization", func() {
 	Context("When serializing messages", func() {
 		It("should serialize all message types correctly", func() {

@@ -1,0 +1,18 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: claude-code-reviewer
+  labels:
+    git-repo-url: "https://github.com/mckinsey/agents-at-scale-ark.git"
+    git-branch: "main"
+    git-sparse-paths: "docs/,samples/"
+spec:
+  description: Code reviewer that clones a repository and analyzes it
+  modelRef:
+    name: claude-sonnet
+  executionEngine:
+    name: executor-claude-sdk
+  prompt: |
+    You are a code reviewer. The repository has been cloned to /workspace.
+    Analyze the code structure and provide feedback on code quality,
+    documentation, and potential improvements.

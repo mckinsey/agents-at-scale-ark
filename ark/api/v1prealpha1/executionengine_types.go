@@ -22,6 +22,16 @@ type ExecutionEngineSpec struct {
 
 	// Description provides human-readable information about this execution engine
 	Description string `json:"description,omitempty"`
+
+	// Timeout specifies the HTTP request timeout for this execution engine (e.g., "5m", "30s", "1h").
+	// Defaults to "5m" if not specified.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default="5m"
+	Timeout string `json:"timeout,omitempty"`
+
+	// Streaming indicates whether this engine supports SSE streaming via /execute-stream
+	// +kubebuilder:validation:Optional
+	Streaming bool `json:"streaming,omitempty"`
 }
 
 type ExecutionEngineStatus struct {

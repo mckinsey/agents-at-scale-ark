@@ -1,0 +1,34 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: review-feature-branch
+spec:
+  target:
+    agent: claude-code-reviewer
+  parameters:
+    - name: git_branch
+      value: "feature/new-feature"
+    - name: git_sparse_paths
+      value: "src/"
+  input: |
+    Review the changes in this feature branch compared to main.
+    Focus on code quality and potential issues.
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: fix-specific-branch
+spec:
+  target:
+    agent: claude-auto-fixer
+  parameters:
+    - name: git_repo_url
+      value: "git@github.com:org/different-repo.git"
+    - name: git_branch
+      value: "develop"
+    - name: git_push_branch
+      value: "agent/fix-develop"
+    - name: git_commit_message
+      value: "fix: resolve linting issues on develop branch"
+  input: |
+    Fix all linting errors in this branch.

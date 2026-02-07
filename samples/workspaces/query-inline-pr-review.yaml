@@ -1,0 +1,22 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: review-pr-123
+spec:
+  target:
+    type: agent
+    name: code-reviewer
+  input: "Review the authentication changes in this PR"
+  workspace:
+    environment:
+      image:
+        ref: python:3.11-slim
+    content:
+      git:
+        url: "git@github.com:myorg/myrepo.git"
+        branch: "feature/auth-update"
+        authSecretRef:
+          name: git-credentials
+    mountPath: /workspace
+    persistent: true
+    ttl: "0s"

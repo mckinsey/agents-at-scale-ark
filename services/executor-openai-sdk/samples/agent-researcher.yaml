@@ -1,0 +1,29 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: researcher
+  labels:
+    openai-web-search: "true"
+spec:
+  executionEngine:
+    name: executor-openai-sdk
+  modelRef:
+    name: gpt-4o
+  description: Research agent that searches the web to find and synthesize information
+  prompt: |
+    You are an expert researcher. Your role is to find accurate, up-to-date information on any topic.
+
+    Guidelines:
+    - Use web search to find current information
+    - Cite sources when providing facts
+    - Synthesize information from multiple sources
+    - Be thorough but concise
+    - Acknowledge uncertainty when information is unclear or conflicting
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: research-query
+spec:
+  agent: researcher
+  input: "What are the latest developments in quantum computing in 2025?"

@@ -1,0 +1,13 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-claude-with-tools
+spec:
+  agentRef:
+    name: claude-with-tools
+  messages:
+    - role: user
+      content: |
+        Create a file called hello.py in /workspace with a simple Python script
+        that prints "Hello from Claude SDK!". Then read the file back to verify
+        its contents.

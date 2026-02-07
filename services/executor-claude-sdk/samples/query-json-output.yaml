@@ -1,0 +1,14 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-claude-json-output
+spec:
+  agentRef:
+    name: claude-json-output
+  messages:
+    - role: user
+      content: |
+        Apple Inc. announced record quarterly earnings on January 15, 2025.
+        CEO Tim Cook said the company exceeded expectations with strong iPhone
+        sales in China and Europe. The Cupertino-based tech giant reported
+        revenue of $120 billion, marking a 15% increase from the previous year.

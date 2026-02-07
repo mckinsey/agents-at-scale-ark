@@ -1,0 +1,223 @@
+---
+title: Workspaces
+description: Provisioning isolated environments for agent execution
+---
+
+## Overview
+
+Workspaces provide agents with isolated file systems containing tools (environment) and code/data (content). Two usage patterns are supported:
+
+- **Inline Ephemeral**: Defined in the Query spec, automatically cleaned up after execution
+- **Workspace CRD**: Pre-defined persistent workspaces for long-running sessions
+
+## Environment + Content Model
+
+A workspace has two components:
+
+| Component   | Purpose                  | Source           | Mutable             |
+| ----------- | ------------------------ | ---------------- | ------------------- |
+| Environment | Tools, binaries, runtime | Docker image     | No (read-only)      |
+| Content     | Code, data to work on   | Git, S3, archive | Yes (if persistent) |
+
+## Query Workspace Configuration
+
+Add a `workspace` field to your Query spec. The mode is determined by which fields are present:
+
+- `environment` or `content` present → inline workspace
+- `ref` present → reference to Workspace CRD
+
+### Inline Ephemeral (API-Driven)
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: review-pr-123
+spec:
+  target:
+    type: agent
+    name: code-reviewer
+  input: "Review this PR"
+  workspace:
+    environment:
+      image:
+        ref: python:3.11-slim
+    content:
+      git:
+        url: "git@github.com:org/repo.git"
+        branch: "feature/auth"
+        authSecretRef:
+          name: git-credentials
+    mountPath: /workspace
+    persistent: true
+    ttl: "0s"
+```
+
+### Reference Existing Workspace
+
+```yaml
+spec:
+  workspace:
+    ref:
+      name: my-project-workspace
+    sessionId: "abc123"
+```
+
+### Reference + Override
+
+```yaml
+spec:
+  workspace:
+    ref:
+      name: python-code-review
+    overrides:
+      content:
+        git:
+          branch: "feature/new-api"
+      autoCommit:
+        pushBranch: "review/new-api"
+```
+
+## Content Sources
+
+### Git Repository
+
+```yaml
+content:
+  git:
+    url: "git@github.com:org/repo.git"
+    branch: main
+    authSecretRef:
+      name: git-credentials
+```
+
+The `depth` field controls git history depth (default: `1` for shallow clone). Use `depth: 0` for full history when you need `git log`, `git blame`, or bisect.
+
+### Empty Directory
+
+```yaml
+content:
+  empty: {}
+```
+
+### Object Storage (S3/GCS/Azure)
+
+```yaml
+content:
+  objectStorage:
+    provider: s3
+    bucket: my-bucket
+    prefix: projects/my-project/
+    authSecretRef:
+      name: s3-credentials
+```
+
+### Archive
+
+```yaml
+content:
+  archive:
+    url: "https://storage.example.com/project.tar.gz"
+    format: tar.gz
+```
+
+## Workspace CRD
+
+For persistent workspaces used across multiple queries:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Workspace
+metadata:
+  name: python-code-review
+spec:
+  environment:
+    image:
+      ref: python:3.11-slim
+  content:
+    git:
+      url: "git@github.com:org/repo.git"
+      branch: main
+      authSecretRef:
+        name: git-credentials
+  mountPath: /workspace
+  persistent: true
+  storage:
+    size: 5Gi
+  ttl: "168h"
+  autoCommit:
+    enabled: true
+    message: "Changes by Ark agent"
+```
+
+## Persistence Model
+
+| Setting             | Environment | Content    | Use Case                     |
+| ------------------- | ----------- | ---------- | ---------------------------- |
+| `persistent: true`  | Read-only   | Read-write | Development, iterative work  |
+| `persistent: false` | Read-only   | Read-only  | Testing, reproducible builds |
+
+## Concurrency
+
+### Inline Workspaces
+
+Each query gets its own isolated workspace. No concurrency issues.
+
+### Workspace CRD References
+
+When multiple queries reference the same Workspace CRD, the default behavior is fail-fast:
+
+```yaml
+workspace:
+  ref:
+    name: shared-workspace
+```
+
+## Agent Default Workspace
+
+Agents can specify a default workspace:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: code-reviewer
+spec:
+  workspace:
+    ref:
+      name: python-dev-tools
+```
+
+## Migration from Git Labels
+
+Workspace configuration replaces the label-based git configuration. Existing git labels (`git-repo-url`, `git-branch`, etc.) continue to work during the migration period.
+
+**Before (labels)**:
+```yaml
+kind: Agent
+metadata:
+  labels:
+    git-repo-url: "git@github.com:org/repo.git"
+    git-branch: main
+    git-auto-commit: "true"
+```
+
+**After (workspace)**:
+```yaml
+kind: Query
+spec:
+  workspace:
+    content:
+      git:
+        url: "git@github.com:org/repo.git"
+        branch: main
+    autoCommit:
+      enabled: true
+```
+
+The workspace model offers:
+- Per-query isolation (no race conditions)
+- Dynamic branch configuration from the API
+- Environment support (tools from Docker images)
+- Multiple content sources (Git, S3, archives)
+- Session-based persistence for multi-step workflows

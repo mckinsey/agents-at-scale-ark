@@ -11,6 +11,7 @@ const (
 	sessionIDKey    contextKey = "sessionId"
 	queryNameKey    contextKey = "queryName"
 	a2aContextIDKey contextKey = "a2aContextId"
+	workspaceKey    contextKey = "workspaceConfig"
 	// QueryContextKey is used to pass the Query resource through context to agents
 	QueryContextKey contextKey = "queryContext"
 	// Execution metadata keys for streaming
@@ -93,6 +94,19 @@ func GetExecutionMetadata(ctx context.Context) map[string]interface{} {
 	}
 
 	return metadata
+}
+
+func WithWorkspaceConfig(ctx context.Context, config *WorkspaceConfig) context.Context {
+	return context.WithValue(ctx, workspaceKey, config)
+}
+
+func GetWorkspaceConfig(ctx context.Context) *WorkspaceConfig {
+	if val := ctx.Value(workspaceKey); val != nil {
+		if config, ok := val.(*WorkspaceConfig); ok {
+			return config
+		}
+	}
+	return nil
 }
 
 func WithA2AContextID(ctx context.Context, contextID string) context.Context {

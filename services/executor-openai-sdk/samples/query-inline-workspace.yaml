@@ -1,0 +1,13 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: inline-workspace-query
+spec:
+  agent: openai-codex-developer
+  input: "Review the codebase for security vulnerabilities."
+  workspace:
+    content:
+      git:
+        url: "https://github.com/org/repo.git"
+        branch: "main"
+    mountPath: /workspace

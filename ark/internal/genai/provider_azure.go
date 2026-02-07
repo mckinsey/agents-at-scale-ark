@@ -177,5 +177,8 @@ func (ap *AzureProvider) BuildConfig() map[string]any {
 	if ap.APIKey != "" {
 		config["apiKey"] = ap.APIKey
 	}
+	if len(ap.Properties) > 0 {
+		config["properties"] = ap.Properties
+	}
 	return config
 }

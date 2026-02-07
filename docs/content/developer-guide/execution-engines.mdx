@@ -1,0 +1,363 @@
+---
+title: Execution Engines
+description: Guide to selecting and configuring execution engines for Ark agents
+---
+
+# Execution Engines
+
+Ark supports multiple execution engines for running agent workloads. Each engine wraps a different agent SDK or framework, allowing you to choose the best fit for your use case.
+
+## Available Engines
+
+| Engine                | SDK               | Best For                          | Tool Model                                     | Streaming |
+| --------------------- | ----------------- | --------------------------------- | ---------------------------------------------- | --------- |
+| `executor-claude-sdk` | Claude Agent SDK  | Autonomous tasks, code generation | Built-in tools (Bash, Read, Write)             | Yes       |
+| `executor-openai-sdk` | OpenAI Agents SDK | Web search, code execution, MCP   | Hosted tools (WebSearch, CodeInterpreter, MCP) | Yes       |
+| `executor-langchain`  | LangChain         | RAG, custom chains                | Ark tools via LangChain                        | No        |
+
+## Configuring an Agent
+
+Point an Agent at an execution engine using `spec.executionEngine`:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: my-agent
+spec:
+  executionEngine:
+    name: executor-openai-sdk
+  modelRef:
+    name: gpt-4
+  prompt: "You are a helpful assistant."
+```
+
+## ExecutionEngine CRD
+
+Each executor service creates an `ExecutionEngine` CRD via its Helm chart. The CRD configures how the controller communicates with the engine.
+
+```yaml
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: ExecutionEngine
+metadata:
+  name: executor-claude-sdk
+spec:
+  type: "claude-agent-sdk"
+  address:
+    valueFrom:
+      serviceRef:
+        name: executor-claude-sdk
+  timeout: "30m"
+  streaming: true
+  description: "Claude Agent SDK Executor"
+```
+
+### Fields
+
+- **`spec.timeout`** - HTTP request timeout (default: `5m`). Set higher for long-running agents like Claude autonomous loops.
+- **`spec.streaming`** - Whether the engine supports SSE streaming via `/execute-stream`. When enabled and a query has streaming configured, the controller uses the streaming endpoint.
+
+## Tool Ownership
+
+Each executor uses its own tool model. Ark's `spec.tools` on the Agent CRD only applies to the built-in engine and LangChain.
+
+| Executor              | Tool Model                                                                                  |
+| --------------------- | ------------------------------------------------------------------------------------------- |
+| Built-in engine       | Ark tools via OpenAI function calling                                                       |
+| `executor-langchain`  | Ark tools mapped to LangChain tools                                                         |
+| `executor-openai-sdk` | OpenAI hosted tools (WebSearch, CodeInterpreter, FileSearch, MCP) -- runs on OpenAI servers |
+| `executor-claude-sdk` | Claude built-in tools (Bash, Read, Write, Edit, Glob, Grep, WebSearch, WebFetch)            |
+
+## OpenAI SDK Hosted Tools
+
+The OpenAI SDK executor uses hosted tools that run on OpenAI's infrastructure. No local tool execution or callbacks are needed.
+
+### Default tools
+
+**WebSearchTool** is enabled by default. Disable it per-agent with a label:
+
+```yaml
+metadata:
+  labels:
+    openai-web-search: "false"
+```
+
+### Code Interpreter
+
+Enable sandboxed code execution per-agent:
+
+```yaml
+metadata:
+  labels:
+    openai-code-interpreter: "true"
+```
+
+### File Search (Vector Stores)
+
+Enable retrieval from OpenAI Vector Stores per-agent:
+
+```yaml
+metadata:
+  labels:
+    openai-file-search-vector-stores: "vs_abc123,vs_def456"
+```
+
+### Hosted MCP Servers
+
+MCP servers are configured at the executor deployment level via environment variables. All agents using the executor share the configured MCP servers.
+
+Each MCP server needs a URL env var. Label and headers are optional:
+
+```yaml
+env:
+  HOST: "0.0.0.0"
+  PORT: "8000"
+  ARK_MCP_SERVER_GITHUB_URL: "https://mcp.github.com/sse"
+  ARK_MCP_SERVER_GITHUB_LABEL: "github"
+  ARK_MCP_SERVER_DOCS_URL: "https://gitmcp.io/my-org/my-repo"
+  ARK_MCP_SERVER_DOCS_LABEL: "docs"
+```
+
+The naming pattern is `ARK_MCP_SERVER_<NAME>_URL`, `ARK_MCP_SERVER_<NAME>_LABEL`, and optionally `ARK_MCP_SERVER_<NAME>_HEADERS` (comma-separated `key=value` pairs).
+
+### MCP Security Considerations
+
+MCP tools execute without approval. When a configured MCP server exposes a tool, the agent can invoke it automatically. Ark does not provide a tool approval mechanism for the OpenAI SDK executor.
+
+**Recommendations:**
+
+- Only configure MCP servers you trust
+- Use authentication headers to restrict access
+- Avoid exposing MCP servers with destructive operations (file deletion, database writes) unless the agent workflow requires them
+- Consider network policies to limit which MCP endpoints the executor can reach
+
+Unlike OpenAI's hosted tools (WebSearch, CodeInterpreter, FileSearch) which run in OpenAI's sandboxed infrastructure, MCP tools run wherever the MCP server is deployed.
+
+## Git Repository Integration
+
+Both Claude SDK and OpenAI SDK executors support cloning git repositories, working with files, and optionally committing and pushing changes back. This enables agents to work with codebases, access skills, or make contributions to repositories.
+
+### Clone Configuration
+
+Configure git cloning via agent labels or query parameters. Query parameters override labels.
+
+| Configuration     | Agent Label         | Query Parameter   | Description                                              |
+| ----------------- | ------------------- | ----------------- | -------------------------------------------------------- |
+| Repository URL    | `git-repo-url`      | `git_repo_url`    | URL of the repository to clone (required to enable)      |
+| Branch            | `git-branch`        | `git_branch`      | Branch to checkout (default: `main`)                     |
+| Clone Path        | `git-path`          | `git_path`        | Subdirectory within workspace to clone into              |
+| Sparse Paths      | `git-sparse-paths`  | `git_sparse_paths`| Comma-separated paths for sparse checkout                |
+| Clone Depth       | `git-depth`         | `git_depth`       | Clone depth (default: `0` = full, set to `1` for shallow) |
+
+### Commit and Push Configuration
+
+Enable automatic commit and push after agent execution completes:
+
+| Configuration     | Agent Label           | Query Parameter     | Description                                              |
+| ----------------- | --------------------- | ------------------- | -------------------------------------------------------- |
+| Auto Commit       | `git-auto-commit`     | `git_auto_commit`   | Commit changes after execution (default: `false`)        |
+| Auto Push         | `git-auto-push`       | `git_auto_push`     | Push after commit (default: `false`, implies auto-commit)|
+| Commit Message    | `git-commit-message`  | `git_commit_message`| Commit message (default: "Changes by Ark agent")         |
+| Push Branch       | `git-push-branch`     | `git_push_branch`   | Branch to push to (default: same as cloned branch)       |
+| User Name         | `git-user-name`       | `git_user_name`     | Git commit author name (default: "Ark Agent")            |
+| User Email        | `git-user-email`      | `git_user_email`    | Git commit author email                                  |
+
+When `git-auto-push` is enabled, clone depth is automatically set to `0` (full clone) since shallow clones cannot push.
+
+### Authentication
+
+Secrets are configured at the executor deployment level via environment variables from Kubernetes Secrets. They are **not** configurable via labels or parameters for security.
+
+#### Helm Values Configuration
+
+```yaml
+# In executor deployment values.yaml
+env:
+  GIT_USER_NAME: "Ark Agent"
+  GIT_USER_EMAIL: "ark-agent@example.com"
+
+envFromSecrets:
+  - name: git-credentials
+    keys:
+      GIT_AUTH_TOKEN: auth-token
+      
+extraVolumes:
+  - name: git-ssh-key
+    secret:
+      secretName: git-ssh-key
+      defaultMode: 0400
+
+extraVolumeMounts:
+  - name: git-ssh-key
+    mountPath: /secrets/git-ssh-key
+    subPath: id_rsa
+    readOnly: true
+```
+
+#### Environment Variables
+
+| Variable | Description | Default |
+| -------- | ----------- | ------- |
+| `GIT_AUTH_TOKEN` | HTTPS auth token for private repos | - |
+| `GIT_SSH_KEY_PATH` | Path to mounted SSH private key | `/secrets/git-ssh-key` (auto-detected) |
+| `GIT_SSH_STRICT_HOST_KEY` | Enable SSH host key verification | `false` |
+| `GIT_USER_NAME` | Git commit author name | `Ark Agent` |
+| `GIT_USER_EMAIL` | Git commit author email | `ark-agent@noreply.github.com` |
+
+#### SSH Key Setup
+
+```yaml
+# Create secret with SSH key
+apiVersion: v1
+kind: Secret
+metadata:
+  name: git-ssh-key
+type: Opaque
+data:
+  id_rsa: <base64-encoded-private-key>
+```
+
+The executor automatically uses `/secrets/git-ssh-key` if the file exists.
+
+#### Production Security
+
+Enable SSH host key verification in production:
+
+```yaml
+env:
+  GIT_SSH_STRICT_HOST_KEY: "true"
+```
+
+### Example: Read-Only Clone
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: code-reviewer
+  labels:
+    git-repo-url: "https://github.com/org/my-repo.git"
+    git-branch: "main"
+spec:
+  executionEngine:
+    name: executor-claude-sdk
+  modelRef:
+    name: claude-sonnet
+  prompt: "Review the code in /workspace and provide feedback."
+```
+
+### Example: Clone, Modify, and Push
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: code-fixer
+  labels:
+    git-repo-url: "git@github.com:org/my-repo.git"
+    git-branch: "main"
+    git-auto-commit: "true"
+    git-auto-push: "true"
+    git-commit-message: "fix: automated code fixes by Ark agent"
+    git-push-branch: "agent/fixes"
+spec:
+  executionEngine:
+    name: executor-claude-sdk
+  modelRef:
+    name: claude-sonnet
+  prompt: "Fix any linting errors in the codebase and save your changes."
+```
+
+### Query Parameter Override
+
+Override repository settings per-query:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: fix-feature-branch
+spec:
+  target:
+    agent: code-fixer
+  parameters:
+    - name: git_branch
+      value: "feature/new-feature"
+    - name: git_push_branch
+      value: "agent/fix-new-feature"
+  input: "Fix any issues in this feature branch"
+```
+
+### Workspace Paths
+
+| Executor              | Default Workspace | Configurable Via     |
+| --------------------- | ----------------- | -------------------- |
+| `executor-claude-sdk` | `/workspace`      | `claude-cwd` label   |
+| `executor-openai-sdk` | `/workspace`      | `openai-cwd` label   |
+
+### Security Considerations
+
+- SSH keys should be stored in Kubernetes Secrets with restricted access
+- Use deploy keys or service accounts with minimal required permissions
+- Consider branch protection rules to prevent direct pushes to protected branches
+- Review agent prompts to ensure they don't make unintended changes
+
+## Model Settings
+
+The OpenAI SDK executor maps model properties from the Ark Model CRD to the SDK's `ModelSettings`. Supported properties:
+
+| Property              | Type   | Description                                                        |
+| --------------------- | ------ | ------------------------------------------------------------------ |
+| `temperature`         | float  | Sampling temperature                                               |
+| `max_tokens`          | int    | Maximum output tokens                                              |
+| `top_p`               | float  | Nucleus sampling                                                   |
+| `frequency_penalty`   | float  | Frequency penalty                                                  |
+| `presence_penalty`    | float  | Presence penalty                                                   |
+| `tool_choice`         | string | Tool selection strategy (`auto`, `required`, `none`, or tool name) |
+| `parallel_tool_calls` | bool   | Allow multiple parallel tool calls                                 |
+| `truncation`          | string | Truncation strategy (`auto` or `disabled`)                         |
+| `store`               | bool   | Store model response for retrieval                                 |
+
+Set these in the Model CRD's properties:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: gpt-4o
+spec:
+  model: gpt-4o
+  type: openai
+  connection:
+    apiKey:
+      valueFrom:
+        secretKeyRef:
+          name: openai-key
+          key: api-key
+  properties:
+    temperature: "0.7"
+    max_tokens: "4096"
+    frequency_penalty: "0.5"
+    tool_choice: "auto"
+```
+
+## Resource Profiles
+
+Different executors have different resource requirements:
+
+| Executor              | Memory      | CPU        | Typical Execution Time |
+| --------------------- | ----------- | ---------- | ---------------------- |
+| `executor-langchain`  | 256Mi-1Gi   | 100m-500m  | Seconds to minutes     |
+| `executor-openai-sdk` | 256Mi-512Mi | 100m-500m  | Seconds to minutes     |
+| `executor-claude-sdk` | 512Mi-2Gi   | 250m-1000m | Minutes to hours       |
+
+## Adding a New Executor
+
+1. Deploy the executor service (Helm chart creates Deployment, Service, and ExecutionEngine CRD)
+2. Update Agent CRDs to reference the new ExecutionEngine name
+3. Queries automatically route to the new executor
+
+## Next Steps
+
+- [LangChain Execution Engine](/developer-guide/langchain-execution-engine) - RAG support details
+- [Query Execution Flow](/reference/query-execution) - How queries are processed

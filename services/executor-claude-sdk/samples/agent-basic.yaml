@@ -1,0 +1,13 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: claude-basic
+spec:
+  description: Basic Claude agent to validate core execution
+  modelRef:
+    name: claude-sonnet
+  executionEngine:
+    name: executor-claude-sdk
+  prompt: |
+    You are a helpful assistant. Answer questions concisely and accurately.
+    Do not include unnecessary preamble or postamble.

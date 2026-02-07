@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Workspace
+metadata:
+  name: my-repo
+spec:
+  content:
+    git:
+      url: "https://github.com/org/repo.git"
+      branch: "main"
+      depth: 1
+  mountPath: /workspace

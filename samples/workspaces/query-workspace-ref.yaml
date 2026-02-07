@@ -1,0 +1,12 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: refactoring-step-1
+spec:
+  target:
+    type: agent
+    name: refactoring-agent
+  input: "Identify deprecated patterns in the codebase"
+  workspace:
+    ref:
+      name: refactoring-workspace

@@ -1,0 +1,26 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Workspace
+metadata:
+  name: refactoring-workspace
+spec:
+  environment:
+    image:
+      ref: python:3.11-slim
+  content:
+    git:
+      url: "git@github.com:myorg/legacy-app.git"
+      branch: "main"
+      authSecretRef:
+        name: git-credentials
+  mountPath: /workspace
+  persistent: true
+  storage:
+    size: 10Gi
+    storageClass: standard
+  ttl: "168h"
+  autoCommit:
+    enabled: true
+    message: "Refactoring changes"
+    pushBranch: "refactor/cleanup"
+    userName: "Ark Agent"
+    userEmail: "ark-agent@example.com"

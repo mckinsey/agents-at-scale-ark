@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-claude-basic
+spec:
+  agentRef:
+    name: claude-basic
+  messages:
+    - role: user
+      content: "What is the capital of France? Answer in one sentence."

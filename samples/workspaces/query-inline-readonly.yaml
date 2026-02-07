@@ -1,0 +1,22 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: analyze-codebase
+spec:
+  target:
+    type: agent
+    name: code-analyzer
+  input: "Analyze the codebase for security vulnerabilities"
+  workspace:
+    environment:
+      image:
+        ref: python:3.11-slim
+    content:
+      git:
+        url: "git@github.com:myorg/myrepo.git"
+        branch: "main"
+        authSecretRef:
+          name: git-credentials
+    mountPath: /workspace
+    persistent: false
+    ttl: "0s"

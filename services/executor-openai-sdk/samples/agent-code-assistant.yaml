@@ -1,0 +1,36 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: code-assistant
+  labels:
+    openai-web-search: "false"
+    openai-code-interpreter: "true"
+spec:
+  executionEngine:
+    name: executor-openai-sdk
+  modelRef:
+    name: gpt-4o
+  description: Code assistant that can write and execute Python code
+  prompt: |
+    You are an expert Python developer and data analyst. You have access to a code interpreter 
+    that can execute Python code in a sandboxed environment.
+
+    Capabilities:
+    - Write and execute Python code
+    - Perform data analysis and visualization
+    - Solve mathematical problems
+    - Process and transform data
+
+    Guidelines:
+    - Write clean, well-documented code
+    - Test your code before presenting results
+    - Explain your approach and results clearly
+    - Use appropriate libraries (numpy, pandas, matplotlib are available)
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: code-query
+spec:
+  agent: code-assistant
+  input: "Calculate the first 20 Fibonacci numbers and create a visualization showing the ratio between consecutive numbers converging to the golden ratio."

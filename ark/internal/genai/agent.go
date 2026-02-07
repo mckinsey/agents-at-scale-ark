@@ -30,6 +30,7 @@ type Agent struct {
 	eventing          eventing.Provider
 	ExecutionEngine   *arkv1alpha1.ExecutionEngineRef
 	Annotations       map[string]string
+	Labels            map[string]string
 	OutputSchema      *runtime.RawExtension
 	client            client.Client
 }
@@ -80,14 +81,14 @@ func (a *Agent) executeWithExecutionEngineRouter(ctx context.Context, userInput 
 		return a.executeWithA2AExecutionEngine(ctx, userInput, eventStream)
 	}
 
-	messages, err := a.executeWithExecutionEngine(ctx, userInput, history)
+	messages, err := a.executeWithExecutionEngine(ctx, userInput, history, eventStream)
 	if err != nil {
 		return nil, err
 	}
 	return &ExecutionResult{Messages: messages}, nil
 }
 
-func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
+func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Message, history []Message, eventStream EventStreamInterface) ([]Message, error) {
 	engineClient := NewExecutionEngineClient(a.client, a.eventing.ExecutionEngineRecorder())
 
 	agentConfig, err := buildAgentConfig(a)
@@ -103,7 +104,26 @@ func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Messag
 
 	toolDefinitions := buildToolDefinitions(a.Tools)
 
-	return engineClient.Execute(ctx, a.ExecutionEngine, agentConfig, userInput, history, toolDefinitions)
+	engine, err := engineClient.resolveEngine(ctx, a.ExecutionEngine, agentConfig.Namespace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve execution engine: %w", err)
+	}
+
+	params := executeParams{
+		engineRef:   a.ExecutionEngine,
+		engine:      engine,
+		agentConfig: agentConfig,
+		userInput:   userInput,
+		history:     history,
+		tools:       toolDefinitions,
+		workspace:   GetWorkspaceConfig(ctx),
+	}
+
+	if eventStream != nil && engine.streaming {
+		return engineClient.ExecuteStreamingWithEngine(ctx, params, eventStream)
+	}
+
+	return engineClient.ExecuteWithEngine(ctx, params.engineRef, params.engine, params.agentConfig, params.userInput, params.history, params.tools, params.workspace)
 }
 
 func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
@@ -392,6 +412,7 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 		eventing:          eventingProvider,
 		ExecutionEngine:   crd.Spec.ExecutionEngine,
 		Annotations:       crd.Annotations,
+		Labels:            crd.Labels,
 		OutputSchema:      crd.Spec.OutputSchema,
 		client:            k8sClient,
 	}, nil

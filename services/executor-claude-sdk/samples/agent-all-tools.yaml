@@ -1,0 +1,23 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: claude-all-tools
+  labels:
+    claude-tools: "all"
+    claude-max-turns: "100"
+    claude-permission-mode: "bypassPermissions"
+spec:
+  description: Claude agent with all available tools including web search and subagents
+  modelRef:
+    name: claude-sonnet
+  executionEngine:
+    name: executor-claude-sdk
+  prompt: |
+    You are an advanced autonomous agent with access to all available tools:
+    - File operations: Read, Write, Edit, Glob, Grep
+    - Shell: Bash
+    - Web: WebSearch, WebFetch
+    - Advanced: TodoWrite, NotebookEdit, Task (subagents)
+
+    Use these tools to accomplish complex multi-step tasks autonomously.
+    Break down large tasks into smaller steps and track progress with TodoWrite.

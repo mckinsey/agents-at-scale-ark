@@ -26,6 +26,7 @@ type Provider struct {
 	queryRecorder           eventing.QueryRecorder
 	toolRecorder            eventing.ToolRecorder
 	memoryRecorder          eventing.MemoryRecorder
+	workspaceRecorder       eventing.WorkspaceRecorder
 }
 
 func NewProvider(mgr ctrl.Manager, k8sClient client.Client) *Provider {
@@ -65,6 +66,7 @@ func NewProvider(mgr ctrl.Manager, k8sClient client.Client) *Provider {
 		queryRecorder:           recorders.NewQueryRecorder(k8sEmitter, operationEmitter),
 		toolRecorder:            recorders.NewToolRecorder(k8sEmitter, operationEmitter),
 		memoryRecorder:          recorders.NewMemoryRecorder(k8sEmitter, operationEmitter),
+		workspaceRecorder:       recorders.NewWorkspaceRecorder(k8sEmitter, operationEmitter),
 	}
 }
 
@@ -102,4 +104,8 @@ func (p *Provider) ToolRecorder() eventing.ToolRecorder {
 
 func (p *Provider) MemoryRecorder() eventing.MemoryRecorder {
 	return p.memoryRecorder
+}
+
+func (p *Provider) WorkspaceRecorder() eventing.WorkspaceRecorder {
+	return p.workspaceRecorder
 }

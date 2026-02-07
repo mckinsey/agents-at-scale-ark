@@ -1,0 +1,17 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-claude-with-parameters
+spec:
+  agentRef:
+    name: claude-with-parameters
+  parameters:
+    - name: role
+      value: financial analyst
+    - name: domain
+      value: stock market analysis
+    - name: style
+      value: detailed and analytical
+  messages:
+    - role: user
+      content: "What factors should I consider when evaluating a tech company's stock?"

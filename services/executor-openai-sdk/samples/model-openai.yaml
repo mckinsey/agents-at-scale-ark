@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openai-api-key
+type: Opaque
+stringData:
+  api-key: "sk-your-api-key-here"
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: gpt-4o
+spec:
+  type: openai
+  model:
+    value: gpt-4o
+  config:
+    openai:
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            name: openai-api-key
+            key: api-key
+      properties:
+        temperature: "0.7"
+        max_tokens: "4096"

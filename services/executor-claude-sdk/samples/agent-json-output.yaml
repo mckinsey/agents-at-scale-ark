@@ -1,0 +1,41 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: claude-json-output
+spec:
+  description: Claude agent that returns structured JSON output
+  modelRef:
+    name: claude-sonnet
+  executionEngine:
+    name: executor-claude-sdk
+  prompt: |
+    You are an entity extraction assistant. Analyze the input text and extract
+    entities, sentiment, and provide a summary in the specified JSON format.
+  outputSchema:
+    type: object
+    properties:
+      summary:
+        type: string
+        description: A brief summary of the input text
+      entities:
+        type: array
+        items:
+          type: object
+          properties:
+            name:
+              type: string
+            type:
+              type: string
+              enum: ["person", "organization", "location", "date", "other"]
+        description: Named entities found in the input
+      sentiment:
+        type: string
+        enum: ["positive", "negative", "neutral"]
+        description: Overall sentiment of the input
+      keywords:
+        type: array
+        items:
+          type: string
+        description: Key terms from the text
+    required: ["summary", "entities", "sentiment"]
+    additionalProperties: false

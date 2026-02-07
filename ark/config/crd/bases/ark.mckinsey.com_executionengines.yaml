@@ -137,6 +137,16 @@ spec:
                 description: Description provides human-readable information about
                   this execution engine
                 type: string
+              streaming:
+                description: Streaming indicates whether this engine supports SSE
+                  streaming via /execute-stream
+                type: boolean
+              timeout:
+                default: 5m
+                description: |-
+                  Timeout specifies the HTTP request timeout for this execution engine (e.g., "5m", "30s", "1h").
+                  Defaults to "5m" if not specified.
+                type: string
               type:
                 description: Type specifies which execution engine implementation
                   to use

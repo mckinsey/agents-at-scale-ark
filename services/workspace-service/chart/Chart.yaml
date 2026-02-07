@@ -1,0 +1,6 @@
+apiVersion: v2
+name: workspace-service
+description: Workspace provisioning service for Ark
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

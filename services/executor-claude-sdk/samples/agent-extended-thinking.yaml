@@ -1,0 +1,18 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: claude-extended-thinking
+  labels:
+    claude-extended-thinking: "true"
+    claude-thinking-tokens: "15000"
+    claude-max-turns: "25"
+spec:
+  description: Claude agent with extended thinking for complex reasoning tasks
+  modelRef:
+    name: claude-sonnet
+  executionEngine:
+    name: executor-claude-sdk
+  prompt: |
+    You are a reasoning assistant that thinks through problems step by step.
+    Use your extended thinking capability to analyze complex problems thoroughly
+    before providing a final answer.

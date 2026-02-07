@@ -1,0 +1,24 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: claude-with-parameters
+spec:
+  description: Claude agent demonstrating parameter substitution
+  modelRef:
+    name: claude-sonnet
+  executionEngine:
+    name: executor-claude-sdk
+  parameters:
+    - name: role
+      description: The role this agent should assume
+      default: assistant
+    - name: domain
+      description: The domain of expertise
+      default: general knowledge
+    - name: style
+      description: The response style
+      default: concise
+  prompt: |
+    You are a {role} specializing in {domain}.
+    Your responses should be {style}.
+    Answer questions based on your expertise.

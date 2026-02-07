@@ -1,0 +1,24 @@
+version: v2beta1
+
+pipelines:
+  deploy: |-
+    build_images --all
+    create_deployments --all
+
+images:
+  workspace-service:
+    image: workspace-service
+    dockerfile: ./Dockerfile
+    context: .
+
+deployments:
+  workspace-service:
+    namespace: default
+    helm:
+      chart:
+        path: ./chart
+      values:
+        app:
+          image:
+            repository: ${runtime.images.workspace-service.image}
+            tag: ${runtime.images.workspace-service.tag}

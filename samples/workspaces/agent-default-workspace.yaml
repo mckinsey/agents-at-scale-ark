@@ -1,0 +1,15 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: python-developer
+spec:
+  prompt: |
+    You are a Python developer. Use the tools available in your workspace
+    to write, test, and refactor Python code.
+  modelRef:
+    name: claude-sonnet
+  executionEngine:
+    name: claude-sdk
+  workspace:
+    ref:
+      name: python-dev-environment

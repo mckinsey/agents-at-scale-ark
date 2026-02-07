@@ -546,6 +546,372 @@ spec:
                   - type
                   type: object
                 type: array
+              workspace:
+                properties:
+                  autoCommit:
+                    properties:
+                      enabled:
+                        default: false
+                        type: boolean
+                      message:
+                        default: Changes by Ark agent
+                        type: string
+                      pushBranch:
+                        type: string
+                      userEmail:
+                        default: ark-agent@noreply.github.com
+                        type: string
+                      userName:
+                        default: Ark Agent
+                        type: string
+                    type: object
+                  content:
+                    properties:
+                      archive:
+                        properties:
+                          authSecretRef:
+                            description: SecretKeySelector selects a key of a Secret.
+                            properties:
+                              key:
+                                description: The key of the secret to select from.  Must
+                                  be a valid secret key.
+                                type: string
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                              optional:
+                                description: Specify whether the Secret or its key
+                                  must be defined
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          format:
+                            default: tar.gz
+                            enum:
+                            - tar.gz
+                            - zip
+                            type: string
+                          url:
+                            type: string
+                        required:
+                        - url
+                        type: object
+                      empty:
+                        type: object
+                      git:
+                        properties:
+                          authSecretRef:
+                            description: SecretKeySelector selects a key of a Secret.
+                            properties:
+                              key:
+                                description: The key of the secret to select from.  Must
+                                  be a valid secret key.
+                                type: string
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                              optional:
+                                description: Specify whether the Secret or its key
+                                  must be defined
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          branch:
+                            default: main
+                            type: string
+                          depth:
+                            default: 1
+                            type: integer
+                          path:
+                            type: string
+                          sparsePaths:
+                            items:
+                              type: string
+                            type: array
+                          url:
+                            minLength: 1
+                            type: string
+                        required:
+                        - url
+                        type: object
+                      objectStorage:
+                        properties:
+                          authSecretRef:
+                            description: SecretKeySelector selects a key of a Secret.
+                            properties:
+                              key:
+                                description: The key of the secret to select from.  Must
+                                  be a valid secret key.
+                                type: string
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                              optional:
+                                description: Specify whether the Secret or its key
+                                  must be defined
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          bucket:
+                            type: string
+                          prefix:
+                            type: string
+                          provider:
+                            enum:
+                            - s3
+                            - gcs
+                            - azure
+                            type: string
+                        required:
+                        - bucket
+                        - provider
+                        type: object
+                    type: object
+                  environment:
+                    properties:
+                      image:
+                        properties:
+                          pullSecretRef:
+                            description: SecretKeySelector selects a key of a Secret.
+                            properties:
+                              key:
+                                description: The key of the secret to select from.  Must
+                                  be a valid secret key.
+                                type: string
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                              optional:
+                                description: Specify whether the Secret or its key
+                                  must be defined
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          ref:
+                            minLength: 1
+                            type: string
+                          sourcePath:
+                            type: string
+                        required:
+                        - ref
+                        type: object
+                    type: object
+                  mountPath:
+                    default: /workspace
+                    type: string
+                  overrides:
+                    properties:
+                      autoCommit:
+                        properties:
+                          enabled:
+                            default: false
+                            type: boolean
+                          message:
+                            default: Changes by Ark agent
+                            type: string
+                          pushBranch:
+                            type: string
+                          userEmail:
+                            default: ark-agent@noreply.github.com
+                            type: string
+                          userName:
+                            default: Ark Agent
+                            type: string
+                        type: object
+                      content:
+                        properties:
+                          archive:
+                            properties:
+                              authSecretRef:
+                                description: SecretKeySelector selects a key of a
+                                  Secret.
+                                properties:
+                                  key:
+                                    description: The key of the secret to select from.  Must
+                                      be a valid secret key.
+                                    type: string
+                                  name:
+                                    default: ""
+                                    description: |-
+                                      Name of the referent.
+                                      This field is effectively required, but due to backwards compatibility is
+                                      allowed to be empty. Instances of this type with an empty value here are
+                                      almost certainly wrong.
+                                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                    type: string
+                                  optional:
+                                    description: Specify whether the Secret or its
+                                      key must be defined
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                              format:
+                                default: tar.gz
+                                enum:
+                                - tar.gz
+                                - zip
+                                type: string
+                              url:
+                                type: string
+                            required:
+                            - url
+                            type: object
+                          empty:
+                            type: object
+                          git:
+                            properties:
+                              authSecretRef:
+                                description: SecretKeySelector selects a key of a
+                                  Secret.
+                                properties:
+                                  key:
+                                    description: The key of the secret to select from.  Must
+                                      be a valid secret key.
+                                    type: string
+                                  name:
+                                    default: ""
+                                    description: |-
+                                      Name of the referent.
+                                      This field is effectively required, but due to backwards compatibility is
+                                      allowed to be empty. Instances of this type with an empty value here are
+                                      almost certainly wrong.
+                                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                    type: string
+                                  optional:
+                                    description: Specify whether the Secret or its
+                                      key must be defined
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                              branch:
+                                default: main
+                                type: string
+                              depth:
+                                default: 1
+                                type: integer
+                              path:
+                                type: string
+                              sparsePaths:
+                                items:
+                                  type: string
+                                type: array
+                              url:
+                                minLength: 1
+                                type: string
+                            required:
+                            - url
+                            type: object
+                          objectStorage:
+                            properties:
+                              authSecretRef:
+                                description: SecretKeySelector selects a key of a
+                                  Secret.
+                                properties:
+                                  key:
+                                    description: The key of the secret to select from.  Must
+                                      be a valid secret key.
+                                    type: string
+                                  name:
+                                    default: ""
+                                    description: |-
+                                      Name of the referent.
+                                      This field is effectively required, but due to backwards compatibility is
+                                      allowed to be empty. Instances of this type with an empty value here are
+                                      almost certainly wrong.
+                                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                    type: string
+                                  optional:
+                                    description: Specify whether the Secret or its
+                                      key must be defined
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                              bucket:
+                                type: string
+                              prefix:
+                                type: string
+                              provider:
+                                enum:
+                                - s3
+                                - gcs
+                                - azure
+                                type: string
+                            required:
+                            - bucket
+                            - provider
+                            type: object
+                        type: object
+                    type: object
+                  persistent:
+                    default: true
+                    type: boolean
+                  ref:
+                    properties:
+                      name:
+                        minLength: 1
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  sessionId:
+                    type: string
+                  storage:
+                    properties:
+                      accessMode:
+                        default: ReadWriteOnce
+                        enum:
+                        - ReadWriteOnce
+                        - ReadWriteMany
+                        type: string
+                      size:
+                        default: 5Gi
+                        type: string
+                      storageClass:
+                        type: string
+                    type: object
+                  ttl:
+                    type: string
+                type: object
             type: object
           status:
             properties:

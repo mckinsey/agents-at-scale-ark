@@ -93,6 +93,8 @@ type AgentSpec struct {
 	OutputSchema *runtime.RawExtension `json:"outputSchema,omitempty"`
 	// +kubebuilder:validation:Optional
 	Overrides []Override `json:"overrides,omitempty"`
+	// +kubebuilder:validation:Optional
+	Workspace *QueryWorkspace `json:"workspace,omitempty"`
 }
 
 type AgentStatus struct {

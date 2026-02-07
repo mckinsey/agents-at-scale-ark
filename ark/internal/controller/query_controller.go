@@ -209,6 +209,55 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	opCtx = r.Eventing.QueryRecorder().StartTokenCollection(opCtx)
 	opCtx = r.Eventing.QueryRecorder().Start(opCtx, "QueryExecution", fmt.Sprintf("Executing query %s", obj.Name), nil)
 
+	effectiveWorkspace := r.resolveEffectiveWorkspace(opCtx, obj, impersonatedClient)
+
+	var provisionedWorkspace *genai.ProvisionedWorkspace
+	var resolvedWorkspace *arkv1alpha1.QueryWorkspace
+	if effectiveWorkspace != nil {
+		resolvedWorkspace, err = genai.ResolveQueryWorkspace(opCtx, impersonatedClient, effectiveWorkspace, obj.Namespace)
+		if err != nil {
+			r.Telemetry.QueryRecorder().RecordError(span, err)
+			_ = r.updateStatus(opCtx, &obj, statusError)
+			return
+		}
+		credentials, err := genai.ResolveWorkspaceCredentials(opCtx, impersonatedClient, resolvedWorkspace.Content, obj.Namespace)
+		if err != nil {
+			r.Telemetry.QueryRecorder().RecordError(span, err)
+			_ = r.updateStatus(opCtx, &obj, statusError)
+			return
+		}
+		wsClient := genai.NewWorkspaceClient(r.Eventing.WorkspaceRecorder())
+		provisionedWorkspace, err = wsClient.ProvisionWorkspace(opCtx, string(obj.UID), resolvedWorkspace, credentials)
+		if err != nil {
+			r.Telemetry.QueryRecorder().RecordError(span, err)
+			_ = r.updateStatus(opCtx, &obj, statusError)
+			return
+		}
+		if provisionedWorkspace != nil {
+			opCtx = genai.WithWorkspaceConfig(opCtx, provisionedWorkspace.Config)
+			if obj.Annotations == nil {
+				obj.Annotations = make(map[string]string)
+			}
+			obj.Annotations[annotations.WorkspaceID] = provisionedWorkspace.ID
+			_ = r.Update(opCtx, &obj)
+		}
+	}
+	defer func() {
+		if provisionedWorkspace != nil {
+			wsClient := genai.NewWorkspaceClient(r.Eventing.WorkspaceRecorder())
+			autoCommit := resolvedWorkspace.AutoCommit
+			if releaseErr := wsClient.ReleaseWorkspace(opCtx, provisionedWorkspace.ID, string(obj.UID), autoCommit); releaseErr != nil {
+				logf.FromContext(opCtx).Error(releaseErr, "failed to release workspace")
+			}
+			ttl := resolvedWorkspace.TTL
+			if ttl == nil || ttl.Duration == 0 {
+				if cleanupErr := wsClient.CleanupWorkspace(opCtx, provisionedWorkspace.ID); cleanupErr != nil {
+					logf.FromContext(opCtx).Error(cleanupErr, "failed to cleanup workspace")
+				}
+			}
+		}
+	}()
+
 	inputMessages, err := genai.GetQueryInputMessages(opCtx, obj, impersonatedClient)
 	if err == nil {
 		queryInput := genai.ExtractUserMessageContent(inputMessages)
@@ -587,6 +636,13 @@ func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query
 		}
 		r.operations.Delete(nsName)
 		log.Info("cancelled running operation for query", "name", query.Name, "namespace", query.Namespace)
+	}
+
+	if wsID := query.Annotations[annotations.WorkspaceID]; wsID != "" {
+		wsClient := genai.NewWorkspaceClient(r.Eventing.WorkspaceRecorder())
+		if err := wsClient.CleanupWorkspace(ctx, wsID); err != nil {
+			log.Error(err, "failed to cleanup workspace during finalization", "workspaceId", wsID)
+		}
 	}
 }
 
@@ -967,6 +1023,29 @@ func (r *QueryReconciler) executeModelWithStreaming(ctx context.Context, model *
 	responseMessages := []genai.Message{assistantMessage}
 
 	return responseMessages, nil
+}
+
+func (r *QueryReconciler) resolveEffectiveWorkspace(ctx context.Context, query arkv1alpha1.Query, k8sClient client.Client) *arkv1alpha1.QueryWorkspace {
+	if query.Spec.Workspace != nil {
+		return query.Spec.Workspace
+	}
+
+	target, err := r.resolveTarget(ctx, query, k8sClient)
+	if err != nil || target.Type != targetTypeAgent {
+		return nil
+	}
+
+	var agentCRD arkv1alpha1.Agent
+	agentKey := types.NamespacedName{Name: target.Name, Namespace: query.Namespace}
+	if err := k8sClient.Get(ctx, agentKey, &agentCRD); err != nil {
+		return nil
+	}
+
+	if agentCRD.Spec.Workspace != nil {
+		logf.FromContext(ctx).Info("using agent default workspace", "agent", target.Name)
+	}
+
+	return agentCRD.Spec.Workspace
 }
 
 func (r *QueryReconciler) SetupWithManager(mgr ctrl.Manager) error {

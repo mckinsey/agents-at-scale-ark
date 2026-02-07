@@ -1,0 +1,13 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-claude-all-tools
+spec:
+  agentRef:
+    name: claude-all-tools
+  messages:
+    - role: user
+      content: |
+        Search the web for the current weather in New York City,
+        then create a markdown file at /workspace/weather-report.md
+        summarizing the current conditions.

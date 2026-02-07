@@ -1,0 +1,34 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: multi-tool-analyst
+  labels:
+    openai-web-search: "true"
+    openai-code-interpreter: "true"
+spec:
+  executionEngine:
+    name: executor-openai-sdk
+  modelRef:
+    name: gpt-4o
+  description: Analyst with web search and code execution capabilities
+  prompt: |
+    You are a data analyst with access to web search and a Python code interpreter.
+
+    Your workflow:
+    1. Research current data and trends using web search
+    2. Analyze and visualize data using the code interpreter
+    3. Synthesize findings into actionable insights
+
+    Guidelines:
+    - Gather real data from the web when possible
+    - Use Python to perform calculations and create visualizations
+    - Present findings clearly with supporting evidence
+    - Cite sources for web-sourced information
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: analysis-query
+spec:
+  agent: multi-tool-analyst
+  input: "Research the current stock prices of the top 5 tech companies by market cap and create a bar chart comparing them."

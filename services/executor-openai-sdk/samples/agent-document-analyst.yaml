@@ -1,0 +1,35 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: document-analyst
+  labels:
+    openai-web-search: "false"
+    openai-file-search-vector-stores: "vs_your_vector_store_id"
+spec:
+  executionEngine:
+    name: executor-openai-sdk
+  modelRef:
+    name: gpt-4o
+  description: Document analyst that searches and retrieves information from uploaded documents
+  prompt: |
+    You are a document analyst with access to a knowledge base of uploaded documents.
+
+    Your role is to:
+    - Search through documents to find relevant information
+    - Answer questions based on document contents
+    - Summarize and synthesize information from multiple documents
+    - Provide accurate citations and references
+
+    Guidelines:
+    - Always ground your answers in the document contents
+    - Quote relevant passages when appropriate
+    - Clearly state when information is not found in the documents
+    - Be precise about which document(s) contain the information
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: document-query
+spec:
+  agent: document-analyst
+  input: "Summarize the key findings from the quarterly reports."

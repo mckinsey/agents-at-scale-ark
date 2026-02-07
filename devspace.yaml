@@ -25,18 +25,20 @@ dependencies:
 #    path: ./services/ark-evaluator
 #  executor-langchain:
 #    path: ./services/executor-langchain
-  
-  # Observability services. Uncomment to enable locally. Only phoenix or langfuse is needed
-  # phoenix service for observability. phoenix has a hook to restart ark-controller to pick up its url
-  # phoenix:
-  #   git: https://github.com/mckinsey/agents-at-scale-marketplace
-  #   tag: phoenix-v0.1.5
-  #   subPath: services/phoenix
-  # langfuse service for observability. langfuse has a hook to restart ark-controller to pick up its url
-  # langfuse:
-  #   git: https://github.com/mckinsey/agents-at-scale-marketplace
-  #   tag: langfuse-v0.1.4
-  #   subPath: services/langfuse
+#  workspace-service:
+#    path: ./services/workspace-service
+
+# Observability services. Uncomment to enable locally. Only phoenix or langfuse is needed
+# phoenix service for observability. phoenix has a hook to restart ark-controller to pick up its url
+# phoenix:
+#   git: https://github.com/mckinsey/agents-at-scale-marketplace
+#   tag: phoenix-v0.1.5
+#   subPath: services/phoenix
+# langfuse service for observability. langfuse has a hook to restart ark-controller to pick up its url
+# langfuse:
+#   git: https://github.com/mckinsey/agents-at-scale-marketplace
+#   tag: langfuse-v0.1.4
+#   subPath: services/langfuse
 
 # Vars - To disable, set environment variables before the devspace commands
 #        For example: ENABLE_CERT_MANAGER=false devspace dev
@@ -52,28 +54,27 @@ vars:
     default: true
 
 commands:
-  routes:
-    ./services/localhost-gateway/scripts/show-routes.sh
+  routes: ./services/localhost-gateway/scripts/show-routes.sh
 
 profiles:
   - name: enable-cert-manager
     activation:
-    - vars:
-        ENABLE_CERT_MANAGER: true
+      - vars:
+          ENABLE_CERT_MANAGER: true
     patches:
-    - op: add
-      path: deployments
-      value:
-        cert-manager:
-          namespace: cert-manager
-          helm:
-            chart:
-              name: cert-manager
-              repo: https://charts.jetstack.io
-            releaseName: cert-manager
-            upgradeArgs: [ "--install" ]
-            values:
-              installCRDs: true
+      - op: add
+        path: deployments
+        value:
+          cert-manager:
+            namespace: cert-manager
+            helm:
+              chart:
+                name: cert-manager
+                repo: https://charts.jetstack.io
+              releaseName: cert-manager
+              upgradeArgs: ["--install"]
+              values:
+                installCRDs: true
   - name: enable-gateway-api
     activation:
       - vars:
@@ -101,40 +102,40 @@ profiles:
               chart:
                 path: ./charts/ark-tenant
               releaseName: ark-tenant
-              upgradeArgs: [ "--install" ]
+              upgradeArgs: ["--install"]
 
 pipelines:
   deploy: |-
-    
+
     if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
       create_deployments cert-manager
     fi
-    
+
     if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then
       create_deployments gateway-api
     fi
-    
+
     run_dependency_pipelines ark --pipeline=deploy
-    
+
     if [ "${ENABLE_ARK_TENANT}" == "true" ]; then
       create_deployments ark-tenant
     fi
-    
+
     run_dependency_pipelines --all --exclude ark --pipeline=deploy
   dev: |-
-    
+
     if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
       create_deployments cert-manager
     fi
-    
+
     if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then
       create_deployments gateway-api
     fi
-    
+
     run_dependency_pipelines ark --pipeline=dev
-    
+
     if [ "${ENABLE_ARK_TENANT}" == "true" ]; then
       create_deployments ark-tenant
     fi
-    
+
     run_dependency_pipelines --all --exclude ark --pipeline=dev

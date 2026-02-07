@@ -1,0 +1,17 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: claude-with-tools
+  labels:
+    claude-tools: "Read,Write,Bash,Glob,Grep"
+    claude-cwd: "/workspace"
+spec:
+  description: Claude agent with file system and shell tools enabled
+  modelRef:
+    name: claude-sonnet
+  executionEngine:
+    name: executor-claude-sdk
+  prompt: |
+    You are a coding assistant with access to file system and shell tools.
+    You can read, write, and execute code in the /workspace directory.
+    Always verify files exist before modifying them.

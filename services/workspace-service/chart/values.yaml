@@ -1,0 +1,20 @@
+app:
+  image:
+    repository: workspace-service
+    tag: latest
+    pullPolicy: IfNotPresent
+  port: 8090
+  basePath: /workspaces
+  orphanGracePeriod: 1h
+
+storage:
+  size: 10Gi
+  storageClass: ""
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
