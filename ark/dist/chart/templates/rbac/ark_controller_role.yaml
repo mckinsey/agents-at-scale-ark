@@ -47,6 +47,7 @@ rules:
   - models
   - queries
   - teams
+  - workspaces
   verbs:
   - create
   - delete
@@ -70,6 +71,7 @@ rules:
   - queries/finalizers
   - teams/finalizers
   - tools/finalizers
+  - workspaces/finalizers
   verbs:
   - update
 - apiGroups:
@@ -87,6 +89,7 @@ rules:
   - queries/status
   - teams/status
   - tools/status
+  - workspaces/status
   verbs:
   - get
   - patch
