@@ -1,0 +1,6 @@
+apiVersion: v2
+name: code-first-executor
+description: Code-first executor for Ark
+type: application
+version: 0.1.0
+appVersion: 0.1.0

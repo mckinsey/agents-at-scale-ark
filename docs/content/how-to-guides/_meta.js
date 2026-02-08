@@ -10,6 +10,10 @@ export default {
     title: 'Create an agent',
     href: '/user-guide/agents'
   },
+  'code-first-agents': {
+    title: 'Build code-first agents',
+    href: '/developer-guide/code-first-agents'
+  },
   teams: {
     title: 'Coordinate multiple agents',
     href: '/user-guide/teams'

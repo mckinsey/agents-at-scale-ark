@@ -48,13 +48,30 @@ func (v *ExecutionEngineValidator) ValidateCreate(ctx context.Context, obj runti
 
 	executionengineLog.Info("Validating ExecutionEngine", "name", executionEngine.GetName(), "namespace", executionEngine.GetNamespace())
 
-	// Validate that the execution engine name is not reserved
 	if executionEngine.GetName() == genai.ExecutionEngineA2A {
 		return nil, fmt.Errorf("execution engine name '%s' is reserved for A2A servers", genai.ExecutionEngineA2A)
 	}
 
-	// Validate that the address can be resolved
-	_, err := v.Resolver.ResolveValueSource(ctx, executionEngine.Spec.Address, executionEngine.GetNamespace())
+	hasAddress := executionEngine.Spec.Address != nil
+	hasContainer := executionEngine.Spec.Container != nil
+
+	if hasAddress && hasContainer {
+		return nil, fmt.Errorf("address and container are mutually exclusive; specify one or the other")
+	}
+
+	if !hasAddress && !hasContainer {
+		return nil, fmt.Errorf("either address or container must be specified")
+	}
+
+	if hasContainer {
+		if executionEngine.Spec.Container.Image.Ref == "" {
+			return nil, fmt.Errorf("container.image.ref is required")
+		}
+		executionengineLog.Info("ExecutionEngine validation complete (container mode)", "name", executionEngine.GetName())
+		return nil, nil
+	}
+
+	_, err := v.Resolver.ResolveValueSource(ctx, *executionEngine.Spec.Address, executionEngine.GetNamespace())
 	if err != nil {
 		executionengineLog.Error(err, "Failed to resolve Address", "executionEngine", executionEngine.GetName())
 		return nil, fmt.Errorf("failed to resolve Address: %w", err)

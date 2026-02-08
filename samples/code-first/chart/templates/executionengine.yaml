@@ -1,0 +1,16 @@
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: ExecutionEngine
+metadata:
+  name: {{ include "code-first.fullname" . }}
+  labels:
+    {{- include "code-first.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.executionEngine.type | quote }}
+  address:
+    valueFrom:
+      serviceRef:
+        name: {{ include "code-first.fullname" . }}
+  description: {{ .Values.executionEngine.description | quote }}
+  {{- if .Values.executionEngine.timeout }}
+  timeout: {{ .Values.executionEngine.timeout | quote }}
+  {{- end }}

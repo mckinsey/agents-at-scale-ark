@@ -15,6 +15,7 @@ export default {
   queries: 'Queries',
 
   '---services': { type: 'separator', title: 'Services and runtime' },
+  'code-first-agents': 'Code-First Agents',
   services: 'Services',
   'ark-dashboard': 'ARK Dashboard',
   'form-validation-standards': 'Form Validation Standards',

@@ -1,0 +1,68 @@
+version: v2beta1
+
+images:
+  code-first-executor:
+    image: code-first-executor
+    dockerfile: Dockerfile
+    context: .
+
+pipelines:
+  deploy: |-
+    mkdir -p build-context
+    pip wheel --no-deps -w build-context ../../lib/ark-executor-common
+    build_images --all
+    create_deployments --all
+  dev: |-
+    create_deployments --all
+    start_dev --all
+
+deployments:
+  code-first-executor:
+    namespace: default
+    helm:
+      chart:
+        path: ./chart
+      values:
+        image:
+          repository: ${runtime.images.code-first-executor.image}
+          tag: ${runtime.images.code-first-executor.tag}
+        agent:
+          modelRef: gpt5
+        podSecurityContext:
+          runAsNonRoot: false
+          runAsUser: 0
+          fsGroup: 0
+        securityContext:
+          runAsUser: 0
+          allowPrivilegeEscalation: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            add:
+              - SETUID
+              - SETGID
+              - CHOWN
+              - FOWNER
+              - DAC_OVERRIDE
+
+dev:
+  code-first-executor:
+    imageSelector: code-first-executor
+    devImage: python:3.12-slim
+    command:
+      [
+        "sh",
+        "-c",
+        "pip install -e /deps/ark-executor-common openai && uvicorn executor:app --host 0.0.0.0 --port 8000 --reload",
+      ]
+    namespace: default
+    logs:
+      lastLines: 50
+    sync:
+      - path: .:/app
+        startContainer: true
+        disableDownload: true
+        uploadExcludeFile: .dockerignore
+      - path: ../../lib/ark-executor-common:/deps/ark-executor-common
+        disableDownload: true
+    ssh:
+      enabled: true

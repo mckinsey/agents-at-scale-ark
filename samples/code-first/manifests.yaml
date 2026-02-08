@@ -1,0 +1,42 @@
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: ExecutionEngine
+metadata:
+  name: code-first-example
+spec:
+  type: container
+  container:
+    image:
+      ref: ghcr.io/myorg/code-first-example:latest
+    port: 8000
+    env:
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        valueFrom:
+          secretKeyRef:
+            name: otel-environment-variables
+            key: OTEL_EXPORTER_OTLP_ENDPOINT
+            optional: true
+      - name: OTEL_SERVICE_NAME
+        value: "code-first-example"
+    workspaceStorage:
+      enabled: true
+    resources:
+      limits:
+        cpu: "500m"
+        memory: 512Mi
+      requests:
+        cpu: "100m"
+        memory: 256Mi
+  streaming: false
+  timeout: "5m"
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: code-first-agent
+spec:
+  modelRef:
+    name: default
+  executionEngine:
+    name: code-first-example
+  prompt: You are a helpful assistant built with a code-first approach.
+  description: A code-first agent running custom Python code in an OCI container.

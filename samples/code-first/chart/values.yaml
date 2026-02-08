@@ -1,0 +1,49 @@
+replicaCount: 1
+
+image:
+  repository: code-first-executor
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  fsGroup: 1001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 8000
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "256Mi"
+    cpu: "500m"
+
+env:
+  HOST: "0.0.0.0"
+  PORT: "8000"
+
+executionEngine:
+  type: "code-first"
+  description: "Code-first executor"
+  timeout: "5m"
+
+agent:
+  enabled: true
+  modelRef: default
+  prompt: "You are a helpful assistant."
+  description: "A code-first agent."

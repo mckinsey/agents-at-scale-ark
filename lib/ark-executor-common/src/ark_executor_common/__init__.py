@@ -22,6 +22,12 @@ from .git import (
     prepare_workspace_with_git,
 )
 from .history import format_history_as_prompt
+from .models import (
+    resolve_api_key,
+    resolve_base_url,
+    resolve_model_properties,
+    resolve_azure_api_version,
+)
 from .telemetry import TraceContext, extract_trace_context, get_tracer, pre_tool_hook, post_tool_hook
 
 __all__ = [
@@ -48,4 +54,8 @@ __all__ = [
     "post_tool_hook",
     "pre_tool_hook",
     "prepare_workspace_with_git",
+    "resolve_api_key",
+    "resolve_azure_api_version",
+    "resolve_base_url",
+    "resolve_model_properties",
 ]

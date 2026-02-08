@@ -1,0 +1,15 @@
+{{- if .Values.agent.enabled }}
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: {{ include "code-first.fullname" . }}
+  labels:
+    {{- include "code-first.labels" . | nindent 4 }}
+spec:
+  modelRef:
+    name: {{ .Values.agent.modelRef }}
+  executionEngine:
+    name: {{ include "code-first.fullname" . }}
+  prompt: {{ .Values.agent.prompt | quote }}
+  description: {{ .Values.agent.description | quote }}
+{{- end }}
