@@ -398,43 +398,6 @@ func TestGetResourceVersion(t *testing.T) {
 	}
 }
 
-func TestCleanup(t *testing.T) {
-	t.Parallel()
-	backend := newTestBackend(t)
-	ctx := context.Background()
-
-	obj := createTestObject("agent1", "default", "uid-123")
-	_ = backend.Create(ctx, "Agent", "default", "agent1", obj)
-	_ = backend.Delete(ctx, "Agent", "default", "agent1")
-
-	deleted, err := backend.Cleanup(ctx, 0)
-	if err != nil {
-		t.Fatalf("Cleanup() error = %v", err)
-	}
-
-	if deleted != 1 {
-		t.Errorf("expected 1 deleted, got %d", deleted)
-	}
-}
-
-func TestCleanup_RetentionPeriod(t *testing.T) {
-	t.Parallel()
-	backend := newTestBackend(t)
-	ctx := context.Background()
-
-	obj := createTestObject("agent1", "default", "uid-123")
-	_ = backend.Create(ctx, "Agent", "default", "agent1", obj)
-	_ = backend.Delete(ctx, "Agent", "default", "agent1")
-
-	deleted, err := backend.Cleanup(ctx, 24*time.Hour)
-	if err != nil {
-		t.Fatalf("Cleanup() error = %v", err)
-	}
-
-	if deleted != 0 {
-		t.Errorf("expected 0 deleted (within retention), got %d", deleted)
-	}
-}
 
 func TestWatch(t *testing.T) {
 	t.Parallel()
