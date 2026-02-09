@@ -323,10 +323,10 @@ export function AppSidebar() {
                     }}>
                     <Bot />
                     <span>Agent Builder</span>
-                    {agentBuilderOpen ? (
-                      <ChevronUp className="ml-auto h-4 w-4 transition-opacity" />
+                    {!agentBuilderOpen ? (
+                      <ChevronDown className="ml-auto h-4 w-4 transition-opacity" />
                     ) : (
-                      <ChevronDown className="ml-auto h-4 w-4 opacity-0 transition-opacity group-hover/button:opacity-100" />
+                      <ChevronUp className="ml-auto h-4 w-4 transition-opacity" />
                     )}
                   </CollapsibleTrigger>
                 </SidebarMenuButton>
@@ -397,10 +397,10 @@ export function AppSidebar() {
                     }}>
                     <Activity />
                     <span>Monitoring</span>
-                    {monitoringOpen ? (
-                      <ChevronUp className="ml-auto h-4 w-4 transition-opacity" />
+                    {!monitoringOpen ? (
+                      <ChevronDown className="ml-auto h-4 w-4 transition-opacity" />
                     ) : (
-                      <ChevronDown className="ml-auto h-4 w-4 opacity-0 transition-opacity group-hover/button:opacity-100" />
+                      <ChevronUp className="ml-auto h-4 w-4 transition-opacity" />
                     )}
                   </CollapsibleTrigger>
                 </SidebarMenuButton>
