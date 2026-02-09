@@ -10,7 +10,6 @@ require (
 	github.com/google/jsonschema-go v0.3.0
 	github.com/itchyny/gojq v0.12.17
 	github.com/lib/pq v1.11.1
-	github.com/mattn/go-sqlite3 v1.14.33
 	github.com/onsi/ginkgo/v2 v2.22.0
 	github.com/onsi/gomega v1.36.1
 	github.com/openai/openai-go v1.5.0
@@ -152,7 +151,7 @@ require (
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/apiextensions-apiserver v0.34.0 // indirect
+	k8s.io/apiextensions-apiserver v0.34.0
 	k8s.io/apiserver v0.34.0
 	k8s.io/component-base v0.34.0 // indirect
 	k8s.io/klog/v2 v2.130.1

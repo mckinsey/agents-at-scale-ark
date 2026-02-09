@@ -6,8 +6,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,7 +27,6 @@ import (
 	"mckinsey.com/ark/internal/apiserver/validation"
 	"mckinsey.com/ark/internal/storage"
 	"mckinsey.com/ark/internal/storage/postgresql"
-	"mckinsey.com/ark/internal/storage/sqlite"
 )
 
 var (
@@ -46,9 +43,7 @@ func init() {
 }
 
 type Config struct {
-	StorageBackend string
-	SQLitePath     string
-	PostgresHost   string
+	PostgresHost string
 	PostgresPort   int
 	PostgresDB     string
 	PostgresUser   string
@@ -67,9 +62,6 @@ func New(cfg Config) *Server {
 	if cfg.BindPort == 0 {
 		cfg.BindPort = 6443
 	}
-	if cfg.SQLitePath == "" {
-		cfg.SQLitePath = "/data/ark.db"
-	}
 	return &Server{
 		config: cfg,
 		stopCh: make(chan struct{}),
@@ -82,36 +74,19 @@ func (s *Server) Start(ctx context.Context) error {
 	converter := NewRegistryTypeConverter()
 	var err error
 
-	switch s.config.StorageBackend {
-	case "sqlite":
-		dir := filepath.Dir(s.config.SQLitePath)
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return fmt.Errorf("failed to create data directory: %w", err)
-		}
-		s.backend, err = sqlite.New(s.config.SQLitePath, converter)
-		if err != nil {
-			return fmt.Errorf("failed to create SQLite backend: %w", err)
-		}
-		klog.Infof("Using SQLite storage backend: %s", s.config.SQLitePath)
-
-	case "postgresql":
-		cfg := postgresql.Config{
-			Host:     s.config.PostgresHost,
-			Port:     s.config.PostgresPort,
-			Database: s.config.PostgresDB,
-			User:     s.config.PostgresUser,
-			Password: s.config.PostgresPass,
-			SSLMode:  s.config.PostgresSSL,
-		}
-		s.backend, err = postgresql.New(cfg, converter)
-		if err != nil {
-			return fmt.Errorf("failed to create PostgreSQL backend: %w", err)
-		}
-		klog.Infof("Using PostgreSQL storage backend: %s:%d/%s", cfg.Host, cfg.Port, cfg.Database)
-
-	default:
-		return fmt.Errorf("unsupported storage backend: %s", s.config.StorageBackend)
+	cfg := postgresql.Config{
+		Host:     s.config.PostgresHost,
+		Port:     s.config.PostgresPort,
+		Database: s.config.PostgresDB,
+		User:     s.config.PostgresUser,
+		Password: s.config.PostgresPass,
+		SSLMode:  s.config.PostgresSSL,
 	}
+	s.backend, err = postgresql.New(cfg, converter)
+	if err != nil {
+		return fmt.Errorf("failed to create PostgreSQL backend: %w", err)
+	}
+	klog.Infof("Using PostgreSQL storage backend: %s:%d/%s", cfg.Host, cfg.Port, cfg.Database)
 
 	secureServing := genericoptions.NewSecureServingOptions().WithLoopback()
 	secureServing.BindPort = s.config.BindPort
