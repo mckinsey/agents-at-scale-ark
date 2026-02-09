@@ -32,9 +32,8 @@ func (op *OpenAIProvider) HealthCheck(ctx context.Context) error {
 	client := op.createClient(ctx)
 	modelsPage, err := client.Models.List(ctx)
 	if err != nil {
-		testMessages := []Message{
-			NewUserMessage("test"),
-		}
+		testMsg, _ := A2AToOpenAIMessage(NewUserMessage("test"))
+		testMessages := []openai.ChatCompletionMessageParamUnion{testMsg}
 		_, err := op.ChatCompletion(ctx, testMessages, 1)
 		if err != nil {
 			return fmt.Errorf("model %s is not accessible: %w", op.Model, err)
