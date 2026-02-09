@@ -3548,6 +3548,15 @@ export interface components {
             /** Filename */
             filename?: string;
         };
+        /** FilePreviewRequest */
+        FilePreviewRequest: {
+            /** Content */
+            content: string;
+            /** Filename */
+            filename: string;
+            /** Mimetype */
+            mimeType?: string | null;
+        };
         /**
          * Function
          * @description The function that the model called.
