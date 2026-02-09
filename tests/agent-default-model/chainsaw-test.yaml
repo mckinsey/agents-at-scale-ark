@@ -83,7 +83,7 @@ spec:
             type: completions
             provider: openai
             model:
-              value: gpt-4.1
+              value: gpt-5.2
             pollInterval: 3s
             config:
               openai:
