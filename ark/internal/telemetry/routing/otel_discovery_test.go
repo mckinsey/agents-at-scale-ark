@@ -94,17 +94,22 @@ func assertOTELEndpoint(t *testing.T, got, want *OTELEndpoint) {
 	}
 }
 
+func TestDiscoverOTELEndpoints_NilClient(t *testing.T) {
+	got, err := DiscoverOTELEndpoints(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != nil {
+		t.Errorf("got %v, want nil", got)
+	}
+}
+
 func TestDiscoverOTELEndpoints(t *testing.T) {
 	tests := []struct {
 		name    string
 		secrets []runtime.Object
 		want    []OTELEndpoint
 	}{
-		{
-			name:    "nil client returns nil",
-			secrets: nil,
-			want:    nil,
-		},
 		{
 			name:    "no secrets returns empty",
 			secrets: []runtime.Object{},
@@ -128,9 +133,7 @@ func TestDiscoverOTELEndpoints(t *testing.T) {
 					Data:       map[string][]byte{"OTEL_EXPORTER_OTLP_ENDPOINT": []byte("http://collector:4318/v1/traces")},
 				},
 			},
-			want: []OTELEndpoint{
-				{Namespace: "tenant-a", Endpoint: "http://collector:4318/v1/traces", TLS: false},
-			},
+			want: []OTELEndpoint{{Namespace: "tenant-a", Endpoint: "http://collector:4318/v1/traces", TLS: false}},
 		},
 		{
 			name: "discovers multiple endpoints",
@@ -164,41 +167,29 @@ func TestDiscoverOTELEndpoints(t *testing.T) {
 					Data:       map[string][]byte{"OTHER_KEY": []byte("value")},
 				},
 			},
-			want: []OTELEndpoint{
-				{Namespace: "tenant-a", Endpoint: "http://valid:4318", TLS: false},
-			},
+			want: []OTELEndpoint{{Namespace: "tenant-a", Endpoint: "http://valid:4318", TLS: false}},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
-
-			if tt.name == "nil client returns nil" {
-				got, err := DiscoverOTELEndpoints(ctx, nil)
-				if err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-				if got != nil {
-					t.Errorf("got %v, want nil", got)
-				}
-				return
-			}
-
 			client := fake.NewClientBuilder().WithRuntimeObjects(tt.secrets...).Build()
-			got, err := DiscoverOTELEndpoints(ctx, client)
+			got, err := DiscoverOTELEndpoints(context.Background(), client)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-
-			if len(got) != len(tt.want) {
-				t.Fatalf("got %d endpoints, want %d", len(got), len(tt.want))
-			}
-
-			for i := range tt.want {
-				assertOTELEndpointEqual(t, got[i], tt.want[i])
-			}
+			assertEndpointsEqual(t, got, tt.want)
 		})
+	}
+}
+
+func assertEndpointsEqual(t *testing.T, got, want []OTELEndpoint) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("got %d endpoints, want %d", len(got), len(want))
+	}
+	for i := range want {
+		assertOTELEndpointEqual(t, got[i], want[i])
 	}
 }
 
