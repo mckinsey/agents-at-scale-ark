@@ -9,11 +9,11 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/openai/openai-go"
 	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/eventing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
 // HTTPMemory handles memory operations for ARK queries
@@ -173,15 +173,10 @@ func (m *HTTPMemory) AddMessages(ctx context.Context, queryID string, messages [
 	}
 
 	// Convert messages to the request format
-	openaiMessages := make([]openai.ChatCompletionMessageParamUnion, len(messages))
-	for i, msg := range messages {
-		openaiMessages[i] = openai.ChatCompletionMessageParamUnion(msg)
-	}
-
 	reqBody, err := json.Marshal(MessagesRequest{
 		ConversationID: m.conversationId,
 		QueryID:        queryID,
-		Messages:       openaiMessages,
+		Messages:       messages,
 	})
 	if err != nil {
 		operationData := map[string]string{"result": fmt.Sprintf("Failed to serialize messages: %v", err)}
@@ -280,13 +275,13 @@ func (m *HTTPMemory) GetMessages(ctx context.Context) ([]Message, error) {
 
 	messages := make([]Message, 0, len(response.Messages))
 	for i, record := range response.Messages {
-		openaiMessage, err := unmarshalMessageRobust(record.Message)
+		a2aMessage, err := unmarshalMessageRobust(record.Message)
 		if err != nil {
 			operationData := map[string]string{"result": fmt.Sprintf("Failed to unmarshal message at index %d: %v", i, err)}
 			m.eventingRecorder.Fail(ctx, "MemoryGetMessages", operationData["result"], err, operationData)
 			return nil, fmt.Errorf("failed to unmarshal message at index %d: %w", i, err)
 		}
-		messages = append(messages, Message(openaiMessage))
+		messages = append(messages, a2aMessage)
 	}
 
 	operationData := map[string]string{
@@ -321,37 +316,56 @@ func (m *HTTPMemory) Close() error {
 }
 
 // unmarshalMessageRobust tries discriminated union first, then falls back to simple role/content extraction
-func unmarshalMessageRobust(rawJSON json.RawMessage) (openai.ChatCompletionMessageParamUnion, error) {
-	// Step 1: Try discriminated union first (the normal case)
-	var openaiMessage openai.ChatCompletionMessageParamUnion
-	if err := json.Unmarshal(rawJSON, &openaiMessage); err == nil {
-		return openaiMessage, nil
+func unmarshalMessageRobust(rawJSON json.RawMessage) (protocol.Message, error) {
+	if len(rawJSON) == 0 {
+		return protocol.Message{}, fmt.Errorf("empty message payload")
+	}
+	trimmed := strings.TrimSpace(string(rawJSON))
+	if trimmed == "" || trimmed == "null" {
+		return protocol.Message{}, fmt.Errorf("empty message payload")
+	}
+	var message protocol.Message
+	if err := json.Unmarshal(rawJSON, &message); err == nil && message.Role != "" && len(message.Parts) > 0 {
+		return message, nil
 	}
 
-	// Step 2: Fallback - try to extract role/content from simple format
 	var simple simpleMessage
 	if err := json.Unmarshal(rawJSON, &simple); err != nil {
-		return openai.ChatCompletionMessageParamUnion{}, fmt.Errorf("malformed JSON: %v", err)
+		return protocol.Message{}, fmt.Errorf("malformed JSON: %v", err)
 	}
 
-	// Step 3: Validate role is present (any role is acceptable for future compatibility)
 	if simple.Role == "" {
-		return openai.ChatCompletionMessageParamUnion{}, fmt.Errorf("missing required 'role' field")
+		return protocol.Message{}, fmt.Errorf("missing required 'role' field")
 	}
 
-	// Step 4: Convert simple format to proper OpenAI message based on known roles
-	// For unknown roles, try user message as fallback (most permissive)
+	role := protocol.MessageRoleAgent
 	switch simple.Role {
 	case RoleUser:
-		return openai.UserMessage(simple.Content), nil
+		role = protocol.MessageRoleUser
+	case RoleAssistant, RoleSystem, RoleTool:
+		role = protocol.MessageRoleAgent
+	}
+
+	message = protocol.NewMessage(role, []protocol.Part{
+		protocol.NewTextPart(simple.Content),
+	})
+	switch simple.Role {
+	case RoleUser:
+		return message, nil
 	case RoleAssistant:
-		return openai.AssistantMessage(simple.Content), nil
+		return message, nil
 	case RoleSystem:
-		return openai.SystemMessage(simple.Content), nil
+		message.Metadata = map[string]interface{}{
+			MetadataRoleKey: RoleSystem,
+		}
+		return message, nil
+	case RoleTool:
+		message.Metadata = map[string]interface{}{
+			MetadataRoleKey: RoleTool,
+		}
+		return message, nil
 	default:
-		// Future-proof: accept any role by treating as user message
-		// The OpenAI SDK will handle validation of the actual role
-		return openai.UserMessage(simple.Content), nil
+		return message, nil
 	}
 }
 

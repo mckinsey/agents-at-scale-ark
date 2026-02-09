@@ -25,6 +25,7 @@ const (
 	A2AHistoryLimit       = ARKPrefix + "a2a-history-limit"
 	A2AExtensions         = ARKPrefix + "a2a-extensions"
 	A2APermissions        = ARKPrefix + "a2a-permissions"
+	A2ASupportedExtensions = ARKPrefix + "a2a-supported-extensions"
 )
 
 // MCP annotations

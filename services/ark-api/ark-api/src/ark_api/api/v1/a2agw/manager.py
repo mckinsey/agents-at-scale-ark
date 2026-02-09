@@ -9,6 +9,7 @@ from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
 from ark_sdk.k8s import get_namespace, is_k8s
 from starlette.applications import Starlette
+from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .execution import ARKAgentExecutor
@@ -189,10 +190,28 @@ class DynamicManager:
                 http_handler=request_handler
             )
 
-            new_app.mount(f"/{name}/", server.build())
+            agent_app = server.build()
+            agent_app.add_route(
+                "/.well-known/agent-card.json",
+                self._agent_card_handler(agent_card),
+                methods=["GET"],
+            )
+            new_app.mount(f"/{name}/", agent_app)
 
         # Atomically swap the entire app
         self.app.set_app(new_app)
         
         logger.info(f"Updated routes - Active agents: {list(self.agents.keys())}")
+
+    def _agent_card_handler(self, agent_card):
+        async def handler(_request):
+            if hasattr(agent_card, "model_dump"):
+                payload = agent_card.model_dump()
+            elif hasattr(agent_card, "dict"):
+                payload = agent_card.dict()
+            else:
+                payload = agent_card
+            return JSONResponse(payload)
+
+        return handler
 

@@ -167,9 +167,13 @@ func GetQueryInputMessages(ctx context.Context, query arkv1alpha1.Query, k8sClie
 			return nil, fmt.Errorf("failed to get input messages: %w", err)
 		}
 
-		messages := make([]Message, len(openaiMessages))
+		messages := make([]Message, 0, len(openaiMessages))
 		for i := range openaiMessages {
-			messages[i] = Message(openaiMessages[i])
+			converted, err := OpenAIToA2AMessage(openaiMessages[i])
+			if err != nil {
+				return nil, fmt.Errorf("failed to convert input message %d: %w", i, err)
+			}
+			messages = append(messages, converted)
 		}
 		return messages, nil
 	}

@@ -254,8 +254,9 @@ func TestExtractTextFromParts(t *testing.T) {
 
 func TestBuildA2AMetadataWithHistory(t *testing.T) {
 	annotations := map[string]string{
-		arkann.A2AHistoryEnabled: TrueString,
-		arkann.A2AHistoryLimit:   "1",
+		arkann.A2AHistoryEnabled:     TrueString,
+		arkann.A2AHistoryLimit:       "1",
+		arkann.A2ASupportedExtensions: `["https://ark.mckinsey.com/extensions/history/v1"]`,
 	}
 	history := []Message{
 		NewUserMessage("first"),
@@ -277,7 +278,8 @@ func TestBuildA2AMetadataWithHistory(t *testing.T) {
 func TestBuildA2AMetadataPermissions(t *testing.T) {
 	permissions := `{"subject":"user-123","scopes":["agents:read"]}`
 	annotations := map[string]string{
-		arkann.A2APermissions: permissions,
+		arkann.A2APermissions:        permissions,
+		arkann.A2ASupportedExtensions: `["https://ark.mckinsey.com/extensions/permissions/v1"]`,
 	}
 
 	metadata, err := buildA2AMetadata(annotations, nil, false)
@@ -289,4 +291,31 @@ func TestBuildA2AMetadataPermissions(t *testing.T) {
 	permissionsMap, ok := permissionsValue.(map[string]interface{})
 	assert.True(t, ok)
 	assert.Equal(t, "user-123", permissionsMap["subject"])
+}
+
+func TestBuildA2AMetadataPermissionsUnsupported(t *testing.T) {
+	permissions := `{"subject":"user-123","scopes":["agents:read"]}`
+	annotations := map[string]string{
+		arkann.A2APermissions: permissions,
+	}
+
+	metadata, err := buildA2AMetadata(annotations, nil, false)
+
+	assert.NoError(t, err)
+	if metadata != nil {
+		_, ok := metadata[a2aPermissionsExtensionKey]
+		assert.False(t, ok)
+	}
+}
+
+func TestBuildA2AMetadataPermissionsInvalid(t *testing.T) {
+	permissions := `{"scopes":["agents:read"]}`
+	annotations := map[string]string{
+		arkann.A2APermissions:        permissions,
+		arkann.A2ASupportedExtensions: `["https://ark.mckinsey.com/extensions/permissions/v1"]`,
+	}
+
+	_, err := buildA2AMetadata(annotations, nil, false)
+
+	assert.Error(t, err)
 }

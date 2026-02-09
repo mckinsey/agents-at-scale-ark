@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/openai/openai-go"
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/eventing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -52,9 +51,9 @@ type Config struct {
 }
 
 type MessagesRequest struct {
-	ConversationID string                                   `json:"conversation_id,omitempty"`
-	QueryID        string                                   `json:"query_id"`
-	Messages       []openai.ChatCompletionMessageParamUnion `json:"messages"`
+	ConversationID string    `json:"conversation_id,omitempty"`
+	QueryID        string    `json:"query_id"`
+	Messages       []Message `json:"messages"`
 }
 
 type MessageRecord struct {

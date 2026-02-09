@@ -27,15 +27,10 @@ func (ap *AzureProvider) SetOutputSchema(schema *runtime.RawExtension, schemaNam
 	ap.schemaName = schemaName
 }
 
-func (ap *AzureProvider) ChatCompletion(ctx context.Context, messages []Message, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
-	openaiMessages := make([]openai.ChatCompletionMessageParamUnion, len(messages))
-	for i, msg := range messages {
-		openaiMessages[i] = openai.ChatCompletionMessageParamUnion(msg)
-	}
-
+func (ap *AzureProvider) ChatCompletion(ctx context.Context, messages []openai.ChatCompletionMessageParamUnion, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
 	params := openai.ChatCompletionNewParams{
 		Model:    ap.Model,
-		Messages: openaiMessages,
+		Messages: messages,
 		N:        openai.Int(n),
 	}
 
@@ -53,15 +48,10 @@ func (ap *AzureProvider) ChatCompletion(ctx context.Context, messages []Message,
 }
 
 // prepareStreamParams prepares the parameters for streaming chat completion
-func (ap *AzureProvider) prepareStreamParams(messages []Message, n int64, tools ...[]openai.ChatCompletionToolParam) openai.ChatCompletionNewParams {
-	openaiMessages := make([]openai.ChatCompletionMessageParamUnion, len(messages))
-	for i, msg := range messages {
-		openaiMessages[i] = openai.ChatCompletionMessageParamUnion(msg)
-	}
-
+func (ap *AzureProvider) prepareStreamParams(messages []openai.ChatCompletionMessageParamUnion, n int64, tools ...[]openai.ChatCompletionToolParam) openai.ChatCompletionNewParams {
 	params := openai.ChatCompletionNewParams{
 		Model:    ap.Model,
-		Messages: openaiMessages,
+		Messages: messages,
 		N:        openai.Int(n),
 	}
 
@@ -77,7 +67,7 @@ func (ap *AzureProvider) prepareStreamParams(messages []Message, n int64, tools 
 	return params
 }
 
-func (ap *AzureProvider) ChatCompletionStream(ctx context.Context, messages []Message, n int64, streamFunc func(*openai.ChatCompletionChunk) error, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
+func (ap *AzureProvider) ChatCompletionStream(ctx context.Context, messages []openai.ChatCompletionMessageParamUnion, n int64, streamFunc func(*openai.ChatCompletionChunk) error, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
 	params := ap.prepareStreamParams(messages, n, tools...)
 	client := ap.createClient(ctx)
 	stream := client.Chat.Completions.NewStreaming(ctx, params)
@@ -162,7 +152,7 @@ func (ap *AzureProvider) createClient(ctx context.Context) openai.Client {
 func (ap *AzureProvider) HealthCheck(ctx context.Context) error {
 	// Azure OpenAI deployments don't support the /models endpoint
 	// Instead, make a minimal chat completion request to verify the deployment is accessible
-	testMessages := []Message{NewUserMessage("test")}
+	testMessages := []openai.ChatCompletionMessageParamUnion{openai.UserMessage("test")}
 	_, err := ap.ChatCompletion(ctx, testMessages, 1)
 	return err
 }

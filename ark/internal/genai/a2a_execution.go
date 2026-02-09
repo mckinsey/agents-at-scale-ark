@@ -81,7 +81,7 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 	if err != nil {
 		return nil, err
 	}
-	payloadMode := a2aPayloadModeNative
+	payloadMode := getA2APayloadMode(agentAnnotations)
 
 	if isA2AStreamingEnabled(agentAnnotations) {
 		if isA2AStreamingSupported(agentAnnotations) {
@@ -162,101 +162,120 @@ func (e *A2AExecutionEngine) streamA2AExecution(ctx context.Context, address str
 
 	modelID := fmt.Sprintf("agent/%s", agentName)
 	completionID := getQueryID(ctx)
+	response, err := e.consumeA2AStreamEvents(ctx, events, eventStream, payloadMode, modelID, completionID, agentName, namespace, queryName, a2aServer)
+	if err != nil {
+		return nil, err
+	}
+	responseMessage := NewAssistantMessage(response.Content)
+	return &ExecutionResult{
+		Messages:    []Message{responseMessage},
+		A2AResponse: response,
+	}, nil
+}
+
+func (e *A2AExecutionEngine) consumeA2AStreamEvents(ctx context.Context, events <-chan protocol.StreamingMessageEvent, eventStream EventStreamInterface, payloadMode, modelID, completionID, agentName, namespace, queryName string, a2aServer *arkv1prealpha1.A2AServer) (*A2AResponse, error) {
 	response := &A2AResponse{}
 	var finalContent strings.Builder
 	var latestTask *protocol.Task
 	var lastStatus *protocol.TaskStatus
 	received := false
 	done := false
-	for event := range events {
-		received = true
-		if event.Result == nil {
-			continue
-		}
-		switch result := event.Result.(type) {
-		case *protocol.Message:
-			text := extractTextFromParts(result.Parts)
-			if text != "" {
-				finalContent.WriteString(text)
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case event, ok := <-events:
+			if !ok {
+				if !received {
+					return nil, fmt.Errorf("a2a streaming returned no events")
+				}
+				if latestTask != nil {
+					if text, textErr := extractTextFromTask(latestTask); textErr == nil && text != "" {
+						finalContent.Reset()
+						finalContent.WriteString(text)
+					}
+				}
+				response.Content = finalContent.String()
+				return response, nil
 			}
-			if result.ContextID != nil && *result.ContextID != "" {
-				response.ContextID = *result.ContextID
+			received = true
+			if event.Result == nil {
+				continue
 			}
-			if result.TaskID != nil && *result.TaskID != "" {
-				response.TaskID = *result.TaskID
-			}
-			streamA2AEvent(ctx, eventStream, payloadMode, modelID, completionID, text, result)
-			done = true
-		case *protocol.Task:
-			latestTask = result
-			response.TaskID = result.ID
-			response.ContextID = result.ContextID
-			lastStatus = &result.Status
-			if a2aServer != nil {
-				_ = upsertA2ATaskFromTask(ctx, e.client, result, agentName, namespace, queryName, a2aServer.Name)
-			}
-			streamA2AEvent(ctx, eventStream, payloadMode, modelID, completionID, "", result)
-		case *protocol.TaskStatusUpdateEvent:
-			lastStatus = &result.Status
-			if response.TaskID == "" {
-				response.TaskID = result.TaskID
-			}
-			if response.ContextID == "" {
-				response.ContextID = result.ContextID
-			}
-			task := taskFromStatusUpdate(result)
-			if a2aServer != nil {
-				_ = upsertA2ATaskFromTask(ctx, e.client, task, agentName, namespace, queryName, a2aServer.Name)
-			}
-			if result.Final && result.Status.Message != nil && finalContent.Len() == 0 {
-				text := extractTextFromParts(result.Status.Message.Parts)
+			switch result := event.Result.(type) {
+			case *protocol.Message:
+				text := extractTextFromParts(result.Parts)
 				if text != "" {
 					finalContent.WriteString(text)
 				}
-			}
-			streamA2AEvent(ctx, eventStream, payloadMode, modelID, completionID, "", result)
-			if result.Final {
+				if result.ContextID != nil && *result.ContextID != "" {
+					response.ContextID = *result.ContextID
+				}
+				if result.TaskID != nil && *result.TaskID != "" {
+					response.TaskID = *result.TaskID
+				}
+				streamA2AEvent(ctx, eventStream, payloadMode, modelID, completionID, text, result)
 				done = true
-			}
-		case *protocol.TaskArtifactUpdateEvent:
-			if response.TaskID == "" {
-				response.TaskID = result.TaskID
-			}
-			if response.ContextID == "" {
+			case *protocol.Task:
+				latestTask = result
+				response.TaskID = result.ID
 				response.ContextID = result.ContextID
+				lastStatus = &result.Status
+				if a2aServer != nil {
+					_ = upsertA2ATaskFromTask(ctx, e.client, result, agentName, namespace, queryName, a2aServer.Name)
+				}
+				streamA2AEvent(ctx, eventStream, payloadMode, modelID, completionID, "", result)
+			case *protocol.TaskStatusUpdateEvent:
+				lastStatus = &result.Status
+				if response.TaskID == "" {
+					response.TaskID = result.TaskID
+				}
+				if response.ContextID == "" {
+					response.ContextID = result.ContextID
+				}
+				task := taskFromStatusUpdate(result)
+				if a2aServer != nil {
+					_ = upsertA2ATaskFromTask(ctx, e.client, task, agentName, namespace, queryName, a2aServer.Name)
+				}
+				if result.Final && result.Status.Message != nil && finalContent.Len() == 0 {
+					text := extractTextFromParts(result.Status.Message.Parts)
+					if text != "" {
+						finalContent.WriteString(text)
+					}
+				}
+				streamA2AEvent(ctx, eventStream, payloadMode, modelID, completionID, "", result)
+				if result.Final {
+					done = true
+				}
+			case *protocol.TaskArtifactUpdateEvent:
+				if response.TaskID == "" {
+					response.TaskID = result.TaskID
+				}
+				if response.ContextID == "" {
+					response.ContextID = result.ContextID
+				}
+				text := extractTextFromParts(result.Artifact.Parts)
+				if text != "" {
+					finalContent.WriteString(text)
+				}
+				task := taskFromArtifactUpdate(result, lastStatus)
+				if a2aServer != nil {
+					_ = upsertA2ATaskFromTask(ctx, e.client, task, agentName, namespace, queryName, a2aServer.Name)
+				}
+				streamA2AEvent(ctx, eventStream, payloadMode, modelID, completionID, text, result)
 			}
-			text := extractTextFromParts(result.Artifact.Parts)
-			if text != "" {
-				finalContent.WriteString(text)
+			if done {
+				if latestTask != nil {
+					if text, textErr := extractTextFromTask(latestTask); textErr == nil && text != "" {
+						finalContent.Reset()
+						finalContent.WriteString(text)
+					}
+				}
+				response.Content = finalContent.String()
+				return response, nil
 			}
-			task := taskFromArtifactUpdate(result, lastStatus)
-			if a2aServer != nil {
-				_ = upsertA2ATaskFromTask(ctx, e.client, task, agentName, namespace, queryName, a2aServer.Name)
-			}
-			streamA2AEvent(ctx, eventStream, payloadMode, modelID, completionID, text, result)
-		}
-		if done {
-			break
 		}
 	}
-
-	if !received {
-		return nil, fmt.Errorf("a2a streaming returned no events")
-	}
-
-	if latestTask != nil {
-		if text, textErr := extractTextFromTask(latestTask); textErr == nil && text != "" {
-			finalContent.Reset()
-			finalContent.WriteString(text)
-		}
-	}
-
-	response.Content = finalContent.String()
-	responseMessage := NewAssistantMessage(response.Content)
-	return &ExecutionResult{
-		Messages:    []Message{responseMessage},
-		A2AResponse: response,
-	}, nil
 }
 
 func streamA2AEvent(ctx context.Context, eventStream EventStreamInterface, payloadMode, modelID, completionID, content string, payload interface{}) {

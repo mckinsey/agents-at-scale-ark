@@ -2,7 +2,7 @@
 
 package genai
 
-import "github.com/openai/openai-go"
+import "trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 // PrepareExecutionMessages separates the current message from context messages
 // and combines with memory history for agent/team execution.
@@ -22,11 +22,8 @@ func PrepareExecutionMessages(inputMessages, memoryMessages []Message) (currentM
 // to capture the initial query input.
 func ExtractUserMessageContent(messages []Message) string {
 	for _, msg := range messages {
-		msgUnion := openai.ChatCompletionMessageParamUnion(msg)
-		if msgUnion.OfUser != nil {
-			if content := msgUnion.OfUser.Content; content.OfString.Value != "" {
-				return content.OfString.Value
-			}
+		if resolveMessageRole(msg) == RoleUser {
+			return extractTextFromParts(msg.Parts)
 		}
 	}
 	return ""
@@ -59,10 +56,31 @@ func PrepareNewMessagesForMemory(inputMessages, responseMessages []Message) []Me
 func ExtractLastAssistantMessageContent(messages []Message) string {
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
-		msgUnion := openai.ChatCompletionMessageParamUnion(msg)
-		if msgUnion.OfAssistant != nil && msgUnion.OfAssistant.Content.OfString.Value != "" {
-			return msgUnion.OfAssistant.Content.OfString.Value
+		if resolveMessageRole(msg) == RoleAssistant {
+			if text := extractTextFromParts(msg.Parts); text != "" {
+				return text
+			}
 		}
 	}
 	return ""
+}
+
+func ExtractTextFromMessage(message Message) string {
+	return extractTextFromParts(message.Parts)
+}
+
+func resolveMessageRole(msg Message) string {
+	switch msg.Role {
+	case protocol.MessageRoleUser:
+		return RoleUser
+	case protocol.MessageRoleAgent:
+		if msg.Metadata != nil {
+			if value, ok := msg.Metadata[MetadataRoleKey].(string); ok && value != "" {
+				return value
+			}
+		}
+		return RoleAssistant
+	default:
+		return RoleAssistant
+	}
 }

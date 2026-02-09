@@ -47,6 +47,14 @@ const (
 	RoleTool      = "tool"
 )
 
+const (
+	MetadataRoleKey       = "ark.mckinsey.com/role"
+	MetadataToolCallIDKey = "ark.mckinsey.com/tool-call-id"
+	MetadataToolNameKey   = "ark.mckinsey.com/tool-name"
+	MetadataToolCallsKey  = "ark.mckinsey.com/tool-calls"
+	MetadataAgentNameKey  = "ark.mckinsey.com/agent-name"
+)
+
 // Tool type constants
 const (
 	ToolTypeHTTP    = "http"

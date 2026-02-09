@@ -12,9 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/openai/openai-go"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	a2aclient "trpc.group/trpc-go/trpc-a2a-go/client"
@@ -31,19 +30,37 @@ const (
 	// AgentCardPathVersion2 is the A2A protocol 0.2.x agent card path
 	AgentCardPathVersion2 = "/.well-known/agent.json"
 	// AgentCardPathVersion3 is the A2A protocol 0.3.x agent card path
-	AgentCardPathVersion3 = "/.well-known/agent-card.json"
-	a2aHistoryExtensionKey = "https://ark.mckinsey.com/extensions/history/v1"
+	AgentCardPathVersion3      = "/.well-known/agent-card.json"
+	a2aHistoryExtensionKey     = "https://ark.mckinsey.com/extensions/history/v1"
 	a2aPermissionsExtensionKey = "https://ark.mckinsey.com/extensions/permissions/v1"
-	a2aStreamingEnabledEnv = "ARK_A2A_STREAMING_ENABLED"
-	a2aPayloadModeEnv      = "ARK_A2A_STREAMING_PAYLOAD_MODE"
-	a2aPayloadModeCompat   = "compat"
-	a2aPayloadModeNative   = "native-a2a"
+	a2aStreamingEnabledEnv     = "ARK_A2A_STREAMING_ENABLED"
+	a2aPayloadModeEnv          = "ARK_A2A_STREAMING_PAYLOAD_MODE"
+	a2aPayloadModeCompat       = "compat"
+	a2aPayloadModeNative       = "native-a2a"
 )
 
 type A2AResponse struct {
 	Content   string
 	ContextID string
 	TaskID    string
+}
+
+type A2APermissions struct {
+	Subject    string                 `json:"subject,omitempty"`
+	Scopes     []string               `json:"scopes,omitempty"`
+	Claims     map[string]interface{} `json:"claims,omitempty"`
+	Issuer     string                 `json:"issuer,omitempty"`
+	Audience   []string               `json:"audience,omitempty"`
+	IssuedAt   string                 `json:"issuedAt,omitempty"`
+	ExpiresAt  string                 `json:"expiresAt,omitempty"`
+	Token      string                 `json:"token,omitempty"`
+	TokenType  string                 `json:"tokenType,omitempty"`
+	Delegation *A2ADelegation         `json:"delegation,omitempty"`
+}
+
+type A2ADelegation struct {
+	Subject string   `json:"subject,omitempty"`
+	Chain   []string `json:"chain,omitempty"`
 }
 
 func isA2AStreamingEnabled(agentAnnotations map[string]string) bool {
@@ -64,15 +81,21 @@ func isA2AStreamingSupported(agentAnnotations map[string]string) bool {
 }
 
 func getA2APayloadMode(agentAnnotations map[string]string) string {
+	mode := ""
 	if agentAnnotations != nil {
-		if mode := agentAnnotations[arkann.A2APayloadMode]; mode != "" {
-			return mode
+		if value := agentAnnotations[arkann.A2APayloadMode]; value != "" {
+			mode = value
 		}
 	}
-	if mode := os.Getenv(a2aPayloadModeEnv); mode != "" {
-		return mode
+	if mode == "" {
+		mode = os.Getenv(a2aPayloadModeEnv)
 	}
-	return a2aPayloadModeNative
+	switch mode {
+	case a2aPayloadModeCompat, a2aPayloadModeNative:
+		return mode
+	default:
+		return a2aPayloadModeCompat
+	}
 }
 
 func shouldIncludeA2AHistory(agentAnnotations map[string]string, defaultValue bool) bool {
@@ -103,8 +126,101 @@ func getA2AHistoryLimit(agentAnnotations map[string]string) int {
 	return limit
 }
 
+func getA2ASupportedExtensions(agentAnnotations map[string]string) map[string]struct{} {
+	if agentAnnotations == nil {
+		return nil
+	}
+	raw := agentAnnotations[arkann.A2ASupportedExtensions]
+	if raw == "" {
+		return nil
+	}
+	var values []string
+	if err := json.Unmarshal([]byte(raw), &values); err != nil {
+		return nil
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	result := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if value != "" {
+			result[value] = struct{}{}
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func supportsA2AExtension(agentAnnotations map[string]string, extension string) bool {
+	if extension == "" {
+		return false
+	}
+	supported := getA2ASupportedExtensions(agentAnnotations)
+	if len(supported) == 0 {
+		return false
+	}
+	_, ok := supported[extension]
+	return ok
+}
+
+func parseA2APermissions(raw string) (map[string]interface{}, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	var permissions A2APermissions
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&permissions); err != nil {
+		return nil, fmt.Errorf("failed to parse A2A permissions: %w", err)
+	}
+	if permissions.Subject == "" && permissions.Token == "" {
+		return nil, fmt.Errorf("A2A permissions must include subject or token")
+	}
+	if permissions.Token != "" && permissions.TokenType == "" {
+		return nil, fmt.Errorf("A2A permissions tokenType is required when token is provided")
+	}
+	if permissions.IssuedAt != "" {
+		issuedAt, err := time.Parse(time.RFC3339, permissions.IssuedAt)
+		if err != nil {
+			return nil, fmt.Errorf("A2A permissions issuedAt must be RFC3339: %w", err)
+		}
+		if permissions.ExpiresAt != "" {
+			expiresAt, err := time.Parse(time.RFC3339, permissions.ExpiresAt)
+			if err != nil {
+				return nil, fmt.Errorf("A2A permissions expiresAt must be RFC3339: %w", err)
+			}
+			if expiresAt.Before(issuedAt) {
+				return nil, fmt.Errorf("A2A permissions expiresAt must be after issuedAt")
+			}
+		}
+	} else if permissions.ExpiresAt != "" {
+		if _, err := time.Parse(time.RFC3339, permissions.ExpiresAt); err != nil {
+			return nil, fmt.Errorf("A2A permissions expiresAt must be RFC3339: %w", err)
+		}
+	}
+	if permissions.Delegation != nil && permissions.Delegation.Subject == "" {
+		return nil, fmt.Errorf("A2A permissions delegation subject is required")
+	}
+	data, err := json.Marshal(permissions)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode A2A permissions: %w", err)
+	}
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return nil, fmt.Errorf("failed to parse A2A permissions: %w", err)
+	}
+	if len(parsed) == 0 {
+		return nil, nil
+	}
+	return parsed, nil
+}
+
 func buildA2AMetadata(agentAnnotations map[string]string, history []Message, includeHistory bool) (map[string]interface{}, error) {
 	var metadata map[string]interface{}
+	supportsPermissions := supportsA2AExtension(agentAnnotations, a2aPermissionsExtensionKey)
+	supportsHistory := supportsA2AExtension(agentAnnotations, a2aHistoryExtensionKey)
 	if agentAnnotations != nil {
 		raw := agentAnnotations[arkann.A2AExtensions]
 		if raw != "" {
@@ -112,20 +228,29 @@ func buildA2AMetadata(agentAnnotations map[string]string, history []Message, inc
 				return nil, fmt.Errorf("failed to parse A2A extensions: %w", err)
 			}
 		}
-		permissions := agentAnnotations[arkann.A2APermissions]
-		if permissions != "" {
-			var permissionsValue interface{}
-			if err := json.Unmarshal([]byte(permissions), &permissionsValue); err != nil {
-				return nil, fmt.Errorf("failed to parse A2A permissions: %w", err)
+		if metadata != nil {
+			if !supportsPermissions {
+				delete(metadata, a2aPermissionsExtensionKey)
 			}
-			if metadata == nil {
-				metadata = map[string]interface{}{}
+			if !supportsHistory {
+				delete(metadata, a2aHistoryExtensionKey)
 			}
-			metadata[a2aPermissionsExtensionKey] = permissionsValue
+		}
+		if supportsPermissions {
+			permissionsValue, err := parseA2APermissions(agentAnnotations[arkann.A2APermissions])
+			if err != nil {
+				return nil, err
+			}
+			if permissionsValue != nil {
+				if metadata == nil {
+					metadata = map[string]interface{}{}
+				}
+				metadata[a2aPermissionsExtensionKey] = permissionsValue
+			}
 		}
 	}
 
-	if includeHistory && len(history) > 0 {
+	if includeHistory && len(history) > 0 && supportsHistory {
 		limit := getA2AHistoryLimit(agentAnnotations)
 		if limit > 0 && len(history) > limit {
 			history = history[len(history)-limit:]
@@ -143,19 +268,10 @@ func buildA2AMetadata(agentAnnotations map[string]string, history []Message, inc
 }
 
 func buildA2ASendMessageParams(userInput Message, contextID string, metadata map[string]interface{}, blocking bool) protocol.SendMessageParams {
-	content := ""
-	if userInput.OfUser != nil && userInput.OfUser.Content.OfString.Value != "" {
-		content = userInput.OfUser.Content.OfString.Value
-	}
-	var message protocol.Message
+	message := userInput
+	message.Role = protocol.MessageRoleUser
 	if contextID != "" {
-		message = protocol.NewMessageWithContext(protocol.MessageRoleUser, []protocol.Part{
-			protocol.NewTextPart(content),
-		}, nil, &contextID)
-	} else {
-		message = protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
-			protocol.NewTextPart(content),
-		})
+		message.ContextID = &contextID
 	}
 	params := protocol.SendMessageParams{
 		RPCID:   protocol.GenerateRPCID(),
@@ -166,6 +282,19 @@ func buildA2ASendMessageParams(userInput Message, contextID string, metadata map
 	}
 	if len(metadata) > 0 {
 		params.Metadata = metadata
+		extensions := make([]string, 0, len(metadata))
+		seen := make(map[string]struct{}, len(metadata))
+		for key := range metadata {
+			if strings.HasPrefix(key, "http://") || strings.HasPrefix(key, "https://") {
+				if _, ok := seen[key]; !ok {
+					extensions = append(extensions, key)
+					seen[key] = struct{}{}
+				}
+			}
+		}
+		if len(extensions) > 0 {
+			params.Message.Extensions = extensions
+		}
 	}
 	return params
 }
@@ -234,7 +363,52 @@ func StreamA2AAgent(ctx context.Context, k8sClient client.Client, address string
 		return nil, err
 	}
 	params := buildA2ASendMessageParams(userInput, contextID, metadata, false)
-	return a2aClient.StreamMessage(ctx, params)
+	events, streamErr := a2aClient.StreamMessage(ctx, params)
+	if streamErr == nil {
+		return events, nil
+	}
+
+	result, sendErr := a2aClient.SendMessage(ctx, params)
+	if sendErr != nil {
+		return nil, sendErr
+	}
+	if result == nil || result.Result == nil {
+		return nil, fmt.Errorf("A2A streaming response is nil")
+	}
+	switch r := result.Result.(type) {
+	case *protocol.Message:
+		out := make(chan protocol.StreamingMessageEvent, 1)
+		out <- protocol.StreamingMessageEvent{Result: r}
+		close(out)
+		return out, nil
+	case *protocol.Task:
+		resubscribe, resubscribeErr := a2aClient.ResubscribeTask(ctx, protocol.TaskIDParams{
+			RPCID: protocol.GenerateRPCID(),
+			ID:    r.ID,
+		})
+		if resubscribeErr != nil {
+			return nil, resubscribeErr
+		}
+		out := make(chan protocol.StreamingMessageEvent, 1)
+		go func() {
+			defer close(out)
+			select {
+			case out <- protocol.StreamingMessageEvent{Result: r}:
+			case <-ctx.Done():
+				return
+			}
+			for event := range resubscribe {
+				select {
+				case out <- event:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+		return out, nil
+	default:
+		return nil, fmt.Errorf("unexpected A2A streaming result type: %T", result.Result)
+	}
 }
 
 // CreateA2AClient creates and configures A2A client with header resolution and injection
@@ -412,17 +586,10 @@ func extractTextFromParts(parts []protocol.Part) string {
 func convertToA2AHistory(history []Message) []protocol.Message {
 	results := make([]protocol.Message, 0, len(history))
 	for _, msg := range history {
-		msgUnion := openai.ChatCompletionMessageParamUnion(msg)
-		switch {
-		case msgUnion.OfUser != nil && msgUnion.OfUser.Content.OfString.Value != "":
-			results = append(results, protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
-				protocol.NewTextPart(msgUnion.OfUser.Content.OfString.Value),
-			}))
-		case msgUnion.OfAssistant != nil && msgUnion.OfAssistant.Content.OfString.Value != "":
-			results = append(results, protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
-				protocol.NewTextPart(msgUnion.OfAssistant.Content.OfString.Value),
-			}))
+		if msg.Role == "" {
+			continue
 		}
+		results = append(results, msg)
 	}
 	return results
 }

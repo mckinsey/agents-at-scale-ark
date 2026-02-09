@@ -390,7 +390,7 @@ func TestBuildHistory(t *testing.T) {
 			messages: []Message{
 				NewAssistantMessage("Hi there"),
 			},
-			want: "# :\nHi there\n",
+			want: "# assistant:\nHi there\n",
 		},
 		{
 			name: "multiple messages",
@@ -399,7 +399,7 @@ func TestBuildHistory(t *testing.T) {
 				NewAssistantMessage("Answer"),
 				NewUserMessage("Follow-up"),
 			},
-			want: "# user:\nQuestion?\n\n# :\nAnswer\n\n# user:\nFollow-up\n",
+			want: "# user:\nQuestion?\n\n# assistant:\nAnswer\n\n# user:\nFollow-up\n",
 		},
 	}
 
