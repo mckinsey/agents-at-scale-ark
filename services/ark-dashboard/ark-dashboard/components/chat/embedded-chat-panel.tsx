@@ -49,6 +49,20 @@ interface StreamEntry {
   data: unknown;
 }
 
+interface ArkExtendedChunk extends ChatCompletionChunk {
+  ark?: {
+    completedQuery?: {
+      status?: {
+        tokenUsage?: {
+          promptTokens?: number;
+          completionTokens?: number;
+          totalTokens?: number;
+        };
+      };
+    };
+  };
+}
+
 interface PaginatedResponse<T> {
   items: T[];
   total: number;
@@ -689,7 +703,7 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
       name,
       sessionId,
     )) {
-      const typedChunk = chunk as unknown as ChatCompletionChunk;
+      const typedChunk = chunk as unknown as ArkExtendedChunk;
 
       if (typedChunk?.id === 'chatcmpl-final') {
         if (typedChunk?.usage) {
@@ -702,7 +716,7 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
           updateTokenUsage(usage);
         }
 
-        const arkMetadata = (chunk as any)?.ark?.completedQuery?.status?.tokenUsage;
+        const arkMetadata = typedChunk?.ark?.completedQuery?.status?.tokenUsage;
         if (arkMetadata) {
           const usage = {
             prompt_tokens: arkMetadata.promptTokens || 0,
