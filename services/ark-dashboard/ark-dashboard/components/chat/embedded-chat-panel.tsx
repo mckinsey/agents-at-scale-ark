@@ -720,9 +720,11 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
               setChatMessages(prev => [
                 ...prev,
                 ...result.messages!.map(msg => ({
-                  role: msg.role as 'assistant' | 'user' | 'system',
-                  content: msg.content,
+                  role: msg.role as 'assistant' | 'user' | 'system' | 'tool',
+                  content: msg.content || '',
                   name: msg.name,
+                  tool_calls: msg.tool_calls,
+                  tool_call_id: msg.tool_call_id,
                 })),
               ]);
             } else if (result.response) {
@@ -890,11 +892,36 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
 
                 const senderName = 'name' in message ? message.name : undefined;
 
+                const toolCallsWithResults = toolCalls?.map(toolCall => {
+                  const toolResultMessage = chatMessages
+                    .slice(index + 1)
+                    .find(
+                      msg =>
+                        msg.role === 'tool' &&
+                        'tool_call_id' in msg &&
+                        msg.tool_call_id === toolCall.id,
+                    );
+
+                  return {
+                    ...toolCall,
+                    result:
+                      toolResultMessage && typeof toolResultMessage.content === 'string'
+                        ? toolResultMessage.content
+                        : undefined,
+                  };
+                });
+
+                const hasToolCalls = debugMode && toolCallsWithResults && toolCallsWithResults.length > 0;
+                const hasContent = content && content.trim().length > 0;
+
+                if (!hasToolCalls && !hasContent) {
+                  return null;
+                }
+
                 return (
                   <div key={index} className="flex flex-col gap-2">
-                    {debugMode &&
-                      toolCalls &&
-                      toolCalls.map((toolCall, toolIndex) => (
+                    {hasToolCalls &&
+                      toolCallsWithResults.map((toolCall, toolIndex) => (
                         <div key={`${index}-tool-${toolIndex}`}>
                           <ChatMessage
                             role="assistant"
@@ -905,12 +932,13 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
                                 id: string;
                                 type: 'function';
                                 function: { name: string; arguments: string };
+                                result?: string;
                               },
                             ]}
                           />
                         </div>
                       ))}
-                    {content && (
+                    {hasContent && (
                       <ChatMessage
                         role={message.role as 'user' | 'assistant' | 'system'}
                         content={content}

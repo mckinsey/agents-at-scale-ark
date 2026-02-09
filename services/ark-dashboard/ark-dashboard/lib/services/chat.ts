@@ -76,7 +76,17 @@ export type ChatResponse = {
   status: QueryStatusPhase;
   terminal: boolean;
   response?: string;
-  messages?: Array<{ role: string; content: string; name?: string }>;
+  messages?: Array<{
+    role: string;
+    content?: string;
+    name?: string;
+    tool_calls?: Array<{
+      id: string;
+      type: string;
+      function: { name: string; arguments: string };
+    }>;
+    tool_call_id?: string;
+  }>;
 };
 
 export type ChatMessage = {
@@ -257,7 +267,19 @@ export const chatService = {
           ? phase
           : 'unknown';
 
-        let messages: Array<{ role: string; content: string; name?: string }> | undefined;
+        let messages:
+          | Array<{
+              role: string;
+              content?: string;
+              name?: string;
+              tool_calls?: Array<{
+                id: string;
+                type: string;
+                function: { name: string; arguments: string };
+              }>;
+              tool_call_id?: string;
+            }>
+          | undefined;
 
         if (statusWithPhase.response?.raw) {
           try {
