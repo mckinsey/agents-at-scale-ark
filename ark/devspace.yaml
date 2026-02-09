@@ -56,7 +56,7 @@ dev:
     imageSelector: ark-controller
     devImage: golang:1.24.13-bookworm
     command:
-      ["sh", "-c", "cd /app && while [ ! -f internal/apiserver/crds/ark.mckinsey.com_agents.yaml ]; do echo 'Waiting for CRD files...'; sleep 2; done && GOTOOLCHAIN=auto go run cmd/main.go --leader-elect=false"]
+      ["sh", "-c", "cd /app && mkdir -p internal/apiserver/crds && cp config/crd/bases/*.yaml internal/apiserver/crds/ && GOTOOLCHAIN=auto go run cmd/main.go --leader-elect=false"]
     namespace: ark-system
     logs:
       lastLines: 50
@@ -101,7 +101,7 @@ profiles:
           - "-c"
           - |
             cd /app
-            while [ ! -f internal/apiserver/crds/ark.mckinsey.com_agents.yaml ]; do echo 'Waiting for CRD files...'; sleep 2; done
+            mkdir -p internal/apiserver/crds && cp config/crd/bases/*.yaml internal/apiserver/crds/
             GOTOOLCHAIN=auto \
             ARK_STORAGE_BACKEND=postgresql \
             ARK_POSTGRES_HOST=ark-storage-dev.ark-system.svc.cluster.local \
