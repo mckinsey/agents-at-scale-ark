@@ -10,7 +10,6 @@ import { toast } from 'sonner';
 import { queryTimeoutSettingAtom } from '@/atoms/experimental-features';
 import { ErrorResponseContent } from '@/components/ErrorResponseContent';
 import JsonDisplay from '@/components/JsonDisplay';
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { QueryEvaluationActions } from '@/components/query-actions';
 import { QueryMemoryField } from '@/components/query-fields/query-memory-field';
@@ -50,11 +49,6 @@ import {
   transformQueryParametersToApi,
 } from '@/lib/utils/query-parameters';
 import { simplifyDuration } from '@/lib/utils/time';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-  { href: '/queries', label: 'Queries' },
-];
 
 // Component for rendering response content
 function ResponseContent({
@@ -689,8 +683,6 @@ function QueryDetailContent() {
   return (
     <>
       <PageHeader
-        breadcrumbs={breadcrumbs}
-        currentPage={isNew ? 'New Query' : query.name}
         actions={
           <>
             {!isNew && <QueryEvaluationActions queryName={queryId} />}

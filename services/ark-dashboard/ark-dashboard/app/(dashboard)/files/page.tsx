@@ -5,16 +5,11 @@ import { RefreshCw } from 'lucide-react';
 import { useRef } from 'react';
 
 import { isFilesBrowserAvailableAtom } from '@/atoms/experimental-features';
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { FilesSection } from '@/components/sections/files-section';
 import { FilesSetupInstructions } from '@/components/sections/files-setup-instructions';
 import { Button } from '@/components/ui/button';
 import { useGetFilesCount } from '@/lib/services/files-count-hooks';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-];
 
 export default function FilesPage() {
   const filesSectionRef = useRef<{ refresh: () => void }>(null);
@@ -27,8 +22,6 @@ export default function FilesPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={breadcrumbs}
-        currentPage="Files"
         actions={
           isFilesBrowserAvailable ? (
             <Button onClick={() => filesSectionRef.current?.refresh()}>

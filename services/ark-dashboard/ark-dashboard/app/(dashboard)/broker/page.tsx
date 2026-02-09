@@ -4,7 +4,6 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,10 +22,6 @@ import {
   sortEntriesByTimestampAndSequence,
 } from '@/lib/broker/session-utils';
 import { type Memory, memoriesService } from '@/lib/services/memories';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-];
 
 interface StreamEntry {
   id: string;
@@ -650,7 +645,7 @@ export default function BrokerPage() {
 
   return (
     <>
-      <PageHeader breadcrumbs={breadcrumbs} currentPage="Broker" />
+      <PageHeader />
       <div className="flex flex-1 flex-col gap-4 p-4">
         <h1 className="px-2 text-xl">Broker</h1>
         <Tabs

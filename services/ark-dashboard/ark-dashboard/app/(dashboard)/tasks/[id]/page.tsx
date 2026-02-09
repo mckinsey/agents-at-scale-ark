@@ -44,11 +44,6 @@ export default function A2ATaskPage() {
     );
   }
 
-  const breadcrumbs = [
-    { href: '/', label: 'ARK Dashboard' },
-    { href: '/tasks', label: 'A2A Tasks' },
-  ];
-
   const duration =
     task.metadata?.creationTimestamp && task.status?.completionTime
       ? simplifyDuration(
@@ -61,7 +56,7 @@ export default function A2ATaskPage() {
 
   return (
     <>
-      <PageHeader breadcrumbs={breadcrumbs} currentPage={task.name} />
+      <PageHeader />
       <div className="flex flex-1 flex-col overflow-auto p-4">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {/* Column 1: Identity & Status */}

@@ -208,7 +208,7 @@ export function ApiKeysSection() {
   if (loading) {
     return (
       <>
-        <PageHeader currentPage="Service API Keys" />
+        <PageHeader />
         <div className="flex flex-1 flex-col">
           <main className="flex-1 overflow-auto p-4">
             <div className="py-8 text-center">Loading API keys...</div>
@@ -221,7 +221,7 @@ export function ApiKeysSection() {
   if (error) {
     return (
       <>
-        <PageHeader currentPage="Service API Keys" />
+        <PageHeader />
         <div className="flex flex-1 flex-col">
           <main className="flex-1 overflow-auto p-4">
             <div className="rounded-md border border-red-200 bg-red-50 p-4 text-red-600">
@@ -239,7 +239,6 @@ export function ApiKeysSection() {
   return (
     <>
       <PageHeader
-        currentPage="Service API Keys"
         actions={
           <Button onClick={() => setAddDialogOpen(true)}>
             <Plus className="h-4 w-4" />

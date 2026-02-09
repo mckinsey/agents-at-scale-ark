@@ -3,14 +3,8 @@
 import { useParams, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { EvaluationDetailView } from '@/components/evaluation';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-  { href: '/evaluations', label: 'Evaluations' },
-];
 
 function EvaluationDetailContent() {
   const params = useParams();
@@ -21,7 +15,7 @@ function EvaluationDetailContent() {
 
   return (
     <>
-      <PageHeader breadcrumbs={breadcrumbs} currentPage={evaluationId} />
+      <PageHeader />
       <div className="flex flex-1 flex-col gap-4 p-4">
         <EvaluationDetailView
           evaluationId={evaluationId}

@@ -3,15 +3,9 @@
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { toolsService } from '@/lib/services';
 import type { ToolDetail } from '@/lib/services/tools';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-  { href: '/tools', label: 'Tools' },
-];
 
 const FIELD_HEADING_STYLES =
   'px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 w-1/3 text-left';
@@ -28,7 +22,7 @@ export default function ToolDetailsPage() {
 
       setLoading(true);
       try {
-        const toolData = await toolsService.getDetail(toolName); // Fetch tool details
+        const toolData = await toolsService.getDetail(toolName);
         setTool(toolData);
       } catch (error) {
         console.error('Failed to fetch tool details:', error);
@@ -46,7 +40,7 @@ export default function ToolDetailsPage() {
 
   return (
     <>
-      <PageHeader breadcrumbs={breadcrumbs} currentPage={toolName} />
+      <PageHeader />
       {/* Tool Details Content */}
       <div className="m-4">
         <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">

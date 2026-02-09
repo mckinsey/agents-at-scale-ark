@@ -3,15 +3,10 @@
 import { useSearchParams } from 'next/navigation';
 import { useRef, useState } from 'react';
 
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { EvaluationsSection, EvaluatorsSection } from '@/components/sections';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-];
 
 export default function EvalsPage() {
   const searchParams = useSearchParams();
@@ -23,8 +18,6 @@ export default function EvalsPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={breadcrumbs}
-        currentPage="Evals"
         actions={
           <div className="flex gap-2">
             <Button

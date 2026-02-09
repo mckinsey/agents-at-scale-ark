@@ -4,15 +4,10 @@ import { Code, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useRef } from 'react';
 
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { AgentsSection } from '@/components/sections/agents-section';
 import { Button } from '@/components/ui/button';
 import { useGetAllAgents } from '@/lib/services/agents-hooks';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-];
 
 interface AgentsSectionHandle {
   openAddEditor: () => void;
@@ -28,8 +23,6 @@ export default function AgentsPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={breadcrumbs}
-        currentPage="Agents"
         actions={
           <div className="flex items-center gap-2">
             <Button

@@ -4,18 +4,12 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { EvaluatorEditForm } from '@/components/forms/evaluator-edit-form';
 import {
   type EvaluatorDetailResponse,
   evaluatorsService,
 } from '@/lib/services';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-  { href: '/evaluators', label: 'Evaluators' },
-];
 
 interface EvaluatorEditContentProps {
   namespace: string;
@@ -96,10 +90,7 @@ function EvaluatorEditContent({
 
   return (
     <>
-      <PageHeader
-        breadcrumbs={breadcrumbs}
-        currentPage={`Edit ${evaluator.name}`}
-      />
+      <PageHeader />
       <div className="flex-1 overflow-hidden">
         <EvaluatorEditForm
           evaluator={evaluator}

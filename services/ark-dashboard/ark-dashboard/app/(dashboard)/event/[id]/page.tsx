@@ -4,7 +4,6 @@ import { useParams, useRouter } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -16,11 +15,6 @@ import {
 } from '@/components/ui/tooltip';
 import type { Event } from '@/lib/services/events';
 import { eventsService } from '@/lib/services/events';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-  { href: '/events', label: 'Events' },
-];
 
 // Reusable styles for table field headings
 const FIELD_HEADING_STYLES =
@@ -172,7 +166,7 @@ function EventDetailContent() {
 
   return (
     <>
-      <PageHeader breadcrumbs={breadcrumbs} currentPage={event.name} />
+      <PageHeader />
       <div className="flex h-full flex-col">
         {/* Event Details - Four Column Layout */}
         <div className="border-b bg-gray-50/30 px-4 py-3 dark:bg-gray-900/10">
