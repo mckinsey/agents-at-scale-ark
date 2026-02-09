@@ -49,10 +49,6 @@ spec:
             value: {{ .Values.storage.backend | quote }}
           - name: ARK_APISERVER_PORT
             value: {{ .Values.storage.apiserver.port | quote }}
-          {{- if eq .Values.storage.backend "sqlite" }}
-          - name: ARK_SQLITE_PATH
-            value: {{ .Values.storage.sqlite.path | quote }}
-          {{- end }}
           {{- if eq .Values.storage.backend "postgresql" }}
           - name: ARK_POSTGRES_HOST
             value: {{ .Values.storage.postgresql.host | quote }}

@@ -45,20 +45,17 @@ ENABLE_CERT_MANAGER=false devspace dev
 
 ## Storage Backend Selection
 
-The ark-controller supports three storage backends: etcd (default), SQLite, and PostgreSQL. Use the `STORAGE_BACKEND` environment variable to select:
+The ark-controller supports two storage backends: etcd (default) and PostgreSQL. Use the `STORAGE_BACKEND` environment variable to select:
 
 ```bash
 # etcd (default) - uses Kubernetes CRDs
 devspace dev
 
-# SQLite - embedded apiserver with file storage
-STORAGE_BACKEND=sqlite devspace dev
-
 # PostgreSQL - deploys a postgres pod with embedded apiserver
 STORAGE_BACKEND=postgresql devspace dev
 ```
 
-When using `sqlite` or `postgresql`, the controller runs an embedded API server instead of using CRDs. Data is ephemeral in dev mode (SQLite uses `/tmp/ark.db`, PostgreSQL has no persistence enabled).
+When using `postgresql`, the controller runs an embedded API server instead of using CRDs.
 
 - ark-api and ark-dashboard deploy to namespace: default
 - ark-controller and localhost-gateway deploys to namespace: ark-system
