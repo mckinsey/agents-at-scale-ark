@@ -428,7 +428,7 @@ export function AppSidebar() {
                 <PopoverContent
                   side="right"
                   align="start"
-                  sideOffset={-110}
+                  sideOffset={sidebarState === 'expanded' ? -110 : 8}
                   className="w-56 p-2">
                   <div className="flex flex-col gap-1">
                     <button
@@ -436,7 +436,7 @@ export function AppSidebar() {
                         navigateToSection('files');
                         setMorePopoverOpen(false);
                       }}
-                      className="hover:bg-accent hover:text-accent-foreground flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm">
+                      className="hover:bg-accent hover:text-accent-foreground flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer">
                       <File className="h-4 w-4" />
                       <span>Files</span>
                     </button>
@@ -445,7 +445,7 @@ export function AppSidebar() {
                         navigateToSection('tasks');
                         setMorePopoverOpen(false);
                       }}
-                      className="hover:bg-accent hover:text-accent-foreground flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm">
+                      className="hover:bg-accent hover:text-accent-foreground flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer">
                       <ListTodo className="h-4 w-4" />
                       <span>A2A Tasks</span>
                     </button>
@@ -487,7 +487,7 @@ export function AppSidebar() {
               <span>{isExperimentalDarkModeEnabled ? 'Dark Mode' : 'Light Mode'}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          <SidebarMenuItem>
+          <SidebarMenuItem className='bg-[var(--primary-500)] w-8'>
             <SidebarMenuButton
               onClick={() => {
                 setSidebarOpen(sidebarState === 'expanded' ? false : true);
