@@ -50,7 +50,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { Separator } from '@/components/ui/separator';
 import {
   Sidebar,
@@ -66,16 +70,16 @@ import { trackEvent } from '@/lib/analytics/singleton';
 import { signout } from '@/lib/auth/signout';
 import {
   AGENT_BUILDER_SECTIONS,
-  MONITORING_SECTIONS,
   type DashboardSection,
+  MONITORING_SECTIONS,
 } from '@/lib/constants/dashboard-icons';
 import { proxyService } from '@/lib/services/proxy';
 import { useNamespace } from '@/providers/NamespaceProvider';
 import { useUser } from '@/providers/UserProvider';
-import { UserDetails } from './user';
 
 import qbLogoDark from '../app/img/qb-logo-dark.svg';
 import qbLogoLight from '../app/img/qb-logo-light.svg';
+import { UserDetails } from './user';
 
 interface CollapsibleSectionProps {
   sections: DashboardSection[];
@@ -105,7 +109,10 @@ function CollapsibleSection({
   loading,
 }: CollapsibleSectionProps) {
   return (
-    <Collapsible open={isOpen} onOpenChange={onOpenChange} className="group/collapsible">
+    <Collapsible
+      open={isOpen}
+      onOpenChange={onOpenChange}
+      className="group/collapsible">
       <SidebarMenuItem>
         <SidebarMenuButton
           asChild
@@ -114,7 +121,7 @@ function CollapsibleSection({
           className="group/button">
           <CollapsibleTrigger
             className="flex w-full items-center gap-2"
-            onClick={(e) => {
+            onClick={e => {
               if (sidebarState === 'collapsed') {
                 e.preventDefault();
                 onExpand();
@@ -150,7 +157,9 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { user } = useUser();
   const { state: sidebarState, setOpen: setSidebarOpen } = useSidebar();
-  const isExperimentalDarkModeEnabled = useAtomValue(isExperimentalDarkModeEnabledAtom);
+  const isExperimentalDarkModeEnabled = useAtomValue(
+    isExperimentalDarkModeEnabledAtom,
+  );
   const setSettingsModalOpen = useSetAtom(settingsModalOpenAtom);
   const setIsFilesBrowserAvailable = useSetAtom(isFilesBrowserAvailableAtom);
   const setStoredIsExperimentalDarkModeEnabled = useSetAtom(
@@ -175,7 +184,8 @@ export function AppSidebar() {
   useEffect(() => {
     const checkFilesAPIHealth = async () => {
       try {
-        const available = await proxyService.isServiceAvailable('file-gateway-api');
+        const available =
+          await proxyService.isServiceAvailable('file-gateway-api');
         setIsFilesBrowserAvailable(available);
       } catch (error) {
         console.error('Failed to check files API health:', error);
@@ -236,17 +246,23 @@ export function AppSidebar() {
         <SidebarHeader>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton size="lg" className="pointer-events-none mb-4 !p-0">
+              <SidebarMenuButton
+                size="lg"
+                className="pointer-events-none mb-4 !p-0">
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
                   <Image
-                    src={isExperimentalDarkModeEnabled ? qbLogoDark : qbLogoLight}
+                    src={
+                      isExperimentalDarkModeEnabled ? qbLogoDark : qbLogoLight
+                    }
                     alt="ARK"
                     width={32}
                     height={32}
                   />
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-medium text-sidebar-accent-foreground">ARK</span>
+                  <span className="text-sidebar-accent-foreground font-medium">
+                    ARK
+                  </span>
                 </div>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -259,12 +275,12 @@ export function AppSidebar() {
                     size="lg"
                     className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground !p-0">
                     <div
-                      className="flex aspect-square size-8 items-center p-1 justify-center rounded-lg"
+                      className="flex aspect-square size-8 items-center justify-center rounded-lg p-1"
                       style={{ backgroundColor: '#0085FF99' }}>
-                      <span className="text-white text-xs">ARK</span>
+                      <span className="text-xs text-white">ARK</span>
                     </div>
                     <div className="flex flex-col gap-0.5 leading-none">
-                      <span className="font-medium text-sidebar-accent-foreground">
+                      <span className="text-sidebar-accent-foreground font-medium">
                         ARK Dashboard
                       </span>
                       <span className="text-xs">
@@ -288,9 +304,13 @@ export function AppSidebar() {
                   <DropdownMenuLabel>Namespaces</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   {loading ? (
-                    <DropdownMenuItem disabled>Loading namespaces...</DropdownMenuItem>
+                    <DropdownMenuItem disabled>
+                      Loading namespaces...
+                    </DropdownMenuItem>
                   ) : availableNamespaces.length === 0 ? (
-                    <DropdownMenuItem disabled>No namespaces available</DropdownMenuItem>
+                    <DropdownMenuItem disabled>
+                      No namespaces available
+                    </DropdownMenuItem>
                   ) : (
                     <>
                       {availableNamespaces.map(ns => (
@@ -298,13 +318,16 @@ export function AppSidebar() {
                           key={ns.name}
                           onSelect={() => setNamespace(ns.name)}>
                           {ns.name}
-                          {ns.name === namespace && <Check className="ml-auto h-4 w-4" />}
+                          {ns.name === namespace && (
+                            <Check className="ml-auto h-4 w-4" />
+                          )}
                         </DropdownMenuItem>
                       ))}
                     </>
                   )}
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={() => setNamespaceEditorOpen(true)}>
+                  <DropdownMenuItem
+                    onSelect={() => setNamespaceEditorOpen(true)}>
                     <Plus className="mr-2 h-4 w-4" />
                     Add Namespace
                   </DropdownMenuItem>
@@ -405,7 +428,7 @@ export function AppSidebar() {
                         navigateToSection('files');
                         setMorePopoverOpen(false);
                       }}
-                      className="hover:bg-accent hover:text-accent-foreground flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer">
+                      className="hover:bg-accent hover:text-accent-foreground flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm">
                       <File className="h-4 w-4" />
                       <span>Files</span>
                     </button>
@@ -414,7 +437,7 @@ export function AppSidebar() {
                         navigateToSection('tasks');
                         setMorePopoverOpen(false);
                       }}
-                      className="hover:bg-accent hover:text-accent-foreground flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer">
+                      className="hover:bg-accent hover:text-accent-foreground flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm">
                       <ListTodo className="h-4 w-4" />
                       <span>A2A Tasks</span>
                     </button>
@@ -426,7 +449,7 @@ export function AppSidebar() {
         </SidebarMenu>
 
         <SidebarContent></SidebarContent>
-        <Separator className="!w-10 my-4" />
+        <Separator className="my-4 !w-10" />
 
         <SidebarMenu className="ml-2">
           <SidebarMenuItem>
@@ -451,20 +474,26 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton
               onClick={() =>
-                setStoredIsExperimentalDarkModeEnabled(!isExperimentalDarkModeEnabled)
+                setStoredIsExperimentalDarkModeEnabled(
+                  !isExperimentalDarkModeEnabled,
+                )
               }>
               {isExperimentalDarkModeEnabled ? (
                 <Moon className="mr-2 h-4 w-4" />
               ) : (
                 <Sun className="mr-2 h-4 w-4" />
               )}
-              <span>{isExperimentalDarkModeEnabled ? 'Dark Mode' : 'Light Mode'}</span>
+              <span>
+                {isExperimentalDarkModeEnabled ? 'Dark Mode' : 'Light Mode'}
+              </span>
             </SidebarMenuButton>
           </SidebarMenuItem>
 
-          <SidebarMenuItem className="bg-[var(--primary-500)] w-8">
+          <SidebarMenuItem className="w-8 bg-[var(--primary-500)]">
             <SidebarMenuButton
-              onClick={() => setSidebarOpen(sidebarState === 'expanded' ? false : true)}>
+              onClick={() =>
+                setSidebarOpen(sidebarState === 'expanded' ? false : true)
+              }>
               {sidebarState === 'expanded' ? (
                 <ChevronsLeft className="mr-2 h-4 w-4" />
               ) : (

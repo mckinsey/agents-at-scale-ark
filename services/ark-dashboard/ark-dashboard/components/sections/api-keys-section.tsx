@@ -249,7 +249,7 @@ export function ApiKeysSection() {
       />
       <div className="flex flex-1 flex-col">
         <main className="flex-1 overflow-auto p-4">
-          <h1 className="text-3xl font-bold mb-4 px-2">Service API Keys</h1>
+          <h1 className="mb-4 px-2 text-3xl font-bold">Service API Keys</h1>
           <DataTable
             data={apiKeys}
             onRevoke={handleRevoke}

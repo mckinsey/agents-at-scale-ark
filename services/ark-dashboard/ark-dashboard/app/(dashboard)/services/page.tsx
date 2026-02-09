@@ -302,7 +302,7 @@ function ServicesContent() {
       <PageHeader breadcrumbs={breadcrumbs} currentPage="ARK Services" />
       <div className="flex flex-1 flex-col">
         <main className="flex-1 overflow-auto p-4">
-          <h1 className="text-3xl font-bold mb-4 px-2">ARK Services</h1>
+          <h1 className="mb-4 px-2 text-3xl font-bold">ARK Services</h1>
           <DataTable columns={columnDefinitions} data={services} />
         </main>
       </div>

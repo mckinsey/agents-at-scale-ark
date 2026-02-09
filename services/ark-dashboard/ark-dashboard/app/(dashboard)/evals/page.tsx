@@ -7,7 +7,7 @@ import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { EvaluationsSection, EvaluatorsSection } from '@/components/sections';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const breadcrumbs: BreadcrumbElement[] = [
   { href: '/', label: 'ARK Dashboard' },
@@ -41,7 +41,7 @@ export default function EvalsPage() {
         }
       />
       <div className="flex flex-1 flex-col gap-4 p-4">
-        <h1 className="text-xl px-2">Evals</h1>
+        <h1 className="px-2 text-xl">Evals</h1>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="border-border w-full justify-start border-b bg-transparent">
             <TabsTrigger

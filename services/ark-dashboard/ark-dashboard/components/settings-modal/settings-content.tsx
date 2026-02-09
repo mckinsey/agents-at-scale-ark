@@ -3,14 +3,14 @@
 import { Suspense, useMemo } from 'react';
 
 import type { SettingPage } from '@/atoms/settings-modal';
-import { A2AServersSection } from '@/components/sections/a2a-servers-section';
 import { MemorySection } from '@/components/sections';
+import { A2AServersSection } from '@/components/sections/a2a-servers-section';
 import { SecretsSection } from '@/components/sections/secrets-section';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { ApiKeysSettings } from './api-keys-settings';
-import { ExperimentalFeaturesSettings } from './experimental-features-settings';
 import { ArkServicesSettings } from './ark-services-settings';
+import { ExperimentalFeaturesSettings } from './experimental-features-settings';
 
 type SettingsContentProps = {
   activePage: SettingPage;
@@ -57,9 +57,11 @@ export function SettingsContent({ activePage }: SettingsContentProps) {
   const config = pageConfigs[activePage];
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-sidebar">
+    <div className="bg-sidebar flex flex-1 flex-col overflow-hidden">
       <div className="px-8 py-8">
-        <h1 className="text-md text-sidebar-foreground font-semibold">{config.title}</h1>
+        <h1 className="text-md text-sidebar-foreground font-semibold">
+          {config.title}
+        </h1>
       </div>
       <div className="flex-1 overflow-y-auto px-8 py-6">
         <Suspense

@@ -3,7 +3,10 @@
 import { useAtom, useAtomValue } from 'jotai';
 import { useEffect } from 'react';
 
-import { activeSettingPageAtom, settingsModalOpenAtom } from '@/atoms/settings-modal';
+import {
+  activeSettingPageAtom,
+  settingsModalOpenAtom,
+} from '@/atoms/settings-modal';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 
 import { SettingsContent } from './settings-content';
@@ -15,10 +18,6 @@ export function SettingsModal() {
   const [isModalOpen, setIsModalOpen] = useAtom(settingsModalOpenAtom);
   const activeSettingPage = useAtomValue(activeSettingPageAtom);
 
-  const toggleModal = () => {
-    setIsModalOpen(prev => !prev);
-  };
-
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
@@ -26,18 +25,18 @@ export function SettingsModal() {
         (event.metaKey || event.ctrlKey)
       ) {
         event.preventDefault();
-        toggleModal();
+        setIsModalOpen(prev => !prev);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [setIsModalOpen]);
 
   return (
     <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
       <DialogContent
-        className="!max-w-[100vw] !max-h-[100vh] w-screen h-screen p-0 !gap-0 rounded-none overflow-hidden"
+        className="h-screen !max-h-[100vh] w-screen !max-w-[100vw] !gap-0 overflow-hidden rounded-none p-0"
         showCloseButton={true}
         onOpenAutoFocus={e => e.preventDefault()}>
         <DialogTitle className="sr-only">Settings</DialogTitle>

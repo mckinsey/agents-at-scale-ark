@@ -35,7 +35,7 @@ export function ExperimentalFeaturesSettings() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold mb-4">Agents</h2>
+        <h2 className="mb-4 text-lg font-semibold">Agents</h2>
         <div className="flex flex-row items-center justify-between rounded-lg border p-4">
           <div className="space-y-0.5">
             <Label>Experimental Execution Engine Field</Label>
@@ -53,7 +53,7 @@ export function ExperimentalFeaturesSettings() {
       </div>
 
       <div>
-        <h2 className="text-lg font-semibold mb-4">Observability</h2>
+        <h2 className="mb-4 text-lg font-semibold">Observability</h2>
         <div className="flex flex-row items-center justify-between rounded-lg border p-4">
           <div className="space-y-0.5">
             <Label>Broker</Label>
@@ -71,7 +71,7 @@ export function ExperimentalFeaturesSettings() {
       </div>
 
       <div>
-        <h2 className="text-lg font-semibold mb-4">Chat</h2>
+        <h2 className="mb-4 text-lg font-semibold">Chat</h2>
         <div className="flex flex-row items-center justify-between rounded-lg border p-4">
           <div className="space-y-0.5">
             <Label>Chat Streaming</Label>
@@ -87,7 +87,7 @@ export function ExperimentalFeaturesSettings() {
       </div>
 
       <div>
-        <h2 className="text-lg font-semibold mb-4">Queries</h2>
+        <h2 className="mb-4 text-lg font-semibold">Queries</h2>
         <div className="flex flex-row items-center justify-between rounded-lg border p-4">
           <div className="flex-1 space-y-0.5">
             <Label>Query Timeout</Label>
