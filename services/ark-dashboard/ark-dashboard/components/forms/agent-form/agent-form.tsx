@@ -119,7 +119,8 @@ export function AgentForm({
   const agentYaml = useMemo(() => {
     if (!agent) return '';
 
-    const selectedToolsList = availableTools.filter(t =>
+    const allTools = [...availableTools, ...unavailableTools];
+    const selectedToolsList = allTools.filter(t =>
       state.selectedTools.some(st => st.name === t.name),
     );
 
@@ -178,6 +179,7 @@ export function AgentForm({
     promptValue,
     parameters,
     availableTools,
+    unavailableTools,
     state.selectedTools,
   ]);
 
@@ -435,6 +437,8 @@ export function AgentForm({
                             toolsLoading={toolsLoading}
                             onToolToggle={handleToolToggle}
                             isToolSelected={isToolSelected}
+                            unavailableTools={unavailableTools}
+                            onDeleteClick={handleDeleteTool}
                             disabled={isDisabled}
                           />
                         )}

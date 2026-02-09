@@ -150,16 +150,16 @@ class AgentsPage(BasePage):
         
         return result
     
-    def create_agent_with_verification(self, agent_name: str, description: str, model_name: str, execution_engine: str = "langchain-executor", tools: list = None) -> dict:        
+    def create_agent_with_verification(self, agent_name: str, description: str, model_name: str, execution_engine: str = "langchain-executor", tools: list = None) -> dict:
         self.page.locator(self.ADD_AGENT_BUTTON).first.click()
         self.wait_for_load_state("domcontentloaded")
         self.wait_for_timeout(2000)
-        
-        name_input = self.page.locator("input#name, input[name='name']").first
+
+        name_input = self.page.locator(self.AGENT_NAME_INPUT).first
         name_input.wait_for(state="visible", timeout=10000)
         name_input.fill(agent_name)
-        
-        description_input = self.page.locator("input#description, input[name='description'], textarea[name='description']").first
+
+        description_input = self.page.locator(self.AGENT_DESCRIPTION_INPUT).first
         description_input.wait_for(state="visible", timeout=5000)
         description_input.fill(description)
         
