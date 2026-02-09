@@ -115,8 +115,7 @@ func (p *PostgreSQLBackend) initSchema() error {
 	CREATE INDEX IF NOT EXISTS idx_resources_kind_namespace ON resources(kind, namespace);
 	CREATE INDEX IF NOT EXISTS idx_resources_kind_namespace_name ON resources(kind, namespace, name);
 	CREATE INDEX IF NOT EXISTS idx_resources_labels ON resources USING GIN(labels);
-	CREATE INDEX IF NOT EXISTS idx_resources_deleted ON resources(deleted_at) WHERE deleted_at IS NULL;
-	CREATE INDEX IF NOT EXISTS idx_resources_lookup ON resources(kind, namespace, name, resource_version) WHERE deleted_at IS NULL;
+	CREATE INDEX IF NOT EXISTS idx_resources_lookup ON resources(kind, namespace, name, resource_version);
 
 	CREATE OR REPLACE FUNCTION notify_resource_change()
 	RETURNS TRIGGER AS $$
@@ -281,8 +280,7 @@ func (p *PostgreSQLBackend) Get(ctx context.Context, kind, namespace, name strin
 	row := p.db.QueryRowContext(ctx, `
 		SELECT resource_version, generation, uid, spec, status, labels, annotations, finalizers, created_at, updated_at
 		FROM resources
-		WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL
-	`, kind, namespace, name)
+		WHERE kind = $1 AND namespace = $2 AND name = $3	`, kind, namespace, name)
 
 	var rv, generation int64
 	var uid string
@@ -303,8 +301,7 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 	query := `
 		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, created_at
 		FROM resources
-		WHERE kind = $1 AND deleted_at IS NULL
-	`
+		WHERE kind = $1	`
 	args := []interface{}{kind}
 	argIndex := 2
 
@@ -427,8 +424,7 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 			UPDATE resources
 			SET spec = $1::jsonb, status = $2::jsonb, labels = $3::jsonb, annotations = $4::jsonb,
 			    finalizers = $5::jsonb, generation = generation + 1, resource_version = resource_version + 1, updated_at = NOW()
-			WHERE kind = $6 AND namespace = $7 AND name = $8 AND resource_version = $9 AND deleted_at IS NULL
-			RETURNING 1
+			WHERE kind = $6 AND namespace = $7 AND name = $8 AND resource_version = $9			RETURNING 1
 		)
 		SELECT
 			(SELECT COUNT(*) > 0 FROM upd) as updated,
@@ -484,8 +480,7 @@ func (p *PostgreSQLBackend) UpdateStatus(ctx context.Context, kind, namespace, n
 		WITH upd AS (
 			UPDATE resources
 			SET status = $1::jsonb, resource_version = resource_version + 1, updated_at = NOW()
-			WHERE kind = $2 AND namespace = $3 AND name = $4 AND resource_version = $5 AND deleted_at IS NULL
-			RETURNING 1
+			WHERE kind = $2 AND namespace = $3 AND name = $4 AND resource_version = $5			RETURNING 1
 		)
 		SELECT
 			(SELECT COUNT(*) > 0 FROM upd) as updated,
@@ -507,8 +502,8 @@ func (p *PostgreSQLBackend) UpdateStatus(ctx context.Context, kind, namespace, n
 
 func (p *PostgreSQLBackend) Delete(ctx context.Context, kind, namespace, name string) error {
 	result, err := p.db.ExecContext(ctx, `
-		UPDATE resources SET deleted_at = NOW()
-		WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL
+		DELETE FROM resources
+		WHERE kind = $1 AND namespace = $2 AND name = $3
 	`, kind, namespace, name)
 	if err != nil {
 		return fmt.Errorf("failed to delete resource: %w", err)
@@ -542,8 +537,7 @@ func (p *PostgreSQLBackend) GetResourceVersion(ctx context.Context, kind, namesp
 	var rv int64
 	err := p.db.QueryRowContext(ctx, `
 		SELECT resource_version FROM resources
-		WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL
-	`, kind, namespace, name).Scan(&rv)
+		WHERE kind = $1 AND namespace = $2 AND name = $3	`, kind, namespace, name).Scan(&rv)
 	return rv, err
 }
 
@@ -552,16 +546,6 @@ func (p *PostgreSQLBackend) Close() error {
 	return p.db.Close()
 }
 
-func (p *PostgreSQLBackend) Cleanup(ctx context.Context, retention time.Duration) (int64, error) {
-	cutoff := time.Now().Add(-retention)
-	result, err := p.db.ExecContext(ctx, `
-		DELETE FROM resources WHERE deleted_at IS NOT NULL AND deleted_at < $1
-	`, cutoff)
-	if err != nil {
-		return 0, fmt.Errorf("failed to cleanup deleted resources: %w", err)
-	}
-	return result.RowsAffected()
-}
 
 func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, generation int64, uid, spec, status, labels, annotations, finalizers string, createdAt time.Time) (runtime.Object, error) {
 	var labelsMap map[string]string

@@ -124,8 +124,7 @@ func (s *SQLiteBackend) Get(ctx context.Context, kind, namespace, name string) (
 	row := s.db.QueryRowContext(ctx, `
 		SELECT resource_version, generation, uid, spec, status, labels, annotations, created_at, updated_at
 		FROM resources
-		WHERE kind = ? AND namespace = ? AND name = ? AND deleted_at IS NULL
-	`, kind, namespace, name)
+		WHERE kind = ? AND namespace = ? AND name = ?	`, kind, namespace, name)
 
 	var rv, generation int64
 	var uid, spec, status, labels, annotations string
@@ -152,8 +151,7 @@ func (s *SQLiteBackend) List(ctx context.Context, kind, namespace string, opts s
 	query := `
 		SELECT id, resource_version, generation, namespace, name, uid, spec, status, labels, annotations, created_at
 		FROM resources
-		WHERE kind = ? AND deleted_at IS NULL
-	`
+		WHERE kind = ?	`
 	args := []interface{}{kind}
 
 	if namespace != "" {
@@ -250,8 +248,7 @@ func (s *SQLiteBackend) Update(ctx context.Context, kind, namespace, name string
 		UPDATE resources
 		SET spec = ?, status = ?, labels = ?, annotations = ?,
 		    generation = generation + 1, resource_version = resource_version + 1, updated_at = CURRENT_TIMESTAMP
-		WHERE kind = ? AND namespace = ? AND name = ? AND resource_version = ? AND deleted_at IS NULL
-	`, string(resource.Spec), string(resource.Status), string(labelsJSON), string(annotationsJSON), kind, namespace, name, rv)
+		WHERE kind = ? AND namespace = ? AND name = ? AND resource_version = ?	`, string(resource.Spec), string(resource.Status), string(labelsJSON), string(annotationsJSON), kind, namespace, name, rv)
 	if err != nil {
 		return fmt.Errorf("failed to update resource: %w", err)
 	}
@@ -299,8 +296,7 @@ func (s *SQLiteBackend) UpdateStatus(ctx context.Context, kind, namespace, name 
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE resources
 		SET status = ?, resource_version = resource_version + 1, updated_at = CURRENT_TIMESTAMP
-		WHERE kind = ? AND namespace = ? AND name = ? AND resource_version = ? AND deleted_at IS NULL
-	`, string(resource.Status), kind, namespace, name, rv)
+		WHERE kind = ? AND namespace = ? AND name = ? AND resource_version = ?	`, string(resource.Status), kind, namespace, name, rv)
 	if err != nil {
 		return fmt.Errorf("failed to update resource status: %w", err)
 	}
@@ -323,8 +319,7 @@ func (s *SQLiteBackend) resourceExists(ctx context.Context, kind, namespace, nam
 	var count int
 	err := s.db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM resources
-		WHERE kind = ? AND namespace = ? AND name = ? AND deleted_at IS NULL
-	`, kind, namespace, name).Scan(&count)
+		WHERE kind = ? AND namespace = ? AND name = ?	`, kind, namespace, name).Scan(&count)
 	return count > 0, err
 }
 
@@ -335,8 +330,8 @@ func (s *SQLiteBackend) Delete(ctx context.Context, kind, namespace, name string
 	}
 
 	result, err := s.db.ExecContext(ctx, `
-		UPDATE resources SET deleted_at = CURRENT_TIMESTAMP
-		WHERE kind = ? AND namespace = ? AND name = ? AND deleted_at IS NULL
+		DELETE FROM resources
+		WHERE kind = ? AND namespace = ? AND name = ?
 	`, kind, namespace, name)
 	if err != nil {
 		return fmt.Errorf("failed to delete resource: %w", err)
@@ -420,8 +415,7 @@ func (s *SQLiteBackend) GetResourceVersion(ctx context.Context, kind, namespace,
 	var rv int64
 	err := s.db.QueryRowContext(ctx, `
 		SELECT resource_version FROM resources
-		WHERE kind = ? AND namespace = ? AND name = ? AND deleted_at IS NULL
-	`, kind, namespace, name).Scan(&rv)
+		WHERE kind = ? AND namespace = ? AND name = ?	`, kind, namespace, name).Scan(&rv)
 	return rv, err
 }
 
@@ -429,16 +423,6 @@ func (s *SQLiteBackend) Close() error {
 	return s.db.Close()
 }
 
-func (s *SQLiteBackend) Cleanup(ctx context.Context, retention time.Duration) (int64, error) {
-	cutoff := time.Now().Add(-retention)
-	result, err := s.db.ExecContext(ctx, `
-		DELETE FROM resources WHERE deleted_at IS NOT NULL AND deleted_at < ?
-	`, cutoff)
-	if err != nil {
-		return 0, fmt.Errorf("failed to cleanup deleted resources: %w", err)
-	}
-	return result.RowsAffected()
-}
 
 func (s *SQLiteBackend) reconstructObject(kind, namespace, name string, rv, generation int64, uid, spec, status, labels, annotations string, createdAt time.Time) (runtime.Object, error) {
 	var labelsMap map[string]string
