@@ -16,10 +16,10 @@ const (
 	// Execution metadata keys for streaming
 	// These values are sent back with streaming chunks in the 'ark' metadata field,
 	// allowing callers to differentiate the source of chunks (e.g., specific agents in a team query)
-	targetKey contextKey = "target" // Original query target (e.g., "team/my-team")
-	teamKey   contextKey = "team"   // Current team name
-	agentKey  contextKey = "agent"  // Current agent name
-	modelKey  contextKey = "model"  // Current model name
+	targetKey         contextKey = "target" // Original query target (e.g., "team/my-team")
+	teamKey           contextKey = "team"   // Current team name
+	agentKey          contextKey = "agent"  // Current agent name
+	modelKey          contextKey = "model"  // Current model name
 	a2aPayloadModeKey contextKey = "a2aPayloadMode"
 )
 
@@ -124,3 +124,4 @@ func GetA2APayloadModeFromContext(ctx context.Context) string {
 	}
 	return A2APayloadModeCompat
 }
+

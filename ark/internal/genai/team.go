@@ -9,6 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	arkann "mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
 )
@@ -21,6 +22,7 @@ type Team struct {
 	MaxTurns          *int
 	Selector          *arkv1alpha1.TeamSelectorSpec
 	Graph             *arkv1alpha1.TeamGraphSpec
+	PayloadMode       string
 	telemetryRecorder telemetry.TeamRecorder
 	eventingRecorder  eventing.TeamRecorder
 	telemetry         telemetry.Provider
@@ -180,10 +182,12 @@ func (t *Team) GetDescription() string {
 }
 
 func MakeTeam(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Team, telemetryProvider telemetry.Provider, eventingProvider eventing.Provider) (*Team, error) {
-	members, err := loadTeamMembers(ctx, k8sClient, crd, telemetryProvider, eventingProvider)
+	members, agentAnnotations, err := loadTeamMembers(ctx, k8sClient, crd, telemetryProvider, eventingProvider)
 	if err != nil {
 		return nil, err
 	}
+
+	payloadMode := ResolvePayloadMode(crd.Annotations, nil, agentAnnotations)
 
 	return &Team{
 		Name:              crd.Name,
@@ -193,6 +197,7 @@ func MakeTeam(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Tea
 		MaxTurns:          crd.Spec.MaxTurns,
 		Selector:          crd.Spec.Selector,
 		Graph:             crd.Spec.Graph,
+		PayloadMode:       payloadMode,
 		telemetryRecorder: telemetryProvider.TeamRecorder(),
 		eventingRecorder:  eventingProvider.TeamRecorder(),
 		telemetry:         telemetryProvider,
@@ -202,18 +207,22 @@ func MakeTeam(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Tea
 	}, nil
 }
 
-func loadTeamMembers(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Team, telemetryProvider telemetry.Provider, eventingProvider eventing.Provider) ([]TeamMember, error) {
+func loadTeamMembers(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Team, telemetryProvider telemetry.Provider, eventingProvider eventing.Provider) ([]TeamMember, []map[string]string, error) {
 	members := make([]TeamMember, 0, len(crd.Spec.Members))
+	agentAnnotations := make([]map[string]string, 0, len(crd.Spec.Members))
 
 	for _, memberSpec := range crd.Spec.Members {
-		member, err := loadTeamMember(ctx, k8sClient, memberSpec, crd.Namespace, crd.Name, telemetryProvider, eventingProvider)
+		member, annotations, err := loadTeamMember(ctx, k8sClient, memberSpec, crd.Namespace, crd.Name, telemetryProvider, eventingProvider)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		members = append(members, member)
+		if annotations != nil {
+			agentAnnotations = append(agentAnnotations, annotations)
+		}
 	}
 
-	return members, nil
+	return members, agentAnnotations, nil
 }
 
 func (t *Team) executeWithTracking(execFunc func(context.Context, Message, []Message) ([]Message, error), ctx context.Context, userInput Message, history []Message) ([]Message, error) {
@@ -286,25 +295,37 @@ func (t *Team) executeMemberAndAccumulate(ctx context.Context, member TeamMember
 	return nil
 }
 
-func loadTeamMember(ctx context.Context, k8sClient client.Client, memberSpec arkv1alpha1.TeamMember, namespace, teamName string, telemetryProvider telemetry.Provider, eventingProvider eventing.Provider) (TeamMember, error) {
+func loadTeamMember(ctx context.Context, k8sClient client.Client, memberSpec arkv1alpha1.TeamMember, namespace, teamName string, telemetryProvider telemetry.Provider, eventingProvider eventing.Provider) (TeamMember, map[string]string, error) {
 	key := types.NamespacedName{Name: memberSpec.Name, Namespace: namespace}
 
 	switch memberSpec.Type {
 	case string(agentKey):
 		var agentCRD arkv1alpha1.Agent
 		if err := k8sClient.Get(ctx, key, &agentCRD); err != nil {
-			return nil, fmt.Errorf("failed to get agent %s for team %s: %w", memberSpec.Name, teamName, err)
+			return nil, nil, fmt.Errorf("failed to get agent %s for team %s: %w", memberSpec.Name, teamName, err)
 		}
-		return MakeAgent(ctx, k8sClient, &agentCRD, telemetryProvider, eventingProvider)
+		var annotations map[string]string
+		if agentCRD.Annotations != nil && agentCRD.Annotations[arkann.A2AServerAddress] != "" {
+			annotations = agentCRD.Annotations
+		}
+		member, err := MakeAgent(ctx, k8sClient, &agentCRD, telemetryProvider, eventingProvider)
+		if err != nil {
+			return nil, nil, err
+		}
+		return member, annotations, nil
 
 	case "team":
 		var nestedTeamCRD arkv1alpha1.Team
 		if err := k8sClient.Get(ctx, key, &nestedTeamCRD); err != nil {
-			return nil, fmt.Errorf("failed to get team %s for team %s: %w", memberSpec.Name, teamName, err)
+			return nil, nil, fmt.Errorf("failed to get team %s for team %s: %w", memberSpec.Name, teamName, err)
 		}
-		return MakeTeam(ctx, k8sClient, &nestedTeamCRD, telemetryProvider, eventingProvider)
+		member, err := MakeTeam(ctx, k8sClient, &nestedTeamCRD, telemetryProvider, eventingProvider)
+		if err != nil {
+			return nil, nil, err
+		}
+		return member, nil, nil
 
 	default:
-		return nil, fmt.Errorf("unsupported member type %s for member %s in team %s", memberSpec.Type, memberSpec.Name, teamName)
+		return nil, nil, fmt.Errorf("unsupported member type %s for member %s in team %s", memberSpec.Type, memberSpec.Name, teamName)
 	}
 }
