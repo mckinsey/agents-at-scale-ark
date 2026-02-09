@@ -153,10 +153,134 @@ jobs:
             echo "The following violations were eliminated: $REMOVED_VIOLATIONS."
           else
             echo "No new violations found."
-          fi  
+          fi
+
+  detect-changes:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    outputs:
+      ark-sdk: ${{ steps.filter.outputs.ark-sdk }}
+      ark-controller: ${{ steps.filter.outputs.ark-controller }}
+      ark-api: ${{ steps.filter.outputs.ark-api }}
+      ark-dashboard: ${{ steps.filter.outputs.ark-dashboard }}
+      ark-evaluator: ${{ steps.filter.outputs.ark-evaluator }}
+      ark-mcp: ${{ steps.filter.outputs.ark-mcp }}
+      executor-langchain: ${{ steps.filter.outputs.executor-langchain }}
+      ark-broker: ${{ steps.filter.outputs.ark-broker }}
+      localhost-gateway: ${{ steps.filter.outputs.localhost-gateway }}
+      ark-cli: ${{ steps.filter.outputs.ark-cli }}
+      fark: ${{ steps.filter.outputs.fark }}
+      ark-tools-image: ${{ steps.filter.outputs.ark-tools-image }}
+      filesystem-mcp: ${{ steps.filter.outputs.filesystem-mcp }}
+      langchain-weather-agent: ${{ steps.filter.outputs.langchain-weather-agent }}
+      charts: ${{ steps.filter.outputs.charts }}
+      docs: ${{ steps.filter.outputs.docs }}
+      e2e-tests: ${{ steps.filter.outputs.e2e-tests }}
+      cicd: ${{ steps.filter.outputs.cicd }}
+      critical-paths: ${{ steps.filter.outputs.critical-paths }}
+      need-build-libs: ${{ steps.compute.outputs.need-build-libs }}
+      need-build-ark: ${{ steps.compute.outputs.need-build-ark }}
+      need-build-services: ${{ steps.compute.outputs.need-build-services }}
+      containers-to-build: ${{ steps.compute.outputs.containers-to-build }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: .github/path-filters.yaml
+          list-files: json
+
+      - name: Compute build requirements
+        id: compute
+        run: |
+          NEED_LIBS="false"
+          NEED_ARK="false"
+          NEED_SERVICES="false"
+          CONTAINERS=()
+
+          if [[ "${{ steps.filter.outputs.ark-sdk }}" == "true" ]] || \
+             [[ "${{ steps.filter.outputs.critical-paths }}" == "true" ]] || \
+             [[ "${{ steps.filter.outputs.cicd }}" == "true" ]]; then
+            NEED_LIBS="true"
+            NEED_SERVICES="true"
+            CONTAINERS+=(ark-api ark-dashboard ark-evaluator ark-mcp executor-langchain)
+          fi
+
+          if [[ "${{ steps.filter.outputs.ark-controller }}" == "true" ]] || \
+             [[ "${{ steps.filter.outputs.critical-paths }}" == "true" ]] || \
+             [[ "${{ steps.filter.outputs.cicd }}" == "true" ]]; then
+            NEED_ARK="true"
+            CONTAINERS+=(ark-controller)
+          fi
+
+          if [[ "${{ steps.filter.outputs.ark-api }}" == "true" ]]; then
+            NEED_LIBS="true"
+            NEED_SERVICES="true"
+            CONTAINERS+=(ark-api ark-dashboard)
+          fi
+
+          if [[ "${{ steps.filter.outputs.ark-dashboard }}" == "true" ]]; then
+            NEED_SERVICES="true"
+            CONTAINERS+=(ark-dashboard)
+          fi
+
+          if [[ "${{ steps.filter.outputs.ark-evaluator }}" == "true" ]]; then
+            NEED_LIBS="true"
+            NEED_SERVICES="true"
+            CONTAINERS+=(ark-evaluator)
+          fi
+
+          if [[ "${{ steps.filter.outputs.ark-mcp }}" == "true" ]]; then
+            NEED_LIBS="true"
+            NEED_SERVICES="true"
+            CONTAINERS+=(ark-mcp)
+          fi
+
+          if [[ "${{ steps.filter.outputs.executor-langchain }}" == "true" ]]; then
+            NEED_LIBS="true"
+            NEED_SERVICES="true"
+            CONTAINERS+=(executor-langchain)
+          fi
+
+          if [[ "${{ steps.filter.outputs.ark-broker }}" == "true" ]]; then
+            NEED_SERVICES="true"
+            CONTAINERS+=(ark-broker)
+          fi
+
+          if [[ "${{ steps.filter.outputs.ark-cli }}" == "true" ]]; then
+            CONTAINERS+=(ark-cli)
+          fi
+
+          if [[ "${{ steps.filter.outputs.ark-tools-image }}" == "true" ]]; then
+            CONTAINERS+=(ark-tools)
+          fi
+
+          if [[ "${{ steps.filter.outputs.filesystem-mcp }}" == "true" ]]; then
+            CONTAINERS+=(filesystem-mcp-server)
+          fi
+
+          if [[ "${{ steps.filter.outputs.langchain-weather-agent }}" == "true" ]]; then
+            CONTAINERS+=(langchain-weather-agent)
+          fi
+
+          echo "need-build-libs=$NEED_LIBS" >> $GITHUB_OUTPUT
+          echo "need-build-ark=$NEED_ARK" >> $GITHUB_OUTPUT
+          echo "need-build-services=$NEED_SERVICES" >> $GITHUB_OUTPUT
+
+          CONTAINERS_JSON=$(printf '%s\n' "${CONTAINERS[@]}" | jq -R . | jq -s -c 'unique')
+          echo "containers-to-build=$CONTAINERS_JSON" >> $GITHUB_OUTPUT
+
+          echo "Build requirements:"
+          echo "  - Libraries: $NEED_LIBS"
+          echo "  - Ark Controller: $NEED_ARK"
+          echo "  - Services: $NEED_SERVICES"
+          echo "  - Containers: $CONTAINERS_JSON"
 
   # Build and test Ark itself.
   build-and-test-ark:
+    needs: [detect-changes]
+    if: always() && (needs.detect-changes.result == 'skipped' || needs.detect-changes.outputs.need-build-ark == 'true')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -198,6 +322,8 @@ jobs:
           artifact-suffix: ark-unit
 
   build-and-test-services:
+    needs: [detect-changes]
+    if: always() && (needs.detect-changes.result == 'skipped' || needs.detect-changes.outputs.need-build-services == 'true')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -249,7 +375,8 @@ jobs:
           artifact-suffix: ark-dashboard-unit
 
   build-containers:
-    needs: [setup-container-cache-registry, build-libs]
+    needs: [setup-container-cache-registry, build-libs, detect-changes]
+    if: always() && (needs.detect-changes.result == 'skipped' || needs.detect-changes.outputs.containers-to-build != '[]')
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -288,24 +415,47 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check if build needed
+        id: check
+        run: |
+          if [[ "${{ needs.detect-changes.result }}" == "skipped" ]]; then
+            echo "needed=true" >> $GITHUB_OUTPUT
+            echo "Building ${{ matrix.image }} (main branch - full pipeline)"
+          else
+            CONTAINERS='${{ needs.detect-changes.outputs.containers-to-build }}'
+            IMAGE='${{ matrix.image }}'
+
+            if echo "$CONTAINERS" | jq -e --arg img "$IMAGE" 'index($img) != null' > /dev/null; then
+              echo "needed=true" >> $GITHUB_OUTPUT
+              echo "Building ${{ matrix.image }} (changes detected)"
+            else
+              echo "needed=false" >> $GITHUB_OUTPUT
+              echo "Skipping build for ${{ matrix.image }} (no changes detected)"
+            fi
+          fi
+
       - name: Download library artifacts
+        if: steps.check.outputs.needed == 'true'
         uses: actions/download-artifact@v4
         with:
           name: out-libs-${{ github.sha }}
           path: out/
 
       - name: Install uv
+        if: steps.check.outputs.needed == 'true'
         uses: astral-sh/setup-uv@v6
 
       - name: Login to Docker Registry
-        if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
+        if: steps.check.outputs.needed == 'true' && needs.setup-container-cache-registry.outputs.is-fork-pr == 'false'
         uses: docker/login-action@v3
         with:
           registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry-hostname }}
           username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
 
-      - uses: ./.github/actions/build-image
+      - name: Build and push container
+        if: steps.check.outputs.needed == 'true'
+        uses: ./.github/actions/build-image
         with:
           path: ${{ matrix.path }}
           image: ${{ matrix.image }}
@@ -316,8 +466,8 @@ jobs:
           prebuild: ${{ matrix.prebuild }}
 
   xray-container-scan:
-    needs: [setup-container-cache-registry, build-containers]
-    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
+    needs: [setup-container-cache-registry, build-containers, detect-changes]
+    if: always() && needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' && (needs.detect-changes.result == 'skipped' || needs.detect-changes.outputs.containers-to-build != '[]')
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -337,14 +487,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check if scan needed
+        id: check
+        run: |
+          if [[ "${{ needs.detect-changes.result }}" == "skipped" ]]; then
+            echo "needed=true" >> $GITHUB_OUTPUT
+            echo "Scanning ${{ matrix.image }} (main branch - full pipeline)"
+          else
+            CONTAINERS='${{ needs.detect-changes.outputs.containers-to-build }}'
+            IMAGE='${{ matrix.image }}'
+
+            if echo "$CONTAINERS" | jq -e --arg img "$IMAGE" 'index($img) != null' > /dev/null; then
+              echo "needed=true" >> $GITHUB_OUTPUT
+              echo "Scanning ${{ matrix.image }} (changes detected)"
+            else
+              echo "needed=false" >> $GITHUB_OUTPUT
+              echo "Skipping scan for ${{ matrix.image }} (no changes detected)"
+            fi
+          fi
+
       - name: Login to Docker Registry
+        if: steps.check.outputs.needed == 'true'
         uses: docker/login-action@v3
         with:
           registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry-hostname }}
           username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
 
-      - uses: ./.github/actions/jfrog-xray-container-scan
+      - name: Scan container with Xray
+        if: steps.check.outputs.needed == 'true'
+        uses: ./.github/actions/jfrog-xray-container-scan
         with:
           image: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/${{ matrix.image }}:${{ github.sha }}
           image_name: ${{ matrix.image }}
@@ -353,6 +525,8 @@ jobs:
           jfrog_url: ${{ vars.JFROG_PLATFORM_URL }}
 
   build-libs:
+    needs: [detect-changes]
+    if: always() && (needs.detect-changes.result == 'skipped' || needs.detect-changes.outputs.need-build-libs == 'true')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -1097,6 +1271,7 @@ jobs:
   report-coverage:
     needs:
       [
+        detect-changes,
         build-containers,
         e2e-quickstart,
         e2e-smoke-test,
@@ -1110,6 +1285,7 @@ jobs:
         build-charts,
         build-ark-cli,
       ]
+    if: always()
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -1170,6 +1346,7 @@ jobs:
   check-release:
     needs:
       [
+        detect-changes,
         build-containers,
         e2e-quickstart,
         e2e-smoke-test,
@@ -1182,6 +1359,7 @@ jobs:
         build-charts,
         build-ark-cli,
       ]
+    if: always()
     runs-on: ubuntu-24.04
     outputs:
       released: ${{ steps.release-please.outputs.release_created }}

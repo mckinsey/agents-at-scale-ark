@@ -1,0 +1,90 @@
+# Path filters for change detection in CI/CD pipeline
+# Used by dorny/paths-filter to detect which components changed
+
+filters:
+  # Core library - affects all Python services
+  ark-sdk:
+    - 'lib/ark-sdk/**'
+    - 'ark/config/crd/bases/**'  # CRDs affect SDK generation
+    - 'version.txt'               # Version changes trigger SDK rebuild
+
+  # Ark controller (Go) - independent
+  ark-controller:
+    - 'ark/**'
+    - '!ark/config/crd/bases/**'  # CRDs handled separately by ark-sdk filter
+
+  # Python services - all depend on ark-sdk
+  ark-api:
+    - 'services/ark-api/**'
+
+  ark-dashboard:
+    - 'services/ark-dashboard/**'
+
+  ark-evaluator:
+    - 'services/ark-evaluator/**'
+
+  ark-mcp:
+    - 'services/ark-mcp/**'
+
+  executor-langchain:
+    - 'services/executor-langchain/**'
+
+  # Independent services
+  ark-broker:
+    - 'services/ark-broker/**'
+
+  localhost-gateway:
+    - 'services/localhost-gateway/**'
+
+  # Tools
+  ark-cli:
+    - 'tools/ark-cli/**'
+
+  fark:
+    - 'tools/fark/**'
+
+  ark-tools-image:
+    - 'images/ark-tools/**'
+    - 'tools/ark-cli/**'  # ark-tools includes ark-cli
+
+  # MCP servers
+  filesystem-mcp:
+    - 'mcp/filesystem-mcp/**'
+
+  # Sample agents
+  langchain-weather-agent:
+    - 'samples/a2a/langchain-weather-agent/**'
+
+  # Charts
+  charts:
+    - 'charts/**'
+    - 'ark/dist/chart/**'
+    - 'services/*/chart/**'
+    - 'mcp/*/chart/**'
+
+  # Documentation
+  docs:
+    - 'docs/**'
+    - 'README.md'
+    - '**/CLAUDE.md'
+
+  # E2E tests
+  e2e-tests:
+    - 'tests/**'
+    - '.chainsaw*.yaml'
+
+  # CI/CD infrastructure - triggers full rebuild
+  cicd:
+    - '.github/**'
+    - 'scripts/**'
+    - 'Makefile'
+    - 'helpers.mk'
+    - '**/*.mk'
+
+  # Critical paths - triggers full rebuild
+  critical-paths:
+    - 'ark/config/crd/bases/**'   # CRD changes affect everything
+    - 'lib/ark-sdk/**'             # SDK changes affect all dependent services
+    - '.github/workflows/cicd.yaml' # Workflow changes require full validation
+    - 'Makefile'                   # Build system changes
+    - 'helpers.mk'                 # Build system changes
