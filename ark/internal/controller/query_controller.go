@@ -776,6 +776,7 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 		var agentCRD arkv1alpha1.Agent
 		agentKey := types.NamespacedName{Name: member.Name, Namespace: query.Namespace}
 		if err := impersonatedClient.Get(ctx, agentKey, &agentCRD); err != nil {
+			logf.FromContext(ctx).V(1).Info("unable to fetch agent for payload mode resolution, skipping", "agent", member.Name, "error", err)
 			continue
 		}
 		if agentCRD.Annotations == nil {
