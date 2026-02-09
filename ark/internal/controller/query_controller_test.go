@@ -210,7 +210,7 @@ var _ = Describe("Query Controller", func() {
 
 var _ = Describe("Query Controller Message Serialization", func() {
 	Context("When serializing messages", func() {
-		It("should serialize all message types correctly", func() {
+		It("should serialize all message types in OpenAI-compatible format", func() {
 			messages := []genai.Message{
 				genai.NewAssistantMessage("hello"),
 				genai.NewUserMessage("hi"),
@@ -221,22 +221,20 @@ var _ = Describe("Query Controller Message Serialization", func() {
 			jsonStr, err := serializeMessages(messages)
 			Expect(err).NotTo(HaveOccurred())
 
-			var decoded []genai.Message
+			var decoded []map[string]interface{}
 			Expect(json.Unmarshal([]byte(jsonStr), &decoded)).To(Succeed())
 			Expect(decoded).To(HaveLen(4))
-			Expect(decoded[0].Role).To(Equal("agent"))
-			Expect(decoded[1].Role).To(Equal("user"))
-			Expect(decoded[2].Role).To(Equal("agent"))
-			Expect(decoded[3].Role).To(Equal("agent"))
-			Expect(decoded[2].Metadata).To(HaveKeyWithValue("ark.mckinsey.com/role", "system"))
-			Expect(decoded[3].Metadata).To(HaveKeyWithValue("ark.mckinsey.com/role", "tool"))
+			Expect(decoded[0]).To(HaveKeyWithValue("role", "assistant"))
+			Expect(decoded[1]).To(HaveKeyWithValue("role", "user"))
+			Expect(decoded[2]).To(HaveKeyWithValue("role", "system"))
+			Expect(decoded[3]).To(HaveKeyWithValue("role", "tool"))
 		})
 
-		It("should return error for unknown message types", func() {
-			// Create a message with no known type
+		It("should handle empty messages gracefully", func() {
 			messages := []genai.Message{{}}
-			_, err := serializeMessages(messages)
+			jsonStr, err := serializeMessages(messages)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(jsonStr).NotTo(BeEmpty())
 		})
 	})
 })

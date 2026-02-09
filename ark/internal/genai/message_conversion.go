@@ -1,6 +1,7 @@
 package genai
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/openai/openai-go"
@@ -30,15 +31,9 @@ func A2AToOpenAIMessage(msg Message) (openai.ChatCompletionMessageParamUnion, er
 		assistant := openai.AssistantMessage(content)
 		if assistant.OfAssistant != nil && msg.Metadata != nil {
 			if value, ok := msg.Metadata[MetadataToolCallsKey]; ok {
-				switch calls := value.(type) {
-				case []openai.ChatCompletionMessageToolCallParam:
-					assistant.OfAssistant.ToolCalls = calls
-				case []openai.ChatCompletionMessageToolCall:
-					params := make([]openai.ChatCompletionMessageToolCallParam, len(calls))
-					for i, call := range calls {
-						params[i] = call.ToParam()
-					}
-					assistant.OfAssistant.ToolCalls = params
+				toolCalls := recoverToolCalls(value)
+				if len(toolCalls) > 0 {
+					assistant.OfAssistant.ToolCalls = toolCalls
 				}
 			}
 		}
@@ -48,10 +43,49 @@ func A2AToOpenAIMessage(msg Message) (openai.ChatCompletionMessageParamUnion, er
 	}
 }
 
+func recoverToolCalls(value interface{}) []openai.ChatCompletionMessageToolCallParam {
+	switch calls := value.(type) {
+	case []openai.ChatCompletionMessageToolCallParam:
+		return calls
+	case []openai.ChatCompletionMessageToolCall:
+		params := make([]openai.ChatCompletionMessageToolCallParam, len(calls))
+		for i, call := range calls {
+			params[i] = call.ToParam()
+		}
+		return params
+	default:
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return nil
+		}
+		var params []openai.ChatCompletionMessageToolCallParam
+		if err := json.Unmarshal(raw, &params); err == nil && len(params) > 0 {
+			return params
+		}
+		return nil
+	}
+}
+
+func extractUserContent(msg *openai.ChatCompletionUserMessageParam) string {
+	if msg.Content.OfString.Value != "" {
+		return msg.Content.OfString.Value
+	}
+	if len(msg.Content.OfArrayOfContentParts) > 0 {
+		var text string
+		for _, part := range msg.Content.OfArrayOfContentParts {
+			if part.OfText != nil {
+				text += part.OfText.Text
+			}
+		}
+		return text
+	}
+	return ""
+}
+
 func OpenAIToA2AMessage(msg openai.ChatCompletionMessageParamUnion) (Message, error) {
 	switch {
 	case msg.OfUser != nil:
-		content := msg.OfUser.Content.OfString.Value
+		content := extractUserContent(msg.OfUser)
 		return protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
 			protocol.NewTextPart(content),
 		}), nil

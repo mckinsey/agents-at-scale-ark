@@ -172,11 +172,23 @@ func (m *HTTPMemory) AddMessages(ctx context.Context, queryID string, messages [
 		return err
 	}
 
-	// Convert messages to the request format
-	reqBody, err := json.Marshal(MessagesRequest{
+	compatMessages := make([]interface{}, 0, len(messages))
+	for _, msg := range messages {
+		oaiMsg, convErr := A2AToOpenAIMessage(msg)
+		if convErr != nil {
+			compatMessages = append(compatMessages, msg)
+			continue
+		}
+		compatMessages = append(compatMessages, oaiMsg)
+	}
+	reqBody, err := json.Marshal(struct {
+		ConversationID string        `json:"conversation_id,omitempty"`
+		QueryID        string        `json:"query_id"`
+		Messages       []interface{} `json:"messages"`
+	}{
 		ConversationID: m.conversationId,
 		QueryID:        queryID,
-		Messages:       messages,
+		Messages:       compatMessages,
 	})
 	if err != nil {
 		operationData := map[string]string{"result": fmt.Sprintf("Failed to serialize messages: %v", err)}
