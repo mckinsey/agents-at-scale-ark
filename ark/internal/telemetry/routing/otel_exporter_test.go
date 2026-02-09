@@ -1,6 +1,7 @@
 package routing
 
 import (
+	"context"
 	"reflect"
 	"testing"
 )
@@ -144,6 +145,77 @@ func TestExtractPath(t *testing.T) {
 			got := extractPath(tt.url)
 			if got != tt.want {
 				t.Errorf("extractPath() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCreateOTELExporter(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  OTELEndpoint
+		wantErr bool
+	}{
+		{
+			name: "HTTP endpoint without headers",
+			config: OTELEndpoint{
+				Namespace: "test",
+				Endpoint:  "http://collector:4318/v1/traces",
+				TLS:       false,
+			},
+			wantErr: false,
+		},
+		{
+			name: "HTTPS endpoint with headers",
+			config: OTELEndpoint{
+				Namespace: "test",
+				Endpoint:  "https://api.honeycomb.io/v1/traces",
+				Headers:   "x-honeycomb-team=abc123",
+				TLS:       true,
+			},
+			wantErr: false,
+		},
+		{
+			name: "endpoint with multiple headers",
+			config: OTELEndpoint{
+				Namespace: "test",
+				Endpoint:  "http://collector:4318/v1/traces",
+				Headers:   "Authorization=Bearer token,x-tenant=test",
+				TLS:       false,
+			},
+			wantErr: false,
+		},
+		{
+			name: "langfuse configuration",
+			config: OTELEndpoint{
+				Namespace: "prod",
+				Endpoint:  "http://langfuse.svc:3000/api/public/otel",
+				Headers:   "Authorization=Basic dXNlcjpwYXNz",
+				TLS:       false,
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			exporter, err := createOTELExporter(ctx, tt.config)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("createOTELExporter() expected error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("createOTELExporter() error = %v", err)
+				return
+			}
+
+			if exporter == nil {
+				t.Error("createOTELExporter() returned nil exporter")
 			}
 		})
 	}

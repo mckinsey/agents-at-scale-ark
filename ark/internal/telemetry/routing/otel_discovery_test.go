@@ -1,10 +1,13 @@
 package routing
 
 import (
+	"context"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestParseOTELSecret(t *testing.T) {
@@ -79,6 +82,130 @@ func assertOTELEndpoint(t *testing.T, got, want *OTELEndpoint) {
 	}
 	if got == nil {
 		t.Fatal("got nil, want non-nil")
+	}
+	if got.Endpoint != want.Endpoint {
+		t.Errorf("Endpoint = %q, want %q", got.Endpoint, want.Endpoint)
+	}
+	if got.Headers != want.Headers {
+		t.Errorf("Headers = %q, want %q", got.Headers, want.Headers)
+	}
+	if got.TLS != want.TLS {
+		t.Errorf("TLS = %v, want %v", got.TLS, want.TLS)
+	}
+}
+
+func TestDiscoverOTELEndpoints(t *testing.T) {
+	tests := []struct {
+		name    string
+		secrets []runtime.Object
+		want    []OTELEndpoint
+	}{
+		{
+			name:    "nil client returns nil",
+			secrets: nil,
+			want:    nil,
+		},
+		{
+			name:    "no secrets returns empty",
+			secrets: []runtime.Object{},
+			want:    []OTELEndpoint{},
+		},
+		{
+			name: "ignores non-matching secrets",
+			secrets: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: "other-secret", Namespace: "ns1"},
+					Data:       map[string][]byte{"OTEL_EXPORTER_OTLP_ENDPOINT": []byte("http://collector:4318")},
+				},
+			},
+			want: []OTELEndpoint{},
+		},
+		{
+			name: "discovers single endpoint",
+			secrets: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: otelSecretName, Namespace: "tenant-a"},
+					Data:       map[string][]byte{"OTEL_EXPORTER_OTLP_ENDPOINT": []byte("http://collector:4318/v1/traces")},
+				},
+			},
+			want: []OTELEndpoint{
+				{Namespace: "tenant-a", Endpoint: "http://collector:4318/v1/traces", TLS: false},
+			},
+		},
+		{
+			name: "discovers multiple endpoints",
+			secrets: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: otelSecretName, Namespace: "tenant-a"},
+					Data:       map[string][]byte{"OTEL_EXPORTER_OTLP_ENDPOINT": []byte("http://collector-a:4318")},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: otelSecretName, Namespace: "tenant-b"},
+					Data: map[string][]byte{
+						"OTEL_EXPORTER_OTLP_ENDPOINT": []byte("https://collector-b:443"),
+						"OTEL_EXPORTER_OTLP_HEADERS":  []byte("Authorization=Bearer token"),
+					},
+				},
+			},
+			want: []OTELEndpoint{
+				{Namespace: "tenant-a", Endpoint: "http://collector-a:4318", TLS: false},
+				{Namespace: "tenant-b", Endpoint: "https://collector-b:443", Headers: "Authorization=Bearer token", TLS: true},
+			},
+		},
+		{
+			name: "skips secrets with missing endpoint",
+			secrets: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: otelSecretName, Namespace: "tenant-a"},
+					Data:       map[string][]byte{"OTEL_EXPORTER_OTLP_ENDPOINT": []byte("http://valid:4318")},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: otelSecretName, Namespace: "tenant-b"},
+					Data:       map[string][]byte{"OTHER_KEY": []byte("value")},
+				},
+			},
+			want: []OTELEndpoint{
+				{Namespace: "tenant-a", Endpoint: "http://valid:4318", TLS: false},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			if tt.name == "nil client returns nil" {
+				got, err := DiscoverOTELEndpoints(ctx, nil)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if got != nil {
+					t.Errorf("got %v, want nil", got)
+				}
+				return
+			}
+
+			client := fake.NewClientBuilder().WithRuntimeObjects(tt.secrets...).Build()
+			got, err := DiscoverOTELEndpoints(ctx, client)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %d endpoints, want %d", len(got), len(tt.want))
+			}
+
+			for i := range tt.want {
+				assertOTELEndpointEqual(t, got[i], tt.want[i])
+			}
+		})
+	}
+}
+
+func assertOTELEndpointEqual(t *testing.T, got, want OTELEndpoint) {
+	t.Helper()
+	if got.Namespace != want.Namespace {
+		t.Errorf("Namespace = %q, want %q", got.Namespace, want.Namespace)
 	}
 	if got.Endpoint != want.Endpoint {
 		t.Errorf("Endpoint = %q, want %q", got.Endpoint, want.Endpoint)
