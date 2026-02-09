@@ -633,11 +633,11 @@ func (r *QueryReconciler) performTargetExecution(ctx context.Context, query arkv
 	case targetTypeModel:
 		var messages []genai.Message
 		messages, err = r.executeModel(execCtx, query, inputMessages, target.Name, impersonatedClient, memory, eventStream)
-		result = &genai.ExecutionResult{Messages: messages}
+		result = &genai.ExecutionResult{Messages: messages, A2APayloadMode: genai.A2APayloadModeCompat}
 	case targetTypeTool:
 		var messages []genai.Message
 		messages, err = r.executeTool(execCtx, query, inputMessages, target.Name, impersonatedClient)
-		result = &genai.ExecutionResult{Messages: messages}
+		result = &genai.ExecutionResult{Messages: messages, A2APayloadMode: genai.A2APayloadModeCompat}
 	default:
 		panic(fmt.Errorf("unknown query target type:%s", target.Type))
 	}
@@ -696,13 +696,7 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 		return nil, err
 	}
 
-	if agentCRD.Annotations != nil {
-		if agentCRD.Annotations[annotations.A2AServerAddress] != "" {
-			payloadMode := genai.GetA2APayloadMode(agentCRD.Annotations)
-			result.A2APayloadMode = payloadMode
-			ctx = genai.WithA2APayloadMode(ctx, payloadMode)
-		}
-	}
+	ctx = genai.WithA2APayloadMode(ctx, result.A2APayloadMode)
 
 	// Save all new messages (input + response) to memory
 	newMessages := genai.PrepareNewMessagesForMemory(inputMessages, result.Messages)
@@ -739,7 +733,7 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 		return nil, err
 	}
 
-	payloadMode := genai.GetA2APayloadMode(query.Annotations)
+	payloadMode := genai.GetA2APayloadMode(teamCRD.Annotations)
 	result.A2APayloadMode = payloadMode
 	ctx = genai.WithA2APayloadMode(ctx, payloadMode)
 
