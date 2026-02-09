@@ -141,8 +141,9 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 	e.eventingRecorder.Complete(ctx, "A2AExecution", "A2A execution completed successfully", operationData)
 
 	return &ExecutionResult{
-		Messages:    []Message{responseMessage},
-		A2AResponse: a2aResponse,
+		Messages:       []Message{responseMessage},
+		A2AResponse:    a2aResponse,
+		A2APayloadMode: payloadMode,
 	}, nil
 }
 
@@ -160,8 +161,9 @@ func (e *A2AExecutionEngine) streamA2AExecution(ctx context.Context, address str
 	}
 	responseMessage := NewAssistantMessage(response.Content)
 	return &ExecutionResult{
-		Messages:    []Message{responseMessage},
-		A2AResponse: response,
+		Messages:       []Message{responseMessage},
+		A2AResponse:    response,
+		A2APayloadMode: payloadMode,
 	}, nil
 }
 
