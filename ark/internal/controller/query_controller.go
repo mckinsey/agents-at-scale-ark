@@ -733,7 +733,25 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 		return nil, err
 	}
 
-	payloadMode := genai.GetA2APayloadMode(teamCRD.Annotations)
+	agentAnnotations := make([]map[string]string, 0, len(teamCRD.Spec.Members))
+	for _, member := range teamCRD.Spec.Members {
+		if member.Type != genai.MemberTypeAgent {
+			continue
+		}
+		var agentCRD arkv1alpha1.Agent
+		agentKey := types.NamespacedName{Name: member.Name, Namespace: query.Namespace}
+		if err := impersonatedClient.Get(ctx, agentKey, &agentCRD); err != nil {
+			continue
+		}
+		if agentCRD.Annotations == nil {
+			continue
+		}
+		if agentCRD.Annotations[annotations.A2AServerAddress] == "" {
+			continue
+		}
+		agentAnnotations = append(agentAnnotations, agentCRD.Annotations)
+	}
+	payloadMode := genai.ResolvePayloadMode(teamCRD.Annotations, query.Annotations, agentAnnotations)
 	result.A2APayloadMode = payloadMode
 	ctx = genai.WithA2APayloadMode(ctx, payloadMode)
 
