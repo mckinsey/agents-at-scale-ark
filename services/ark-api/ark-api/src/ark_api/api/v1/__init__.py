@@ -22,7 +22,7 @@ from .api_keys import router as api_keys_router
 from .a2a_tasks import router as a2a_tasks_router
 from .resources import router as resources_router
 from .broker import router as broker_router
-from .proxy import proxy_router
+from .file_preview import router as file_preview_router
 
 router = APIRouter(prefix="/v1", tags=["v1"])
 
@@ -49,4 +49,4 @@ router.include_router(evaluators_router)
 router.include_router(api_keys_router)
 router.include_router(resources_router)
 router.include_router(broker_router)
-router.include_router(proxy_router)
+router.include_router(file_preview_router)
