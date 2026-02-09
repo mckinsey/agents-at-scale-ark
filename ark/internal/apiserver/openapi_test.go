@@ -69,6 +69,30 @@ func TestModelSchemaHasProperStructure(t *testing.T) {
 	}
 }
 
+func TestObjectMetaAnnotationsSchema(t *testing.T) {
+	defs := GetOpenAPIDefinitions(nil)
+
+	objectMeta, ok := defs["k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"]
+	if !ok {
+		t.Fatal("ObjectMeta definition not found")
+	}
+
+	annotations, ok := objectMeta.Schema.Properties["annotations"]
+	if !ok {
+		t.Fatal("ObjectMeta missing 'annotations' property")
+	}
+
+	addlProps := annotations.AdditionalProperties
+	if addlProps == nil || addlProps.Schema == nil {
+		t.Fatal("annotations missing additionalProperties schema")
+	}
+
+	schemaType := addlProps.Schema.Type
+	if len(schemaType) == 0 || schemaType[0] != "string" {
+		t.Errorf("annotations additionalProperties type = %v, want [string]", schemaType)
+	}
+}
+
 func TestAPIVersionByKind(t *testing.T) {
 	conv := NewRegistryTypeConverter()
 
