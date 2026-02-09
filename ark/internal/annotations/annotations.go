@@ -18,6 +18,13 @@ const (
 	A2AServerAddress = ARKPrefix + "a2a-server-address"
 	A2AServerSkills  = ARKPrefix + "a2a-server-skills"
 	A2AContextID     = ARKPrefix + "a2a-context-id"
+	A2AStreamingEnabled   = ARKPrefix + "a2a-streaming-enabled"
+	A2AStreamingSupported = ARKPrefix + "a2a-streaming-supported"
+	A2APayloadMode        = ARKPrefix + "a2a-payload-mode"
+	A2AHistoryEnabled     = ARKPrefix + "a2a-history-enabled"
+	A2AHistoryLimit       = ARKPrefix + "a2a-history-limit"
+	A2AExtensions         = ARKPrefix + "a2a-extensions"
+	A2APermissions        = ARKPrefix + "a2a-permissions"
 )
 
 // MCP annotations

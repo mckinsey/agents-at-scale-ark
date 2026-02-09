@@ -153,3 +153,21 @@ func TestStreamMetadata_Empty(t *testing.T) {
 	nonEmptyMeta := StreamMetadata{Query: "test"}
 	assert.Equal(t, "test", nonEmptyMeta.Query)
 }
+
+func TestWrapChunkWithA2A(t *testing.T) {
+	ctx := context.Background()
+	chunk := &openai.ChatCompletionChunk{
+		ID: "chunk-1",
+	}
+	payload := map[string]string{
+		"kind": "message",
+	}
+
+	result := WrapChunkWithA2A(ctx, chunk, "test-model", nil, payload)
+
+	wrapped, ok := result.(ChunkWithMetadata)
+	assert.True(t, ok)
+	assert.Equal(t, chunk, wrapped.ChatCompletionChunk)
+	assert.NotNil(t, wrapped.Ark)
+	assert.Equal(t, payload, wrapped.Ark.A2A)
+}

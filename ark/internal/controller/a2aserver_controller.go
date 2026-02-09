@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -254,11 +255,16 @@ func (r *A2AServerReconciler) createAgentWithSkills(ctx context.Context, a2aServ
 func (r *A2AServerReconciler) buildAgentWithSkills(a2aServer *arkv1prealpha1.A2AServer, agentCard *genai.A2AAgentCard, agentName string) *arkv1alpha1.Agent {
 	// Build skills annotation JSON
 	skillsJSON, _ := json.Marshal(agentCard.Skills)
+	streamingSupported := false
+	if agentCard.Capabilities.Streaming != nil {
+		streamingSupported = *agentCard.Capabilities.Streaming
+	}
 
 	agentAnnotations := map[string]string{
 		annotations.A2AServerName:    a2aServer.Name,
 		annotations.A2AServerAddress: a2aServer.Status.LastResolvedAddress,
 		annotations.A2AServerSkills:  string(skillsJSON),
+		annotations.A2AStreamingSupported: strconv.FormatBool(streamingSupported),
 	}
 
 	// Inherit ark.mckinsey.com annotations from A2AServer to Agent
