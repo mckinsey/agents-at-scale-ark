@@ -61,6 +61,34 @@ func discoverBrokerProcessor(ctx context.Context, k8sClient client.Client) trace
 	return routingProcessor
 }
 
+func discoverOTELProcessor(ctx context.Context, k8sClient client.Client) trace.SpanProcessor {
+	otelEndpoints, err := routing.DiscoverOTELEndpoints(ctx, k8sClient)
+	if err != nil {
+		log.Error(err, "failed to discover per-tenant OTEL endpoints")
+		return nil
+	}
+
+	if len(otelEndpoints) == 0 {
+		log.Info("no per-tenant OTEL endpoints discovered")
+		return nil
+	}
+
+	namespaces := make([]string, 0, len(otelEndpoints))
+	for _, endpoint := range otelEndpoints {
+		namespaces = append(namespaces, endpoint.Namespace)
+	}
+	log.Info("discovered per-tenant OTEL endpoints", "count", len(otelEndpoints), "namespaces", namespaces)
+
+	otelProcessor, err := routing.NewOTELRoutingProcessor(ctx, otelEndpoints)
+	if err != nil {
+		log.Error(err, "failed to create OTEL routing processor")
+		return nil
+	}
+
+	log.Info("OTEL routing processor configured", "tenants", len(otelEndpoints))
+	return otelProcessor
+}
+
 // NewProvider creates a telemetry provider based on configuration.
 // If OTEL endpoint is not configured and no brokers discovered, returns a no-op provider.
 func NewProvider(ctx context.Context, k8sClient client.Client) *Provider {
@@ -88,6 +116,12 @@ func NewProvider(ctx context.Context, k8sClient client.Client) *Provider {
 	if k8sClient != nil {
 		if processor := discoverBrokerProcessor(ctx, k8sClient); processor != nil {
 			spanProcessors = append(spanProcessors, processor)
+		}
+
+		if os.Getenv("ARK_TELEMETRY_OTEL_DISCOVERY") == "true" {
+			if processor := discoverOTELProcessor(ctx, k8sClient); processor != nil {
+				spanProcessors = append(spanProcessors, processor)
+			}
 		}
 	}
 

@@ -114,3 +114,12 @@ customCACert:
   enabled: false
   secretName: "custom-ca-cert"
   key: "ca.crt"
+
+# [TELEMETRY]: Telemetry and tracing configuration
+telemetry:
+  tenantRouting:
+    # Enable per-tenant OTEL endpoint discovery from Secrets.
+    # When enabled, the controller looks for Secrets named "otel-environment-variables"
+    # in each namespace containing OTEL_EXPORTER_OTLP_ENDPOINT and optional
+    # OTEL_EXPORTER_OTLP_HEADERS, then routes traces to those endpoints.
+    otelDiscovery: false

@@ -39,7 +39,94 @@ Some queries go directly from the controller to the OTEL endpoint, while others 
 └─────────────────────────┘
 ```
 
+## Per-Tenant OTEL Routing
 
+For multi-tenant deployments, Ark supports routing traces to tenant-specific OTEL endpoints. This enables:
+
+- **Tenant isolation** - Each tenant's traces go to their own observability backend
+- **Backend flexibility** - Different tenants can use different OTEL backends (Langfuse, Phoenix, Jaeger, Honeycomb, etc.)
+- **Cost attribution** - Observability costs can be attributed per tenant
+- **Compliance** - Meet data residency or access control requirements
+
+### Enabling Per-Tenant Routing
+
+Enable per-tenant OTEL discovery in your Helm values:
+
+```yaml
+telemetry:
+  tenantRouting:
+    otelDiscovery: true
+```
+
+### Tenant Configuration
+
+Each tenant configures their OTEL endpoint by creating a Secret named `otel-environment-variables` in their namespace:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: otel-environment-variables
+  namespace: <tenant-namespace>
+type: Opaque
+stringData:
+  OTEL_EXPORTER_OTLP_ENDPOINT: "https://otel-backend.example.com/v1/traces"
+  OTEL_EXPORTER_OTLP_HEADERS: "Authorization=Bearer <token>"
+```
+
+The controller discovers these Secrets at startup and routes traces based on the `query.namespace` attribute.
+
+### Example Backend Configurations
+
+**Langfuse:**
+```yaml
+stringData:
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://langfuse.svc:3000/api/public/otel"
+  OTEL_EXPORTER_OTLP_HEADERS: "Authorization=Basic <base64(pk:sk)>"
+```
+
+**Phoenix (Arize):**
+```yaml
+stringData:
+  OTEL_EXPORTER_OTLP_ENDPOINT: "https://app.phoenix.arize.com/v1/traces"
+  OTEL_EXPORTER_OTLP_HEADERS: "api_key=<phoenix_api_key>"
+```
+
+**Honeycomb:**
+```yaml
+stringData:
+  OTEL_EXPORTER_OTLP_ENDPOINT: "https://api.honeycomb.io/v1/traces"
+  OTEL_EXPORTER_OTLP_HEADERS: "x-honeycomb-team=<api_key>"
+```
+
+**Jaeger:**
+```yaml
+stringData:
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger-collector.svc:4318/v1/traces"
+```
+
+### Architecture with Per-Tenant Routing
+
+When per-tenant OTEL routing is enabled, traces are routed based on the query's namespace:
+
+```
+                      ARK Controller
+                            │
+              ┌─────────────┼─────────────┐
+              │             │             │
+              ▼             ▼             ▼
+        Primary OTEL   Tenant-A OTEL  Tenant-B OTEL
+        (platform)     (Langfuse)     (Phoenix)
+```
+
+### Applying Changes
+
+After creating or updating tenant OTEL Secrets, restart the controller to pick up new configurations:
+
+```bash
+kubectl rollout restart deployment/ark-controller -n ark-system
+kubectl rollout status deployment/ark-controller -n ark-system --timeout=120s
+```
 
 ## Automatic Injection of OTEL Configuration
 
