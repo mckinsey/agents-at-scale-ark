@@ -368,9 +368,12 @@ func StreamA2AAgent(ctx context.Context, k8sClient client.Client, address string
 		return events, nil
 	}
 
+	log := logf.FromContext(ctx)
+	log.V(1).Info("A2A message/stream failed, falling back to message/send", "agent", agentName, "error", streamErr)
+
 	result, sendErr := a2aClient.SendMessage(ctx, params)
 	if sendErr != nil {
-		return nil, sendErr
+		return nil, fmt.Errorf("A2A streaming failed (%w) and blocking fallback also failed: %w", streamErr, sendErr)
 	}
 	if result == nil || result.Result == nil {
 		return nil, fmt.Errorf("A2A streaming response is nil")

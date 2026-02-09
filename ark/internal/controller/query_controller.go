@@ -467,7 +467,15 @@ func messageToText(message genai.Message) string {
 }
 
 func serializeMessages(messages []genai.Message) (string, error) {
-	rawBytes, err := json.Marshal(messages)
+	openaiMessages := make([]interface{}, 0, len(messages))
+	for _, msg := range messages {
+		oaiMsg, err := genai.A2AToOpenAIMessage(msg)
+		if err != nil {
+			return "", fmt.Errorf("failed to convert message for serialization: %w", err)
+		}
+		openaiMessages = append(openaiMessages, oaiMsg)
+	}
+	rawBytes, err := json.Marshal(openaiMessages)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal messages: %w", err)
 	}
