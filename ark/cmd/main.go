@@ -334,9 +334,7 @@ func setupEmbeddedApiserver(mgr ctrl.Manager) {
 		return
 	}
 
-	cfg := apiserver.Config{
-		StorageBackend: backend,
-	}
+	cfg := apiserver.Config{}
 
 	if portStr := os.Getenv("ARK_APISERVER_PORT"); portStr != "" {
 		port, err := strconv.Atoi(portStr)
@@ -347,24 +345,17 @@ func setupEmbeddedApiserver(mgr ctrl.Manager) {
 		cfg.BindPort = port
 	}
 
-	switch backend {
-	case "sqlite":
-		if path := os.Getenv("ARK_SQLITE_PATH"); path != "" {
-			cfg.SQLitePath = path
-		}
-	case "postgresql":
-		cfg.PostgresHost = os.Getenv("ARK_POSTGRES_HOST")
-		if portStr := os.Getenv("ARK_POSTGRES_PORT"); portStr != "" {
-			port, _ := strconv.Atoi(portStr)
-			cfg.PostgresPort = port
-		}
-		cfg.PostgresDB = os.Getenv("ARK_POSTGRES_DATABASE")
-		cfg.PostgresUser = os.Getenv("ARK_POSTGRES_USER")
-		cfg.PostgresPass = os.Getenv("ARK_POSTGRES_PASSWORD")
-		cfg.PostgresSSL = os.Getenv("ARK_POSTGRES_SSL_MODE")
-		if cfg.PostgresSSL == "" {
-			cfg.PostgresSSL = "disable"
-		}
+	cfg.PostgresHost = os.Getenv("ARK_POSTGRES_HOST")
+	if portStr := os.Getenv("ARK_POSTGRES_PORT"); portStr != "" {
+		port, _ := strconv.Atoi(portStr)
+		cfg.PostgresPort = port
+	}
+	cfg.PostgresDB = os.Getenv("ARK_POSTGRES_DATABASE")
+	cfg.PostgresUser = os.Getenv("ARK_POSTGRES_USER")
+	cfg.PostgresPass = os.Getenv("ARK_POSTGRES_PASSWORD")
+	cfg.PostgresSSL = os.Getenv("ARK_POSTGRES_SSL_MODE")
+	if cfg.PostgresSSL == "" {
+		cfg.PostgresSSL = "disable"
 	}
 
 	server := apiserver.New(cfg)
