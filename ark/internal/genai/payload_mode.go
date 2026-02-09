@@ -16,19 +16,25 @@ func ResolvePayloadMode(teamAnnotations, queryAnnotations map[string]string, age
 		}
 	}
 	if len(agentAnnotations) > 0 {
-		hasCompat := false
+		hasExplicitCompat := false
 		hasNative := false
-		for _, annotations := range agentAnnotations {
-			mode := GetA2APayloadMode(annotations)
-			if mode == A2APayloadModeCompat {
-				hasCompat = true
+		for _, ann := range agentAnnotations {
+			if ann == nil {
 				continue
+			}
+			explicit := ann[arkann.A2APayloadMode]
+			if explicit == "" {
+				continue
+			}
+			mode := GetA2APayloadMode(ann)
+			if mode == A2APayloadModeCompat {
+				hasExplicitCompat = true
 			}
 			if mode == A2APayloadModeNative {
 				hasNative = true
 			}
 		}
-		if hasCompat {
+		if hasExplicitCompat {
 			return A2APayloadModeCompat
 		}
 		if hasNative {
