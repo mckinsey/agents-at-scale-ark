@@ -433,7 +433,7 @@ describe('FilesSection', () => {
       render(<FilesSection />);
 
       const fileRow = screen.getByRole('row', { name: /report\.pdf/i });
-      const downloadButton = within(fileRow).getAllByRole('button')[0];
+      const downloadButton = within(fileRow).getAllByRole('button')[1];
 
       expect(downloadButton).toBeInTheDocument();
     });
@@ -445,7 +445,7 @@ describe('FilesSection', () => {
 
       const fileRow = await screen.findByRole('row', { name: /report\.pdf/i });
       const buttons = within(fileRow).getAllByRole('button');
-      const downloadButton = buttons[0];
+      const downloadButton = buttons[1];
 
       fireEvent.click(downloadButton);
 

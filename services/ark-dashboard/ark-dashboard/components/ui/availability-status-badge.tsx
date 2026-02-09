@@ -54,7 +54,10 @@ export function AvailabilityStatusBadge({
   // If eventsLink is provided, wrap in a Link component
   if (eventsLink) {
     return (
-      <Link href={eventsLink} title="View events">
+      <Link
+        href={eventsLink}
+        title="View events"
+        onClick={e => e.stopPropagation()}>
         {badgeContent}
       </Link>
     );
