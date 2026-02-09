@@ -43,8 +43,10 @@ RUN curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm
 
 # Install argo CLI
 RUN ARGO_VERSION=$(curl -s https://api.github.com/repos/argoproj/argo-workflows/releases/latest | grep '"tag_name"' | cut -d '"' -f 4) && \
-    curl -sL "https://github.com/argoproj/argo-workflows/releases/download/${ARGO_VERSION}/argo-linux-amd64" -o /usr/local/bin/argo && \
-    chmod +x /usr/local/bin/argo
+    curl -sLO "https://github.com/argoproj/argo-workflows/releases/download/${ARGO_VERSION}/argo-linux-amd64.gz" && \
+    gunzip argo-linux-amd64.gz && \
+    chmod +x argo-linux-amd64 && \
+    mv argo-linux-amd64 /usr/local/bin/argo
 
 # Install devspace
 RUN curl -sL https://github.com/devspace-sh/devspace/releases/latest/download/devspace-linux-amd64 -o /usr/local/bin/devspace && \
