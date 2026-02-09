@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.52](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.51...v0.1.52) (2026-02-02)
+
+
+### Bug Fixes
+
+* Resolve CVE-2026-23864: bump next to 16.1.6 ([#1006](https://github.com/mckinsey/agents-at-scale-ark/issues/1006)) ([1b8fafd](https://github.com/mckinsey/agents-at-scale-ark/commit/1b8fafd921e40b8bde599765c1fc965057407a31))
+
 ## [0.1.51](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.50...v0.1.51) (2026-01-30)
 
 
