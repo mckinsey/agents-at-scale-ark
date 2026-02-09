@@ -30,11 +30,22 @@ type SelectorTemplateData struct {
 func buildHistory(messages []Message) string {
 	var history []string
 	for _, msg := range messages {
-		if m := msg.OfAssistant; m != nil {
-			history = append(history, fmt.Sprintf("# %s:\n%s\n", m.Name.Value, m.Content.OfString))
+		role := resolveMessageRole(msg)
+		text := extractTextFromParts(msg.Parts)
+		if text == "" {
+			continue
 		}
-		if m := msg.OfUser; m != nil {
-			history = append(history, fmt.Sprintf("# user:\n%s\n", m.Content.OfString))
+		switch role {
+		case RoleAssistant:
+			name := "assistant"
+			if msg.Metadata != nil {
+				if value, ok := msg.Metadata[MetadataAgentNameKey].(string); ok && value != "" {
+					name = value
+				}
+			}
+			history = append(history, fmt.Sprintf("# %s:\n%s\n", name, text))
+		case RoleUser:
+			history = append(history, fmt.Sprintf("# user:\n%s\n", text))
 		}
 	}
 	return strings.Join(history, "\n")
@@ -119,12 +130,10 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 
 	var selectedName string
 	lastMsg := result.Messages[len(result.Messages)-1]
-	if lastMsg.OfAssistant != nil && lastMsg.OfAssistant.Content.OfString.Value != "" {
-		selectedName = strings.TrimSpace(lastMsg.OfAssistant.Content.OfString.Value)
-		logger := logf.FromContext(ctx)
-		logger.Info("Selector chose", "selectedName", selectedName)
-
-	} else {
+	if resolveMessageRole(lastMsg) == RoleAssistant {
+		selectedName = strings.TrimSpace(extractTextFromParts(lastMsg.Parts))
+	}
+	if selectedName == "" {
 		return nil, fmt.Errorf("selector agent returned invalid response")
 	}
 

@@ -493,42 +493,11 @@ func lastResponseContent(messages []genai.Message) string {
 // messageToText extracts text content from a single OpenAI message format structure.
 // This function assumes the message follows OpenAI's ChatCompletionMessageParamUnion format.
 func messageToText(message genai.Message) string {
-	switch {
-	case message.OfAssistant != nil:
-		return message.OfAssistant.Content.OfString.Value
-	case message.OfTool != nil:
-		return message.OfTool.Content.OfString.Value
-	case message.OfUser != nil:
-		return message.OfUser.Content.OfString.Value
-	default:
-		logf.Log.Error(fmt.Errorf("LLMResponseMalformed"),
-			"Unable to parse message content to text",
-			"messageContent", "unknown message structure",
-			"message", message)
-		return ""
-	}
+	return genai.ExtractTextFromMessage(message)
 }
 
-// serializeMessages converts OpenAI union message types to their actual content for JSON serialization
 func serializeMessages(messages []genai.Message) (string, error) {
-	var actualMessages []interface{}
-	for _, msg := range messages {
-		switch {
-		case msg.OfAssistant != nil:
-			actualMessages = append(actualMessages, msg.OfAssistant)
-		case msg.OfUser != nil:
-			actualMessages = append(actualMessages, msg.OfUser)
-		case msg.OfSystem != nil:
-			actualMessages = append(actualMessages, msg.OfSystem)
-		case msg.OfTool != nil:
-			actualMessages = append(actualMessages, msg.OfTool)
-		case msg.OfFunction != nil:
-			actualMessages = append(actualMessages, msg.OfFunction)
-		default:
-			return "", fmt.Errorf("unknown message type encountered during serialization")
-		}
-	}
-	rawBytes, err := json.Marshal(actualMessages)
+	rawBytes, err := json.Marshal(messages)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal messages: %w", err)
 	}
@@ -861,15 +830,14 @@ func (r *QueryReconciler) executeTool(ctx context.Context, crd arkv1alpha1.Query
 
 	// For tools, extract the content from the last message as tool arguments
 	lastMessage := inputMessages[len(inputMessages)-1]
-	var resolvedInput string
-	switch {
-	case lastMessage.OfUser != nil:
-		resolvedInput = lastMessage.OfUser.Content.OfString.Value
-	case lastMessage.OfAssistant != nil:
-		resolvedInput = lastMessage.OfAssistant.Content.OfString.Value
-	case lastMessage.OfTool != nil:
-		resolvedInput = lastMessage.OfTool.Content.OfString.Value
-	default:
+	resolvedInput := genai.ExtractLastAssistantMessageContent([]genai.Message{lastMessage})
+	if resolvedInput == "" {
+		resolvedInput = genai.ExtractUserMessageContent([]genai.Message{lastMessage})
+	}
+	if resolvedInput == "" {
+		resolvedInput = genai.ExtractLastAssistantMessageContent(inputMessages)
+	}
+	if resolvedInput == "" {
 		return nil, fmt.Errorf("unable to extract content from input message")
 	}
 
@@ -1001,7 +969,10 @@ func (r *QueryReconciler) executeModelWithStreaming(ctx context.Context, model *
 
 	// Create the assistant message with the full response (preserves tool calls if present)
 	// This matches the non-streaming path but uses the full message instead of just content
-	assistantMessage := genai.Message(choice.Message.ToParam())
+	assistantMessage, err := genai.OpenAIToA2AMessage(choice.Message.ToParam())
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert model message: %w", err)
+	}
 	responseMessages := []genai.Message{assistantMessage}
 
 	return responseMessages, nil

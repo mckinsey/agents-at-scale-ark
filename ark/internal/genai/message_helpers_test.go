@@ -5,8 +5,6 @@ package genai
 import (
 	"reflect"
 	"testing"
-
-	"github.com/openai/openai-go"
 )
 
 // Test constants to avoid duplication
@@ -31,10 +29,22 @@ func createTestMessage(role, content string) Message {
 	case "assistant":
 		return NewAssistantMessage(content)
 	case "system":
-		return Message(openai.SystemMessage(content))
+		return NewSystemMessage(content)
 	default:
 		panic("unsupported role: " + role)
 	}
+}
+
+func messageSignature(message Message) string {
+	return resolveMessageRole(message) + ":" + extractTextFromParts(message.Parts)
+}
+
+func messagesSignature(messages []Message) []string {
+	signatures := make([]string, len(messages))
+	for i, message := range messages {
+		signatures[i] = messageSignature(message)
+	}
+	return signatures
 }
 
 func TestPrepareExecutionMessages(t *testing.T) {
@@ -127,11 +137,11 @@ func TestPrepareExecutionMessages(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			gotCurrent, gotContext := PrepareExecutionMessages(tt.inputMessages, tt.memoryMessages)
 
-			if !reflect.DeepEqual(gotCurrent, tt.wantCurrent) {
+			if messageSignature(gotCurrent) != messageSignature(tt.wantCurrent) {
 				t.Errorf("PrepareExecutionMessages() current message = %v, want %v", gotCurrent, tt.wantCurrent)
 			}
 
-			if !reflect.DeepEqual(gotContext, tt.wantContext) {
+			if !reflect.DeepEqual(messagesSignature(gotContext), messagesSignature(tt.wantContext)) {
 				t.Errorf("PrepareExecutionMessages() context messages = %v, want %v", gotContext, tt.wantContext)
 			}
 
@@ -219,7 +229,7 @@ func TestPrepareModelMessages(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := PrepareModelMessages(tt.inputMessages, tt.memoryMessages)
 
-			if !reflect.DeepEqual(got, tt.want) {
+			if !reflect.DeepEqual(messagesSignature(got), messagesSignature(tt.want)) {
 				t.Errorf("PrepareModelMessages() = %v, want %v", got, tt.want)
 			}
 
@@ -333,7 +343,7 @@ func TestPrepareNewMessagesForMemory(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := PrepareNewMessagesForMemory(tt.inputMessages, tt.responseMessages)
 
-			if !reflect.DeepEqual(got, tt.want) {
+			if !reflect.DeepEqual(messagesSignature(got), messagesSignature(tt.want)) {
 				t.Errorf("PrepareNewMessagesForMemory() = %v, want %v", got, tt.want)
 			}
 

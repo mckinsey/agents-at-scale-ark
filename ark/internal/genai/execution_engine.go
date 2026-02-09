@@ -77,52 +77,11 @@ type ExecutionEngineResponse struct {
 
 // convertToExecutionEngineMessage converts internal genai.Message to ExecutionEngineMessage format
 func convertToExecutionEngineMessage(msg Message) ExecutionEngineMessage {
-	// Handle different message types from OpenAI ChatCompletionMessageParamUnion
-	if msg.OfUser != nil {
-		content := ""
-		if msg.OfUser.Content.OfString.Value != "" {
-			content = msg.OfUser.Content.OfString.Value
-		}
-		return ExecutionEngineMessage{
-			Role:    "user",
-			Content: content,
-		}
-	}
-	if msg.OfAssistant != nil {
-		content := ""
-		if msg.OfAssistant.Content.OfString.Value != "" {
-			content = msg.OfAssistant.Content.OfString.Value
-		}
-		return ExecutionEngineMessage{
-			Role:    "assistant",
-			Content: content,
-		}
-	}
-	if msg.OfSystem != nil {
-		content := ""
-		if msg.OfSystem.Content.OfString.Value != "" {
-			content = msg.OfSystem.Content.OfString.Value
-		}
-		return ExecutionEngineMessage{
-			Role:    "system",
-			Content: content,
-		}
-	}
-	if msg.OfTool != nil {
-		content := ""
-		if msg.OfTool.Content.OfString.Value != "" {
-			content = msg.OfTool.Content.OfString.Value
-		}
-		return ExecutionEngineMessage{
-			Role:    "tool",
-			Content: content,
-		}
-	}
-
-	// Fallback for unknown message types
+	role := resolveMessageRole(msg)
+	content := extractTextFromParts(msg.Parts)
 	return ExecutionEngineMessage{
-		Role:    "user",
-		Content: "",
+		Role:    role,
+		Content: content,
 	}
 }
 
@@ -136,11 +95,8 @@ func convertFromExecutionEngineMessage(msg ExecutionEngineMessage) Message {
 	case RoleSystem:
 		return NewSystemMessage(msg.Content)
 	case RoleTool:
-		// For tool messages, we need a tool call ID, but execution engines don't provide it
-		// So we'll convert to assistant message for now
-		return NewAssistantMessage(msg.Content)
+		return ToolMessage(msg.Content, "")
 	default:
-		// Default to user message for unknown roles
 		return NewUserMessage(msg.Content)
 	}
 }

@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/openai/openai-go"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -134,7 +133,7 @@ func TestUnmarshalMessageRobust(t *testing.T) {
 				t.Errorf("Expected error for %s, but got none. Description: %s", tc.name, tc.description)
 			case !tc.expectError && err != nil:
 				t.Errorf("Unexpected error for %s: %v. Description: %s", tc.name, err, tc.description)
-			case !tc.expectError && result == (openai.ChatCompletionMessageParamUnion{}):
+			case !tc.expectError && result.Role == "" && len(result.Parts) == 0:
 				t.Errorf("Got empty message for %s. Description: %s", tc.name, tc.description)
 			}
 		})
@@ -151,7 +150,7 @@ func TestUnmarshalMessageRobustFutureRoles(t *testing.T) {
 			if err != nil {
 				t.Errorf("Future role '%s' should not fail: %v", role, err)
 			}
-			if result == (openai.ChatCompletionMessageParamUnion{}) {
+			if result.Role == "" && len(result.Parts) == 0 {
 				t.Errorf("Future role '%s' should produce valid message", role)
 			}
 		})
@@ -204,7 +203,7 @@ func TestHTTPMemoryAddMessagesWithHeaders(t *testing.T) {
 				"Authorization": "Bearer test-token",
 			},
 			messages: []Message{
-				Message(openai.UserMessage("test message")),
+				NewUserMessage("test message"),
 			},
 		},
 		{
@@ -220,8 +219,8 @@ func TestHTTPMemoryAddMessagesWithHeaders(t *testing.T) {
 				"X-API-Key":       "api-key-123",
 			},
 			messages: []Message{
-				Message(openai.UserMessage("message 1")),
-				Message(openai.AssistantMessage("message 2")),
+				NewUserMessage("message 1"),
+				NewAssistantMessage("message 2"),
 			},
 		},
 		{
@@ -229,7 +228,7 @@ func TestHTTPMemoryAddMessagesWithHeaders(t *testing.T) {
 			headers:         map[string]string{},
 			expectedHeaders: map[string]string{},
 			messages: []Message{
-				Message(openai.UserMessage("test")),
+				NewUserMessage("test"),
 			},
 		},
 	}
@@ -466,7 +465,8 @@ func TestHTTPMemoryHeadersLoadedFromStatus(t *testing.T) {
 	httpMemory, err := NewHTTPMemory(ctx, fakeClient, "header-memory", "default", Config{}, &noOpMemoryRecorder{})
 	require.NoError(t, err)
 
-	mem := httpMemory.(*HTTPMemory)
+	mem, ok := httpMemory.(*HTTPMemory)
+	require.True(t, ok)
 	require.Equal(t, expectedHeaders, mem.headers, "Headers should be resolved from Memory spec on-demand")
 }
 
@@ -530,7 +530,7 @@ func TestHTTPMemoryHeadersUpdatedOnResolve(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	err := httpMemory.AddMessages(ctx, "query-id", []Message{Message(openai.UserMessage("test"))})
+	err := httpMemory.AddMessages(ctx, "query-id", []Message{NewUserMessage("test")})
 	require.NoError(t, err)
 
 	require.Equal(t, "Bearer updated-token", receivedHeaders.Get("Authorization"),
@@ -580,7 +580,7 @@ func TestHTTPMemoryEmptyHeaders(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	err := httpMemory.AddMessages(ctx, "query-id", []Message{Message(openai.UserMessage("test"))})
+	err := httpMemory.AddMessages(ctx, "query-id", []Message{NewUserMessage("test")})
 	require.NoError(t, err)
 }
 
@@ -721,7 +721,8 @@ func TestNewHTTPMemoryWithMixedHeaderSources(t *testing.T) {
 	httpMemory, err := NewHTTPMemory(ctx, fakeClient, "mixed-headers-memory", "default", Config{}, &noOpMemoryRecorder{})
 	require.NoError(t, err)
 
-	mem := httpMemory.(*HTTPMemory)
+	mem, ok := httpMemory.(*HTTPMemory)
+	require.True(t, ok)
 	require.Equal(t, "direct-value", mem.headers["X-Direct"])
 	require.Equal(t, "Bearer secret-token-123", mem.headers["Authorization"])
 	require.Equal(t, "config-api-key-456", mem.headers["X-API-Key"])

@@ -11,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
@@ -42,9 +43,8 @@ func TestGetQueryInputMessages(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, messages, 1)
 
-		// Check that it's a user message
-		assert.NotNil(t, messages[0].OfUser)
-		assert.Equal(t, "Hello, how are you?", messages[0].OfUser.Content.OfString.Value)
+		assert.Equal(t, protocol.MessageRoleUser, messages[0].Role)
+		assert.Equal(t, "Hello, how are you?", extractTextFromParts(messages[0].Parts))
 	})
 
 	t.Run("user type with template parameters", func(t *testing.T) {
@@ -95,9 +95,8 @@ func TestGetQueryInputMessages(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, messages, 1)
 
-		// Check that template was resolved
-		assert.NotNil(t, messages[0].OfUser)
-		assert.Equal(t, "What's the weather in Berlin?", messages[0].OfUser.Content.OfString.Value)
+		assert.Equal(t, protocol.MessageRoleUser, messages[0].Role)
+		assert.Equal(t, "What's the weather in Berlin?", extractTextFromParts(messages[0].Parts))
 	})
 
 	t.Run("messages type with multiple messages", func(t *testing.T) {
@@ -126,17 +125,14 @@ func TestGetQueryInputMessages(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, messages, 3)
 
-		// Check first message (user)
-		assert.NotNil(t, messages[0].OfUser)
-		assert.Equal(t, "Hello!", messages[0].OfUser.Content.OfString.Value)
+		assert.Equal(t, protocol.MessageRoleUser, messages[0].Role)
+		assert.Equal(t, "Hello!", extractTextFromParts(messages[0].Parts))
 
-		// Check second message (assistant)
-		assert.NotNil(t, messages[1].OfAssistant)
-		assert.Equal(t, "Hi there! How can I help you?", messages[1].OfAssistant.Content.OfString.Value)
+		assert.Equal(t, protocol.MessageRoleAgent, messages[1].Role)
+		assert.Equal(t, "Hi there! How can I help you?", extractTextFromParts(messages[1].Parts))
 
-		// Check third message (user)
-		assert.NotNil(t, messages[2].OfUser)
-		assert.Equal(t, "What's the weather like?", messages[2].OfUser.Content.OfString.Value)
+		assert.Equal(t, protocol.MessageRoleUser, messages[2].Role)
+		assert.Equal(t, "What's the weather like?", extractTextFromParts(messages[2].Parts))
 	})
 
 	t.Run("messages type with system message", func(t *testing.T) {
@@ -164,13 +160,12 @@ func TestGetQueryInputMessages(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, messages, 2)
 
-		// Check system message
-		assert.NotNil(t, messages[0].OfSystem)
-		assert.Equal(t, "You are a helpful assistant.", messages[0].OfSystem.Content.OfString.Value)
+		assert.Equal(t, protocol.MessageRoleAgent, messages[0].Role)
+		assert.Equal(t, RoleSystem, resolveMessageRole(messages[0]))
+		assert.Equal(t, "You are a helpful assistant.", extractTextFromParts(messages[0].Parts))
 
-		// Check user message
-		assert.NotNil(t, messages[1].OfUser)
-		assert.Equal(t, "Hello!", messages[1].OfUser.Content.OfString.Value)
+		assert.Equal(t, protocol.MessageRoleUser, messages[1].Role)
+		assert.Equal(t, "Hello!", extractTextFromParts(messages[1].Parts))
 	})
 
 	t.Run("messages type with tool message", func(t *testing.T) {
@@ -196,7 +191,8 @@ func TestGetQueryInputMessages(t *testing.T) {
 		messages, err := GetQueryInputMessages(ctx, query, k8sClient)
 		require.NoError(t, err)
 		require.Len(t, messages, 1)
-		assert.NotNil(t, messages[0].OfTool)
+		assert.Equal(t, protocol.MessageRoleAgent, messages[0].Role)
+		assert.Equal(t, RoleTool, resolveMessageRole(messages[0]))
 	})
 
 	t.Run("empty type defaults to user", func(t *testing.T) {
@@ -220,9 +216,8 @@ func TestGetQueryInputMessages(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, messages, 1)
 
-		// Check that it defaults to user type
-		assert.NotNil(t, messages[0].OfUser)
-		assert.Equal(t, "Default behavior test", messages[0].OfUser.Content.OfString.Value)
+		assert.Equal(t, protocol.MessageRoleUser, messages[0].Role)
+		assert.Equal(t, "Default behavior test", extractTextFromParts(messages[0].Parts))
 	})
 
 	t.Run("user type with template resolution error", func(t *testing.T) {
