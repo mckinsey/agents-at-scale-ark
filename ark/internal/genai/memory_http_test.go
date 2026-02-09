@@ -3,6 +3,7 @@ package genai
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -302,6 +303,114 @@ func TestHTTPMemoryAddMessagesWithHeaders(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHTTPMemoryAddMessagesFormatCompat(t *testing.T) {
+	var requestBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == MessagesEndpoint && r.Method == http.MethodPost {
+			requestBody, _ = io.ReadAll(r.Body)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	resolvedAddress := server.URL
+	memory := &arkv1alpha1.Memory{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-memory",
+			Namespace: "default",
+		},
+		Spec: arkv1alpha1.MemorySpec{
+			Address: arkv1alpha1.ValueSource{
+				Value: server.URL,
+			},
+		},
+		Status: arkv1alpha1.MemoryStatus{
+			LastResolvedAddress: &resolvedAddress,
+			Phase:               "ready",
+		},
+	}
+
+	fakeClient := setupMemoryTestClient([]client.Object{memory})
+	httpMemory := &HTTPMemory{
+		client:           fakeClient,
+		httpClient:       server.Client(),
+		baseURL:          server.URL,
+		conversationId:   "test-conv-id",
+		name:             "test-memory",
+		namespace:        "default",
+		headers:          make(map[string]string),
+		eventingRecorder: &noOpMemoryRecorder{},
+	}
+
+	ctx := context.Background()
+	err := httpMemory.AddMessages(ctx, "query-id", []Message{NewUserMessage("hello")})
+	require.NoError(t, err)
+
+	var decoded struct {
+		Messages []map[string]interface{} `json:"messages"`
+	}
+	require.NoError(t, json.Unmarshal(requestBody, &decoded))
+	require.Len(t, decoded.Messages, 1)
+	require.NotNil(t, decoded.Messages[0]["content"])
+	require.Nil(t, decoded.Messages[0]["parts"])
+}
+
+func TestHTTPMemoryAddMessagesFormatNative(t *testing.T) {
+	var requestBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == MessagesEndpoint && r.Method == http.MethodPost {
+			requestBody, _ = io.ReadAll(r.Body)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	resolvedAddress := server.URL
+	memory := &arkv1alpha1.Memory{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-memory",
+			Namespace: "default",
+		},
+		Spec: arkv1alpha1.MemorySpec{
+			Address: arkv1alpha1.ValueSource{
+				Value: server.URL,
+			},
+		},
+		Status: arkv1alpha1.MemoryStatus{
+			LastResolvedAddress: &resolvedAddress,
+			Phase:               "ready",
+		},
+	}
+
+	fakeClient := setupMemoryTestClient([]client.Object{memory})
+	httpMemory := &HTTPMemory{
+		client:           fakeClient,
+		httpClient:       server.Client(),
+		baseURL:          server.URL,
+		conversationId:   "test-conv-id",
+		name:             "test-memory",
+		namespace:        "default",
+		headers:          make(map[string]string),
+		eventingRecorder: &noOpMemoryRecorder{},
+	}
+
+	ctx := WithA2APayloadMode(context.Background(), A2APayloadModeNative)
+	err := httpMemory.AddMessages(ctx, "query-id", []Message{NewUserMessage("hello")})
+	require.NoError(t, err)
+
+	var decoded struct {
+		Messages []map[string]interface{} `json:"messages"`
+	}
+	require.NoError(t, json.Unmarshal(requestBody, &decoded))
+	require.Len(t, decoded.Messages, 1)
+	require.NotNil(t, decoded.Messages[0]["parts"])
+	require.Nil(t, decoded.Messages[0]["content"])
 }
 
 func TestHTTPMemoryGetMessagesWithHeaders(t *testing.T) {

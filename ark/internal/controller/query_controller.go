@@ -436,7 +436,7 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 		return nil
 	}
 
-	response := r.createSuccessResponse(target, executionResult.Messages)
+	response := r.createSuccessResponse(target, executionResult.Messages, executionResult.A2APayloadMode)
 	if executionResult.A2AResponse != nil {
 		response.A2A = &arkv1alpha1.A2AMetadata{
 			ContextID: executionResult.A2AResponse.ContextID,
@@ -447,8 +447,8 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 	return &response
 }
 
-func (r *QueryReconciler) createSuccessResponse(target arkv1alpha1.QueryTarget, messages []genai.Message) arkv1alpha1.Response {
-	rawJSON, err := serializeMessages(messages)
+func (r *QueryReconciler) createSuccessResponse(target arkv1alpha1.QueryTarget, messages []genai.Message, payloadMode string) arkv1alpha1.Response {
+	rawJSON, err := serializeMessages(messages, payloadMode)
 	if err != nil {
 		serializationErr := fmt.Errorf("failed to serialize messages for target %v: %w", target, err)
 		return r.createErrorResponse(target, serializationErr)
@@ -466,7 +466,14 @@ func messageToText(message genai.Message) string {
 	return genai.ExtractTextFromMessage(message)
 }
 
-func serializeMessages(messages []genai.Message) (string, error) {
+func serializeMessages(messages []genai.Message, payloadMode string) (string, error) {
+	if payloadMode == genai.A2APayloadModeNative {
+		rawBytes, err := json.Marshal(messages)
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal messages: %w", err)
+		}
+		return string(rawBytes), nil
+	}
 	openaiMessages := make([]interface{}, 0, len(messages))
 	for _, msg := range messages {
 		oaiMsg, err := genai.A2AToOpenAIMessage(msg)
@@ -689,6 +696,14 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 		return nil, err
 	}
 
+	if agentCRD.Annotations != nil {
+		if agentCRD.Annotations[annotations.A2AServerAddress] != "" {
+			payloadMode := genai.GetA2APayloadMode(agentCRD.Annotations)
+			result.A2APayloadMode = payloadMode
+			ctx = genai.WithA2APayloadMode(ctx, payloadMode)
+		}
+	}
+
 	// Save all new messages (input + response) to memory
 	newMessages := genai.PrepareNewMessagesForMemory(inputMessages, result.Messages)
 	if err := memory.AddMessages(ctx, query.Name, newMessages); err != nil {
@@ -723,6 +738,10 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 	if err != nil {
 		return nil, err
 	}
+
+	payloadMode := genai.GetA2APayloadMode(query.Annotations)
+	result.A2APayloadMode = payloadMode
+	ctx = genai.WithA2APayloadMode(ctx, payloadMode)
 
 	// Save all new messages (input + response) to memory
 	newMessages := genai.PrepareNewMessagesForMemory(inputMessages, result.Messages)

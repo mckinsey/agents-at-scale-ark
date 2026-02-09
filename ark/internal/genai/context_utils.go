@@ -20,6 +20,7 @@ const (
 	teamKey   contextKey = "team"   // Current team name
 	agentKey  contextKey = "agent"  // Current agent name
 	modelKey  contextKey = "model"  // Current model name
+	a2aPayloadModeKey contextKey = "a2aPayloadMode"
 )
 
 func WithQueryContext(ctx context.Context, queryID, sessionID, queryName string) context.Context {
@@ -103,6 +104,22 @@ func GetA2AContextID(ctx context.Context) string {
 	if val := ctx.Value(a2aContextIDKey); val != nil {
 		if contextID, ok := val.(string); ok {
 			return contextID
+		}
+	}
+	return ""
+}
+
+func WithA2APayloadMode(ctx context.Context, payloadMode string) context.Context {
+	if payloadMode == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, a2aPayloadModeKey, payloadMode)
+}
+
+func GetA2APayloadModeFromContext(ctx context.Context) string {
+	if val := ctx.Value(a2aPayloadModeKey); val != nil {
+		if payloadMode, ok := val.(string); ok {
+			return payloadMode
 		}
 	}
 	return ""

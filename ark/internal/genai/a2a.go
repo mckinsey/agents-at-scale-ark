@@ -35,8 +35,6 @@ const (
 	a2aPermissionsExtensionKey = "https://ark.mckinsey.com/extensions/permissions/v1"
 	a2aStreamingEnabledEnv     = "ARK_A2A_STREAMING_ENABLED"
 	a2aPayloadModeEnv          = "ARK_A2A_STREAMING_PAYLOAD_MODE"
-	a2aPayloadModeCompat       = "compat"
-	a2aPayloadModeNative       = "native-a2a"
 )
 
 type A2AResponse struct {
@@ -80,7 +78,7 @@ func isA2AStreamingSupported(agentAnnotations map[string]string) bool {
 	return agentAnnotations[arkann.A2AStreamingSupported] == TrueString
 }
 
-func getA2APayloadMode(agentAnnotations map[string]string) string {
+func GetA2APayloadMode(agentAnnotations map[string]string) string {
 	mode := ""
 	if agentAnnotations != nil {
 		if value := agentAnnotations[arkann.A2APayloadMode]; value != "" {
@@ -91,10 +89,10 @@ func getA2APayloadMode(agentAnnotations map[string]string) string {
 		mode = os.Getenv(a2aPayloadModeEnv)
 	}
 	switch mode {
-	case a2aPayloadModeCompat, a2aPayloadModeNative:
+	case A2APayloadModeCompat, A2APayloadModeNative:
 		return mode
 	default:
-		return a2aPayloadModeCompat
+		return A2APayloadModeCompat
 	}
 }
 

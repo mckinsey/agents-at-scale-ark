@@ -37,7 +37,7 @@ func TestStreamA2AEventNative(t *testing.T) {
 		},
 	}
 
-	streamA2AEvent(ctx, stream, a2aPayloadModeNative, "agent/test", "completion-1", "hello", payload)
+	streamA2AEvent(ctx, stream, A2APayloadModeNative, "agent/test", "completion-1", "hello", payload)
 
 	assert.Len(t, stream.chunks, 1)
 	assert.Equal(t, payload, stream.chunks[0])
@@ -47,7 +47,7 @@ func TestStreamA2AErrorNative(t *testing.T) {
 	ctx := context.Background()
 	stream := &fakeEventStream{}
 
-	streamA2AError(ctx, stream, a2aPayloadModeNative, "agent/test", errors.New("boom"))
+	streamA2AError(ctx, stream, A2APayloadModeNative, "agent/test", errors.New("boom"))
 
 	assert.Len(t, stream.chunks, 1)
 	message, ok := stream.chunks[0].(*protocol.Message)
@@ -68,7 +68,7 @@ func TestConsumeA2AStreamEventsMessageCompat(t *testing.T) {
 	close(events)
 
 	engine := &A2AExecutionEngine{}
-	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, a2aPayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
+	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "hello", response.Content)
@@ -97,7 +97,7 @@ func TestConsumeA2AStreamEventsArtifactUpdate(t *testing.T) {
 	close(events)
 
 	engine := &A2AExecutionEngine{}
-	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, a2aPayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
+	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "part-1", response.Content)
@@ -126,7 +126,7 @@ func TestConsumeA2AStreamEventsFinalStatus(t *testing.T) {
 	close(events)
 
 	engine := &A2AExecutionEngine{}
-	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, a2aPayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
+	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "done", response.Content)
@@ -154,7 +154,7 @@ func TestConsumeA2AStreamEventsTaskHistory(t *testing.T) {
 	close(events)
 
 	engine := &A2AExecutionEngine{}
-	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, a2aPayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
+	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "history", response.Content)
@@ -169,7 +169,7 @@ func TestConsumeA2AStreamEventsNoEvents(t *testing.T) {
 	close(events)
 
 	engine := &A2AExecutionEngine{}
-	_, err := engine.consumeA2AStreamEvents(ctx, events, stream, a2aPayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
+	_, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
 
 	assert.Error(t, err)
 }

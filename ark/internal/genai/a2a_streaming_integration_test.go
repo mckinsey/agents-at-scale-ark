@@ -108,7 +108,7 @@ func TestStreamA2AAgentIntegrationCompat(t *testing.T) {
 
 	engine := &A2AExecutionEngine{}
 	stream := &fakeEventStream{}
-	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, a2aPayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
+	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
 	require.NoError(t, err)
 
 	assert.Contains(t, response.Content, "delta")
@@ -138,7 +138,7 @@ func TestStreamA2AAgentIntegrationNative(t *testing.T) {
 
 	engine := &A2AExecutionEngine{}
 	stream := &fakeEventStream{}
-	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, a2aPayloadModeNative, "agent/test", "completion-1", "agent", "default", "query", nil)
+	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeNative, "agent/test", "completion-1", "agent", "default", "query", nil)
 	require.NoError(t, err)
 
 	assert.Contains(t, response.Content, "delta")
