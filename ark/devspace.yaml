@@ -113,21 +113,3 @@ profiles:
             ARK_APISERVER_PORT=6443 \
             go run cmd/main.go --leader-elect=false
 
-  - name: storage-sqlite
-    activation:
-      - vars:
-          STORAGE_BACKEND: "sqlite"
-    patches:
-      - op: replace
-        path: dev.ark-controller.command
-        value:
-          - "sh"
-          - "-c"
-          - |
-            cd /app
-            while [ ! -f internal/apiserver/crds/ark.mckinsey.com_agents.yaml ]; do echo 'Waiting for CRD files...'; sleep 2; done
-            GOTOOLCHAIN=auto \
-            ARK_STORAGE_BACKEND=sqlite \
-            ARK_SQLITE_PATH=/tmp/ark.db \
-            ARK_APISERVER_PORT=6443 \
-            go run cmd/main.go --leader-elect=false

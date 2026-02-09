@@ -64,7 +64,7 @@ rbac:
 crd:
   # This option determines whether the CRDs are included in the installation.
   # NOTE: CRDs are automatically disabled when storage.backend is not "etcd"
-  # (e.g., postgresql or sqlite), since the embedded apiserver serves the APIs.
+  # (e.g., postgresql), since the embedded apiserver serves the APIs.
   enable: true
 
   # Enabling this option adds the "helm.sh/resource-policy": keep
@@ -115,17 +115,15 @@ customCACert:
   key: "ca.crt"
 
 # [STORAGE]: Storage backend configuration for embedded API server
-# When backend is set to "postgresql" or "sqlite", an embedded API server is started
-# and Ark resources are stored in the configured database instead of etcd via CRDs.
-# NOTE: When using non-etcd backends, CRDs are automatically skipped and APIService
+# When backend is set to "postgresql", an embedded API server is started
+# and Ark resources are stored in PostgreSQL instead of etcd via CRDs.
+# NOTE: When using postgresql, CRDs are automatically skipped and APIService
 # resources are created to route API requests to the embedded apiserver.
 storage:
-  # Options: "etcd" (default, uses CRDs), "postgresql", "sqlite"
+  # Options: "etcd" (default, uses CRDs), "postgresql"
   backend: "etcd"
   apiserver:
     port: 6443
-  sqlite:
-    path: "/data/ark.db"
   postgresql:
     host: ""
     port: 5432

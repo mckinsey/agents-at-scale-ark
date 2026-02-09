@@ -258,7 +258,6 @@ The aggregated architecture is fully implemented and ready for use:
 |-----------|--------|----------|
 | **Embedded API Server** | Complete | `ark/internal/apiserver/` |
 | **PostgreSQL Storage** | Complete | `ark/internal/storage/postgresql/` |
-| **SQLite Storage** | Complete | `ark/internal/storage/sqlite/` |
 | **OpenAPI Schema Generation** | Complete | From embedded CRDs |
 | **Controller Integration** | Complete | `ark/cmd/main.go` |
 | **Helm Chart Configuration** | Complete | `ark/dist/chart/` |
@@ -269,7 +268,7 @@ To deploy Ark with the PostgreSQL storage backend, configure the Helm values:
 
 ```yaml
 storage:
-  backend: "postgresql"  # Options: "etcd" (default), "postgresql", "sqlite"
+  backend: "postgresql"  # Options: "etcd" (default), "postgresql"
   apiserver:
     port: 6443
   postgresql:
@@ -296,26 +295,8 @@ When using PostgreSQL backend, Ark CRDs are not installed (resources are stored 
 
 ### Available Storage Backends
 
-Both storage backends implement the same interface (`ark/internal/storage/interface.go`):
-
-```go
-type Storage interface {
-    Create(ctx context.Context, obj runtime.Object) error
-    Get(ctx context.Context, name, namespace string, obj runtime.Object) error
-    List(ctx context.Context, namespace string, opts *metav1.ListOptions, listObj runtime.Object) error
-    Update(ctx context.Context, obj runtime.Object) error
-    Delete(ctx context.Context, name, namespace string) error
-    Watch(ctx context.Context, namespace string, opts *metav1.ListOptions) (watch.Interface, error)
-}
-```
-
-**PostgreSQL features:**
+The PostgreSQL storage backend implements the storage interface (`ark/internal/storage/interface.go`) with:
 - Keyset pagination for efficient LIST operations
 - LISTEN/NOTIFY for real-time watch events
 - Composite indexes for fast queries
 - Connection pooling
-
-**SQLite features:**
-- Zero-configuration local development
-- Single-file database
-- WAL mode for concurrent reads
