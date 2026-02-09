@@ -225,17 +225,8 @@ export function AppSidebar() {
                   <SidebarMenuButton
                     size="lg"
                     className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground !p-0">
-                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
-                      <Image
-                        src={
-                          isExperimentalDarkModeEnabled
-                            ? qbLogoDark
-                            : qbLogoLight
-                        }
-                        alt="ARK Dashboard Logo"
-                        width={32}
-                        height={32}
-                      />
+                    <div className="flex aspect-square size-8 items-center p-1 justify-center rounded-lg" style={{ backgroundColor: '#0085FF99' }}>
+                      <span className="text-white text-xs">ARK</span>
                     </div>
                     <div className="flex flex-col gap-0.5 leading-none">
                       <span className="font-medium text-sidebar-accent-foreground">ARK Dashboard</span>
