@@ -18,11 +18,31 @@ pipelines:
     build_images --all
     if [ "${STORAGE_BACKEND}" == "postgresql" ]; then
       create_deployments ark-storage-dev
+      for crd in $(kubectl get crd -o name 2>/dev/null | grep ark.mckinsey.com); do
+        kubectl delete "$crd" --wait=false 2>/dev/null || true
+        kubectl patch "$crd" -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null || true
+      done
+      for svc in v1alpha1.ark.mckinsey.com v1prealpha1.ark.mckinsey.com; do
+        if kubectl get apiservice "$svc" --no-headers 2>/dev/null; then
+          kubectl label apiservice "$svc" app.kubernetes.io/managed-by=Helm --overwrite 2>/dev/null || true
+          kubectl annotate apiservice "$svc" meta.helm.sh/release-name=ark-controller meta.helm.sh/release-namespace=ark-system --overwrite 2>/dev/null || true
+        fi
+      done
     fi
     create_deployments ark-controller
   dev: |-
     if [ "${STORAGE_BACKEND}" == "postgresql" ]; then
       create_deployments ark-storage-dev
+      for crd in $(kubectl get crd -o name 2>/dev/null | grep ark.mckinsey.com); do
+        kubectl delete "$crd" --wait=false 2>/dev/null || true
+        kubectl patch "$crd" -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null || true
+      done
+      for svc in v1alpha1.ark.mckinsey.com v1prealpha1.ark.mckinsey.com; do
+        if kubectl get apiservice "$svc" --no-headers 2>/dev/null; then
+          kubectl label apiservice "$svc" app.kubernetes.io/managed-by=Helm --overwrite 2>/dev/null || true
+          kubectl annotate apiservice "$svc" meta.helm.sh/release-name=ark-controller meta.helm.sh/release-namespace=ark-system --overwrite 2>/dev/null || true
+        fi
+      done
     fi
     create_deployments ark-controller
     start_dev --all

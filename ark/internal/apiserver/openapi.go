@@ -48,8 +48,16 @@ func loadCRDDefinitions() {
 		definitions[k] = v
 	}
 
-	objectMetaSchema := k8sDefs["k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"].Schema
-	listMetaSchema := k8sDefs["k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"].Schema
+	objectMetaRef := spec.Schema{
+		SchemaProps: spec.SchemaProps{
+			Ref: spec.MustCreateRef("#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta"),
+		},
+	}
+	listMetaRef := spec.Schema{
+		SchemaProps: spec.SchemaProps{
+			Ref: spec.MustCreateRef("#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.ListMeta"),
+		},
+	}
 
 	entries, err := crdFS.ReadDir("crds")
 	if err != nil {
@@ -60,7 +68,7 @@ func loadCRDDefinitions() {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") {
 			continue
 		}
-		loadCRDFile(entry.Name(), &objectMetaSchema, &listMetaSchema)
+		loadCRDFile(entry.Name(), &objectMetaRef, &listMetaRef)
 	}
 }
 

@@ -41,7 +41,11 @@ dependencies:
 
 # Vars - To disable, set environment variables before the devspace commands
 #        For example: ENABLE_CERT_MANAGER=false devspace dev
+#        For PostgreSQL: STORAGE_BACKEND=postgresql devspace dev
 vars:
+  STORAGE_BACKEND:
+    source: env
+    default: "etcd"
   ENABLE_CERT_MANAGER:
     source: env
     default: true
@@ -119,7 +123,7 @@ pipelines:
 
     if [ "${ENABLE_ARK_TENANT}" == "true" ]; then
       echo "Waiting for Ark API to be available..."
-      if [ "${STORAGE_BACKEND:-etcd}" == "etcd" ]; then
+      if [ "${STORAGE_BACKEND}" == "etcd" ]; then
         kubectl wait --for=condition=Established crd/tools.ark.mckinsey.com --timeout=60s
       else
         kubectl wait --for=condition=Available apiservice/v1alpha1.ark.mckinsey.com --timeout=300s
@@ -142,7 +146,7 @@ pipelines:
 
     if [ "${ENABLE_ARK_TENANT}" == "true" ]; then
       echo "Waiting for Ark API to be available..."
-      if [ "${STORAGE_BACKEND:-etcd}" == "etcd" ]; then
+      if [ "${STORAGE_BACKEND}" == "etcd" ]; then
         kubectl wait --for=condition=Established crd/tools.ark.mckinsey.com --timeout=60s
       else
         kubectl wait --for=condition=Available apiservice/v1alpha1.ark.mckinsey.com --timeout=300s
