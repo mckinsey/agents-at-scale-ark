@@ -6,6 +6,8 @@ import (
 	"testing"
 )
 
+const colNameAge = "Age"
+
 func TestGetPrinterColumnRegistry(t *testing.T) {
 	reg := GetPrinterColumnRegistry()
 	if reg == nil {
@@ -23,7 +25,7 @@ func TestGetPrinterColumnRegistry(t *testing.T) {
 		if col.Name == "Model" {
 			hasModel = true
 		}
-		if col.Name == "Age" {
+		if col.Name == colNameAge {
 			hasAge = true
 		}
 	}
@@ -53,7 +55,7 @@ func TestGetPrinterColumnRegistry_AllKinds(t *testing.T) {
 
 		hasAge := false
 		for _, col := range cols {
-			if col.Name == "Age" {
+			if col.Name == colNameAge {
 				hasAge = true
 				break
 			}
@@ -79,7 +81,7 @@ func TestGetPrinterColumnRegistry_ColumnTypes(t *testing.T) {
 				t.Errorf("MCPServer.Tools should be integer, got %s", col.Type)
 			}
 		}
-		if col.Name == "Age" {
+		if col.Name == colNameAge {
 			if col.Type != "date" {
 				t.Errorf("MCPServer.Age should be date, got %s", col.Type)
 			}

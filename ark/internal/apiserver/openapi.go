@@ -60,37 +60,40 @@ func loadCRDDefinitions() {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") {
 			continue
 		}
+		loadCRDFile(entry.Name(), &objectMetaSchema, &listMetaSchema)
+	}
+}
 
-		data, err := crdFS.ReadFile("crds/" + entry.Name())
-		if err != nil {
+func loadCRDFile(filename string, objectMetaSchema, listMetaSchema *spec.Schema) {
+	data, err := crdFS.ReadFile("crds/" + filename)
+	if err != nil {
+		return
+	}
+
+	var crd crdFile
+	if err := yaml.Unmarshal(data, &crd); err != nil {
+		return
+	}
+
+	for _, version := range crd.Spec.Versions {
+		if len(crd.Spec.Names.Kind) == 0 || len(version.Schema.OpenAPIV3Schema) == 0 {
 			continue
 		}
 
-		var crd crdFile
-		if err := yaml.Unmarshal(data, &crd); err != nil {
+		var schema spec.Schema
+		if err := json.Unmarshal(version.Schema.OpenAPIV3Schema, &schema); err != nil {
 			continue
 		}
 
-		for _, version := range crd.Spec.Versions {
-			if len(crd.Spec.Names.Kind) == 0 || len(version.Schema.OpenAPIV3Schema) == 0 {
-				continue
-			}
-
-			var schema spec.Schema
-			if err := json.Unmarshal(version.Schema.OpenAPIV3Schema, &schema); err != nil {
-				continue
-			}
-
-			if schema.Properties != nil {
-				schema.Properties["metadata"] = objectMetaSchema
-			}
-
-			resourceKey := "mckinsey.com/ark/api/" + version.Name + "." + crd.Spec.Names.Kind
-			definitions[resourceKey] = openapicommon.OpenAPIDefinition{Schema: schema}
-
-			listKey := resourceKey + "List"
-			definitions[listKey] = schemaForList(&schema, &listMetaSchema)
+		if schema.Properties != nil {
+			schema.Properties["metadata"] = *objectMetaSchema
 		}
+
+		resourceKey := "mckinsey.com/ark/api/" + version.Name + "." + crd.Spec.Names.Kind
+		definitions[resourceKey] = openapicommon.OpenAPIDefinition{Schema: schema}
+
+		listKey := resourceKey + "List"
+		definitions[listKey] = schemaForList(&schema, listMetaSchema)
 	}
 }
 
@@ -119,4 +122,3 @@ func schemaForList(itemSchema, listMetaSchema *spec.Schema) openapicommon.OpenAP
 		},
 	}
 }
-

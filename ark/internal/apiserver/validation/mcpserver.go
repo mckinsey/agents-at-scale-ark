@@ -57,26 +57,5 @@ func (v *MCPServerValidator) validateMCPServer(ctx context.Context, mcpserver *a
 }
 
 func (v *MCPServerValidator) validateAddress(ctx context.Context, mcpserver *arkv1alpha1.MCPServer) error {
-	addr := mcpserver.Spec.Address
-	if addr.Value == "" && addr.ValueFrom == nil {
-		return fmt.Errorf("address: must specify either value or valueFrom")
-	}
-	if addr.Value != "" && addr.ValueFrom != nil {
-		return fmt.Errorf("address: cannot specify both value and valueFrom")
-	}
-
-	if addr.ValueFrom != nil {
-		if addr.ValueFrom.SecretKeyRef != nil {
-			if err := v.ValidateSecretKeyExists(ctx, addr.ValueFrom.SecretKeyRef.Name, mcpserver.Namespace, addr.ValueFrom.SecretKeyRef.Key); err != nil {
-				return fmt.Errorf("address: %w", err)
-			}
-		}
-		if addr.ValueFrom.ConfigMapKeyRef != nil {
-			if err := v.ValidateConfigMapKeyExists(ctx, addr.ValueFrom.ConfigMapKeyRef.Name, mcpserver.Namespace, addr.ValueFrom.ConfigMapKeyRef.Key); err != nil {
-				return fmt.Errorf("address: %w", err)
-			}
-		}
-	}
-
-	return nil
+	return v.ValidateAddress(ctx, mcpserver.Spec.Address, mcpserver.Namespace)
 }

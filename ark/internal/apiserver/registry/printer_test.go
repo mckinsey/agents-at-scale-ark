@@ -61,7 +61,7 @@ func TestPrinterColumnRegistry_EvaluateCell_MissingField(t *testing.T) {
 	agent := &arkv1alpha1.Agent{}
 
 	result := reg.EvaluateCell(col, agent)
-	if result != "<none>" {
+	if result != cellNone {
 		t.Errorf("expected '<none>' for missing field, got %v", result)
 	}
 }
@@ -95,7 +95,7 @@ func TestPrinterColumnRegistry_EvaluateCell_DateType(t *testing.T) {
 	}
 
 	result := reg.EvaluateCell(col, agent)
-	if result == "<none>" || result == "<error>" {
+	if result == cellNone || result == cellError {
 		t.Errorf("expected valid time, got %v", result)
 	}
 }

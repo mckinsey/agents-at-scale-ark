@@ -14,6 +14,11 @@ import (
 	"k8s.io/client-go/util/jsonpath"
 )
 
+const (
+	cellNone  = "<none>"
+	cellError = "<error>"
+)
+
 type PrinterColumn struct {
 	Name        string `json:"name"`
 	Type        string `json:"type"`
@@ -48,26 +53,26 @@ func (r *PrinterColumnRegistry) EvaluateCell(column PrinterColumn, obj runtime.O
 
 	jp := jsonpath.New(column.Name).AllowMissingKeys(true)
 	if err := jp.Parse(path); err != nil {
-		return "<error>"
+		return cellError
 	}
 
 	var data interface{}
 	raw, err := json.Marshal(obj)
 	if err != nil {
-		return "<error>"
+		return cellError
 	}
 	if err := json.Unmarshal(raw, &data); err != nil {
-		return "<error>"
+		return cellError
 	}
 
 	buf := new(bytes.Buffer)
 	if err := jp.Execute(buf, data); err != nil {
-		return "<none>"
+		return cellNone
 	}
 
 	result := buf.String()
 	if result == "" {
-		return "<none>"
+		return cellNone
 	}
 
 	return formatCellValue(result, column.Type)
@@ -83,7 +88,7 @@ func formatCellValue(value, colType string) interface{} {
 		return value
 	case "boolean":
 		return strings.ToLower(value) == "true"
-	case "date":
+	case columnTypeDate:
 		if t, err := time.Parse(time.RFC3339, value); err == nil {
 			return t
 		}

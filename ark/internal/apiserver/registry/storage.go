@@ -25,6 +25,11 @@ import (
 	"mckinsey.com/ark/internal/storage"
 )
 
+const (
+	columnTypeDate   = "date"
+	defaultNamespace = "default"
+)
+
 func storageContext(ctx context.Context) context.Context {
 	return context.WithoutCancel(ctx)
 }
@@ -200,17 +205,7 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 	}
 
 	if err := s.backend.Update(storageContext(ctx), s.config.Kind, namespace, name, updated); err != nil {
-		metrics.RecordStorageLatency("update", s.config.Kind, start)
-		if errors.Is(err, storage.ErrConflict) {
-			metrics.RecordStorageOperation("update", s.config.Kind, "conflict")
-			return nil, false, apierrors.NewConflict(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}, name, err)
-		}
-		if errors.Is(err, storage.ErrNotFound) {
-			metrics.RecordStorageOperation("update", s.config.Kind, "not_found")
-			return nil, false, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}, name)
-		}
-		metrics.RecordStorageOperation("update", s.config.Kind, "error")
-		return nil, false, fmt.Errorf("failed to update %s: %w", s.config.SingularName, err)
+		return nil, false, handleUpdateError(err, s.config, "update", name, start)
 	}
 
 	metrics.RecordStorageOperation("update", s.config.Kind, "success")
@@ -288,8 +283,8 @@ func (s *GenericStorage) getColumnDefinitions() []metav1.TableColumnDefinition {
 	if s.printerColumns != nil {
 		for _, col := range s.printerColumns.GetColumns(s.config.Kind) {
 			format := ""
-			if col.Type == "date" {
-				format = "date"
+			if col.Type == columnTypeDate {
+				format = columnTypeDate
 			}
 			defs = append(defs, metav1.TableColumnDefinition{
 				Name:        col.Name,
@@ -324,7 +319,22 @@ func getNamespace(ctx context.Context) string {
 	if reqInfo, ok := genericrequest.RequestInfoFrom(ctx); ok {
 		return reqInfo.Namespace
 	}
-	return "default"
+	return defaultNamespace
+}
+
+func handleUpdateError(err error, cfg ResourceConfig, operation, name string, start time.Time) error {
+	metrics.RecordStorageLatency(operation, cfg.Kind, start)
+	gr := schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: cfg.Resource}
+	if errors.Is(err, storage.ErrConflict) {
+		metrics.RecordStorageOperation(operation, cfg.Kind, "conflict")
+		return apierrors.NewConflict(gr, name, err)
+	}
+	if errors.Is(err, storage.ErrNotFound) {
+		metrics.RecordStorageOperation(operation, cfg.Kind, "not_found")
+		return apierrors.NewNotFound(gr, name)
+	}
+	metrics.RecordStorageOperation(operation, cfg.Kind, "error")
+	return fmt.Errorf("failed to %s %s: %w", operation, cfg.SingularName, err)
 }
 
 func setListItems(list runtime.Object, objects []runtime.Object, continueToken string) error {

@@ -41,8 +41,8 @@ func (s *DefaultingStorage) Create(ctx context.Context, obj runtime.Object, crea
 		}
 	}
 
-	if creater, ok := s.Storage.(rest.Creater); ok {
-		return creater.Create(ctx, obj, createValidation, options)
+	if creater, ok := s.Storage.(rest.Creater); ok { //nolint:misspell // k8s interface name
+		return creater.Create(ctx, obj, createValidation, options) //nolint:misspell
 	}
 	return nil, nil
 }

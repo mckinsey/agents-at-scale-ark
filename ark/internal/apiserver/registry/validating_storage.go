@@ -57,24 +57,8 @@ func (s *ValidatingStorage) Update(ctx context.Context, name string, objInfo res
 		return nil, false, fmt.Errorf("failed to get updated object: %w", err)
 	}
 
-	if s.validator != nil {
-		if existing == nil {
-			if err := s.validator.ValidateCreate(ctx, updated); err != nil {
-				return nil, false, apierrors.NewForbidden(
-					schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource},
-					name,
-					fmt.Errorf("admission webhook denied the request: %v", err),
-				)
-			}
-		} else {
-			if err := s.validator.ValidateUpdate(ctx, existing, updated); err != nil {
-				return nil, false, apierrors.NewForbidden(
-					schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource},
-					name,
-					fmt.Errorf("admission webhook denied the request: %v", err),
-				)
-			}
-		}
+	if err := s.validateForUpdate(ctx, existing, updated, name); err != nil {
+		return nil, false, err
 	}
 
 	return s.GenericStorage.Update(ctx, name, objInfo, createValidation, updateValidation, forceAllowCreate, options)
@@ -95,6 +79,23 @@ func (s *ValidatingStorage) Delete(ctx context.Context, name string, deleteValid
 		}
 	}
 	return s.GenericStorage.Delete(ctx, name, deleteValidation, options)
+}
+
+func (s *ValidatingStorage) validateForUpdate(ctx context.Context, existing, updated runtime.Object, name string) error {
+	if s.validator == nil {
+		return nil
+	}
+	gr := schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}
+	var validationErr error
+	if existing == nil {
+		validationErr = s.validator.ValidateCreate(ctx, updated)
+	} else {
+		validationErr = s.validator.ValidateUpdate(ctx, existing, updated)
+	}
+	if validationErr != nil {
+		return apierrors.NewForbidden(gr, name, fmt.Errorf("admission webhook denied the request: %v", validationErr))
+	}
+	return nil
 }
 
 func (s *ValidatingStorage) NamespaceScoped() bool {

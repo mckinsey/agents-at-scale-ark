@@ -50,28 +50,7 @@ func (v *EvaluatorValidator) validateEvaluator(ctx context.Context, evaluator *a
 }
 
 func (v *EvaluatorValidator) validateAddress(ctx context.Context, evaluator *arkv1alpha1.Evaluator) error {
-	addr := evaluator.Spec.Address
-	if addr.Value == "" && addr.ValueFrom == nil {
-		return fmt.Errorf("address: must specify either value or valueFrom")
-	}
-	if addr.Value != "" && addr.ValueFrom != nil {
-		return fmt.Errorf("address: cannot specify both value and valueFrom")
-	}
-
-	if addr.ValueFrom != nil {
-		if addr.ValueFrom.SecretKeyRef != nil {
-			if err := v.ValidateSecretKeyExists(ctx, addr.ValueFrom.SecretKeyRef.Name, evaluator.Namespace, addr.ValueFrom.SecretKeyRef.Key); err != nil {
-				return fmt.Errorf("address: %w", err)
-			}
-		}
-		if addr.ValueFrom.ConfigMapKeyRef != nil {
-			if err := v.ValidateConfigMapKeyExists(ctx, addr.ValueFrom.ConfigMapKeyRef.Name, evaluator.Namespace, addr.ValueFrom.ConfigMapKeyRef.Key); err != nil {
-				return fmt.Errorf("address: %w", err)
-			}
-		}
-	}
-
-	return nil
+	return v.ValidateAddress(ctx, evaluator.Spec.Address, evaluator.Namespace)
 }
 
 func (v *EvaluatorValidator) validateModelReference(ctx context.Context, evaluator *arkv1alpha1.Evaluator) error {

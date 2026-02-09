@@ -198,20 +198,12 @@ func (p *PostgreSQLBackend) handleNotification(payload string) {
 	}
 
 	obj, err := p.Get(context.Background(), notification.Kind, notification.Namespace, notification.Name)
+	if err != nil && eventType != watch.Deleted {
+		klog.Warningf("Failed to get object for notification: %v", err)
+		return
+	}
 	if err != nil {
-		if eventType == watch.Deleted {
-			obj = p.converter.NewObject(notification.Kind)
-			if obj != nil {
-				if accessor, aerr := meta.Accessor(obj); aerr == nil {
-					accessor.SetName(notification.Name)
-					accessor.SetNamespace(notification.Namespace)
-					accessor.SetResourceVersion(fmt.Sprintf("%d", notification.ResourceVersion))
-				}
-			}
-		} else {
-			klog.Warningf("Failed to get object for notification: %v", err)
-			return
-		}
+		obj = p.buildDeletedStub(notification.Kind, notification.Namespace, notification.Name, notification.ResourceVersion)
 	}
 
 	if obj == nil {
@@ -220,6 +212,19 @@ func (p *PostgreSQLBackend) handleNotification(payload string) {
 	}
 
 	p.notifyWatchers(notification.Kind, notification.Namespace, eventType, obj, notification.ResourceVersion)
+}
+
+func (p *PostgreSQLBackend) buildDeletedStub(kind, namespace, name string, resourceVersion int64) runtime.Object {
+	obj := p.converter.NewObject(kind)
+	if obj == nil {
+		return nil
+	}
+	if accessor, err := meta.Accessor(obj); err == nil {
+		accessor.SetName(name)
+		accessor.SetNamespace(namespace)
+		accessor.SetResourceVersion(fmt.Sprintf("%d", resourceVersion))
+	}
+	return obj
 }
 
 func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name string, obj runtime.Object) error {
@@ -545,7 +550,6 @@ func (p *PostgreSQLBackend) Close() error {
 	p.cancel()
 	return p.db.Close()
 }
-
 
 func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, generation int64, uid, spec, status, labels, annotations, finalizers string, createdAt time.Time) (runtime.Object, error) {
 	var labelsMap map[string]string

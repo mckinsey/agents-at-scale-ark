@@ -328,6 +328,29 @@ func ValidateHeaderValueFrom(valueFrom *arkv1alpha1.HeaderValueSource, contextPr
 	return nil
 }
 
+func (v *StorageValidator) ValidateAddress(ctx context.Context, addr arkv1alpha1.ValueSource, namespace string) error {
+	if addr.Value == "" && addr.ValueFrom == nil {
+		return fmt.Errorf("address: must specify either value or valueFrom")
+	}
+	if addr.Value != "" && addr.ValueFrom != nil {
+		return fmt.Errorf("address: cannot specify both value and valueFrom")
+	}
+	if addr.ValueFrom == nil {
+		return nil
+	}
+	if addr.ValueFrom.SecretKeyRef != nil {
+		if err := v.ValidateSecretKeyExists(ctx, addr.ValueFrom.SecretKeyRef.Name, namespace, addr.ValueFrom.SecretKeyRef.Key); err != nil {
+			return fmt.Errorf("address: %w", err)
+		}
+	}
+	if addr.ValueFrom.ConfigMapKeyRef != nil {
+		if err := v.ValidateConfigMapKeyExists(ctx, addr.ValueFrom.ConfigMapKeyRef.Name, namespace, addr.ValueFrom.ConfigMapKeyRef.Key); err != nil {
+			return fmt.Errorf("address: %w", err)
+		}
+	}
+	return nil
+}
+
 func ValidateOverrides(overrides []arkv1alpha1.Override) error {
 	for i, override := range overrides {
 		if err := validateOverrideEntry(override, i); err != nil {

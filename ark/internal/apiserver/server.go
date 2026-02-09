@@ -44,12 +44,12 @@ func init() {
 
 type Config struct {
 	PostgresHost string
-	PostgresPort   int
-	PostgresDB     string
-	PostgresUser   string
-	PostgresPass   string
-	PostgresSSL    string
-	BindPort       int
+	PostgresPort int
+	PostgresDB   string
+	PostgresUser string
+	PostgresPass string
+	PostgresSSL  string
+	BindPort     int
 }
 
 type Server struct {
@@ -152,8 +152,8 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 			NewFunc:      res.NewFunc,
 			NewListFunc:  res.NewListFunc,
 		}
-		storage := s.buildStorage(cfg, converter, storageValidator, printerColumns)
-		v1alpha1Storage[res.Resource] = storage
+		resStorage := s.buildStorage(cfg, converter, storageValidator, printerColumns)
+		v1alpha1Storage[res.Resource] = resStorage
 		v1alpha1Storage[res.Resource+"/status"] = registry.NewStatusStorage(s.backend, converter, cfg)
 	}
 	apiGroupInfo.VersionedResourcesStorageMap[arkv1alpha1.GroupVersion.Version] = v1alpha1Storage
@@ -167,8 +167,8 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 			NewFunc:      res.NewFunc,
 			NewListFunc:  res.NewListFunc,
 		}
-		storage := s.buildStorage(cfg, converter, storageValidator, printerColumns)
-		v1prealpha1Storage[res.Resource] = storage
+		resStorage := s.buildStorage(cfg, converter, storageValidator, printerColumns)
+		v1prealpha1Storage[res.Resource] = resStorage
 		v1prealpha1Storage[res.Resource+"/status"] = registry.NewStatusStorage(s.backend, converter, cfg)
 	}
 	apiGroupInfo.VersionedResourcesStorageMap[arkv1prealpha1.GroupVersion.Version] = v1prealpha1Storage
@@ -183,17 +183,17 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 func (s *Server) buildStorage(cfg registry.ResourceConfig, converter storage.TypeConverter, storageValidator *validation.StorageValidator, printerColumns *registry.PrinterColumnRegistry) rest.Storage {
 	genericStorage := registry.NewGenericStorage(s.backend, converter, cfg, printerColumns)
 
-	var storage rest.Storage = genericStorage
+	var result rest.Storage = genericStorage
 
 	if validator, ok := validation.GetValidator(cfg.Kind, storageValidator); ok {
-		storage = registry.NewValidatingStorage(genericStorage, validator)
+		result = registry.NewValidatingStorage(genericStorage, validator)
 	}
 
 	if defaulter, ok := validation.GetDefaulter(cfg.Kind); ok {
-		storage = registry.NewDefaultingStorage(storage, defaulter)
+		result = registry.NewDefaultingStorage(result, defaulter)
 	}
 
-	return storage
+	return result
 }
 
 func (s *Server) NeedLeaderElection() bool {
