@@ -34,6 +34,12 @@ config:
               "owned_by": "openai"
             },
             {
+              "id": "gpt-4.1-mini",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            },
+            {
               "id": "gpt-4.1",
               "object": "model",
               "created": 1687882411,
