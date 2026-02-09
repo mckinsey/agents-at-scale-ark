@@ -55,15 +55,15 @@ export default function EvalsPage() {
               Evaluators
             </TabsTrigger>
           </TabsList>
-          <TabsContent value="evaluations">
+          <div className={activeTab === 'evaluations' ? 'block' : 'hidden'}>
             <EvaluationsSection
               ref={evaluationsSectionRef}
               initialQueryFilter={queryFilter}
             />
-          </TabsContent>
-          <TabsContent value="evaluators">
+          </div>
+          <div className={activeTab === 'evaluators' ? 'block' : 'hidden'}>
             <EvaluatorsSection ref={evaluatorsSectionRef} />
-          </TabsContent>
+          </div>
         </Tabs>
       </div>
     </>
