@@ -35,12 +35,7 @@ func DiscoverOTELEndpoints(ctx context.Context, k8sClient client.Client) ([]OTEL
 			continue
 		}
 
-		endpoint, err := parseOTELSecret(&secret)
-		if err != nil {
-			log.Error(err, "failed to parse OTEL secret", "namespace", secret.Namespace)
-			continue
-		}
-
+		endpoint := parseOTELSecret(&secret)
 		if endpoint == nil {
 			continue
 		}
@@ -54,24 +49,25 @@ func DiscoverOTELEndpoints(ctx context.Context, k8sClient client.Client) ([]OTEL
 	return endpoints, nil
 }
 
-func parseOTELSecret(secret *corev1.Secret) (*OTELEndpoint, error) {
-	endpoint := &OTELEndpoint{}
-
+func parseOTELSecret(secret *corev1.Secret) *OTELEndpoint {
 	endpointBytes, ok := secret.Data["OTEL_EXPORTER_OTLP_ENDPOINT"]
 	if !ok {
-		return nil, nil
+		return nil
 	}
 
-	endpoint.Endpoint = strings.TrimSpace(string(endpointBytes))
-	if endpoint.Endpoint == "" {
-		return nil, nil
+	endpoint := strings.TrimSpace(string(endpointBytes))
+	if endpoint == "" {
+		return nil
 	}
 
-	endpoint.TLS = strings.HasPrefix(endpoint.Endpoint, "https://")
+	result := &OTELEndpoint{
+		Endpoint: endpoint,
+		TLS:      strings.HasPrefix(endpoint, "https://"),
+	}
 
 	if headersBytes, ok := secret.Data["OTEL_EXPORTER_OTLP_HEADERS"]; ok {
-		endpoint.Headers = strings.TrimSpace(string(headersBytes))
+		result.Headers = strings.TrimSpace(string(headersBytes))
 	}
 
-	return endpoint, nil
+	return result
 }
