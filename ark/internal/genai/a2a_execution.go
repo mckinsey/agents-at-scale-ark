@@ -73,7 +73,10 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 	if err != nil {
 		return nil, err
 	}
-	payloadMode := GetA2APayloadMode(agentAnnotations)
+	payloadMode := GetA2APayloadModeFromContext(ctx)
+	if payloadMode == A2APayloadModeCompat {
+		payloadMode = GetA2APayloadMode(agentAnnotations)
+	}
 
 	if isA2AStreamingEnabled(agentAnnotations) {
 		if isA2AStreamingSupported(agentAnnotations) {

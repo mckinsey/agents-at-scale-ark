@@ -712,6 +712,13 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 		return nil, fmt.Errorf("unable to make agent %v, error:%w", agentKey, err)
 	}
 
+	agentAnnotations := []map[string]string(nil)
+	if agentCRD.Annotations != nil && agentCRD.Annotations[annotations.A2AServerAddress] != "" {
+		agentAnnotations = []map[string]string{agentCRD.Annotations}
+	}
+	payloadMode := genai.ResolvePayloadMode(nil, query.Annotations, agentAnnotations)
+	ctx = genai.WithA2APayloadMode(ctx, payloadMode)
+
 	// Load existing messages from memory
 	memoryMessages, err := r.loadInitialMessages(ctx, memory)
 	if err != nil {
@@ -731,7 +738,7 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 		}
 	}
 
-	ctx = genai.WithA2APayloadMode(ctx, result.A2APayloadMode)
+	result.A2APayloadMode = payloadMode
 
 	// Save all new messages (input + response) to memory
 	newMessages := genai.PrepareNewMessagesForMemory(inputMessages, result.Messages)
@@ -755,6 +762,14 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 		return nil, fmt.Errorf("unable to make team %v, error:%w", teamKey, err)
 	}
 
+	payloadMode := team.PayloadMode
+	if teamCRD.Annotations == nil || teamCRD.Annotations[annotations.A2APayloadMode] == "" {
+		if query.Annotations != nil && query.Annotations[annotations.A2APayloadMode] != "" {
+			payloadMode = genai.GetA2APayloadMode(query.Annotations)
+		}
+	}
+	ctx = genai.WithA2APayloadMode(ctx, payloadMode)
+
 	historyMessages, err := r.loadInitialMessages(ctx, memory)
 	if err != nil {
 		return nil, fmt.Errorf("unable to load initial messages: %w", err)
@@ -768,28 +783,7 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 		return nil, err
 	}
 
-	agentAnnotations := make([]map[string]string, 0, len(teamCRD.Spec.Members))
-	for _, member := range teamCRD.Spec.Members {
-		if member.Type != genai.MemberTypeAgent {
-			continue
-		}
-		var agentCRD arkv1alpha1.Agent
-		agentKey := types.NamespacedName{Name: member.Name, Namespace: query.Namespace}
-		if err := impersonatedClient.Get(ctx, agentKey, &agentCRD); err != nil {
-			logf.FromContext(ctx).V(1).Info("unable to fetch agent for payload mode resolution, skipping", "agent", member.Name, "error", err)
-			continue
-		}
-		if agentCRD.Annotations == nil {
-			continue
-		}
-		if agentCRD.Annotations[annotations.A2AServerAddress] == "" {
-			continue
-		}
-		agentAnnotations = append(agentAnnotations, agentCRD.Annotations)
-	}
-	payloadMode := genai.ResolvePayloadMode(teamCRD.Annotations, query.Annotations, agentAnnotations)
 	result.A2APayloadMode = payloadMode
-	ctx = genai.WithA2APayloadMode(ctx, payloadMode)
 
 	// Save all new messages (input + response) to memory
 	newMessages := genai.PrepareNewMessagesForMemory(inputMessages, result.Messages)
