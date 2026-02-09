@@ -1,6 +1,6 @@
 'use client';
 
-import { useAtom } from 'jotai';
+import { useSetAtom } from 'jotai';
 
 import { activeSettingPageAtom } from '@/atoms/settings-modal';
 import type { SettingPage } from '@/atoms/settings-modal';
@@ -9,16 +9,14 @@ import { cn } from '@/lib/utils';
 import { settingsSections } from './settings-types';
 
 export function SettingsSidebar() {
-  const [activeSettingPage, setActiveSettingPage] = useAtom(
-    activeSettingPageAtom,
-  );
+  const setActiveSettingPage = useSetAtom(activeSettingPageAtom);
 
   const handleSettingClick = (settingKey: SettingPage) => {
     setActiveSettingPage(settingKey);
   };
 
   return (
-    <div className="bg-sidebar w-64 flex flex-col">
+    <div className="bg-sidebar flex w-64 flex-col">
       <div className="px-6 py-8">
         <h2 className="text-md text-sidebar-foreground">Settings</h2>
       </div>
@@ -37,7 +35,7 @@ export function SettingsSidebar() {
                       key={item.key}
                       onClick={() => handleSettingClick(item.key)}
                       className={cn(
-                        'flex w-full items-center gap-3 text-sidebar-foreground rounded-md px-3 py-1.5 text-sm transition-colors',
+                        'text-sidebar-foreground flex w-full items-center gap-3 rounded-md px-3 py-1.5 text-sm transition-colors',
                         'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-pointer',
                       )}>
                       <Icon className="h-4 w-4" />
