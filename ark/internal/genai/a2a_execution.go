@@ -73,7 +73,7 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 	if err != nil {
 		return nil, err
 	}
-	payloadMode := getA2APayloadMode(agentAnnotations)
+	payloadMode := GetA2APayloadMode(agentAnnotations)
 
 	if isA2AStreamingEnabled(agentAnnotations) {
 		if isA2AStreamingSupported(agentAnnotations) {
@@ -101,7 +101,7 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 	if eventStream != nil {
 		completionID := getQueryID(ctx)
 		modelID := fmt.Sprintf("agent/%s", agentName)
-		if payloadMode == a2aPayloadModeNative {
+		if payloadMode == A2APayloadModeNative {
 			var contextRef *string
 			if a2aResponse.ContextID != "" {
 				contextRef = &a2aResponse.ContextID
@@ -274,7 +274,7 @@ func streamA2AEvent(ctx context.Context, eventStream EventStreamInterface, paylo
 	if eventStream == nil {
 		return
 	}
-	if payloadMode == a2aPayloadModeNative {
+	if payloadMode == A2APayloadModeNative {
 		_ = eventStream.StreamChunk(ctx, payload)
 		return
 	}
@@ -287,7 +287,7 @@ func streamA2AError(ctx context.Context, eventStream EventStreamInterface, paylo
 	if eventStream == nil || err == nil {
 		return
 	}
-	if payloadMode == a2aPayloadModeNative {
+	if payloadMode == A2APayloadModeNative {
 		message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
 			protocol.NewTextPart(err.Error()),
 		})

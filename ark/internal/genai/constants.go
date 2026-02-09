@@ -55,6 +55,11 @@ const (
 	MetadataAgentNameKey  = "ark.mckinsey.com/agent-name"
 )
 
+const (
+	A2APayloadModeCompat = "compat"
+	A2APayloadModeNative = "native-a2a"
+)
+
 // Tool type constants
 const (
 	ToolTypeHTTP    = "http"

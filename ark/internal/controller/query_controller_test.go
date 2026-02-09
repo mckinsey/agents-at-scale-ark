@@ -218,7 +218,7 @@ var _ = Describe("Query Controller Message Serialization", func() {
 				genai.ToolMessage("tool-content", "tool-1"),
 			}
 
-			jsonStr, err := serializeMessages(messages)
+			jsonStr, err := serializeMessages(messages, genai.A2APayloadModeCompat)
 			Expect(err).NotTo(HaveOccurred())
 
 			var decoded []map[string]interface{}
@@ -232,9 +232,25 @@ var _ = Describe("Query Controller Message Serialization", func() {
 
 		It("should handle empty messages gracefully", func() {
 			messages := []genai.Message{{}}
-			jsonStr, err := serializeMessages(messages)
+			jsonStr, err := serializeMessages(messages, genai.A2APayloadModeCompat)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(jsonStr).NotTo(BeEmpty())
+		})
+
+		It("should serialize messages in A2A format when native payload mode is requested", func() {
+			messages := []genai.Message{
+				genai.NewAssistantMessage("hello"),
+				genai.NewUserMessage("hi"),
+			}
+
+			jsonStr, err := serializeMessages(messages, genai.A2APayloadModeNative)
+			Expect(err).NotTo(HaveOccurred())
+
+			var decoded []genai.Message
+			Expect(json.Unmarshal([]byte(jsonStr), &decoded)).To(Succeed())
+			Expect(decoded).To(HaveLen(2))
+			Expect(decoded[0].Role).To(Equal("agent"))
+			Expect(decoded[1].Role).To(Equal("user"))
 		})
 	})
 })
