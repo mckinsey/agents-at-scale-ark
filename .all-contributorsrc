@@ -469,6 +469,17 @@
         "bug",
         "doc"
       ]
+    },
+    {
+      "login": "pontino",
+      "name": "pontino",
+      "avatar_url": "https://avatars.githubusercontent.com/u/713888?v=4",
+      "profile": "https://github.com/pontino",
+      "contributions": [
+        "code",
+        "bug",
+        "doc"
+      ]
     }
   ],
   "contributorsPerLine": 7,

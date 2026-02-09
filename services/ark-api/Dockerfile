@@ -30,8 +30,9 @@ COPY ark-api/tests/ ./tests/
 COPY ark-api/*.py ./
 
 # Add ark-sdk wheel as a dependency and sync all dependencies
+# Install the project itself to avoid build delay at runtime
 RUN uv add file://$(ls /tmp/wheels/ark*.whl) && \
-  uv sync --frozen --no-install-project
+  uv sync --frozen
 
 ENV HOME=/home/ark
 ENV XDG_CACHE_HOME=/home/ark/.cache

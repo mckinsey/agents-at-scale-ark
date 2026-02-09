@@ -162,7 +162,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24.11"
+          go-version: "1.24.13"
           cache: true
           cache-dependency-path: |
             ark/go.sum
@@ -204,7 +204,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24.11"
+          go-version: "1.24.13"
           cache: true
           cache-dependency-path: |
             ark/go.sum
@@ -218,6 +218,11 @@ jobs:
         with:
           version: "0.12.2"
           args: "--version"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
 
       - run: make -j24 build-all
 
@@ -737,6 +742,16 @@ jobs:
           sudo chmod +x /usr/local/bin/chainsaw
           sudo apt-get update && sudo apt-get install -y jq
 
+      - name: Warm up network connectivity
+        run: |
+          echo "Warming up egress network paths..."
+          for i in {1..5}; do
+            echo "Attempt $i: Testing connectivity to external APIs"
+            curl -s -m 10 "https://api.open-meteo.com/v1/forecast?latitude=40.7128&longitude=-74.006&current_weather=true" > /dev/null && echo "✓ Weather API reachable" || echo "✗ Weather API unreachable (will retry)"
+            sleep 3
+          done
+          echo "Network warm-up complete - egress connectivity established"
+
       - name: Run multi-provider LLM tests
         env:
           E2E_TEST_AZURE_OPENAI_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
@@ -1102,7 +1117,7 @@ jobs:
       - name: Setup Go for coverage tools
         uses: actions/setup-go@v5
         with:
-          go-version: "1.24.11"
+          go-version: "1.24.13"
 
       - name: Install Python coverage tools
         run: |
@@ -1313,7 +1328,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24.11'
+          go-version: '1.24.13'
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
