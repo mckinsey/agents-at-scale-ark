@@ -162,7 +162,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24.11"
+          go-version: "1.24.13"
           cache: true
           cache-dependency-path: |
             ark/go.sum
@@ -204,7 +204,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24.11"
+          go-version: "1.24.13"
           cache: true
           cache-dependency-path: |
             ark/go.sum
@@ -218,6 +218,11 @@ jobs:
         with:
           version: "0.12.2"
           args: "--version"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
 
       - run: make -j24 build-all
 
@@ -493,7 +498,8 @@ jobs:
           fark agent sample-agent "confirm you have read this message"
 
   e2e-ark-cli:
-    needs: [build-ark-cli]
+    needs: [setup-container-cache-registry, build-containers, build-ark-cli]
+    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -505,8 +511,12 @@ jobs:
           model-type: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL && 'azure' || 'openai' }}
           model-name: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL && 'gpt-4.1-mini' || 'gpt-4' }}
           model-api-version: 2024-12-01-preview
+          ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
+          ci-cache-registry-hostname: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry-hostname }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+          ark-image-tag: ${{ github.sha }}
+          is-fork-pr: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr }}
 
   e2e-smoke-test:
     needs: [setup-container-cache-registry, build-containers]
@@ -731,6 +741,16 @@ jobs:
           sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
           sudo chmod +x /usr/local/bin/chainsaw
           sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Warm up network connectivity
+        run: |
+          echo "Warming up egress network paths..."
+          for i in {1..5}; do
+            echo "Attempt $i: Testing connectivity to external APIs"
+            curl -s -m 10 "https://api.open-meteo.com/v1/forecast?latitude=40.7128&longitude=-74.006&current_weather=true" > /dev/null && echo "✓ Weather API reachable" || echo "✗ Weather API unreachable (will retry)"
+            sleep 3
+          done
+          echo "Network warm-up complete - egress connectivity established"
 
       - name: Run multi-provider LLM tests
         env:
@@ -1097,7 +1117,7 @@ jobs:
       - name: Setup Go for coverage tools
         uses: actions/setup-go@v5
         with:
-          go-version: "1.24.11"
+          go-version: "1.24.13"
 
       - name: Install Python coverage tools
         run: |
@@ -1308,7 +1328,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24.11'
+          go-version: '1.24.13'
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
