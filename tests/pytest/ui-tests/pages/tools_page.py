@@ -7,8 +7,9 @@ logger = logging.getLogger(__name__)
 
 
 class ToolsPage(BasePage):
-    
+
     ADD_TOOL_BUTTON = "button:has-text('Add Tool'), button:has-text('Create Tool'), button:has-text('New Tool')"
+    TOOL_NAME_INPUT = "input[name='name'], input[placeholder*='name' i], input#name, [role='dialog'] input:first-of-type"
     SUCCESS_POPUP = "[role='alert'], [role='status'], .notification, .toast, div:has-text('success'), div:has-text('Success'), div:has-text('created'), div:has-text('Created')"
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
     CONFIRM_DELETE_BUTTON = "button:has-text('Delete'), button:has-text('Confirm'), button:has-text('Yes')"
@@ -68,8 +69,8 @@ class ToolsPage(BasePage):
         self.wait_for_navigation_complete()
         self.wait_for_form_ready()
         
-        name_input = self.page.locator("input#name, input[name='name'], [role='dialog'] input:first-of-type").first
-        
+        name_input = self.page.locator(self.TOOL_NAME_INPUT).first
+
         for attempt in range(3):
             try:
                 name_input.wait_for(state="visible", timeout=5000)
