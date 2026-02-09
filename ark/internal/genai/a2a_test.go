@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
+
+	arkann "mckinsey.com/ark/internal/annotations"
 )
 
 func TestExtractTextFromTask(t *testing.T) {
@@ -248,4 +250,43 @@ func TestExtractTextFromParts(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestBuildA2AMetadataWithHistory(t *testing.T) {
+	annotations := map[string]string{
+		arkann.A2AHistoryEnabled: TrueString,
+		arkann.A2AHistoryLimit:   "1",
+	}
+	history := []Message{
+		NewUserMessage("first"),
+		NewAssistantMessage("second"),
+	}
+
+	metadata, err := buildA2AMetadata(annotations, history, true)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, metadata)
+	rawHistory, ok := metadata[a2aHistoryExtensionKey]
+	assert.True(t, ok)
+	historyList, ok := rawHistory.([]protocol.Message)
+	assert.True(t, ok)
+	assert.Len(t, historyList, 1)
+	assert.Equal(t, protocol.MessageRoleAgent, historyList[0].Role)
+}
+
+func TestBuildA2AMetadataPermissions(t *testing.T) {
+	permissions := `{"subject":"user-123","scopes":["agents:read"]}`
+	annotations := map[string]string{
+		arkann.A2APermissions: permissions,
+	}
+
+	metadata, err := buildA2AMetadata(annotations, nil, false)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, metadata)
+	permissionsValue, ok := metadata[a2aPermissionsExtensionKey]
+	assert.True(t, ok)
+	permissionsMap, ok := permissionsValue.(map[string]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, "user-123", permissionsMap["subject"])
 }

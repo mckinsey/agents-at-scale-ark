@@ -81,7 +81,7 @@ func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []M
 
 func (a *Agent) executeWithExecutionEngineRouter(ctx context.Context, userInput Message, history []Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	if a.ExecutionEngine.Name == ExecutionEngineA2A {
-		return a.executeWithA2AExecutionEngine(ctx, userInput, eventStream)
+		return a.executeWithA2AExecutionEngine(ctx, userInput, history, eventStream)
 	}
 
 	messages, err := a.executeWithExecutionEngine(ctx, userInput, history)
@@ -110,10 +110,10 @@ func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Messag
 	return engineClient.Execute(ctx, a.ExecutionEngine, agentConfig, userInput, history, toolDefinitions)
 }
 
-func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
+func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Message, history []Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	a2aEngine := NewA2AExecutionEngine(a.client, a.eventing.A2aRecorder())
 	contextID := GetA2AContextID(ctx)
-	return a2aEngine.Execute(ctx, a.Name, a.Namespace, a.Annotations, contextID, userInput, eventStream)
+	return a2aEngine.Execute(ctx, a.Name, a.Namespace, a.Annotations, contextID, userInput, history, eventStream)
 }
 
 func (a *Agent) prepareMessages(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
