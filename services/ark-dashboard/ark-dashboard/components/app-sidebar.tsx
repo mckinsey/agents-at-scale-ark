@@ -50,11 +50,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Separator } from '@/components/ui/separator';
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -66,26 +67,90 @@ import { signout } from '@/lib/auth/signout';
 import {
   AGENT_BUILDER_SECTIONS,
   MONITORING_SECTIONS,
+  type DashboardSection,
 } from '@/lib/constants/dashboard-icons';
-import { type SystemInfo, systemInfoService } from '@/lib/services';
 import { proxyService } from '@/lib/services/proxy';
 import { useNamespace } from '@/providers/NamespaceProvider';
 import { useUser } from '@/providers/UserProvider';
+import { UserDetails } from './user';
 
 import qbLogoDark from '../app/img/qb-logo-dark.svg';
 import qbLogoLight from '../app/img/qb-logo-light.svg';
-import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
-import { UserDetails } from './user';
-import { Separator } from './ui/separator';
+
+interface CollapsibleSectionProps {
+  sections: DashboardSection[];
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  icon: React.ReactNode;
+  label: string;
+  isActive: boolean;
+  sidebarState: 'expanded' | 'collapsed';
+  onExpand: () => void;
+  onNavigate: (key: string) => void;
+  isNamespaceResolved: boolean;
+  loading: boolean;
+}
+
+function CollapsibleSection({
+  sections,
+  isOpen,
+  onOpenChange,
+  icon,
+  label,
+  isActive,
+  sidebarState,
+  onExpand,
+  onNavigate,
+  isNamespaceResolved,
+  loading,
+}: CollapsibleSectionProps) {
+  return (
+    <Collapsible open={isOpen} onOpenChange={onOpenChange} className="group/collapsible">
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          asChild
+          isActive={isActive}
+          tooltip={label}
+          className="group/button">
+          <CollapsibleTrigger
+            className="flex w-full items-center gap-2"
+            onClick={(e) => {
+              if (sidebarState === 'collapsed') {
+                e.preventDefault();
+                onExpand();
+              }
+            }}>
+            {icon}
+            <span>{label}</span>
+            {isOpen ? (
+              <ChevronUp className="ml-auto h-4 w-4 transition-opacity" />
+            ) : (
+              <ChevronDown className="ml-auto h-4 w-4 transition-opacity" />
+            )}
+          </CollapsibleTrigger>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+      <CollapsibleContent>
+        {sections.map(item => (
+          <SidebarMenuItem key={item.key}>
+            <SidebarMenuButton
+              onClick={() => isNamespaceResolved && onNavigate(item.key)}
+              disabled={!isNamespaceResolved || loading}>
+              <span>{item.title}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 export function AppSidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useUser();
   const { state: sidebarState, setOpen: setSidebarOpen } = useSidebar();
-  const isExperimentalDarkModeEnabled = useAtomValue(
-    isExperimentalDarkModeEnabledAtom,
-  );
+  const isExperimentalDarkModeEnabled = useAtomValue(isExperimentalDarkModeEnabledAtom);
   const setSettingsModalOpen = useSetAtom(settingsModalOpenAtom);
   const setIsFilesBrowserAvailable = useSetAtom(isFilesBrowserAvailableAtom);
   const setStoredIsExperimentalDarkModeEnabled = useSetAtom(
@@ -102,44 +167,26 @@ export function AppSidebar() {
   } = useNamespace();
 
   const [loading, setLoading] = useState(true);
-  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [namespaceEditorOpen, setNamespaceEditorOpen] = useState(false);
   const [agentBuilderOpen, setAgentBuilderOpen] = useState(false);
   const [monitoringOpen, setMonitoringOpen] = useState(false);
   const [morePopoverOpen, setMorePopoverOpen] = useState(false);
-  const isPlaceholderSection = (key: string): boolean => {
-    const placeholderKeys: string[] = [];
-    return placeholderKeys.includes(key);
-  };
 
   useEffect(() => {
-    const loadInitialData = async () => {
-      setLoading(true);
+    const checkFilesAPIHealth = async () => {
       try {
-        // Load system info and get current context
-        const systemData = await systemInfoService.get();
-        setSystemInfo(systemData);
+        const available = await proxyService.isServiceAvailable('file-gateway-api');
+        setIsFilesBrowserAvailable(available);
       } catch (error) {
-        console.error('Failed to load initial data:', error);
+        console.error('Failed to check files API health:', error);
+        setIsFilesBrowserAvailable(false);
       } finally {
         setLoading(false);
       }
     };
 
-    const checkFilesAPIHealth = async () => {
-      try {
-        const available =
-          await proxyService.isServiceAvailable('file-gateway-api');
-        setIsFilesBrowserAvailable(available);
-      } catch (error) {
-        console.error('Failed to check files API health:', error);
-        setIsFilesBrowserAvailable(false);
-      }
-    };
-
-    loadInitialData();
     checkFilesAPIHealth();
-  }, [router, pathname, setIsFilesBrowserAvailable]);
+  }, [setIsFilesBrowserAvailable]);
 
   useEffect(() => {
     const currentSection = pathname.split('/')[1];
@@ -161,26 +208,20 @@ export function AppSidebar() {
     }
   }, [sidebarState]);
 
-  const handleCreateNamespace = (name: string) => {
-    createNamespace(name);
-  };
-
   const navigateToSection = (sectionKey: string) => {
     trackEvent({
       name: 'nav_item_clicked',
       properties: {
         section: sectionKey,
-        fromSection: getCurrentSection(),
+        fromSection: pathname.split('/')[1],
       },
     });
     router.push(`/${sectionKey}`);
   };
 
-  const getCurrentSection = () => {
-    return pathname.split('/')[1];
-  };
+  const getCurrentSection = () => pathname.split('/')[1];
 
-  const isAnySectionActive = (sections: typeof AGENT_BUILDER_SECTIONS) => {
+  const isAnySectionActive = (sections: DashboardSection[]) => {
     const currentSection = getCurrentSection();
     return sections.some(item => item.key === currentSection);
   };
@@ -198,11 +239,7 @@ export function AppSidebar() {
               <SidebarMenuButton size="lg" className="pointer-events-none mb-4 !p-0">
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
                   <Image
-                    src={
-                      isExperimentalDarkModeEnabled
-                        ? qbLogoDark
-                        : qbLogoLight
-                    }
+                    src={isExperimentalDarkModeEnabled ? qbLogoDark : qbLogoLight}
                     alt="ARK"
                     width={32}
                     height={32}
@@ -214,22 +251,22 @@ export function AppSidebar() {
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
-          <SidebarMenu
-          >
+          <SidebarMenu>
             <SidebarMenuItem>
-              <DropdownMenu
-                // Dialog & DropdownMenu adds pointer-events: none
-                // Discussion here: https://github.com/shadcn-ui/ui/discussions/6908
-                modal={false}>
+              <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild>
                   <SidebarMenuButton
                     size="lg"
                     className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground !p-0">
-                    <div className="flex aspect-square size-8 items-center p-1 justify-center rounded-lg" style={{ backgroundColor: '#0085FF99' }}>
+                    <div
+                      className="flex aspect-square size-8 items-center p-1 justify-center rounded-lg"
+                      style={{ backgroundColor: '#0085FF99' }}>
                       <span className="text-white text-xs">ARK</span>
                     </div>
                     <div className="flex flex-col gap-0.5 leading-none">
-                      <span className="font-medium text-sidebar-accent-foreground">ARK Dashboard</span>
+                      <span className="font-medium text-sidebar-accent-foreground">
+                        ARK Dashboard
+                      </span>
                       <span className="text-xs">
                         {isPending
                           ? 'Loading...'
@@ -251,13 +288,9 @@ export function AppSidebar() {
                   <DropdownMenuLabel>Namespaces</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   {loading ? (
-                    <DropdownMenuItem disabled>
-                      Loading namespaces...
-                    </DropdownMenuItem>
+                    <DropdownMenuItem disabled>Loading namespaces...</DropdownMenuItem>
                   ) : availableNamespaces.length === 0 ? (
-                    <DropdownMenuItem disabled>
-                      No namespaces available
-                    </DropdownMenuItem>
+                    <DropdownMenuItem disabled>No namespaces available</DropdownMenuItem>
                   ) : (
                     <>
                       {availableNamespaces.map(ns => (
@@ -265,16 +298,13 @@ export function AppSidebar() {
                           key={ns.name}
                           onSelect={() => setNamespace(ns.name)}>
                           {ns.name}
-                          {ns.name === namespace && (
-                            <Check className="ml-auto h-4 w-4" />
-                          )}
+                          {ns.name === namespace && <Check className="ml-auto h-4 w-4" />}
                         </DropdownMenuItem>
                       ))}
                     </>
                   )}
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onSelect={() => setNamespaceEditorOpen(true)}>
+                  <DropdownMenuItem onSelect={() => setNamespaceEditorOpen(true)}>
                     <Plus className="mr-2 h-4 w-4" />
                     Add Namespace
                   </DropdownMenuItem>
@@ -283,7 +313,8 @@ export function AppSidebar() {
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>
-        <SidebarMenu className='ml-2'>
+
+        <SidebarMenu className="ml-2">
           <SidebarContent>
             <SidebarMenuItem>
               <SidebarMenuButton
@@ -293,56 +324,24 @@ export function AppSidebar() {
                 <span>Home</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
-            <Collapsible
-              open={agentBuilderOpen}
+
+            <CollapsibleSection
+              sections={AGENT_BUILDER_SECTIONS}
+              isOpen={agentBuilderOpen}
               onOpenChange={setAgentBuilderOpen}
-              className="group/collapsible">
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={isAnySectionActive(AGENT_BUILDER_SECTIONS)}
-                  tooltip="Agent Builder"
-                  className="group/button">
-                  <CollapsibleTrigger
-                    className="flex w-full items-center gap-2"
-                    onClick={(e) => {
-                      if (sidebarState === 'collapsed') {
-                        e.preventDefault();
-                        setSidebarOpen(true);
-                        setTimeout(() => setAgentBuilderOpen(true), 100);
-                      }
-                    }}>
-                    <Bot />
-                    <span>Agent Builder</span>
-                    {!agentBuilderOpen ? (
-                      <ChevronDown className="ml-auto h-4 w-4 transition-opacity" />
-                    ) : (
-                      <ChevronUp className="ml-auto h-4 w-4 transition-opacity" />
-                    )}
-                  </CollapsibleTrigger>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <CollapsibleContent>
-                {AGENT_BUILDER_SECTIONS.map(item => {
-                  const isPlaceholder = isPlaceholderSection(item.key);
-                  const isDisabled =
-                    !isNamespaceResolved || loading || isPlaceholder;
-                  return (
-                    <SidebarMenuItem key={item.key}>
-                      <SidebarMenuButton
-                        onClick={() =>
-                          !isPlaceholder &&
-                          isNamespaceResolved &&
-                          navigateToSection(item.key)
-                        }
-                        disabled={isDisabled}>
-                        <span>{item.title}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </CollapsibleContent>
-            </Collapsible>
+              icon={<Bot />}
+              label="Agent Builder"
+              isActive={isAnySectionActive(AGENT_BUILDER_SECTIONS)}
+              sidebarState={sidebarState}
+              onExpand={() => {
+                setSidebarOpen(true);
+                setTimeout(() => setAgentBuilderOpen(true), 100);
+              }}
+              onNavigate={navigateToSection}
+              isNamespaceResolved={isNamespaceResolved}
+              loading={loading}
+            />
+
             <SidebarMenuItem>
               <SidebarMenuButton
                 onClick={() => navigateToSection('workflow-templates')}
@@ -351,6 +350,7 @@ export function AppSidebar() {
                 <span>Workflows</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
+
             <SidebarMenuItem>
               <SidebarMenuButton
                 onClick={() => navigateToSection('mcp')}
@@ -359,6 +359,7 @@ export function AppSidebar() {
                 <span>MCPs</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
+
             <SidebarMenuItem>
               <SidebarMenuButton
                 onClick={() => navigateToSection('models')}
@@ -367,56 +368,24 @@ export function AppSidebar() {
                 <span>Models</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
-            <Collapsible
-              open={monitoringOpen}
+
+            <CollapsibleSection
+              sections={enabledMonitoringSections}
+              isOpen={monitoringOpen}
               onOpenChange={setMonitoringOpen}
-              className="group/collapsible">
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={isAnySectionActive(MONITORING_SECTIONS)}
-                  tooltip="Monitoring"
-                  className="group/button">
-                  <CollapsibleTrigger
-                    className="flex w-full items-center gap-2"
-                    onClick={(e) => {
-                      if (sidebarState === 'collapsed') {
-                        e.preventDefault();
-                        setSidebarOpen(true);
-                        setTimeout(() => setMonitoringOpen(true), 100);
-                      }
-                    }}>
-                    <Activity />
-                    <span>Monitoring</span>
-                    {!monitoringOpen ? (
-                      <ChevronDown className="ml-auto h-4 w-4 transition-opacity" />
-                    ) : (
-                      <ChevronUp className="ml-auto h-4 w-4 transition-opacity" />
-                    )}
-                  </CollapsibleTrigger>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <CollapsibleContent>
-                {enabledMonitoringSections.map(item => {
-                  const isPlaceholder = isPlaceholderSection(item.key);
-                  const isDisabled =
-                    !isNamespaceResolved || loading || isPlaceholder;
-                  return (
-                    <SidebarMenuItem key={item.key}>
-                      <SidebarMenuButton
-                        onClick={() =>
-                          !isPlaceholder &&
-                          isNamespaceResolved &&
-                          navigateToSection(item.key)
-                        }
-                        disabled={isDisabled}>
-                        <span>{item.title}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </CollapsibleContent>
-            </Collapsible>
+              icon={<Activity />}
+              label="Monitoring"
+              isActive={isAnySectionActive(MONITORING_SECTIONS)}
+              sidebarState={sidebarState}
+              onExpand={() => {
+                setSidebarOpen(true);
+                setTimeout(() => setMonitoringOpen(true), 100);
+              }}
+              onNavigate={navigateToSection}
+              isNamespaceResolved={isNamespaceResolved}
+              loading={loading}
+            />
+
             <SidebarMenuItem>
               <Popover open={morePopoverOpen} onOpenChange={setMorePopoverOpen}>
                 <PopoverTrigger asChild>
@@ -455,18 +424,18 @@ export function AppSidebar() {
             </SidebarMenuItem>
           </SidebarContent>
         </SidebarMenu>
+
         <SidebarContent></SidebarContent>
         <Separator className="!w-10 my-4" />
-        <SidebarMenu className='ml-2'>
+
+        <SidebarMenu className="ml-2">
           <SidebarMenuItem>
-            <SidebarMenuButton
-              onClick={() => {
-                setSettingsModalOpen(true);
-              }}>
+            <SidebarMenuButton onClick={() => setSettingsModalOpen(true)}>
               <Settings className="mr-2 h-4 w-4" />
               <span>Settings</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
+
           <SidebarMenuItem>
             <SidebarMenuButton asChild>
               <a
@@ -478,24 +447,33 @@ export function AppSidebar() {
               </a>
             </SidebarMenuButton>
           </SidebarMenuItem>
+
           <SidebarMenuItem>
             <SidebarMenuButton
-              onClick={() => {
-                setStoredIsExperimentalDarkModeEnabled(!isExperimentalDarkModeEnabled);
-              }}>
-              {isExperimentalDarkModeEnabled ? <Moon className="mr-2 h-4 w-4" /> : <Sun className="mr-2 h-4 w-4" />}
+              onClick={() =>
+                setStoredIsExperimentalDarkModeEnabled(!isExperimentalDarkModeEnabled)
+              }>
+              {isExperimentalDarkModeEnabled ? (
+                <Moon className="mr-2 h-4 w-4" />
+              ) : (
+                <Sun className="mr-2 h-4 w-4" />
+              )}
               <span>{isExperimentalDarkModeEnabled ? 'Dark Mode' : 'Light Mode'}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          <SidebarMenuItem className='bg-[var(--primary-500)] w-8'>
+
+          <SidebarMenuItem className="bg-[var(--primary-500)] w-8">
             <SidebarMenuButton
-              onClick={() => {
-                setSidebarOpen(sidebarState === 'expanded' ? false : true);
-              }}>
-              {sidebarState === 'expanded' ? <ChevronsLeft className="mr-2 h-4 w-4" /> : <ChevronsRight className="mr-2 h-4 w-4" />}
+              onClick={() => setSidebarOpen(sidebarState === 'expanded' ? false : true)}>
+              {sidebarState === 'expanded' ? (
+                <ChevronsLeft className="mr-2 h-4 w-4" />
+              ) : (
+                <ChevronsRight className="mr-2 h-4 w-4" />
+              )}
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+
         <SidebarFooter>
           {user && (
             <SidebarMenu>
@@ -530,7 +508,7 @@ export function AppSidebar() {
       <NamespaceEditor
         open={namespaceEditorOpen}
         onOpenChange={setNamespaceEditorOpen}
-        onSave={handleCreateNamespace}
+        onSave={createNamespace}
       />
     </>
   );

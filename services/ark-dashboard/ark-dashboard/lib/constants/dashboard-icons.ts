@@ -176,28 +176,7 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
 // Type-safe keys
 export type DashboardSectionKey = keyof typeof DASHBOARD_SECTIONS;
 
-// Helper function to get icon by section key
-export function getDashboardIcon(sectionKey: DashboardSectionKey): LucideIcon {
-  return DASHBOARD_SECTIONS[sectionKey]?.icon || Bot;
-}
-
-// Export individual section groups for convenience
-export const CONFIGURATION_SECTIONS = Object.values(DASHBOARD_SECTIONS).filter(
-  section => section.group === 'configurations',
-);
-
-export const OPERATION_SECTIONS = Object.values(DASHBOARD_SECTIONS).filter(
-  section => section.group === 'operations',
-);
-
-export const RUNTIME_SECTIONS = Object.values(DASHBOARD_SECTIONS).filter(
-  section => section.group === 'runtime',
-);
-
-export const SERVICE_SECTIONS = Object.values(DASHBOARD_SECTIONS).filter(
-  section => section.group === 'service',
-);
-
+// Section groups used in the app
 export const AGENT_BUILDER_SECTIONS = Object.values(DASHBOARD_SECTIONS).filter(
   section => section.group === 'agent-builder',
 );
