@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	k8sopenapi "k8s.io/apiextensions-apiserver/pkg/generated/openapi"
 	openapicommon "k8s.io/kube-openapi/pkg/common"
 	"k8s.io/kube-openapi/pkg/validation/spec"
 	"sigs.k8s.io/yaml"
@@ -39,7 +40,16 @@ var (
 func loadCRDDefinitions() {
 	definitions = make(map[string]openapicommon.OpenAPIDefinition)
 
-	addStandardK8sTypes(definitions)
+	ref := func(name string) spec.Ref {
+		return spec.MustCreateRef("#/definitions/" + name)
+	}
+	k8sDefs := k8sopenapi.GetOpenAPIDefinitions(ref)
+	for k, v := range k8sDefs {
+		definitions[k] = v
+	}
+
+	objectMetaSchema := k8sDefs["k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"].Schema
+	listMetaSchema := k8sDefs["k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"].Schema
 
 	entries, err := crdFS.ReadDir("crds")
 	if err != nil {
@@ -71,11 +81,15 @@ func loadCRDDefinitions() {
 				continue
 			}
 
+			if schema.Properties != nil {
+				schema.Properties["metadata"] = objectMetaSchema
+			}
+
 			resourceKey := "mckinsey.com/ark/api/" + version.Name + "." + crd.Spec.Names.Kind
 			definitions[resourceKey] = openapicommon.OpenAPIDefinition{Schema: schema}
 
 			listKey := resourceKey + "List"
-			definitions[listKey] = schemaForList(&schema)
+			definitions[listKey] = schemaForList(&schema, &listMetaSchema)
 		}
 	}
 }
@@ -85,7 +99,7 @@ func GetOpenAPIDefinitions(ref openapicommon.ReferenceCallback) map[string]opena
 	return definitions
 }
 
-func schemaForList(itemSchema *spec.Schema) openapicommon.OpenAPIDefinition {
+func schemaForList(itemSchema, listMetaSchema *spec.Schema) openapicommon.OpenAPIDefinition {
 	return openapicommon.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
@@ -93,7 +107,7 @@ func schemaForList(itemSchema *spec.Schema) openapicommon.OpenAPIDefinition {
 				Properties: map[string]spec.Schema{
 					"apiVersion": {SchemaProps: spec.SchemaProps{Type: []string{"string"}}},
 					"kind":       {SchemaProps: spec.SchemaProps{Type: []string{"string"}}},
-					"metadata":   {SchemaProps: spec.SchemaProps{Type: []string{"object"}}},
+					"metadata":   *listMetaSchema,
 					"items": {
 						SchemaProps: spec.SchemaProps{
 							Type:  []string{"array"},
@@ -106,57 +120,3 @@ func schemaForList(itemSchema *spec.Schema) openapicommon.OpenAPIDefinition {
 	}
 }
 
-func addStandardK8sTypes(defs map[string]openapicommon.OpenAPIDefinition) {
-	objectSchema := spec.Schema{SchemaProps: spec.SchemaProps{Type: []string{"object"}}}
-	stringSchema := spec.Schema{SchemaProps: spec.SchemaProps{Type: []string{"string"}}}
-	intSchema := spec.Schema{SchemaProps: spec.SchemaProps{Type: []string{"integer"}}}
-	arrayOfStrings := spec.Schema{SchemaProps: spec.SchemaProps{Type: []string{"array"}, Items: &spec.SchemaOrArray{Schema: &stringSchema}}}
-
-	defs["k8s.io/apimachinery/pkg/version.Info"] = openapicommon.OpenAPIDefinition{
-		Schema: spec.Schema{SchemaProps: spec.SchemaProps{Type: []string{"object"}, Properties: map[string]spec.Schema{
-			"major": stringSchema, "minor": stringSchema, "gitVersion": stringSchema, "gitCommit": stringSchema,
-			"gitTreeState": stringSchema, "buildDate": stringSchema, "goVersion": stringSchema, "compiler": stringSchema, "platform": stringSchema,
-		}}},
-	}
-
-	defs["k8s.io/apimachinery/pkg/apis/meta/v1.APIGroupList"] = openapicommon.OpenAPIDefinition{
-		Schema: spec.Schema{SchemaProps: spec.SchemaProps{Type: []string{"object"}, Properties: map[string]spec.Schema{
-			"apiVersion": stringSchema, "kind": stringSchema, "groups": {SchemaProps: spec.SchemaProps{Type: []string{"array"}, Items: &spec.SchemaOrArray{Schema: &objectSchema}}},
-		}}},
-	}
-
-	defs["k8s.io/apimachinery/pkg/apis/meta/v1.APIGroup"] = openapicommon.OpenAPIDefinition{Schema: objectSchema}
-	defs["k8s.io/apimachinery/pkg/apis/meta/v1.APIVersions"] = openapicommon.OpenAPIDefinition{Schema: objectSchema}
-	defs["k8s.io/apimachinery/pkg/apis/meta/v1.APIResourceList"] = openapicommon.OpenAPIDefinition{Schema: objectSchema}
-	defs["k8s.io/apimachinery/pkg/apis/meta/v1.Status"] = openapicommon.OpenAPIDefinition{
-		Schema: spec.Schema{SchemaProps: spec.SchemaProps{Type: []string{"object"}, Properties: map[string]spec.Schema{
-			"apiVersion": stringSchema, "kind": stringSchema, "metadata": objectSchema, "status": stringSchema, "message": stringSchema, "reason": stringSchema, "code": intSchema,
-		}}},
-	}
-	defs["k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"] = openapicommon.OpenAPIDefinition{
-		Schema: spec.Schema{SchemaProps: spec.SchemaProps{Type: []string{"object"}, Properties: map[string]spec.Schema{
-			"name": stringSchema, "namespace": stringSchema, "uid": stringSchema, "resourceVersion": stringSchema,
-			"generation": intSchema, "creationTimestamp": stringSchema, "deletionTimestamp": stringSchema,
-			"labels": objectSchema, "annotations": objectSchema, "finalizers": arrayOfStrings,
-		}}},
-	}
-	defs["k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"] = openapicommon.OpenAPIDefinition{
-		Schema: spec.Schema{SchemaProps: spec.SchemaProps{Type: []string{"object"}, Properties: map[string]spec.Schema{
-			"selfLink": stringSchema, "resourceVersion": stringSchema, "continue": stringSchema, "remainingItemCount": intSchema,
-		}}},
-	}
-	defs["k8s.io/apimachinery/pkg/apis/meta/v1.Time"] = openapicommon.OpenAPIDefinition{Schema: stringSchema}
-	defs["k8s.io/apimachinery/pkg/apis/meta/v1.MicroTime"] = openapicommon.OpenAPIDefinition{Schema: stringSchema}
-	defs["k8s.io/apimachinery/pkg/apis/meta/v1.Duration"] = openapicommon.OpenAPIDefinition{Schema: stringSchema}
-	defs["k8s.io/apimachinery/pkg/apis/meta/v1.Patch"] = openapicommon.OpenAPIDefinition{Schema: objectSchema}
-	defs["k8s.io/apimachinery/pkg/apis/meta/v1.DeleteOptions"] = openapicommon.OpenAPIDefinition{Schema: objectSchema}
-	defs["k8s.io/apimachinery/pkg/apis/meta/v1.CreateOptions"] = openapicommon.OpenAPIDefinition{Schema: objectSchema}
-	defs["k8s.io/apimachinery/pkg/apis/meta/v1.UpdateOptions"] = openapicommon.OpenAPIDefinition{Schema: objectSchema}
-	defs["k8s.io/apimachinery/pkg/apis/meta/v1.GetOptions"] = openapicommon.OpenAPIDefinition{Schema: objectSchema}
-	defs["k8s.io/apimachinery/pkg/apis/meta/v1.ListOptions"] = openapicommon.OpenAPIDefinition{Schema: objectSchema}
-	defs["k8s.io/apimachinery/pkg/apis/meta/v1.PatchOptions"] = openapicommon.OpenAPIDefinition{Schema: objectSchema}
-	defs["k8s.io/apimachinery/pkg/apis/meta/v1.WatchEvent"] = openapicommon.OpenAPIDefinition{Schema: objectSchema}
-	defs["k8s.io/apimachinery/pkg/runtime.RawExtension"] = openapicommon.OpenAPIDefinition{Schema: objectSchema}
-	defs["k8s.io/apimachinery/pkg/runtime.Unknown"] = openapicommon.OpenAPIDefinition{Schema: objectSchema}
-	defs["k8s.io/apimachinery/pkg/util/intstr.IntOrString"] = openapicommon.OpenAPIDefinition{Schema: stringSchema}
-}
