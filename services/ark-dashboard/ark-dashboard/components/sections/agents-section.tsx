@@ -22,6 +22,7 @@ import { TrackedButton } from '@/components/ui/tracked-button';
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { useDelayedLoading } from '@/lib/hooks';
 import { type Agent, agentsService } from '@/lib/services';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 interface AgentsSectionHandle {
   openApiDialog: () => void;
@@ -34,6 +35,7 @@ export const AgentsSection = forwardRef<AgentsSectionHandle, object>(
     const [loading, setLoading] = useState(true);
     const showLoading = useDelayedLoading(loading);
     const [showCompactView, setShowCompactView] = useState(false);
+    const { readOnlyMode } = useNamespace();
 
     const viewOptions: ToggleOption[] = [
       { id: 'compact', label: 'compact view', active: !showCompactView },
@@ -110,15 +112,25 @@ export const AgentsSection = forwardRef<AgentsSectionHandle, object>(
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
-            <TrackedButton
-              trackingEvent="create_agent_clicked"
-              trackingProperties={{ source: 'empty_state' }}
-              asChild>
-              <Link href="/agents/new">
+            {readOnlyMode ? (
+              <TrackedButton
+                trackingEvent="create_agent_clicked"
+                trackingProperties={{ source: 'empty_state' }}
+                disabled>
                 <Plus className="h-4 w-4" />
                 Create Agent
-              </Link>
-            </TrackedButton>
+              </TrackedButton>
+            ) : (
+              <TrackedButton
+                trackingEvent="create_agent_clicked"
+                trackingProperties={{ source: 'empty_state' }}
+                asChild>
+                <Link href="/agents/new">
+                  <Plus className="h-4 w-4" />
+                  Create Agent
+                </Link>
+              </TrackedButton>
+            )}
           </EmptyContent>
           <Button
             variant="link"

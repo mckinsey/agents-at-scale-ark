@@ -21,6 +21,7 @@ import { type ToggleOption, ToggleSwitch } from '@/components/ui/toggle-switch';
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { useDelayedLoading } from '@/lib/hooks';
 import { type Model, modelsService } from '@/lib/services';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 interface ModelsSectionProps {
   namespace: string;
@@ -33,6 +34,7 @@ export const ModelsSection = function ModelsSection({
   const [loading, setLoading] = useState(true);
   const showLoading = useDelayedLoading(loading);
   const [showCompactView, setShowCompactView] = useState(false);
+  const { readOnlyMode } = useNamespace();
 
   const viewOptions: ToggleOption[] = [
     { id: 'compact', label: 'compact view', active: !showCompactView },
@@ -107,12 +109,19 @@ export const ModelsSection = function ModelsSection({
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
-            <Link href="/models/new">
-              <Button>
+            {readOnlyMode ? (
+              <Button disabled>
                 <Plus className="h-4 w-4" />
                 Add Model
               </Button>
-            </Link>
+            ) : (
+              <Link href="/models/new">
+                <Button>
+                  <Plus className="h-4 w-4" />
+                  Add Model
+                </Button>
+              </Link>
+            )}
           </EmptyContent>
           <Button
             variant="link"

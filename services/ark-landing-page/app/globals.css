@@ -1,0 +1,177 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --radius: 0rem;
+
+  /* TextColor */
+  --text-primary: #141721e0;
+  --text-secondary: #14172199;
+  --text-placeholder: #14172161;
+  --text-disabled: #1417214d;
+  --text-primary-hover: #141721ff;
+
+  /* SurfaceColor */
+  --surface-bg01: #ffffffff;
+  --surface-bg02: #f5f6f6ff;
+  --surface-bg03: #e6e8eaff;
+
+  /* BorderColor */
+  --border-subtle-alpha01: #1417211a;
+  --border-subtle-alpha02: #14172129;
+  --border-subtle-alpha03: #1417213d;
+  --border-enabled: #14172199;
+  --border-hover: #141721e0;
+  --border-selected: #141721ff;
+  --border-disabled: #1417214d;
+
+  /* FieldColor */
+  --field-enabled: #fafafbff;
+  --field-hover: #ffffffff;
+  --field-disabled: #f0f1f2ff;
+
+  /* StatusColor */
+  --status-success: #26bf56ff;
+  --status-error: #f03b3aff;
+  --status-information: #009effff;
+  --status-warning: #f17c02ff;
+
+  /* PrimaryColor */
+  --primary-50: #ffffffff;
+  --primary-100: #fafafbff;
+  --primary-200: #f5f6f6ff;
+  --primary-300: #f2f3f4ff;
+  --primary-400: #ebedeeff;
+  --primary-500: #e6e8eaff;
+  --primary-600: #e2e4e6ff;
+  --primary-700: #dddfe1ff;
+  --primary-800: #d8daddff;
+  --primary-900: #d3d6d9ff;
+
+  /* Semantic Variables */
+  --background: var(--surface-bg01);
+  --foreground: var(--text-primary);
+
+  --card: var(--surface-bg01);
+  --card-foreground: var(--text-primary);
+
+  --primary: var(--text-primary);
+  --primary-foreground: var(--surface-bg01);
+
+  --secondary: var(--surface-bg02);
+  --secondary-foreground: var(--text-primary);
+
+  --muted: var(--surface-bg02);
+  --muted-foreground: var(--text-secondary);
+
+  --accent: var(--surface-bg01);
+  --accent-foreground: var(--text-primary);
+
+  --destructive: var(--status-error);
+  --destructive-foreground: var(--surface-bg01);
+
+  --border: var(--border-subtle-alpha01);
+  --input: var(--field-enabled);
+  --ring: var(--surface-bg01);
+
+  --state-overlay-enabled: #14172100;
+  --state-overlay-hover: #1417210f;
+  --state-overlay-active: #1417211f;
+  --state-overlay-disabled: #14172129;
+  --state-overlay-selected-hover: #1417213d;
+  --state-overlay-selected-inverse: #141721ff;
+  --state-overlay-selected-range: #14172114;
+}
+
+.dark {
+  /* TextColor */
+  --text-primary: #ffffffe0;
+  --text-secondary: #ffffff99;
+  --text-placeholder: #ffffff61;
+  --text-disabled: #ffffff4d;
+  --text-primary-hover: #ffffffff;
+
+  /* SurfaceColor */
+  --surface-bg01: #232632ff;
+  --surface-bg02: #1b1e2aff;
+  --surface-bg03: #141721ff;
+
+  /* BorderColor */
+  --border-subtle-alpha01: #ffffff1a;
+  --border-subtle-alpha02: #ffffff29;
+  --border-subtle-alpha03: #ffffff3d;
+  --border-enabled: #ffffff99;
+  --border-hover: #ffffffe0;
+  --border-selected: #ffffffff;
+  --border-disabled: #ffffff4d;
+
+  /* FieldColor */
+  --field-enabled: #2b2e39ff;
+  --field-hover: #373a44ff;
+  --field-disabled: #272a35ff;
+
+  /* StatusColor */
+  --status-success: #40d86eff;
+  --status-error: #f56565ff;
+  --status-information: #00b4ffff;
+  --status-warning: #ffc107ff;
+
+  /* PrimaryColor */
+  --primary-50: #373a44ff;
+  --primary-100: #333640ff;
+  --primary-200: #2f323cff;
+  --primary-300: #2b2e39ff;
+  --primary-400: #272a35ff;
+  --primary-500: #232632ff;
+  --primary-600: #1f222eff;
+  --primary-700: #1b1e2aff;
+  --primary-800: #181b26ff;
+  --primary-900: #141721ff;
+
+  /* Semantic Variables */
+  --background: var(--surface-bg03);
+  --foreground: var(--text-primary);
+
+  --card: var(--surface-bg03);
+  --card-foreground: var(--text-primary);
+
+  --primary: var(--text-primary);
+  --primary-foreground: var(--surface-bg03);
+
+  --secondary: var(--surface-bg02);
+  --secondary-foreground: var(--text-primary);
+
+  --muted: var(--surface-bg02);
+  --muted-foreground: var(--text-secondary);
+
+  --accent: var(--surface-bg03);
+  --accent-foreground: var(--text-primary);
+
+  --destructive: var(--status-error);
+  --destructive-foreground: var(--text-primary);
+
+  --border: var(--border-subtle-alpha01);
+  --input: var(--field-enabled);
+  --ring: var(--surface-bg03);
+
+  --state-overlay-enabled: #ffffff00;
+  --state-overlay-hover: #ffffff0a;
+  --state-overlay-active: #ffffff14;
+  --state-overlay-disabled: #04131f29;
+  --state-overlay-selected-hover: #ffffff29;
+  --state-overlay-selected-inverse: #ffffffff;
+  --state-overlay-selected-range: #ffffff1a;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+    outline-color: var(--ring);
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}

@@ -7,6 +7,7 @@ import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { TeamsSection } from '@/components/sections/teams-section';
 import { Button } from '@/components/ui/button';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 const breadcrumbs: BreadcrumbElement[] = [
   { href: '/', label: 'ARK Dashboard' },
@@ -14,6 +15,7 @@ const breadcrumbs: BreadcrumbElement[] = [
 
 export default function TeamsPage() {
   const teamsSectionRef = useRef<{ openAddEditor: () => void }>(null);
+  const { readOnlyMode } = useNamespace();
 
   return (
     <>
@@ -21,7 +23,9 @@ export default function TeamsPage() {
         breadcrumbs={breadcrumbs}
         currentPage="Teams"
         actions={
-          <Button onClick={() => teamsSectionRef.current?.openAddEditor()}>
+          <Button
+            onClick={() => teamsSectionRef.current?.openAddEditor()}
+            disabled={readOnlyMode}>
             <Plus className="h-4 w-4" />
             Create Team
           </Button>
