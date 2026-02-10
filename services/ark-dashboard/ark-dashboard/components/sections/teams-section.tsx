@@ -28,6 +28,7 @@ import {
   agentsService,
   teamsService,
 } from '@/lib/services';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
   function TeamsSection(_, ref) {
@@ -42,6 +43,7 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
       { id: 'compact', label: 'compact view', active: !showCompactView },
       { id: 'card', label: 'card view', active: showCompactView },
     ];
+    const { readOnlyMode } = useNamespace();
 
     useImperativeHandle(ref, () => ({
       openAddEditor: () => router.push('/teams/new'),
@@ -141,21 +143,36 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
 
     if (teams.length === 0 && !loading) {
       return (
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <DASHBOARD_SECTIONS.teams.icon />
-            </EmptyMedia>
-            <EmptyTitle>No Teams Yet</EmptyTitle>
-            <EmptyDescription>
-              You haven&apos;t created any teams yet. Get started by creating
-              your first team.
-            </EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            <Button onClick={() => router.push('/teams/new')}>
-              <Plus className="h-4 w-4" />
-              Create Team
+        <>
+          <Empty>
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <DASHBOARD_SECTIONS.teams.icon />
+              </EmptyMedia>
+              <EmptyTitle>No Teams Yet</EmptyTitle>
+              <EmptyDescription>
+                You haven&apos;t created any teams yet. Get started by creating
+                your first team.
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button
+                onClick={() => setTeamEditorOpen(true)}
+                disabled={readOnlyMode}>
+                <Plus className="h-4 w-4" />
+                Create Team
+              </Button>
+            </EmptyContent>
+            <Button
+              variant="link"
+              asChild
+              className="text-muted-foreground"
+              size="sm">
+              <a
+                href="https://mckinsey.github.io/agents-at-scale-ark/user-guide/teams/"
+                target="_blank">
+                Learn More <ArrowUpRightIcon />
+              </a>
             </Button>
           </EmptyContent>
           <Button

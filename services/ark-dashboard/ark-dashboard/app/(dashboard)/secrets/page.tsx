@@ -8,6 +8,7 @@ import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { SecretsSection } from '@/components/sections/secrets-section';
 import { Button } from '@/components/ui/button';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 const breadcrumbs: BreadcrumbElement[] = [
   { href: '/', label: 'ARK Dashboard' },
@@ -17,6 +18,7 @@ export default function SecretsPage() {
   const searchParams = useSearchParams();
   const namespace = searchParams.get('namespace') || 'default';
   const secretsSectionRef = useRef<{ openAddEditor: () => void }>(null);
+  const { readOnlyMode } = useNamespace();
 
   return (
     <>
@@ -24,7 +26,9 @@ export default function SecretsPage() {
         breadcrumbs={breadcrumbs}
         currentPage="Secrets"
         actions={
-          <Button onClick={() => secretsSectionRef.current?.openAddEditor()}>
+          <Button
+            onClick={() => secretsSectionRef.current?.openAddEditor()}
+            disabled={readOnlyMode}>
             <Plus className="h-4 w-4" />
             Add Secret
           </Button>

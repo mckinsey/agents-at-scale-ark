@@ -20,6 +20,7 @@ import type {
   TeamCreateRequest,
   TeamUpdateRequest,
 } from '@/lib/services';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { BaseCard, type BaseCardAction } from './base-card';
 
@@ -42,6 +43,7 @@ export function TeamCard({
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(team.name);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const { readOnlyMode } = useNamespace();
 
   // Get the names of member agents
   const memberAgents = team.members
@@ -53,18 +55,21 @@ export function TeamCard({
 
   const actions: BaseCardAction[] = [];
 
-  actions.push({
-    icon: Pencil,
-    label: 'View team',
-    onClick: () => router.push(`/teams/${encodeURIComponent(team.name)}`),
-  });
+  if (onUpdate) {
+    actions.push({
+      icon: Pencil,
+      label: 'Edit team',
+      onClick: () => setEditorOpen(true),
+      disabled: readOnlyMode,
+    });
+  }
 
   if (onDelete) {
     actions.push({
       icon: Trash2,
       label: 'Delete team',
       onClick: () => setDeleteConfirmOpen(true),
-      disabled: isChatOpen,
+      disabled: isChatOpen || readOnlyMode,
     });
   }
 

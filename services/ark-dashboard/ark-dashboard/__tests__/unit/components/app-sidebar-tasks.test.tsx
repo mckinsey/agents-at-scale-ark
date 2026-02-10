@@ -20,6 +20,7 @@ vi.mock('@/providers/NamespaceProvider', () => ({
     loading: false,
     setNamespace: vi.fn(),
     createNamespace: vi.fn(),
+    readOnlyMode: false,
   })),
 }));
 

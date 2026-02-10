@@ -1,0 +1,57 @@
+version: v2beta1
+
+images:
+  ark-landing-page:
+    image: ark-landing-page
+    dockerfile: Dockerfile
+    context: .
+
+pipelines:
+  deploy: |-
+    build_images --all
+    create_deployments --all
+  dev: |-
+    create_deployments --all
+    start_dev --all
+
+deployments:
+  ark-landing-page:
+    namespace: ark-system
+    helm:
+      chart:
+        path: ./chart
+      values:
+        app:
+          image:
+            repository: ${runtime.images.ark-landing-page.image}
+            tag: ${runtime.images.ark-landing-page.tag}
+            pullPolicy: IfNotPresent
+        httpRoute:
+          enabled: true
+        rbac:
+          create: true
+
+dev:
+  ark-landing-page:
+    labelSelector:
+      app: ark-landing-page
+    devImage: node:24-alpine
+    env:
+      - name: NODE_ENV
+        value: development
+    command:
+      [
+        "sh",
+        "-c",
+        "cd /app && npm install && npm run dev",
+      ]
+    namespace: ark-system
+    logs:
+      lastLines: 50
+    sync:
+      - path: .:/app
+        startContainer: true
+        disableDownload: true
+        uploadExcludeFile: .dockerignore
+    ssh:
+      enabled: true

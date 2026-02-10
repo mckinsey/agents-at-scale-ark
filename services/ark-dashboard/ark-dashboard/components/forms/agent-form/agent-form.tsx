@@ -39,6 +39,7 @@ import {
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { type Agent, agentsService } from '@/lib/services';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import {
   BasicInfoSection,
@@ -61,6 +62,7 @@ export function AgentForm({
   onCancel,
 }: AgentFormProps) {
   const router = useRouter();
+  const { readOnlyMode } = useNamespace();
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
   const [allAgents, setAllAgents] = useState<Agent[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
@@ -119,7 +121,8 @@ export function AgentForm({
   const agentYaml = useMemo(() => {
     if (!agent) return '';
 
-    const selectedToolsList = availableTools.filter(t =>
+    const allTools = [...availableTools, ...unavailableTools];
+    const selectedToolsList = allTools.filter(t =>
       state.selectedTools.some(st => st.name === t.name),
     );
 
@@ -178,6 +181,7 @@ export function AgentForm({
     promptValue,
     parameters,
     availableTools,
+    unavailableTools,
     state.selectedTools,
   ]);
 
@@ -254,7 +258,7 @@ export function AgentForm({
                 </Button>
                 <Button
                   onClick={form.handleSubmit(onSubmit)}
-                  disabled={saving || !hasChanges}>
+                  disabled={saving || !hasChanges || readOnlyMode}>
                   {saving ? (
                     <Spinner className="mr-2 h-4 w-4" />
                   ) : (
@@ -280,7 +284,7 @@ export function AgentForm({
                 )}
                 <Button
                   onClick={form.handleSubmit(onSubmit)}
-                  disabled={saving || hasUnavailableTools}>
+                  disabled={saving || hasUnavailableTools || readOnlyMode}>
                   {saving ? (
                     <Spinner className="mr-2 h-4 w-4" />
                   ) : (
@@ -435,6 +439,8 @@ export function AgentForm({
                             toolsLoading={toolsLoading}
                             onToolToggle={handleToolToggle}
                             isToolSelected={isToolSelected}
+                            unavailableTools={unavailableTools}
+                            onDeleteClick={handleDeleteTool}
                             disabled={isDisabled}
                           />
                         )}

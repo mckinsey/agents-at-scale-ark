@@ -28,6 +28,8 @@ argo-workflows:
         artifactRepositoryRef:
           configMap: artifact-repositories
           key: default
+        
+        archiveLogs: true
 
   # Server configuration
   server:
