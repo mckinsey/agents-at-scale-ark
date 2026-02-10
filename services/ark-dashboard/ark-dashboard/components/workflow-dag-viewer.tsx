@@ -30,6 +30,7 @@ interface WorkflowTemplate {
     tasks: Array<{
       name: string;
       template: string;
+      depends?: string;
       dependencies?: string[];
     }>;
   };
@@ -150,6 +151,14 @@ interface ExpandResult {
   exitNodes: string[];
 }
 
+function parseDependsField(depends: string | undefined): string[] {
+  if (!depends) return [];
+  return depends
+    .split(/\s*&&\s*|\s*\|\|\s*/)
+    .map(dep => dep.trim())
+    .filter(dep => dep.length > 0);
+}
+
 function expandTemplate(
   templateName: string,
   templates: WorkflowTemplate[],
@@ -197,16 +206,17 @@ function expandTemplate(
       expandedTasks.push(...expansion.tasks);
     });
 
-    const tasksWithoutDeps = template.dag.tasks.filter(
-      t => !t.dependencies || t.dependencies.length === 0,
-    );
+    const tasksWithoutDeps = template.dag.tasks.filter(t => {
+      const deps = parseDependsField(t.depends);
+      return deps.length === 0;
+    });
     tasksWithoutDeps.forEach(task => {
       const expansion = taskExpansions.get(task.name)!;
       entryNodes.push(...expansion.entryNodes);
     });
 
     const allDepTasks = new Set(
-      template.dag.tasks.flatMap(t => t.dependencies || []),
+      template.dag.tasks.flatMap(t => parseDependsField(t.depends)),
     );
     const tasksNotDependedOn = template.dag.tasks.filter(
       t => !allDepTasks.has(t.name),
@@ -217,11 +227,12 @@ function expandTemplate(
     });
 
     template.dag.tasks.forEach(task => {
-      if (task.dependencies && task.dependencies.length > 0) {
+      const deps = parseDependsField(task.depends);
+      if (deps.length > 0) {
         const targetExpansion = taskExpansions.get(task.name)!;
         const depExitNodes: string[] = [];
 
-        task.dependencies.forEach(depTaskName => {
+        deps.forEach(depTaskName => {
           const depExpansion = taskExpansions.get(depTaskName);
           if (depExpansion) {
             depExitNodes.push(...depExpansion.exitNodes);
