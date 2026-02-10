@@ -1350,6 +1350,40 @@ export interface paths {
         patch: operations["cancel_query_v1_queries__query_name__cancel_patch"];
         trace?: never;
     };
+    "/v1/resources/api/v1/namespaces/{namespace}/pods/{pod_name}/log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Pod Logs
+         * @description Get logs from a pod.
+         *
+         *     Args:
+         *         pod_name: Name of the pod
+         *         namespace: Namespace of the pod
+         *         container: Optional container name
+         *         tail_lines: Number of lines to return from the end of the logs
+         *         follow: Whether to follow the log stream
+         *
+         *     Returns:
+         *         PlainTextResponse: Pod logs as plain text
+         *
+         *     Examples:
+         *         - GET /v1/resources/api/v1/namespaces/default/pods/my-pod/log
+         *         - GET /v1/resources/api/v1/namespaces/default/pods/my-pod/log?container=main&tailLines=100
+         */
+        get: operations["get_pod_logs_v1_resources_api_v1_namespaces__namespace__pods__pod_name__log_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/resources/api/{version}/{kind}": {
         parameters: {
             query?: never;
@@ -1375,7 +1409,24 @@ export interface paths {
          */
         get: operations["list_core_resources_v1_resources_api__version___kind__get"];
         put?: never;
-        post?: never;
+        /**
+         * Create Core Resource
+         * @description Create a core Kubernetes resource.
+         *
+         *     Args:
+         *         version: API version (e.g., 'v1')
+         *         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
+         *         body: The resource definition as JSON
+         *         namespace: The namespace (defaults to current context)
+         *
+         *     Returns:
+         *         Response: The created Kubernetes resource as JSON
+         *
+         *     Examples:
+         *         - POST /v1/resources/api/v1/Pod
+         *         - POST /v1/resources/api/v1/Service
+         */
+        post: operations["create_core_resource_v1_resources_api__version___kind__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1409,6 +1460,57 @@ export interface paths {
         get: operations["get_core_resource_v1_resources_api__version___kind___resource_name__get"];
         put?: never;
         post?: never;
+        /**
+         * Delete Core Resource
+         * @description Delete a core Kubernetes resource by name.
+         *
+         *     Args:
+         *         version: API version (e.g., 'v1')
+         *         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
+         *         resource_name: The name of the resource
+         *         namespace: The namespace (defaults to current context)
+         *
+         *     Returns:
+         *         Response: HTTP 204 No Content on success
+         *
+         *     Examples:
+         *         - DELETE /v1/resources/api/v1/Pod/my-pod
+         *         - DELETE /v1/resources/api/v1/Service/my-service
+         */
+        delete: operations["delete_core_resource_v1_resources_api__version___kind___resource_name__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/{node_id}/log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Workflow Logs
+         * @description Get logs for a workflow node by fetching directly from the pod.
+         *     The node_id corresponds to the pod name in most cases.
+         *
+         *     Args:
+         *         workflow_name: Name of the workflow
+         *         node_id: Node ID within the workflow (typically the pod name)
+         *         namespace: Namespace of the workflow
+         *         container: Container name (defaults to 'main')
+         *         tail_lines: Number of lines to tail from the end
+         *
+         *     Returns:
+         *         PlainTextResponse: Workflow node logs as plain text
+         *
+         *     Examples:
+         *         - GET /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/my-node-id/log
+         */
+        get: operations["get_workflow_logs_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name___node_id__log_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1424,13 +1526,16 @@ export interface paths {
         };
         /**
          * List Grouped Resources
-         * @description List grouped Kubernetes resources.
+         * @description List grouped Kubernetes resources with optional filtering.
          *
          *     Args:
          *         group: API group (e.g., 'apps', 'batch', 'ark.mckinsey.com')
          *         version: API version (e.g., 'v1', 'v1alpha1')
          *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
          *         namespace: The namespace (defaults to current context)
+         *         workflowName: Filter by workflow name (partial match, case insensitive)
+         *         workflowTemplateName: Filter by workflow template name (partial match, case insensitive)
+         *         status: Filter by workflow status
          *
          *     Returns:
          *         Response: List of raw Kubernetes resources as JSON
@@ -1439,10 +1544,30 @@ export interface paths {
          *         - GET /v1/resources/apis/apps/v1/Deployment
          *         - GET /v1/resources/apis/batch/v1/Job
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate
+         *         - GET /v1/resources/apis/argoproj.io/v1alpha1/Workflow?workflowName=my-workflow&status=running
          */
         get: operations["list_grouped_resources_v1_resources_apis__group___version___kind__get"];
         put?: never;
-        post?: never;
+        /**
+         * Create Grouped Resource
+         * @description Create a grouped Kubernetes resource.
+         *
+         *     Args:
+         *         group: API group (e.g., 'apps', 'batch', 'argoproj.io')
+         *         version: API version (e.g., 'v1', 'v1alpha1')
+         *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'Workflow')
+         *         body: The resource definition as JSON
+         *         namespace: The namespace (defaults to current context)
+         *
+         *     Returns:
+         *         Response: The created Kubernetes resource as JSON
+         *
+         *     Examples:
+         *         - POST /v1/resources/apis/apps/v1/Deployment
+         *         - POST /v1/resources/apis/batch/v1/Job
+         *         - POST /v1/resources/apis/argoproj.io/v1alpha1/Workflow
+         */
+        post: operations["create_grouped_resource_v1_resources_apis__group___version___kind__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1478,7 +1603,26 @@ export interface paths {
         get: operations["get_grouped_resource_v1_resources_apis__group___version___kind___resource_name__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Grouped Resource
+         * @description Delete a grouped Kubernetes resource by name.
+         *
+         *     Args:
+         *         group: API group (e.g., 'apps', 'batch', 'ark.mckinsey.com')
+         *         version: API version (e.g., 'v1', 'v1alpha1')
+         *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+         *         resource_name: The name of the resource
+         *         namespace: The namespace (defaults to current context)
+         *
+         *     Returns:
+         *         Response: HTTP 204 No Content on success
+         *
+         *     Examples:
+         *         - DELETE /v1/resources/apis/apps/v1/Deployment/my-deployment
+         *         - DELETE /v1/resources/apis/batch/v1/Job/my-job
+         *         - DELETE /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/sparkly-bear
+         */
+        delete: operations["delete_grouped_resource_v1_resources_apis__group___version___kind___resource_name__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -7661,6 +7805,45 @@ export interface operations {
             };
         };
     };
+    get_pod_logs_v1_resources_api_v1_namespaces__namespace__pods__pod_name__log_get: {
+        parameters: {
+            query?: {
+                /** @description Container name (defaults to first container) */
+                container?: string | null;
+                /** @description Number of lines to tail */
+                tailLines?: number | null;
+                /** @description Follow log stream */
+                follow?: boolean | null;
+            };
+            header?: never;
+            path: {
+                pod_name: string;
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_core_resources_v1_resources_api__version___kind__get: {
         parameters: {
             query?: {
@@ -7675,6 +7858,47 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_core_resource_v1_resources_api__version___kind__post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                version: string;
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -7732,11 +7956,91 @@ export interface operations {
             };
         };
     };
+    delete_core_resource_v1_resources_api__version___kind___resource_name__delete: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                version: string;
+                kind: string;
+                resource_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_workflow_logs_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name___node_id__log_get: {
+        parameters: {
+            query?: {
+                /** @description Container name */
+                container?: string | null;
+                /** @description Number of lines to tail */
+                tail_lines?: number | null;
+            };
+            header?: never;
+            path: {
+                workflow_name: string;
+                node_id: string;
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_grouped_resources_v1_resources_apis__group___version___kind__get: {
         parameters: {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Filter by workflow name (partial match, case insensitive) */
+                workflowName?: string | null;
+                /** @description Filter by workflow template name (partial match, case insensitive) */
+                workflowTemplateName?: string | null;
+                /** @description Filter by workflow status (case insensitive). Options: running, succeeded, failed (which matches both failed and error), pending */
+                status?: string | null;
             };
             header?: never;
             path: {
@@ -7768,7 +8072,86 @@ export interface operations {
             };
         };
     };
+    create_grouped_resource_v1_resources_apis__group___version___kind__post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                group: string;
+                version: string;
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_grouped_resource_v1_resources_apis__group___version___kind___resource_name__get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                group: string;
+                version: string;
+                kind: string;
+                resource_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_grouped_resource_v1_resources_apis__group___version___kind___resource_name__delete: {
         parameters: {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */

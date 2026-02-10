@@ -48,24 +48,24 @@ interface WorkflowManifest {
   };
 }
 
-const nodeWidth = 180;
+const minNodeWidth = 120;
+const maxNodeWidth = 400;
 const nodeHeight = 40;
+const charWidth = 6.5;
 
-function CustomNode({ data }: { data: { label: string } }) {
+function calculateNodeWidth(label: string): number {
+  const padding = 24;
+  const calculatedWidth = label.length * charWidth + padding;
+  return Math.min(Math.max(calculatedWidth, minNodeWidth), maxNodeWidth);
+}
+
+function CustomNode({ data }: { data: { label: string; width: number } }) {
   return (
     <div
+      className="border-border bg-card text-card-foreground dark:border-border dark:bg-card dark:text-card-foreground flex items-center justify-center rounded-md border-2 px-2 py-2 text-xs font-medium"
       style={{
-        width: nodeWidth,
+        width: data.width,
         height: nodeHeight,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        border: '2px solid #d1d5db',
-        borderRadius: '6px',
-        background: 'white',
-        fontSize: '12px',
-        fontWeight: 500,
-        padding: '8px',
       }}>
       <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
       {data.label}
@@ -83,12 +83,16 @@ function getLayoutedElements(tasks: DagTask[]) {
   dagreGraph.setDefaultEdgeLabel(() => ({}));
   dagreGraph.setGraph({ rankdir: 'LR', nodesep: 50, ranksep: 100 });
 
-  const nodes: Node[] = tasks.map(task => ({
-    id: task.name,
-    type: 'custom',
-    data: { label: task.name },
-    position: { x: 0, y: 0 },
-  }));
+  const nodes: Node[] = tasks.map(task => {
+    const width = calculateNodeWidth(task.name);
+    return {
+      id: task.name,
+      type: 'custom',
+      data: { label: task.name, width },
+      position: { x: 0, y: 0 },
+      width,
+    };
+  });
 
   const edges: Edge[] = [];
   tasks.forEach(task => {
@@ -101,12 +105,12 @@ function getLayoutedElements(tasks: DagTask[]) {
           type: 'smoothstep',
           animated: true,
           style: {
-            stroke: '#000000',
+            stroke: '#6b7280',
             strokeWidth: 2,
           },
           markerEnd: {
             type: MarkerType.Arrow,
-            color: '#000000',
+            color: '#6b7280',
             width: 15,
             height: 15,
           },
@@ -116,7 +120,10 @@ function getLayoutedElements(tasks: DagTask[]) {
   });
 
   nodes.forEach(node => {
-    dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
+    dagreGraph.setNode(node.id, {
+      width: node.width || minNodeWidth,
+      height: nodeHeight,
+    });
   });
 
   edges.forEach(edge => {
@@ -127,13 +134,172 @@ function getLayoutedElements(tasks: DagTask[]) {
 
   nodes.forEach(node => {
     const nodeWithPosition = dagreGraph.node(node.id);
+    const width = node.width || minNodeWidth;
     node.position = {
-      x: nodeWithPosition.x - nodeWidth / 2,
+      x: nodeWithPosition.x - width / 2,
       y: nodeWithPosition.y - nodeHeight / 2,
     };
   });
 
   return { nodes, edges };
+}
+
+interface ExpandResult {
+  tasks: DagTask[];
+  entryNodes: string[];
+  exitNodes: string[];
+}
+
+function expandTemplate(
+  templateName: string,
+  templates: WorkflowTemplate[],
+  prefix: string = '',
+  visited: Set<string> = new Set(),
+): ExpandResult {
+  const fullName = prefix ? `${prefix}.${templateName}` : templateName;
+
+  if (visited.has(fullName)) {
+    return { tasks: [], entryNodes: [], exitNodes: [] };
+  }
+  visited.add(fullName);
+
+  const template = templates.find(t => t.name === templateName);
+  if (!template) {
+    return {
+      tasks: [
+        {
+          name: fullName,
+          template: templateName,
+          dependencies: [],
+        },
+      ],
+      entryNodes: [fullName],
+      exitNodes: [fullName],
+    };
+  }
+
+  const expandedTasks: DagTask[] = [];
+  let entryNodes: string[] = [];
+  let exitNodes: string[] = [];
+
+  if (template.dag?.tasks) {
+    const taskExpansions = new Map<string, ExpandResult>();
+
+    template.dag.tasks.forEach(task => {
+      const taskFullName = prefix ? `${prefix}.${task.name}` : task.name;
+      const expansion = expandTemplate(
+        task.template,
+        templates,
+        taskFullName,
+        visited,
+      );
+      taskExpansions.set(task.name, expansion);
+      expandedTasks.push(...expansion.tasks);
+    });
+
+    const tasksWithoutDeps = template.dag.tasks.filter(
+      t => !t.dependencies || t.dependencies.length === 0,
+    );
+    tasksWithoutDeps.forEach(task => {
+      const expansion = taskExpansions.get(task.name)!;
+      entryNodes.push(...expansion.entryNodes);
+    });
+
+    const allDepTasks = new Set(
+      template.dag.tasks.flatMap(t => t.dependencies || []),
+    );
+    const tasksNotDependedOn = template.dag.tasks.filter(
+      t => !allDepTasks.has(t.name),
+    );
+    tasksNotDependedOn.forEach(task => {
+      const expansion = taskExpansions.get(task.name)!;
+      exitNodes.push(...expansion.exitNodes);
+    });
+
+    template.dag.tasks.forEach(task => {
+      if (task.dependencies && task.dependencies.length > 0) {
+        const targetExpansion = taskExpansions.get(task.name)!;
+        const depExitNodes: string[] = [];
+
+        task.dependencies.forEach(depTaskName => {
+          const depExpansion = taskExpansions.get(depTaskName);
+          if (depExpansion) {
+            depExitNodes.push(...depExpansion.exitNodes);
+          }
+        });
+
+        targetExpansion.entryNodes.forEach(entryNode => {
+          const taskObj = expandedTasks.find(t => t.name === entryNode);
+          if (taskObj) {
+            taskObj.dependencies = [
+              ...(taskObj.dependencies || []),
+              ...depExitNodes,
+            ];
+          }
+        });
+      }
+    });
+  } else if (template.steps) {
+    const stepExpansions: ExpandResult[][] = [];
+
+    template.steps.forEach((step, _stepIndex) => {
+      const currentStepExpansions: ExpandResult[] = [];
+
+      step.forEach(stepTask => {
+        const stepTaskFullName = prefix
+          ? `${prefix}.${stepTask.name}`
+          : stepTask.name;
+        const stepTaskTemplate = stepTask.template || stepTask.name;
+
+        const expansion = expandTemplate(
+          stepTaskTemplate,
+          templates,
+          stepTaskFullName,
+          visited,
+        );
+        currentStepExpansions.push(expansion);
+        expandedTasks.push(...expansion.tasks);
+      });
+
+      stepExpansions.push(currentStepExpansions);
+    });
+
+    if (stepExpansions.length > 0) {
+      entryNodes = stepExpansions[0].flatMap(exp => exp.entryNodes);
+      exitNodes = stepExpansions[stepExpansions.length - 1].flatMap(
+        exp => exp.exitNodes,
+      );
+    }
+
+    for (let i = 1; i < stepExpansions.length; i++) {
+      const prevStepExitNodes = stepExpansions[i - 1].flatMap(
+        exp => exp.exitNodes,
+      );
+      const currStepEntryNodes = stepExpansions[i].flatMap(
+        exp => exp.entryNodes,
+      );
+
+      currStepEntryNodes.forEach(entryNode => {
+        const taskObj = expandedTasks.find(t => t.name === entryNode);
+        if (taskObj) {
+          taskObj.dependencies = [
+            ...(taskObj.dependencies || []),
+            ...prevStepExitNodes,
+          ];
+        }
+      });
+    }
+  } else {
+    expandedTasks.push({
+      name: fullName,
+      template: templateName,
+      dependencies: [],
+    });
+    entryNodes = [fullName];
+    exitNodes = [fullName];
+  }
+
+  return { tasks: expandedTasks, entryNodes, exitNodes };
 }
 
 export function WorkflowDagViewer({ manifest }: WorkflowDagViewerProps) {
@@ -150,53 +316,25 @@ export function WorkflowDagViewer({ manifest }: WorkflowDagViewerProps) {
         return;
       }
 
-      const dagTemplate = parsed.spec.templates.find(t => t.dag?.tasks);
+      const entrypoint =
+        parsed.spec.entrypoint ||
+        parsed.spec.templates.find(t => t.dag?.tasks)?.name ||
+        parsed.spec.templates.find(t => t.steps)?.name;
 
-      const stepsTemplate = parsed.spec.templates.find(t => t.steps);
+      if (!entrypoint) {
+        setError('No entrypoint, DAG, or steps found in workflow');
+        return;
+      }
 
-      let tasks: DagTask[] = [];
+      const expansion = expandTemplate(entrypoint, parsed.spec.templates);
 
-      if (dagTemplate && dagTemplate.dag) {
-        tasks = dagTemplate.dag.tasks.map(task => ({
-          name: task.name,
-          template: task.template,
-          dependencies: task.dependencies || [],
-        }));
-      } else if (stepsTemplate && stepsTemplate.steps) {
-        const allStepTasks: string[][] = stepsTemplate.steps.map(step => {
-          return step.map(s => s.name);
-        });
-
-        const flatTasks: DagTask[] = [];
-        allStepTasks.forEach((stepTasks, stepIndex) => {
-          const previousStepTasks =
-            stepIndex > 0 ? allStepTasks[stepIndex - 1] : [];
-
-          stepTasks.forEach(taskName => {
-            flatTasks.push({
-              name: taskName,
-              template: taskName,
-              dependencies: previousStepTasks,
-            });
-          });
-        });
-
-        tasks = flatTasks;
-      } else if (parsed.spec?.entrypoint) {
-        tasks = [
-          {
-            name: parsed.spec.entrypoint,
-            template: parsed.spec.entrypoint,
-            dependencies: [],
-          },
-        ];
-      } else {
-        setError('No DAG, Steps, or entrypoint found in workflow');
+      if (expansion.tasks.length === 0) {
+        setError('No tasks found after expanding templates');
         return;
       }
 
       const { nodes: layoutedNodes, edges: layoutedEdges } =
-        getLayoutedElements(tasks);
+        getLayoutedElements(expansion.tasks);
       setNodes(layoutedNodes);
       setEdges(layoutedEdges);
       setError(null);
@@ -226,15 +364,45 @@ export function WorkflowDagViewer({ manifest }: WorkflowDagViewerProps) {
   }
 
   return (
-    <div style={{ width: '100%', height: '500px' }}>
+    <div className="bg-muted h-[500px] w-full rounded-lg border">
+      <style jsx global>{`
+        .react-flow__controls {
+          background: hsl(var(--card)) !important;
+          border: 1px solid hsl(var(--border)) !important;
+        }
+        .react-flow__controls button {
+          background: hsl(var(--card)) !important;
+          background-color: hsl(var(--card)) !important;
+          border-bottom: 1px solid hsl(var(--border)) !important;
+          color: hsl(var(--foreground)) !important;
+        }
+        .react-flow__controls button:hover {
+          background: hsl(var(--accent)) !important;
+          background-color: hsl(var(--accent)) !important;
+        }
+        .react-flow__controls button svg,
+        .react-flow__controls button path {
+          fill: currentColor !important;
+        }
+        .dark .react-flow__attribution {
+          background: hsl(var(--card));
+          color: hsl(var(--muted-foreground));
+          border: 1px solid hsl(var(--border));
+          padding: 2px 6px;
+          border-radius: 4px;
+        }
+        .dark .react-flow__attribution a {
+          color: hsl(var(--foreground));
+        }
+      `}</style>
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         fitView
-        attributionPosition="bottom-left">
+        attributionPosition="bottom-right">
         <Background />
-        <Controls />
+        <Controls className="!bg-card" />
       </ReactFlow>
     </div>
   );

@@ -117,14 +117,26 @@ spec:
 
       await waitFor(() => {
         expect(screen.getByTestId('react-flow')).toBeInTheDocument();
-        expect(screen.getByTestId('node-task-a')).toBeInTheDocument();
-        expect(screen.getByTestId('node-task-b')).toBeInTheDocument();
-        expect(screen.getByTestId('node-task-c')).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-task-a.task-a-template'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-task-b.task-b-template'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-task-c.task-c-template'),
+        ).toBeInTheDocument();
       });
 
-      expect(screen.getByTestId('edge-task-a-task-b')).toBeInTheDocument();
-      expect(screen.getByTestId('edge-task-a-task-c')).toBeInTheDocument();
-      expect(screen.getByTestId('edge-task-b-task-c')).toBeInTheDocument();
+      expect(
+        screen.getByTestId('edge-task-a.task-a-template-task-b.task-b-template'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId('edge-task-a.task-a-template-task-c.task-c-template'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId('edge-task-b.task-b-template-task-c.task-c-template'),
+      ).toBeInTheDocument();
     });
 
     it('should parse DAG workflow without dependencies', async () => {
@@ -158,7 +170,9 @@ spec:
       render(<WorkflowDagViewer manifest={manifest} />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('node-single-task')).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-single-task.single-template'),
+        ).toBeInTheDocument();
       });
 
       expect(screen.queryByTestId(/^edge-/)).not.toBeInTheDocument();
@@ -199,16 +213,22 @@ spec:
       render(<WorkflowDagViewer manifest={manifest} />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('node-step1-task1')).toBeInTheDocument();
-        expect(screen.getByTestId('node-step2-task1')).toBeInTheDocument();
-        expect(screen.getByTestId('node-step3-task1')).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-step1-task1.step1-task1'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-step2-task1.step2-task1'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-step3-task1.step3-task1'),
+        ).toBeInTheDocument();
       });
 
       expect(
-        screen.getByTestId('edge-step1-task1-step2-task1'),
+        screen.getByTestId('edge-step1-task1.step1-task1-step2-task1.step2-task1'),
       ).toBeInTheDocument();
       expect(
-        screen.getByTestId('edge-step2-task1-step3-task1'),
+        screen.getByTestId('edge-step2-task1.step2-task1-step3-task1.step3-task1'),
       ).toBeInTheDocument();
     });
 
@@ -244,16 +264,22 @@ spec:
       render(<WorkflowDagViewer manifest={manifest} />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('node-parallel-task1')).toBeInTheDocument();
-        expect(screen.getByTestId('node-parallel-task2')).toBeInTheDocument();
-        expect(screen.getByTestId('node-next-task')).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-parallel-task1.parallel-task1'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-parallel-task2.parallel-task2'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-next-task.next-task'),
+        ).toBeInTheDocument();
       });
 
       expect(
-        screen.getByTestId('edge-parallel-task1-next-task'),
+        screen.getByTestId('edge-parallel-task1.parallel-task1-next-task.next-task'),
       ).toBeInTheDocument();
       expect(
-        screen.getByTestId('edge-parallel-task2-next-task'),
+        screen.getByTestId('edge-parallel-task2.parallel-task2-next-task.next-task'),
       ).toBeInTheDocument();
     });
   });
@@ -351,7 +377,7 @@ spec:
 
       await waitFor(() => {
         expect(
-          screen.getByText('No DAG, Steps, or entrypoint found in workflow'),
+          screen.getByText('No entrypoint, DAG, or steps found in workflow'),
         ).toBeInTheDocument();
       });
     });
@@ -403,7 +429,9 @@ spec:
       render(<WorkflowDagViewer manifest={manifest} />);
 
       await waitFor(() => {
-        expect(screen.getByText('No tasks found in DAG')).toBeInTheDocument();
+        expect(
+          screen.getByText('No tasks found after expanding templates'),
+        ).toBeInTheDocument();
       });
 
       expect(screen.queryByTestId('react-flow')).not.toBeInTheDocument();
@@ -453,9 +481,15 @@ spec:
 
       await waitFor(() => {
         expect(screen.getByTestId('react-flow')).toBeInTheDocument();
-        expect(screen.getByTestId('node-task-a')).toBeInTheDocument();
-        expect(screen.getByTestId('node-task-b')).toBeInTheDocument();
-        expect(screen.getByTestId('edge-task-a-task-b')).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-task-a.template-a'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-task-b.template-b'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('edge-task-a.template-a-task-b.template-b'),
+        ).toBeInTheDocument();
       });
 
       expect(dagre.layout).toHaveBeenCalled();
@@ -494,7 +528,9 @@ spec:
       const { rerender } = render(<WorkflowDagViewer manifest={manifest1} />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('node-task-old')).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-task-old.template-old'),
+        ).toBeInTheDocument();
       });
 
       const manifest2 = `
@@ -527,8 +563,12 @@ spec:
       rerender(<WorkflowDagViewer manifest={manifest2} />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('node-task-new')).toBeInTheDocument();
-        expect(screen.queryByTestId('node-task-old')).not.toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-task-new.template-new'),
+        ).toBeInTheDocument();
+        expect(
+          screen.queryByTestId('node-task-old.template-old'),
+        ).not.toBeInTheDocument();
       });
     });
   });
@@ -561,10 +601,312 @@ spec:
       render(<WorkflowDagViewer manifest={manifest} />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('node-first-step')).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-first-step.first-step'),
+        ).toBeInTheDocument();
       });
 
       expect(screen.queryByTestId(/^edge-/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Nested template expansion', () => {
+    it('should expand nested DAG templates and connect edges correctly', async () => {
+      const manifest = `
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+spec:
+  entrypoint: main
+  templates:
+    - name: main
+      dag:
+        tasks:
+          - name: task-a
+            template: nested-template
+          - name: task-b
+            template: another-template
+            dependencies: [task-a]
+    - name: nested-template
+      steps:
+        - - name: subtask-1
+        - - name: subtask-2
+    - name: another-template
+      dag:
+        tasks:
+          - name: leaf-task
+            template: leaf
+`;
+
+      const parsed = {
+        spec: {
+          entrypoint: 'main',
+          templates: [
+            {
+              name: 'main',
+              dag: {
+                tasks: [
+                  { name: 'task-a', template: 'nested-template' },
+                  {
+                    name: 'task-b',
+                    template: 'another-template',
+                    dependencies: ['task-a'],
+                  },
+                ],
+              },
+            },
+            {
+              name: 'nested-template',
+              steps: [
+                [{ name: 'subtask-1', template: 'subtask-1' }],
+                [{ name: 'subtask-2', template: 'subtask-2' }],
+              ],
+            },
+            {
+              name: 'another-template',
+              dag: {
+                tasks: [{ name: 'leaf-task', template: 'leaf' }],
+              },
+            },
+          ],
+        },
+      };
+
+      vi.mocked(yaml.load).mockReturnValue(parsed);
+
+      render(<WorkflowDagViewer manifest={manifest} />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId('node-task-a.subtask-1.subtask-1'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-task-a.subtask-2.subtask-2'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-task-b.leaf-task.leaf'),
+        ).toBeInTheDocument();
+      });
+
+      expect(
+        screen.getByTestId('edge-task-a.subtask-1.subtask-1-task-a.subtask-2.subtask-2'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId('edge-task-a.subtask-2.subtask-2-task-b.leaf-task.leaf'),
+      ).toBeInTheDocument();
+    });
+
+    it('should handle deeply nested templates with multiple levels', async () => {
+      const manifest = `
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+spec:
+  entrypoint: level-0
+  templates:
+    - name: level-0
+      dag:
+        tasks:
+          - name: start
+            template: level-1
+    - name: level-1
+      dag:
+        tasks:
+          - name: middle
+            template: level-2
+    - name: level-2
+      steps:
+        - - name: end
+`;
+
+      const parsed = {
+        spec: {
+          entrypoint: 'level-0',
+          templates: [
+            {
+              name: 'level-0',
+              dag: {
+                tasks: [{ name: 'start', template: 'level-1' }],
+              },
+            },
+            {
+              name: 'level-1',
+              dag: {
+                tasks: [{ name: 'middle', template: 'level-2' }],
+              },
+            },
+            {
+              name: 'level-2',
+              steps: [[{ name: 'end', template: 'end' }]],
+            },
+          ],
+        },
+      };
+
+      vi.mocked(yaml.load).mockReturnValue(parsed);
+
+      render(<WorkflowDagViewer manifest={manifest} />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId('node-start.middle.end.end'),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('should handle nested templates with parallel branches', async () => {
+      const manifest = `
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+spec:
+  entrypoint: main
+  templates:
+    - name: main
+      dag:
+        tasks:
+          - name: branch-a
+            template: branch-template
+          - name: branch-b
+            template: branch-template
+    - name: branch-template
+      steps:
+        - - name: step-1
+        - - name: step-2
+`;
+
+      const parsed = {
+        spec: {
+          entrypoint: 'main',
+          templates: [
+            {
+              name: 'main',
+              dag: {
+                tasks: [
+                  { name: 'branch-a', template: 'branch-template' },
+                  { name: 'branch-b', template: 'branch-template' },
+                ],
+              },
+            },
+            {
+              name: 'branch-template',
+              steps: [
+                [{ name: 'step-1', template: 'step-1' }],
+                [{ name: 'step-2', template: 'step-2' }],
+              ],
+            },
+          ],
+        },
+      };
+
+      vi.mocked(yaml.load).mockReturnValue(parsed);
+
+      render(<WorkflowDagViewer manifest={manifest} />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId('node-branch-a.step-1.step-1'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-branch-a.step-2.step-2'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-branch-b.step-1.step-1'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-branch-b.step-2.step-2'),
+        ).toBeInTheDocument();
+      });
+
+      expect(
+        screen.getByTestId('edge-branch-a.step-1.step-1-branch-a.step-2.step-2'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId('edge-branch-b.step-1.step-1-branch-b.step-2.step-2'),
+      ).toBeInTheDocument();
+    });
+
+    it('should connect dependencies to exit nodes of expanded templates', async () => {
+      const manifest = `
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+spec:
+  entrypoint: main
+  templates:
+    - name: main
+      dag:
+        tasks:
+          - name: first
+            template: multi-step
+          - name: second
+            template: single-task
+            dependencies: [first]
+    - name: multi-step
+      steps:
+        - - name: step-1
+        - - name: step-2
+        - - name: step-3
+    - name: single-task
+      dag:
+        tasks:
+          - name: final
+            template: final
+`;
+
+      const parsed = {
+        spec: {
+          entrypoint: 'main',
+          templates: [
+            {
+              name: 'main',
+              dag: {
+                tasks: [
+                  { name: 'first', template: 'multi-step' },
+                  {
+                    name: 'second',
+                    template: 'single-task',
+                    dependencies: ['first'],
+                  },
+                ],
+              },
+            },
+            {
+              name: 'multi-step',
+              steps: [
+                [{ name: 'step-1', template: 'step-1' }],
+                [{ name: 'step-2', template: 'step-2' }],
+                [{ name: 'step-3', template: 'step-3' }],
+              ],
+            },
+            {
+              name: 'single-task',
+              dag: {
+                tasks: [{ name: 'final', template: 'final' }],
+              },
+            },
+          ],
+        },
+      };
+
+      vi.mocked(yaml.load).mockReturnValue(parsed);
+
+      render(<WorkflowDagViewer manifest={manifest} />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId('node-first.step-1.step-1'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-first.step-2.step-2'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-first.step-3.step-3'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-second.final.final'),
+        ).toBeInTheDocument();
+      });
+
+      expect(
+        screen.getByTestId('edge-first.step-3.step-3-second.final.final'),
+      ).toBeInTheDocument();
     });
   });
 });

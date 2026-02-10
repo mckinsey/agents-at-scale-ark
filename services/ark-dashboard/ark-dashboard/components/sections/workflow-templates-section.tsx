@@ -2,6 +2,7 @@
 
 import { ArrowUpRightIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 import { type Flow, FlowRow } from '@/components/rows/flow-row';
 import { Button } from '@/components/ui/button';
@@ -19,39 +20,79 @@ import {
   type WorkflowTemplate,
   workflowTemplatesService,
 } from '@/lib/services/workflow-templates';
+import { countWorkflowTasks } from '@/lib/utils/workflow';
+import { showWorkflowStartedToast } from '@/lib/utils/workflow-toast';
 
 function mapWorkflowTemplateToFlow(template: WorkflowTemplate): Flow {
   const annotations = template.metadata.annotations || {};
+  const stages = countWorkflowTasks(template.spec);
   return {
     id: template.metadata.name,
     title: annotations['workflows.argoproj.io/title'],
     description: annotations['workflows.argoproj.io/description'],
-    stages: 0,
+    stages,
   };
 }
 
 export function WorkflowTemplatesSection() {
-  const [flows, setFlows] = useState<Flow[]>([]);
+  const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const showLoading = useDelayedLoading(loading);
 
-  useEffect(() => {
-    async function fetchFlows() {
-      try {
-        setLoading(true);
-        const templates = await workflowTemplatesService.list();
-        const mappedFlows = templates.map(mapWorkflowTemplateToFlow);
-        setFlows(mappedFlows);
-      } catch (error) {
-        console.error('Failed to fetch workflow templates:', error);
-        setFlows([]);
-      } finally {
-        setLoading(false);
-      }
+  const fetchFlows = async () => {
+    try {
+      setLoading(true);
+      const fetchedTemplates = await workflowTemplatesService.list();
+      setTemplates(fetchedTemplates);
+    } catch (error) {
+      console.error('Failed to fetch workflow templates:', error);
+      setTemplates([]);
+    } finally {
+      setLoading(false);
     }
+  };
 
+  useEffect(() => {
     fetchFlows();
   }, []);
+
+  const handleRunWorkflow = async (
+    flowId: string,
+    parameters?: Record<string, string>,
+    workflowName?: string,
+  ) => {
+    try {
+      const workflow = await workflowTemplatesService.run(
+        flowId,
+        parameters,
+        workflowName,
+      );
+      showWorkflowStartedToast(workflow.metadata.name);
+    } catch (error) {
+      console.error('Failed to start workflow:', error);
+      toast.error('Failed to start workflow', {
+        description:
+          error instanceof Error ? error.message : 'An unknown error occurred',
+      });
+      throw error;
+    }
+  };
+
+  const handleDeleteWorkflow = async (flowId: string) => {
+    try {
+      await workflowTemplatesService.delete(flowId);
+      toast.success('Workflow template deleted', {
+        description: `Deleted workflow template: ${flowId}`,
+      });
+      await fetchFlows();
+    } catch (error) {
+      console.error('Failed to delete workflow template:', error);
+      toast.error('Failed to delete workflow template', {
+        description:
+          error instanceof Error ? error.message : 'An unknown error occurred',
+      });
+    }
+  };
 
   if (showLoading) {
     return (
@@ -61,7 +102,7 @@ export function WorkflowTemplatesSection() {
     );
   }
 
-  if (flows.length === 0 && !loading) {
+  if (templates.length === 0 && !loading) {
     const WorkflowIcon = DASHBOARD_SECTIONS['workflow-templates'].icon;
     return (
       <Empty>
@@ -96,9 +137,18 @@ export function WorkflowTemplatesSection() {
     <div className="flex h-full flex-col">
       <main className="flex-1 overflow-auto px-6 py-6">
         <div className="flex flex-col gap-3">
-          {flows.map(flow => (
-            <FlowRow key={flow.id} flow={flow} />
-          ))}
+          {templates.map(template => {
+            const flow = mapWorkflowTemplateToFlow(template);
+            return (
+              <FlowRow
+                key={flow.id}
+                flow={flow}
+                parameters={template.spec?.arguments?.parameters}
+                onRun={handleRunWorkflow}
+                onDelete={handleDeleteWorkflow}
+              />
+            );
+          })}
         </div>
       </main>
     </div>
