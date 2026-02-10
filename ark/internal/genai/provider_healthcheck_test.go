@@ -41,8 +41,6 @@ func TestOpenAIProvider_HealthCheck_Success(t *testing.T) {
 
 func TestOpenAIProvider_HealthCheck_Unauthorized(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/v1/models", r.URL.Path)
-
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
@@ -69,8 +67,6 @@ func TestOpenAIProvider_HealthCheck_Unauthorized(t *testing.T) {
 
 func TestOpenAIProvider_HealthCheck_ServerError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/v1/models", r.URL.Path)
-
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
@@ -396,6 +392,95 @@ func TestOpenAIProvider_HealthCheck_ModelAvailable(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, callCount, "HealthCheck should make exactly one API call")
+}
+
+func TestOpenAIProvider_HealthCheck_ModelNotAvailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/models", r.URL.Path)
+		assert.Equal(t, "GET", r.Method)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": []map[string]string{
+				{"id": "gpt-3.5-turbo", "object": "model"},
+				{"id": "gpt-4-turbo", "object": "model"},
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := &OpenAIProvider{
+		Model:   "gpt-4",
+		BaseURL: server.URL + "/v1",
+		APIKey:  "test-key",
+	}
+
+	ctx := context.Background()
+	err := provider.HealthCheck(ctx)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "gpt-4")
+	assert.Contains(t, err.Error(), "not available")
+}
+
+func TestOpenAIProvider_HealthCheck_FallbackToChatCompletion(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if r.URL.Path == "/v1/models" {
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": map[string]string{
+					"message": "insufficient permissions",
+					"type":    "insufficient_quota",
+				},
+			})
+			return
+		}
+
+		if r.URL.Path == "/v1/chat/completions" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"id":      "chatcmpl-test",
+				"object":  "chat.completion",
+				"created": 1234567890,
+				"model":   "gpt-4",
+				"choices": []map[string]interface{}{
+					{
+						"index": 0,
+						"message": map[string]interface{}{
+							"role":    "assistant",
+							"content": "test response",
+						},
+						"finish_reason": "stop",
+					},
+				},
+				"usage": map[string]interface{}{
+					"prompt_tokens":     10,
+					"completion_tokens": 5,
+					"total_tokens":      15,
+				},
+			})
+			return
+		}
+
+		t.Errorf("unexpected path: %s", r.URL.Path)
+	}))
+	defer server.Close()
+
+	provider := &OpenAIProvider{
+		Model:   "gpt-4",
+		BaseURL: server.URL + "/v1",
+		APIKey:  "test-key",
+	}
+
+	ctx := context.Background()
+	err := provider.HealthCheck(ctx)
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, callCount, "HealthCheck should make two API calls (list models + chat completion)")
 }
 
 func TestAzureProvider_HealthCheck_ModelAvailable(t *testing.T) {
