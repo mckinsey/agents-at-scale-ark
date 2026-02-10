@@ -1,7 +1,19 @@
 'use client';
 
-import { Sparkle, Workflow } from 'lucide-react';
+import { ExternalLink, Play, Trash2, Workflow } from 'lucide-react';
 import Link from 'next/link';
+import { useState } from 'react';
+
+import { DeleteWorkflowTemplateDialog } from '@/components/dialogs/delete-workflow-template-dialog';
+import { RunWorkflowDialog } from '@/components/dialogs/run-workflow-dialog';
+import { Button } from '@/components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import type { WorkflowParameter } from '@/lib/services/workflow-templates';
 
 export interface Flow {
   id: string;
@@ -13,52 +25,138 @@ export interface Flow {
 
 interface FlowRowProps {
   readonly flow: Flow;
+  readonly parameters?: WorkflowParameter[];
+  readonly onRun?: (
+    flowId: string,
+    parameters?: Record<string, string>,
+    workflowName?: string,
+  ) => Promise<void>;
+  readonly onDelete?: (flowId: string) => Promise<void>;
 }
 
-export function FlowRow({ flow }: FlowRowProps) {
-  const isComposerFlow = !!(flow.title && flow.description);
+export function FlowRow({ flow, parameters, onRun, onDelete }: FlowRowProps) {
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+  const handleRunWorkflow = async (
+    params?: Record<string, string>,
+    workflowName?: string,
+  ) => {
+    if (onRun) {
+      await onRun(flow.id, params, workflowName);
+    }
+  };
+
+  const handleDeleteClick = () => {
+    setShowDeleteDialog(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (onDelete) {
+      await onDelete(flow.id);
+    }
+  };
 
   return (
-    <Link href={`/workflow-templates/${flow.id}`} className="block w-full">
-      <div className="bg-card hover:bg-accent/5 hover:border-primary/50 flex w-full cursor-pointer items-center gap-4 overflow-hidden rounded-md border px-4 py-3 transition-colors">
-        <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
-          <div className="relative flex-shrink-0">
-            <Workflow className="text-muted-foreground h-5 w-5 flex-shrink-0" />
-            {isComposerFlow && (
-              <Sparkle className="fill-primary text-primary absolute -top-1 -right-1 h-2.5 w-2.5 opacity-60" />
-            )}
-          </div>
+    <div className="bg-card hover:bg-accent/5 relative flex w-full items-center gap-4 overflow-hidden rounded-md border px-4 py-3 transition-colors">
+      <Link
+        href={`/workflow-templates/${flow.id}`}
+        className="absolute inset-0 z-0"
+      />
 
-          <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-hidden">
-            <p
-              className="truncate font-mono text-sm font-medium"
-              title={flow.id}>
-              {flow.id}
-            </p>
-            {flow.title && (
-              <p
-                className="text-muted-foreground truncate text-xs font-medium"
-                title={flow.title}>
-                {flow.title}
-              </p>
-            )}
-            {flow.description && (
-              <p
-                className="text-muted-foreground truncate text-xs"
-                title={flow.description}>
-                {flow.description}
-              </p>
-            )}
-          </div>
+      <div className="pointer-events-none relative z-10 flex flex-grow items-center gap-3 overflow-hidden">
+        <div className="flex-shrink-0">
+          <Workflow className="text-muted-foreground h-5 w-5 flex-shrink-0" />
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="text-muted-foreground flex items-center gap-1 text-xs">
-            <span className="font-medium">{flow.stages}</span>
-            <span>{flow.stages === 1 ? 'stage' : 'stages'}</span>
-          </div>
+        <div className="flex max-w-[850px] min-w-0 flex-col gap-1">
+          <p className="truncate text-sm font-medium" title={flow.id}>
+            {flow.id}
+          </p>
+          {flow.title && (
+            <p
+              className="text-muted-foreground truncate text-xs font-medium"
+              title={flow.title}>
+              {flow.title}
+            </p>
+          )}
+          {flow.description && (
+            <p
+              className="text-muted-foreground truncate text-xs"
+              title={flow.description}>
+              {flow.description}
+            </p>
+          )}
         </div>
       </div>
-    </Link>
+
+      <div className="relative z-10 flex flex-shrink-0 items-center gap-1">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="pointer-events-auto h-8 w-8 cursor-pointer p-0"
+                asChild>
+                <a
+                  href={`http://argo.127.0.0.1.nip.io:8080/workflow-templates/default/${flow.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer">
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Open in Argo</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        {onDelete && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="pointer-events-auto h-8 w-8 cursor-pointer p-0"
+                  onClick={handleDeleteClick}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Delete template</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+
+        {onRun && (
+          <TooltipProvider>
+            <Tooltip>
+              <RunWorkflowDialog
+                templateName={flow.id}
+                parameters={parameters}
+                onRun={handleRunWorkflow}
+                trigger={
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="pointer-events-auto h-8 w-8 cursor-pointer p-0">
+                      <Play className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                }
+              />
+              <TooltipContent>Run workflow</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </div>
+
+      <DeleteWorkflowTemplateDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        templateName={flow.id}
+        onConfirm={handleConfirmDelete}
+      />
+    </div>
   );
 }

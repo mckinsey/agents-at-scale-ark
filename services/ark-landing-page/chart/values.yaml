@@ -1,0 +1,75 @@
+
+global:
+  annotations:
+    ark.mckinsey.com/service: ark-landing-page
+
+app:
+  name: ark-landing-page
+  image:
+    repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-landing-page
+    pullPolicy: IfNotPresent
+
+  config:
+    nodeEnv: "production"
+    port: "3000"
+    hostname: "0.0.0.0"
+
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
+
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop:
+        - ALL
+
+serviceAccount:
+  create: true
+  name: ark-landing-page-sa
+
+rbac:
+  create: true
+  rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["httproutes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["ark.mckinsey.com"]
+    resources: ["agents", "teams", "models"]
+    verbs: ["get", "list"]
+
+service:
+  name: ark-landing-page
+  type: ClusterIP
+  port: 3000
+  targetPort: 3000
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts: []
+  tls: []
+
+httpRoute:
+  enabled: false
+  annotations: {}
+  parentRefs:
+    - name: localhost-gateway
+      namespace: ark-system
+  hostnames: []

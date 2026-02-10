@@ -10,6 +10,7 @@ import {
   Key,
   Lock,
   type LucideIcon,
+  Play,
   Search,
   Server,
   Settings,
@@ -71,7 +72,12 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     group: 'configurations',
   },
 
-  // Operations
+  sessions: {
+    key: 'sessions',
+    title: 'Sessions',
+    icon: Play,
+    group: 'operations',
+  },
   queries: {
     key: 'queries',
     title: 'Queries',

@@ -22,6 +22,7 @@ vi.mock('@/providers/NamespaceProvider', () => ({
     isPending: false,
     setNamespace: vi.fn(),
     createNamespace: vi.fn(),
+    readOnlyMode: false,
   })),
 }));
 
