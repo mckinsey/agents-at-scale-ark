@@ -86,6 +86,12 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
   },
 
   // Monitoring
+  sessions: {
+    key: 'sessions',
+    title: 'Workflow Runs',
+    icon: Play,
+    group: 'monitoring',
+  },
   events: {
     key: 'events',
     title: 'Query Logs',
@@ -116,12 +122,6 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     title: 'Evaluations',
     icon: BarChart,
     group: 'monitoring',
-  },
-  sessions: {
-    key: 'sessions',
-    title: 'Sessions',
-    icon: Play,
-    group: 'operations',
   },
 
   // Operations
