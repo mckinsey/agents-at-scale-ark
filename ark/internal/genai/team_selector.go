@@ -8,6 +8,7 @@ import (
 	"text/template"
 
 	"k8s.io/apimachinery/pkg/types"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
@@ -115,6 +116,9 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	lastMsg := result.Messages[len(result.Messages)-1]
 	if lastMsg.OfAssistant != nil && lastMsg.OfAssistant.Content.OfString.Value != "" {
 		selectedName = strings.TrimSpace(lastMsg.OfAssistant.Content.OfString.Value)
+		logger := logf.FromContext(ctx)
+		logger.Info("Selector chose", "selectedName", selectedName)
+
 	} else {
 		return nil, fmt.Errorf("selector agent returned invalid response")
 	}
@@ -148,19 +152,14 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 
 // determineNextMember routes to the appropriate selection logic based on whether graph constraints exist.
 func (t *Team) determineNextMember(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string, legalTransitions map[string][]TeamMember) (TeamMember, error) {
-	switch {
-	case previousMember == "":
-		// First turn: use first member
-		return t.Members[0], nil
-	case len(legalTransitions) == 0:
+	if len(legalTransitions) == 0 {
 		// No graph constraints: use standard selector (all members available)
 		participantsList := buildParticipants(t.Members)
 		rolesList := buildRoles(t.Members)
 		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, nil)
-	default:
-		// Graph constraints provided: use legal transitions
-		return t.selectFromGraphConstraints(ctx, messages, tmpl, previousMember, legalTransitions)
 	}
+	// Graph constraints provided: use legal transitions
+	return t.selectFromGraphConstraints(ctx, messages, tmpl, previousMember, legalTransitions)
 }
 
 // selectFromGraphConstraints selects a member from the graph-constrained legal transitions.
@@ -171,12 +170,11 @@ func (t *Team) selectFromGraphConstraints(ctx context.Context, messages []Messag
 		memberLookup[member.GetName()] = member
 	}
 
-	// Find previous member to get legal transitions
-	previousMemberObj := memberLookup[previousMember]
-
-	if previousMemberObj == nil {
-		// Previous member not found, fallback to first member
-		return t.Members[0], nil
+	if previousMember == "" {
+	    // If this is the first step, choose from all available members
+		participantsList := buildParticipants(t.Members)
+		rolesList := buildRoles(t.Members)
+		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, nil)
 	}
 
 	legal := legalTransitions[previousMember]
@@ -199,7 +197,8 @@ func (t *Team) selectFromGraphConstraints(ctx context.Context, messages []Messag
 
 //nolint:gocognit // Complex function orchestrating selector logic with graph constraints, but cohesive responsibilities
 func (t *Team) executeSelector(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
-	messages := append([]Message{}, history...)
+    // Explicitly add userInput to the history so that the selector has access to it
+	messages := append(history, userInput)
 	var newMessages []Message
 
 	promptTemplate := defaultSelectorPrompt
@@ -250,7 +249,7 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 			"strategy": t.Strategy,
 			"turn":     fmt.Sprintf("%d", turn),
 		}
-		turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s", turn, t.Name), operationData)
+		turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s using team member %s", turn, t.Name, nextMember.GetName()), operationData)
 
 		err = t.executeMemberAndAccumulate(turnCtx, nextMember, userInput, &messages, &newMessages, turn)
 
