@@ -46,8 +46,10 @@ func (v *A2AServerValidator) validateA2AServer(a2aServer *arkv1prealpha1.A2AServ
 		return err
 	}
 
-	if err := ValidatePollInterval(a2aServer.Spec.PollInterval.Duration); err != nil {
-		return err
+	if a2aServer.Spec.PollInterval != nil {
+		if err := ValidatePollInterval(a2aServer.Spec.PollInterval.Duration); err != nil {
+			return err
+		}
 	}
 
 	return nil

@@ -358,7 +358,7 @@ func setupEmbeddedApiserver(mgr ctrl.Manager) {
 		cfg.PostgresSSL = "disable"
 	}
 
-	server := apiserver.New(cfg)
+	server := apiserver.New(cfg, mgr.GetClient())
 	if err := mgr.Add(server); err != nil {
 		setupLog.Error(err, "unable to add embedded apiserver to manager")
 		os.Exit(1)

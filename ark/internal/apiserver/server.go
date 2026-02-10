@@ -20,6 +20,7 @@ import (
 	genericoptions "k8s.io/apiserver/pkg/server/options"
 	"k8s.io/apiserver/pkg/util/compatibility"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
@@ -53,18 +54,20 @@ type Config struct {
 }
 
 type Server struct {
-	config  Config
-	backend storage.Backend
-	stopCh  chan struct{}
+	config    Config
+	backend   storage.Backend
+	k8sClient client.Client
+	stopCh    chan struct{}
 }
 
-func New(cfg Config) *Server {
+func New(cfg Config, k8sClient client.Client) *Server {
 	if cfg.BindPort == 0 {
 		cfg.BindPort = 6443
 	}
 	return &Server{
-		config: cfg,
-		stopCh: make(chan struct{}),
+		config:    cfg,
+		k8sClient: k8sClient,
+		stopCh:    make(chan struct{}),
 	}
 }
 
@@ -140,7 +143,7 @@ func (s *Server) Start(ctx context.Context) error {
 func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, converter storage.TypeConverter) error {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(arkv1alpha1.GroupVersion.Group, Scheme, ParameterCodec, Codecs)
 
-	storageValidator := validation.NewStorageValidator(s.backend, nil)
+	storageValidator := validation.NewStorageValidator(s.backend, s.k8sClient)
 	printerColumns := GetPrinterColumnRegistry()
 
 	v1alpha1Storage := make(map[string]rest.Storage)
