@@ -29,7 +29,7 @@ export default function TeamsPage() {
         }
       />
       <div className="flex flex-1 flex-col">
-        <div className="px-6 pt-6">
+        <div>
           <h1 className="text-xl">{pageTitle}</h1>
         </div>
         <TeamsSection ref={teamsSectionRef} />

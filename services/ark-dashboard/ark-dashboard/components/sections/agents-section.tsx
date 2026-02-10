@@ -150,14 +150,14 @@ export const AgentsSection = forwardRef<AgentsSectionHandle, object>(
     return (
       <>
         <div className="flex h-full flex-col">
-          <div className="flex items-center justify-end px-6 py-3">
+          <div className="flex items-center justify-end mt-3">
             <ToggleSwitch
               options={viewOptions}
               onChange={id => setShowCompactView(id === 'card')}
             />
           </div>
 
-          <main className="flex-1 overflow-auto px-6 py-0">
+          <main className="flex-1 overflow-auto mt-4">
             {showCompactView && (
               <div className="grid gap-6 pb-6 md:grid-cols-2 lg:grid-cols-3">
                 {agents.map(agent => (

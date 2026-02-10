@@ -29,7 +29,7 @@ export default function DashboardLayout({
     <>
       <SidebarProvider>
         <AppSidebar />
-        <SidebarInset className="p-6">{children}</SidebarInset>
+        <SidebarInset className="p-10">{children}</SidebarInset>
       </SidebarProvider>
       <SettingsModal />
       <ChatManager />

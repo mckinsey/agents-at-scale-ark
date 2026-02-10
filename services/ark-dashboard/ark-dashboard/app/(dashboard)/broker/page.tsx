@@ -646,8 +646,8 @@ export default function BrokerPage() {
   return (
     <>
       <PageHeader />
-      <div className="flex flex-1 flex-col gap-4 p-4">
-        <h1 className="px-2 text-xl">Broker</h1>
+      <div className="flex flex-1 flex-col gap-4">
+        <h1 className="text-xl">Broker</h1>
         <Tabs
           defaultValue="traces"
           className="flex-1"

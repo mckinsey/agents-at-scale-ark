@@ -176,7 +176,7 @@ export const McpServersSection = forwardRef<
 
   return (
     <div className="flex h-full flex-col">
-      <main className="flex-1 overflow-auto p-6">
+      <main className="flex-1 overflow-auto mt-4">
         <div className="grid gap-6 pb-6 md:grid-cols-2 lg:grid-cols-3">
           {mcpServers.map(server => (
             <McpServerCard
