@@ -905,13 +905,17 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
                   return {
                     ...toolCall,
                     result:
-                      toolResultMessage && typeof toolResultMessage.content === 'string'
+                      toolResultMessage &&
+                      typeof toolResultMessage.content === 'string'
                         ? toolResultMessage.content
                         : undefined,
                   };
                 });
 
-                const hasToolCalls = debugMode && toolCallsWithResults && toolCallsWithResults.length > 0;
+                const hasToolCalls =
+                  debugMode &&
+                  toolCallsWithResults &&
+                  toolCallsWithResults.length > 0;
                 const hasContent = content && content.trim().length > 0;
 
                 if (!hasToolCalls && !hasContent) {

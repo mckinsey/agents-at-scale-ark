@@ -555,7 +555,8 @@ export default function FloatingChat({
                   const toolCalls =
                     'tool_calls' in message ? message.tool_calls : undefined;
 
-                  const senderName = 'name' in message ? message.name : undefined;
+                  const senderName =
+                    'name' in message ? message.name : undefined;
 
                   const toolCallsWithResults = toolCalls?.map(toolCall => {
                     const toolResultMessage = chatMessages
@@ -570,13 +571,17 @@ export default function FloatingChat({
                     return {
                       ...toolCall,
                       result:
-                        toolResultMessage && typeof toolResultMessage.content === 'string'
+                        toolResultMessage &&
+                        typeof toolResultMessage.content === 'string'
                           ? toolResultMessage.content
                           : undefined,
                     };
                   });
 
-                  const hasToolCalls = debugMode && toolCallsWithResults && toolCallsWithResults.length > 0;
+                  const hasToolCalls =
+                    debugMode &&
+                    toolCallsWithResults &&
+                    toolCallsWithResults.length > 0;
                   const hasContent = content && content.trim().length > 0;
 
                   if (!hasToolCalls && !hasContent) {
@@ -585,28 +590,27 @@ export default function FloatingChat({
 
                   return (
                     <div key={index} className="flex flex-col gap-2">
-                      {hasToolCalls && toolCallsWithResults.map((toolCall, toolIndex) => (
-                        <div key={`${index}-tool-${toolIndex}`}>
-                          <ChatMessage
-                            role="assistant"
-                            content=""
-                            viewMode={viewMode}
-                            toolCalls={[
-                              toolCall as {
-                                id: string;
-                                type: 'function';
-                                function: { name: string; arguments: string };
-                                result?: string;
-                              },
-                            ]}
-                          />
-                        </div>
-                      ))}
+                      {hasToolCalls &&
+                        toolCallsWithResults.map((toolCall, toolIndex) => (
+                          <div key={`${index}-tool-${toolIndex}`}>
+                            <ChatMessage
+                              role="assistant"
+                              content=""
+                              viewMode={viewMode}
+                              toolCalls={[
+                                toolCall as {
+                                  id: string;
+                                  type: 'function';
+                                  function: { name: string; arguments: string };
+                                  result?: string;
+                                },
+                              ]}
+                            />
+                          </div>
+                        ))}
                       {hasContent && (
                         <ChatMessage
-                          role={
-                            message.role as 'user' | 'assistant' | 'system'
-                          }
+                          role={message.role as 'user' | 'assistant' | 'system'}
                           content={content}
                           viewMode={viewMode}
                           sender={senderName}
