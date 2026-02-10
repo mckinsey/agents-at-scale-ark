@@ -1,16 +1,27 @@
 package routing
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"mckinsey.com/ark/internal/telemetry"
 )
+
+func setupTestLogger() *bytes.Buffer {
+	buf := &bytes.Buffer{}
+	logger := zap.New(zap.WriteTo(buf))
+	ctrllog.SetLogger(logger)
+	return buf
+}
 
 type mockSpanProcessor struct {
 	mu           sync.Mutex
@@ -52,10 +63,10 @@ func TestOTELRoutingProcessor_OnEnd(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		namespace      string
-		wantTenantA    int
-		wantTenantB    int
+		name        string
+		namespace   string
+		wantTenantA int
+		wantTenantB int
 	}{
 		{
 			name:        "routes to tenant-a",
@@ -207,4 +218,68 @@ func TestNewOTELRoutingProcessor(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestOTELRoutingProcessor_Logs(t *testing.T) {
+	logBuf := setupTestLogger()
+
+	t.Run("NewOTELRoutingProcessor logs info on success", func(t *testing.T) {
+		logBuf.Reset()
+		endpoints := []OTELEndpoint{
+			{Namespace: "tenant-a", Endpoint: "http://collector:4318/v1/traces", TLS: false},
+		}
+
+		_, err := NewOTELRoutingProcessor(context.Background(), endpoints)
+		if err != nil {
+			t.Fatalf("NewOTELRoutingProcessor() error = %v", err)
+		}
+
+		logOutput := logBuf.String()
+		if !bytes.Contains(logBuf.Bytes(), []byte("created per-tenant OTEL exporter")) {
+			t.Errorf("expected info log 'created per-tenant OTEL exporter', got: %s", logOutput)
+		}
+		if !bytes.Contains(logBuf.Bytes(), []byte("tenant-a")) {
+			t.Errorf("expected namespace 'tenant-a' in log, got: %s", logOutput)
+		}
+	})
+
+	t.Run("Shutdown logs error on failure", func(t *testing.T) {
+		logBuf.Reset()
+		shutdownErr := errors.New("shutdown failed")
+		processor := &OTELRoutingProcessor{
+			endpoints: map[string]*ExporterConfig{
+				"tenant-a": {Namespace: "tenant-a", Processor: &mockSpanProcessor{shutdownErr: shutdownErr}},
+			},
+		}
+
+		_ = processor.Shutdown(context.Background())
+
+		logOutput := logBuf.String()
+		if !bytes.Contains(logBuf.Bytes(), []byte("failed to shutdown OTEL processor")) {
+			t.Errorf("expected error log 'failed to shutdown OTEL processor', got: %s", logOutput)
+		}
+		if !bytes.Contains(logBuf.Bytes(), []byte("tenant-a")) {
+			t.Errorf("expected namespace 'tenant-a' in log, got: %s", logOutput)
+		}
+	})
+
+	t.Run("ForceFlush logs error on failure", func(t *testing.T) {
+		logBuf.Reset()
+		flushErr := errors.New("flush failed")
+		processor := &OTELRoutingProcessor{
+			endpoints: map[string]*ExporterConfig{
+				"tenant-b": {Namespace: "tenant-b", Processor: &mockSpanProcessor{flushErr: flushErr}},
+			},
+		}
+
+		_ = processor.ForceFlush(context.Background())
+
+		logOutput := logBuf.String()
+		if !bytes.Contains(logBuf.Bytes(), []byte("failed to flush OTEL processor")) {
+			t.Errorf("expected error log 'failed to flush OTEL processor', got: %s", logOutput)
+		}
+		if !bytes.Contains(logBuf.Bytes(), []byte("tenant-b")) {
+			t.Errorf("expected namespace 'tenant-b' in log, got: %s", logOutput)
+		}
+	})
 }

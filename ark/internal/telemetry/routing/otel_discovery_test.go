@@ -2,12 +2,16 @@ package routing
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
 
 func TestParseOTELSecret(t *testing.T) {
@@ -101,6 +105,32 @@ func TestDiscoverOTELEndpoints_NilClient(t *testing.T) {
 	}
 	if got != nil {
 		t.Errorf("got %v, want nil", got)
+	}
+}
+
+func TestDiscoverOTELEndpoints_ListError(t *testing.T) {
+	listErr := errors.New("connection refused")
+	fakeClient := fake.NewClientBuilder().
+		WithInterceptorFuncs(interceptor.Funcs{
+			List: func(ctx context.Context, client client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+				return listErr
+			},
+		}).
+		Build()
+
+	got, err := DiscoverOTELEndpoints(context.Background(), fakeClient)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to list Secrets") {
+		t.Errorf("expected error to contain 'failed to list Secrets', got: %v", err)
+	}
+	if !errors.Is(err, listErr) {
+		t.Errorf("expected error to wrap listErr, got: %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil result, got: %v", got)
 	}
 }
 
