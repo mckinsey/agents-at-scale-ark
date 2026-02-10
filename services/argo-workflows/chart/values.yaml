@@ -24,6 +24,13 @@ argo-workflows:
     workflowDefaults:
       spec:
         serviceAccountName: argo-workflow
+        # Reference the artifact repository ConfigMap when Minio is enabled
+        # This is populated by the artifact-repository.yaml template
+        artifactRepositoryRef:
+          configMap: artifact-repositories
+          key: default
+        
+        archiveLogs: true
 
   # Server configuration
   server:

@@ -5,8 +5,9 @@ import unittest.mock
 from unittest.mock import Mock, patch, AsyncMock
 from fastapi.testclient import TestClient
 
-# Set environment variable to skip authentication before importing the app
+# Set environment variables before importing the app
 os.environ["AUTH_MODE"] = "open"
+os.environ["READ_ONLY_MODE"] = "false"
 
 
 class TestNamespacesEndpoint(unittest.TestCase):

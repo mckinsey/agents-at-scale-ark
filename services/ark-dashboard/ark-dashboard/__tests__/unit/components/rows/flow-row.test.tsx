@@ -8,15 +8,54 @@ vi.mock('next/link', () => ({
   default: ({
     children,
     href,
+    className,
   }: {
-    children: React.ReactNode;
+    children?: React.ReactNode;
     href: string;
-  }) => <a href={href}>{children}</a>,
+    className?: string;
+  }) => (
+    <a href={href} className={className}>
+      {children}
+    </a>
+  ),
 }));
 
 vi.mock('lucide-react', () => ({
   Workflow: () => <div data-testid="workflow-icon">WorkflowIcon</div>,
-  Sparkle: () => <div data-testid="sparkle-icon">SparkleIcon</div>,
+  Play: () => <div data-testid="play-icon">PlayIcon</div>,
+  Trash2: () => <div data-testid="trash-icon">TrashIcon</div>,
+  ExternalLink: () => <div data-testid="external-link-icon">ExternalLinkIcon</div>,
+}));
+
+vi.mock('@/components/ui/button', () => ({
+  Button: ({
+    children,
+    onClick,
+    asChild,
+  }: {
+    children: React.ReactNode;
+    onClick?: () => void;
+    asChild?: boolean;
+  }) => (
+    <button onClick={onClick} data-as-child={asChild}>
+      {children}
+    </button>
+  ),
+}));
+
+vi.mock('@/components/ui/tooltip', () => ({
+  TooltipProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipTrigger: ({ children, asChild }: { children: React.ReactNode; asChild?: boolean }) => <>{children}</>,
+  TooltipContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+
+vi.mock('@/components/dialogs/delete-workflow-template-dialog', () => ({
+  DeleteWorkflowTemplateDialog: () => <div data-testid="delete-dialog">DeleteDialog</div>,
+}));
+
+vi.mock('@/components/dialogs/run-workflow-dialog', () => ({
+  RunWorkflowDialog: ({ trigger }: { trigger: React.ReactNode }) => <>{trigger}</>,
 }));
 
 describe('FlowRow', () => {
@@ -38,18 +77,18 @@ describe('FlowRow', () => {
       expect(screen.getByTestId('workflow-icon')).toBeInTheDocument();
     });
 
-    it('should render stages count', () => {
+    it('should render external link button', () => {
       render(<FlowRow flow={baseFlow} />);
 
-      expect(screen.getByText('3')).toBeInTheDocument();
-      expect(screen.getByText('stages')).toBeInTheDocument();
+      expect(screen.getByTestId('external-link-icon')).toBeInTheDocument();
     });
 
     it('should create link to flow detail page', () => {
       render(<FlowRow flow={baseFlow} />);
 
-      const link = screen.getByRole('link');
-      expect(link).toHaveAttribute('href', '/workflow-templates/test-flow-123');
+      const links = screen.getAllByRole('link');
+      const detailPageLink = links.find(link => link.getAttribute('href')?.startsWith('/workflow-templates/'));
+      expect(detailPageLink).toHaveAttribute('href', '/workflow-templates/test-flow-123');
     });
   });
 
@@ -106,120 +145,31 @@ describe('FlowRow', () => {
     });
   });
 
-  describe('Composer flow (Sparkle badge)', () => {
-    it('should show sparkle badge when flow has both title and description', () => {
-      const composerFlow: Flow = {
-        ...baseFlow,
-        title: 'ML Training Pipeline',
-        description: 'Trains machine learning models with validation',
-      };
+  describe('Action buttons', () => {
+    it('should render run button when onRun is provided', () => {
+      const onRun = vi.fn();
+      render(<FlowRow flow={baseFlow} onRun={onRun} />);
 
-      render(<FlowRow flow={composerFlow} />);
-
-      expect(screen.getByTestId('sparkle-icon')).toBeInTheDocument();
+      expect(screen.getByTestId('play-icon')).toBeInTheDocument();
     });
 
-    it('should not show sparkle badge when flow has only title', () => {
-      const flowWithTitleOnly: Flow = {
-        ...baseFlow,
-        title: 'Simple Flow',
-      };
-
-      render(<FlowRow flow={flowWithTitleOnly} />);
-
-      expect(screen.queryByTestId('sparkle-icon')).not.toBeInTheDocument();
-    });
-
-    it('should not show sparkle badge when flow has only description', () => {
-      const flowWithDescriptionOnly: Flow = {
-        ...baseFlow,
-        description: 'Some description',
-      };
-
-      render(<FlowRow flow={flowWithDescriptionOnly} />);
-
-      expect(screen.queryByTestId('sparkle-icon')).not.toBeInTheDocument();
-    });
-
-    it('should not show sparkle badge when flow has neither title nor description', () => {
+    it('should not render run button when onRun is not provided', () => {
       render(<FlowRow flow={baseFlow} />);
 
-      expect(screen.queryByTestId('sparkle-icon')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('play-icon')).not.toBeInTheDocument();
     });
 
-    it('should not show sparkle badge when title is empty string', () => {
-      const flowWithEmptyTitle: Flow = {
-        ...baseFlow,
-        title: '',
-        description: 'Some description',
-      };
+    it('should render delete button when onDelete is provided', () => {
+      const onDelete = vi.fn();
+      render(<FlowRow flow={baseFlow} onDelete={onDelete} />);
 
-      render(<FlowRow flow={flowWithEmptyTitle} />);
-
-      expect(screen.queryByTestId('sparkle-icon')).not.toBeInTheDocument();
+      expect(screen.getByTestId('trash-icon')).toBeInTheDocument();
     });
 
-    it('should not show sparkle badge when description is empty string', () => {
-      const flowWithEmptyDescription: Flow = {
-        ...baseFlow,
-        title: 'Some title',
-        description: '',
-      };
+    it('should not render delete button when onDelete is not provided', () => {
+      render(<FlowRow flow={baseFlow} />);
 
-      render(<FlowRow flow={flowWithEmptyDescription} />);
-
-      expect(screen.queryByTestId('sparkle-icon')).not.toBeInTheDocument();
-    });
-  });
-
-  describe('Stages display', () => {
-    it('should display singular "stage" when stages is 1', () => {
-      const flowWithOneStage: Flow = {
-        ...baseFlow,
-        stages: 1,
-      };
-
-      render(<FlowRow flow={flowWithOneStage} />);
-
-      expect(screen.getByText('1')).toBeInTheDocument();
-      expect(screen.getByText('stage')).toBeInTheDocument();
-      expect(screen.queryByText('stages')).not.toBeInTheDocument();
-    });
-
-    it('should display plural "stages" when stages is 0', () => {
-      const flowWithZeroStages: Flow = {
-        ...baseFlow,
-        stages: 0,
-      };
-
-      render(<FlowRow flow={flowWithZeroStages} />);
-
-      expect(screen.getByText('0')).toBeInTheDocument();
-      expect(screen.getByText('stages')).toBeInTheDocument();
-    });
-
-    it('should display plural "stages" when stages is 2', () => {
-      const flowWithTwoStages: Flow = {
-        ...baseFlow,
-        stages: 2,
-      };
-
-      render(<FlowRow flow={flowWithTwoStages} />);
-
-      expect(screen.getByText('2')).toBeInTheDocument();
-      expect(screen.getByText('stages')).toBeInTheDocument();
-    });
-
-    it('should display plural "stages" when stages is 10', () => {
-      const flowWithManyStages: Flow = {
-        ...baseFlow,
-        stages: 10,
-      };
-
-      render(<FlowRow flow={flowWithManyStages} />);
-
-      expect(screen.getByText('10')).toBeInTheDocument();
-      expect(screen.getByText('stages')).toBeInTheDocument();
+      expect(screen.queryByTestId('trash-icon')).not.toBeInTheDocument();
     });
   });
 
@@ -279,7 +229,7 @@ describe('FlowRow', () => {
   });
 
   describe('Complex scenarios', () => {
-    it('should render complete composer flow with all properties', () => {
+    it('should render complete flow with all properties', () => {
       const completeFlow: Flow = {
         id: 'complete-workflow-abc-123',
         title: 'Complete ML Pipeline',
@@ -296,13 +246,11 @@ describe('FlowRow', () => {
           'End-to-end machine learning workflow with validation',
         ),
       ).toBeInTheDocument();
-      expect(screen.getByText('5')).toBeInTheDocument();
-      expect(screen.getByText('stages')).toBeInTheDocument();
-      expect(screen.getByTestId('sparkle-icon')).toBeInTheDocument();
       expect(screen.getByTestId('workflow-icon')).toBeInTheDocument();
 
-      const link = screen.getByRole('link');
-      expect(link).toHaveAttribute(
+      const links = screen.getAllByRole('link');
+      const detailPageLink = links.find(link => link.getAttribute('href')?.startsWith('/workflow-templates/'));
+      expect(detailPageLink).toHaveAttribute(
         'href',
         '/workflow-templates/complete-workflow-abc-123',
       );
@@ -319,8 +267,9 @@ describe('FlowRow', () => {
       expect(
         screen.getByText('flow-with_underscores-and.dots'),
       ).toBeInTheDocument();
-      const link = screen.getByRole('link');
-      expect(link).toHaveAttribute(
+      const links = screen.getAllByRole('link');
+      const detailPageLink = links.find(link => link.getAttribute('href')?.startsWith('/workflow-templates/'));
+      expect(detailPageLink).toHaveAttribute(
         'href',
         '/workflow-templates/flow-with_underscores-and.dots',
       );
