@@ -30,8 +30,25 @@ func (op *OpenAIProvider) SetOutputSchema(schema *runtime.RawExtension, schemaNa
 
 func (op *OpenAIProvider) HealthCheck(ctx context.Context) error {
 	client := op.createClient(ctx)
-	_, err := client.Models.List(ctx)
-	return err
+	modelsPage, err := client.Models.List(ctx)
+	if err != nil {
+		testMessages := []Message{
+			NewUserMessage("test"),
+		}
+		_, err := op.ChatCompletion(ctx, testMessages, 1)
+		if err != nil {
+			return fmt.Errorf("model %s is not accessible: %w", op.Model, err)
+		}
+		return nil
+	}
+
+	for _, model := range modelsPage.Data {
+		if model.ID == op.Model {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("model %s is not available in the provider", op.Model)
 }
 
 func (op *OpenAIProvider) ChatCompletion(ctx context.Context, messages []Message, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {

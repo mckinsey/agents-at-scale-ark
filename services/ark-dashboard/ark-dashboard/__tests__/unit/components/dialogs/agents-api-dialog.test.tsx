@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentsAPIDialog } from '@/components/dialogs/agents-api-dialog';
 import type { Agent } from '@/lib/services';
@@ -46,6 +46,10 @@ describe('AgentsAPIDialog', () => {
       },
       writable: true,
     });
+  });
+
+  afterEach(() => {
+    vi.clearAllTimers();
   });
 
   it('should render dialog when open', () => {

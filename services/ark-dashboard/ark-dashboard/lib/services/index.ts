@@ -86,3 +86,20 @@ export {
   useCreateAPIKey,
   useDeleteAPIKey,
 } from './api-keys-hooks';
+export {
+  workflowsService,
+  buildNodeHierarchy,
+  getAllNodesFlat,
+  getRootNodeId,
+  calculateDuration,
+} from './workflows';
+export { useWorkflows, useWorkflow } from './workflows-hooks';
+export {
+  mapArgoWorkflowToSession,
+  mapArgoWorkflowsToSessions,
+  type MappedWorkflowSession,
+  type MappedWorkflowStep,
+  type MappedWorkflowStepDetail,
+  type MappedStepStatus,
+  type MappedWorkflowStepType,
+} from './workflow-mapper';
