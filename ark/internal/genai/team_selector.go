@@ -60,7 +60,12 @@ func buildRoles(members []TeamMember) string {
 	return strings.Join(roles, ", ")
 }
 
-func (t *Team) loadSelectorAgent(ctx context.Context) (*Agent, error) {
+func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, error) {
+	// Check for override selector agent first (used in tests)
+	if t.overrideSelectorAgent != nil {
+		return t.overrideSelectorAgent, nil
+	}
+
 	if t.Selector == nil || t.Selector.Agent == "" {
 		return nil, fmt.Errorf("selector agent must be specified")
 	}
@@ -171,7 +176,7 @@ func (t *Team) selectFromGraphConstraints(ctx context.Context, messages []Messag
 	}
 
 	if previousMember == "" {
-	    // If this is the first step, choose from all available members
+		// If this is the first step, choose from all available members
 		participantsList := buildParticipants(t.Members)
 		rolesList := buildRoles(t.Members)
 		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, nil)
@@ -197,7 +202,7 @@ func (t *Team) selectFromGraphConstraints(ctx context.Context, messages []Messag
 
 //nolint:gocognit // Complex function orchestrating selector logic with graph constraints, but cohesive responsibilities
 func (t *Team) executeSelector(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
-    // Explicitly add userInput to the history so that the selector has access to it
+	// Explicitly add userInput to the history so that the selector has access to it
 	messages := append(history, userInput)
 	var newMessages []Message
 
