@@ -124,4 +124,3 @@ func GetA2APayloadModeFromContext(ctx context.Context) string {
 	}
 	return A2APayloadModeCompat
 }
-

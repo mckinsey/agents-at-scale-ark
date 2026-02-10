@@ -254,8 +254,8 @@ func TestExtractTextFromParts(t *testing.T) {
 
 func TestBuildA2AMetadataWithHistory(t *testing.T) {
 	annotations := map[string]string{
-		arkann.A2AHistoryEnabled:     TrueString,
-		arkann.A2AHistoryLimit:       "1",
+		arkann.A2AHistoryEnabled:      TrueString,
+		arkann.A2AHistoryLimit:        "1",
 		arkann.A2ASupportedExtensions: `["https://ark.mckinsey.com/extensions/history/v1"]`,
 	}
 	history := []Message{
@@ -278,7 +278,7 @@ func TestBuildA2AMetadataWithHistory(t *testing.T) {
 func TestBuildA2AMetadataPermissions(t *testing.T) {
 	permissions := `{"subject":"user-123","scopes":["agents:read"]}`
 	annotations := map[string]string{
-		arkann.A2APermissions:        permissions,
+		arkann.A2APermissions:         permissions,
 		arkann.A2ASupportedExtensions: `["https://ark.mckinsey.com/extensions/permissions/v1"]`,
 	}
 
@@ -311,7 +311,7 @@ func TestBuildA2AMetadataPermissionsUnsupported(t *testing.T) {
 func TestBuildA2AMetadataPermissionsInvalid(t *testing.T) {
 	permissions := `{"scopes":["agents:read"]}`
 	annotations := map[string]string{
-		arkann.A2APermissions:        permissions,
+		arkann.A2APermissions:         permissions,
 		arkann.A2ASupportedExtensions: `["https://ark.mckinsey.com/extensions/permissions/v1"]`,
 	}
 
