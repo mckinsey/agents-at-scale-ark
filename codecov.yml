@@ -1,0 +1,19 @@
+coverage:
+  status:
+    project:
+      default:
+        # Allow coverage to drop by up to 1% before failing
+        threshold: 1%
+    patch:
+      default:
+        # Only require 50% coverage on new code in PRs
+        target: 80%
+
+ignore:
+  - "**/*_test.go"
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/mocks/**"
+  - "**/node_modules/**"
+  - "**/*.pb.go"
+  - "**/generated/**"
