@@ -7,11 +7,13 @@ import { useSearchParams } from 'next/navigation';
 import { PageHeader } from '@/components/common/page-header';
 import { ModelsSection } from '@/components/sections/models-section';
 import { Button } from '@/components/ui/button';
+import { useNamespace } from '@/providers/NamespaceProvider';
 import { useGetAllModels } from '@/lib/services/models-hooks';
 
 export default function ModelsPage() {
   const searchParams = useSearchParams();
   const namespace = searchParams.get('namespace') || 'default';
+  const { readOnlyMode } = useNamespace();
   const { data: models } = useGetAllModels();
 
   const pageTitle = models ? `Models (${models.length})` : 'Models';
@@ -20,12 +22,19 @@ export default function ModelsPage() {
     <>
       <PageHeader
         actions={
-          <Link href="/models/new">
-            <Button>
+          readOnlyMode ? (
+            <Button disabled>
               <Plus className="h-4 w-4" />
               Add Model
             </Button>
-          </Link>
+          ) : (
+            <Link href="/models/new">
+              <Button>
+                <Plus className="h-4 w-4" />
+                Add Model
+              </Button>
+            </Link>
+          )
         }
       />
       <div className="flex flex-1 flex-col">

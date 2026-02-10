@@ -3,29 +3,55 @@
 import {
   Copy,
   Download,
+  ExternalLink,
   FileCode,
   Network,
-  Sparkle,
+  Play,
+  Trash2,
   Workflow,
 } from 'lucide-react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+import { WorkflowStatsCard } from '@/components/cards/workflow-stats-card';
+import { CodeViewer } from '@/components/code-viewer';
 import { PageHeader } from '@/components/common/page-header';
+import { DeleteWorkflowTemplateDialog } from '@/components/dialogs/delete-workflow-template-dialog';
+import { RunWorkflowDialog } from '@/components/dialogs/run-workflow-dialog';
 import type { Flow } from '@/components/rows/flow-row';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useSidebar } from '@/components/ui/sidebar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { WorkflowDagViewer } from '@/components/workflow-dag-viewer';
-import { workflowTemplatesService } from '@/lib/services/workflow-templates';
+import {
+  type WorkflowStats,
+  type WorkflowTemplate,
+  workflowTemplatesService,
+} from '@/lib/services/workflow-templates';
+import { countWorkflowTasks } from '@/lib/utils/workflow';
+import { showWorkflowStartedToast } from '@/lib/utils/workflow-toast';
 
 export default function FlowDetailPage() {
   const params = useParams();
+  const router = useRouter();
+  const { state: sidebarState, isMobile } = useSidebar();
   const flowId = params.id as string;
   const [flow, setFlow] = useState<Flow | null>(null);
+  const [template, setTemplate] = useState<WorkflowTemplate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState<WorkflowStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('tree');
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   useEffect(() => {
     async function fetchFlow() {
@@ -33,17 +59,20 @@ export default function FlowDetailPage() {
         setLoading(true);
         setError(null);
 
-        const [template, yamlManifest] = await Promise.all([
+        const [templateData, yamlManifest] = await Promise.all([
           workflowTemplatesService.get(flowId),
           workflowTemplatesService.getYaml(flowId),
         ]);
 
-        const annotations = template.metadata.annotations || {};
+        setTemplate(templateData);
+
+        const annotations = templateData.metadata.annotations || {};
+        const stages = countWorkflowTasks(templateData.spec);
         const flowData: Flow = {
-          id: template.metadata.name,
+          id: templateData.metadata.name,
           title: annotations['workflows.argoproj.io/title'],
           description: annotations['workflows.argoproj.io/description'],
-          stages: 0,
+          stages,
           manifest: yamlManifest,
         };
 
@@ -57,7 +86,33 @@ export default function FlowDetailPage() {
       }
     }
 
+    async function fetchStats(showLoading = true) {
+      try {
+        if (showLoading) {
+          setStatsLoading(true);
+        }
+        const workflowStats = await workflowTemplatesService.getStats(flowId);
+        setStats(workflowStats);
+      } catch (err) {
+        console.error('Failed to fetch workflow stats:', err);
+        setStats(null);
+      } finally {
+        if (showLoading) {
+          setStatsLoading(false);
+        }
+      }
+    }
+
     fetchFlow();
+    fetchStats();
+
+    const statsInterval = setInterval(() => {
+      fetchStats(false);
+    }, 30000);
+
+    return () => {
+      clearInterval(statsInterval);
+    };
   }, [flowId]);
 
   if (loading) {
@@ -82,23 +137,23 @@ export default function FlowDetailPage() {
     );
   }
 
-  const handleCopyId = async () => {
-    try {
-      await navigator.clipboard.writeText(flow.id);
-      toast.success('Copied', {
-        description: 'Flow ID copied to clipboard',
-      });
-    } catch {
-      toast.error('Failed to copy', {
-        description: 'Could not copy flow ID to clipboard',
-      });
-    }
-  };
-
   const handleCopyManifest = async () => {
     if (!flow.manifest) return;
     try {
-      await navigator.clipboard.writeText(flow.manifest);
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(flow.manifest);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = flow.manifest;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        textArea.remove();
+      }
       toast.success('Copied', {
         description: 'Manifest copied to clipboard',
       });
@@ -122,19 +177,96 @@ export default function FlowDetailPage() {
     URL.revokeObjectURL(url);
   };
 
-  const isComposerFlow = !!(flow.title && flow.description);
+  const handleCopyWorkflowName = async () => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(flowId);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = flowId;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        textArea.remove();
+      }
+      toast.success('Copied', {
+        description: 'Workflow name copied to clipboard',
+      });
+    } catch {
+      toast.error('Failed to copy', {
+        description: 'Could not copy workflow name to clipboard',
+      });
+    }
+  };
+
+  const handleRunWorkflow = async (
+    parameters?: Record<string, string>,
+    workflowName?: string,
+  ) => {
+    try {
+      const workflow = await workflowTemplatesService.run(
+        flowId,
+        parameters,
+        workflowName,
+      );
+      showWorkflowStartedToast(workflow.metadata.name);
+
+      if (stats) {
+        setStats({
+          total: stats.total + 1,
+          succeeded: stats.succeeded,
+          running: stats.running + 1,
+          failed: stats.failed,
+        });
+      }
+
+      setTimeout(async () => {
+        const workflowStats = await workflowTemplatesService.getStats(flowId);
+        setStats(workflowStats);
+      }, 1000);
+    } catch (err) {
+      console.error('Failed to start workflow:', err);
+      toast.error('Failed to start workflow', {
+        description:
+          err instanceof Error ? err.message : 'An unknown error occurred',
+      });
+      throw err;
+    }
+  };
+
+  const handleDeleteClick = () => {
+    setShowDeleteDialog(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    try {
+      await workflowTemplatesService.delete(flowId);
+      toast.success('Workflow template deleted', {
+        description: `Deleted workflow template: ${flowId}`,
+      });
+      router.push('/workflow-templates');
+    } catch (err) {
+      console.error('Failed to delete workflow template:', err);
+      toast.error('Failed to delete workflow template', {
+        description:
+          err instanceof Error ? err.message : 'An unknown error occurred',
+      });
+    }
+  };
 
   return (
     <>
-      <PageHeader />
+      <PageHeader
+      />
       <div className="flex flex-col gap-6 p-6">
         <div className="bg-card flex w-full flex-wrap items-center gap-4 rounded-md border px-4 py-3">
           <div className="flex flex-grow items-center gap-3 overflow-hidden">
-            <div className="relative p-2">
+            <div className="p-2">
               <Workflow className="text-muted-foreground h-8 w-8 flex-shrink-0" />
-              {isComposerFlow && (
-                <Sparkle className="fill-primary text-primary absolute -top-0.5 -right-0.5 h-3.5 w-3.5 opacity-60" />
-              )}
             </div>
 
             <div className="flex min-w-0 flex-col gap-1">
@@ -145,10 +277,11 @@ export default function FlowDetailPage() {
                   {flow.id}
                 </p>
                 <Button
+                  type="button"
                   variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 cursor-pointer"
-                  onClick={handleCopyId}>
+                  size="sm"
+                  className="h-6 w-6 cursor-pointer p-0"
+                  onClick={handleCopyWorkflowName}>
                   <Copy className="h-4 w-4" />
                 </Button>
               </div>
@@ -174,8 +307,71 @@ export default function FlowDetailPage() {
               <span className="font-medium">{flow.stages}</span>
               <span>{flow.stages === 1 ? 'stage' : 'stages'}</span>
             </div>
+            <div className="flex items-center gap-2">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 cursor-pointer p-0"
+                      asChild>
+                      <a
+                        href={`http://argo.127.0.0.1.nip.io:8080/workflow-templates/default/${flowId}`}
+                        target="_blank"
+                        rel="noopener noreferrer">
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Open in Argo</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 cursor-pointer p-0"
+                      onClick={handleDeleteClick}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Delete template</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              {template && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <RunWorkflowDialog
+                      templateName={flowId}
+                      parameters={template.spec?.arguments?.parameters}
+                      onRun={handleRunWorkflow}
+                      trigger={
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 cursor-pointer p-0">
+                            <Play className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                      }
+                    />
+                    <TooltipContent>Run workflow</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
           </div>
         </div>
+
+        <WorkflowStatsCard
+          templateName={flowId}
+          stats={stats}
+          isLoading={statsLoading}
+        />
 
         {flow.manifest && (
           <Card>
@@ -186,7 +382,11 @@ export default function FlowDetailPage() {
                   variant="outline"
                   size="sm"
                   className="cursor-pointer"
-                  onClick={handleCopyManifest}>
+                  onClick={handleCopyManifest}
+                  style={{
+                    visibility: activeTab === 'yaml' ? 'visible' : 'hidden',
+                    transitionProperty: 'background-color, border-color, color',
+                  }}>
                   <Copy className="mr-2 h-4 w-4" />
                   Copy
                 </Button>
@@ -194,37 +394,54 @@ export default function FlowDetailPage() {
                   variant="outline"
                   size="sm"
                   className="cursor-pointer"
-                  onClick={handleDownloadManifest}>
+                  onClick={handleDownloadManifest}
+                  style={{
+                    visibility: activeTab === 'yaml' ? 'visible' : 'hidden',
+                    transitionProperty: 'background-color, border-color, color',
+                  }}>
                   <Download className="mr-2 h-4 w-4" />
                   Download
                 </Button>
               </div>
             </CardHeader>
             <CardContent>
-              <Tabs defaultValue="yaml">
+              <Tabs value={activeTab} onValueChange={setActiveTab}>
                 <TabsList>
-                  <TabsTrigger value="yaml">
-                    <FileCode className="mr-2 h-4 w-4" />
-                    YAML
-                  </TabsTrigger>
-                  <TabsTrigger value="tree">
+                  <TabsTrigger value="tree" className="cursor-pointer">
                     <Network className="mr-2 h-4 w-4" />
                     Tree
                   </TabsTrigger>
+                  <TabsTrigger value="yaml" className="cursor-pointer">
+                    <FileCode className="mr-2 h-4 w-4" />
+                    YAML
+                  </TabsTrigger>
                 </TabsList>
-                <TabsContent value="yaml">
-                  <pre className="bg-muted overflow-x-auto rounded-lg p-4 font-mono text-xs">
-                    <code>{flow.manifest}</code>
-                  </pre>
-                </TabsContent>
-                <TabsContent value="tree">
+                <TabsContent
+                  value="tree"
+                  forceMount
+                  tabIndex={-1}
+                  className={activeTab !== 'tree' ? 'hidden' : ''}>
                   <WorkflowDagViewer manifest={flow.manifest} />
+                </TabsContent>
+                <TabsContent
+                  value="yaml"
+                  forceMount
+                  tabIndex={-1}
+                  className={activeTab !== 'yaml' ? 'hidden' : ''}>
+                  <CodeViewer code={flow.manifest} language="yaml" />
                 </TabsContent>
               </Tabs>
             </CardContent>
           </Card>
         )}
       </div>
+
+      <DeleteWorkflowTemplateDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        templateName={flowId}
+        onConfirm={handleConfirmDelete}
+      />
     </>
   );
 }

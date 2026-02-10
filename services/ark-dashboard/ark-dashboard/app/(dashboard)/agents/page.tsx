@@ -7,6 +7,7 @@ import { useRef } from 'react';
 import { PageHeader } from '@/components/common/page-header';
 import { AgentsSection } from '@/components/sections/agents-section';
 import { Button } from '@/components/ui/button';
+import { useNamespace } from '@/providers/NamespaceProvider';
 import { useGetAllAgents } from '@/lib/services/agents-hooks';
 
 interface AgentsSectionHandle {
@@ -16,6 +17,7 @@ interface AgentsSectionHandle {
 
 export default function AgentsPage() {
   const agentsSectionRef = useRef<AgentsSectionHandle>(null);
+  const { readOnlyMode } = useNamespace();
   const { data: agents } = useGetAllAgents();
 
   const pageTitle = agents ? `Agents (${agents.length})` : 'Agents';
@@ -31,12 +33,19 @@ export default function AgentsPage() {
               <Code className="h-4 w-4" />
               Use via API
             </Button>
-            <Button asChild>
-              <Link href="/agents/new">
+            {readOnlyMode ? (
+              <Button disabled>
                 <Plus className="h-4 w-4" />
                 Create Agent
-              </Link>
-            </Button>
+              </Button>
+            ) : (
+              <Button asChild>
+                <Link href="/agents/new">
+                  <Plus className="h-4 w-4" />
+                  Create Agent
+                </Link>
+              </Button>
+            )}
           </div>
         }
       />

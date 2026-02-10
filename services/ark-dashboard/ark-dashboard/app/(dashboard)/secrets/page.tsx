@@ -7,17 +7,21 @@ import { useRef } from 'react';
 import { PageHeader } from '@/components/common/page-header';
 import { SecretsSection } from '@/components/sections/secrets-section';
 import { Button } from '@/components/ui/button';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 export default function SecretsPage() {
   const searchParams = useSearchParams();
   const namespace = searchParams.get('namespace') || 'default';
   const secretsSectionRef = useRef<{ openAddEditor: () => void }>(null);
+  const { readOnlyMode } = useNamespace();
 
   return (
     <>
       <PageHeader
         actions={
-          <Button onClick={() => secretsSectionRef.current?.openAddEditor()}>
+          <Button
+            onClick={() => secretsSectionRef.current?.openAddEditor()}
+            disabled={readOnlyMode}>
             <Plus className="h-4 w-4" />
             Add Secret
           </Button>
