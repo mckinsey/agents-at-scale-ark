@@ -6,7 +6,7 @@ coverage:
         threshold: 1%
     patch:
       default:
-        # Only require 50% coverage on new code in PRs
+        # Only require 80% coverage on new code in PRs
         target: 80%
 
 ignore:
