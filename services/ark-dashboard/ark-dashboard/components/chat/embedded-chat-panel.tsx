@@ -719,13 +719,48 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
             if (result.messages && result.messages.length > 0) {
               setChatMessages(prev => [
                 ...prev,
-                ...result.messages!.map(msg => ({
-                  role: msg.role as 'assistant' | 'user' | 'system' | 'tool',
-                  content: msg.content || '',
-                  name: msg.name,
-                  tool_calls: msg.tool_calls,
-                  tool_call_id: msg.tool_call_id,
-                })),
+                ...result.messages!.map((msg): ChatCompletionMessageParam => {
+                  if (msg.role === 'tool') {
+                    return {
+                      role: 'tool',
+                      content: msg.content || '',
+                      tool_call_id: msg.tool_call_id || '',
+                    };
+                  } else if (msg.role === 'assistant') {
+                    const baseMsg = {
+                      role: 'assistant' as const,
+                      content: msg.content || '',
+                    };
+                    if (msg.tool_calls && msg.tool_calls.length > 0) {
+                      return {
+                        ...baseMsg,
+                        tool_calls: msg.tool_calls.map(tc => ({
+                          id: tc.id,
+                          type: 'function' as const,
+                          function: tc.function,
+                        })),
+                      };
+                    }
+                    if (msg.name) {
+                      return { ...baseMsg, name: msg.name };
+                    }
+                    return baseMsg;
+                  } else if (msg.role === 'user') {
+                    const baseMsg = {
+                      role: 'user' as const,
+                      content: msg.content || '',
+                    };
+                    if (msg.name) {
+                      return { ...baseMsg, name: msg.name };
+                    }
+                    return baseMsg;
+                  } else {
+                    return {
+                      role: 'system',
+                      content: msg.content || '',
+                    };
+                  }
+                }),
               ]);
             } else if (result.response) {
               setChatMessages(prev => [
