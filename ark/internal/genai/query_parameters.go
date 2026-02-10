@@ -148,20 +148,7 @@ func GetQueryInputMessages(ctx context.Context, query arkv1alpha1.Query, k8sClie
 		queryType = RoleUser // default type
 	}
 
-	if queryType == RoleUser {
-		// For 'user' type (default), get input string using helper method
-		inputString, err := query.Spec.GetInputString()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get input string: %w", err)
-		}
-
-		// Resolve input with template parameters and create a single user message
-		resolvedInput, err := ResolveQueryInput(ctx, k8sClient, query.Namespace, inputString, query.Spec.Parameters)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve query input: %w", err)
-		}
-		return []Message{NewUserMessage(resolvedInput)}, nil
-	} else {
+	if queryType != RoleUser {
 		openaiMessages, err := query.Spec.GetInputMessages()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get input messages: %w", err)
@@ -169,14 +156,25 @@ func GetQueryInputMessages(ctx context.Context, query arkv1alpha1.Query, k8sClie
 
 		messages := make([]Message, 0, len(openaiMessages))
 		for i := range openaiMessages {
-			converted, err := OpenAIToA2AMessage(openaiMessages[i])
-			if err != nil {
-				return nil, fmt.Errorf("failed to convert input message %d: %w", i, err)
+			converted, convErr := OpenAIToA2AMessage(openaiMessages[i])
+			if convErr != nil {
+				return nil, fmt.Errorf("failed to convert input message %d: %w", i, convErr)
 			}
 			messages = append(messages, converted)
 		}
 		return messages, nil
 	}
+
+	inputString, err := query.Spec.GetInputString()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get input string: %w", err)
+	}
+
+	resolvedInput, err := ResolveQueryInput(ctx, k8sClient, query.Namespace, inputString, query.Spec.Parameters)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve query input: %w", err)
+	}
+	return []Message{NewUserMessage(resolvedInput)}, nil
 }
 
 // toAnyMap converts map[string]string to map[string]any
