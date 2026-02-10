@@ -27,9 +27,14 @@ export default function DashboardLayout({
 
   return (
     <>
-      <SidebarProvider>
+      <SidebarProvider
+        style={
+          {
+            '--sidebar-width-icon': '5rem',
+          } as React.CSSProperties
+        }>
         <AppSidebar />
-        <SidebarInset className="p-10">{children}</SidebarInset>
+        <SidebarInset className="p-10 ml-8">{children}</SidebarInset>
       </SidebarProvider>
       <SettingsModal />
       <ChatManager />

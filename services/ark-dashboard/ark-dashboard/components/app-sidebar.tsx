@@ -231,14 +231,14 @@ export function AppSidebar() {
   );
 
   return (
-    <>
+    <div>
       <Sidebar collapsible="icon" className="p-2">
         <SidebarHeader>
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton
                 size="lg"
-                className="pointer-events-none mb-4 !p-0">
+                className="pointer-events-none mb-4 !p-0 group-data-[collapsible=icon]:!h-12">
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
                   <Image
                     src={
@@ -263,7 +263,7 @@ export function AppSidebar() {
                 <DropdownMenuTrigger asChild>
                   <SidebarMenuButton
                     size="lg"
-                    className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground !p-0">
+                    className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground !p-0 group-data-[collapsible=icon]:!h-12">
                     <div
                       className="flex aspect-square size-8 items-center justify-center rounded-lg p-1"
                       style={{ backgroundColor: '#0085FF99' }}>
@@ -327,8 +327,8 @@ export function AppSidebar() {
           </SidebarMenu>
         </SidebarHeader>
 
-        <SidebarMenu className="ml-2">
-          <SidebarContent>
+        <SidebarContent className="px-4 flex-initial overflow-visible">
+          <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton
                 onClick={() => navigateToSection('')}
@@ -435,13 +435,14 @@ export function AppSidebar() {
                 </PopoverContent>
               </Popover>
             </SidebarMenuItem>
-          </SidebarContent>
-        </SidebarMenu>
+          </SidebarMenu>
+        </SidebarContent>
 
         <SidebarContent></SidebarContent>
         <Separator className="my-4 !w-10" />
 
-        <SidebarMenu className="ml-2">
+        <div className="px-4">
+          <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton onClick={() => setSettingsModalOpen(true)}>
               <Settings className="mr-2 h-4 w-4" />
@@ -492,6 +493,7 @@ export function AppSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        </div>
 
         <SidebarFooter>
           {user && (
@@ -529,6 +531,6 @@ export function AppSidebar() {
         onOpenChange={setNamespaceEditorOpen}
         onSave={createNamespace}
       />
-    </>
+    </div>
   );
 }
