@@ -63,11 +63,19 @@ class APIClient {
         const errorData = isJSON
           ? await response.json()
           : await response.text();
-        const apiError = new APIError(
-          errorData.message || `HTTP error! status: ${response.status}`,
-          response.status,
-          errorData,
-        );
+
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        if (typeof errorData === 'object' && errorData !== null) {
+          if ('message' in errorData && errorData.message) {
+            errorMessage = String(errorData.message);
+          } else if ('reason' in errorData && errorData.reason) {
+            errorMessage = String(errorData.reason);
+          }
+        } else if (typeof errorData === 'string' && errorData) {
+          errorMessage = errorData;
+        }
+
+        const apiError = new APIError(errorMessage, response.status, errorData);
 
         trackError({
           message: apiError.message,
@@ -90,7 +98,43 @@ class APIClient {
 
       // Return parsed JSON or text based on content type
       if (isJSON) {
-        return (await response.json()) as T;
+        const data = await response.json();
+
+        // Check if the response is a Kubernetes Status object indicating an error
+        if (
+          data &&
+          typeof data === 'object' &&
+          'kind' in data &&
+          data.kind === 'Status' &&
+          'status' in data &&
+          data.status === 'Failure'
+        ) {
+          const errorMessage =
+            'message' in data && data.message
+              ? String(data.message)
+              : 'API request failed';
+          const statusCode =
+            'code' in data && typeof data.code === 'number'
+              ? data.code
+              : response.status;
+
+          const apiError = new APIError(errorMessage, statusCode, data);
+
+          trackError({
+            message: apiError.message,
+            severity: 'error',
+            context: {
+              type: 'api_error',
+              endpoint,
+              method: requestOptions.method || 'GET',
+              status: statusCode,
+            },
+          });
+
+          throw apiError;
+        }
+
+        return data as T;
       } else {
         return (await response.text()) as T;
       }

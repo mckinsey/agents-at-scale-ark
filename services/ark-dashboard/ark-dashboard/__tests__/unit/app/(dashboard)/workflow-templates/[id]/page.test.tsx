@@ -9,6 +9,11 @@ import { workflowTemplatesService } from '@/lib/services/workflow-templates';
 
 vi.mock('next/navigation', () => ({
   useParams: vi.fn(),
+  useRouter: vi.fn(() => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    refresh: vi.fn(),
+  })),
 }));
 
 vi.mock('@/lib/services/workflow-templates', () => ({
@@ -35,6 +40,18 @@ vi.mock('sonner', () => ({
     success: vi.fn(),
     error: vi.fn(),
   },
+}));
+
+vi.mock('@/components/ui/sidebar', () => ({
+  useSidebar: vi.fn(() => ({
+    open: true,
+    setOpen: vi.fn(),
+    openMobile: false,
+    setOpenMobile: vi.fn(),
+    isMobile: false,
+    state: 'expanded',
+    toggleSidebar: vi.fn(),
+  })),
 }));
 
 const mockTemplate = {
@@ -64,6 +81,10 @@ describe('FlowDetailPage', () => {
       clipboard: {
         writeText: vi.fn().mockResolvedValue(undefined),
       },
+    });
+    Object.defineProperty(window, 'isSecureContext', {
+      writable: true,
+      value: true,
     });
     global.URL.createObjectURL = vi.fn(() => 'blob:mock-url');
     global.URL.revokeObjectURL = vi.fn();
@@ -148,9 +169,10 @@ describe('FlowDetailPage', () => {
     });
 
     const copyButtons = screen.getAllByRole('button');
-    const copyIdButton = copyButtons.find((button) =>
-      button.querySelector('svg')
-    );
+    const copyIdButton = copyButtons.find((button) => {
+      const svg = button.querySelector('svg');
+      return svg?.classList.contains('lucide-copy');
+    });
 
     if (copyIdButton) {
       await userEvent.click(copyIdButton);
@@ -158,7 +180,7 @@ describe('FlowDetailPage', () => {
       await waitFor(() => {
         expect(navigator.clipboard.writeText).toHaveBeenCalledWith('test-workflow');
         expect(toast.success).toHaveBeenCalledWith('Copied', {
-          description: 'Flow ID copied to clipboard',
+          description: 'Workflow name copied to clipboard',
         });
       });
     }
@@ -182,16 +204,17 @@ describe('FlowDetailPage', () => {
     });
 
     const copyButtons = screen.getAllByRole('button');
-    const copyIdButton = copyButtons.find((button) =>
-      button.querySelector('svg')
-    );
+    const copyIdButton = copyButtons.find((button) => {
+      const svg = button.querySelector('svg');
+      return svg?.classList.contains('lucide-copy');
+    });
 
     if (copyIdButton) {
       await userEvent.click(copyIdButton);
 
       await waitFor(() => {
         expect(toast.error).toHaveBeenCalledWith('Failed to copy', {
-          description: 'Could not copy flow ID to clipboard',
+          description: 'Could not copy workflow name to clipboard',
         });
       });
     }
@@ -207,6 +230,9 @@ describe('FlowDetailPage', () => {
     await waitFor(() => {
       expect(screen.queryByText('Loading flow...')).not.toBeInTheDocument();
     }, { timeout: 3000 });
+
+    const yamlTab = screen.getByRole('tab', { name: /yaml/i });
+    await userEvent.click(yamlTab);
 
     const copyButton = screen.getByRole('button', { name: /copy/i });
     await userEvent.click(copyButton);
@@ -235,6 +261,9 @@ describe('FlowDetailPage', () => {
     await waitFor(() => {
       expect(screen.queryByText('Loading flow...')).not.toBeInTheDocument();
     }, { timeout: 3000 });
+
+    const yamlTab = screen.getByRole('tab', { name: /yaml/i });
+    await userEvent.click(yamlTab);
 
     const copyButton = screen.getByRole('button', { name: /copy/i });
     await userEvent.click(copyButton);
@@ -334,26 +363,23 @@ describe('FlowDetailPage', () => {
     });
   });
 
-  it('should show composer flow indicator for flows with title and description', async () => {
+  it('should show title and description for flows with metadata', async () => {
     vi.mocked(workflowTemplatesService.get).mockResolvedValue(mockTemplate as any);
     vi.mocked(workflowTemplatesService.getYaml).mockResolvedValue(mockYaml);
 
-    const { container } = render(<FlowDetailPage />);
+    render(<FlowDetailPage />);
 
     await waitFor(() => {
       expect(screen.queryByText('Loading flow...')).not.toBeInTheDocument();
     }, { timeout: 3000 });
 
     await waitFor(() => {
-      const sparkleIcons = container.querySelectorAll('svg');
-      const hasSparkle = Array.from(sparkleIcons).some(
-        (svg) => svg.classList.contains('lucide-sparkle')
-      );
-      expect(hasSparkle).toBe(true);
+      expect(screen.getAllByText('Test Workflow').length).toBeGreaterThan(0);
+      expect(screen.getByText('A test workflow template')).toBeInTheDocument();
     });
   });
 
-  it('should not show composer indicator for flows without title', async () => {
+  it('should not show title and description for flows without metadata', async () => {
     const templateWithoutTitle = {
       metadata: {
         name: 'simple-workflow',
@@ -366,15 +392,15 @@ describe('FlowDetailPage', () => {
     );
     vi.mocked(workflowTemplatesService.getYaml).mockResolvedValue(mockYaml);
 
-    const { container } = render(<FlowDetailPage />);
+    render(<FlowDetailPage />);
 
     await waitFor(() => {
       expect(screen.queryByText('Loading flow...')).not.toBeInTheDocument();
     }, { timeout: 3000 });
 
     await waitFor(() => {
-      const sparkleIcons = container.querySelectorAll('.lucide-sparkle');
-      expect(sparkleIcons.length).toBe(0);
+      expect(screen.queryByText('Test Workflow')).not.toBeInTheDocument();
+      expect(screen.queryByText('A test workflow template')).not.toBeInTheDocument();
     });
   });
 });
