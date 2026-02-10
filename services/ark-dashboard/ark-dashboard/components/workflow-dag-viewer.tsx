@@ -151,7 +151,13 @@ interface ExpandResult {
   exitNodes: string[];
 }
 
-function parseDependsField(depends: string | undefined): string[] {
+function parseDependencies(
+  depends: string | undefined,
+  dependencies: string[] | undefined,
+): string[] {
+  if (dependencies && dependencies.length > 0) {
+    return dependencies;
+  }
   if (!depends) return [];
   return depends
     .split(/\s*&&\s*|\s*\|\|\s*/)
@@ -207,7 +213,7 @@ function expandTemplate(
     });
 
     const tasksWithoutDeps = template.dag.tasks.filter(t => {
-      const deps = parseDependsField(t.depends);
+      const deps = parseDependencies(t.depends, t.dependencies);
       return deps.length === 0;
     });
     tasksWithoutDeps.forEach(task => {
@@ -216,7 +222,7 @@ function expandTemplate(
     });
 
     const allDepTasks = new Set(
-      template.dag.tasks.flatMap(t => parseDependsField(t.depends)),
+      template.dag.tasks.flatMap(t => parseDependencies(t.depends, t.dependencies)),
     );
     const tasksNotDependedOn = template.dag.tasks.filter(
       t => !allDepTasks.has(t.name),
@@ -227,7 +233,7 @@ function expandTemplate(
     });
 
     template.dag.tasks.forEach(task => {
-      const deps = parseDependsField(task.depends);
+      const deps = parseDependencies(task.depends, task.dependencies);
       if (deps.length > 0) {
         const targetExpansion = taskExpansions.get(task.name)!;
         const depExitNodes: string[] = [];
