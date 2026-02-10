@@ -127,7 +127,7 @@ func TestSerializeMessagesProducesOpenAIFormat(t *testing.T) {
 		ToolMessage("tool output", "call-1"),
 	}
 
-	var openaiMessages []interface{}
+	openaiMessages := make([]interface{}, 0, len(messages))
 	for _, msg := range messages {
 		oai, err := A2AToOpenAIMessage(msg)
 		require.NoError(t, err)

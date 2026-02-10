@@ -97,13 +97,13 @@ func startStreamingTestServer(t *testing.T) *httptest.Server {
 }
 
 func TestStreamA2AAgentIntegrationCompat(t *testing.T) {
-	server := startStreamingTestServer(t)
-	defer server.Close()
+	testServer := startStreamingTestServer(t)
+	defer testServer.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	events, err := StreamA2AAgent(ctx, nil, server.URL, nil, "", NewUserMessage("hello"), nil, "test-agent", "", nil)
+	events, err := StreamA2AAgent(ctx, nil, testServer.URL, nil, "", NewUserMessage("hello"), nil, "test-agent", "", nil)
 	require.NoError(t, err)
 
 	engine := &A2AExecutionEngine{}
@@ -127,13 +127,13 @@ func TestStreamA2AAgentIntegrationCompat(t *testing.T) {
 }
 
 func TestStreamA2AAgentIntegrationNative(t *testing.T) {
-	server := startStreamingTestServer(t)
-	defer server.Close()
+	testServer := startStreamingTestServer(t)
+	defer testServer.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	events, err := StreamA2AAgent(ctx, nil, server.URL, nil, "", NewUserMessage("hello"), nil, "test-agent", "", nil)
+	events, err := StreamA2AAgent(ctx, nil, testServer.URL, nil, "", NewUserMessage("hello"), nil, "test-agent", "", nil)
 	require.NoError(t, err)
 
 	engine := &A2AExecutionEngine{}

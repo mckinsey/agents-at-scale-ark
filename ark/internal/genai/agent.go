@@ -163,7 +163,7 @@ func (a *Agent) processAssistantMessage(choice openai.ChatCompletionChoice) Mess
 }
 
 func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) (Message, error) {
-	result, err := a.Tools.ExecuteTool(ctx, ToolCall(toolCall))
+	result, err := a.Tools.ExecuteTool(ctx, toolCall)
 	toolMessage := ToolMessage(result.Content, result.ID)
 
 	if err != nil {

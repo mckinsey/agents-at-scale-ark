@@ -167,40 +167,87 @@ func parseA2APermissions(raw string) (map[string]interface{}, error) {
 	if raw == "" {
 		return nil, nil
 	}
+	permissions, err := decodeA2APermissions(raw)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateA2APermissions(permissions); err != nil {
+		return nil, err
+	}
+	return encodeA2APermissions(permissions)
+}
+
+func buildA2AMetadata(agentAnnotations map[string]string, history []Message, includeHistory bool) (map[string]interface{}, error) {
+	supportsPermissions := supportsA2AExtension(agentAnnotations, a2aPermissionsExtensionKey)
+	supportsHistory := supportsA2AExtension(agentAnnotations, a2aHistoryExtensionKey)
+	metadata, err := parseA2AExtensionsMetadata(agentAnnotations)
+	if err != nil {
+		return nil, err
+	}
+	metadata = filterUnsupportedA2AExtensions(metadata, supportsPermissions, supportsHistory)
+
+	metadata, err = addA2APermissionsMetadata(metadata, agentAnnotations, supportsPermissions)
+	if err != nil {
+		return nil, err
+	}
+	metadata = addA2AHistoryMetadata(metadata, history, includeHistory && supportsHistory, agentAnnotations)
+
+	if len(metadata) == 0 {
+		return nil, nil
+	}
+	return metadata, nil
+}
+
+func decodeA2APermissions(raw string) (A2APermissions, error) {
 	var permissions A2APermissions
 	decoder := json.NewDecoder(strings.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&permissions); err != nil {
-		return nil, fmt.Errorf("failed to parse A2A permissions: %w", err)
+		return A2APermissions{}, fmt.Errorf("failed to parse A2A permissions: %w", err)
 	}
+	return permissions, nil
+}
+
+func validateA2APermissions(permissions A2APermissions) error {
 	if permissions.Subject == "" && permissions.Token == "" {
-		return nil, fmt.Errorf("A2A permissions must include subject or token")
+		return fmt.Errorf("A2A permissions must include subject or token")
 	}
 	if permissions.Token != "" && permissions.TokenType == "" {
-		return nil, fmt.Errorf("A2A permissions tokenType is required when token is provided")
-	}
-	if permissions.IssuedAt != "" {
-		issuedAt, err := time.Parse(time.RFC3339, permissions.IssuedAt)
-		if err != nil {
-			return nil, fmt.Errorf("A2A permissions issuedAt must be RFC3339: %w", err)
-		}
-		if permissions.ExpiresAt != "" {
-			expiresAt, err := time.Parse(time.RFC3339, permissions.ExpiresAt)
-			if err != nil {
-				return nil, fmt.Errorf("A2A permissions expiresAt must be RFC3339: %w", err)
-			}
-			if expiresAt.Before(issuedAt) {
-				return nil, fmt.Errorf("A2A permissions expiresAt must be after issuedAt")
-			}
-		}
-	} else if permissions.ExpiresAt != "" {
-		if _, err := time.Parse(time.RFC3339, permissions.ExpiresAt); err != nil {
-			return nil, fmt.Errorf("A2A permissions expiresAt must be RFC3339: %w", err)
-		}
+		return fmt.Errorf("A2A permissions tokenType is required when token is provided")
 	}
 	if permissions.Delegation != nil && permissions.Delegation.Subject == "" {
-		return nil, fmt.Errorf("A2A permissions delegation subject is required")
+		return fmt.Errorf("A2A permissions delegation subject is required")
 	}
+	return validateA2APermissionsTimestamps(permissions.IssuedAt, permissions.ExpiresAt)
+}
+
+func validateA2APermissionsTimestamps(issuedAtRaw, expiresAtRaw string) error {
+	issuedAt, err := parseOptionalRFC3339(issuedAtRaw, "issuedAt")
+	if err != nil {
+		return err
+	}
+	expiresAt, err := parseOptionalRFC3339(expiresAtRaw, "expiresAt")
+	if err != nil {
+		return err
+	}
+	if !issuedAt.IsZero() && !expiresAt.IsZero() && expiresAt.Before(issuedAt) {
+		return fmt.Errorf("A2A permissions expiresAt must be after issuedAt")
+	}
+	return nil
+}
+
+func parseOptionalRFC3339(raw, field string) (time.Time, error) {
+	if raw == "" {
+		return time.Time{}, nil
+	}
+	parsed, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("A2A permissions %s must be RFC3339: %w", field, err)
+	}
+	return parsed, nil
+}
+
+func encodeA2APermissions(permissions A2APermissions) (map[string]interface{}, error) {
 	data, err := json.Marshal(permissions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode A2A permissions: %w", err)
@@ -215,54 +262,71 @@ func parseA2APermissions(raw string) (map[string]interface{}, error) {
 	return parsed, nil
 }
 
-func buildA2AMetadata(agentAnnotations map[string]string, history []Message, includeHistory bool) (map[string]interface{}, error) {
-	var metadata map[string]interface{}
-	supportsPermissions := supportsA2AExtension(agentAnnotations, a2aPermissionsExtensionKey)
-	supportsHistory := supportsA2AExtension(agentAnnotations, a2aHistoryExtensionKey)
-	if agentAnnotations != nil {
-		raw := agentAnnotations[arkann.A2AExtensions]
-		if raw != "" {
-			if err := json.Unmarshal([]byte(raw), &metadata); err != nil {
-				return nil, fmt.Errorf("failed to parse A2A extensions: %w", err)
-			}
-		}
-		if metadata != nil {
-			if !supportsPermissions {
-				delete(metadata, a2aPermissionsExtensionKey)
-			}
-			if !supportsHistory {
-				delete(metadata, a2aHistoryExtensionKey)
-			}
-		}
-		if supportsPermissions {
-			permissionsValue, err := parseA2APermissions(agentAnnotations[arkann.A2APermissions])
-			if err != nil {
-				return nil, err
-			}
-			if permissionsValue != nil {
-				if metadata == nil {
-					metadata = map[string]interface{}{}
-				}
-				metadata[a2aPermissionsExtensionKey] = permissionsValue
-			}
-		}
-	}
-
-	if includeHistory && len(history) > 0 && supportsHistory {
-		limit := getA2AHistoryLimit(agentAnnotations)
-		if limit > 0 && len(history) > limit {
-			history = history[len(history)-limit:]
-		}
-		if metadata == nil {
-			metadata = map[string]interface{}{}
-		}
-		metadata[a2aHistoryExtensionKey] = convertToA2AHistory(history)
-	}
-
-	if len(metadata) == 0 {
+func parseA2AExtensionsMetadata(agentAnnotations map[string]string) (map[string]interface{}, error) {
+	if agentAnnotations == nil {
 		return nil, nil
 	}
+	raw := agentAnnotations[arkann.A2AExtensions]
+	if raw == "" {
+		return nil, nil
+	}
+	var metadata map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &metadata); err != nil {
+		return nil, fmt.Errorf("failed to parse A2A extensions: %w", err)
+	}
 	return metadata, nil
+}
+
+func filterUnsupportedA2AExtensions(metadata map[string]interface{}, supportsPermissions, supportsHistory bool) map[string]interface{} {
+	if metadata == nil {
+		return nil
+	}
+	if !supportsPermissions {
+		delete(metadata, a2aPermissionsExtensionKey)
+	}
+	if !supportsHistory {
+		delete(metadata, a2aHistoryExtensionKey)
+	}
+	if len(metadata) == 0 {
+		return nil
+	}
+	return metadata
+}
+
+func addA2APermissionsMetadata(metadata map[string]interface{}, agentAnnotations map[string]string, supported bool) (map[string]interface{}, error) {
+	if !supported || agentAnnotations == nil {
+		return metadata, nil
+	}
+	permissionsValue, err := parseA2APermissions(agentAnnotations[arkann.A2APermissions])
+	if err != nil {
+		return nil, err
+	}
+	if permissionsValue == nil {
+		return metadata, nil
+	}
+	metadata = ensureA2AMetadata(metadata)
+	metadata[a2aPermissionsExtensionKey] = permissionsValue
+	return metadata, nil
+}
+
+func addA2AHistoryMetadata(metadata map[string]interface{}, history []Message, include bool, agentAnnotations map[string]string) map[string]interface{} {
+	if !include || len(history) == 0 {
+		return metadata
+	}
+	limit := getA2AHistoryLimit(agentAnnotations)
+	if limit > 0 && len(history) > limit {
+		history = history[len(history)-limit:]
+	}
+	metadata = ensureA2AMetadata(metadata)
+	metadata[a2aHistoryExtensionKey] = convertToA2AHistory(history)
+	return metadata
+}
+
+func ensureA2AMetadata(metadata map[string]interface{}) map[string]interface{} {
+	if metadata != nil {
+		return metadata
+	}
+	return map[string]interface{}{}
 }
 
 func buildA2ASendMessageParams(userInput Message, contextID string, metadata map[string]interface{}, blocking bool) protocol.SendMessageParams {

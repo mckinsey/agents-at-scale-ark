@@ -351,7 +351,7 @@ func extractMessageContent(msg openai.ChatCompletionMessageParamUnion) (string, 
 
 	if assistantMsg := msg.OfAssistant; assistantMsg != nil {
 		if content := assistantMsg.Content.OfString; content.Value != "" {
-			return content.Value, "assistant"
+			return content.Value, RoleAssistant
 		}
 	}
 

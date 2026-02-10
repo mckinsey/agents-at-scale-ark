@@ -75,7 +75,7 @@ func TestConsumeA2AStreamEventsMessageCompat(t *testing.T) {
 	assert.Len(t, stream.chunks, 1)
 	wrapped, ok := stream.chunks[0].(ChunkWithMetadata)
 	assert.True(t, ok)
-	assert.Equal(t, "hello", wrapped.ChatCompletionChunk.Choices[0].Delta.Content)
+	assert.Equal(t, "hello", wrapped.Choices[0].Delta.Content)
 	assert.Equal(t, &message, wrapped.Ark.A2A)
 }
 
