@@ -27,3 +27,12 @@ comment:
   layout: "reach,diff,flags,tree"
   behavior: default
   require_changes: false
+
+ignore:
+  - "**/*_test.go"
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/mocks/**"
+  - "**/node_modules/**"
+  - "**/*.pb.go"
+  - "**/generated/**"
