@@ -6,8 +6,6 @@ import {
   AlertCircle,
   Bot,
   Check,
-  ChevronDown,
-  ChevronUp,
   ChevronsLeft,
   ChevronsRight,
   ChevronsUpDown,
@@ -120,6 +118,7 @@ function CollapsibleSection({
           tooltip={label}
           className="group/button">
           <CollapsibleTrigger
+            open={isOpen}
             className="flex w-full items-center gap-2"
             onClick={e => {
               if (sidebarState === 'collapsed') {
@@ -129,11 +128,6 @@ function CollapsibleSection({
             }}>
             {icon}
             <span>{label}</span>
-            {isOpen ? (
-              <ChevronUp className="ml-auto h-4 w-4 transition-opacity" />
-            ) : (
-              <ChevronDown className="ml-auto h-4 w-4 transition-opacity" />
-            )}
           </CollapsibleTrigger>
         </SidebarMenuButton>
       </SidebarMenuItem>
@@ -177,9 +171,18 @@ export function AppSidebar() {
 
   const [loading, setLoading] = useState(true);
   const [namespaceEditorOpen, setNamespaceEditorOpen] = useState(false);
-  const [agentBuilderOpen, setAgentBuilderOpen] = useState(false);
-  const [monitoringOpen, setMonitoringOpen] = useState(false);
   const [morePopoverOpen, setMorePopoverOpen] = useState(false);
+
+  const currentSection = pathname.split('/')[1];
+  const isAgentBuilderSection = AGENT_BUILDER_SECTIONS.some(
+    item => item.key === currentSection,
+  );
+  const isMonitoringSection =
+    MONITORING_SECTIONS.some(item => item.key === currentSection) ||
+    currentSection === 'evals';
+
+  const [agentBuilderOpen, setAgentBuilderOpen] = useState(isAgentBuilderSection);
+  const [monitoringOpen, setMonitoringOpen] = useState(isMonitoringSection);
 
   useEffect(() => {
     const checkFilesAPIHealth = async () => {
@@ -197,19 +200,6 @@ export function AppSidebar() {
 
     checkFilesAPIHealth();
   }, [setIsFilesBrowserAvailable]);
-
-  useEffect(() => {
-    const currentSection = pathname.split('/')[1];
-    const isAgentBuilderSection = AGENT_BUILDER_SECTIONS.some(
-      item => item.key === currentSection,
-    );
-    const isMonitoringSection =
-      MONITORING_SECTIONS.some(item => item.key === currentSection) ||
-      currentSection === 'evals';
-
-    setAgentBuilderOpen(isAgentBuilderSection);
-    setMonitoringOpen(isMonitoringSection);
-  }, [pathname]);
 
   useEffect(() => {
     if (sidebarState === 'collapsed') {

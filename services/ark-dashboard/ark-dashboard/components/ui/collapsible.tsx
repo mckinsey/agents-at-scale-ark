@@ -39,7 +39,7 @@ function CollapsibleTrigger({
       {showChevron && (
         <>
           <ChevronUp className="ml-auto transition-all group-data-[state=closed]/collapsible:hidden group-data-[state=open]/collapsible:block" />
-          <ChevronDown className="ml-auto opacity-0 transition-all group-hover/collapsible-trigger:opacity-100 group-data-[state=closed]/collapsible:block group-data-[state=open]/collapsible:hidden" />
+          <ChevronDown className="ml-auto transition-all group-data-[state=closed]/collapsible:block group-data-[state=open]/collapsible:hidden" />
         </>
       )}
       {!showChevron && open !== undefined && (
@@ -47,7 +47,7 @@ function CollapsibleTrigger({
           {open ? (
             <ChevronUp className="ml-auto transition-all" />
           ) : (
-            <ChevronDown className="ml-auto opacity-0 transition-all group-hover/collapsible-trigger:opacity-100" />
+            <ChevronDown className="ml-auto transition-all" />
           )}
         </>
       )}
