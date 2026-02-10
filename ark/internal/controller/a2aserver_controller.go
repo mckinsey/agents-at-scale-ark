@@ -267,9 +267,9 @@ func (r *A2AServerReconciler) buildAgentWithSkills(a2aServer *arkv1prealpha1.A2A
 	}
 
 	agentAnnotations := map[string]string{
-		annotations.A2AServerName:    a2aServer.Name,
-		annotations.A2AServerAddress: a2aServer.Status.LastResolvedAddress,
-		annotations.A2AServerSkills:  string(skillsJSON),
+		annotations.A2AServerName:         a2aServer.Name,
+		annotations.A2AServerAddress:      a2aServer.Status.LastResolvedAddress,
+		annotations.A2AServerSkills:       string(skillsJSON),
 		annotations.A2AStreamingSupported: strconv.FormatBool(streamingSupported),
 	}
 	if len(supportedExtensions) > 0 {

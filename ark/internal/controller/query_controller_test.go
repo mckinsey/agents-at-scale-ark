@@ -249,8 +249,8 @@ var _ = Describe("Query Controller Message Serialization", func() {
 			var decoded []genai.Message
 			Expect(json.Unmarshal([]byte(jsonStr), &decoded)).To(Succeed())
 			Expect(decoded).To(HaveLen(2))
-			Expect(decoded[0].Role).To(Equal("agent"))
-			Expect(decoded[1].Role).To(Equal("user"))
+			Expect(string(decoded[0].Role)).To(Equal("agent"))
+			Expect(string(decoded[1].Role)).To(Equal("user"))
 		})
 
 		It("should default to OpenAI format when payload mode is explicitly compat", func() {
