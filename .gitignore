@@ -165,3 +165,4 @@ vibe_artifacts/
 
 # Playwright MCP screenshots
 .playwright-mcp/
+xray-scan-*.json
