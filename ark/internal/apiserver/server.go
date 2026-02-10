@@ -20,12 +20,9 @@ import (
 	genericoptions "k8s.io/apiserver/pkg/server/options"
 	"k8s.io/apiserver/pkg/util/compatibility"
 	"k8s.io/klog/v2"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark/internal/apiserver/registry"
-	"mckinsey.com/ark/internal/apiserver/validation"
 	"mckinsey.com/ark/internal/storage"
 	"mckinsey.com/ark/internal/storage/postgresql"
 )
@@ -54,20 +51,18 @@ type Config struct {
 }
 
 type Server struct {
-	config    Config
-	backend   storage.Backend
-	k8sClient client.Client
-	stopCh    chan struct{}
+	config  Config
+	backend storage.Backend
+	stopCh  chan struct{}
 }
 
-func New(cfg Config, k8sClient client.Client) *Server {
+func New(cfg Config) *Server {
 	if cfg.BindPort == 0 {
 		cfg.BindPort = 6443
 	}
 	return &Server{
-		config:    cfg,
-		k8sClient: k8sClient,
-		stopCh:    make(chan struct{}),
+		config: cfg,
+		stopCh: make(chan struct{}),
 	}
 }
 
@@ -143,7 +138,6 @@ func (s *Server) Start(ctx context.Context) error {
 func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, converter storage.TypeConverter) error {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(arkv1alpha1.GroupVersion.Group, Scheme, ParameterCodec, Codecs)
 
-	storageValidator := validation.NewStorageValidator(s.backend, s.k8sClient)
 	printerColumns := GetPrinterColumnRegistry()
 
 	v1alpha1Storage := make(map[string]rest.Storage)
@@ -155,8 +149,7 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 			NewFunc:      res.NewFunc,
 			NewListFunc:  res.NewListFunc,
 		}
-		resStorage := s.buildStorage(cfg, converter, storageValidator, printerColumns)
-		v1alpha1Storage[res.Resource] = resStorage
+		v1alpha1Storage[res.Resource] = registry.NewGenericStorage(s.backend, converter, cfg, printerColumns)
 		v1alpha1Storage[res.Resource+"/status"] = registry.NewStatusStorage(s.backend, converter, cfg)
 	}
 	apiGroupInfo.VersionedResourcesStorageMap[arkv1alpha1.GroupVersion.Version] = v1alpha1Storage
@@ -170,8 +163,7 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 			NewFunc:      res.NewFunc,
 			NewListFunc:  res.NewListFunc,
 		}
-		resStorage := s.buildStorage(cfg, converter, storageValidator, printerColumns)
-		v1prealpha1Storage[res.Resource] = resStorage
+		v1prealpha1Storage[res.Resource] = registry.NewGenericStorage(s.backend, converter, cfg, printerColumns)
 		v1prealpha1Storage[res.Resource+"/status"] = registry.NewStatusStorage(s.backend, converter, cfg)
 	}
 	apiGroupInfo.VersionedResourcesStorageMap[arkv1prealpha1.GroupVersion.Version] = v1prealpha1Storage
@@ -181,22 +173,6 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 	}
 
 	return nil
-}
-
-func (s *Server) buildStorage(cfg registry.ResourceConfig, converter storage.TypeConverter, storageValidator *validation.StorageValidator, printerColumns *registry.PrinterColumnRegistry) rest.Storage {
-	genericStorage := registry.NewGenericStorage(s.backend, converter, cfg, printerColumns)
-
-	var result rest.Storage = genericStorage
-
-	if validator, ok := validation.GetValidator(cfg.Kind, storageValidator); ok {
-		result = registry.NewValidatingStorage(genericStorage, validator)
-	}
-
-	if defaulter, ok := validation.GetDefaulter(cfg.Kind); ok {
-		result = registry.NewDefaultingStorage(result, defaulter)
-	}
-
-	return result
 }
 
 func (s *Server) NeedLeaderElection() bool {
