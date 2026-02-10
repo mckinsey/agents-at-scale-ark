@@ -7,8 +7,8 @@ import { useSearchParams } from 'next/navigation';
 import { PageHeader } from '@/components/common/page-header';
 import { ModelsSection } from '@/components/sections/models-section';
 import { Button } from '@/components/ui/button';
-import { useNamespace } from '@/providers/NamespaceProvider';
 import { useGetAllModels } from '@/lib/services/models-hooks';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 export default function ModelsPage() {
   const searchParams = useSearchParams();

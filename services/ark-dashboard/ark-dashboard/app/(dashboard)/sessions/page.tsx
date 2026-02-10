@@ -6,13 +6,13 @@ import { mapArgoWorkflowsToSessions } from '@/lib/services/workflow-mapper';
 import { useWorkflows } from '@/lib/services/workflows-hooks';
 
 export default function SessionsPage() {
-  const {
-    workflows,
-  } = useWorkflows('default');
+  const { workflows } = useWorkflows('default');
 
   const allSessions = mapArgoWorkflowsToSessions(workflows);
 
-  const pageTitle = allSessions ? `Workflow Runs (${allSessions.length})` : 'Workflow Runs';
+  const pageTitle = allSessions
+    ? `Workflow Runs (${allSessions.length})`
+    : 'Workflow Runs';
 
   return (
     <>

@@ -7,8 +7,8 @@ import { useRef } from 'react';
 import { PageHeader } from '@/components/common/page-header';
 import { AgentsSection } from '@/components/sections/agents-section';
 import { Button } from '@/components/ui/button';
-import { useNamespace } from '@/providers/NamespaceProvider';
 import { useGetAllAgents } from '@/lib/services/agents-hooks';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 interface AgentsSectionHandle {
   openAddEditor: () => void;

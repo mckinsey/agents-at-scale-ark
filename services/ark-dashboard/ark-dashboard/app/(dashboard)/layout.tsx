@@ -34,7 +34,7 @@ export default function DashboardLayout({
           } as React.CSSProperties
         }>
         <AppSidebar />
-        <SidebarInset className="p-10 ml-8">{children}</SidebarInset>
+        <SidebarInset className="ml-8 p-10">{children}</SidebarInset>
       </SidebarProvider>
       <SettingsModal />
       <ChatManager />

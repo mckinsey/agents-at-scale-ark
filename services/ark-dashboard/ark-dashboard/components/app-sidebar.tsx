@@ -181,7 +181,9 @@ export function AppSidebar() {
     MONITORING_SECTIONS.some(item => item.key === currentSection) ||
     currentSection === 'evals';
 
-  const [agentBuilderOpen, setAgentBuilderOpen] = useState(isAgentBuilderSection);
+  const [agentBuilderOpen, setAgentBuilderOpen] = useState(
+    isAgentBuilderSection,
+  );
   const [monitoringOpen, setMonitoringOpen] = useState(isMonitoringSection);
 
   useEffect(() => {
@@ -222,8 +224,8 @@ export function AppSidebar() {
   const getCurrentSection = () => pathname.split('/')[1];
 
   const isAnySectionActive = (sections: DashboardSection[]) => {
-    const currentSection = getCurrentSection();
-    return sections.some(item => item.key === currentSection);
+    const current = getCurrentSection();
+    return sections.some(item => item.key === current);
   };
 
   const enabledMonitoringSections = MONITORING_SECTIONS.filter(
@@ -327,7 +329,7 @@ export function AppSidebar() {
           </SidebarMenu>
         </SidebarHeader>
 
-        <SidebarContent className="px-4 flex-initial overflow-visible">
+        <SidebarContent className="flex-initial overflow-visible px-4">
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton
@@ -443,56 +445,56 @@ export function AppSidebar() {
 
         <div className="px-4">
           <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton onClick={() => setSettingsModalOpen(true)}>
-              <Settings className="mr-2 h-4 w-4" />
-              <span>Settings</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={() => setSettingsModalOpen(true)}>
+                <Settings className="mr-2 h-4 w-4" />
+                <span>Settings</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
 
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild>
-              <a
-                href="https://mckinsey.github.io/agents-at-scale-ark/"
-                target="_blank"
-                rel="noopener noreferrer">
-                <HelpCircle className="mr-2 h-4 w-4" />
-                <span>Help</span>
-              </a>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild>
+                <a
+                  href="https://mckinsey.github.io/agents-at-scale-ark/"
+                  target="_blank"
+                  rel="noopener noreferrer">
+                  <HelpCircle className="mr-2 h-4 w-4" />
+                  <span>Help</span>
+                </a>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
 
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              onClick={() =>
-                setStoredIsExperimentalDarkModeEnabled(
-                  !isExperimentalDarkModeEnabled,
-                )
-              }>
-              {isExperimentalDarkModeEnabled ? (
-                <Moon className="mr-2 h-4 w-4" />
-              ) : (
-                <Sun className="mr-2 h-4 w-4" />
-              )}
-              <span>
-                {isExperimentalDarkModeEnabled ? 'Dark Mode' : 'Light Mode'}
-              </span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={() =>
+                  setStoredIsExperimentalDarkModeEnabled(
+                    !isExperimentalDarkModeEnabled,
+                  )
+                }>
+                {isExperimentalDarkModeEnabled ? (
+                  <Moon className="mr-2 h-4 w-4" />
+                ) : (
+                  <Sun className="mr-2 h-4 w-4" />
+                )}
+                <span>
+                  {isExperimentalDarkModeEnabled ? 'Dark Mode' : 'Light Mode'}
+                </span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
 
-          <SidebarMenuItem className="w-8 bg-[var(--primary-500)]">
-            <SidebarMenuButton
-              onClick={() =>
-                setSidebarOpen(sidebarState === 'expanded' ? false : true)
-              }>
-              {sidebarState === 'expanded' ? (
-                <ChevronsLeft className="mr-2 h-4 w-4" />
-              ) : (
-                <ChevronsRight className="mr-2 h-4 w-4" />
-              )}
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+            <SidebarMenuItem className="w-8 bg-[var(--primary-500)]">
+              <SidebarMenuButton
+                onClick={() =>
+                  setSidebarOpen(sidebarState === 'expanded' ? false : true)
+                }>
+                {sidebarState === 'expanded' ? (
+                  <ChevronsLeft className="mr-2 h-4 w-4" />
+                ) : (
+                  <ChevronsRight className="mr-2 h-4 w-4" />
+                )}
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
         </div>
 
         <SidebarFooter>

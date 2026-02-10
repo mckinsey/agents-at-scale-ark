@@ -226,7 +226,7 @@ export function AgentForm({
       </div>
     );
   }
-  
+
   const submitButtonText = isEditing ? 'Save Changes' : 'Create Agent';
   const cancelHref = onCancel ? undefined : '/agents';
 
