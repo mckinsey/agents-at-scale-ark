@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
+import { TeamEditor } from '@/components/editors';
 import { AvailabilityStatusBadge } from '@/components/ui/availability-status-badge';
 import {
   Tooltip,
@@ -33,16 +34,12 @@ interface TeamCardProps {
   onDelete?: (id: string) => void;
 }
 
-export function TeamCard({
-  team,
-  agents,
-  onUpdate: _onUpdate,
-  onDelete,
-}: TeamCardProps) {
+export function TeamCard({ team, agents, onUpdate, onDelete }: TeamCardProps) {
   const router = useRouter();
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(team.name);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const { readOnlyMode } = useNamespace();
 
   // Get the names of member agents
@@ -119,6 +116,15 @@ export function TeamCard({
           </div>
         }
       />
+      {onUpdate && (
+        <TeamEditor
+          open={editorOpen}
+          team={team}
+          agents={agents}
+          onOpenChange={setEditorOpen}
+          onSave={onUpdate}
+        />
+      )}
       {onDelete && (
         <ConfirmationDialog
           open={deleteConfirmOpen}

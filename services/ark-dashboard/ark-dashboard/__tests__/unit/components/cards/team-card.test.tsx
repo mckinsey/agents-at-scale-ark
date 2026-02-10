@@ -4,6 +4,19 @@ import userEvent from '@testing-library/user-event';
 import { TeamCard } from '@/components/cards/team-card';
 import type { Agent, Team, TeamMember } from '@/lib/services';
 
+vi.mock('next/navigation', () => ({
+  useRouter: vi.fn(() => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    refresh: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+    prefetch: vi.fn(),
+  })),
+  usePathname: vi.fn(() => '/teams'),
+  useSearchParams: vi.fn(() => new URLSearchParams()),
+}));
+
 vi.mock('@/lib/api/client', () => ({
   apiClient: {
     get: vi.fn(),
