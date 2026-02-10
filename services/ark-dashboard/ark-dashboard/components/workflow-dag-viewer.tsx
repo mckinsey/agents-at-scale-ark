@@ -222,7 +222,9 @@ function expandTemplate(
     });
 
     const allDepTasks = new Set(
-      template.dag.tasks.flatMap(t => parseDependencies(t.depends, t.dependencies)),
+      template.dag.tasks.flatMap(t =>
+        parseDependencies(t.depends, t.dependencies),
+      ),
     );
     const tasksNotDependedOn = template.dag.tasks.filter(
       t => !allDepTasks.has(t.name),
