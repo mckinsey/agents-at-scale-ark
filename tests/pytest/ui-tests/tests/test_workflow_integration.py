@@ -200,7 +200,6 @@ class TestWorkflowIntegration:
                 
                 print("Workflow cleanup completed")
             
-            print("\n=== Cleanup: Deleting WorkflowTemplate ===")
             delete_template_result = subprocess.run(
                 ["kubectl", "delete", "-f", workflow_template_path],
                 capture_output=True,
@@ -212,5 +211,4 @@ class TestWorkflowIntegration:
                 print("WorkflowTemplate deleted successfully")
             else:
                 print(f"WorkflowTemplate deletion warning: {delete_template_result.stderr}")
-            
-            print("All cleanup completed")
+        
