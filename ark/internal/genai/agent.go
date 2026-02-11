@@ -55,6 +55,9 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 		if !IsTerminateTeam(err) {
 			a.eventingRecorder.Fail(ctx, "AgentExecution", fmt.Sprintf("Agent execution failed: %v", err), err, operationData)
 		}
+		if IsTerminateTeam(err) {
+			return result, err
+		}
 		return nil, err
 	}
 
@@ -70,6 +73,9 @@ func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []M
 
 	messages, err := a.executeLocally(ctx, userInput, history, memory, eventStream)
 	if err != nil {
+		if IsTerminateTeam(err) {
+			return &ExecutionResult{Messages: messages}, err
+		}
 		return nil, err
 	}
 	return &ExecutionResult{Messages: messages}, nil

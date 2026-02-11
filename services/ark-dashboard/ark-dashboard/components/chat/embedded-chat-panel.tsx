@@ -20,6 +20,7 @@ import { chatHistoryAtom, createNewSessionId } from '@/atoms/chat-history';
 import { isChatStreamingEnabledAtom } from '@/atoms/experimental-features';
 import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { ChatMessage } from '@/components/chat/chat-message';
+import { TerminationEvent } from '@/components/chat/termination-event';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
@@ -727,22 +728,28 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
                       tool_call_id: msg.tool_call_id || '',
                     };
                   } else if (msg.role === 'assistant') {
-                    const baseMsg = {
+                    const baseMsg: {
+                      role: 'assistant';
+                      content: string;
+                      name?: string;
+                      tool_calls?: Array<{
+                        id: string;
+                        type: 'function';
+                        function: { name: string; arguments: string };
+                      }>;
+                    } = {
                       role: 'assistant' as const,
                       content: msg.content || '',
                     };
-                    if (msg.tool_calls && msg.tool_calls.length > 0) {
-                      return {
-                        ...baseMsg,
-                        tool_calls: msg.tool_calls.map(tc => ({
-                          id: tc.id,
-                          type: 'function' as const,
-                          function: tc.function,
-                        })),
-                      };
-                    }
                     if (msg.name) {
-                      return { ...baseMsg, name: msg.name };
+                      baseMsg.name = msg.name;
+                    }
+                    if (msg.tool_calls && msg.tool_calls.length > 0) {
+                      baseMsg.tool_calls = msg.tool_calls.map(tc => ({
+                        id: tc.id,
+                        type: 'function' as const,
+                        function: tc.function,
+                      }));
                     }
                     return baseMsg;
                   } else if (msg.role === 'user') {
@@ -947,13 +954,21 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
                   };
                 });
 
+                const terminateToolCall = toolCalls?.find(tc => {
+                  if ('function' in tc && tc.function) {
+                    return tc.function.name === 'terminate';
+                  }
+                  return false;
+                });
+
                 const hasToolCalls =
                   debugMode &&
                   toolCallsWithResults &&
                   toolCallsWithResults.length > 0;
                 const hasContent = content && content.trim().length > 0;
+                const hasTermination = terminateToolCall !== undefined;
 
-                if (!hasToolCalls && !hasContent) {
+                if (!hasToolCalls && !hasContent && !hasTermination) {
                   return null;
                 }
 
@@ -983,6 +998,11 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
                         content={content}
                         viewMode="markdown"
                         sender={senderName}
+                      />
+                    )}
+                    {hasTermination && (
+                      <TerminationEvent
+                        agentName={senderName || 'Unknown Agent'}
                       />
                     )}
                   </div>
