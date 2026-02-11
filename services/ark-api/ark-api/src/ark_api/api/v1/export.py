@@ -197,11 +197,13 @@ async def collect_resources(
                             items.append(evaluation_dict)
 
                 resources[resource_type.value] = items
+                logger.info(f"Collected {len(items)} items for {resource_type.value}")
 
             except Exception as e:
                 logger.error(f"Failed to collect {resource_type.value}: {e}")
                 resources[resource_type.value] = []
 
+    logger.info(f"Final resources collected: {', '.join([f'{k}: {len(v)}' for k, v in resources.items()])}")
     return resources
 
 
@@ -235,11 +237,15 @@ def create_export_zip(resources: Dict[str, List[Dict[str, Any]]]) -> bytes:
     """Create a ZIP file containing YAML files organized by resource type."""
     zip_buffer = io.BytesIO()
 
+    logger.info(f"Creating ZIP with resources: {', '.join([f'{k}: {len(v)}' for k, v in resources.items()])}")
+
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         for resource_type, items in resources.items():
             if not items:
+                logger.info(f"Skipping {resource_type} - no items")
                 continue
 
+            logger.info(f"Processing {len(items)} items for {resource_type}")
             # Create folder for resource type
             for item in items:
                 cleaned_item = clean_resource_for_yaml(item)
