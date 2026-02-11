@@ -61,10 +61,11 @@ func (v *MCPServerValidator) ValidateCreate(ctx context.Context, obj runtime.Obj
 		}
 	}
 
-	// Validate PollInterval
-	if err := ValidatePollInterval(mcpserver.Spec.PollInterval.Duration); err != nil {
-		mcpserverlog.Error(err, "Failed to validate pollInterval", "mcpserver", mcpserver.GetName())
-		return nil, fmt.Errorf("failed to validate pollInterval: %w", err)
+	if mcpserver.Spec.PollInterval != nil {
+		if err := ValidatePollInterval(mcpserver.Spec.PollInterval.Duration); err != nil {
+			mcpserverlog.Error(err, "Failed to validate pollInterval", "mcpserver", mcpserver.GetName())
+			return nil, fmt.Errorf("failed to validate pollInterval: %w", err)
+		}
 	}
 
 	mcpserverlog.Info("MCPServer validation complete", "name", mcpserver.GetName())

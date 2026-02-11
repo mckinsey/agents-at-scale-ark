@@ -38,12 +38,34 @@ spec:
           env:
           - name: OTEL_SERVICE_NAME
             value: "ark-controller"
-          # HTTP timeout in seconds for connecting to memory services.
           - name: ARK_MEMORY_HTTP_TIMEOUT_SECONDS
             value: "30"
           {{- if .Values.customCACert.enabled }}
           - name: SSL_CERT_FILE
             value: "/etc/ssl/certs/custom-ca/{{ .Values.customCACert.key }}"
+          {{- end }}
+          {{- if and .Values.storage (ne .Values.storage.backend "etcd") }}
+          - name: ARK_STORAGE_BACKEND
+            value: {{ .Values.storage.backend | quote }}
+          - name: ARK_APISERVER_PORT
+            value: {{ .Values.storage.apiserver.port | quote }}
+          {{- if eq .Values.storage.backend "postgresql" }}
+          - name: ARK_POSTGRES_HOST
+            value: {{ .Values.storage.postgresql.host | quote }}
+          - name: ARK_POSTGRES_PORT
+            value: {{ .Values.storage.postgresql.port | quote }}
+          - name: ARK_POSTGRES_DATABASE
+            value: {{ .Values.storage.postgresql.database | quote }}
+          - name: ARK_POSTGRES_USER
+            value: {{ .Values.storage.postgresql.user | quote }}
+          - name: ARK_POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.storage.postgresql.passwordSecretName }}
+                key: {{ .Values.storage.postgresql.passwordSecretKey }}
+          - name: ARK_POSTGRES_SSL_MODE
+            value: {{ .Values.storage.postgresql.sslMode | quote }}
+          {{- end }}
           {{- end }}
           {{- if .Values.controllerManager.container.env }}
             {{- range $key, $value := .Values.controllerManager.container.env }}
@@ -62,11 +84,18 @@ spec:
             {{- toYaml .Values.controllerManager.container.livenessProbe | nindent 12 }}
           readinessProbe:
             {{- toYaml .Values.controllerManager.container.readinessProbe | nindent 12 }}
-          {{- if .Values.webhook.enable }}
+          {{- if or .Values.webhook.enable (and .Values.storage (ne .Values.storage.backend "etcd")) }}
           ports:
+            {{- if .Values.webhook.enable }}
             - containerPort: 9443
               name: webhook-server
               protocol: TCP
+            {{- end }}
+            {{- if and .Values.storage (ne .Values.storage.backend "etcd") }}
+            - containerPort: {{ .Values.storage.apiserver.port }}
+              name: apiserver
+              protocol: TCP
+            {{- end }}
           {{- end }}
           resources:
             {{- toYaml .Values.controllerManager.container.resources | nindent 12 }}
