@@ -845,6 +845,12 @@ jobs:
           kubectl wait --for=condition=ready pod -l app=ark-dashboard -n default --timeout=120s
           kubectl wait --for=condition=ready pod -l app=ark-mcp -n default --timeout=120s
 
+      - name: Update Argo Workflows dependencies
+        run: |
+          cd services/argo-workflows/chart
+          helm dependency update
+          cd ../../..
+
       - name: Deploy Argo Workflows
         run: |
           helm upgrade --install argo-workflows services/argo-workflows/chart \
