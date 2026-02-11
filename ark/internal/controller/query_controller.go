@@ -70,12 +70,16 @@ func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	expiry := obj.CreationTimestamp.Add(obj.Spec.TTL.Duration)
-	if time.Now().After(expiry) {
-		// TTL expired: delete the object
-		if err := r.Delete(ctx, &obj); err != nil {
-			log.Error(err, "unable to delete object")
-			return ctrl.Result{}, err
+	// Check TTL expiry if TTL is set.
+	// TTL may be nil when using aggregated API server (non-CRD storage)
+	// because the field is omitempty and may not be initialized.
+	if obj.Spec.TTL != nil {
+		expiry := obj.CreationTimestamp.Add(obj.Spec.TTL.Duration)
+		if time.Now().After(expiry) {
+			if err := r.Delete(ctx, &obj); err != nil {
+				log.Error(err, "unable to delete object")
+				return ctrl.Result{}, err
+			}
 		}
 	}
 
@@ -116,7 +120,13 @@ func (r *QueryReconciler) handleFinalizer(ctx context.Context, obj *arkv1alpha1.
 }
 
 func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query) (ctrl.Result, error) {
-	expiry := obj.CreationTimestamp.Add(obj.Spec.TTL.Duration)
+	// Calculate expiry time for requeue. Use 1 hour default if TTL is not set.
+	// TTL may be nil when using aggregated API server (non-CRD storage).
+	ttl := time.Hour
+	if obj.Spec.TTL != nil {
+		ttl = obj.Spec.TTL.Duration
+	}
+	expiry := obj.CreationTimestamp.Add(ttl)
 
 	if obj.Spec.Cancel && obj.Status.Phase != statusCanceled {
 		r.cleanupExistingOperation(req.NamespacedName)

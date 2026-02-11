@@ -3,6 +3,8 @@ title: "Local Development"
 description: "Local development with DevSpace for ARK services"
 ---
 
+import { Callout } from 'nextra/components'
+
 ## Local development with DevSpace
 
 Develop and live-reload ARK services directly in your Kubernetes cluster using DevSpace.
@@ -42,6 +44,24 @@ cert-manager or gateway-api are installed by default to disable them use env var
 ```bash
 ENABLE_CERT_MANAGER=false devspace dev
 ```
+
+## Storage Backend Selection
+
+The ark-controller supports two storage backends: etcd (default) and PostgreSQL. Use the `STORAGE_BACKEND` environment variable to select:
+
+```bash
+# etcd (default) - uses Kubernetes CRDs
+devspace dev
+
+# PostgreSQL - deploys a postgres pod with embedded apiserver
+STORAGE_BACKEND=postgresql devspace dev
+```
+
+When using `postgresql`, the controller runs an embedded API server instead of using CRDs.
+
+<Callout type="warning">
+Switching between storage backends is destructive. Resources created with etcd (CRDs) are not visible in PostgreSQL and vice versa. The DevSpace pipeline cleans up CRDs and APIServices from the previous backend when switching, so any existing Ark resources will be lost.
+</Callout>
 
 - ark-api and ark-dashboard deploy to namespace: default
 - ark-controller and localhost-gateway deploys to namespace: ark-system
