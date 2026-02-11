@@ -38,31 +38,6 @@ app:
       drop:
         - ALL
 
-  # Probe configuration - set to null/empty to disable probes
-  # Useful for environments where probes cause issues
-  startupProbe:
-    httpGet:
-      path: /health
-      port: 8000
-    initialDelaySeconds: 5
-    periodSeconds: 5
-    timeoutSeconds: 5
-    failureThreshold: 180
-  readinessProbe:
-    httpGet:
-      path: /ready
-      port: 8000
-    periodSeconds: 10
-    timeoutSeconds: 5
-    failureThreshold: 3
-  livenessProbe:
-    httpGet:
-      path: /health
-      port: 8000
-    periodSeconds: 15
-    timeoutSeconds: 5
-    failureThreshold: 3
-
   # Environment variables - often useful to allow other websites to hit the
   # APIs - not suitable for production environments.
   env:

@@ -41,18 +41,6 @@ spec:
         {{- end }}
         ports:
         - containerPort: {{ .Values.service.targetPort }}
-        {{- if .Values.app.startupProbe }}
-        startupProbe:
-          {{- toYaml .Values.app.startupProbe | nindent 10 }}
-        {{- end }}
-        {{- if .Values.app.readinessProbe }}
-        readinessProbe:
-          {{- toYaml .Values.app.readinessProbe | nindent 10 }}
-        {{- end }}
-        {{- if .Values.app.livenessProbe }}
-        livenessProbe:
-          {{- toYaml .Values.app.livenessProbe | nindent 10 }}
-        {{- end }}
         env:
           - name: NODE_ENV
             value: {{ required "app.config.nodeEnv is required" .Values.app.config.nodeEnv | quote }}

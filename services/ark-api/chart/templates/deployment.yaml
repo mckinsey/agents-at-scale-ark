@@ -36,18 +36,6 @@ spec:
           {{- end }}
           ports:
             - containerPort: {{ .Values.service.targetPort }}
-          {{- if .Values.app.startupProbe }}
-          startupProbe:
-            {{- toYaml .Values.app.startupProbe | nindent 12 }}
-          {{- end }}
-          {{- if .Values.app.readinessProbe }}
-          readinessProbe:
-            {{- toYaml .Values.app.readinessProbe | nindent 12 }}
-          {{- end }}
-          {{- if .Values.app.livenessProbe }}
-          livenessProbe:
-            {{- toYaml .Values.app.livenessProbe | nindent 12 }}
-          {{- end }}
           {{- if .Values.app.env }}
           env:
             {{- range .Values.app.env }}
