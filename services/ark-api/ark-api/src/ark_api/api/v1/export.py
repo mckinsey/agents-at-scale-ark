@@ -127,11 +127,13 @@ async def collect_resources(
                             items.append(query_dict)
 
                 elif resource_type == ResourceType.A2A:
-                    a2a_servers = await ark_client.a2aservers.a_list()
-                    for server in a2a_servers:
-                        server_dict = server.to_dict()
-                        if not resource_ids or server_dict["metadata"]["name"] in resource_ids.get("a2a", []):
-                            items.append(server_dict)
+                    # A2A servers use v1prealpha1 version
+                    async with with_ark_client(namespace, "v1prealpha1") as a2a_client:
+                        a2a_servers = await a2a_client.a2aservers.a_list()
+                        for server in a2a_servers:
+                            server_dict = server.to_dict()
+                            if not resource_ids or server_dict["metadata"]["name"] in resource_ids.get("a2a", []):
+                                items.append(server_dict)
 
                 elif resource_type == ResourceType.MCP:
                     mcp_servers = await ark_client.mcpservers.a_list()
