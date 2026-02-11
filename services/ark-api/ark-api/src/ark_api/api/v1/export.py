@@ -141,16 +141,39 @@ async def collect_resources(
                             items.append(server_dict)
 
                 elif resource_type == ResourceType.WORKFLOWS:
-                    # Workflows might be Argo Workflows or custom CRDs
-                    # For now, we'll handle custom workflow CRDs if they exist
+                    # Export Argo WorkflowTemplates instead of workflow instances
+                    from kubernetes.client import CustomObjectsApi
+                    custom_api = CustomObjectsApi()
                     try:
-                        workflows = await ark_client.workflows.a_list()
-                        for workflow in workflows:
-                            workflow_dict = workflow.to_dict()
-                            if not resource_ids or workflow_dict["metadata"]["name"] in resource_ids.get("workflows", []):
-                                items.append(workflow_dict)
-                    except AttributeError:
-                        logger.warning("Workflows resource type not available")
+                        # Fetch Argo WorkflowTemplates
+                        group = "argoproj.io"
+                        version = "v1alpha1"
+                        plural = "workflowtemplates"
+
+                        if namespace:
+                            workflow_templates = custom_api.list_namespaced_custom_object(
+                                group=group,
+                                version=version,
+                                namespace=namespace,
+                                plural=plural
+                            )
+                        else:
+                            workflow_templates = custom_api.list_cluster_custom_object(
+                                group=group,
+                                version=version,
+                                plural=plural
+                            )
+
+                        for template in workflow_templates.get("items", []):
+                            if not resource_ids or template["metadata"]["name"] in resource_ids.get("workflows", []):
+                                items.append(template)
+                    except ApiException as e:
+                        if e.status == 404:
+                            logger.warning("WorkflowTemplates CRD not found - Argo Workflows may not be installed")
+                        else:
+                            logger.error(f"Failed to fetch WorkflowTemplates: {e}")
+                    except Exception as e:
+                        logger.error(f"Unexpected error fetching WorkflowTemplates: {e}")
 
                 elif resource_type == ResourceType.EVALUATORS:
                     evaluators = await ark_client.evaluators.a_list()

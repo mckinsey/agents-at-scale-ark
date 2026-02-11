@@ -1,6 +1,7 @@
 import { apiClient } from '@/lib/api/client';
 import { API_CONFIG } from '@/lib/api/config';
 import type { components } from '@/lib/api/generated/types';
+import { workflowTemplatesService } from '@/lib/services/workflow-templates';
 
 // Resource types from the API
 export type AgentListResponse = components['schemas']['AgentListResponse'];
@@ -109,6 +110,7 @@ export const exportService = {
       mcpServers,
       evaluators,
       evaluations,
+      workflowTemplates,
     ] = await Promise.allSettled([
       apiClient.get<AgentListResponse>('/api/v1/agents'),
       apiClient.get<TeamListResponse>('/api/v1/teams'),
@@ -118,6 +120,7 @@ export const exportService = {
       apiClient.get<MCPServerListResponse>('/api/v1/mcp-servers'),
       apiClient.get<EvaluatorListResponse>('/api/v1/evaluators'),
       apiClient.get<EvaluationListResponse>('/api/v1/evaluations'),
+      workflowTemplatesService.list(),
     ]);
 
     const data: ResourceExportData = {};
@@ -178,8 +181,14 @@ export const exportService = {
       }));
     }
 
-    // Workflows are not currently available in the API
-    data.workflows = [];
+    // Fetch WorkflowTemplates
+    if (workflowTemplates.status === 'fulfilled' && workflowTemplates.value) {
+      data.workflows = workflowTemplates.value.map(template => ({
+        id: template.metadata.name || '',
+        name: template.metadata.name || '',
+        type: 'workflow',
+      }));
+    }
 
     if (evaluations.status === 'fulfilled' && evaluations.value?.items) {
       data.evaluations = evaluations.value.items.map(evaluation => ({
