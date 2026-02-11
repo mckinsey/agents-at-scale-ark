@@ -25,13 +25,14 @@ spec:
                 name: mock-geocoding-api
         - script:
             content: |
+              kubectl wait --for=condition=ready pod -l app=mock-geocoding-api -n $NAMESPACE --timeout=60s
               MOCK_URL="http://mock-geocoding-api.$NAMESPACE.svc.cluster.local"
               kubectl run test-mock-ready --image=curlimages/curl --rm -i --restart=Never -n $NAMESPACE -- \
                 curl -f -s "${MOCK_URL}/v1/search?name=New+York&count=1"
             env:
               - name: NAMESPACE
                 value: ($namespace)
-            timeout: 30s
+            timeout: 60s
         - script:
             content: |
               helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \

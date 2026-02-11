@@ -11,6 +11,7 @@ import { toggleFloatingChat } from '@/lib/chat-events';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import type { Agent } from '@/lib/services';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { BaseCard, type BaseCardAction } from './base-card';
 
@@ -24,6 +25,7 @@ export function AgentCard({ agent, onDelete }: AgentCardProps) {
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(agent.name);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const { readOnlyMode } = useNamespace();
 
   const modelName = agent.modelRef?.name || 'No model assigned';
   const isA2A = agent.isA2A || false;
@@ -38,6 +40,7 @@ export function AgentCard({ agent, onDelete }: AgentCardProps) {
       icon: Pencil,
       label: 'Edit agent',
       onClick: () => router.push(`/agents/${agent.name}`),
+      disabled: readOnlyMode,
     },
   ];
 
@@ -46,7 +49,7 @@ export function AgentCard({ agent, onDelete }: AgentCardProps) {
       icon: Trash2,
       label: 'Delete agent',
       onClick: () => setDeleteConfirmOpen(true),
-      disabled: isChatOpen,
+      disabled: isChatOpen || readOnlyMode,
     });
   }
 

@@ -86,14 +86,50 @@ describe('AvailabilityStatusBadge', () => {
 
   it('should apply custom className with link', () => {
     const { container } = render(
-      <AvailabilityStatusBadge 
-        status="True" 
-        eventsLink="/events" 
-        className="custom-class" 
+      <AvailabilityStatusBadge
+        status="True"
+        eventsLink="/events"
+        className="custom-class"
       />
     );
-    
+
     const badge = container.querySelector('span');
     expect(badge).toHaveClass('custom-class');
+  });
+
+  it('should render spinner for Unknown status', () => {
+    const { container } = render(<AvailabilityStatusBadge status="Unknown" />);
+
+    const spinner = container.querySelector('svg.animate-spin');
+    expect(spinner).toBeInTheDocument();
+    expect(screen.getByText('Unknown')).toBeInTheDocument();
+  });
+
+  it('should not render spinner for Available status', () => {
+    const { container } = render(<AvailabilityStatusBadge status="True" />);
+
+    const spinner = container.querySelector('svg.animate-spin');
+    expect(spinner).not.toBeInTheDocument();
+  });
+
+  it('should not render spinner for Unavailable status', () => {
+    const { container } = render(<AvailabilityStatusBadge status="False" />);
+
+    const spinner = container.querySelector('svg.animate-spin');
+    expect(spinner).not.toBeInTheDocument();
+  });
+
+  it('should render spinner when status is null', () => {
+    const { container } = render(<AvailabilityStatusBadge status={null} />);
+
+    const spinner = container.querySelector('svg.animate-spin');
+    expect(spinner).toBeInTheDocument();
+  });
+
+  it('should render spinner when status is undefined', () => {
+    const { container } = render(<AvailabilityStatusBadge />);
+
+    const spinner = container.querySelector('svg.animate-spin');
+    expect(spinner).toBeInTheDocument();
   });
 });

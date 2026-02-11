@@ -586,6 +586,22 @@ jobs:
 
       - name: Test endpoints
         run: |
+          wait_for_endpoint() {
+            local url=$1
+            local name=$2
+            local max_attempts=30
+            for i in $(seq 1 $max_attempts); do
+              if curl -sf "$url" > /dev/null 2>&1; then
+                echo "$name is ready"
+                return 0
+              fi
+              echo "Waiting for $name... ($i/$max_attempts)"
+              sleep 2
+            done
+            echo "$name failed to become ready"
+            return 1
+          }
+
           # Wait for services to be ready
           echo "Waiting for services to be ready..."
           kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
@@ -596,7 +612,7 @@ jobs:
           echo "=== Testing ark-api service ==="
           kubectl port-forward -n default service/ark-api 8082:80 &
           API_PID=$!
-          sleep 15
+          wait_for_endpoint "http://127.0.0.1:8082/health" "ark-api" || (kubectl logs -l app=ark-api -n default --tail=50 && exit 1)
           echo "Testing API health endpoint..."
           curl -f http://127.0.0.1:8082/health || (echo "API health check failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
           echo "Testing API ready endpoint..."
@@ -613,7 +629,7 @@ jobs:
           echo "=== Testing ark-dashboard service ==="
           kubectl port-forward -n default service/ark-dashboard 3001:3000 &
           DASH_PID=$!
-          sleep 15
+          wait_for_endpoint "http://127.0.0.1:3001/" "ark-dashboard" || (kubectl logs -l app=ark-dashboard -n default --tail=50 && exit 1)
           echo "Testing dashboard endpoint..."
           curl -f http://127.0.0.1:3001/ || (echo "Dashboard check failed" && kubectl logs -l app=ark-dashboard -n default --tail=20 && exit 1)
           # Clean up dashboard port-forward
@@ -950,12 +966,12 @@ jobs:
           done
           echo "Warning: MCP server not ready after 5 minutes, tests may fail"
 
-      - name: Run File Gateway CLI tests
+      - name: Run CLI tests
         env:
           PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
         run: |
-          cd tests/pytest/cli-tests/tests
-          pytest test_file_gateway.py -v --tb=short
+          cd tests/pytest/cli-tests
+          pytest tests/ -v --tb=short
 
       - name: Run complete ARK workflow tests
         env:
@@ -969,7 +985,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cli-test-logs-${{ github.sha }}
-          path: tests/pytest/cli-tests/tests/*.log
+          path: |
+            tests/pytest/cli-tests/**/*.log
+            tests/pytest/*.log
           retention-days: 7
 
   build-charts:
@@ -1176,6 +1194,10 @@ jobs:
         e2e-tests-standard,
         e2e-tests-evaluated,
         e2e-ui-tests,
+        e2e-cli-tests,
+        e2e-ark-cli,
+        e2e-tests-llm,
+        xray-container-scan,
         build-and-test-ark,
         build-and-test-services,
         build-docs,

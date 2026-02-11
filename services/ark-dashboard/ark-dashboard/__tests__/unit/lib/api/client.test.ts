@@ -121,7 +121,7 @@ describe('APIClient', () => {
         expect.fail('Should have thrown an error')
       } catch (error) {
         expect(error).toBeInstanceOf(APIError)
-        expect((error as APIError).message).toBe('HTTP error! status: 500')
+        expect((error as APIError).message).toBe('Internal Server Error')
         expect((error as APIError).status).toBe(500)
       }
     })

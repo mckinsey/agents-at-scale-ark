@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   Copy,
   Download,
+  Eye,
   FileIcon,
   FolderIcon,
   MoreVertical,
@@ -23,6 +24,7 @@ import { toast } from 'sonner';
 
 import { filesBrowserPrefixAtom } from '@/atoms/internal-states';
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
+import { MultiTabPreviewDialog } from '@/components/file-preview/multi-tab-preview-dialog';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -49,6 +51,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
+import { useMultiFilePreview } from '@/hooks/use-multi-file-preview';
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { filesService } from '@/lib/services/files';
 import {
@@ -94,6 +97,19 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
     const [filename, setFilename] = useState('');
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Use the multi-file preview hook
+    const {
+      previewOpen,
+      tabs,
+      activeTab,
+      activeTabKey,
+      handlePreview,
+      closeTab,
+      closeAllTabs,
+      setActiveTabKey,
+      setPreviewOpen,
+    } = useMultiFilePreview();
 
     const {
       data: listFilesData,
@@ -496,6 +512,14 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
                       className="border-b border-gray-200 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900/30">
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handlePreview(file.key)}
+                            className="p-1"
+                            aria-label="Preview file">
+                            <Eye className="h-4 w-4" />
+                          </Button>
                           <FileIcon className="text-muted-foreground h-4 w-4" />
                           <span>{file.key.split('/').pop()}</span>
                         </div>
@@ -657,6 +681,17 @@ export const FilesSection = forwardRef<{ refresh: () => void }>(
               : `This will delete ${deleteTarget?.name} and ALL files inside. This action cannot be undone.`
           }
           variant="destructive"
+        />
+
+        <MultiTabPreviewDialog
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          tabs={tabs}
+          activeTab={activeTab}
+          activeTabKey={activeTabKey}
+          onTabClick={setActiveTabKey}
+          onTabClose={closeTab}
+          onCloseAll={closeAllTabs}
         />
       </div>
     );
