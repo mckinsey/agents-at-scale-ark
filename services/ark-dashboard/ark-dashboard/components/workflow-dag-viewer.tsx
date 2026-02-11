@@ -30,6 +30,7 @@ interface WorkflowTemplate {
     tasks: Array<{
       name: string;
       template: string;
+      depends?: string;
       dependencies?: string[];
     }>;
   };
@@ -150,6 +151,20 @@ interface ExpandResult {
   exitNodes: string[];
 }
 
+function parseDependencies(
+  depends: string | undefined,
+  dependencies: string[] | undefined,
+): string[] {
+  if (dependencies && dependencies.length > 0) {
+    return dependencies;
+  }
+  if (!depends) return [];
+  return depends
+    .split(/\s*&&\s*|\s*\|\|\s*/)
+    .map(dep => dep.trim())
+    .filter(dep => dep.length > 0);
+}
+
 function expandTemplate(
   templateName: string,
   templates: WorkflowTemplate[],
@@ -197,16 +212,19 @@ function expandTemplate(
       expandedTasks.push(...expansion.tasks);
     });
 
-    const tasksWithoutDeps = template.dag.tasks.filter(
-      t => !t.dependencies || t.dependencies.length === 0,
-    );
+    const tasksWithoutDeps = template.dag.tasks.filter(t => {
+      const deps = parseDependencies(t.depends, t.dependencies);
+      return deps.length === 0;
+    });
     tasksWithoutDeps.forEach(task => {
       const expansion = taskExpansions.get(task.name)!;
       entryNodes.push(...expansion.entryNodes);
     });
 
     const allDepTasks = new Set(
-      template.dag.tasks.flatMap(t => t.dependencies || []),
+      template.dag.tasks.flatMap(t =>
+        parseDependencies(t.depends, t.dependencies),
+      ),
     );
     const tasksNotDependedOn = template.dag.tasks.filter(
       t => !allDepTasks.has(t.name),
@@ -217,11 +235,12 @@ function expandTemplate(
     });
 
     template.dag.tasks.forEach(task => {
-      if (task.dependencies && task.dependencies.length > 0) {
+      const deps = parseDependencies(task.depends, task.dependencies);
+      if (deps.length > 0) {
         const targetExpansion = taskExpansions.get(task.name)!;
         const depExitNodes: string[] = [];
 
-        task.dependencies.forEach(depTaskName => {
+        deps.forEach(depTaskName => {
           const depExpansion = taskExpansions.get(depTaskName);
           if (depExpansion) {
             depExitNodes.push(...depExpansion.exitNodes);
