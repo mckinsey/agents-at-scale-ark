@@ -139,6 +139,195 @@ spec:
       ).toBeInTheDocument();
     });
 
+    it('should parse and render DAG workflow with depends field using && syntax', async () => {
+      const manifest = `
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: dag-workflow-depends
+spec:
+  entrypoint: main
+  templates:
+    - name: main
+      dag:
+        tasks:
+          - name: task-a
+            template: task-a-template
+          - name: task-b
+            template: task-b-template
+          - name: task-c
+            template: task-c-template
+            depends: task-a && task-b
+`;
+
+      const parsed = {
+        spec: {
+          entrypoint: 'main',
+          templates: [
+            {
+              name: 'main',
+              dag: {
+                tasks: [
+                  { name: 'task-a', template: 'task-a-template' },
+                  { name: 'task-b', template: 'task-b-template' },
+                  {
+                    name: 'task-c',
+                    template: 'task-c-template',
+                    depends: 'task-a && task-b',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      };
+
+      vi.mocked(yaml.load).mockReturnValue(parsed);
+
+      render(<WorkflowDagViewer manifest={manifest} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('react-flow')).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-task-a.task-a-template'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-task-b.task-b-template'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-task-c.task-c-template'),
+        ).toBeInTheDocument();
+      });
+
+      expect(
+        screen.getByTestId('edge-task-a.task-a-template-task-c.task-c-template'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId('edge-task-b.task-b-template-task-c.task-c-template'),
+      ).toBeInTheDocument();
+    });
+
+    it('should parse and render DAG workflow with depends field using || syntax', async () => {
+      const manifest = `
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+spec:
+  entrypoint: main
+  templates:
+    - name: main
+      dag:
+        tasks:
+          - name: task-a
+            template: task-a-template
+          - name: task-b
+            template: task-b-template
+          - name: task-c
+            template: task-c-template
+            depends: task-a || task-b
+`;
+
+      const parsed = {
+        spec: {
+          entrypoint: 'main',
+          templates: [
+            {
+              name: 'main',
+              dag: {
+                tasks: [
+                  { name: 'task-a', template: 'task-a-template' },
+                  { name: 'task-b', template: 'task-b-template' },
+                  {
+                    name: 'task-c',
+                    template: 'task-c-template',
+                    depends: 'task-a || task-b',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      };
+
+      vi.mocked(yaml.load).mockReturnValue(parsed);
+
+      render(<WorkflowDagViewer manifest={manifest} />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId('node-task-a.task-a-template'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-task-b.task-b-template'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-task-c.task-c-template'),
+        ).toBeInTheDocument();
+      });
+
+      expect(
+        screen.getByTestId('edge-task-a.task-a-template-task-c.task-c-template'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId('edge-task-b.task-b-template-task-c.task-c-template'),
+      ).toBeInTheDocument();
+    });
+
+    it('should parse complex depends field with single dependency', async () => {
+      const manifest = `
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+spec:
+  entrypoint: main
+  templates:
+    - name: main
+      dag:
+        tasks:
+          - name: validate
+            template: validate-template
+          - name: build
+            template: build-template
+            depends: validate
+`;
+
+      const parsed = {
+        spec: {
+          entrypoint: 'main',
+          templates: [
+            {
+              name: 'main',
+              dag: {
+                tasks: [
+                  { name: 'validate', template: 'validate-template' },
+                  {
+                    name: 'build',
+                    template: 'build-template',
+                    depends: 'validate',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      };
+
+      vi.mocked(yaml.load).mockReturnValue(parsed);
+
+      render(<WorkflowDagViewer manifest={manifest} />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId('node-validate.validate-template'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-build.build-template'),
+        ).toBeInTheDocument();
+      });
+
+      expect(
+        screen.getByTestId('edge-validate.validate-template-build.build-template'),
+      ).toBeInTheDocument();
+    });
+
     it('should parse DAG workflow without dependencies', async () => {
       const manifest = `
 apiVersion: argoproj.io/v1alpha1
@@ -611,6 +800,114 @@ spec:
   });
 
   describe('Nested template expansion', () => {
+    it('should handle nested templates with depends field', async () => {
+      const manifest = `
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+spec:
+  entrypoint: main
+  templates:
+    - name: main
+      dag:
+        tasks:
+          - name: build
+            template: build-pipeline
+          - name: test
+            template: test-pipeline
+            depends: build
+          - name: deploy
+            template: deploy-step
+            depends: test
+    - name: build-pipeline
+      dag:
+        tasks:
+          - name: compile
+            template: compile-step
+          - name: package
+            template: package-step
+            depends: compile
+    - name: test-pipeline
+      dag:
+        tasks:
+          - name: unit-test
+            template: test-step
+          - name: integration-test
+            template: test-step
+            depends: unit-test
+`;
+
+      const parsed = {
+        spec: {
+          entrypoint: 'main',
+          templates: [
+            {
+              name: 'main',
+              dag: {
+                tasks: [
+                  { name: 'build', template: 'build-pipeline' },
+                  { name: 'test', template: 'test-pipeline', depends: 'build' },
+                  { name: 'deploy', template: 'deploy-step', depends: 'test' },
+                ],
+              },
+            },
+            {
+              name: 'build-pipeline',
+              dag: {
+                tasks: [
+                  { name: 'compile', template: 'compile-step' },
+                  { name: 'package', template: 'package-step', depends: 'compile' },
+                ],
+              },
+            },
+            {
+              name: 'test-pipeline',
+              dag: {
+                tasks: [
+                  { name: 'unit-test', template: 'test-step' },
+                  { name: 'integration-test', template: 'test-step', depends: 'unit-test' },
+                ],
+              },
+            },
+          ],
+        },
+      };
+
+      vi.mocked(yaml.load).mockReturnValue(parsed);
+
+      render(<WorkflowDagViewer manifest={manifest} />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId('node-build.compile.compile-step'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-build.package.package-step'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-test.unit-test.test-step'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-test.integration-test.test-step'),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId('node-deploy.deploy-step'),
+        ).toBeInTheDocument();
+      });
+
+      expect(
+        screen.getByTestId('edge-build.compile.compile-step-build.package.package-step'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId('edge-build.package.package-step-test.unit-test.test-step'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId('edge-test.unit-test.test-step-test.integration-test.test-step'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId('edge-test.integration-test.test-step-deploy.deploy-step'),
+      ).toBeInTheDocument();
+    });
+
     it('should expand nested DAG templates and connect edges correctly', async () => {
       const manifest = `
 apiVersion: argoproj.io/v1alpha1
