@@ -152,6 +152,8 @@ async def collect_resources(
                         version = "v1alpha1"
                         plural = "workflowtemplates"
 
+                        logger.info(f"Fetching WorkflowTemplates with namespace: {namespace}")
+
                         if namespace:
                             workflow_templates = custom_api.list_namespaced_custom_object(
                                 group=group,
@@ -166,9 +168,12 @@ async def collect_resources(
                                 plural=plural
                             )
 
+                        logger.info(f"Found {len(workflow_templates.get('items', []))} WorkflowTemplates")
+
                         for template in workflow_templates.get("items", []):
                             if not resource_ids or template["metadata"]["name"] in resource_ids.get("workflows", []):
                                 items.append(template)
+                                logger.info(f"Added WorkflowTemplate: {template['metadata']['name']}")
                     except ApiException as e:
                         if e.status == 404:
                             logger.warning("WorkflowTemplates CRD not found - Argo Workflows may not be installed")
