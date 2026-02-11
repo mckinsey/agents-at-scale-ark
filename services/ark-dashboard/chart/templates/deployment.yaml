@@ -41,22 +41,18 @@ spec:
         {{- end }}
         ports:
         - containerPort: {{ .Values.service.targetPort }}
+        {{- if .Values.app.startupProbe }}
+        startupProbe:
+          {{- toYaml .Values.app.startupProbe | nindent 10 }}
+        {{- end }}
+        {{- if .Values.app.readinessProbe }}
         readinessProbe:
-          httpGet:
-            path: /
-            port: {{ .Values.service.targetPort }}
-          initialDelaySeconds: 10
-          periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 6
+          {{- toYaml .Values.app.readinessProbe | nindent 10 }}
+        {{- end }}
+        {{- if .Values.app.livenessProbe }}
         livenessProbe:
-          httpGet:
-            path: /
-            port: {{ .Values.service.targetPort }}
-          initialDelaySeconds: 30
-          periodSeconds: 15
-          timeoutSeconds: 5
-          failureThreshold: 6
+          {{- toYaml .Values.app.livenessProbe | nindent 10 }}
+        {{- end }}
         env:
           - name: NODE_ENV
             value: {{ required "app.config.nodeEnv is required" .Values.app.config.nodeEnv | quote }}

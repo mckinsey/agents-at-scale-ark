@@ -84,6 +84,31 @@ app:
       drop:
         - ALL
 
+  # Probe configuration - set to null/empty to disable probes
+  # Useful for environments where probes cause issues
+  startupProbe:
+    httpGet:
+      path: /
+      port: 3000
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 180
+  readinessProbe:
+    httpGet:
+      path: /
+      port: 3000
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  livenessProbe:
+    httpGet:
+      path: /
+      port: 3000
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 3
+
 # Service account configuration
 serviceAccount:
   create: true

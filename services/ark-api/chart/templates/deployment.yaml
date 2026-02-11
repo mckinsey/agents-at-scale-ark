@@ -36,22 +36,18 @@ spec:
           {{- end }}
           ports:
             - containerPort: {{ .Values.service.targetPort }}
+          {{- if .Values.app.startupProbe }}
+          startupProbe:
+            {{- toYaml .Values.app.startupProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.app.readinessProbe }}
           readinessProbe:
-            httpGet:
-              path: /ready
-              port: {{ .Values.service.targetPort }}
-            initialDelaySeconds: 10
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 6
+            {{- toYaml .Values.app.readinessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.app.livenessProbe }}
           livenessProbe:
-            httpGet:
-              path: /health
-              port: {{ .Values.service.targetPort }}
-            initialDelaySeconds: 30
-            periodSeconds: 15
-            timeoutSeconds: 5
-            failureThreshold: 6
+            {{- toYaml .Values.app.livenessProbe | nindent 12 }}
+          {{- end }}
           {{- if .Values.app.env }}
           env:
             {{- range .Values.app.env }}
