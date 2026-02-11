@@ -86,6 +86,7 @@ class ProxyApp:
 class DynamicManager:
     def __init__(self):
         self.agents = {}
+        self.executors = {}
         self.lock = threading.Lock()
         self.app = ProxyApp()  # Use proxy instead of Starlette
         self.registry = get_registry()
@@ -133,6 +134,7 @@ class DynamicManager:
             
             # Check for changes
             changes_detected = False
+            removed_executors = []
             
             with self.lock:
                 current_names = set(self.agents.keys())
@@ -142,6 +144,9 @@ class DynamicManager:
                 to_remove = current_names - registry_names
                 for name in to_remove:
                     del self.agents[name]
+                    executor = self.executors.pop(name, None)
+                    if executor is not None:
+                        removed_executors.append(executor)
                     logger.info(f"Removed agent: {name}")
                     changes_detected = True
                 
@@ -151,6 +156,12 @@ class DynamicManager:
                         self.agents[name] = card
                         logger.info(f"Added/Updated agent: {name}")
                         changes_detected = True
+
+            if removed_executors:
+                await asyncio.gather(
+                    *(executor.cancel_all_tasks() for executor in removed_executors),
+                    return_exceptions=True,
+                )
             
             # Only update routes if changes were detected
             if changes_detected:
@@ -173,15 +184,30 @@ class DynamicManager:
     async def shutdown(self):
         """Shutdown the manager and stop periodic sync"""
         await self.stop_periodic_sync()
+        with self.lock:
+            executors = list(self.executors.values())
+            self.executors.clear()
+        if executors:
+            await asyncio.gather(
+                *(executor.cancel_all_tasks() for executor in executors),
+                return_exceptions=True,
+            )
 
     def _update_routes(self):
         # Create a new Starlette app with all routes
         new_app = Starlette()
+        with self.lock:
+            agent_items = list(self.agents.items())
         
         # Add routes for each agent
-        for name, agent_card in self.agents.items():
+        for name, agent_card in agent_items:
+            with self.lock:
+                executor = self.executors.get(name)
+                if executor is None:
+                    executor = ARKAgentExecutor(name, get_namespace())
+                    self.executors[name] = executor
             request_handler = DefaultRequestHandler(
-                agent_executor=ARKAgentExecutor(name, get_namespace()),
+                agent_executor=executor,
                 task_store=InMemoryTaskStore(),
             )
 

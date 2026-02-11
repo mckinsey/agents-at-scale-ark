@@ -1,10 +1,13 @@
 import functools
+import json
 import logging
 import os
 
 from a2a.types import AgentCapabilities, AgentCard, AgentSkill
 from ark_sdk.client import V1_ALPHA1, with_ark_client
 from ark_sdk.k8s import get_namespace
+
+from ark_api.constants.annotations import A2A_SERVER_SKILLS_ANNOTATION
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +27,9 @@ def get_external(agent_name):
 
 def ark_to_agent_card(ark_agent) -> AgentCard:
     metadata = ark_agent.metadata
-    annotations = metadata.get('annotations', {})
-    skills = annotations.get('a2a.mckinsey.com/skill', [])
+    annotations = metadata.get('annotations') or {}
+    if not isinstance(annotations, dict):
+        annotations = {}
     spec = ark_agent.spec
     
     # Create capabilities object
@@ -33,20 +37,38 @@ def ark_to_agent_card(ark_agent) -> AgentCard:
         streaming=True, pushNotifications=False, stateTransitionHistory=False
     )
     
-    # Create skills from capabilities list or annotations
     skills_list = []
-    skills_data = annotations.get('a2a.mckinsey.com/skills', [])
+    skills_data = annotations.get(A2A_SERVER_SKILLS_ANNOTATION)
+    parsed_skills = []
+    if isinstance(skills_data, str) and skills_data:
+        try:
+            parsed = json.loads(skills_data)
+            if isinstance(parsed, list):
+                parsed_skills = parsed
+        except json.JSONDecodeError:
+            logger.warning(f"Unable to parse skills annotation for agent {metadata['name']}")
+    elif isinstance(skills_data, list):
+        parsed_skills = skills_data
 
-    for idx, skill_dict in enumerate(skills_data):
+    for idx, skill_dict in enumerate(parsed_skills):
         if isinstance(skill_dict, dict):
-            skill_dict['id'] = skill_dict.get('id') or f"{metadata['name']}-skill-{idx}"
-            skill = AgentSkill(**skill_dict)
-            skills_list.append(skill)
+            skill_payload = dict(skill_dict)
+            skill_payload['id'] = skill_payload.get('id') or f"{metadata['name']}-skill-{idx}"
+            skill_payload['name'] = skill_payload.get('name') or f"skill-{idx + 1}"
+            skill_payload['description'] = skill_payload.get('description') or "No description"
+            raw_tags = skill_payload.get('tags')
+            if isinstance(raw_tags, list):
+                skill_payload['tags'] = [tag for tag in raw_tags if isinstance(tag, str)]
+            else:
+                skill_payload['tags'] = []
+            try:
+                skills_list.append(AgentSkill(**skill_payload))
+            except Exception:
+                logger.warning(f"Unable to recover skill from annotation: {skill_dict}")
         else:
             logger.warning(f"Unable to recover skill from annotation: {skill_dict}")
-    
-    # If no skills, create a default one
-    if not skills:
+
+    if not skills_list:
         skills_list.append(
             AgentSkill(
                 id=f"{metadata['name']}-default-skill",

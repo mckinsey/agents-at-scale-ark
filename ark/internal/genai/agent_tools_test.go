@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	eventnoop "mckinsey.com/ark/internal/eventing/noop"
@@ -568,4 +569,258 @@ func TestTeamToolExecutor_Execute(t *testing.T) {
 		// This is more of an integration test
 		t.Skip("Requires full setup with models and agents - better suited for integration tests")
 	})
+}
+
+type testToolEventStream struct{}
+
+func (t *testToolEventStream) StreamChunk(ctx context.Context, chunk interface{}) error {
+	return nil
+}
+
+func (t *testToolEventStream) NotifyCompletion(ctx context.Context) error {
+	return nil
+}
+
+func (t *testToolEventStream) Close() error {
+	return nil
+}
+
+func TestParseDelegatedInvocationCompat(t *testing.T) {
+	args := map[string]any{
+		"input": "hello",
+	}
+	invocation, userError, err := parseDelegatedInvocation(args, A2APayloadModeCompat, "agent", "test-agent")
+	require.NoError(t, err)
+	require.Equal(t, "", userError)
+	require.Equal(t, protocol.MessageRoleUser, invocation.userInput.Role)
+	require.Len(t, invocation.userInput.Parts, 1)
+	require.Equal(t, "hello", extractTextFromParts(invocation.userInput.Parts))
+	require.Len(t, invocation.history, 0)
+	require.Equal(t, "", invocation.contextID)
+}
+
+func TestParseDelegatedInvocationCompatRequiresInput(t *testing.T) {
+	args := map[string]any{}
+	_, userError, err := parseDelegatedInvocation(args, A2APayloadModeCompat, "agent", "test-agent")
+	require.Error(t, err)
+	require.Equal(t, "input parameter is required", userError)
+	require.Contains(t, err.Error(), "input parameter is required")
+}
+
+func TestParseDelegatedInvocationNativeMessageHistoryContext(t *testing.T) {
+	args := map[string]any{
+		"message": map[string]any{
+			"role": "user",
+			"parts": []map[string]any{
+				{
+					"kind": "text",
+					"text": "delegate this",
+				},
+			},
+		},
+		"history": []map[string]any{
+			{
+				"role": "agent",
+				"parts": []map[string]any{
+					{
+						"kind": "text",
+						"text": "previous response",
+					},
+				},
+			},
+		},
+		"contextId": "ctx-123",
+	}
+	invocation, userError, err := parseDelegatedInvocation(args, A2APayloadModeNative, "agent", "test-agent")
+	require.NoError(t, err)
+	require.Equal(t, "", userError)
+	require.Equal(t, "ctx-123", invocation.contextID)
+	require.Equal(t, protocol.MessageRoleUser, invocation.userInput.Role)
+	require.Len(t, invocation.userInput.Parts, 1)
+	require.Equal(t, "delegate this", extractTextFromParts(invocation.userInput.Parts))
+	require.Len(t, invocation.history, 1)
+	require.Equal(t, protocol.MessageRoleAgent, invocation.history[0].Role)
+}
+
+func TestParseDelegatedInvocationNativeFallsBackToInput(t *testing.T) {
+	args := map[string]any{
+		"input": "fallback input",
+	}
+	invocation, userError, err := parseDelegatedInvocation(args, A2APayloadModeNative, "team", "test-team")
+	require.NoError(t, err)
+	require.Equal(t, "", userError)
+	require.Equal(t, protocol.MessageRoleUser, invocation.userInput.Role)
+	require.Len(t, invocation.userInput.Parts, 1)
+	require.Equal(t, "fallback input", extractTextFromParts(invocation.userInput.Parts))
+}
+
+func TestParseDelegatedInvocationNativeInvalidContextID(t *testing.T) {
+	args := map[string]any{
+		"message": map[string]any{
+			"role": "user",
+			"parts": []map[string]any{
+				{
+					"kind": "text",
+					"text": "delegate this",
+				},
+			},
+		},
+		"contextId": 10,
+	}
+	_, userError, err := parseDelegatedInvocation(args, A2APayloadModeNative, "agent", "test-agent")
+	require.Error(t, err)
+	require.Equal(t, "contextId parameter must be a string", userError)
+	require.Contains(t, err.Error(), "contextId parameter must be a string")
+}
+
+func TestGetDelegationEventStreamGatedByPayloadMode(t *testing.T) {
+	ctx := WithToolEventStream(context.Background(), &testToolEventStream{})
+	compatStream := getDelegationEventStream(ctx, A2APayloadModeCompat)
+	nativeStream := getDelegationEventStream(ctx, A2APayloadModeNative)
+	require.Nil(t, compatStream)
+	require.NotNil(t, nativeStream)
+}
+
+func TestAgentToolExecutor_NativeMessageDelegationWithoutInput(t *testing.T) {
+	agentCRD := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "delegate-agent",
+			Namespace: "default",
+		},
+		Spec: arkv1alpha1.AgentSpec{
+			ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{
+				Name: ExecutionEngineA2A,
+			},
+		},
+	}
+	executor := &AgentToolExecutor{
+		AgentName: "delegate-agent",
+		Namespace: "default",
+		AgentCRD:  agentCRD,
+		k8sClient: setupTestClientForTools([]client.Object{}),
+		telemetry: noop.NewProvider(),
+		eventing:  eventnoop.NewProvider(),
+	}
+	args := map[string]any{
+		"message": map[string]any{
+			"role": "user",
+			"parts": []map[string]any{
+				{
+					"kind": "text",
+					"text": "delegate this",
+				},
+			},
+		},
+	}
+	argsJSON, err := json.Marshal(args)
+	require.NoError(t, err)
+	call := ToolCall{
+		ID: "agent-native-no-input",
+		Function: openai.ChatCompletionMessageToolCallFunction{
+			Name:      "delegate-agent",
+			Arguments: string(argsJSON),
+		},
+		Type: "function",
+	}
+	queryCtx := context.WithValue(context.Background(), QueryContextKey, &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "query-native",
+			Namespace: "default",
+		},
+	})
+	queryCtx = WithA2APayloadMode(queryCtx, A2APayloadModeNative)
+	result, err := executor.Execute(queryCtx, call)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "A2A agent missing")
+	require.Contains(t, result.Error, "failed to execute agent")
+	require.NotContains(t, result.Error, "input parameter is required")
+}
+
+func TestAgentToolExecutor_CompatMessageStillRequiresInput(t *testing.T) {
+	executor := &AgentToolExecutor{
+		AgentName: "delegate-agent",
+		Namespace: "default",
+		AgentCRD: &arkv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "delegate-agent",
+				Namespace: "default",
+			},
+		},
+		k8sClient: setupTestClientForTools([]client.Object{}),
+		telemetry: noop.NewProvider(),
+		eventing:  eventnoop.NewProvider(),
+	}
+	args := map[string]any{
+		"message": map[string]any{
+			"role": "user",
+			"parts": []map[string]any{
+				{
+					"kind": "text",
+					"text": "delegate this",
+				},
+			},
+		},
+	}
+	argsJSON, err := json.Marshal(args)
+	require.NoError(t, err)
+	call := ToolCall{
+		ID: "agent-compat-no-input",
+		Function: openai.ChatCompletionMessageToolCallFunction{
+			Name:      "delegate-agent",
+			Arguments: string(argsJSON),
+		},
+		Type: "function",
+	}
+	result, err := executor.Execute(context.Background(), call)
+	require.Error(t, err)
+	require.Equal(t, "input parameter is required", result.Error)
+	require.Contains(t, err.Error(), "input parameter is required")
+}
+
+func TestTeamToolExecutor_NativeMessageDelegationWithoutInput(t *testing.T) {
+	teamCRD := &arkv1alpha1.Team{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "delegate-team",
+			Namespace: "default",
+		},
+		Spec: arkv1alpha1.TeamSpec{
+			Members:  []arkv1alpha1.TeamMember{},
+			Strategy: "sequential",
+		},
+	}
+	executor := &TeamToolExecutor{
+		TeamName:          "delegate-team",
+		Namespace:         "default",
+		TeamCRD:           teamCRD,
+		k8sClient:         setupTestClientForTools([]client.Object{}),
+		telemetryProvider: noop.NewProvider(),
+		eventingProvider:  eventnoop.NewProvider(),
+	}
+	args := map[string]any{
+		"message": map[string]any{
+			"role": "user",
+			"parts": []map[string]any{
+				{
+					"kind": "text",
+					"text": "delegate this",
+				},
+			},
+		},
+	}
+	argsJSON, err := json.Marshal(args)
+	require.NoError(t, err)
+	call := ToolCall{
+		ID: "team-native-no-input",
+		Function: openai.ChatCompletionMessageToolCallFunction{
+			Name:      "delegate-team",
+			Arguments: string(argsJSON),
+		},
+		Type: "function",
+	}
+	ctx := WithA2APayloadMode(context.Background(), A2APayloadModeNative)
+	result, err := executor.Execute(ctx, call)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "has no members configured")
+	require.Contains(t, result.Error, "failed to execute team")
+	require.NotContains(t, result.Error, "input parameter is required")
 }
