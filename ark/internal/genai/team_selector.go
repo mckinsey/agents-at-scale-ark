@@ -203,7 +203,8 @@ func (t *Team) selectFromGraphConstraints(ctx context.Context, messages []Messag
 //nolint:gocognit // Complex function orchestrating selector logic with graph constraints, but cohesive responsibilities
 func (t *Team) executeSelector(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
 	// Explicitly add userInput to the history so that the selector has access to it
-	messages := append(history, userInput)
+	messages := append([]Message{}, history...)
+	messages = append(messages, userInput)
 	var newMessages []Message
 
 	promptTemplate := defaultSelectorPrompt

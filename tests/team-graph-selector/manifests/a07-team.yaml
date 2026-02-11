@@ -17,6 +17,16 @@ spec:
       name: writer
   selector:
     agent: coordinator
+    selectorPrompt: |
+      You are a team coordinator. Your job is to select the best next team member 
+      to respond based on the conversation context.
+      
+      Available participants: {{.Participants}}
+      Roles: {{.Roles}}
+      Conversation history: {{.History}}
+      
+      Respond with ONLY the name of the member you want to select next.
+
   graph:
     edges:
       # Coordinator can choose researcher or analyzer
