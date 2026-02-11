@@ -34,7 +34,6 @@ concurrency:
 jobs:
   # Setup job to determine container cache registry
   setup-container-cache-registry:
-    needs: [jfrog-xray-scan]
     runs-on: ubuntu-24.04
     outputs:
       ci-cache-registry: ${{ steps.setup-registry.outputs.ci-cache-registry }}
@@ -224,7 +223,7 @@ jobs:
         with:
           node-version: "22.x"
 
-      - run: make -j24 build-all
+      - run: make -j24 services-build-all
 
       - name: Check generated types are unchanged
         run: |
@@ -1188,6 +1187,7 @@ jobs:
         e2e-cli-tests,
         e2e-ark-cli,
         e2e-tests-llm,
+        jfrog-xray-scan,
         xray-container-scan,
         build-and-test-ark,
         build-and-test-services,
