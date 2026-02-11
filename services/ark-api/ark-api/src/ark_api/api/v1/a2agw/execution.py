@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 from datetime import UTC, datetime
+from typing import Any
 
 from a2a.server.agent_execution import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
@@ -9,7 +10,8 @@ from a2a.server.events.event_queue import EventQueue
 from a2a.types import TaskState, TaskStatus, TaskStatusUpdateEvent
 from a2a.utils import new_agent_text_message
 
-from .query import post_query_and_wait
+from .message_conversion import build_query_payload
+from .query import QueryExecutionResult, post_query_and_wait
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +24,7 @@ class ARKAgentExecutor(AgentExecutor):
         self.namespace = namespace
         self.timeout = timeout if timeout is not None else DEFAULT_TIMEOUT
         self.tasks_lock = asyncio.Lock()
-        self.active_coroutines = {}  # task_id -> coroutine mapping
+        self.active_tasks: dict[str, asyncio.Task] = {}
 
     def _extract_message_text(self, message) -> str:
         """Extract text content from a message object.
@@ -48,8 +50,14 @@ class ARKAgentExecutor(AgentExecutor):
                 
         return "No message"
     
-    def _create_status_event(self, context_id: str, task_id: str, state: TaskState, 
-                           final: bool = False, error_msg: str = None) -> TaskStatusUpdateEvent:
+    def _create_status_event(
+        self,
+        context_id: str | None,
+        task_id: str | None,
+        state: TaskState,
+        final: bool = False,
+        error_msg: str | None = None,
+    ) -> TaskStatusUpdateEvent:
         """Create a task status update event.
         
         Args:
@@ -77,8 +85,14 @@ class ARKAgentExecutor(AgentExecutor):
             final=final
         )
     
-    async def _send_task_update(self, event_queue: EventQueue, context_id: str, 
-                               task_id: str, state: TaskState, final: bool = False):
+    async def _send_task_update(
+        self,
+        event_queue: EventQueue,
+        context_id: str | None,
+        task_id: str | None,
+        state: TaskState,
+        final: bool = False,
+    ):
         """Send a task status update to the event queue.
         
         Args:
@@ -91,16 +105,31 @@ class ARKAgentExecutor(AgentExecutor):
         status_event = self._create_status_event(context_id, task_id, state, final)
         await event_queue.enqueue_event(status_event)
     
-    async def _process_query(self, user_message: str) -> str:
+    async def _process_query(
+        self,
+        query_input: str | list[dict[str, Any]],
+        query_type: str,
+        context_id: str | None,
+    ) -> QueryExecutionResult:
         """Process the query and return the result.
         
         Args:
-            user_message: The user's query message
+            query_input: The query payload
+            query_type: The query payload type
+            context_id: A2A context id
             
         Returns:
             The query result
         """
-        return await post_query_and_wait(self.namespace, 'agent', self.target_name, user_message, timeout=self.timeout)
+        return await post_query_and_wait(
+            self.namespace,
+            'agent',
+            self.target_name,
+            query_input,
+            query_type=query_type,
+            timeout=self.timeout,
+            context_id=context_id,
+        )
     
     async def execute(
             self, context: RequestContext, event_queue: EventQueue
@@ -112,13 +141,15 @@ class ARKAgentExecutor(AgentExecutor):
             event_queue: The queue to publish events to.
         """
         # Extract IDs from context
-        task_id = getattr(context, 'task_id', None)
-        context_id = getattr(context, 'context_id', None)
+        task_id_raw = getattr(context, 'task_id', None)
+        context_id_raw = getattr(context, 'context_id', None)
+        task_id = task_id_raw if isinstance(task_id_raw, str) and task_id_raw else "unknown"
+        context_id = context_id_raw if isinstance(context_id_raw, str) and context_id_raw else None
         
         try:
             # Extract and log the message
-            user_message = self._extract_message_text(context.message)
-            logger.info(f"Task {task_id} Context {context_id} - Processing query: {user_message}")
+            query_payload = build_query_payload(context)
+            logger.info(f"Task {task_id} Context {context_id} - Processing query: {query_payload.preview_text}")
             logger.info(f"Task {task_id} - Using timeout: {self.timeout} seconds")
             
             # Send starting status
@@ -126,18 +157,28 @@ class ARKAgentExecutor(AgentExecutor):
 
             try:
                 # Process the query with timeout
-                result_co = self._process_query(user_message)
-                
-                # Store the coroutine for potential cancellation
+                result_task = asyncio.create_task(
+                    self._process_query(
+                        query_payload.input_data,
+                        query_payload.query_type,
+                        context_id,
+                    )
+                )
+
                 async with self.tasks_lock:
-                    self.active_coroutines[task_id] = result_co
-                
+                    self.active_tasks[task_id] = result_task
+
                 try:
                     # Wait up to configured timeout for result
-                    result = await asyncio.wait_for(result_co, timeout=self.timeout)
-                    
+                    result = await asyncio.wait_for(asyncio.shield(result_task), timeout=self.timeout)
+
+                    response_context_id = result.context_id or context_id
                     # Send the result
-                    result_msg = new_agent_text_message(result, context_id=context_id, task_id=task_id)
+                    result_msg = new_agent_text_message(
+                        result.content,
+                        context_id=response_context_id,
+                        task_id=task_id,
+                    )
                     await event_queue.enqueue_event(result_msg)
 
                     # Send completion status
@@ -147,10 +188,9 @@ class ARKAgentExecutor(AgentExecutor):
                     
                 except TimeoutError:
                     logger.error(f"Task {task_id} - Query timed out after {self.timeout} seconds")
-                    
-                    # Cancel the coroutine if still running
-                    if isinstance(result_co, asyncio.Task):
-                        result_co.cancel()
+
+                    if not result_task.done():
+                        result_task.cancel()
                     
                     # Send timeout error
                     timeout_msg = new_agent_text_message(
@@ -168,15 +208,19 @@ class ARKAgentExecutor(AgentExecutor):
                     await event_queue.enqueue_event(failure_event)
                     
             finally:
-                # Remove task and coroutine with lock
                 async with self.tasks_lock:
-                    self.active_coroutines.pop(task_id, None)  # Remove coroutine reference
+                    self.active_tasks.pop(task_id, None)
 
         except Exception as e:
             await self._handle_error(e, event_queue, context_id, task_id)
     
-    async def _handle_error(self, error: Exception, event_queue: EventQueue, 
-                           context_id: str, task_id: str):
+    async def _handle_error(
+        self,
+        error: Exception,
+        event_queue: EventQueue,
+        context_id: str | None,
+        task_id: str | None,
+    ):
         """Handle errors during query processing.
         
         Args:
@@ -209,26 +253,31 @@ class ARKAgentExecutor(AgentExecutor):
             context: The request context containing the task ID to cancel.
             event_queue: The queue to publish the cancellation status update to.
         """
-        task_id = getattr(context, 'task_id', "unknown")
-        context_id = getattr(context, 'context_id', None)
+        task_id_raw = getattr(context, 'task_id', "unknown")
+        context_id_raw = getattr(context, 'context_id', None)
+        task_id = task_id_raw if isinstance(task_id_raw, str) and task_id_raw else "unknown"
+        context_id = context_id_raw if isinstance(context_id_raw, str) and context_id_raw else None
         
-        # Check if task is active and get coroutine
         async with self.tasks_lock:
-            coroutine = self.active_coroutines.get(task_id)
-            
-        if coroutine:
+            task = self.active_tasks.pop(task_id, None)
+
+        if task:
             logger.info(f"Cancellation requested for active task {task_id}")
-            
-            # Cancel the coroutine if it exists
-            if coroutine and isinstance(coroutine, asyncio.Task):
-                coroutine.cancel()
-                logger.info(f"Cancelled coroutine for task {task_id}")
-            
-            # Remove from tracking
-            async with self.tasks_lock:
-                self.active_coroutines.pop(task_id, None)
+
+            if not task.done():
+                task.cancel()
+                logger.info(f"Cancelled task {task_id}")
             
             # Send cancellation status
             await self._send_task_update(event_queue, context_id, task_id, TaskState.canceled, final=True)
         else:
             logger.warning(f"Cancellation requested for task {task_id}, but task is not active")
+
+    async def cancel_all_tasks(self) -> None:
+        async with self.tasks_lock:
+            tasks = list(self.active_tasks.values())
+            self.active_tasks.clear()
+
+        for task in tasks:
+            if not task.done():
+                task.cancel()

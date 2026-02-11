@@ -1,6 +1,8 @@
 package genai
 
 import (
+	"context"
+
 	arkann "mckinsey.com/ark/internal/annotations"
 )
 
@@ -41,4 +43,11 @@ func scanAgentPayloadModes(agentAnnotations []map[string]string) (bool, bool) {
 		}
 	}
 	return hasExplicitCompat, hasNative
+}
+
+func ResolveDelegationPayloadMode(ctx context.Context, targetAnnotations map[string]string) string {
+	if HasA2APayloadModeInContext(ctx) {
+		return GetA2APayloadModeFromContext(ctx)
+	}
+	return GetA2APayloadMode(targetAnnotations)
 }

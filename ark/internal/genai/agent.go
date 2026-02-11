@@ -173,13 +173,14 @@ func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatComplet
 	return toolMessage, nil
 }
 
-func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCompletionMessageToolCall, agentMessages, newMessages *[]Message) error {
+func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCompletionMessageToolCall, eventStream EventStreamInterface, agentMessages, newMessages *[]Message) error {
+	execCtx := WithToolEventStream(ctx, eventStream)
 	for _, tc := range toolCalls {
-		if ctx.Err() != nil {
-			return ctx.Err()
+		if execCtx.Err() != nil {
+			return execCtx.Err()
 		}
 
-		toolMessage, err := a.executeToolCall(ctx, tc)
+		toolMessage, err := a.executeToolCall(execCtx, tc)
 		*agentMessages = append(*agentMessages, toolMessage)
 		*newMessages = append(*newMessages, toolMessage)
 
@@ -228,7 +229,7 @@ func (a *Agent) executeLocally(ctx context.Context, userInput Message, history [
 			return newMessages, nil
 		}
 
-		if err := a.executeToolCalls(ctx, choice.Message.ToolCalls, &agentMessages, &newMessages); err != nil {
+		if err := a.executeToolCalls(ctx, choice.Message.ToolCalls, eventStream, &agentMessages, &newMessages); err != nil {
 			logger := logf.FromContext(ctx)
 			if !IsTerminateTeam(err) {
 				logger.Error(err, "Tool execution failed", "agent", a.FullName())

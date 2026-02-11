@@ -279,6 +279,115 @@ type AgentToolExecutor struct {
 	eventing  eventing.Provider
 }
 
+type delegatedInvocation struct {
+	userInput Message
+	history   []Message
+	contextID string
+}
+
+func resolveDelegationMode(ctx context.Context, targetAnnotations map[string]string) string {
+	return ResolveDelegationPayloadMode(ctx, targetAnnotations)
+}
+
+func parseLegacyDelegationInput(arguments map[string]any, targetType, targetName string) (delegatedInvocation, string, error) {
+	input, exists := arguments["input"]
+	if !exists {
+		return delegatedInvocation{}, "input parameter is required", fmt.Errorf("input parameter is required for %s tool %s", targetType, targetName)
+	}
+	inputStr, ok := input.(string)
+	if !ok {
+		return delegatedInvocation{}, "input parameter must be a string", fmt.Errorf("input parameter must be a string for %s tool %s", targetType, targetName)
+	}
+	return delegatedInvocation{
+		userInput: NewUserMessage(inputStr),
+		history:   []Message{},
+	}, "", nil
+}
+
+func parseMessageArgument(rawValue any) (Message, error) {
+	rawJSON, err := json.Marshal(rawValue)
+	if err != nil {
+		return Message{}, fmt.Errorf("failed to serialize message argument: %w", err)
+	}
+	var message Message
+	if err := json.Unmarshal(rawJSON, &message); err != nil {
+		return Message{}, fmt.Errorf("failed to parse message argument: %w", err)
+	}
+	if len(message.Parts) == 0 {
+		return Message{}, fmt.Errorf("message argument must include at least one part")
+	}
+	return message, nil
+}
+
+func parseHistoryArgument(rawValue any) ([]Message, error) {
+	rawJSON, err := json.Marshal(rawValue)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize history argument: %w", err)
+	}
+	var history []Message
+	if err := json.Unmarshal(rawJSON, &history); err != nil {
+		return nil, fmt.Errorf("failed to parse history argument: %w", err)
+	}
+	return history, nil
+}
+
+func parseNativeDelegationInput(arguments map[string]any, targetType, targetName string) (delegatedInvocation, string, error) {
+	invocation := delegatedInvocation{
+		history: []Message{},
+	}
+	if rawContextID, exists := arguments["contextId"]; exists {
+		contextID, ok := rawContextID.(string)
+		if !ok {
+			return delegatedInvocation{}, "contextId parameter must be a string", fmt.Errorf("contextId parameter must be a string for %s tool %s", targetType, targetName)
+		}
+		invocation.contextID = contextID
+	}
+	if rawHistory, exists := arguments["history"]; exists {
+		history, err := parseHistoryArgument(rawHistory)
+		if err != nil {
+			return delegatedInvocation{}, "history parameter is invalid", err
+		}
+		invocation.history = history
+	}
+	if rawMessage, exists := arguments["message"]; exists {
+		message, err := parseMessageArgument(rawMessage)
+		if err != nil {
+			return delegatedInvocation{}, "message parameter is invalid", err
+		}
+		invocation.userInput = message
+		return invocation, "", nil
+	}
+	legacyInvocation, userError, err := parseLegacyDelegationInput(arguments, targetType, targetName)
+	if err != nil {
+		return delegatedInvocation{}, userError, err
+	}
+	legacyInvocation.history = invocation.history
+	legacyInvocation.contextID = invocation.contextID
+	return legacyInvocation, "", nil
+}
+
+func parseDelegatedInvocation(arguments map[string]any, payloadMode, targetType, targetName string) (delegatedInvocation, string, error) {
+	if payloadMode == A2APayloadModeNative {
+		return parseNativeDelegationInput(arguments, targetType, targetName)
+	}
+	return parseLegacyDelegationInput(arguments, targetType, targetName)
+}
+
+func applyDelegationContext(ctx context.Context, payloadMode, contextID string) context.Context {
+	ctx = WithA2APayloadMode(ctx, payloadMode)
+	if contextID == "" {
+		return ctx
+	}
+	return WithA2AContextID(ctx, contextID)
+}
+
+func getDelegationEventStream(ctx context.Context, payloadMode string) EventStreamInterface {
+	if payloadMode != A2APayloadModeNative {
+		return nil
+	}
+	return GetToolEventStream(ctx)
+}
+
 func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
 	var arguments map[string]any
 	if err := json.Unmarshal([]byte(call.Function.Arguments), &arguments); err != nil {
@@ -291,25 +400,16 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolRes
 		}, fmt.Errorf("failed to parse tool arguments: %v", err)
 	}
 
-	input, exists := arguments["input"]
-	if !exists {
+	payloadMode := resolveDelegationMode(ctx, a.AgentCRD.Annotations)
+	invocation, userError, err := parseDelegatedInvocation(arguments, payloadMode, "agent", a.AgentName)
+	if err != nil {
 		return ToolResult{
 			ID:    call.ID,
 			Name:  call.Function.Name,
-			Error: "input parameter is required",
-		}, fmt.Errorf("input parameter is required for agent tool %s", a.AgentName)
+			Error: userError,
+		}, err
 	}
 
-	inputStr, ok := input.(string)
-	if !ok {
-		return ToolResult{
-			ID:    call.ID,
-			Name:  call.Function.Name,
-			Error: "input parameter must be a string",
-		}, fmt.Errorf("input parameter must be a string for agent tool %s", a.AgentName)
-	}
-
-	// Create the Agent object using the Agent CRD
 	agent, err := MakeAgent(ctx, a.k8sClient, a.AgentCRD, a.telemetry, a.eventing)
 	if err != nil {
 		return ToolResult{
@@ -319,14 +419,9 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolRes
 		}, err
 	}
 
-	// Prepare user input. No conversation history is ever provided
-	userInput := NewUserMessage(inputStr)
-	history := []Message{}
-
-	// Call the agent's Execute function
-	// Pass nil for memory and eventStream (agents-as-tools don't use memory or streaming)
-	// See ARKQB-137 for discussion on streaming support for agents as tools
-	result, err := agent.Execute(ctx, userInput, history, nil, nil)
+	execCtx := applyDelegationContext(ctx, payloadMode, invocation.contextID)
+	eventStream := getDelegationEventStream(ctx, payloadMode)
+	result, err := agent.Execute(execCtx, invocation.userInput, invocation.history, nil, eventStream)
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,
@@ -373,25 +468,16 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResu
 		}, fmt.Errorf("failed to parse tool arguments: %v", err)
 	}
 
-	input, exists := arguments["input"]
-	if !exists {
+	payloadMode := resolveDelegationMode(ctx, t.TeamCRD.Annotations)
+	invocation, userError, err := parseDelegatedInvocation(arguments, payloadMode, "team", t.TeamName)
+	if err != nil {
 		return ToolResult{
 			ID:    call.ID,
 			Name:  call.Function.Name,
-			Error: "input parameter is required",
-		}, fmt.Errorf("input parameter is required for team tool %s", t.TeamName)
+			Error: userError,
+		}, err
 	}
 
-	inputStr, ok := input.(string)
-	if !ok {
-		return ToolResult{
-			ID:    call.ID,
-			Name:  call.Function.Name,
-			Error: "input parameter must be a string",
-		}, fmt.Errorf("input parameter must be a string for team tool %s", t.TeamName)
-	}
-
-	// Create the Team object using the Team CRD and providers
 	team, err := MakeTeam(ctx, t.k8sClient, t.TeamCRD, t.telemetryProvider, t.eventingProvider)
 	if err != nil {
 		return ToolResult{
@@ -401,11 +487,9 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResu
 		}, err
 	}
 
-	// Prepare user input. No conversation history is ever provided
-	userInput := NewUserMessage(inputStr)
-	history := []Message{}
-
-	result, err := team.Execute(ctx, userInput, history, nil, nil)
+	execCtx := applyDelegationContext(ctx, payloadMode, invocation.contextID)
+	eventStream := getDelegationEventStream(ctx, payloadMode)
+	result, err := team.Execute(execCtx, invocation.userInput, invocation.history, nil, eventStream)
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,

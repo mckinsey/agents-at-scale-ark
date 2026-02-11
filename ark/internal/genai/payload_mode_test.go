@@ -1,6 +1,7 @@
 package genai
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -107,4 +108,22 @@ func TestResolvePayloadModeTeamTakesPriorityOverQuery(t *testing.T) {
 	}
 	mode := ResolvePayloadMode(teamAnnotations, queryAnnotations, nil)
 	assert.Equal(t, A2APayloadModeCompat, mode)
+}
+
+func TestResolveDelegationPayloadModeContext(t *testing.T) {
+	ctx := WithA2APayloadMode(context.Background(), A2APayloadModeNative)
+	annotations := map[string]string{
+		arkann.A2APayloadMode: A2APayloadModeCompat,
+	}
+	mode := ResolveDelegationPayloadMode(ctx, annotations)
+	assert.Equal(t, A2APayloadModeNative, mode)
+}
+
+func TestResolveDelegationPayloadModeAnnotations(t *testing.T) {
+	ctx := context.Background()
+	annotations := map[string]string{
+		arkann.A2APayloadMode: A2APayloadModeNative,
+	}
+	mode := ResolveDelegationPayloadMode(ctx, annotations)
+	assert.Equal(t, A2APayloadModeNative, mode)
 }
