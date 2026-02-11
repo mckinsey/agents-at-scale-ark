@@ -123,6 +123,8 @@ func (t *Team) executeRoundRobin(ctx context.Context, userInput Message, history
 
 		// Check maxTurns before executing
 		if t.MaxTurns != nil && messageCount >= *t.MaxTurns {
+			maxTurnsMessage := NewSystemMessage(fmt.Sprintf("Team conversation reached maximum turns limit (%d)", *t.MaxTurns))
+			newMessages = append(newMessages, maxTurnsMessage)
 			return newMessages, nil
 		}
 

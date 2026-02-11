@@ -961,14 +961,24 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
                   return false;
                 });
 
+                const isMaxTurnsMessage =
+                  message.role === 'system' &&
+                  content.includes('maximum turns limit');
+
                 const hasToolCalls =
                   debugMode &&
                   toolCallsWithResults &&
                   toolCallsWithResults.length > 0;
-                const hasContent = content && content.trim().length > 0;
+                const hasContent =
+                  content && content.trim().length > 0 && !isMaxTurnsMessage;
                 const hasTermination = terminateToolCall !== undefined;
 
-                if (!hasToolCalls && !hasContent && !hasTermination) {
+                if (
+                  !hasToolCalls &&
+                  !hasContent &&
+                  !hasTermination &&
+                  !isMaxTurnsMessage
+                ) {
                   return null;
                 }
 
@@ -1004,6 +1014,11 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
                       <TerminationEvent
                         agentName={senderName || 'Unknown Agent'}
                       />
+                    )}
+                    {isMaxTurnsMessage && (
+                      <div className="text-muted-foreground text-sm italic">
+                        {content}
+                      </div>
                     )}
                   </div>
                 );

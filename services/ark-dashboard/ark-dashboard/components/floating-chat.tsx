@@ -627,14 +627,24 @@ export default function FloatingChat({
                     return false;
                   });
 
+                  const isMaxTurnsMessage =
+                    message.role === 'system' &&
+                    content.includes('maximum turns limit');
+
                   const hasToolCalls =
                     debugMode &&
                     toolCallsWithResults &&
                     toolCallsWithResults.length > 0;
-                  const hasContent = content && content.trim().length > 0;
+                  const hasContent =
+                    content && content.trim().length > 0 && !isMaxTurnsMessage;
                   const hasTermination = terminateToolCall !== undefined;
 
-                  if (!hasToolCalls && !hasContent && !hasTermination) {
+                  if (
+                    !hasToolCalls &&
+                    !hasContent &&
+                    !hasTermination &&
+                    !isMaxTurnsMessage
+                  ) {
                     return null;
                   }
 
@@ -670,6 +680,11 @@ export default function FloatingChat({
                         <TerminationEvent
                           agentName={senderName || 'Unknown Agent'}
                         />
+                      )}
+                      {isMaxTurnsMessage && (
+                        <div className="text-muted-foreground text-sm italic">
+                          {content}
+                        </div>
                       )}
                     </div>
                   );
