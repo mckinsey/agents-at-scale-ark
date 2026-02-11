@@ -33,7 +33,6 @@ const (
 	AgentCardPathVersion3      = "/.well-known/agent-card.json"
 	a2aHistoryExtensionKey     = "https://ark.mckinsey.com/extensions/history/v1"
 	a2aPermissionsExtensionKey = "https://ark.mckinsey.com/extensions/permissions/v1"
-	a2aStreamingEnabledEnv     = "ARK_A2A_STREAMING_ENABLED"
 	a2aPayloadModeEnv          = "ARK_A2A_STREAMING_PAYLOAD_MODE"
 )
 
@@ -59,16 +58,6 @@ type A2APermissions struct {
 type A2ADelegation struct {
 	Subject string   `json:"subject,omitempty"`
 	Chain   []string `json:"chain,omitempty"`
-}
-
-func isA2AStreamingEnabled(agentAnnotations map[string]string) bool {
-	if os.Getenv(a2aStreamingEnabledEnv) != TrueString {
-		return false
-	}
-	if agentAnnotations == nil {
-		return false
-	}
-	return agentAnnotations[arkann.A2AStreamingEnabled] == TrueString
 }
 
 func isA2AStreamingSupported(agentAnnotations map[string]string) bool {

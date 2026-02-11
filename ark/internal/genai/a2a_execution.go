@@ -180,9 +180,6 @@ func resolveA2AExecutionPayloadMode(ctx context.Context, agentAnnotations map[st
 }
 
 func (e *A2AExecutionEngine) tryA2AStreamingExecution(ctx context.Context, address string, headers []arkv1prealpha1.Header, namespace string, agentAnnotations map[string]string, agentName, queryName, contextID string, userInput Message, metadata map[string]interface{}, eventStream EventStreamInterface, payloadMode string, a2aServer *arkv1prealpha1.A2AServer) (*ExecutionResult, bool, error) {
-	if !isA2AStreamingEnabled(agentAnnotations) {
-		return nil, false, nil
-	}
 	if !isA2AStreamingSupported(agentAnnotations) {
 		logf.FromContext(ctx).Info("A2A streaming not supported by agent", "agent", agentName)
 		return nil, false, nil
