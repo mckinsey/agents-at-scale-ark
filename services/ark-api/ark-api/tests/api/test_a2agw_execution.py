@@ -36,6 +36,35 @@ class TestA2AGatewayExecution(unittest.IsolatedAsyncioTestCase):
         self.assertGreaterEqual(event_queue.enqueue_event.await_count, 3)
         mock_new_message.assert_any_call("done", context_id="ctx-new", task_id="task-1")
 
+    async def test_execute_generates_context_and_task_ids_when_missing(self):
+        executor = ARKAgentExecutor("test-agent", "default", timeout=1)
+        event_queue = SimpleNamespace(enqueue_event=AsyncMock())
+        context = SimpleNamespace(message=SimpleNamespace(parts=[]))
+
+        with patch(
+            "ark_api.api.v1.a2agw.execution.build_query_payload",
+            return_value=QueryPayload(query_type="user", input_data="hello", preview_text="hello"),
+        ), patch(
+            "ark_api.api.v1.a2agw.execution.post_query_and_wait",
+            new_callable=AsyncMock,
+            return_value=QueryExecutionResult(content="done", context_id=None),
+        ), patch(
+            "ark_api.api.v1.a2agw.execution.new_agent_text_message",
+            side_effect=lambda text, context_id=None, task_id=None: {
+                "text": text,
+                "context_id": context_id,
+                "task_id": task_id,
+            },
+        ) as mock_new_message:
+            await executor.execute(context, event_queue)
+
+        self.assertGreaterEqual(event_queue.enqueue_event.await_count, 3)
+        generated_call = mock_new_message.call_args_list[-1]
+        self.assertTrue(generated_call.kwargs["context_id"])
+        self.assertTrue(generated_call.kwargs["task_id"])
+        self.assertNotEqual(generated_call.kwargs["context_id"], "default")
+        self.assertNotEqual(generated_call.kwargs["task_id"], "unknown")
+
     async def test_cancel_cancels_active_task(self):
         executor = ARKAgentExecutor("test-agent", "default", timeout=1)
         event_queue = SimpleNamespace(enqueue_event=AsyncMock())

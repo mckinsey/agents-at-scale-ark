@@ -40,6 +40,8 @@ type A2AResponse struct {
 	Content   string
 	ContextID string
 	TaskID    string
+	Message   *protocol.Message   `json:"-"`
+	Artifacts []protocol.Artifact `json:"-"`
 }
 
 type A2APermissions struct {
@@ -557,9 +559,13 @@ func extractResponseFromMessageResult(ctx context.Context, k8sClient client.Clie
 		text := extractTextFromParts(r.Parts)
 		response := &A2AResponse{
 			Content: text,
+			Message: r,
 		}
 		if r.ContextID != nil && *r.ContextID != "" {
 			response.ContextID = *r.ContextID
+		}
+		if r.TaskID != nil && *r.TaskID != "" {
+			response.TaskID = *r.TaskID
 		}
 		return response, nil
 	case *protocol.Task:
@@ -579,6 +585,8 @@ func extractResponseFromMessageResult(ctx context.Context, k8sClient client.Clie
 			Content:   text,
 			ContextID: r.ContextID,
 			TaskID:    r.ID,
+			Message:   extractLatestAgentMessageFromTask(r),
+			Artifacts: r.Artifacts,
 		}
 		return response, nil
 	default:
@@ -595,6 +603,12 @@ func extractTextFromTask(task *protocol.Task) (string, error) {
 
 	switch task.Status.State {
 	case TaskStateCompleted:
+		if task.Status.Message != nil && len(task.Status.Message.Parts) > 0 {
+			if statusText := extractTextFromParts(task.Status.Message.Parts); statusText != "" {
+				return statusText, nil
+			}
+		}
+
 		// Extract all agent messages from history
 		var text strings.Builder
 		for _, msg := range task.History {
@@ -624,17 +638,65 @@ func extractTextFromTask(task *protocol.Task) (string, error) {
 	}
 }
 
+func extractLatestAgentMessageFromTask(task *protocol.Task) *protocol.Message {
+	if task == nil {
+		return nil
+	}
+	if task.Status.Message != nil && task.Status.Message.Role == protocol.MessageRoleAgent && len(task.Status.Message.Parts) > 0 {
+		return task.Status.Message
+	}
+	for i := len(task.History) - 1; i >= 0; i-- {
+		message := task.History[i]
+		if message.Role == protocol.MessageRoleAgent && len(message.Parts) > 0 {
+			copyMessage := message
+			return &copyMessage
+		}
+	}
+	return nil
+}
+
 // extractTextFromParts extracts text from message parts in a type-safe way
 func extractTextFromParts(parts []protocol.Part) string {
 	var text strings.Builder
 	for _, part := range parts {
-		if textPart, ok := part.(protocol.TextPart); ok {
-			text.WriteString(textPart.Text)
-		} else if textPartPtr, ok := part.(*protocol.TextPart); ok {
-			text.WriteString(textPartPtr.Text)
+		switch p := part.(type) {
+		case protocol.TextPart:
+			text.WriteString(p.Text)
+		case *protocol.TextPart:
+			text.WriteString(p.Text)
+		case protocol.DataPart:
+			if p.Data != nil {
+				if raw, err := json.Marshal(p.Data); err == nil {
+					text.WriteString(string(raw))
+				}
+			}
+		case *protocol.DataPart:
+			if p.Data != nil {
+				if raw, err := json.Marshal(p.Data); err == nil {
+					text.WriteString(string(raw))
+				}
+			}
+		case protocol.FilePart:
+			text.WriteString(extractFilePartText(p.File))
+		case *protocol.FilePart:
+			text.WriteString(extractFilePartText(p.File))
 		}
 	}
 	return text.String()
+}
+
+func extractFilePartText(file interface{}) string {
+	switch f := file.(type) {
+	case *protocol.FileWithURI:
+		return f.URI
+	case *protocol.FileWithBytes:
+		if f.Name != nil && *f.Name != "" {
+			return *f.Name
+		}
+		return "file-bytes"
+	default:
+		return ""
+	}
 }
 
 func convertToA2AHistory(history []Message) []protocol.Message {

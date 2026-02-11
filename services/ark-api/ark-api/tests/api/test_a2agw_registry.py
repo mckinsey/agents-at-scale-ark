@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 
 from ark_api.api.v1.a2agw.registry import ark_to_agent_card
-from ark_api.constants.annotations import A2A_SERVER_SKILLS_ANNOTATION
+from ark_api.constants.annotations import A2A_SERVER_SKILLS_ANNOTATION, A2A_STREAMING_SUPPORTED_ANNOTATION
 
 
 class TestA2AGatewayRegistry(unittest.TestCase):
@@ -47,3 +47,18 @@ class TestA2AGatewayRegistry(unittest.TestCase):
 
         self.assertEqual(len(card.skills), 1)
         self.assertEqual(card.skills[0].name, "General")
+
+    def test_ark_to_agent_card_streaming_capability_from_annotation(self):
+        agent = SimpleNamespace(
+            metadata={
+                "name": "test-agent",
+                "annotations": {
+                    A2A_STREAMING_SUPPORTED_ANNOTATION: "false",
+                },
+            },
+            spec=SimpleNamespace(description="test"),
+        )
+
+        card = ark_to_agent_card(agent)
+
+        self.assertFalse(card.capabilities.streaming)

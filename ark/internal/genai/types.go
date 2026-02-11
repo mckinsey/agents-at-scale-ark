@@ -65,10 +65,11 @@ type TeamMember interface {
 }
 
 type ToolResult struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Content string `json:"content,omitempty"`
-	Error   string `json:"error,omitempty"`
+	ID       string                 `json:"id"`
+	Name     string                 `json:"name"`
+	Content  string                 `json:"content,omitempty"`
+	Error    string                 `json:"error,omitempty"`
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
 type ToolExecutor interface {

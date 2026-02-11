@@ -3,6 +3,7 @@ import logging
 import os
 from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
 from a2a.server.agent_execution import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
@@ -25,6 +26,16 @@ class ARKAgentExecutor(AgentExecutor):
         self.timeout = timeout if timeout is not None else DEFAULT_TIMEOUT
         self.tasks_lock = asyncio.Lock()
         self.active_tasks: dict[str, asyncio.Task] = {}
+
+    def _resolve_task_id(self, task_id: object) -> str:
+        if isinstance(task_id, str) and task_id.strip():
+            return task_id.strip()
+        return f"task-{uuid4()}"
+
+    def _resolve_context_id(self, context_id: object) -> str:
+        if isinstance(context_id, str) and context_id.strip():
+            return context_id.strip()
+        return str(uuid4())
 
     def _extract_message_text(self, message) -> str:
         """Extract text content from a message object.
@@ -52,8 +63,8 @@ class ARKAgentExecutor(AgentExecutor):
     
     def _create_status_event(
         self,
-        context_id: str | None,
-        task_id: str | None,
+        context_id: str,
+        task_id: str,
         state: TaskState,
         final: bool = False,
         error_msg: str | None = None,
@@ -79,8 +90,8 @@ class ARKAgentExecutor(AgentExecutor):
             status.message = new_agent_text_message(f"Task failed: {error_msg}")
             
         return TaskStatusUpdateEvent(
-            contextId=context_id or "default",
-            taskId=task_id or "unknown",
+            contextId=context_id,
+            taskId=task_id,
             status=status,
             final=final
         )
@@ -88,8 +99,8 @@ class ARKAgentExecutor(AgentExecutor):
     async def _send_task_update(
         self,
         event_queue: EventQueue,
-        context_id: str | None,
-        task_id: str | None,
+        context_id: str,
+        task_id: str,
         state: TaskState,
         final: bool = False,
     ):
@@ -141,10 +152,8 @@ class ARKAgentExecutor(AgentExecutor):
             event_queue: The queue to publish events to.
         """
         # Extract IDs from context
-        task_id_raw = getattr(context, 'task_id', None)
-        context_id_raw = getattr(context, 'context_id', None)
-        task_id = task_id_raw if isinstance(task_id_raw, str) and task_id_raw else "unknown"
-        context_id = context_id_raw if isinstance(context_id_raw, str) and context_id_raw else None
+        task_id = self._resolve_task_id(getattr(context, 'task_id', None))
+        context_id = self._resolve_context_id(getattr(context, 'context_id', None))
         
         try:
             # Extract and log the message
@@ -218,8 +227,8 @@ class ARKAgentExecutor(AgentExecutor):
         self,
         error: Exception,
         event_queue: EventQueue,
-        context_id: str | None,
-        task_id: str | None,
+        context_id: str,
+        task_id: str,
     ):
         """Handle errors during query processing.
         
@@ -255,8 +264,8 @@ class ARKAgentExecutor(AgentExecutor):
         """
         task_id_raw = getattr(context, 'task_id', "unknown")
         context_id_raw = getattr(context, 'context_id', None)
-        task_id = task_id_raw if isinstance(task_id_raw, str) and task_id_raw else "unknown"
-        context_id = context_id_raw if isinstance(context_id_raw, str) and context_id_raw else None
+        task_id = self._resolve_task_id(task_id_raw)
+        context_id = self._resolve_context_id(context_id_raw)
         
         async with self.tasks_lock:
             task = self.active_tasks.pop(task_id, None)

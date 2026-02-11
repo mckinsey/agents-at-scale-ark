@@ -45,6 +45,15 @@ def _extract_part_value(part: Any, key: str) -> Any:
 
 
 def _extract_file_url(part_dict: dict[str, Any]) -> str | None:
+    direct_url = part_dict.get("url")
+    if isinstance(direct_url, str) and direct_url:
+        return direct_url
+
+    direct_raw = part_dict.get("raw")
+    if isinstance(direct_raw, str) and direct_raw:
+        media_type = part_dict.get("mediaType") or part_dict.get("mimeType") or part_dict.get("mime_type") or "application/octet-stream"
+        return f"data:{media_type};base64,{direct_raw}"
+
     direct_uri = part_dict.get("uri")
     if isinstance(direct_uri, str) and direct_uri:
         return direct_uri
@@ -75,6 +84,12 @@ def _extract_text_from_part(part: Any) -> str | None:
     text = part_dict.get("text")
     if isinstance(text, str) and text:
         return text
+    data_value = part_dict.get("data")
+    if data_value is not None:
+        return data_value if isinstance(data_value, str) else json.dumps(data_value)
+    file_url = _extract_file_url(part_dict)
+    if file_url:
+        return file_url
     return None
 
 
@@ -124,6 +139,28 @@ def a2a_message_to_openai_message(message: Any) -> dict[str, Any]:
             continue
 
         kind = part_dict.get("kind")
+        if "text" in part_dict and isinstance(part_dict.get("text"), str):
+            text = part_dict.get("text")
+            if isinstance(text, str) and text:
+                content_parts.append({"type": "text", "text": text})
+            continue
+
+        if "data" in part_dict and part_dict.get("data") is not None:
+            data_value = part_dict.get("data")
+            text_value = data_value if isinstance(data_value, str) else json.dumps(data_value)
+            content_parts.append({"type": "text", "text": text_value})
+            continue
+
+        if "url" in part_dict or "raw" in part_dict:
+            url = _extract_file_url(part_dict)
+            media_type = part_dict.get("mediaType") or part_dict.get("mimeType") or part_dict.get("mime_type") or ""
+            if url:
+                if isinstance(media_type, str) and media_type.startswith("image/"):
+                    content_parts.append({"type": "image_url", "image_url": {"url": url}})
+                else:
+                    content_parts.append({"type": "text", "text": url})
+            continue
+
         if kind == "text":
             text = part_dict.get("text")
             if isinstance(text, str) and text:

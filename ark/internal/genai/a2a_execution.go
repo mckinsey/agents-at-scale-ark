@@ -85,7 +85,7 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 		return nil, err
 	}
 
-	responseMessage := NewAssistantMessage(a2aResponse.Content)
+	responseMessage := buildAssistantMessageFromA2AResponse(a2aResponse)
 	emitA2ABlockingResponse(ctx, eventStream, payloadMode, agentName, a2aResponse)
 
 	e.eventingRecorder.Complete(ctx, "A2AExecution", "A2A execution completed successfully", operationData)
@@ -109,7 +109,7 @@ func (e *A2AExecutionEngine) streamA2AExecution(ctx context.Context, address str
 	if err != nil {
 		return nil, err
 	}
-	responseMessage := NewAssistantMessage(response.Content)
+	responseMessage := buildAssistantMessageFromA2AResponse(response)
 	return &ExecutionResult{
 		Messages:       []Message{responseMessage},
 		A2AResponse:    response,
@@ -202,6 +202,10 @@ func emitA2ABlockingResponse(ctx context.Context, eventStream EventStreamInterfa
 }
 
 func streamA2ANativeBlockingResponse(ctx context.Context, eventStream EventStreamInterface, payloadMode, modelID, completionID string, a2aResponse *A2AResponse) {
+	if a2aResponse.Message != nil {
+		streamA2AEvent(ctx, eventStream, payloadMode, modelID, completionID, extractTextFromParts(a2aResponse.Message.Parts), a2aResponse.Message)
+		return
+	}
 	var contextRef *string
 	if a2aResponse.ContextID != "" {
 		contextRef = &a2aResponse.ContextID
@@ -251,6 +255,10 @@ type a2aStreamState struct {
 func (s *a2aStreamState) finalize() *A2AResponse {
 	s.applyLatestTaskContent()
 	s.response.Content = s.finalContent.String()
+	if s.response.Message == nil && s.response.Content != "" {
+		message := NewAssistantMessage(s.response.Content)
+		s.response.Message = &message
+	}
 	return s.response
 }
 
@@ -284,6 +292,7 @@ func (s *a2aStreamState) handleMessageEvent(ctx context.Context, eventStream Eve
 	if text != "" {
 		s.finalContent.WriteString(text)
 	}
+	s.response.Message = message
 	if message.ContextID != nil && *message.ContextID != "" {
 		s.response.ContextID = *message.ContextID
 	}
@@ -299,6 +308,10 @@ func (s *a2aStreamState) handleTaskEvent(ctx context.Context, k8sClient client.C
 	s.response.TaskID = task.ID
 	s.response.ContextID = task.ContextID
 	s.lastStatus = &task.Status
+	s.response.Artifacts = task.Artifacts
+	if message := extractLatestAgentMessageFromTask(task); message != nil {
+		s.response.Message = message
+	}
 	maybeUpsertA2ATask(ctx, k8sClient, task, agentName, namespace, queryName, a2aServer)
 	streamA2AEvent(ctx, eventStream, payloadMode, modelID, completionID, "", task)
 }
@@ -313,6 +326,9 @@ func (s *a2aStreamState) handleTaskStatusUpdateEvent(ctx context.Context, k8sCli
 	}
 	task := taskFromStatusUpdate(update)
 	maybeUpsertA2ATask(ctx, k8sClient, task, agentName, namespace, queryName, a2aServer)
+	if update.Status.Message != nil {
+		s.response.Message = update.Status.Message
+	}
 	if update.Final && update.Status.Message != nil && s.finalContent.Len() == 0 {
 		if text := extractTextFromParts(update.Status.Message.Parts); text != "" {
 			s.finalContent.WriteString(text)
@@ -335,9 +351,20 @@ func (s *a2aStreamState) handleTaskArtifactUpdateEvent(ctx context.Context, k8sC
 	if text != "" {
 		s.finalContent.WriteString(text)
 	}
+	s.response.Artifacts = append(s.response.Artifacts, update.Artifact)
 	task := taskFromArtifactUpdate(update, s.lastStatus)
 	maybeUpsertA2ATask(ctx, k8sClient, task, agentName, namespace, queryName, a2aServer)
 	streamA2AEvent(ctx, eventStream, payloadMode, modelID, completionID, text, update)
+}
+
+func buildAssistantMessageFromA2AResponse(response *A2AResponse) Message {
+	if response != nil && response.Message != nil {
+		return *response.Message
+	}
+	if response != nil {
+		return NewAssistantMessage(response.Content)
+	}
+	return NewAssistantMessage("")
 }
 
 func maybeUpsertA2ATask(ctx context.Context, k8sClient client.Client, task *protocol.Task, agentName, namespace, queryName string, a2aServer *arkv1prealpha1.A2AServer) {

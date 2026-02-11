@@ -165,6 +165,12 @@ func (a *Agent) processAssistantMessage(choice openai.ChatCompletionChoice) Mess
 func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) (Message, error) {
 	result, err := a.Tools.ExecuteTool(ctx, toolCall)
 	toolMessage := ToolMessage(result.Content, result.ID)
+	if len(result.Metadata) > 0 {
+		if toolMessage.Metadata == nil {
+			toolMessage.Metadata = map[string]interface{}{}
+		}
+		toolMessage.Metadata[MetadataA2AResultKey] = result.Metadata
+	}
 
 	if err != nil {
 		return toolMessage, err

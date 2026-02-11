@@ -53,6 +53,7 @@ const (
 	MetadataToolNameKey   = "ark.mckinsey.com/tool-name"
 	MetadataToolCallsKey  = "ark.mckinsey.com/tool-calls"
 	MetadataAgentNameKey  = "ark.mckinsey.com/agent-name"
+	MetadataA2AResultKey  = "ark.mckinsey.com/a2a-result"
 )
 
 const (

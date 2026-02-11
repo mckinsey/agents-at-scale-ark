@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/eventing"
@@ -340,7 +342,11 @@ func parseNativeDelegationInput(arguments map[string]any, targetType, targetName
 		if !ok {
 			return delegatedInvocation{}, "contextId parameter must be a string", fmt.Errorf("contextId parameter must be a string for %s tool %s", targetType, targetName)
 		}
-		invocation.contextID = contextID
+		normalizedContextID, err := normalizeContextID(contextID)
+		if err != nil {
+			return delegatedInvocation{}, "contextId parameter is invalid", err
+		}
+		invocation.contextID = normalizedContextID
 	}
 	if rawHistory, exists := arguments["history"]; exists {
 		history, err := parseHistoryArgument(rawHistory)
@@ -388,6 +394,119 @@ func getDelegationEventStream(ctx context.Context, payloadMode string) EventStre
 	return GetToolEventStream(ctx)
 }
 
+func normalizeContextID(contextID string) (string, error) {
+	trimmed := strings.TrimSpace(contextID)
+	if contextID != "" && trimmed == "" {
+		return "", fmt.Errorf("contextId parameter must not contain only whitespace")
+	}
+	if len(trimmed) > 1024 {
+		return "", fmt.Errorf("contextId parameter exceeds max length")
+	}
+	return trimmed, nil
+}
+
+func serializeArtifactPart(part protocol.Part) map[string]interface{} {
+	taskPart := convertPartFromProtocol(part)
+	result := map[string]interface{}{
+		"kind": taskPart.Kind,
+	}
+	if taskPart.Text != "" {
+		result["text"] = taskPart.Text
+	}
+	if taskPart.Data != "" {
+		result["data"] = taskPart.Data
+	}
+	if taskPart.MimeType != "" {
+		result["mimeType"] = taskPart.MimeType
+	}
+	if taskPart.URI != "" {
+		result["uri"] = taskPart.URI
+	}
+	if len(taskPart.Metadata) > 0 {
+		result["metadata"] = taskPart.Metadata
+	}
+	return result
+}
+
+func serializeA2AMessage(message *protocol.Message) map[string]interface{} {
+	if message == nil {
+		return nil
+	}
+	result := map[string]interface{}{
+		"role": message.Role,
+	}
+	if message.MessageID != "" {
+		result["messageId"] = message.MessageID
+	}
+	if message.TaskID != nil && *message.TaskID != "" {
+		result["taskId"] = *message.TaskID
+	}
+	if message.ContextID != nil && *message.ContextID != "" {
+		result["contextId"] = *message.ContextID
+	}
+	parts := make([]map[string]interface{}, 0, len(message.Parts))
+	for _, part := range message.Parts {
+		parts = append(parts, serializeArtifactPart(part))
+	}
+	if len(parts) > 0 {
+		result["parts"] = parts
+	}
+	if len(message.Metadata) > 0 {
+		result["metadata"] = message.Metadata
+	}
+	return result
+}
+
+func serializeA2AArtifacts(artifacts []protocol.Artifact) []map[string]interface{} {
+	serialized := make([]map[string]interface{}, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		item := map[string]interface{}{
+			"artifactId": artifact.ArtifactID,
+		}
+		if artifact.Name != nil && *artifact.Name != "" {
+			item["name"] = *artifact.Name
+		}
+		if artifact.Description != nil && *artifact.Description != "" {
+			item["description"] = *artifact.Description
+		}
+		if len(artifact.Metadata) > 0 {
+			item["metadata"] = artifact.Metadata
+		}
+		parts := make([]map[string]interface{}, 0, len(artifact.Parts))
+		for _, part := range artifact.Parts {
+			parts = append(parts, serializeArtifactPart(part))
+		}
+		if len(parts) > 0 {
+			item["parts"] = parts
+		}
+		serialized = append(serialized, item)
+	}
+	return serialized
+}
+
+func buildDelegatedToolResultMetadata(result *ExecutionResult) map[string]interface{} {
+	if result == nil || result.A2AResponse == nil {
+		return nil
+	}
+	metadata := map[string]interface{}{}
+	if result.A2AResponse.ContextID != "" {
+		metadata["contextId"] = result.A2AResponse.ContextID
+	}
+	if result.A2AResponse.TaskID != "" {
+		metadata["taskId"] = result.A2AResponse.TaskID
+	}
+	if result.A2AResponse.Message != nil {
+		metadata["message"] = serializeA2AMessage(result.A2AResponse.Message)
+	}
+	if len(result.A2AResponse.Artifacts) > 0 {
+		metadata["artifacts"] = serializeA2AArtifacts(result.A2AResponse.Artifacts)
+	}
+	if len(metadata) == 0 {
+		return nil
+	}
+	return metadata
+}
+
 func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
 	var arguments map[string]any
 	if err := json.Unmarshal([]byte(call.Function.Arguments), &arguments); err != nil {
@@ -431,6 +550,15 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolRes
 	}
 
 	content := ExtractLastAssistantMessageContent(result.Messages)
+	metadata := buildDelegatedToolResultMetadata(result)
+	if content == "" && result.A2AResponse != nil {
+		content = result.A2AResponse.Content
+	}
+	if content == "" && len(metadata) > 0 {
+		if raw, err := json.Marshal(metadata); err == nil {
+			content = string(raw)
+		}
+	}
 	if content == "" {
 		return ToolResult{
 			ID:    call.ID,
@@ -440,9 +568,10 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolRes
 	}
 
 	return ToolResult{
-		ID:      call.ID,
-		Name:    call.Function.Name,
-		Content: content,
+		ID:       call.ID,
+		Name:     call.Function.Name,
+		Content:  content,
+		Metadata: metadata,
 	}, nil
 }
 
@@ -507,6 +636,15 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResu
 	}
 
 	content := ExtractLastAssistantMessageContent(result.Messages)
+	metadata := buildDelegatedToolResultMetadata(result)
+	if content == "" && result.A2AResponse != nil {
+		content = result.A2AResponse.Content
+	}
+	if content == "" && len(metadata) > 0 {
+		if raw, err := json.Marshal(metadata); err == nil {
+			content = string(raw)
+		}
+	}
 	if content == "" {
 		return ToolResult{
 			ID:    call.ID,
@@ -516,8 +654,9 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResu
 	}
 
 	return ToolResult{
-		ID:      call.ID,
-		Name:    call.Function.Name,
-		Content: content,
+		ID:       call.ID,
+		Name:     call.Function.Name,
+		Content:  content,
+		Metadata: metadata,
 	}, nil
 }

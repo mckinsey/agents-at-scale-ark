@@ -242,6 +242,27 @@ func TestExtractTextFromParts(t *testing.T) {
 			},
 			expected: "Part 1 Part 2",
 		},
+		{
+			name: "data and file parts",
+			parts: []protocol.Part{
+				&protocol.DataPart{
+					Data: map[string]any{"key": "value"},
+				},
+				&protocol.FilePart{
+					File: &protocol.FileWithURI{URI: "https://example.com/result.txt"},
+				},
+			},
+			expected: `{"key":"value"}https://example.com/result.txt`,
+		},
+		{
+			name: "file bytes part",
+			parts: []protocol.Part{
+				&protocol.FilePart{
+					File: &protocol.FileWithBytes{Bytes: "YWJj"},
+				},
+			},
+			expected: "file-bytes",
+		},
 	}
 
 	for _, tt := range tests {
