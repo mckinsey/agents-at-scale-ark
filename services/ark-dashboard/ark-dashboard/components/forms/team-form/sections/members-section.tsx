@@ -100,6 +100,13 @@ export function MembersSection({
   onDeleteUnavailable,
   disabled: _disabled,
 }: Readonly<MembersSectionProps>) {
+  const orderedAgents = [
+    ...selectedMembers
+      .map(m => agents.find(a => a.name === m.name))
+      .filter((a): a is Agent => a !== undefined),
+    ...agents.filter(a => !selectedMembers.some(m => m.name === a.name)),
+  ];
+
   const toggleMember = useCallback(
     (agent: Agent) => {
       const exists = selectedMembers.some(m => m.name === agent.name);
@@ -117,15 +124,15 @@ export function MembersSection({
 
   const moveCard = useCallback(
     (dragIndex: number, hoverIndex: number) => {
-      const updated = [...agents];
-      const [removed] = updated.splice(dragIndex, 1);
-      updated.splice(hoverIndex, 0, removed);
-      const updatedSelected = updated
+      const reordered = [...orderedAgents];
+      const [removed] = reordered.splice(dragIndex, 1);
+      reordered.splice(hoverIndex, 0, removed);
+      const updatedSelected = reordered
         .filter(agent => selectedMembers.some(m => m.name === agent.name))
         .map(agent => ({ name: agent.name, type: 'agent' as const }));
       onMembersChange(updatedSelected);
     },
-    [agents, selectedMembers, onMembersChange],
+    [orderedAgents, selectedMembers, onMembersChange],
   );
 
   return (
@@ -188,7 +195,7 @@ export function MembersSection({
                 </div>
               </Collapsible>
             )}
-            {agents.map((agent, index) => {
+            {orderedAgents.map((agent, index) => {
               const isSelected = selectedMembers.some(
                 m => m.name === agent.name,
               );
