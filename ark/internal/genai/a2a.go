@@ -3,11 +3,14 @@
 package genai
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -34,6 +37,7 @@ const (
 	a2aHistoryExtensionKey     = "https://ark.mckinsey.com/extensions/history/v1"
 	a2aPermissionsExtensionKey = "https://ark.mckinsey.com/extensions/permissions/v1"
 	a2aPayloadModeEnv          = "ARK_A2A_STREAMING_PAYLOAD_MODE"
+	a2aExtensionsHeader        = "A2A-Extensions"
 )
 
 type A2AResponse struct {
@@ -538,6 +542,9 @@ func (h *customA2ARequestHandler) Handle(ctx context.Context, httpClient *http.C
 	for name, value := range h.headers {
 		req.Header.Set(name, value)
 	}
+	if extensionHeader := extractA2AExtensionsHeader(req); extensionHeader != "" {
+		req.Header.Set(a2aExtensionsHeader, extensionHeader)
+	}
 
 	// Inject OTEL trace context and session headers
 	headerMap := make(map[string]string)
@@ -548,6 +555,71 @@ func (h *customA2ARequestHandler) Handle(ctx context.Context, httpClient *http.C
 
 	// Perform the request
 	return httpClient.Do(req)
+}
+
+func extractA2AExtensionsHeader(req *http.Request) string {
+	if req == nil {
+		return ""
+	}
+	existingHeader := req.Header.Get(a2aExtensionsHeader)
+	if req.Body == nil {
+		return existingHeader
+	}
+
+	bodyBytes, err := io.ReadAll(req.Body)
+	if err != nil {
+		return existingHeader
+	}
+	req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+	req.ContentLength = int64(len(bodyBytes))
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(bodyBytes)), nil
+	}
+
+	if len(bytes.TrimSpace(bodyBytes)) == 0 {
+		return existingHeader
+	}
+
+	var payload struct {
+		Params struct {
+			Message struct {
+				Extensions []string `json:"extensions"`
+			} `json:"message"`
+		} `json:"params"`
+	}
+	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+		return existingHeader
+	}
+	if len(payload.Params.Message.Extensions) == 0 {
+		return existingHeader
+	}
+	return mergeA2AExtensions(existingHeader, payload.Params.Message.Extensions)
+}
+
+func mergeA2AExtensions(existing string, discovered []string) string {
+	unique := make(map[string]struct{})
+	for _, entry := range strings.Split(existing, ",") {
+		trimmed := strings.TrimSpace(entry)
+		if trimmed != "" {
+			unique[trimmed] = struct{}{}
+		}
+	}
+	for _, entry := range discovered {
+		trimmed := strings.TrimSpace(entry)
+		if trimmed != "" {
+			unique[trimmed] = struct{}{}
+		}
+	}
+	if len(unique) == 0 {
+		return ""
+	}
+
+	extensions := make([]string, 0, len(unique))
+	for extension := range unique {
+		extensions = append(extensions, extension)
+	}
+	sort.Strings(extensions)
+	return strings.Join(extensions, ", ")
 }
 
 // extractResponseFromMessageResult extracts response from MessageResult and handles both messages and tasks

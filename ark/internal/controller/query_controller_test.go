@@ -20,6 +20,27 @@ import (
 	"mckinsey.com/ark/internal/genai"
 )
 
+type captureEventStream struct {
+	chunks   []interface{}
+	notified bool
+	closed   bool
+}
+
+func (s *captureEventStream) StreamChunk(_ context.Context, chunk interface{}) error {
+	s.chunks = append(s.chunks, chunk)
+	return nil
+}
+
+func (s *captureEventStream) NotifyCompletion(_ context.Context) error {
+	s.notified = true
+	return nil
+}
+
+func (s *captureEventStream) Close() error {
+	s.closed = true
+	return nil
+}
+
 var _ = Describe("Query Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
@@ -238,20 +259,16 @@ var _ = Describe("Query Controller Message Serialization", func() {
 			Expect(jsonStr).NotTo(BeEmpty())
 		})
 
-		It("should serialize messages in A2A format when native payload mode is requested", func() {
+		It("should fail when native payload mode is requested without A2A messages", func() {
 			messages := []genai.Message{
 				genai.NewAssistantMessage("hello"),
 				genai.NewUserMessage("hi"),
 			}
 
 			jsonStr, err := serializeMessages(messages, nil, genai.A2APayloadModeNative)
-			Expect(err).NotTo(HaveOccurred())
-
-			var decoded []protocol.Message
-			Expect(json.Unmarshal([]byte(jsonStr), &decoded)).To(Succeed())
-			Expect(decoded).To(HaveLen(2))
-			Expect(string(decoded[0].Role)).To(Equal("agent"))
-			Expect(string(decoded[1].Role)).To(Equal("user"))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("native payload mode requires A2A messages"))
+			Expect(jsonStr).To(BeEmpty())
 		})
 
 		It("should serialize provided A2A messages directly in native mode", func() {
@@ -287,6 +304,32 @@ var _ = Describe("Query Controller Message Serialization", func() {
 			Expect(decoded[0]).To(HaveKeyWithValue("role", "user"))
 			Expect(decoded[0]).NotTo(HaveKey("parts"))
 		})
+	})
+})
+
+var _ = Describe("Query Controller Event Stream Finalization", func() {
+	It("should not emit OpenAI final chunk in native payload mode", func() {
+		reconciler := &QueryReconciler{}
+		stream := &captureEventStream{}
+		query := &arkv1alpha1.Query{}
+
+		reconciler.finalizeEventStream(context.Background(), stream, query, genai.A2APayloadModeNative)
+
+		Expect(stream.chunks).To(HaveLen(0))
+		Expect(stream.notified).To(BeTrue())
+		Expect(stream.closed).To(BeTrue())
+	})
+
+	It("should emit OpenAI final chunk in compat payload mode", func() {
+		reconciler := &QueryReconciler{}
+		stream := &captureEventStream{}
+		query := &arkv1alpha1.Query{}
+
+		reconciler.finalizeEventStream(context.Background(), stream, query, genai.A2APayloadModeCompat)
+
+		Expect(stream.chunks).To(HaveLen(1))
+		Expect(stream.notified).To(BeTrue())
+		Expect(stream.closed).To(BeTrue())
 	})
 })
 

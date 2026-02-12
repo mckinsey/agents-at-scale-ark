@@ -87,6 +87,7 @@ class DynamicManager:
     def __init__(self):
         self.agents = {}
         self.executors = {}
+        self.task_stores = {}
         self.lock = threading.Lock()
         self.app = ProxyApp()  # Use proxy instead of Starlette
         self.registry = get_registry()
@@ -147,6 +148,7 @@ class DynamicManager:
                     executor = self.executors.pop(name, None)
                     if executor is not None:
                         removed_executors.append(executor)
+                    self.task_stores.pop(name, None)
                     logger.info(f"Removed agent: {name}")
                     changes_detected = True
                 
@@ -187,6 +189,7 @@ class DynamicManager:
         with self.lock:
             executors = list(self.executors.values())
             self.executors.clear()
+            self.task_stores.clear()
         if executors:
             await asyncio.gather(
                 *(executor.cancel_all_tasks() for executor in executors),
@@ -206,9 +209,13 @@ class DynamicManager:
                 if executor is None:
                     executor = ARKAgentExecutor(name, get_namespace())
                     self.executors[name] = executor
+                task_store = self.task_stores.get(name)
+                if task_store is None:
+                    task_store = InMemoryTaskStore()
+                    self.task_stores[name] = task_store
             request_handler = DefaultRequestHandler(
                 agent_executor=executor,
-                task_store=InMemoryTaskStore(),
+                task_store=task_store,
             )
 
             server = A2AStarletteApplication(

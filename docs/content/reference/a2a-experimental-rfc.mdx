@@ -42,6 +42,7 @@ When `ark.mckinsey.com/a2a-experimental-enabled: "true"` is active:
 - Memory reads/writes use `AddA2AMessages` / `GetA2AMessages`.
 - Tool delegation uses `ExecuteA2A` / `ExecuteNative` and returns structured A2A metadata.
 - Response serialization writes `ExecutionResult.A2AMessages` directly.
+- A2A extensions are activated through the `A2A-Extensions` HTTP header, derived from negotiated extension URIs in the outbound message.
 
 When the flag is disabled:
 
@@ -97,6 +98,8 @@ When experimental mode is enabled:
 - A2A transport failures are returned immediately.
 - No implicit fallback to local OpenAI execution is allowed.
 - The OpenAI model execution path (`Model.ChatCompletion`) rejects calls when the experimental flag is active.
+- Native response serialization fails if `ExecutionResult` does not contain A2A-native messages.
+- Native event streams do not emit OpenAI completion chunks at finalize time.
 
 ## External behavior by mode
 
@@ -132,3 +135,12 @@ If the experiment is withdrawn, removal is isolated to these additive functions 
 | ExecutionResult | `A2AMessages` field |
 
 The default OpenAI path (`executeAgent`, `executeTeam`, `Agent.Execute`, `Team.Execute`, `GetQueryInputMessages`, `AddMessages`, `GetMessages`) remains intact and requires no changes on removal.
+
+## A2A Documentation
+https://raw.githubusercontent.com/a2aproject/A2A/main/docs/topics/what-is-a2a.md 
+https://raw.githubusercontent.com/a2aproject/A2A/main/docs/topics/key-concepts.md 
+https://raw.githubusercontent.com/a2aproject/A2A/main/docs/topics/agent-discovery.md 
+https://raw.githubusercontent.com/a2aproject/A2A/main/docs/topics/life-of-a-task.md 
+https://raw.githubusercontent.com/a2aproject/A2A/main/docs/topics/extensions.md 
+https://raw.githubusercontent.com/a2aproject/A2A/main/docs/topics/streaming-and-async.md 
+https://raw.githubusercontent.com/a2aproject/A2A/main/docs/topics/a2a-and-mcp.md 

@@ -216,7 +216,7 @@ class ARKAgentExecutor(AgentExecutor):
                     await event_queue.enqueue_event(result_msg)
 
                     # Send completion status
-                    await self._send_task_update(event_queue, context_id, task_id, TaskState.completed, final=True)
+                    await self._send_task_update(event_queue, response_context_id, task_id, TaskState.completed, final=True)
 
                     logger.info(f"Task {task_id} - Query completed successfully")
                     

@@ -1,6 +1,9 @@
 package genai
 
 import (
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -340,4 +343,28 @@ func TestBuildA2AMetadataPermissionsInvalid(t *testing.T) {
 	_, err := buildA2AMetadata(annotations, nil, false)
 
 	assert.Error(t, err)
+}
+
+func TestExtractA2AExtensionsHeaderFromRequestBody(t *testing.T) {
+	body := `{"jsonrpc":"2.0","id":"1","method":"message/send","params":{"message":{"extensions":["https://example.com/ext/b/v1","https://example.com/ext/a/v1"]}}}`
+	req, err := http.NewRequest(http.MethodPost, "http://example.com/rpc", strings.NewReader(body))
+	assert.NoError(t, err)
+	req.Header.Set(a2aExtensionsHeader, "https://example.com/ext/base/v1")
+
+	headerValue := extractA2AExtensionsHeader(req)
+	assert.Equal(t, "https://example.com/ext/a/v1, https://example.com/ext/b/v1, https://example.com/ext/base/v1", headerValue)
+
+	restoredBody, readErr := io.ReadAll(req.Body)
+	assert.NoError(t, readErr)
+	assert.Equal(t, body, string(restoredBody))
+}
+
+func TestExtractA2AExtensionsHeaderWithoutExtensions(t *testing.T) {
+	body := `{"jsonrpc":"2.0","id":"1","method":"message/send","params":{"message":{}}}`
+	req, err := http.NewRequest(http.MethodPost, "http://example.com/rpc", strings.NewReader(body))
+	assert.NoError(t, err)
+	req.Header.Set(a2aExtensionsHeader, "https://example.com/ext/base/v1")
+
+	headerValue := extractA2AExtensionsHeader(req)
+	assert.Equal(t, "https://example.com/ext/base/v1", headerValue)
 }
