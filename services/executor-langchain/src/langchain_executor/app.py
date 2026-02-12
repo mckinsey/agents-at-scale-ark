@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from ark_sdk.executor_app import ExecutorApp
 from ark_sdk.executor import ExecutionEngineRequest, ExecutionEngineResponse
+from pydantic import ValidationError
 from .executor import LangChainExecutor
 from .a2a_executor import A2ALangChainExecutor
 
@@ -8,11 +9,17 @@ executor = LangChainExecutor()
 app_instance = ExecutorApp(executor, "LangChain")
 a2a_executor = A2ALangChainExecutor()
 
-if hasattr(app_instance, "setup_a2a_route"):
-    app_instance.setup_a2a_route(a2a_executor)
-else:
-    @app_instance.app.post("/execute-a2a", response_model=ExecutionEngineResponse)
-    async def execute_a2a(request: ExecutionEngineRequest):
+
+def _make_execution_engine_response(messages, a2a_messages, error):
+    payload = {"messages": messages, "error": error}
+    model_fields = getattr(ExecutionEngineResponse, "model_fields", {})
+    if "a2aMessages" in model_fields:
+        payload["a2aMessages"] = a2a_messages
+    return ExecutionEngineResponse(**payload)
+
+
+async def _execute_a2a_fallback(request: ExecutionEngineRequest) -> ExecutionEngineResponse:
+    try:
         response_messages = await a2a_executor.execute_agent(request)
         context_id = ""
         task_id = ""
@@ -30,7 +37,21 @@ else:
             if task_id:
                 payload["taskId"] = task_id
             a2a_messages.append(payload)
-        return ExecutionEngineResponse(messages=[], a2aMessages=a2a_messages, error="")
+        return _make_execution_engine_response(messages=[], a2a_messages=a2a_messages, error="")
+    except ValidationError as e:
+        error_msg = f"Request validation failed for agent {request.agent.name}: {str(e)}"
+        return _make_execution_engine_response(messages=[], a2a_messages=[], error=error_msg)
+    except Exception as e:
+        error_msg = f"LangChain A2A execution failed for agent {request.agent.name}: {str(e)}"
+        return _make_execution_engine_response(messages=[], a2a_messages=[], error=error_msg)
+
+
+if hasattr(app_instance, "setup_a2a_route"):
+    app_instance.setup_a2a_route(a2a_executor)
+else:
+    @app_instance.app.post("/execute-a2a", response_model=ExecutionEngineResponse)
+    async def execute_a2a(request: ExecutionEngineRequest):
+        return await _execute_a2a_fallback(request)
 
 
 def create_app() -> FastAPI:

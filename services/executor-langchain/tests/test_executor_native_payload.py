@@ -73,3 +73,21 @@ def test_app_registers_execute_a2a_route():
     paths = {route.path for route in app_module.app_instance.app.routes}
     assert "/execute" in paths
     assert "/execute-a2a" in paths
+
+
+def test_fallback_execute_a2a_returns_structured_error(monkeypatch):
+    async def failing_execute(_request):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(app_module.a2a_executor, "execute_agent", failing_execute)
+    request = SimpleNamespace(
+        agent=SimpleNamespace(name="native-agent"),
+        a2aUserInput={"contextId": "ctx-1", "taskId": "task-1"},
+    )
+
+    response = asyncio.run(app_module._execute_a2a_fallback(request))
+    payload = response.model_dump()
+    assert payload["messages"] == []
+    if "a2aMessages" in payload:
+        assert payload["a2aMessages"] == []
+    assert "LangChain A2A execution failed for agent native-agent: boom" == payload["error"]

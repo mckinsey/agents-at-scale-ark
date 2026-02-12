@@ -66,11 +66,15 @@ func (a *Agent) executeLocallyA2ANative(ctx context.Context, userInput protocol.
 				TaskID:    dereferenceMessageID(lastMessage.TaskID),
 				Message:   &lastMessage,
 			}
-			streamNativeA2AFinalMessage(ctx, eventStream, lastMessage)
+			if err := streamNativeA2AMessageStrict(ctx, eventStream, lastMessage, "final"); err != nil {
+				return nil, err
+			}
 			return result, nil
 		}
 
-		streamNativeA2AIntermediateMessage(ctx, eventStream, a2aAssistantMessage)
+		if err := streamNativeA2AMessageStrict(ctx, eventStream, a2aAssistantMessage, "assistant"); err != nil {
+			return nil, err
+		}
 		if err := a.executeToolCallsA2ANative(ctx, choice.Message.ToolCalls, eventStream, &agentMessages, &newMessages, contextID, taskID); err != nil {
 			logger := logf.FromContext(ctx)
 			if !IsTerminateTeam(err) {
@@ -133,7 +137,9 @@ func (a *Agent) executeToolCallsA2ANative(ctx context.Context, toolCalls []opena
 		convertedToolMessage = stampA2AMessageMetadata(convertedToolMessage, contextID, taskID)
 		*agentMessages = append(*agentMessages, convertedToolMessage)
 		*newMessages = append(*newMessages, convertedToolMessage)
-		streamNativeA2AIntermediateMessage(execCtx, eventStream, convertedToolMessage)
+		if err := streamNativeA2AMessageStrict(execCtx, eventStream, convertedToolMessage, "tool"); err != nil {
+			return err
+		}
 
 		if err != nil {
 			return err
@@ -142,11 +148,12 @@ func (a *Agent) executeToolCallsA2ANative(ctx context.Context, toolCalls []opena
 	return nil
 }
 
-func streamNativeA2AIntermediateMessage(ctx context.Context, eventStream EventStreamInterface, message protocol.Message) {
+func streamNativeA2AMessageStrict(ctx context.Context, eventStream EventStreamInterface, message protocol.Message, phase string) error {
 	if eventStream == nil {
-		return
+		return nil
 	}
 	if err := eventStream.StreamChunk(ctx, &message); err != nil {
-		logf.FromContext(ctx).V(1).Error(err, "failed to stream native A2A message")
+		return fmt.Errorf("failed to stream %s A2A message: %w", phase, err)
 	}
+	return nil
 }

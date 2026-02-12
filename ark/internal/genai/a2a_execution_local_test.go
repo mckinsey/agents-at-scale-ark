@@ -104,6 +104,27 @@ func stringPointer(value string) *string {
 	return &value
 }
 
+type failingEventStream struct {
+	failOnCall int
+	calls      int
+}
+
+func (f *failingEventStream) StreamChunk(_ context.Context, _ interface{}) error {
+	f.calls++
+	if f.failOnCall > 0 && f.calls == f.failOnCall {
+		return errors.New("stream boom")
+	}
+	return nil
+}
+
+func (f *failingEventStream) NotifyCompletion(_ context.Context) error {
+	return nil
+}
+
+func (f *failingEventStream) Close() error {
+	return nil
+}
+
 func TestExecuteLocallyA2ANativeSimpleResponse(t *testing.T) {
 	provider := &testChatCompletionProvider{
 		responses: []*openai.ChatCompletion{
@@ -245,6 +266,56 @@ func TestExecuteLocallyA2ANativeEventStreamEmitsA2AMessages(t *testing.T) {
 		_, ok := chunk.(*protocol.Message)
 		assert.True(t, ok)
 	}
+}
+
+func TestExecuteLocallyA2ANativeIntermediateStreamFailure(t *testing.T) {
+	toolCalls := []openai.ChatCompletionMessageToolCall{
+		{
+			ID:   "call-1",
+			Type: "function",
+			Function: openai.ChatCompletionMessageToolCallFunction{
+				Name:      "lookup",
+				Arguments: `{"city":"london"}`,
+			},
+		},
+	}
+	provider := &testChatCompletionProvider{
+		responses: []*openai.ChatCompletion{
+			testCompletion("calling tool", toolCalls),
+			testCompletion("final answer", nil),
+		},
+	}
+	executor := &testToolExecutor{
+		result: ToolResult{Content: "tool result"},
+	}
+	agent := newTestAgentForLocalExecution(provider, newTestToolRegistry("lookup", executor))
+	stream := &failingEventStream{failOnCall: 2}
+	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("hello"),
+	})
+
+	result, err := agent.executeLocallyA2ANative(context.Background(), userInput, nil, nil, stream)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to stream tool A2A message")
+	assert.Nil(t, result)
+}
+
+func TestExecuteLocallyA2ANativeFinalStreamFailure(t *testing.T) {
+	provider := &testChatCompletionProvider{
+		responses: []*openai.ChatCompletion{
+			testCompletion("final answer", nil),
+		},
+	}
+	agent := newTestAgentForLocalExecution(provider, nil)
+	stream := &failingEventStream{failOnCall: 1}
+	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("hello"),
+	})
+
+	result, err := agent.executeLocallyA2ANative(context.Background(), userInput, nil, nil, stream)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to stream final A2A message")
+	assert.Nil(t, result)
 }
 
 func TestExecuteLocallyA2ANativeModelError(t *testing.T) {
