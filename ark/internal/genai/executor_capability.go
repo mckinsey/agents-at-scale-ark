@@ -26,7 +26,7 @@ var knownOpenAICompatExecutionEngineTypes = map[string]struct{}{
 }
 
 var knownA2ANativeExecutionEngineTypes = map[string]struct{}{
-	"langchain": {},
+	"a2a-langchain": {},
 }
 
 func normalizeExecutionEngineType(engineType string) string {
@@ -68,11 +68,8 @@ func resolveA2AExecutionCapability(ctx context.Context, k8sClient client.Client,
 	}
 
 	engineType := normalizeExecutionEngineType(engineCRD.Spec.Type)
-	if _, ok := knownA2ANativeExecutionEngineTypes[engineType]; ok {
-		return executionCapabilityA2ANativeExternalEngine, nil
-	}
-	if _, ok := knownOpenAICompatExecutionEngineTypes[engineType]; ok {
-		return executionCapabilityOpenAICompat, nil
+	if capability, ok := resolveA2AExecutionCapabilityFromEngineType(engineType); ok {
+		return capability, nil
 	}
 
 	return "", fmt.Errorf(
@@ -83,4 +80,15 @@ func resolveA2AExecutionCapability(ctx context.Context, k8sClient client.Client,
 		listKnownExecutionEngineTypes(knownA2ANativeExecutionEngineTypes),
 		listKnownExecutionEngineTypes(knownOpenAICompatExecutionEngineTypes),
 	)
+}
+
+func resolveA2AExecutionCapabilityFromEngineType(engineType string) (executionCapability, bool) {
+	normalized := normalizeExecutionEngineType(engineType)
+	if _, ok := knownA2ANativeExecutionEngineTypes[normalized]; ok {
+		return executionCapabilityA2ANativeExternalEngine, true
+	}
+	if _, ok := knownOpenAICompatExecutionEngineTypes[normalized]; ok {
+		return executionCapabilityOpenAICompat, true
+	}
+	return "", false
 }

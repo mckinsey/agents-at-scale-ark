@@ -11,5 +11,5 @@ make services  # Interactive service installation
 ## Notes
 - Services include APIs, execution engines, dashboards, and utilities
 - Use `make services` for guided installation of additional capabilities
-- Execution engines can participate in experimental A2A either natively or through Ark's known OpenAI compat wrapper.
+- In experimental A2A mode, `a2a-langchain` is native and `langchain` stays compat-only.
 

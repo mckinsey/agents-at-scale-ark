@@ -25,7 +25,21 @@ func TestResolveA2AExecutionCapabilityReservedA2AEngine(t *testing.T) {
 	assert.Equal(t, executionCapabilityA2ANativeA2AEngine, capability)
 }
 
-func TestResolveA2AExecutionCapabilityLangChainNative(t *testing.T) {
+func TestResolveA2AExecutionCapabilityA2ALangChainNative(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, arkv1prealpha1.AddToScheme(scheme))
+	engine := &arkv1prealpha1.ExecutionEngine{}
+	engine.Name = "langchain-engine"
+	engine.Namespace = "default"
+	engine.Spec.Type = "a2a-langchain"
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(engine).Build()
+
+	capability, err := resolveA2AExecutionCapability(context.Background(), k8sClient, "default/agent", "default", &arkv1alpha1.ExecutionEngineRef{Name: "langchain-engine"})
+	require.NoError(t, err)
+	assert.Equal(t, executionCapabilityA2ANativeExternalEngine, capability)
+}
+
+func TestResolveA2AExecutionCapabilityLangChainCompat(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, arkv1prealpha1.AddToScheme(scheme))
 	engine := &arkv1prealpha1.ExecutionEngine{}
@@ -36,7 +50,7 @@ func TestResolveA2AExecutionCapabilityLangChainNative(t *testing.T) {
 
 	capability, err := resolveA2AExecutionCapability(context.Background(), k8sClient, "default/agent", "default", &arkv1alpha1.ExecutionEngineRef{Name: "langchain-engine"})
 	require.NoError(t, err)
-	assert.Equal(t, executionCapabilityA2ANativeExternalEngine, capability)
+	assert.Equal(t, executionCapabilityOpenAICompat, capability)
 }
 
 func TestResolveA2AExecutionCapabilityUnknownEngineFails(t *testing.T) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/openai/openai-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
@@ -83,4 +84,29 @@ func TestStreamNativeA2AFinalMessage(t *testing.T) {
 	streamedMessage, ok := stream.chunks[0].(*protocol.Message)
 	require.True(t, ok)
 	assert.Equal(t, "done", ExtractA2ATextFromMessage(*streamedMessage))
+}
+
+func TestCompatToolCallMetadataRoundTrip(t *testing.T) {
+	assistant := openai.AssistantMessage("thinking")
+	assistant.OfAssistant.ToolCalls = []openai.ChatCompletionMessageToolCallParam{
+		{
+			ID:   "call-1",
+			Type: "function",
+			Function: openai.ChatCompletionMessageToolCallFunctionParam{
+				Name:      "get_weather",
+				Arguments: `{"city":"london"}`,
+			},
+		},
+	}
+
+	a2aMessage, err := OpenAIToA2AMessage(assistant)
+	require.NoError(t, err)
+
+	recovered, err := A2AToOpenAIMessage(a2aMessage)
+	require.NoError(t, err)
+	require.NotNil(t, recovered.OfAssistant)
+	require.Len(t, recovered.OfAssistant.ToolCalls, 1)
+	assert.Equal(t, "call-1", recovered.OfAssistant.ToolCalls[0].ID)
+	assert.Equal(t, "get_weather", recovered.OfAssistant.ToolCalls[0].Function.Name)
+	assert.Equal(t, `{"city":"london"}`, recovered.OfAssistant.ToolCalls[0].Function.Arguments)
 }

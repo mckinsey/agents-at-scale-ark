@@ -36,6 +36,7 @@ func (testExecutionEngineRecorder) AddressResolutionFailed(context.Context, runt
 func TestExecutionEngineClientExecuteA2AIncludesNativePayload(t *testing.T) {
 	var capturedRequest ExecutionEngineRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/execute-a2a", r.URL.Path)
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&capturedRequest))
 		response := ExecutionEngineResponse{
 			Messages: []ExecutionEngineMessage{
@@ -52,7 +53,7 @@ func TestExecutionEngineClientExecuteA2AIncludesNativePayload(t *testing.T) {
 	engine := &arkv1prealpha1.ExecutionEngine{}
 	engine.Name = "langchain-engine"
 	engine.Namespace = "default"
-	engine.Spec.Type = "langchain"
+	engine.Spec.Type = "a2a-langchain"
 	engine.Status.LastResolvedAddress = server.URL
 	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(engine).Build()
 
@@ -75,6 +76,8 @@ func TestExecutionEngineClientExecuteA2AIncludesNativePayload(t *testing.T) {
 	assert.Equal(t, protocol.MessageRoleUser, capturedRequest.A2AUserInput.Role)
 	require.Len(t, capturedRequest.A2AHistory, 1)
 	assert.Equal(t, protocol.MessageRoleAgent, capturedRequest.A2AHistory[0].Role)
+	assert.Nil(t, capturedRequest.UserInput)
+	assert.Len(t, capturedRequest.History, 0)
 	require.Len(t, capturedRequest.Tools, 1)
 	assert.Equal(t, "read_file", capturedRequest.Tools[0].Name)
 	require.Len(t, messages, 1)
@@ -90,6 +93,7 @@ func TestExecutionEngineClientExecuteA2AReturnsNativeMessages(t *testing.T) {
 		protocol.NewTextPart("native"),
 	})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/execute-a2a", r.URL.Path)
 		response := ExecutionEngineResponse{
 			A2AMessages: []protocol.Message{responseMessage},
 		}
@@ -103,7 +107,7 @@ func TestExecutionEngineClientExecuteA2AReturnsNativeMessages(t *testing.T) {
 	engine := &arkv1prealpha1.ExecutionEngine{}
 	engine.Name = "langchain-engine"
 	engine.Namespace = "default"
-	engine.Spec.Type = "langchain"
+	engine.Spec.Type = "a2a-langchain"
 	engine.Status.LastResolvedAddress = server.URL
 	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(engine).Build()
 

@@ -18,20 +18,21 @@ import (
 )
 
 type Agent struct {
-	Name              string
-	Namespace         string
-	Prompt            string
-	Description       string
-	Parameters        []arkv1alpha1.Parameter
-	Model             *Model
-	Tools             *ToolRegistry
-	telemetryRecorder telemetry.AgentRecorder
-	eventingRecorder  eventing.AgentRecorder
-	eventing          eventing.Provider
-	ExecutionEngine   *arkv1alpha1.ExecutionEngineRef
-	Annotations       map[string]string
-	OutputSchema      *runtime.RawExtension
-	client            client.Client
+	Name               string
+	Namespace          string
+	Prompt             string
+	Description        string
+	Parameters         []arkv1alpha1.Parameter
+	Model              *Model
+	Tools              *ToolRegistry
+	telemetryRecorder  telemetry.AgentRecorder
+	eventingRecorder   eventing.AgentRecorder
+	eventing           eventing.Provider
+	ExecutionEngine    *arkv1alpha1.ExecutionEngineRef
+	Annotations        map[string]string
+	OutputSchema       *runtime.RawExtension
+	client             client.Client
+	resolvedCapability executionCapability
 }
 
 // FullName returns the namespace/name format for the agent
@@ -151,17 +152,19 @@ func (a *Agent) executeWithA2AExecutionEngineNative(ctx context.Context, userInp
 }
 
 func (a *Agent) executeAgentA2A(ctx context.Context, userInput protocol.Message, history []protocol.Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
-	capability, err := resolveA2AExecutionCapability(ctx, a.client, a.FullName(), a.Namespace, a.ExecutionEngine)
-	if err != nil {
-		return nil, err
+	capability := a.resolvedCapability
+	if capability == "" {
+		resolvedCapability, err := resolveA2AExecutionCapability(ctx, a.client, a.FullName(), a.Namespace, a.ExecutionEngine)
+		if err != nil {
+			return nil, err
+		}
+		capability = resolvedCapability
 	}
 
 	switch capability {
 	case executionCapabilityA2ANativeA2AEngine:
-		_ = memory
 		return a.executeWithA2AExecutionEngineNative(ctx, userInput, history, eventStream)
 	case executionCapabilityA2ANativeExternalEngine:
-		_ = memory
 		return a.executeWithExternalA2ANativeExecutionEngine(ctx, userInput, history, eventStream)
 	case executionCapabilityOpenAICompat:
 		return a.executeWithA2ACompatExecution(ctx, userInput, history, memory, eventStream)
@@ -303,7 +306,7 @@ func (a *Agent) GetDescription() string {
 }
 
 // ValidateExecutionEngine checks if the specified ExecutionEngine resource exists
-func ValidateExecutionEngine(ctx context.Context, k8sClient client.Client, executionEngine *arkv1alpha1.ExecutionEngineRef, defaultNamespace string) error {
+func ValidateExecutionEngine(ctx context.Context, k8sClient client.Client, executionEngine *arkv1alpha1.ExecutionEngineRef, defaultNamespace string) (string, error) {
 	// Resolve execution engine name and namespace
 	engineName := executionEngine.Name
 	namespace := executionEngine.Namespace
@@ -313,17 +316,17 @@ func ValidateExecutionEngine(ctx context.Context, k8sClient client.Client, execu
 
 	// Pass validation for reserved 'a2a' execution engine (internal)
 	if engineName == ExecutionEngineA2A {
-		return nil
+		return "", nil
 	}
 
 	// Check if ExecutionEngine CRD exists
 	var engineCRD arkv1prealpha1.ExecutionEngine
 	engineKey := types.NamespacedName{Name: engineName, Namespace: namespace}
 	if err := k8sClient.Get(ctx, engineKey, &engineCRD); err != nil {
-		return fmt.Errorf("execution engine %s not found in namespace %s: %w", engineName, namespace, err)
+		return "", fmt.Errorf("execution engine %s not found in namespace %s: %w", engineName, namespace, err)
 	}
 
-	return nil
+	return normalizeExecutionEngineType(engineCRD.Spec.Type), nil
 }
 
 func resolveModelHeadersForAgent(ctx context.Context, k8sClient client.Client, agentCRD *arkv1alpha1.Agent, queryCRD *arkv1alpha1.Query) (map[string]string, error) {
@@ -405,22 +408,32 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 		return nil, err
 	}
 
+	resolvedCapability := executionCapabilityOpenAICompat
+	if crd.Spec.ExecutionEngine != nil {
+		engineType, err := ValidateExecutionEngine(ctx, k8sClient, crd.Spec.ExecutionEngine, crd.Namespace)
+		if err != nil {
+			return nil, fmt.Errorf("failed to validate execution engine %s for agent %s/%s: %w",
+				crd.Spec.ExecutionEngine.Name, crd.Namespace, crd.Name, err)
+		}
+		switch {
+		case crd.Spec.ExecutionEngine.Name == ExecutionEngineA2A:
+			resolvedCapability = executionCapabilityA2ANativeA2AEngine
+		default:
+			if capability, ok := resolveA2AExecutionCapabilityFromEngineType(engineType); ok {
+				resolvedCapability = capability
+			} else {
+				resolvedCapability = ""
+			}
+		}
+	}
+
 	var resolvedModel *Model
 
-	// A2A agents don't need models - they delegate to external A2A servers
-	if crd.Spec.ExecutionEngine == nil || crd.Spec.ExecutionEngine.Name != ExecutionEngineA2A {
+	if resolvedCapability != executionCapabilityA2ANativeA2AEngine && resolvedCapability != executionCapabilityA2ANativeExternalEngine {
 		var err error
 		resolvedModel, err = LoadModel(ctx, k8sClient, crd.Spec.ModelRef, crd.Namespace, modelHeaders, telemetryProvider.ModelRecorder(), eventingProvider.ModelRecorder())
 		if err != nil {
 			return nil, fmt.Errorf("failed to load model for agent %s/%s: %w", crd.Namespace, crd.Name, err)
-		}
-	}
-
-	if crd.Spec.ExecutionEngine != nil {
-		err := ValidateExecutionEngine(ctx, k8sClient, crd.Spec.ExecutionEngine, crd.Namespace)
-		if err != nil {
-			return nil, fmt.Errorf("failed to validate execution engine %s for agent %s/%s: %w",
-				crd.Spec.ExecutionEngine.Name, crd.Namespace, crd.Name, err)
 		}
 	}
 
@@ -441,19 +454,20 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 	}
 
 	return &Agent{
-		Name:              crd.Name,
-		Namespace:         crd.Namespace,
-		Prompt:            crd.Spec.Prompt,
-		Description:       crd.Spec.Description,
-		Parameters:        crd.Spec.Parameters,
-		Model:             resolvedModel,
-		Tools:             tools,
-		telemetryRecorder: telemetryProvider.AgentRecorder(),
-		eventingRecorder:  eventingProvider.AgentRecorder(),
-		eventing:          eventingProvider,
-		ExecutionEngine:   crd.Spec.ExecutionEngine,
-		Annotations:       crd.Annotations,
-		OutputSchema:      crd.Spec.OutputSchema,
-		client:            k8sClient,
+		Name:               crd.Name,
+		Namespace:          crd.Namespace,
+		Prompt:             crd.Spec.Prompt,
+		Description:        crd.Spec.Description,
+		Parameters:         crd.Spec.Parameters,
+		Model:              resolvedModel,
+		Tools:              tools,
+		telemetryRecorder:  telemetryProvider.AgentRecorder(),
+		eventingRecorder:   eventingProvider.AgentRecorder(),
+		eventing:           eventingProvider,
+		ExecutionEngine:    crd.Spec.ExecutionEngine,
+		Annotations:        crd.Annotations,
+		OutputSchema:       crd.Spec.OutputSchema,
+		client:             k8sClient,
+		resolvedCapability: resolvedCapability,
 	}, nil
 }

@@ -1,7 +1,7 @@
 """Common FastAPI application setup for execution engines."""
 
 import logging
-from typing import Type
+from typing import Any, List
 from fastapi import FastAPI
 from pydantic import ValidationError
 import uvicorn
@@ -75,6 +75,57 @@ class ExecutorApp:
                 )
                 logger.error(error_msg, exc_info=True)
                 return ExecutionEngineResponse(messages=[], error=error_msg)
+
+    def setup_a2a_route(self, executor: BaseExecutor, path: str = "/execute-a2a") -> None:
+        @self.app.post(path, response_model=ExecutionEngineResponse)
+        async def execute_a2a(request: ExecutionEngineRequest):
+            try:
+                logger.info(
+                    f"Processing A2A execution request for agent: {request.agent.name}"
+                )
+                response_messages = await executor.execute_agent(request)
+                a2a_messages = self._convert_messages_to_a2a(response_messages, request)
+                logger.info(
+                    f"A2A execution successful, returned {len(a2a_messages)} messages"
+                )
+                return ExecutionEngineResponse(messages=[], a2aMessages=a2a_messages, error="")
+            except ValidationError as e:
+                error_msg = f"Request validation failed for agent {request.agent.name}: {str(e)}"
+                logger.error(error_msg)
+                return ExecutionEngineResponse(messages=[], a2aMessages=[], error=error_msg)
+            except Exception as e:
+                error_msg = (
+                    f"{self.engine_name.title()} A2A execution failed for agent {request.agent.name}: {str(e)}"
+                )
+                logger.error(error_msg, exc_info=True)
+                return ExecutionEngineResponse(messages=[], a2aMessages=[], error=error_msg)
+
+    def _convert_messages_to_a2a(
+        self, messages: List, request: ExecutionEngineRequest
+    ) -> List[dict[str, Any]]:
+        context_id = ""
+        task_id = ""
+        if request.a2aUserInput is not None:
+            context_value = request.a2aUserInput.get("contextId")
+            task_value = request.a2aUserInput.get("taskId")
+            if isinstance(context_value, str):
+                context_id = context_value
+            if isinstance(task_value, str):
+                task_id = task_value
+
+        a2a_messages: List[dict[str, Any]] = []
+        for message in messages:
+            role = "agent" if message.role == "assistant" else message.role
+            result: dict[str, Any] = {
+                "role": role,
+                "parts": [{"kind": "text", "text": message.content}],
+            }
+            if context_id:
+                result["contextId"] = context_id
+            if task_id:
+                result["taskId"] = task_id
+            a2a_messages.append(result)
+        return a2a_messages
 
     def run(self, host: str = "0.0.0.0", port: int = 8000):
         """Run the FastAPI server."""

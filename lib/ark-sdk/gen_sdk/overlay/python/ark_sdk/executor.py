@@ -8,6 +8,9 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
+PAYLOAD_MODE_COMPAT = "compat"
+PAYLOAD_MODE_NATIVE = "native"
+
 
 class Parameter(BaseModel):
     """Parameter for agent configuration."""
@@ -53,10 +56,10 @@ class Message(BaseModel):
 class ExecutionEngineRequest(BaseModel):
     """Request to execute an agent."""
     agent: AgentConfig
-    userInput: Message
-    history: List[Message]
+    userInput: Message | None = None
+    history: List[Message] = Field(default_factory=list)
     tools: List[ToolDefinition] = Field(default_factory=list)
-    payloadMode: str = "compat"
+    payloadMode: str = PAYLOAD_MODE_COMPAT
     a2aUserInput: Dict[str, Any] | None = None
     a2aHistory: List[Dict[str, Any]] = Field(default_factory=list)
 

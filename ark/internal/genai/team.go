@@ -11,6 +11,7 @@ import (
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
 )
@@ -565,7 +566,7 @@ func loadTeamMember(ctx context.Context, k8sClient client.Client, memberSpec ark
 			return nil, nil, fmt.Errorf("failed to get agent %s for team %s: %w", memberSpec.Name, teamName, err)
 		}
 		var annotations map[string]string
-		if agentCRD.Annotations != nil {
+		if shouldIncludeMemberAnnotationsForA2A(agentCRD.Annotations) {
 			annotations = agentCRD.Annotations
 		}
 		member, err := MakeAgent(ctx, k8sClient, &agentCRD, telemetryProvider, eventingProvider)
@@ -599,4 +600,11 @@ func addAgentNameToMessages(messages []Message, agentName string) []Message {
 		}
 	}
 	return result
+}
+
+func shouldIncludeMemberAnnotationsForA2A(agentAnnotations map[string]string) bool {
+	if agentAnnotations == nil {
+		return false
+	}
+	return agentAnnotations[annotations.A2AServerAddress] != "" || agentAnnotations[annotations.A2AExperimentalEnabled] != ""
 }

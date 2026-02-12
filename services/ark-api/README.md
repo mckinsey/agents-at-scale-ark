@@ -181,8 +181,8 @@ Streaming is supported by default when a broker is available.
 
 The gateway also supports an experimental A2A-native controller execution mode via `ark.mckinsey.com/a2a-experimental-enabled: "true"`. In that mode, Ark keeps A2A message types end-to-end for agent/team execution and routes by executor capability:
 - reserved `a2a` engine for native A2A servers
-- known native external engine types (currently `langchain`)
-- known OpenAI-compatible executors through a boundary compat wrapper
+- known native external engine types (currently `a2a-langchain`, served at `/execute-a2a`)
+- known OpenAI-compatible executors (`langchain`, served at `/execute`) through a boundary compat wrapper
 
 Unknown execution engine types fail fast in experimental mode. See the [RFC: Experimental A2A transport](https://mckinsey.github.io/agents-at-scale-ark/reference/a2a-experimental-rfc) for details.
 

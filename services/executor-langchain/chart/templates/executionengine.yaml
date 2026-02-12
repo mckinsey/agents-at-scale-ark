@@ -20,3 +20,26 @@ spec:
         path: {{ .Values.executionEngine.address.serviceRef.path }}
         {{- end }}
   description: {{ .Values.executionEngine.description | quote }}
+{{- if .Values.a2aExecutionEngine.enabled }}
+---
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: ExecutionEngine
+metadata:
+  name: {{ include "executor-langchain.fullname" . }}-a2a
+  labels:
+    {{- include "executor-langchain.labels" . | nindent 4 }}
+spec:
+  type: "a2a-langchain"
+  address:
+    valueFrom:
+      serviceRef:
+        name: {{ include "executor-langchain.fullname" . }}
+        {{- if .Values.a2aExecutionEngine.address.serviceRef.namespace }}
+        namespace: {{ .Values.a2aExecutionEngine.address.serviceRef.namespace }}
+        {{- end }}
+        {{- if .Values.a2aExecutionEngine.address.serviceRef.port }}
+        port: "{{ .Values.a2aExecutionEngine.address.serviceRef.port }}"
+        {{- end }}
+        path: {{ .Values.a2aExecutionEngine.address.serviceRef.path }}
+  description: {{ .Values.a2aExecutionEngine.description | quote }}
+{{- end }}

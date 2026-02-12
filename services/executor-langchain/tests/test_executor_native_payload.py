@@ -1,17 +1,11 @@
 import asyncio
-import sys
-import types
 from types import SimpleNamespace
 
 from langchain.schema import AIMessage, HumanMessage
 
-langchain_openai_module = types.ModuleType("langchain_openai")
-langchain_openai_module.ChatOpenAI = object
-langchain_openai_module.OpenAIEmbeddings = object
-sys.modules.setdefault("langchain_openai", langchain_openai_module)
-
-from langchain_executor import executor as executor_module
-from langchain_executor.executor import LangChainExecutor
+from langchain_executor import app as app_module
+from langchain_executor import a2a_executor as a2a_executor_module
+from langchain_executor.a2a_executor import A2ALangChainExecutor
 
 
 def test_extract_native_text():
@@ -23,7 +17,7 @@ def test_extract_native_text():
             {"kind": "file", "uri": "file:///tmp/test.txt"},
         ],
     }
-    assert executor_module._extract_native_text(message) == "alpha\nbeta\nfile:///tmp/test.txt"
+    assert a2a_executor_module._extract_native_text(message) == "alpha\nbeta\nfile:///tmp/test.txt"
 
 
 def test_build_native_langchain_messages_roles():
@@ -31,7 +25,7 @@ def test_build_native_langchain_messages_roles():
         {"role": "user", "parts": [{"kind": "text", "text": "u1"}]},
         {"role": "agent", "parts": [{"kind": "text", "text": "a1"}]},
     ]
-    messages = executor_module._build_native_langchain_messages(history)
+    messages = a2a_executor_module._build_native_langchain_messages(history)
     assert isinstance(messages[0], HumanMessage)
     assert messages[0].content == "u1"
     assert isinstance(messages[1], AIMessage)
@@ -46,10 +40,10 @@ def test_execute_agent_uses_native_payload(monkeypatch):
             captured["messages"] = messages
             return SimpleNamespace(content="native-ok")
 
-    monkeypatch.setattr(executor_module, "create_chat_client", lambda _model: DummyChatClient())
-    monkeypatch.setattr(executor_module, "should_use_rag", lambda _agent: False)
+    monkeypatch.setattr(a2a_executor_module, "create_chat_client", lambda _model: DummyChatClient())
+    monkeypatch.setattr(a2a_executor_module, "should_use_rag", lambda _agent: False)
 
-    executor = LangChainExecutor()
+    executor = A2ALangChainExecutor()
     request = SimpleNamespace(
         agent=SimpleNamespace(
             name="native-agent",
@@ -73,3 +67,9 @@ def test_execute_agent_uses_native_payload(monkeypatch):
     assert any(isinstance(message, AIMessage) and message.content == "prior" for message in sent_messages)
     assert isinstance(sent_messages[-1], HumanMessage)
     assert sent_messages[-1].content == "native input"
+
+
+def test_app_registers_execute_a2a_route():
+    paths = {route.path for route in app_module.app_instance.app.routes}
+    assert "/execute" in paths
+    assert "/execute-a2a" in paths

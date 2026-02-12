@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -31,9 +32,9 @@ type ExecutionEngineRequest struct {
 	// Agent configuration
 	Agent AgentConfig `json:"agent"`
 	// Current message to process
-	UserInput ExecutionEngineMessage `json:"userInput"`
+	UserInput *ExecutionEngineMessage `json:"userInput,omitempty"`
 	// Conversation history
-	History []ExecutionEngineMessage `json:"history"`
+	History []ExecutionEngineMessage `json:"history,omitempty"`
 	// Available tools
 	Tools []ToolDefinition `json:"tools,omitempty"`
 	// Payload mode indicates compat or native request format
@@ -122,8 +123,6 @@ func resolveMessageRoleFromA2A(msg protocol.Message) string {
 		return RoleAssistant
 	case protocol.MessageRoleUser:
 		return RoleUser
-	case RoleSystem:
-		return RoleSystem
 	default:
 		return RoleUser
 	}
@@ -155,7 +154,7 @@ func (c *ExecutionEngineClient) Execute(ctx context.Context, engineRef *arkv1alp
 	}
 	ctx = c.eventingRecorder.Start(ctx, "ExecutionEngine", fmt.Sprintf("Executing agent via execution engine %s", engineRef.Name), operationData)
 
-	engineAddress, err := c.resolveExecutionEngineAddress(ctx, engineRef, agentConfig.Namespace)
+	engineAddress, _, err := c.resolveExecutionEngineAddress(ctx, engineRef, agentConfig.Namespace)
 	if err != nil {
 		c.eventingRecorder.Fail(ctx, "ExecutionEngine", fmt.Sprintf("Failed to resolve execution engine address: %v", err), err, operationData)
 		return nil, fmt.Errorf("failed to resolve execution engine address: %w", err)
@@ -170,7 +169,7 @@ func (c *ExecutionEngineClient) Execute(ctx context.Context, engineRef *arkv1alp
 
 	request := ExecutionEngineRequest{
 		Agent:       agentConfig,
-		UserInput:   convertedUserInput,
+		UserInput:   &convertedUserInput,
 		History:     convertedHistory,
 		Tools:       tools,
 		PayloadMode: A2APayloadModeCompat,
@@ -182,9 +181,13 @@ func (c *ExecutionEngineClient) Execute(ctx context.Context, engineRef *arkv1alp
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/execute", engineAddress)
+	executeURL, err := resolveExecutionEngineURL(engineAddress, "/execute")
+	if err != nil {
+		c.eventingRecorder.Fail(ctx, "ExecutionEngine", fmt.Sprintf("Failed to resolve execution engine URL: %v", err), err, operationData)
+		return nil, fmt.Errorf("failed to resolve execution engine URL: %w", err)
+	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(requestBody))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, executeURL, bytes.NewBuffer(requestBody))
 	if err != nil {
 		c.eventingRecorder.Fail(ctx, "ExecutionEngine", fmt.Sprintf("Failed to create request: %v", err), err, operationData)
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -238,22 +241,14 @@ func (c *ExecutionEngineClient) ExecuteA2A(ctx context.Context, engineRef *arkv1
 	}
 	ctx = c.eventingRecorder.Start(ctx, "ExecutionEngine", fmt.Sprintf("Executing agent via execution engine %s", engineRef.Name), operationData)
 
-	engineAddress, err := c.resolveExecutionEngineAddress(ctx, engineRef, agentConfig.Namespace)
+	engineAddress, engineType, err := c.resolveExecutionEngineAddress(ctx, engineRef, agentConfig.Namespace)
 	if err != nil {
 		c.eventingRecorder.Fail(ctx, "ExecutionEngine", fmt.Sprintf("Failed to resolve execution engine address: %v", err), err, operationData)
 		return nil, fmt.Errorf("failed to resolve execution engine address: %w", err)
 	}
 
-	convertedUserInput := convertA2AMessageToExecutionEngineMessage(userInput)
-	convertedHistory := make([]ExecutionEngineMessage, len(history))
-	for i := range history {
-		convertedHistory[i] = convertA2AMessageToExecutionEngineMessage(history[i])
-	}
-
 	request := ExecutionEngineRequest{
 		Agent:        agentConfig,
-		UserInput:    convertedUserInput,
-		History:      convertedHistory,
 		Tools:        tools,
 		PayloadMode:  A2APayloadModeNative,
 		A2AUserInput: &userInput,
@@ -266,9 +261,17 @@ func (c *ExecutionEngineClient) ExecuteA2A(ctx context.Context, engineRef *arkv1
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/execute", engineAddress)
+	executionPath := "/execute"
+	if _, ok := knownA2ANativeExecutionEngineTypes[engineType]; ok {
+		executionPath = "/execute-a2a"
+	}
+	executeURL, err := resolveExecutionEngineURL(engineAddress, executionPath)
+	if err != nil {
+		c.eventingRecorder.Fail(ctx, "ExecutionEngine", fmt.Sprintf("Failed to resolve execution engine URL: %v", err), err, operationData)
+		return nil, fmt.Errorf("failed to resolve execution engine URL: %w", err)
+	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(requestBody))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, executeURL, bytes.NewBuffer(requestBody))
 	if err != nil {
 		c.eventingRecorder.Fail(ctx, "ExecutionEngine", fmt.Sprintf("Failed to create request: %v", err), err, operationData)
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -340,7 +343,7 @@ func (c *ExecutionEngineClient) ExecuteA2A(ctx context.Context, engineRef *arkv1
 }
 
 // resolveExecutionEngineAddress resolves the address of the execution engine
-func (c *ExecutionEngineClient) resolveExecutionEngineAddress(ctx context.Context, engineRef *arkv1alpha1.ExecutionEngineRef, defaultNamespace string) (string, error) {
+func (c *ExecutionEngineClient) resolveExecutionEngineAddress(ctx context.Context, engineRef *arkv1alpha1.ExecutionEngineRef, defaultNamespace string) (string, string, error) {
 	// Resolve execution engine name and namespace
 	engineName := engineRef.Name
 	namespace := engineRef.Namespace
@@ -352,37 +355,48 @@ func (c *ExecutionEngineClient) resolveExecutionEngineAddress(ctx context.Contex
 	var engineCRD arkv1prealpha1.ExecutionEngine
 	engineKey := types.NamespacedName{Name: engineName, Namespace: namespace}
 	if err := c.client.Get(ctx, engineKey, &engineCRD); err != nil {
-		return "", fmt.Errorf("execution engine %s not found in namespace %s: %w", engineName, namespace, err)
+		return "", "", fmt.Errorf("execution engine %s not found in namespace %s: %w", engineName, namespace, err)
 	}
 
 	// Check if address is resolved in status
 	if engineCRD.Status.LastResolvedAddress == "" {
-		return "", fmt.Errorf("execution engine %s address not yet resolved", engineName)
+		return "", "", fmt.Errorf("execution engine %s address not yet resolved", engineName)
 	}
 
-	return engineCRD.Status.LastResolvedAddress, nil
+	return engineCRD.Status.LastResolvedAddress, normalizeExecutionEngineType(engineCRD.Spec.Type), nil
+}
+
+func resolveExecutionEngineURL(engineAddress, fallbackPath string) (string, error) {
+	parsedURL, err := url.Parse(engineAddress)
+	if err != nil {
+		return "", err
+	}
+	if parsedURL.Path == "" || parsedURL.Path == "/" {
+		parsedURL.Path = fallbackPath
+	}
+	return parsedURL.String(), nil
 }
 
 // buildAgentConfig creates an AgentConfig from the agent and model data
 func buildAgentConfig(agent *Agent) (AgentConfig, error) {
-	if agent.Model == nil {
-		return AgentConfig{}, fmt.Errorf("agent %s has no model configured", agent.FullName())
+	model := ExecutionEngineModel{}
+	if agent.Model != nil {
+		model = ExecutionEngineModel{
+			Name:   agent.Model.Model,
+			Type:   agent.Model.Type,
+			Config: buildModelConfig(agent.Model),
+		}
 	}
 
 	parameters := buildParameters(agent.Parameters)
-	modelConfig := buildModelConfig(agent.Model)
 
 	return AgentConfig{
-		Name:        agent.Name,
-		Namespace:   agent.Namespace,
-		Prompt:      agent.Prompt,
-		Description: agent.Description,
-		Parameters:  parameters,
-		Model: ExecutionEngineModel{
-			Name:   agent.Model.Model,
-			Type:   agent.Model.Type,
-			Config: modelConfig,
-		},
+		Name:         agent.Name,
+		Namespace:    agent.Namespace,
+		Prompt:       agent.Prompt,
+		Description:  agent.Description,
+		Parameters:   parameters,
+		Model:        model,
 		OutputSchema: agent.OutputSchema,
 	}, nil
 }

@@ -15,7 +15,7 @@ import { Callout } from 'nextra/components'
 |-------|-------|
 | **Status** | Experimental |
 | **Author** | Drew Foxall |
-| **Date** | 2026-02-11 |
+| **Date** | 2026-02-12 |
 | **PRs** | [#1060](https://github.com/mckinsey/agents-at-scale-ark/pull/1060), [#1092](https://github.com/mckinsey/agents-at-scale-ark/pull/1092) |
 | **Annotation** | `ark.mckinsey.com/a2a-experimental-enabled` |
 
@@ -39,7 +39,7 @@ When `ark.mckinsey.com/a2a-experimental-enabled: "true"` is active:
 - Query input is parsed via `GetQueryInputA2AMessages` (returns `[]protocol.Message` directly).
 - Agent execution routes through capability resolution:
   - reserved `a2a` engine -> `A2AExecutionEngine.ExecuteNative`
-  - known native external engines -> native `ExecutionEngine` payload mode
+  - known native external engines -> native `ExecutionEngine` payload mode on `/execute-a2a`
   - known OpenAI-compatible executors -> boundary compat wrapper
 - Team strategies use parallel A2A methods (`executeSequentialA2A`, `executeRoundRobinA2A`, etc.).
 - Memory reads/writes use `AddA2AMessages` / `GetA2AMessages`.
@@ -79,7 +79,7 @@ When experimental mode is enabled for a workload:
 - Target type must be `agent` or `team`.
 - Participating agents must resolve to one of:
   - reserved `a2a` execution engine
-  - known native external execution engine type (currently `langchain`)
+  - known native external execution engine type (currently `a2a-langchain`)
   - local or external known OpenAI-compatible executor via boundary compat wrapper
 - Unknown execution engine types fail fast with a compatibility error.
 - Native external engines are expected to accept and emit A2A messages.
@@ -119,7 +119,7 @@ The `ark-api` service exposes an A2A JSON-RPC gateway that discovers Ark agents,
 |---------|-------------------|----------------------|
 | Query input for agent/team | `GetQueryInputMessages` (OpenAI) | `GetQueryInputA2AMessages` (A2A) |
 | Internal execution payload | `Agent.Execute` / `Team.Execute` | `Agent.ExecuteA2A` / `Team.ExecuteA2A` with capability routing |
-| Executor compatibility | N/A | reserved `a2a`, native external types (`langchain`), or known OpenAI compat wrapper |
+| Executor compatibility | N/A | reserved `a2a`, native external types (`a2a-langchain` via `/execute-a2a`), or known OpenAI compat wrapper (`langchain` via `/execute`) |
 | `response.raw` | OpenAI JSON | A2A JSON |
 | Memory writes | `AddMessages` (OpenAI JSON) | `AddA2AMessages` (A2A JSON) |
 | Memory reads | `GetMessages` (OpenAI) | `GetA2AMessages` (A2A, reads both formats) |
@@ -146,14 +146,18 @@ If the experiment is withdrawn, removal is isolated to these additive functions 
 | Helpers | `PrepareA2AExecutionMessages`, `PrepareA2ANewMessagesForMemory`, `ExtractA2ATextFromMessage`, `ExtractA2AUserMessageContent` |
 | Tool delegation | A2A branches in `AgentToolExecutor.Execute`, `TeamToolExecutor.Execute` |
 | ExecutionResult | `A2AMessages` field |
+| Capability split | `executor_capability.go`, `a2a_execution_compat.go`, `Agent.resolvedCapability`, `ExecutionEngineClient.ExecuteA2A` |
+| LangChain executor | `services/executor-langchain/src/langchain_executor/a2a_executor.py`, `services/executor-langchain/src/langchain_executor/app.py` (`/execute-a2a`) |
+| SDK/contract | `ExecutionEngineRequest`/`ExecutionEngineResponse` A2A fields, `ExecutorApp.setup_a2a_route` |
+| Helm registration | optional `a2a-langchain` `ExecutionEngine` template (`services/executor-langchain/chart/templates/executionengine.yaml`) |
 
 The default OpenAI path (`executeAgent`, `executeTeam`, `Agent.Execute`, `Team.Execute`, `GetQueryInputMessages`, `AddMessages`, `GetMessages`) remains intact and requires no changes on removal.
 
 ## A2A Documentation
-https://raw.githubusercontent.com/a2aproject/A2A/main/docs/topics/what-is-a2a.md 
-https://raw.githubusercontent.com/a2aproject/A2A/main/docs/topics/key-concepts.md 
-https://raw.githubusercontent.com/a2aproject/A2A/main/docs/topics/agent-discovery.md 
-https://raw.githubusercontent.com/a2aproject/A2A/main/docs/topics/life-of-a-task.md 
-https://raw.githubusercontent.com/a2aproject/A2A/main/docs/topics/extensions.md 
-https://raw.githubusercontent.com/a2aproject/A2A/main/docs/topics/streaming-and-async.md 
-https://raw.githubusercontent.com/a2aproject/A2A/main/docs/topics/a2a-and-mcp.md 
+https://raw.githubusercontent.com/a2aproject/A2A/main/docs/topics/what-is-a2a.md
+https://raw.githubusercontent.com/a2aproject/A2A/main/docs/topics/key-concepts.md
+https://raw.githubusercontent.com/a2aproject/A2A/main/docs/topics/agent-discovery.md
+https://raw.githubusercontent.com/a2aproject/A2A/main/docs/topics/life-of-a-task.md
+https://raw.githubusercontent.com/a2aproject/A2A/main/docs/topics/extensions.md
+https://raw.githubusercontent.com/a2aproject/A2A/main/docs/topics/streaming-and-async.md
+https://raw.githubusercontent.com/a2aproject/A2A/main/docs/topics/a2a-and-mcp.md

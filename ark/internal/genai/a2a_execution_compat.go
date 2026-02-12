@@ -19,7 +19,7 @@ func (a *Agent) executeWithA2ACompatExecution(ctx context.Context, userInput pro
 
 	var messages []Message
 	if a.ExecutionEngine == nil {
-		messages, err = a.executeLocally(execCtx, compatUserInput, compatHistory, memory, nil)
+		messages, err = a.executeLocally(execCtx, compatUserInput, compatHistory, memory, eventStream)
 	} else {
 		messages, err = a.executeWithExecutionEngine(execCtx, compatUserInput, compatHistory)
 	}
