@@ -282,7 +282,7 @@ export default function ExportPage() {
                       handleSelectItem(section.type, item.id, !!checked)
                     }
                   />
-                  <Icon className="h-4 w-4 text-muted-foreground" />
+                  <Icon className="text-muted-foreground h-4 w-4" />
                   <span className="flex-1 text-sm">{item.name}</span>
                 </div>
               ))}
