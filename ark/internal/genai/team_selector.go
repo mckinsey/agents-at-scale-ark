@@ -62,8 +62,8 @@ func buildRoles(members []TeamMember) string {
 
 func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, error) {
 	// Check for override selector agent first (used in tests)
-	if t.overrideSelectorAgent != nil {
-		return t.overrideSelectorAgent, nil
+	if t.mockSelectorAgent != nil {
+		return t.mockSelectorAgent, nil
 	}
 
 	if t.Selector == nil || t.Selector.Agent == "" {
@@ -255,7 +255,7 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 			"strategy": t.Strategy,
 			"turn":     fmt.Sprintf("%d", turn),
 		}
-		turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s using team member %s", turn, t.Name, nextMember.GetName()), operationData)
+		turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s", turn, t.Name), operationData)
 
 		err = t.executeMemberAndAccumulate(turnCtx, nextMember, userInput, &messages, &newMessages, turn)
 

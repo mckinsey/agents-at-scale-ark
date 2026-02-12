@@ -261,7 +261,7 @@ func TestDetermineNextMember(t *testing.T) {
 			team := &Team{
 				Members: members,
 			}
-			team.overrideSelectorAgent = newMockSelectorAgent()
+			team.mockSelectorAgent = newMockSelectorAgent()
 
 			ctx := context.Background()
 			messages := []Message{}
@@ -338,7 +338,7 @@ func TestSelectFromGraphConstraints(t *testing.T) {
 				Members: members,
 			}
 
-			team.overrideSelectorAgent = newMockSelectorAgent()
+			team.mockSelectorAgent = newMockSelectorAgent()
 
 			ctx := context.Background()
 			messages := []Message{}

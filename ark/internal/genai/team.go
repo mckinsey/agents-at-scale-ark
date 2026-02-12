@@ -35,8 +35,8 @@ type Team struct {
 	Namespace         string
 	memory            MemoryInterface
 	eventStream       EventStreamInterface
-	// overrideSelectorAgent is used for testing to inject a mock selector agent
-	overrideSelectorAgent SelectorAgentInterface
+	// mockSelectorAgent is used for testing to inject a mock selector agent
+	mockSelectorAgent SelectorAgentInterface
 }
 
 // FullName returns the namespace/name format for the team
