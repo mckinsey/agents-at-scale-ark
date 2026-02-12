@@ -73,7 +73,7 @@ export function TeamCard({ team, agents, onUpdate, onDelete }: TeamCardProps) {
   actions.push({
     icon: MessageCircle,
     label: 'Chat with team',
-    onClick: () => toggleFloatingChat(team.name, 'team'),
+    onClick: () => toggleFloatingChat(team.name, 'team', team.strategy),
     className: isChatOpen ? 'fill-current' : '',
   });
 

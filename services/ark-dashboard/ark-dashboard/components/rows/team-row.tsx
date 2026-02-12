@@ -142,7 +142,7 @@ export function TeamRow({
                     className={cn('h-8 w-8 p-0', isChatOpen && 'text-primary')}
                     onClick={e => {
                       e.stopPropagation();
-                      toggleFloatingChat(team.name, 'team');
+                      toggleFloatingChat(team.name, 'team', team.strategy);
                     }}>
                     <MessageCircle
                       className={cn('h-4 w-4', isChatOpen && 'fill-primary')}

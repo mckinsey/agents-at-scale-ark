@@ -22,6 +22,7 @@ import {
 } from '@/atoms/experimental-features';
 import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { ChatMessage } from '@/components/chat/chat-message';
+import { StrategyIndicator } from '@/components/chat/strategy-indicator';
 import { TerminationEvent } from '@/components/chat/termination-event';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -47,6 +48,7 @@ interface FloatingChatProps {
   name: string;
   type: ChatType;
   position: number;
+  strategy?: string;
   onClose: () => void;
 }
 
@@ -54,6 +56,7 @@ export default function FloatingChat({
   name,
   type,
   position,
+  strategy,
   onClose,
 }: FloatingChatProps) {
   const [chatHistory, setChatHistory] = useAtom(chatHistoryAtom);
@@ -617,6 +620,10 @@ export default function FloatingChat({
                   <div className="text-muted-foreground py-8 text-center">
                     Start a conversation with the {type}
                   </div>
+                )}
+
+                {strategy && chatMessages.length > 0 && (
+                  <StrategyIndicator strategy={strategy} />
                 )}
 
                 {chatMessages.map((message, index) => {

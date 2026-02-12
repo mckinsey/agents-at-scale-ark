@@ -10,13 +10,17 @@ import {
   RotateCcw,
   Send,
 } from 'lucide-react';
-import type { ChatCompletionChunk } from 'openai/resources/chat/completions';
+import type {
+  ChatCompletionChunk,
+  ChatCompletionMessageParam,
+} from 'openai/resources/chat/completions';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { chatHistoryAtom, createNewSessionId } from '@/atoms/chat-history';
 import { isChatStreamingEnabledAtom } from '@/atoms/experimental-features';
 import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { ChatMessage } from '@/components/chat/chat-message';
+import { StrategyIndicator } from '@/components/chat/strategy-indicator';
 import { TerminationEvent } from '@/components/chat/termination-event';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -507,9 +511,14 @@ function DebugStreamView({
 interface EmbeddedChatPanelProps {
   name: string;
   type: ChatType;
+  strategy?: string;
 }
 
-export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
+export function EmbeddedChatPanel({
+  name,
+  type,
+  strategy,
+}: EmbeddedChatPanelProps) {
   const [chatHistory, setChatHistory] = useAtom(chatHistoryAtom);
   const [lastConversationId, setLastConversationId] = useAtom(
     lastConversationIdAtom,
@@ -617,13 +626,13 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
     chatMsgs: ExtendedChatMessage[],
     currentMsg: string,
   ): ExtendedChatMessage[] => {
-    return [...chatMsgs, { role: 'user', content: currentMsg }];
+    return [...chatMsgs, { role: 'user', content: currentMsg } as ExtendedChatMessage];
   };
 
   const handleStreamChatResponse = async (userMessage: string) => {
     const messageArray = buildChatMessages(chatMessages, userMessage);
     const assistantMessageIndex = chatMessages.length + 1;
-    setChatMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+    setChatMessages(prev => [...prev, { role: 'assistant', content: '' } as ExtendedChatMessage]);
 
     let accumulatedContent = '';
     const accumulatedToolCalls: Array<{
@@ -637,7 +646,7 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
     let queryName = '';
 
     for await (const chunk of chatService.streamChatResponse(
-      messageArray,
+      messageArray as ChatCompletionMessageParam[],
       type,
       name,
       sessionId,
@@ -690,7 +699,7 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
           role: 'assistant',
           content: accumulatedContent,
           tool_calls: accumulatedToolCalls,
-        };
+        } as ExtendedChatMessage;
         return updated;
       });
     }
@@ -705,7 +714,7 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
             status: 'failed',
             queryName: queryName || undefined,
           },
-        };
+        } as ExtendedChatMessage;
         return updated;
       });
       return;
@@ -719,7 +728,7 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
             role: 'tool',
             tool_call_id: toolCall.id,
             content: `Called ${toolCall.function.name} with ${toolCall.function.arguments}`,
-          });
+          } as ExtendedChatMessage);
         });
         return newMessages;
       });
@@ -730,7 +739,7 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
     const messageArray = buildChatMessages(chatMessages, userMessage);
 
     const query = await chatService.submitChatQuery(
-      messageArray,
+      messageArray as ChatCompletionMessageParam[],
       type,
       name,
       sessionId,
@@ -750,13 +759,13 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
             if (result.messages && result.messages.length > 0) {
               setChatMessages(prev => [
                 ...prev,
-                ...result.messages!.map((msg): ChatCompletionMessageParam => {
+                ...result.messages!.map((msg): ExtendedChatMessage => {
                   if (msg.role === 'tool') {
                     return {
                       role: 'tool',
                       content: msg.content || '',
                       tool_call_id: msg.tool_call_id || '',
-                    };
+                    } as ExtendedChatMessage;
                   } else if (msg.role === 'assistant') {
                     const baseMsg: {
                       role: 'assistant';
@@ -781,28 +790,28 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
                         function: tc.function,
                       }));
                     }
-                    return baseMsg;
+                    return baseMsg as ExtendedChatMessage;
                   } else if (msg.role === 'user') {
                     const baseMsg = {
                       role: 'user' as const,
                       content: msg.content || '',
                     };
                     if (msg.name) {
-                      return { ...baseMsg, name: msg.name };
+                      return { ...baseMsg, name: msg.name } as ExtendedChatMessage;
                     }
-                    return baseMsg;
+                    return baseMsg as ExtendedChatMessage;
                   } else {
                     return {
                       role: 'system',
                       content: msg.content || '',
-                    };
+                    } as ExtendedChatMessage;
                   }
                 }),
               ]);
             } else if (result.response) {
               setChatMessages(prev => [
                 ...prev,
-                { role: 'assistant', content: result.response! },
+                { role: 'assistant', content: result.response! } as ExtendedChatMessage,
               ]);
             }
           } else if (result.status === 'error') {
@@ -815,7 +824,7 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
                   status: 'failed',
                   queryName: query.name,
                 },
-              },
+              } as ExtendedChatMessage,
             ]);
           } else if (result.status === 'unknown') {
             setChatMessages(prev => [
@@ -827,7 +836,7 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
                   status: 'failed',
                   queryName: query.name,
                 },
-              },
+              } as ExtendedChatMessage,
             ]);
           }
 
@@ -845,7 +854,7 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
               status: 'failed',
               queryName: query.name,
             },
-          },
+          } as ExtendedChatMessage,
         ]);
         pollingStopped = true;
       }
@@ -873,7 +882,7 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
       },
     });
 
-    setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setChatMessages(prev => [...prev, { role: 'user', content: userMessage } as ExtendedChatMessage]);
     inputRef.current?.focus();
     setIsProcessing(true);
 
@@ -904,7 +913,7 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
           metadata: {
             status: 'failed',
           },
-        },
+        } as ExtendedChatMessage,
       ]);
       setError(errorMessage);
     } finally {
@@ -960,15 +969,20 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
                 </div>
               )}
 
+              {strategy && chatMessages.length > 0 && (
+                <StrategyIndicator strategy={strategy} />
+              )}
+
               {chatMessages.map((message, index) => {
-                if (message.role === 'tool') {
+                const msg = message as ChatCompletionMessageParam;
+                if (msg.role === 'tool') {
                   return null;
                 }
 
                 let content = '';
-                if (typeof message.content === 'string') {
-                  content = message.content;
-                } else if (Array.isArray(message.content)) {
+                if (typeof msg.content === 'string') {
+                  content = msg.content;
+                } else if (Array.isArray(msg.content)) {
                   content = message.content
                     .filter(
                       part =>
@@ -988,18 +1002,18 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
                 }
 
                 const toolCalls =
-                  'tool_calls' in message ? message.tool_calls : undefined;
+                  'tool_calls' in msg ? msg.tool_calls : undefined;
 
-                const senderName = 'name' in message ? message.name : undefined;
+                const senderName = 'name' in msg ? msg.name : undefined;
 
                 const toolCallsWithResults = toolCalls?.map(toolCall => {
                   const toolResultMessage = chatMessages
                     .slice(index + 1)
                     .find(
-                      msg =>
-                        msg.role === 'tool' &&
-                        'tool_call_id' in msg &&
-                        msg.tool_call_id === toolCall.id,
+                      m =>
+                        (m as ChatCompletionMessageParam).role === 'tool' &&
+                        'tool_call_id' in m &&
+                        (m as any).tool_call_id === toolCall.id,
                     );
 
                   return {
@@ -1020,7 +1034,7 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
                 });
 
                 const isMaxTurnsMessage =
-                  message.role === 'system' &&
+                  msg.role === 'system' &&
                   content.includes('maximum turns limit');
 
                 const hasToolCalls =
@@ -1062,7 +1076,7 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
                       ))}
                     {hasContent && (
                       <ChatMessage
-                        role={message.role as 'user' | 'assistant' | 'system'}
+                        role={msg.role as 'user' | 'assistant' | 'system'}
                         content={content}
                         viewMode="markdown"
                         sender={senderName}

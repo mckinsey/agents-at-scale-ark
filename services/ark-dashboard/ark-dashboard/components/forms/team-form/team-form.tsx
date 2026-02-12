@@ -420,7 +420,11 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
             className={`flex h-full min-h-0 flex-col overflow-hidden transition-all duration-300 ${
               isLeftPanelCollapsed ? 'w-full' : 'w-1/2'
             }`}>
-            <EmbeddedChatPanel name={teamName || ''} type="team" />
+            <EmbeddedChatPanel
+              name={teamName || ''}
+              type="team"
+              strategy={team?.strategy}
+            />
           </div>
         </div>
       ) : isCreating ? (

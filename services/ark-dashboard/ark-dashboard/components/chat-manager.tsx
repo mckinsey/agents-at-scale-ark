@@ -11,6 +11,7 @@ interface ChatWindow {
   name: string;
   type: ChatType;
   position: number;
+  strategy?: string;
 }
 
 export default function ChatManager() {
@@ -41,7 +42,7 @@ export default function ChatManager() {
 
   useEffect(() => {
     const handleOpenChat = (event: CustomEvent) => {
-      const { name, type } = event.detail;
+      const { name, type, strategy } = event.detail;
       const id = `${name}-${Date.now()}`;
 
       setChatWindows(prev => {
@@ -60,13 +61,14 @@ export default function ChatManager() {
             name,
             type,
             position: prev.length,
+            strategy,
           },
         ];
       });
     };
 
     const handleToggleChat = (event: CustomEvent) => {
-      const { name, type } = event.detail;
+      const { name, type, strategy } = event.detail;
 
       setChatWindows(prev => {
         const existingChat = prev.find(chat => chat.name === name);
@@ -94,6 +96,7 @@ export default function ChatManager() {
               name,
               type,
               position: prev.length,
+              strategy,
             },
           ];
         }
@@ -148,6 +151,7 @@ export default function ChatManager() {
           name={chat.name}
           type={chat.type}
           position={chat.position}
+          strategy={chat.strategy}
           onClose={() => handleCloseChat(chat.id)}
         />
       ))}
