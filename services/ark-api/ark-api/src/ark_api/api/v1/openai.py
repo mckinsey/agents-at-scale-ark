@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -102,8 +103,8 @@ def process_request_metadata(
 
 # See https://github.com/mckinsey/agents-at-scale-ark/issues/415 for potential improvement:
 # Start streaming first, wait for the first chunk/response, and use the status code of that to respond with
-async def proxy_streaming_response(streaming_url: str):
-    """Proxy streaming chunks from memory service."""
+async def proxy_streaming_response(streaming_url: str, ark_client, query_name: str):
+    """Proxy streaming chunks from memory service and append final Query status."""
     timeout = httpx.Timeout(BROKER_CONNECT_TIMEOUT, read=None)
     async with httpx.AsyncClient(timeout=timeout) as client:
         async with client.stream("GET", streaming_url) as response:
@@ -161,11 +162,57 @@ async def proxy_streaming_response(streaming_url: str):
                 # Forward the error response as an SSE error event
                 yield f"data: {json.dumps(error_data)}\n\n"
                 return  # Streaming failed, exit generator
-            # Use aiter_lines() for line-by-line streaming without buffering
+
+            # Stream all chunks from broker, but don't forward [DONE] or error chunks yet
             async for line in response.aiter_lines():
-                if line.strip():  # Skip empty lines
-                    # SSE format: each chunk is on its own line
-                    yield line + "\n\n"  # Add back SSE double newline separator
+                if line.strip():
+                    # Check if this is the [DONE] marker
+                    if line.strip() == "data: [DONE]":
+                        # Don't yield [DONE] yet - we'll send final chunk first
+                        break
+                    # Skip error chunks - completedQuery in final chunk has full status
+                    if line.strip().startswith("data: {") and '"error":{' in line:
+                        continue
+                    # Forward all other chunks
+                    yield line + "\n\n"
+
+            # After stream completes, wait for Query to complete and send final chunk
+            try:
+                max_wait = 30
+                poll_interval = 0.5
+                elapsed = 0
+                query = None
+
+                while elapsed < max_wait:
+                    query = await ark_client.queries.a_get(query_name)
+                    if query and hasattr(query, 'status') and query.status:
+                        phase = getattr(query.status, 'phase', '')
+                        if phase in ('done', 'failed', 'error'):
+                            break
+                    await asyncio.sleep(poll_interval)
+                    elapsed += poll_interval
+
+                if query:
+                    final_chunk = {
+                        "id": "chatcmpl-final",
+                        "object": "chat.completion.chunk",
+                        "created": int(time.time()),
+                        "model": query_name,
+                        "choices": [{
+                            "index": 0,
+                            "delta": {},
+                            "finish_reason": "",
+                        }],
+                        "ark": {
+                            "completedQuery": query.to_dict() if hasattr(query, 'to_dict') else query
+                        }
+                    }
+                    yield f"data: {json.dumps(final_chunk)}\n\n"
+            except Exception as e:
+                logger.warning(f"Failed to fetch Query {query_name} for final chunk: {e}")
+
+            # Now send [DONE] marker
+            yield "data: [DONE]\n\n"
 
 
 @router.post("/chat/completions")
@@ -283,7 +330,7 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
             # Proxy to the streaming endpoint
             logger.info(f"Streaming available for query: {query_name}")
             return StreamingResponse(
-                proxy_streaming_response(streaming_url),
+                proxy_streaming_response(streaming_url, ark_client, query_name),
                 media_type="text/event-stream",
                 headers=sse_headers,
             )

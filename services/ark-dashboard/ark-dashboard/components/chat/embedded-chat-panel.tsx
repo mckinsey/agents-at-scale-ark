@@ -650,6 +650,7 @@ export function EmbeddedChatPanel({
     let hasError = false;
     let errorMessage = '';
     let queryName = '';
+    let agentName: string | undefined;
 
     for await (const chunk of chatService.streamChatResponse(
       messageArray as ChatCompletionMessageParam[],
@@ -672,6 +673,26 @@ export function EmbeddedChatPanel({
       }
 
       const typedChunk = chunk as unknown as ChatCompletionChunk;
+
+      if (typedChunk?.id === 'chatcmpl-final' && 'ark' in chunk) {
+        const arkData = chunk.ark as {
+          completedQuery?: {
+            status?: {
+              response?: {
+                target?: {
+                  name?: string;
+                };
+              };
+            };
+          };
+        };
+        const targetName =
+          arkData.completedQuery?.status?.response?.target?.name;
+        if (targetName) {
+          agentName = targetName;
+        }
+      }
+
       const delta = typedChunk?.choices?.[0]?.delta;
       if (delta?.content) {
         accumulatedContent += delta.content;
@@ -701,11 +722,15 @@ export function EmbeddedChatPanel({
       }
       setChatMessages(prev => {
         const updated = [...prev];
-        updated[assistantMessageIndex] = {
+        const updatedMessage: ExtendedChatMessage = {
           role: 'assistant',
           content: accumulatedContent,
           tool_calls: accumulatedToolCalls,
         } as ExtendedChatMessage;
+        if (agentName) {
+          (updatedMessage as { name?: string }).name = agentName;
+        }
+        updated[assistantMessageIndex] = updatedMessage;
         return updated;
       });
     }
@@ -902,7 +927,7 @@ export function EmbeddedChatPanel({
     setIsProcessing(true);
 
     try {
-      if (isChatStreamingEnabled && type !== 'team') {
+      if (isChatStreamingEnabled) {
         await handleStreamChatResponse(userMessage);
       } else {
         await handlePollChatResponse(userMessage);
