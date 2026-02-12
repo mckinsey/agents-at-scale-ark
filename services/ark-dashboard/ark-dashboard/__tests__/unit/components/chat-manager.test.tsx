@@ -292,11 +292,11 @@ describe('ChatManager', () => {
 
   it('should clean up event listeners on unmount', () => {
     const { unmount } = render(<ChatManager />)
-    
+
     const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener')
-    
+
     unmount()
-    
+
     expect(removeEventListenerSpy).toHaveBeenCalledWith(
       'open-floating-chat',
       expect.any(Function)
@@ -305,7 +305,63 @@ describe('ChatManager', () => {
       'toggle-floating-chat',
       expect.any(Function)
     )
-    
+
     removeEventListenerSpy.mockRestore()
+  })
+
+  it('should open team chat with strategy', async () => {
+    render(<ChatManager />)
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('open-floating-chat', {
+          detail: {
+            name: 'strategy-team',
+            type: 'team',
+            strategy: 'round-robin',
+          },
+        })
+      )
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('floating-chat-strategy-team')).toBeInTheDocument()
+    })
+  })
+
+  it('should toggle team chat with strategy', async () => {
+    render(<ChatManager />)
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('toggle-floating-chat', {
+          detail: {
+            name: 'toggle-strategy-team',
+            type: 'team',
+            strategy: 'round-robin',
+          },
+        })
+      )
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('floating-chat-toggle-strategy-team')).toBeInTheDocument()
+    })
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('toggle-floating-chat', {
+          detail: {
+            name: 'toggle-strategy-team',
+            type: 'team',
+            strategy: 'round-robin',
+          },
+        })
+      )
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('floating-chat-toggle-strategy-team')).not.toBeInTheDocument()
+    })
   })
 })

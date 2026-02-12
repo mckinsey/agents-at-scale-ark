@@ -626,13 +626,19 @@ export function EmbeddedChatPanel({
     chatMsgs: ExtendedChatMessage[],
     currentMsg: string,
   ): ExtendedChatMessage[] => {
-    return [...chatMsgs, { role: 'user', content: currentMsg } as ExtendedChatMessage];
+    return [
+      ...chatMsgs,
+      { role: 'user', content: currentMsg } as ExtendedChatMessage,
+    ];
   };
 
   const handleStreamChatResponse = async (userMessage: string) => {
     const messageArray = buildChatMessages(chatMessages, userMessage);
     const assistantMessageIndex = chatMessages.length + 1;
-    setChatMessages(prev => [...prev, { role: 'assistant', content: '' } as ExtendedChatMessage]);
+    setChatMessages(prev => [
+      ...prev,
+      { role: 'assistant', content: '' } as ExtendedChatMessage,
+    ]);
 
     let accumulatedContent = '';
     const accumulatedToolCalls: Array<{
@@ -797,7 +803,10 @@ export function EmbeddedChatPanel({
                       content: msg.content || '',
                     };
                     if (msg.name) {
-                      return { ...baseMsg, name: msg.name } as ExtendedChatMessage;
+                      return {
+                        ...baseMsg,
+                        name: msg.name,
+                      } as ExtendedChatMessage;
                     }
                     return baseMsg as ExtendedChatMessage;
                   } else {
@@ -811,7 +820,10 @@ export function EmbeddedChatPanel({
             } else if (result.response) {
               setChatMessages(prev => [
                 ...prev,
-                { role: 'assistant', content: result.response! } as ExtendedChatMessage,
+                {
+                  role: 'assistant',
+                  content: result.response!,
+                } as ExtendedChatMessage,
               ]);
             }
           } else if (result.status === 'error') {
@@ -882,7 +894,10 @@ export function EmbeddedChatPanel({
       },
     });
 
-    setChatMessages(prev => [...prev, { role: 'user', content: userMessage } as ExtendedChatMessage]);
+    setChatMessages(prev => [
+      ...prev,
+      { role: 'user', content: userMessage } as ExtendedChatMessage,
+    ]);
     inputRef.current?.focus();
     setIsProcessing(true);
 
@@ -1013,7 +1028,8 @@ export function EmbeddedChatPanel({
                       m =>
                         (m as ChatCompletionMessageParam).role === 'tool' &&
                         'tool_call_id' in m &&
-                        (m as any).tool_call_id === toolCall.id,
+                        (m as { tool_call_id: string }).tool_call_id ===
+                          toolCall.id,
                     );
 
                   return {
