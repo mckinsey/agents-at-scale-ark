@@ -25,6 +25,21 @@ func TestNewTargetRoutingProcessor(t *testing.T) {
 			endpoints: nil,
 			wantLen:   0,
 		},
+		{
+			name: "single valid endpoint",
+			endpoints: []TargetEndpoint{
+				{Namespace: "tenant-a", Endpoint: "http://collector:4318/v1/traces", TLS: false},
+			},
+			wantLen: 1,
+		},
+		{
+			name: "multiple valid endpoints",
+			endpoints: []TargetEndpoint{
+				{Namespace: "tenant-a", Endpoint: "http://collector-a:4318", TLS: false},
+				{Namespace: "tenant-b", Endpoint: "https://collector-b:443", TLS: true, Headers: "Authorization=Bearer token"},
+			},
+			wantLen: 2,
+		},
 	}
 
 	for _, tt := range tests {
