@@ -1,0 +1,598 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>routing: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">mckinsey.com/ark/internal/telemetry/routing/broker_discovery.go (86.2%)</option>
+				
+				<option value="file1">mckinsey.com/ark/internal/telemetry/routing/broker_processor.go (92.9%)</option>
+				
+				<option value="file2">mckinsey.com/ark/internal/telemetry/routing/namespace_processor.go (100.0%)</option>
+				
+				<option value="file3">mckinsey.com/ark/internal/telemetry/routing/target_discovery.go (100.0%)</option>
+				
+				<option value="file4">mckinsey.com/ark/internal/telemetry/routing/target_exporter.go (100.0%)</option>
+				
+				<option value="file5">mckinsey.com/ark/internal/telemetry/routing/target_processor.go (77.8%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package routing
+
+import (
+        "context"
+        "fmt"
+        "strings"
+
+        corev1 "k8s.io/api/core/v1"
+        "k8s.io/apimachinery/pkg/types"
+        "sigs.k8s.io/controller-runtime/pkg/client"
+        logf "sigs.k8s.io/controller-runtime/pkg/log"
+)
+
+var log = logf.Log.WithName("telemetry.routing")
+
+const brokerConfigName = "ark-config-broker"
+
+type BrokerEndpoint struct {
+        Namespace string
+        Endpoint  string
+}
+
+type BrokerConfig struct {
+        Enabled    string
+        ServiceRef ServiceRef
+}
+
+type ServiceRef struct {
+        Name string
+        Port string
+}
+
+func DiscoverBrokerEndpoints(ctx context.Context, k8sClient client.Client) ([]BrokerEndpoint, error) <span class="cov8" title="1">{
+        if k8sClient == nil </span><span class="cov8" title="1">{
+                return nil, nil
+        }</span>
+
+        <span class="cov8" title="1">cmList := &amp;corev1.ConfigMapList{}
+        if err := k8sClient.List(ctx, cmList); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to list ConfigMaps: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">endpoints := make([]BrokerEndpoint, 0, len(cmList.Items))
+
+        for _, cm := range cmList.Items </span><span class="cov8" title="1">{
+                if cm.Name != brokerConfigName </span><span class="cov8" title="1">{
+                        continue</span>
+                }
+
+                <span class="cov8" title="1">config, err := parseBrokerConfig(&amp;cm)
+                if err != nil </span><span class="cov0" title="0">{
+                        log.Error(err, "failed to parse broker config", "namespace", cm.Namespace)
+                        continue</span>
+                }
+
+                <span class="cov8" title="1">if config.Enabled != "true" </span><span class="cov8" title="1">{
+                        continue</span>
+                }
+
+                <span class="cov8" title="1">endpoint, err := buildEndpoint(cm.Namespace, config.ServiceRef)
+                if err != nil </span><span class="cov0" title="0">{
+                        log.Error(err, "failed to build endpoint", "namespace", cm.Namespace)
+                        continue</span>
+                }
+
+                <span class="cov8" title="1">endpoints = append(endpoints, BrokerEndpoint{
+                        Namespace: cm.Namespace,
+                        Endpoint:  endpoint,
+                })
+
+                log.Info("discovered broker endpoint", "namespace", cm.Namespace, "endpoint", endpoint)</span>
+        }
+
+        <span class="cov8" title="1">return endpoints, nil</span>
+}
+
+func GetBrokerConfig(ctx context.Context, k8sClient client.Client, namespace string) (*BrokerConfig, error) <span class="cov8" title="1">{
+        if k8sClient == nil </span><span class="cov8" title="1">{
+                return nil, nil
+        }</span>
+
+        <span class="cov8" title="1">cm := &amp;corev1.ConfigMap{}
+        err := k8sClient.Get(ctx, types.NamespacedName{
+                Name:      brokerConfigName,
+                Namespace: namespace,
+        }, cm)
+        if err != nil </span><span class="cov8" title="1">{
+                if client.IgnoreNotFound(err) == nil </span><span class="cov8" title="1">{
+                        return nil, nil
+                }</span>
+                <span class="cov0" title="0">return nil, fmt.Errorf("failed to get ConfigMap %s/%s: %w", namespace, brokerConfigName, err)</span>
+        }
+
+        <span class="cov8" title="1">return parseBrokerConfig(cm)</span>
+}
+
+func parseBrokerConfig(cm *corev1.ConfigMap) (*BrokerConfig, error) <span class="cov8" title="1">{
+        config := &amp;BrokerConfig{}
+
+        if enabled, ok := cm.Data["enabled"]; ok </span><span class="cov8" title="1">{
+                config.Enabled = enabled
+        }</span>
+
+        <span class="cov8" title="1">if serviceRefStr, ok := cm.Data["serviceRef"]; ok </span><span class="cov8" title="1">{
+                serviceRef, err := parseServiceRef(serviceRefStr)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("failed to parse serviceRef: %w", err)
+                }</span>
+                <span class="cov8" title="1">config.ServiceRef = serviceRef</span>
+        }
+
+        <span class="cov8" title="1">return config, nil</span>
+}
+
+func parseServiceRef(data string) (ServiceRef, error) <span class="cov8" title="1">{
+        ref := ServiceRef{}
+        lines := strings.Split(strings.TrimSpace(data), "\n")
+
+        for _, line := range lines </span><span class="cov8" title="1">{
+                line = strings.TrimSpace(line)
+                if line == "" </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+
+                <span class="cov8" title="1">parts := strings.SplitN(line, ":", 2)
+                if len(parts) != 2 </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+
+                <span class="cov8" title="1">key := strings.TrimSpace(parts[0])
+                value := strings.Trim(strings.TrimSpace(parts[1]), "\"")
+
+                switch key </span>{
+                case "name":<span class="cov8" title="1">
+                        ref.Name = value</span>
+                case "port":<span class="cov8" title="1">
+                        ref.Port = value</span>
+                }
+        }
+
+        <span class="cov8" title="1">if ref.Name == "" </span><span class="cov8" title="1">{
+                return ref, fmt.Errorf("serviceRef.name is required")
+        }</span>
+
+        <span class="cov8" title="1">return ref, nil</span>
+}
+
+func buildEndpoint(namespace string, serviceRef ServiceRef) (string, error) <span class="cov8" title="1">{
+        if serviceRef.Name == "" </span><span class="cov8" title="1">{
+                return "", fmt.Errorf("serviceRef.name is empty")
+        }</span>
+
+        <span class="cov8" title="1">port := serviceRef.Port
+        switch port </span>{
+        case "", "http":<span class="cov8" title="1">
+                port = "80"</span>
+        case "https":<span class="cov8" title="1">
+                port = "443"</span>
+        }
+
+        <span class="cov8" title="1">endpoint := fmt.Sprintf("http://%s.%s.svc.cluster.local:%s",
+                serviceRef.Name, namespace, port)
+
+        return endpoint, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package routing
+
+import (
+        "context"
+        "strings"
+
+        "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+        "go.opentelemetry.io/otel/sdk/trace"
+)
+
+type ExporterConfig struct {
+        Namespace string
+        Exporter  trace.SpanExporter
+        Processor trace.SpanProcessor
+}
+
+func NewRoutingSpanProcessor(ctx context.Context, endpoints []BrokerEndpoint) (*NamespaceRoutingProcessor, error) <span class="cov8" title="1">{
+        configs := make(map[string]*ExporterConfig)
+
+        for _, endpoint := range endpoints </span><span class="cov8" title="1">{
+                otlpEndpoint := endpoint.Endpoint + "/v1/traces"
+                exporter, err := createExporter(ctx, otlpEndpoint)
+                if err != nil </span><span class="cov0" title="0">{
+                        log.Error(err, "failed to create exporter",
+                                "namespace", endpoint.Namespace,
+                                "endpoint", otlpEndpoint)
+                        continue</span>
+                }
+
+                <span class="cov8" title="1">configs[endpoint.Namespace] = &amp;ExporterConfig{
+                        Namespace: endpoint.Namespace,
+                        Exporter:  exporter,
+                        Processor: trace.NewBatchSpanProcessor(exporter),
+                }
+
+                log.Info("created broker exporter", "namespace", endpoint.Namespace)</span>
+        }
+
+        <span class="cov8" title="1">return NewNamespaceRoutingProcessor(configs), nil</span>
+}
+
+func createExporter(ctx context.Context, endpoint string) (trace.SpanExporter, error) <span class="cov8" title="1">{
+        host := extractHost(endpoint)
+        path := extractPath(endpoint)
+
+        opts := []otlptracehttp.Option{
+                otlptracehttp.WithEndpoint(host),
+                otlptracehttp.WithURLPath(path),
+                otlptracehttp.WithInsecure(),
+        }
+
+        return otlptracehttp.New(ctx, opts...)
+}</span>
+
+func extractHost(url string) string <span class="cov8" title="1">{
+        url = strings.TrimPrefix(url, "http://")
+        url = strings.TrimPrefix(url, "https://")
+
+        parts := strings.SplitN(url, "/", 2)
+        return parts[0]
+}</span>
+
+func extractPath(url string) string <span class="cov8" title="1">{
+        url = strings.TrimPrefix(url, "http://")
+        url = strings.TrimPrefix(url, "https://")
+
+        parts := strings.SplitN(url, "/", 2)
+        if len(parts) &gt; 1 </span><span class="cov8" title="1">{
+                return "/" + parts[1]
+        }</span>
+        <span class="cov8" title="1">return "/"</span>
+}
+
+func getStringAttribute(span trace.ReadOnlySpan, key string) string <span class="cov8" title="1">{
+        for _, attr := range span.Attributes() </span><span class="cov8" title="1">{
+                if string(attr.Key) == key </span><span class="cov8" title="1">{
+                        return attr.Value.AsString()
+                }</span>
+        }
+        <span class="cov8" title="1">return ""</span>
+}
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package routing
+
+import (
+        "context"
+        "sync"
+
+        "go.opentelemetry.io/otel/sdk/trace"
+
+        "mckinsey.com/ark/internal/telemetry"
+)
+
+type NamespaceRoutingProcessor struct {
+        endpoints map[string]*ExporterConfig
+        mu        sync.RWMutex
+}
+
+func NewNamespaceRoutingProcessor(endpoints map[string]*ExporterConfig) *NamespaceRoutingProcessor <span class="cov8" title="1">{
+        return &amp;NamespaceRoutingProcessor{
+                endpoints: endpoints,
+        }
+}</span>
+
+func (r *NamespaceRoutingProcessor) OnStart(parent context.Context, s trace.ReadWriteSpan) <span class="cov8" title="1">{
+        r.mu.RLock()
+        defer r.mu.RUnlock()
+
+        for _, config := range r.endpoints </span><span class="cov8" title="1">{
+                config.Processor.OnStart(parent, s)
+        }</span>
+}
+
+func (r *NamespaceRoutingProcessor) OnEnd(s trace.ReadOnlySpan) <span class="cov8" title="1">{
+        r.mu.RLock()
+        defer r.mu.RUnlock()
+
+        queryNamespace := getStringAttribute(s, telemetry.AttrQueryNamespace)
+        if queryNamespace == "" </span><span class="cov8" title="1">{
+                return
+        }</span>
+
+        <span class="cov8" title="1">if config, ok := r.endpoints[queryNamespace]; ok </span><span class="cov8" title="1">{
+                config.Processor.OnEnd(s)
+        }</span>
+}
+
+func (r *NamespaceRoutingProcessor) Shutdown(ctx context.Context) error <span class="cov8" title="1">{
+        r.mu.Lock()
+        defer r.mu.Unlock()
+
+        for _, config := range r.endpoints </span><span class="cov8" title="1">{
+                if err := config.Processor.Shutdown(ctx); err != nil </span><span class="cov8" title="1">{
+                        log.Error(err, "failed to shutdown processor", "namespace", config.Namespace)
+                }</span>
+        }
+        <span class="cov8" title="1">return nil</span>
+}
+
+func (r *NamespaceRoutingProcessor) ForceFlush(ctx context.Context) error <span class="cov8" title="1">{
+        r.mu.RLock()
+        defer r.mu.RUnlock()
+
+        for _, config := range r.endpoints </span><span class="cov8" title="1">{
+                if err := config.Processor.ForceFlush(ctx); err != nil </span><span class="cov8" title="1">{
+                        log.Error(err, "failed to flush processor", "namespace", config.Namespace)
+                }</span>
+        }
+        <span class="cov8" title="1">return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package routing
+
+import (
+        "context"
+        "fmt"
+        "strings"
+
+        corev1 "k8s.io/api/core/v1"
+        "sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const otelSecretName = "otel-environment-variables"
+
+type TargetEndpoint struct {
+        Namespace string
+        Endpoint  string
+        Headers   string
+        TLS       bool
+}
+
+func DiscoverTargetEndpoints(ctx context.Context, k8sClient client.Client) ([]TargetEndpoint, error) <span class="cov8" title="1">{
+        if k8sClient == nil </span><span class="cov8" title="1">{
+                return nil, nil
+        }</span>
+
+        <span class="cov8" title="1">secretList := &amp;corev1.SecretList{}
+        if err := k8sClient.List(ctx, secretList); err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("failed to list Secrets: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">endpoints := make([]TargetEndpoint, 0)
+
+        for _, secret := range secretList.Items </span><span class="cov8" title="1">{
+                if secret.Name != otelSecretName </span><span class="cov8" title="1">{
+                        continue</span>
+                }
+
+                <span class="cov8" title="1">endpoint := parseTargetSecret(&amp;secret)
+                if endpoint == nil </span><span class="cov8" title="1">{
+                        continue</span>
+                }
+
+                <span class="cov8" title="1">endpoint.Namespace = secret.Namespace
+                endpoints = append(endpoints, *endpoint)
+
+                log.Info("discovered OTEL endpoint", "namespace", secret.Namespace, "endpoint", endpoint.Endpoint)</span>
+        }
+
+        <span class="cov8" title="1">return endpoints, nil</span>
+}
+
+func parseTargetSecret(secret *corev1.Secret) *TargetEndpoint <span class="cov8" title="1">{
+        endpointBytes, ok := secret.Data["OTEL_EXPORTER_OTLP_ENDPOINT"]
+        if !ok </span><span class="cov8" title="1">{
+                return nil
+        }</span>
+
+        <span class="cov8" title="1">endpoint := strings.TrimSpace(string(endpointBytes))
+        if endpoint == "" </span><span class="cov8" title="1">{
+                return nil
+        }</span>
+
+        <span class="cov8" title="1">result := &amp;TargetEndpoint{
+                Endpoint: endpoint,
+                TLS:      strings.HasPrefix(endpoint, "https://"),
+        }
+
+        if headersBytes, ok := secret.Data["OTEL_EXPORTER_OTLP_HEADERS"]; ok </span><span class="cov8" title="1">{
+                result.Headers = strings.TrimSpace(string(headersBytes))
+        }</span>
+
+        <span class="cov8" title="1">return result</span>
+}
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package routing
+
+import (
+        "context"
+        "strings"
+
+        "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+        "go.opentelemetry.io/otel/sdk/trace"
+)
+
+func createTargetExporter(ctx context.Context, config TargetEndpoint) (trace.SpanExporter, error) <span class="cov8" title="1">{
+        host := extractHost(config.Endpoint)
+        path := extractPath(config.Endpoint)
+
+        opts := []otlptracehttp.Option{
+                otlptracehttp.WithEndpoint(host),
+                otlptracehttp.WithURLPath(path),
+        }
+
+        if !config.TLS </span><span class="cov8" title="1">{
+                opts = append(opts, otlptracehttp.WithInsecure())
+        }</span>
+
+        <span class="cov8" title="1">if config.Headers != "" </span><span class="cov8" title="1">{
+                headers := parseHeaders(config.Headers)
+                if len(headers) &gt; 0 </span><span class="cov8" title="1">{
+                        opts = append(opts, otlptracehttp.WithHeaders(headers))
+                }</span>
+        }
+
+        <span class="cov8" title="1">return otlptracehttp.New(ctx, opts...)</span>
+}
+
+func parseHeaders(headersStr string) map[string]string <span class="cov8" title="1">{
+        headers := make(map[string]string)
+
+        pairs := strings.Split(headersStr, ",")
+        for _, pair := range pairs </span><span class="cov8" title="1">{
+                pair = strings.TrimSpace(pair)
+                if pair == "" </span><span class="cov8" title="1">{
+                        continue</span>
+                }
+
+                <span class="cov8" title="1">parts := strings.SplitN(pair, "=", 2)
+                if len(parts) != 2 </span><span class="cov8" title="1">{
+                        continue</span>
+                }
+
+                <span class="cov8" title="1">key := strings.TrimSpace(parts[0])
+                value := strings.TrimSpace(parts[1])
+                if key != "" &amp;&amp; value != "" </span><span class="cov8" title="1">{
+                        headers[key] = value
+                }</span>
+        }
+
+        <span class="cov8" title="1">return headers</span>
+}
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">package routing
+
+import (
+        "context"
+
+        "go.opentelemetry.io/otel/sdk/trace"
+)
+
+func NewTargetRoutingProcessor(ctx context.Context, endpoints []TargetEndpoint) (*NamespaceRoutingProcessor, error) <span class="cov8" title="1">{
+        configs := make(map[string]*ExporterConfig)
+
+        for _, endpoint := range endpoints </span><span class="cov8" title="1">{
+                exporter, err := createTargetExporter(ctx, endpoint)
+                if err != nil </span><span class="cov0" title="0">{
+                        log.Error(err, "failed to create target exporter",
+                                "namespace", endpoint.Namespace,
+                                "endpoint", endpoint.Endpoint)
+                        continue</span>
+                }
+
+                <span class="cov8" title="1">configs[endpoint.Namespace] = &amp;ExporterConfig{
+                        Namespace: endpoint.Namespace,
+                        Exporter:  exporter,
+                        Processor: trace.NewBatchSpanProcessor(exporter),
+                }
+
+                log.Info("created target exporter", "namespace", endpoint.Namespace)</span>
+        }
+
+        <span class="cov8" title="1">return NewNamespaceRoutingProcessor(configs), nil</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
