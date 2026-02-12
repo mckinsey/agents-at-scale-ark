@@ -145,6 +145,7 @@ async def collect_resources(
                 elif resource_type == ResourceType.WORKFLOWS:
                     # Export Argo WorkflowTemplates instead of workflow instances
                     from kubernetes.client import CustomObjectsApi
+                    from kubernetes import config
                     custom_api = CustomObjectsApi()
                     try:
                         # Fetch Argo WorkflowTemplates
@@ -152,28 +153,27 @@ async def collect_resources(
                         version = "v1alpha1"
                         plural = "workflowtemplates"
 
-                        logger.info(f"Fetching WorkflowTemplates with namespace: {namespace}")
+                        # Always use namespace-scoped listing since ark-api has Role (not ClusterRole)
+                        # Default to the namespace where ark-api is running if none provided
+                        if not namespace:
+                            try:
+                                # Get the namespace from in-cluster config
+                                with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace", "r") as f:
+                                    namespace = f.read().strip()
+                            except:
+                                # Fallback to default namespace
+                                namespace = "default"
 
-                        if namespace:
-                            workflow_templates = custom_api.list_namespaced_custom_object(
-                                group=group,
-                                version=version,
-                                namespace=namespace,
-                                plural=plural
-                            )
-                        else:
-                            workflow_templates = custom_api.list_cluster_custom_object(
-                                group=group,
-                                version=version,
-                                plural=plural
-                            )
-
-                        logger.info(f"Found {len(workflow_templates.get('items', []))} WorkflowTemplates")
+                        workflow_templates = custom_api.list_namespaced_custom_object(
+                            group=group,
+                            version=version,
+                            namespace=namespace,
+                            plural=plural
+                        )
 
                         for template in workflow_templates.get("items", []):
                             if not resource_ids or template["metadata"]["name"] in resource_ids.get("workflows", []):
                                 items.append(template)
-                                logger.info(f"Added WorkflowTemplate: {template['metadata']['name']}")
                     except ApiException as e:
                         if e.status == 404:
                             logger.warning("WorkflowTemplates CRD not found - Argo Workflows may not be installed")
@@ -197,13 +197,11 @@ async def collect_resources(
                             items.append(evaluation_dict)
 
                 resources[resource_type.value] = items
-                logger.info(f"Collected {len(items)} items for {resource_type.value}")
 
             except Exception as e:
                 logger.error(f"Failed to collect {resource_type.value}: {e}")
                 resources[resource_type.value] = []
 
-    logger.info(f"Final resources collected: {', '.join([f'{k}: {len(v)}' for k, v in resources.items()])}")
     return resources
 
 
@@ -237,15 +235,11 @@ def create_export_zip(resources: Dict[str, List[Dict[str, Any]]]) -> bytes:
     """Create a ZIP file containing YAML files organized by resource type."""
     zip_buffer = io.BytesIO()
 
-    logger.info(f"Creating ZIP with resources: {', '.join([f'{k}: {len(v)}' for k, v in resources.items()])}")
-
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         for resource_type, items in resources.items():
             if not items:
-                logger.info(f"Skipping {resource_type} - no items")
                 continue
 
-            logger.info(f"Processing {len(items)} items for {resource_type}")
             # Create folder for resource type
             for item in items:
                 cleaned_item = clean_resource_for_yaml(item)
