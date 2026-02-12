@@ -8,7 +8,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace"
 )
 
-func createOTELExporter(ctx context.Context, config OTELEndpoint) (trace.SpanExporter, error) {
+func createTargetExporter(ctx context.Context, config TargetEndpoint) (trace.SpanExporter, error) {
 	host := extractHost(config.Endpoint)
 	path := extractPath(config.Endpoint)
 

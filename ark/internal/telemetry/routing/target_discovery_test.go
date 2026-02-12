@@ -14,11 +14,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
 
-func TestParseOTELSecret(t *testing.T) {
+func TestParseTargetSecret(t *testing.T) {
 	tests := []struct {
 		name   string
 		secret *corev1.Secret
-		want   *OTELEndpoint
+		want   *TargetEndpoint
 	}{
 		{
 			name: "valid HTTP endpoint without headers",
@@ -26,7 +26,7 @@ func TestParseOTELSecret(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: otelSecretName, Namespace: "test-ns"},
 				Data:       map[string][]byte{"OTEL_EXPORTER_OTLP_ENDPOINT": []byte("http://collector.example.com:4318/v1/traces")},
 			},
-			want: &OTELEndpoint{Endpoint: "http://collector.example.com:4318/v1/traces", TLS: false},
+			want: &TargetEndpoint{Endpoint: "http://collector.example.com:4318/v1/traces", TLS: false},
 		},
 		{
 			name: "valid HTTPS endpoint with headers",
@@ -37,7 +37,7 @@ func TestParseOTELSecret(t *testing.T) {
 					"OTEL_EXPORTER_OTLP_HEADERS":  []byte("x-honeycomb-team=abc123"),
 				},
 			},
-			want: &OTELEndpoint{Endpoint: "https://api.honeycomb.io/v1/traces", Headers: "x-honeycomb-team=abc123", TLS: true},
+			want: &TargetEndpoint{Endpoint: "https://api.honeycomb.io/v1/traces", Headers: "x-honeycomb-team=abc123", TLS: true},
 		},
 		{
 			name: "missing endpoint",
@@ -64,19 +64,19 @@ func TestParseOTELSecret(t *testing.T) {
 					"OTEL_EXPORTER_OTLP_HEADERS":  []byte("Authorization=Basic dXNlcjpwYXNz"),
 				},
 			},
-			want: &OTELEndpoint{Endpoint: "http://langfuse.svc:3000/api/public/otel", Headers: "Authorization=Basic dXNlcjpwYXNz", TLS: false},
+			want: &TargetEndpoint{Endpoint: "http://langfuse.svc:3000/api/public/otel", Headers: "Authorization=Basic dXNlcjpwYXNz", TLS: false},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parseOTELSecret(tt.secret)
-			assertOTELEndpoint(t, got, tt.want)
+			got := parseTargetSecret(tt.secret)
+			assertTargetEndpoint(t, got, tt.want)
 		})
 	}
 }
 
-func assertOTELEndpoint(t *testing.T, got, want *OTELEndpoint) {
+func assertTargetEndpoint(t *testing.T, got, want *TargetEndpoint) {
 	t.Helper()
 	if want == nil {
 		if got != nil {
@@ -98,8 +98,8 @@ func assertOTELEndpoint(t *testing.T, got, want *OTELEndpoint) {
 	}
 }
 
-func TestDiscoverOTELEndpoints_NilClient(t *testing.T) {
-	got, err := DiscoverOTELEndpoints(context.Background(), nil)
+func TestDiscoverTargetEndpoints_NilClient(t *testing.T) {
+	got, err := DiscoverTargetEndpoints(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestDiscoverOTELEndpoints_NilClient(t *testing.T) {
 	}
 }
 
-func TestDiscoverOTELEndpoints_ListError(t *testing.T) {
+func TestDiscoverTargetEndpoints_ListError(t *testing.T) {
 	listErr := errors.New("connection refused")
 	fakeClient := fake.NewClientBuilder().
 		WithInterceptorFuncs(interceptor.Funcs{
@@ -118,7 +118,7 @@ func TestDiscoverOTELEndpoints_ListError(t *testing.T) {
 		}).
 		Build()
 
-	got, err := DiscoverOTELEndpoints(context.Background(), fakeClient)
+	got, err := DiscoverTargetEndpoints(context.Background(), fakeClient)
 
 	if err == nil {
 		t.Fatal("expected error, got nil")
@@ -134,16 +134,16 @@ func TestDiscoverOTELEndpoints_ListError(t *testing.T) {
 	}
 }
 
-func TestDiscoverOTELEndpoints(t *testing.T) {
+func TestDiscoverTargetEndpoints(t *testing.T) {
 	tests := []struct {
 		name    string
 		secrets []runtime.Object
-		want    []OTELEndpoint
+		want    []TargetEndpoint
 	}{
 		{
 			name:    "no secrets returns empty",
 			secrets: []runtime.Object{},
-			want:    []OTELEndpoint{},
+			want:    []TargetEndpoint{},
 		},
 		{
 			name: "ignores non-matching secrets",
@@ -153,7 +153,7 @@ func TestDiscoverOTELEndpoints(t *testing.T) {
 					Data:       map[string][]byte{"OTEL_EXPORTER_OTLP_ENDPOINT": []byte("http://collector:4318")},
 				},
 			},
-			want: []OTELEndpoint{},
+			want: []TargetEndpoint{},
 		},
 		{
 			name: "discovers single endpoint",
@@ -163,7 +163,7 @@ func TestDiscoverOTELEndpoints(t *testing.T) {
 					Data:       map[string][]byte{"OTEL_EXPORTER_OTLP_ENDPOINT": []byte("http://collector:4318/v1/traces")},
 				},
 			},
-			want: []OTELEndpoint{{Namespace: "tenant-a", Endpoint: "http://collector:4318/v1/traces", TLS: false}},
+			want: []TargetEndpoint{{Namespace: "tenant-a", Endpoint: "http://collector:4318/v1/traces", TLS: false}},
 		},
 		{
 			name: "discovers multiple endpoints",
@@ -180,7 +180,7 @@ func TestDiscoverOTELEndpoints(t *testing.T) {
 					},
 				},
 			},
-			want: []OTELEndpoint{
+			want: []TargetEndpoint{
 				{Namespace: "tenant-a", Endpoint: "http://collector-a:4318", TLS: false},
 				{Namespace: "tenant-b", Endpoint: "https://collector-b:443", Headers: "Authorization=Bearer token", TLS: true},
 			},
@@ -197,14 +197,14 @@ func TestDiscoverOTELEndpoints(t *testing.T) {
 					Data:       map[string][]byte{"OTHER_KEY": []byte("value")},
 				},
 			},
-			want: []OTELEndpoint{{Namespace: "tenant-a", Endpoint: "http://valid:4318", TLS: false}},
+			want: []TargetEndpoint{{Namespace: "tenant-a", Endpoint: "http://valid:4318", TLS: false}},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			client := fake.NewClientBuilder().WithRuntimeObjects(tt.secrets...).Build()
-			got, err := DiscoverOTELEndpoints(context.Background(), client)
+			got, err := DiscoverTargetEndpoints(context.Background(), client)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -213,17 +213,17 @@ func TestDiscoverOTELEndpoints(t *testing.T) {
 	}
 }
 
-func assertEndpointsEqual(t *testing.T, got, want []OTELEndpoint) {
+func assertEndpointsEqual(t *testing.T, got, want []TargetEndpoint) {
 	t.Helper()
 	if len(got) != len(want) {
 		t.Fatalf("got %d endpoints, want %d", len(got), len(want))
 	}
 	for i := range want {
-		assertOTELEndpointEqual(t, got[i], want[i])
+		assertTargetEndpointEqual(t, got[i], want[i])
 	}
 }
 
-func assertOTELEndpointEqual(t *testing.T, got, want OTELEndpoint) {
+func assertTargetEndpointEqual(t *testing.T, got, want TargetEndpoint) {
 	t.Helper()
 	if got.Namespace != want.Namespace {
 		t.Errorf("Namespace = %q, want %q", got.Namespace, want.Namespace)

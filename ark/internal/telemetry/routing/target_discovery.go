@@ -11,14 +11,14 @@ import (
 
 const otelSecretName = "otel-environment-variables"
 
-type OTELEndpoint struct {
+type TargetEndpoint struct {
 	Namespace string
 	Endpoint  string
 	Headers   string
 	TLS       bool
 }
 
-func DiscoverOTELEndpoints(ctx context.Context, k8sClient client.Client) ([]OTELEndpoint, error) {
+func DiscoverTargetEndpoints(ctx context.Context, k8sClient client.Client) ([]TargetEndpoint, error) {
 	if k8sClient == nil {
 		return nil, nil
 	}
@@ -28,14 +28,14 @@ func DiscoverOTELEndpoints(ctx context.Context, k8sClient client.Client) ([]OTEL
 		return nil, fmt.Errorf("failed to list Secrets: %w", err)
 	}
 
-	endpoints := make([]OTELEndpoint, 0)
+	endpoints := make([]TargetEndpoint, 0)
 
 	for _, secret := range secretList.Items {
 		if secret.Name != otelSecretName {
 			continue
 		}
 
-		endpoint := parseOTELSecret(&secret)
+		endpoint := parseTargetSecret(&secret)
 		if endpoint == nil {
 			continue
 		}
@@ -49,7 +49,7 @@ func DiscoverOTELEndpoints(ctx context.Context, k8sClient client.Client) ([]OTEL
 	return endpoints, nil
 }
 
-func parseOTELSecret(secret *corev1.Secret) *OTELEndpoint {
+func parseTargetSecret(secret *corev1.Secret) *TargetEndpoint {
 	endpointBytes, ok := secret.Data["OTEL_EXPORTER_OTLP_ENDPOINT"]
 	if !ok {
 		return nil
@@ -60,7 +60,7 @@ func parseOTELSecret(secret *corev1.Secret) *OTELEndpoint {
 		return nil
 	}
 
-	result := &OTELEndpoint{
+	result := &TargetEndpoint{
 		Endpoint: endpoint,
 		TLS:      strings.HasPrefix(endpoint, "https://"),
 	}

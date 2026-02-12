@@ -9,15 +9,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
-func TestNewOTELRoutingProcessor(t *testing.T) {
+func TestNewTargetRoutingProcessor(t *testing.T) {
 	tests := []struct {
 		name      string
-		endpoints []OTELEndpoint
+		endpoints []TargetEndpoint
 		wantLen   int
 	}{
 		{
 			name:      "empty endpoints",
-			endpoints: []OTELEndpoint{},
+			endpoints: []TargetEndpoint{},
 			wantLen:   0,
 		},
 		{
@@ -30,12 +30,12 @@ func TestNewOTELRoutingProcessor(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			processor, err := NewOTELRoutingProcessor(ctx, tt.endpoints)
+			processor, err := NewTargetRoutingProcessor(ctx, tt.endpoints)
 			if err != nil {
-				t.Fatalf("NewOTELRoutingProcessor() error = %v", err)
+				t.Fatalf("NewTargetRoutingProcessor() error = %v", err)
 			}
 			if processor == nil {
-				t.Fatal("NewOTELRoutingProcessor() returned nil")
+				t.Fatal("NewTargetRoutingProcessor() returned nil")
 			}
 			if len(processor.endpoints) != tt.wantLen {
 				t.Errorf("endpoints length = %d, want %d", len(processor.endpoints), tt.wantLen)
@@ -44,24 +44,24 @@ func TestNewOTELRoutingProcessor(t *testing.T) {
 	}
 }
 
-func TestNewOTELRoutingProcessor_LogsOnSuccess(t *testing.T) {
+func TestNewTargetRoutingProcessor_LogsOnSuccess(t *testing.T) {
 	buf := &bytes.Buffer{}
 	logger := zap.New(zap.WriteTo(buf), zap.UseDevMode(true))
 	logf.SetLogger(logger)
 	log = logger.WithName("telemetry.routing")
 
-	endpoints := []OTELEndpoint{
+	endpoints := []TargetEndpoint{
 		{Namespace: "tenant-a", Endpoint: "http://collector:4318/v1/traces", TLS: false},
 	}
 
-	_, err := NewOTELRoutingProcessor(context.Background(), endpoints)
+	_, err := NewTargetRoutingProcessor(context.Background(), endpoints)
 	if err != nil {
-		t.Fatalf("NewOTELRoutingProcessor() error = %v", err)
+		t.Fatalf("NewTargetRoutingProcessor() error = %v", err)
 	}
 
 	logOutput := buf.String()
-	if !bytes.Contains(buf.Bytes(), []byte("created per-tenant OTEL exporter")) {
-		t.Errorf("expected info log 'created per-tenant OTEL exporter', got: %s", logOutput)
+	if !bytes.Contains(buf.Bytes(), []byte("created target exporter")) {
+		t.Errorf("expected info log 'created target exporter', got: %s", logOutput)
 	}
 	if !bytes.Contains(buf.Bytes(), []byte("tenant-a")) {
 		t.Errorf("expected namespace 'tenant-a' in log, got: %s", logOutput)

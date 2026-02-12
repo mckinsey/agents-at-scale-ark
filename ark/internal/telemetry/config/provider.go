@@ -41,7 +41,7 @@ func discoverBrokerProcessor(ctx context.Context, k8sClient client.Client) trace
 	}
 
 	if len(brokerEndpoints) == 0 {
-		log.Info("no broker OTEL endpoints discovered")
+		log.Info("no broker target endpoints discovered")
 		return nil
 	}
 
@@ -49,7 +49,7 @@ func discoverBrokerProcessor(ctx context.Context, k8sClient client.Client) trace
 	for _, endpoint := range brokerEndpoints {
 		namespaces = append(namespaces, endpoint.Namespace)
 	}
-	log.Info("discovered broker OTEL endpoints", "count", len(brokerEndpoints), "namespaces", namespaces)
+	log.Info("discovered broker target endpoints", "count", len(brokerEndpoints), "namespaces", namespaces)
 
 	routingProcessor, err := routing.NewRoutingSpanProcessor(ctx, brokerEndpoints)
 	if err != nil {
@@ -62,14 +62,14 @@ func discoverBrokerProcessor(ctx context.Context, k8sClient client.Client) trace
 }
 
 func discoverOTELProcessor(ctx context.Context, k8sClient client.Client) trace.SpanProcessor {
-	otelEndpoints, err := routing.DiscoverOTELEndpoints(ctx, k8sClient)
+	otelEndpoints, err := routing.DiscoverTargetEndpoints(ctx, k8sClient)
 	if err != nil {
-		log.Error(err, "failed to discover per-tenant OTEL endpoints")
+		log.Error(err, "failed to discover per-tenant target endpoints")
 		return nil
 	}
 
 	if len(otelEndpoints) == 0 {
-		log.Info("no per-tenant OTEL endpoints discovered")
+		log.Info("no per-tenant target endpoints discovered")
 		return nil
 	}
 
@@ -77,9 +77,9 @@ func discoverOTELProcessor(ctx context.Context, k8sClient client.Client) trace.S
 	for _, endpoint := range otelEndpoints {
 		namespaces = append(namespaces, endpoint.Namespace)
 	}
-	log.Info("discovered per-tenant OTEL endpoints", "count", len(otelEndpoints), "namespaces", namespaces)
+	log.Info("discovered per-tenant target endpoints", "count", len(otelEndpoints), "namespaces", namespaces)
 
-	otelProcessor, err := routing.NewOTELRoutingProcessor(ctx, otelEndpoints)
+	otelProcessor, err := routing.NewTargetRoutingProcessor(ctx, otelEndpoints)
 	if err != nil {
 		log.Error(err, "failed to create OTEL routing processor")
 		return nil
@@ -126,7 +126,7 @@ func NewProvider(ctx context.Context, k8sClient client.Client) *Provider {
 	}
 
 	if len(spanProcessors) == 0 {
-		log.Info("no OTEL endpoints configured, using no-op telemetry")
+		log.Info("no target endpoints configured, using no-op telemetry")
 		return newNoopProvider()
 	}
 

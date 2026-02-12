@@ -6,13 +6,13 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace"
 )
 
-func NewOTELRoutingProcessor(ctx context.Context, endpoints []OTELEndpoint) (*NamespaceRoutingProcessor, error) {
+func NewTargetRoutingProcessor(ctx context.Context, endpoints []TargetEndpoint) (*NamespaceRoutingProcessor, error) {
 	configs := make(map[string]*ExporterConfig)
 
 	for _, endpoint := range endpoints {
-		exporter, err := createOTELExporter(ctx, endpoint)
+		exporter, err := createTargetExporter(ctx, endpoint)
 		if err != nil {
-			log.Error(err, "failed to create OTEL exporter",
+			log.Error(err, "failed to create target exporter",
 				"namespace", endpoint.Namespace,
 				"endpoint", endpoint.Endpoint)
 			continue
@@ -24,7 +24,7 @@ func NewOTELRoutingProcessor(ctx context.Context, endpoints []OTELEndpoint) (*Na
 			Processor: trace.NewBatchSpanProcessor(exporter),
 		}
 
-		log.Info("created per-tenant OTEL exporter", "namespace", endpoint.Namespace)
+		log.Info("created target exporter", "namespace", endpoint.Namespace)
 	}
 
 	return NewNamespaceRoutingProcessor(configs), nil
