@@ -16,10 +16,10 @@ const getErrorMessage = (error: unknown): string => {
   return 'An unexpected error occurred';
 };
 
-export const useGetMemoryResources = () => {
+export const useGetMemoryResources = (namespace?: string) => {
   const query = useQuery({
-    queryKey: [GET_MEMORY_RESOURCES_QUERY_KEY],
-    queryFn: memoryService.getMemoryResources,
+    queryKey: [GET_MEMORY_RESOURCES_QUERY_KEY, namespace],
+    queryFn: () => memoryService.getMemoryResources(namespace),
   });
 
   useEffect(() => {

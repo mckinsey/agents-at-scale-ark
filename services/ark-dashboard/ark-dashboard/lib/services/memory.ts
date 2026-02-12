@@ -59,10 +59,14 @@ export type MemoryMessagesFilters = {
 
 export const memoryService = {
   // Get all memory resources in a namespace
-  async getMemoryResources(): Promise<MemoryResource[]> {
+  async getMemoryResources(namespace?: string): Promise<MemoryResource[]> {
     try {
+      const params = namespace ? { namespace } : undefined;
       const url = `/api/v1/memories`;
-      const response = await apiClient.get<MemoryListResponse>(url);
+      const response = await apiClient.get<MemoryListResponse>(
+        url,
+        params ? { params } : undefined,
+      );
 
       return response?.items || [];
     } catch (error) {
