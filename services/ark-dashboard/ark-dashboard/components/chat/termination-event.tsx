@@ -9,7 +9,7 @@ export function TerminationEvent({
 }: Readonly<TerminationEventProps>) {
   return (
     <div className={`text-muted-foreground text-sm italic ${className || ''}`}>
-      Conversation terminated by {agentName}
+      {agentName} has terminated the conversation with the following message:
     </div>
   );
 }

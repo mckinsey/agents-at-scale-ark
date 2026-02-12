@@ -695,12 +695,24 @@ export default function FloatingChat({
                     };
                   });
 
-                  const terminateToolCall = toolCalls?.find(tc => {
+                  const terminateToolCall = toolCallsWithResults?.find(tc => {
                     if ('function' in tc && tc.function) {
                       return tc.function.name === 'terminate';
                     }
                     return false;
                   });
+
+                  let terminateMessage: string | undefined;
+                  if (terminateToolCall && 'function' in terminateToolCall) {
+                    try {
+                      const args = JSON.parse(terminateToolCall.function.arguments);
+                      if (typeof args.response === 'string') {
+                        terminateMessage = args.response;
+                      }
+                    } catch {
+                      // fall through
+                    }
+                  }
 
                   const isMaxTurnsMessage =
                     msg.role === 'system' &&
@@ -754,9 +766,19 @@ export default function FloatingChat({
                         />
                       )}
                       {hasTermination && (
-                        <TerminationEvent
-                          agentName={senderName || 'Unknown Agent'}
-                        />
+                        <div className="mt-2 flex flex-col gap-2">
+                          <TerminationEvent
+                            agentName={senderName || 'Unknown Agent'}
+                          />
+                          {terminateMessage && (
+                            <ChatMessage
+                              role="assistant"
+                              content={terminateMessage}
+                              viewMode={viewMode}
+                              sender={senderName}
+                            />
+                          )}
+                        </div>
                       )}
                       {isMaxTurnsMessage && (
                         <div className="text-muted-foreground text-sm italic">

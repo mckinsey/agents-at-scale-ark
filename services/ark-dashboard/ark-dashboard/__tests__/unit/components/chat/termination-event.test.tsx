@@ -8,7 +8,7 @@ describe('TerminationEvent', () => {
     render(<TerminationEvent agentName="test-agent" />);
 
     expect(
-      screen.getByText('Conversation terminated by test-agent'),
+      screen.getByText(/test-agent has terminated the conversation with the following message/),
     ).toBeInTheDocument();
   });
 
@@ -25,13 +25,13 @@ describe('TerminationEvent', () => {
     const { rerender } = render(<TerminationEvent agentName="agent-alpha" />);
 
     expect(
-      screen.getByText('Conversation terminated by agent-alpha'),
+      screen.getByText(/agent-alpha has terminated the conversation with the following message/),
     ).toBeInTheDocument();
 
     rerender(<TerminationEvent agentName="agent-beta" />);
 
     expect(
-      screen.getByText('Conversation terminated by agent-beta'),
+      screen.getByText(/agent-beta has terminated the conversation with the following message/),
     ).toBeInTheDocument();
   });
 
