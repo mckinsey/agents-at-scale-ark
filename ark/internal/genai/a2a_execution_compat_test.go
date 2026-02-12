@@ -72,13 +72,14 @@ func TestResolveA2AMetadataFromInputFallsBackToContext(t *testing.T) {
 	assert.Equal(t, "query-id", taskID)
 }
 
-func TestStreamNativeA2AFinalMessage(t *testing.T) {
+func TestStreamNativeA2AMessageStrict(t *testing.T) {
 	stream := &fakeEventStream{}
 	message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
 		protocol.NewTextPart("done"),
 	})
 
-	streamNativeA2AFinalMessage(context.Background(), stream, message)
+	err := streamNativeA2AMessageStrict(context.Background(), stream, message, "test")
+	require.NoError(t, err)
 
 	require.Len(t, stream.chunks, 1)
 	streamedMessage, ok := stream.chunks[0].(*protocol.Message)

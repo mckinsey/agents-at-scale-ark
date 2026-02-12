@@ -127,7 +127,10 @@ func (a *Agent) executeToolCallsA2ANative(ctx context.Context, toolCalls []opena
 			return fmt.Errorf("agent %s has no tools configured", a.FullName())
 		}
 
-		result, err := a.Tools.ExecuteTool(execCtx, tc)
+		// Tool result round-trips through OpenAI ToolMessage because ToolResult
+		// carries OpenAI-shaped data; a native A2A tool result interface would
+		// remove this intermediate conversion.
+		result, toolErr := a.Tools.ExecuteTool(execCtx, tc)
 		toolMessage := ToolMessage(result.Content, result.ID)
 		convertedToolMessage, conversionErr := OpenAIToA2AMessage(toolMessage)
 		if conversionErr != nil {
@@ -137,12 +140,12 @@ func (a *Agent) executeToolCallsA2ANative(ctx context.Context, toolCalls []opena
 		convertedToolMessage = stampA2AMessageMetadata(convertedToolMessage, contextID, taskID)
 		*agentMessages = append(*agentMessages, convertedToolMessage)
 		*newMessages = append(*newMessages, convertedToolMessage)
-		if err := streamNativeA2AMessageStrict(execCtx, eventStream, convertedToolMessage, "tool"); err != nil {
-			return err
-		}
 
-		if err != nil {
-			return err
+		if toolErr != nil {
+			return toolErr
+		}
+		if streamErr := streamNativeA2AMessageStrict(execCtx, eventStream, convertedToolMessage, "tool"); streamErr != nil {
+			return streamErr
 		}
 	}
 	return nil

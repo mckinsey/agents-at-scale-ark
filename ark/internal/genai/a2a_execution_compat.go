@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
@@ -33,6 +32,8 @@ func (a *Agent) executeWithA2ACompatExecution(ctx context.Context, userInput pro
 		return nil, err
 	}
 
+	// A2APayloadModeNative: the compat wrapper produces protocol-native A2A output
+	// despite running OpenAI execution internally; callers receive native messages.
 	result := &ExecutionResult{
 		Messages:       messages,
 		A2AMessages:    a2aMessages,
@@ -46,7 +47,9 @@ func (a *Agent) executeWithA2ACompatExecution(ctx context.Context, userInput pro
 			TaskID:    dereferenceMessageID(lastMessage.TaskID),
 			Message:   &lastMessage,
 		}
-		streamNativeA2AFinalMessage(ctx, eventStream, lastMessage)
+		if err := streamNativeA2AMessageStrict(ctx, eventStream, lastMessage, "compat-final"); err != nil {
+			return nil, err
+		}
 	}
 	return result, nil
 }
@@ -84,7 +87,9 @@ func (a *Agent) executeWithExternalA2ANativeExecutionEngine(ctx context.Context,
 			TaskID:    dereferenceMessageID(lastMessage.TaskID),
 			Message:   &lastMessage,
 		}
-		streamNativeA2AFinalMessage(ctx, eventStream, lastMessage)
+		if err := streamNativeA2AMessageStrict(ctx, eventStream, lastMessage, "external-final"); err != nil {
+			return nil, err
+		}
 	}
 	return result, nil
 }
@@ -139,15 +144,6 @@ func stampA2AMessageMetadata(message protocol.Message, contextID, taskID string)
 		message.TaskID = &taskIDCopy
 	}
 	return message
-}
-
-func streamNativeA2AFinalMessage(ctx context.Context, eventStream EventStreamInterface, message protocol.Message) {
-	if eventStream == nil {
-		return
-	}
-	if err := eventStream.StreamChunk(ctx, &message); err != nil {
-		logf.FromContext(ctx).V(1).Error(err, "failed to stream compat-wrapped native A2A message")
-	}
 }
 
 func dereferenceMessageID(value *string) string {

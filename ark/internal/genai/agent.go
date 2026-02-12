@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/packages/param"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -208,6 +209,9 @@ func (a *Agent) executeModelCall(ctx context.Context, agentMessages []Message, t
 
 func (a *Agent) processAssistantMessage(choice openai.ChatCompletionChoice) Message {
 	assistantMessage := openai.AssistantMessage(choice.Message.Content)
+	if assistantMessage.OfAssistant != nil {
+		assistantMessage.OfAssistant.Name = param.Opt[string]{Value: a.Name}
+	}
 	if len(choice.Message.ToolCalls) > 0 {
 		toolCalls := make([]openai.ChatCompletionMessageToolCallParam, len(choice.Message.ToolCalls))
 		for i, call := range choice.Message.ToolCalls {
