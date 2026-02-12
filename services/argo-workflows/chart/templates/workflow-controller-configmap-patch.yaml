@@ -1,0 +1,39 @@
+{{- if .Values.minio.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-configure-artifact-repo
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "5"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  template:
+    spec:
+      serviceAccountName: {{ .Release.Name }}-config-hook
+      restartPolicy: OnFailure
+      containers:
+      - name: patch-configmap
+        image: alpine/k8s:1.28.3
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          echo "Configuring artifact repository for Argo Workflows..."
+
+          apk add --no-cache yq
+
+          kubectl get configmap {{ .Release.Name }}-argo-workflows-workflow-controller-configmap -n {{ .Release.Namespace }} -o yaml > /tmp/config.yaml
+
+          yq eval '.data.config |= (. | from_yaml | .workflowDefaults.spec.artifactRepositoryRef = {"configMap": "artifact-repositories", "key": "default"} | to_yaml)' -i /tmp/config.yaml
+
+          kubectl apply -f /tmp/config.yaml
+
+          echo "Artifact repository configuration complete"
+
+          kubectl rollout restart deployment {{ .Release.Name }}-argo-workflows-workflow-controller -n {{ .Release.Namespace }} || true
+
+          echo "Waiting for controller to restart..."
+          sleep 5
+{{- end }}

@@ -1,0 +1,65 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: engineering-build-test
+  namespace: default
+  annotations:
+    workflows.argoproj.io/title: "Engineering Build & Test Pipeline"
+    workflows.argoproj.io/description: "Clone repository, build, and run tests"
+spec:
+  entrypoint: main
+  serviceAccountName: argo-workflow
+  templates:
+    - name: main
+      script:
+        image: python:3.11-bookworm
+        command: [bash]
+        source: |
+          set -e
+          
+          echo "Starting engineering workflow"
+          echo "Timestamp: $(date)"
+          
+          echo "Installing required tools"
+          apt-get update -qq
+          apt-get install -y -qq git curl jq
+          
+          echo "Cloning repository"
+          cd /tmp
+          git clone --depth 1 https://github.com/mckinsey/agents-at-scale-ark.git
+          cd agents-at-scale-ark
+          
+          echo "Repository cloned successfully"
+          echo "Listing project structure"
+          ls -la | head -20
+          
+          echo "Checking Python version"
+          python --version
+          
+          echo "Analyzing Python code"
+          echo "Finding Python files in services"
+          find services -name "*.py" -type f | head -15
+          
+          echo "Counting Python files"
+          find services -name "*.py" -type f | wc -l
+          
+          echo "Checking for test files"
+          find tests -name "test_*.py" -type f | head -10
+          
+          echo "Running sample Python checks"
+          python -c "import sys; print(f'Python {sys.version}')"
+          python -c "import json; data={'status': 'ok', 'workflow': 'engineering-build-test', 'timestamp': '$(date +%s)'}; print(json.dumps(data, indent=2))"
+          
+          echo "Simulating build steps"
+          for i in 1 2 3 4 5; do
+            echo "Build step $i of 5 completed"
+            sleep 2
+          done
+          
+          echo "Running code quality simulation"
+          echo "Checking directory structure"
+          ls -d services/* | head -10
+          
+          echo "Workflow completed successfully"
+          echo "End timestamp: $(date)"
+          echo "Total duration: approximately 20 seconds"

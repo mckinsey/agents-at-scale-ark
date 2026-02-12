@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -29,6 +30,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
+	"mckinsey.com/ark/internal/apiserver"
 	"mckinsey.com/ark/internal/controller"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
@@ -98,6 +100,7 @@ func main() {
 
 	setupControllers(mgr, telemetryProvider, eventingProvider)
 	setupWebhooks(mgr)
+	setupEmbeddedApiserver(mgr)
 	startManager(mgr, metricsCertWatcher, webhookCertWatcher)
 }
 
@@ -323,6 +326,44 @@ func setupWebhooks(mgr ctrl.Manager) {
 			os.Exit(1)
 		}
 	}
+}
+
+func setupEmbeddedApiserver(mgr ctrl.Manager) {
+	backend := os.Getenv("ARK_STORAGE_BACKEND")
+	if backend == "" || backend == "etcd" {
+		return
+	}
+
+	cfg := apiserver.Config{}
+
+	if portStr := os.Getenv("ARK_APISERVER_PORT"); portStr != "" {
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			setupLog.Error(err, "invalid ARK_APISERVER_PORT")
+			os.Exit(1)
+		}
+		cfg.BindPort = port
+	}
+
+	cfg.PostgresHost = os.Getenv("ARK_POSTGRES_HOST")
+	if portStr := os.Getenv("ARK_POSTGRES_PORT"); portStr != "" {
+		port, _ := strconv.Atoi(portStr)
+		cfg.PostgresPort = port
+	}
+	cfg.PostgresDB = os.Getenv("ARK_POSTGRES_DATABASE")
+	cfg.PostgresUser = os.Getenv("ARK_POSTGRES_USER")
+	cfg.PostgresPass = os.Getenv("ARK_POSTGRES_PASSWORD")
+	cfg.PostgresSSL = os.Getenv("ARK_POSTGRES_SSL_MODE")
+	if cfg.PostgresSSL == "" {
+		cfg.PostgresSSL = "disable"
+	}
+
+	server := apiserver.New(cfg)
+	if err := mgr.Add(server); err != nil {
+		setupLog.Error(err, "unable to add embedded apiserver to manager")
+		os.Exit(1)
+	}
+	setupLog.Info("embedded apiserver configured", "backend", backend)
 }
 
 func startManager(mgr ctrl.Manager, metricsCertWatcher, webhookCertWatcher *certwatcher.CertWatcher) {
