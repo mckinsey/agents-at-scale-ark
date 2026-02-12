@@ -5,6 +5,8 @@ package genai
 import (
 	"reflect"
 	"testing"
+
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
 // Test constants to avoid duplication
@@ -502,5 +504,60 @@ func TestExtractLastAssistantMessageContent(t *testing.T) {
 				t.Errorf("ExtractLastAssistantMessageContent() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestPrepareA2AExecutionMessages(t *testing.T) {
+	input := []protocol.Message{
+		protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{protocol.NewTextPart("first")}),
+		protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{protocol.NewTextPart("current")}),
+	}
+	memory := []protocol.Message{
+		protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{protocol.NewTextPart("history")}),
+	}
+
+	current, contextMessages := PrepareA2AExecutionMessages(input, memory)
+	if got := ExtractA2ATextFromMessage(current); got != "current" {
+		t.Fatalf("current message = %q, want %q", got, "current")
+	}
+	if len(contextMessages) != 2 {
+		t.Fatalf("context message len = %d, want %d", len(contextMessages), 2)
+	}
+	if got := ExtractA2ATextFromMessage(contextMessages[0]); got != "history" {
+		t.Fatalf("context[0] = %q, want %q", got, "history")
+	}
+	if got := ExtractA2ATextFromMessage(contextMessages[1]); got != "first" {
+		t.Fatalf("context[1] = %q, want %q", got, "first")
+	}
+}
+
+func TestPrepareA2ANewMessagesForMemory(t *testing.T) {
+	input := []protocol.Message{
+		protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{protocol.NewTextPart("q")}),
+	}
+	response := []protocol.Message{
+		protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{protocol.NewTextPart("a")}),
+	}
+
+	newMessages := PrepareA2ANewMessagesForMemory(input, response)
+	if len(newMessages) != 2 {
+		t.Fatalf("new messages len = %d, want %d", len(newMessages), 2)
+	}
+	if got := ExtractA2ATextFromMessage(newMessages[0]); got != "q" {
+		t.Fatalf("newMessages[0] = %q, want %q", got, "q")
+	}
+	if got := ExtractA2ATextFromMessage(newMessages[1]); got != "a" {
+		t.Fatalf("newMessages[1] = %q, want %q", got, "a")
+	}
+}
+
+func TestExtractA2AUserMessageContent(t *testing.T) {
+	messages := []protocol.Message{
+		protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{protocol.NewTextPart("assistant")}),
+		protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{protocol.NewTextPart("user-input")}),
+	}
+
+	if got := ExtractA2AUserMessageContent(messages); got != "user-input" {
+		t.Fatalf("ExtractA2AUserMessageContent() = %q, want %q", got, "user-input")
 	}
 }

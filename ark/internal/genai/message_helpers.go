@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/openai/openai-go"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
 // PrepareExecutionMessages separates the current message from context messages
@@ -54,6 +55,34 @@ func PrepareNewMessagesForMemory(inputMessages, responseMessages []Message) []Me
 	newMessages = append(newMessages, inputMessages...)
 	newMessages = append(newMessages, responseMessages...)
 	return newMessages
+}
+
+func PrepareA2AExecutionMessages(inputMessages, memoryMessages []protocol.Message) (currentMessage protocol.Message, contextMessages []protocol.Message) {
+	currentMessage = inputMessages[len(inputMessages)-1]
+	contextMessages = make([]protocol.Message, 0, len(memoryMessages)+len(inputMessages)-1)
+	contextMessages = append(contextMessages, memoryMessages...)
+	contextMessages = append(contextMessages, inputMessages[:len(inputMessages)-1]...)
+	return currentMessage, contextMessages
+}
+
+func PrepareA2ANewMessagesForMemory(inputMessages, responseMessages []protocol.Message) []protocol.Message {
+	newMessages := make([]protocol.Message, 0, len(inputMessages)+len(responseMessages))
+	newMessages = append(newMessages, inputMessages...)
+	newMessages = append(newMessages, responseMessages...)
+	return newMessages
+}
+
+func ExtractA2ATextFromMessage(message protocol.Message) string {
+	return extractTextFromParts(message.Parts)
+}
+
+func ExtractA2AUserMessageContent(messages []protocol.Message) string {
+	for _, msg := range messages {
+		if msg.Role == protocol.MessageRoleUser {
+			return extractTextFromParts(msg.Parts)
+		}
+	}
+	return ""
 }
 
 // ExtractLastAssistantMessageContent extracts the content from the last assistant message

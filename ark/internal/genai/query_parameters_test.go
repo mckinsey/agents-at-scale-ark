@@ -2,6 +2,7 @@ package genai
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/openai/openai-go"
@@ -11,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
@@ -335,5 +337,65 @@ func BenchmarkGetQueryInputMessages(b *testing.B) {
 				b.Fatal(err)
 			}
 		}
+	})
+}
+
+func TestGetQueryInputA2AMessages(t *testing.T) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, arkv1alpha1.AddToScheme(scheme))
+
+	t.Run("messages type uses A2A input directly", func(t *testing.T) {
+		k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+		input := []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{protocol.NewTextPart("hello")}),
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{protocol.NewTextPart("world")}),
+		}
+		raw, err := json.Marshal(input)
+		require.NoError(t, err)
+
+		query := arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-query",
+				Namespace: "test-ns",
+			},
+			Spec: arkv1alpha1.QuerySpec{
+				Type: "messages",
+				Input: runtime.RawExtension{
+					Raw: raw,
+				},
+			},
+		}
+
+		messages, err := GetQueryInputA2AMessages(ctx, query, k8sClient)
+		require.NoError(t, err)
+		require.Len(t, messages, 2)
+		assert.Equal(t, protocol.MessageRoleUser, messages[0].Role)
+		assert.Equal(t, "hello", ExtractA2ATextFromMessage(messages[0]))
+		assert.Equal(t, protocol.MessageRoleAgent, messages[1].Role)
+		assert.Equal(t, "world", ExtractA2ATextFromMessage(messages[1]))
+	})
+
+	t.Run("user type resolves text input into a user message", func(t *testing.T) {
+		k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+		query := arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-query",
+				Namespace: "test-ns",
+			},
+			Spec: arkv1alpha1.QuerySpec{
+				Type: "user",
+			},
+		}
+		err := query.Spec.SetInputString("hello from user")
+		require.NoError(t, err)
+
+		messages, err := GetQueryInputA2AMessages(ctx, query, k8sClient)
+		require.NoError(t, err)
+		require.Len(t, messages, 1)
+		assert.Equal(t, protocol.MessageRoleUser, messages[0].Role)
+		assert.Equal(t, "hello from user", ExtractA2ATextFromMessage(messages[0]))
 	})
 }

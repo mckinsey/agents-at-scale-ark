@@ -12,6 +12,7 @@ import (
 	"mckinsey.com/ark/internal/eventing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
 const (
@@ -39,6 +40,8 @@ func getMemoryTimeout() time.Duration {
 type MemoryInterface interface {
 	AddMessages(ctx context.Context, queryID string, messages []Message) error
 	GetMessages(ctx context.Context) ([]Message, error)
+	AddA2AMessages(ctx context.Context, queryID string, messages []protocol.Message) error
+	GetA2AMessages(ctx context.Context) ([]protocol.Message, error)
 	Close() error
 }
 

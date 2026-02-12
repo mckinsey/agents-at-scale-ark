@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -220,10 +221,18 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	opCtx = r.Eventing.QueryRecorder().StartTokenCollection(opCtx)
 	opCtx = r.Eventing.QueryRecorder().Start(opCtx, "QueryExecution", fmt.Sprintf("Executing query %s", obj.Name), nil)
 
-	inputMessages, err := genai.GetQueryInputMessages(opCtx, obj, impersonatedClient)
-	if err == nil {
-		queryInput := genai.ExtractUserMessageContent(inputMessages)
-		r.Telemetry.QueryRecorder().RecordRootInput(span, queryInput)
+	if genai.IsA2AExperimentalEnabled(obj.Annotations) {
+		inputMessages, err := genai.GetQueryInputA2AMessages(opCtx, obj, impersonatedClient)
+		if err == nil {
+			queryInput := genai.ExtractA2AUserMessageContent(inputMessages)
+			r.Telemetry.QueryRecorder().RecordRootInput(span, queryInput)
+		}
+	} else {
+		inputMessages, err := genai.GetQueryInputMessages(opCtx, obj, impersonatedClient)
+		if err == nil {
+			queryInput := genai.ExtractUserMessageContent(inputMessages)
+			r.Telemetry.QueryRecorder().RecordRootInput(span, queryInput)
+		}
 	}
 
 	response, eventStream, err := r.reconcileQueue(opCtx, obj, impersonatedClient, memory)
@@ -443,29 +452,30 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 		return &errResponse
 	}
 
-	if executionResult == nil || executionResult.Messages == nil {
+	if executionResult == nil || (len(executionResult.Messages) == 0 && len(executionResult.A2AMessages) == 0) {
 		return nil
 	}
+	hydrateDelegatedA2AData(ctx, executionResult)
 
-	response := r.createSuccessResponse(target, executionResult.Messages, executionResult.A2APayloadMode)
-	if executionResult.A2AResponse != nil {
-		response.A2A = &arkv1alpha1.A2AMetadata{
-			ContextID: executionResult.A2AResponse.ContextID,
-			TaskID:    executionResult.A2AResponse.TaskID,
-		}
-	}
+	response := r.createSuccessResponse(target, executionResult.Messages, executionResult.A2AMessages, executionResult.A2APayloadMode)
+	applyA2AMetadataFromExecutionResult(&response, executionResult)
 
 	return &response
 }
 
-func (r *QueryReconciler) createSuccessResponse(target arkv1alpha1.QueryTarget, messages []genai.Message, payloadMode string) arkv1alpha1.Response {
-	rawJSON, err := serializeMessages(messages, payloadMode)
+func (r *QueryReconciler) createSuccessResponse(target arkv1alpha1.QueryTarget, messages []genai.Message, a2aMessages []protocol.Message, payloadMode string) arkv1alpha1.Response {
+	rawJSON, err := serializeMessages(messages, a2aMessages, payloadMode)
 	if err != nil {
 		serializationErr := fmt.Errorf("failed to serialize messages for target %v: %w", target, err)
 		return r.createErrorResponse(target, serializationErr)
 	}
 
-	content := lastResponseContent(messages)
+	content := ""
+	if payloadMode == genai.A2APayloadModeNative && len(a2aMessages) > 0 {
+		content = genai.ExtractA2ATextFromMessage(a2aMessages[len(a2aMessages)-1])
+	} else {
+		content = lastResponseContent(messages)
+	}
 
 	return arkv1alpha1.Response{
 		Target:  target,
@@ -497,15 +507,107 @@ func messageToText(message genai.Message) string {
 	return genai.ExtractTextFromMessage(message)
 }
 
-func serializeMessages(messages []genai.Message, payloadMode string) (string, error) {
-	if payloadMode == genai.A2APayloadModeNative {
-		a2aMessages := make([]protocol.Message, 0, len(messages))
-		for i, msg := range messages {
-			a2aMessage, err := genai.OpenAIToA2AMessage(msg)
-			if err != nil {
-				return "", fmt.Errorf("failed to convert message %d for native serialization: %w", i, err)
+func hydrateDelegatedA2AData(ctx context.Context, executionResult *genai.ExecutionResult) {
+	if executionResult == nil {
+		return
+	}
+	if executionResult.A2APayloadMode != genai.A2APayloadModeNative || !genai.IsA2AExperimentalEnabledInContext(ctx) {
+		return
+	}
+
+	contextID, taskIDs, artifacts := collectDelegatedA2AFromMessages(executionResult.Messages)
+	if contextID != "" {
+		executionResult.DelegatedA2AContextID = contextID
+	}
+	if len(taskIDs) > 0 {
+		executionResult.DelegatedA2ATaskIDs = taskIDs
+	}
+	if len(artifacts) > 0 {
+		executionResult.DelegatedA2AArtifacts = artifacts
+	}
+}
+
+func applyA2AMetadataFromExecutionResult(response *arkv1alpha1.Response, executionResult *genai.ExecutionResult) {
+	if response == nil || executionResult == nil {
+		return
+	}
+	if executionResult.A2AResponse != nil {
+		response.A2A = &arkv1alpha1.A2AMetadata{
+			ContextID: executionResult.A2AResponse.ContextID,
+			TaskID:    executionResult.A2AResponse.TaskID,
+		}
+		return
+	}
+	if executionResult.DelegatedA2AContextID == "" && len(executionResult.DelegatedA2ATaskIDs) == 0 {
+		return
+	}
+	taskID := ""
+	if len(executionResult.DelegatedA2ATaskIDs) > 0 {
+		taskID = executionResult.DelegatedA2ATaskIDs[len(executionResult.DelegatedA2ATaskIDs)-1]
+	}
+	response.A2A = &arkv1alpha1.A2AMetadata{
+		ContextID: executionResult.DelegatedA2AContextID,
+		TaskID:    taskID,
+	}
+}
+
+func collectDelegatedA2AFromMessages(messages []genai.Message) (string, []string, []map[string]interface{}) {
+	contextID := ""
+	taskIDs := make([]string, 0)
+	taskSet := make(map[string]struct{})
+	artifacts := make([]map[string]interface{}, 0)
+
+	for _, message := range messages {
+		msgUnion := openai.ChatCompletionMessageParamUnion(message)
+		if msgUnion.OfTool == nil {
+			continue
+		}
+		toolContent := strings.TrimSpace(msgUnion.OfTool.Content.OfString.Value)
+		if toolContent == "" || !strings.HasPrefix(toolContent, "{") {
+			continue
+		}
+
+		var envelope map[string]interface{}
+		if err := json.Unmarshal([]byte(toolContent), &envelope); err != nil {
+			continue
+		}
+		metadata := envelope
+		if nestedMetadata, ok := envelope["metadata"].(map[string]interface{}); ok {
+			metadata = nestedMetadata
+		}
+
+		if candidateContextID, ok := metadata["contextId"].(string); ok && candidateContextID != "" {
+			contextID = candidateContextID
+		}
+		if candidateTaskID, ok := metadata["taskId"].(string); ok && candidateTaskID != "" {
+			if _, seen := taskSet[candidateTaskID]; !seen {
+				taskSet[candidateTaskID] = struct{}{}
+				taskIDs = append(taskIDs, candidateTaskID)
 			}
-			a2aMessages = append(a2aMessages, a2aMessage)
+		}
+		if rawArtifacts, ok := metadata["artifacts"].([]interface{}); ok {
+			for _, rawArtifact := range rawArtifacts {
+				if artifactMap, artifactOK := rawArtifact.(map[string]interface{}); artifactOK {
+					artifacts = append(artifacts, artifactMap)
+				}
+			}
+		}
+	}
+
+	return contextID, taskIDs, artifacts
+}
+
+func serializeMessages(messages []genai.Message, a2aMessages []protocol.Message, payloadMode string) (string, error) {
+	if payloadMode == genai.A2APayloadModeNative {
+		if len(a2aMessages) == 0 {
+			a2aMessages = make([]protocol.Message, 0, len(messages))
+			for i, msg := range messages {
+				a2aMessage, err := genai.OpenAIToA2AMessage(msg)
+				if err != nil {
+					return "", fmt.Errorf("failed to convert message %d for native serialization: %w", i, err)
+				}
+				a2aMessages = append(a2aMessages, a2aMessage)
+			}
 		}
 		rawBytes, err := json.Marshal(a2aMessages)
 		if err != nil {
@@ -637,16 +739,38 @@ func (r *QueryReconciler) performTargetExecution(ctx context.Context, query arkv
 		"target": targetString,
 	})
 
-	// Get input messages for processing and telemetry
-	inputMessages, err := genai.GetQueryInputMessages(ctx, query, impersonatedClient)
+	useA2AExecution := false
+	var err error
+	switch target.Type {
+	case targetTypeAgent:
+		useA2AExecution, err = r.isAgentA2AExperimental(ctx, query, target.Name, impersonatedClient)
+	case targetTypeTeam:
+		useA2AExecution, err = r.isTeamA2AExperimental(ctx, query, target.Name, impersonatedClient)
+	}
 	if err != nil {
 		r.Telemetry.QueryRecorder().RecordError(span, err)
 		return nil, err
 	}
 
-	// Record input for telemetry
-	userContent := genai.ExtractUserMessageContent(inputMessages)
-	r.Telemetry.QueryRecorder().RecordInput(span, userContent)
+	var inputMessages []genai.Message
+	var inputA2AMessages []protocol.Message
+	if useA2AExecution {
+		inputA2AMessages, err = genai.GetQueryInputA2AMessages(ctx, query, impersonatedClient)
+		if err != nil {
+			r.Telemetry.QueryRecorder().RecordError(span, err)
+			return nil, err
+		}
+		userContent := genai.ExtractA2AUserMessageContent(inputA2AMessages)
+		r.Telemetry.QueryRecorder().RecordInput(span, userContent)
+	} else {
+		inputMessages, err = genai.GetQueryInputMessages(ctx, query, impersonatedClient)
+		if err != nil {
+			r.Telemetry.QueryRecorder().RecordError(span, err)
+			return nil, err
+		}
+		userContent := genai.ExtractUserMessageContent(inputMessages)
+		r.Telemetry.QueryRecorder().RecordInput(span, userContent)
+	}
 
 	timeout := 5 * time.Minute
 	if query.Spec.Timeout != nil {
@@ -658,9 +782,17 @@ func (r *QueryReconciler) performTargetExecution(ctx context.Context, query arkv
 	var result *genai.ExecutionResult
 	switch target.Type {
 	case targetTypeAgent:
-		result, err = r.executeAgent(execCtx, query, inputMessages, target.Name, impersonatedClient, memory, eventStream)
+		if useA2AExecution {
+			result, err = r.executeAgentA2A(execCtx, query, inputA2AMessages, target.Name, impersonatedClient, memory, eventStream)
+		} else {
+			result, err = r.executeAgent(execCtx, query, inputMessages, target.Name, impersonatedClient, memory, eventStream)
+		}
 	case targetTypeTeam:
-		result, err = r.executeTeam(execCtx, query, inputMessages, target.Name, impersonatedClient, memory, eventStream)
+		if useA2AExecution {
+			result, err = r.executeTeamA2A(execCtx, query, inputA2AMessages, target.Name, impersonatedClient, memory, eventStream)
+		} else {
+			result, err = r.executeTeam(execCtx, query, inputMessages, target.Name, impersonatedClient, memory, eventStream)
+		}
 	case targetTypeModel:
 		var messages []genai.Message
 		messages, err = r.executeModel(execCtx, query, inputMessages, target.Name, impersonatedClient, memory, eventStream)
@@ -681,9 +813,15 @@ func (r *QueryReconciler) performTargetExecution(ctx context.Context, query arkv
 	}
 
 	// Set the final response as output at trace level
-	if result != nil && len(result.Messages) > 0 {
-		lastMessage := result.Messages[len(result.Messages)-1]
-		responseContent := messageToText(lastMessage)
+	if result != nil {
+		responseContent := ""
+		switch {
+		case len(result.A2AMessages) > 0:
+			responseContent = genai.ExtractA2ATextFromMessage(result.A2AMessages[len(result.A2AMessages)-1])
+		case len(result.Messages) > 0:
+			lastMessage := result.Messages[len(result.Messages)-1]
+			responseContent = messageToText(lastMessage)
+		}
 		r.Telemetry.QueryRecorder().RecordOutput(span, responseContent)
 	}
 
@@ -691,6 +829,39 @@ func (r *QueryReconciler) performTargetExecution(ctx context.Context, query arkv
 	r.Eventing.QueryRecorder().Complete(ctx, "TargetExecution", "Target execution completed successfully", operationData)
 
 	return result, nil
+}
+
+func (r *QueryReconciler) isAgentA2AExperimental(ctx context.Context, query arkv1alpha1.Query, agentName string, impersonatedClient client.Client) (bool, error) {
+	var agentCRD arkv1alpha1.Agent
+	agentKey := types.NamespacedName{Name: agentName, Namespace: query.Namespace}
+	if err := impersonatedClient.Get(ctx, agentKey, &agentCRD); err != nil {
+		return false, fmt.Errorf("unable to get %v, error:%w", agentKey, err)
+	}
+
+	agentAnnotations := []map[string]string(nil)
+	if agentCRD.Annotations != nil && agentCRD.Annotations[annotations.A2AServerAddress] != "" {
+		agentAnnotations = []map[string]string{agentCRD.Annotations}
+	}
+	return genai.ResolveA2AExperimentalEnabled(nil, query.Annotations, agentAnnotations), nil
+}
+
+func (r *QueryReconciler) isTeamA2AExperimental(ctx context.Context, query arkv1alpha1.Query, teamName string, impersonatedClient client.Client) (bool, error) {
+	var teamCRD arkv1alpha1.Team
+	teamKey := types.NamespacedName{Name: teamName, Namespace: query.Namespace}
+	if err := impersonatedClient.Get(ctx, teamKey, &teamCRD); err != nil {
+		return false, fmt.Errorf("unable to fetch team %v, error:%w", teamKey, err)
+	}
+
+	team, err := genai.MakeTeam(ctx, impersonatedClient, &teamCRD, r.Telemetry, r.Eventing)
+	if err != nil {
+		return false, fmt.Errorf("unable to make team %v, error:%w", teamKey, err)
+	}
+
+	experimentalEnabled := team.PayloadMode == genai.A2APayloadModeNative
+	if queryExperimentalEnabled, hasValue := genai.GetA2AExperimentalEnabled(query.Annotations); hasValue {
+		experimentalEnabled = queryExperimentalEnabled
+	}
+	return experimentalEnabled, nil
 }
 
 func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Query, inputMessages []genai.Message, agentName string, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface) (*genai.ExecutionResult, error) {
@@ -713,17 +884,8 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 		return nil, fmt.Errorf("unable to make agent %v, error:%w", agentKey, err)
 	}
 
-	agentAnnotations := []map[string]string(nil)
-	if agentCRD.Annotations != nil && agentCRD.Annotations[annotations.A2AServerAddress] != "" {
-		agentAnnotations = []map[string]string{agentCRD.Annotations}
-	}
-	experimentalEnabled := genai.ResolveA2AExperimentalEnabled(nil, query.Annotations, agentAnnotations)
-	ctx = genai.WithA2AExperimentalEnabled(ctx, experimentalEnabled)
-	payloadMode := genai.A2APayloadModeCompat
-	if experimentalEnabled {
-		payloadMode = genai.A2APayloadModeNative
-	}
-	ctx = genai.WithA2APayloadMode(ctx, payloadMode)
+	ctx = genai.WithA2AExperimentalEnabled(ctx, false)
+	ctx = genai.WithA2APayloadMode(ctx, genai.A2APayloadModeCompat)
 
 	// Load existing messages from memory
 	memoryMessages, err := r.loadInitialMessages(ctx, memory)
@@ -744,11 +906,51 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 		}
 	}
 
-	result.A2APayloadMode = payloadMode
+	result.A2APayloadMode = genai.A2APayloadModeCompat
 
 	// Save all new messages (input + response) to memory
 	newMessages := genai.PrepareNewMessagesForMemory(inputMessages, result.Messages)
 	if err := memory.AddMessages(ctx, query.Name, newMessages); err != nil {
+		return nil, fmt.Errorf("failed to save new messages to memory: %w", err)
+	}
+
+	return result, nil
+}
+
+func (r *QueryReconciler) executeAgentA2A(ctx context.Context, query arkv1alpha1.Query, inputMessages []protocol.Message, agentName string, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface) (*genai.ExecutionResult, error) {
+	var agentCRD arkv1alpha1.Agent
+	agentKey := types.NamespacedName{Name: agentName, Namespace: query.Namespace}
+
+	if err := impersonatedClient.Get(ctx, agentKey, &agentCRD); err != nil {
+		return nil, fmt.Errorf("unable to get %v, error:%w", agentKey, err)
+	}
+
+	ctx = genai.WithExecutionMetadata(ctx, map[string]interface{}{
+		"agent": agentName,
+	})
+	ctx = genai.WithA2AExperimentalEnabled(ctx, true)
+	ctx = genai.WithA2APayloadMode(ctx, genai.A2APayloadModeNative)
+
+	agent, err := genai.MakeAgent(ctx, impersonatedClient, &agentCRD, r.Telemetry, r.Eventing)
+	if err != nil {
+		return nil, fmt.Errorf("unable to make agent %v, error:%w", agentKey, err)
+	}
+
+	memoryMessages, err := r.loadInitialA2AMessages(ctx, memory)
+	if err != nil {
+		return nil, fmt.Errorf("unable to load initial messages: %w", err)
+	}
+
+	currentMessage, contextMessages := genai.PrepareA2AExecutionMessages(inputMessages, memoryMessages)
+	result, err := agent.ExecuteA2A(ctx, currentMessage, contextMessages, memory, eventStream)
+	if err != nil {
+		return nil, err
+	}
+
+	result.A2APayloadMode = genai.A2APayloadModeNative
+
+	newMessages := genai.PrepareA2ANewMessagesForMemory(inputMessages, result.A2AMessages)
+	if err := memory.AddA2AMessages(ctx, query.Name, newMessages); err != nil {
 		return nil, fmt.Errorf("failed to save new messages to memory: %w", err)
 	}
 
@@ -768,16 +970,8 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 		return nil, fmt.Errorf("unable to make team %v, error:%w", teamKey, err)
 	}
 
-	experimentalEnabled := team.PayloadMode == genai.A2APayloadModeNative
-	if queryExperimentalEnabled, hasValue := genai.GetA2AExperimentalEnabled(query.Annotations); hasValue {
-		experimentalEnabled = queryExperimentalEnabled
-	}
-	ctx = genai.WithA2AExperimentalEnabled(ctx, experimentalEnabled)
-	payloadMode := genai.A2APayloadModeCompat
-	if experimentalEnabled {
-		payloadMode = genai.A2APayloadModeNative
-	}
-	ctx = genai.WithA2APayloadMode(ctx, payloadMode)
+	ctx = genai.WithA2AExperimentalEnabled(ctx, false)
+	ctx = genai.WithA2APayloadMode(ctx, genai.A2APayloadModeCompat)
 
 	historyMessages, err := r.loadInitialMessages(ctx, memory)
 	if err != nil {
@@ -792,11 +986,48 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 		return nil, err
 	}
 
-	result.A2APayloadMode = payloadMode
+	result.A2APayloadMode = genai.A2APayloadModeCompat
 
 	// Save all new messages (input + response) to memory
 	newMessages := genai.PrepareNewMessagesForMemory(inputMessages, result.Messages)
 	if err := memory.AddMessages(ctx, query.Name, newMessages); err != nil {
+		return nil, fmt.Errorf("failed to save new messages to memory: %w", err)
+	}
+
+	return result, nil
+}
+
+func (r *QueryReconciler) executeTeamA2A(ctx context.Context, query arkv1alpha1.Query, inputMessages []protocol.Message, teamName string, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface) (*genai.ExecutionResult, error) {
+	var teamCRD arkv1alpha1.Team
+	teamKey := types.NamespacedName{Name: teamName, Namespace: query.Namespace}
+
+	if err := impersonatedClient.Get(ctx, teamKey, &teamCRD); err != nil {
+		return nil, fmt.Errorf("unable to fetch team %v, error:%w", teamKey, err)
+	}
+
+	team, err := genai.MakeTeam(ctx, impersonatedClient, &teamCRD, r.Telemetry, r.Eventing)
+	if err != nil {
+		return nil, fmt.Errorf("unable to make team %v, error:%w", teamKey, err)
+	}
+
+	ctx = genai.WithA2AExperimentalEnabled(ctx, true)
+	ctx = genai.WithA2APayloadMode(ctx, genai.A2APayloadModeNative)
+
+	historyMessages, err := r.loadInitialA2AMessages(ctx, memory)
+	if err != nil {
+		return nil, fmt.Errorf("unable to load initial messages: %w", err)
+	}
+
+	currentMessage, contextMessages := genai.PrepareA2AExecutionMessages(inputMessages, historyMessages)
+	result, err := team.ExecuteA2A(ctx, currentMessage, contextMessages, memory, eventStream)
+	if err != nil {
+		return nil, err
+	}
+
+	result.A2APayloadMode = genai.A2APayloadModeNative
+
+	newMessages := genai.PrepareA2ANewMessagesForMemory(inputMessages, result.A2AMessages)
+	if err := memory.AddA2AMessages(ctx, query.Name, newMessages); err != nil {
 		return nil, fmt.Errorf("failed to save new messages to memory: %w", err)
 	}
 
@@ -949,6 +1180,15 @@ func (r *QueryReconciler) loadInitialMessages(ctx context.Context, memory genai.
 	messages, err := memory.GetMessages(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get messages from memory: %w", err)
+	}
+
+	return messages, nil
+}
+
+func (r *QueryReconciler) loadInitialA2AMessages(ctx context.Context, memory genai.MemoryInterface) ([]protocol.Message, error) {
+	messages, err := memory.GetA2AMessages(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get A2A messages from memory: %w", err)
 	}
 
 	return messages, nil

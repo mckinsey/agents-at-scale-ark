@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	eventnoop "mckinsey.com/ark/internal/eventing/noop"
@@ -633,10 +634,10 @@ func TestParseDelegatedInvocationNativeMessageHistoryContext(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "", userError)
 	require.Equal(t, "ctx-123", invocation.contextID)
-	require.Equal(t, RoleUser, resolveMessageRole(invocation.userInput))
-	require.Equal(t, "delegate this", ExtractTextFromMessage(invocation.userInput))
-	require.Len(t, invocation.history, 1)
-	require.Equal(t, RoleAssistant, resolveMessageRole(invocation.history[0]))
+	require.Equal(t, protocol.MessageRoleUser, invocation.a2aUserInput.Role)
+	require.Equal(t, "delegate this", ExtractA2ATextFromMessage(invocation.a2aUserInput))
+	require.Len(t, invocation.a2aHistory, 1)
+	require.Equal(t, protocol.MessageRoleAgent, invocation.a2aHistory[0].Role)
 }
 
 func TestParseDelegatedInvocationNativeFallsBackToInput(t *testing.T) {
@@ -646,8 +647,8 @@ func TestParseDelegatedInvocationNativeFallsBackToInput(t *testing.T) {
 	invocation, userError, err := parseDelegatedInvocation(args, A2APayloadModeNative, "team", "test-team")
 	require.NoError(t, err)
 	require.Equal(t, "", userError)
-	require.Equal(t, RoleUser, resolveMessageRole(invocation.userInput))
-	require.Equal(t, "fallback input", ExtractTextFromMessage(invocation.userInput))
+	require.Equal(t, protocol.MessageRoleUser, invocation.a2aUserInput.Role)
+	require.Equal(t, "fallback input", ExtractA2ATextFromMessage(invocation.a2aUserInput))
 }
 
 func TestParseDelegatedInvocationNativeInvalidContextID(t *testing.T) {
@@ -682,6 +683,52 @@ func TestApplyDelegationContextSetsExperimentalFlagFromPayloadMode(t *testing.T)
 	require.True(t, IsA2AExperimentalEnabledInContext(nativeCtx))
 	compatCtx := applyDelegationContext(context.Background(), A2APayloadModeCompat, "")
 	require.False(t, IsA2AExperimentalEnabledInContext(compatCtx))
+}
+
+func TestBuildDelegatedToolResultContentExperimentalNative(t *testing.T) {
+	metadata := map[string]interface{}{
+		"contextId": "ctx-123",
+		"taskId":    "task-456",
+		"message": map[string]interface{}{
+			"role": "agent",
+		},
+	}
+
+	content, err := buildDelegatedToolResultContent("assistant summary", metadata, true)
+	require.NoError(t, err)
+
+	var envelope map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(content), &envelope))
+	require.Equal(t, "ctx-123", envelope["contextId"])
+	require.Equal(t, "task-456", envelope["taskId"])
+	require.Equal(t, "assistant summary", envelope["content"])
+	_, hasMessage := envelope["message"]
+	require.True(t, hasMessage)
+}
+
+func TestBuildDelegatedToolResultContentCompatPreservesTextBehavior(t *testing.T) {
+	metadata := map[string]interface{}{
+		"contextId": "ctx-123",
+	}
+
+	content, err := buildDelegatedToolResultContent("assistant summary", metadata, false)
+	require.NoError(t, err)
+	require.Equal(t, "assistant summary", content)
+
+	jsonFallback, err := buildDelegatedToolResultContent("", metadata, false)
+	require.NoError(t, err)
+	require.Equal(t, `{"contextId":"ctx-123"}`, jsonFallback)
+}
+
+func TestBuildDelegatedToolResultContentExperimentalNativeFailsFast(t *testing.T) {
+	metadata := map[string]interface{}{
+		"contextId": "ctx-123",
+		"invalid":   make(chan int),
+	}
+
+	content, err := buildDelegatedToolResultContent("assistant summary", metadata, true)
+	require.Error(t, err)
+	require.Equal(t, "", content)
 }
 
 func TestAgentToolExecutor_NativeMessageDelegationWithoutInput(t *testing.T) {

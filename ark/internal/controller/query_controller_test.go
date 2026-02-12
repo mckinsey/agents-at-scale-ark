@@ -219,7 +219,7 @@ var _ = Describe("Query Controller Message Serialization", func() {
 				genai.ToolMessage("tool-content", "tool-1"),
 			}
 
-			jsonStr, err := serializeMessages(messages, genai.A2APayloadModeCompat)
+			jsonStr, err := serializeMessages(messages, nil, genai.A2APayloadModeCompat)
 			Expect(err).NotTo(HaveOccurred())
 
 			var decoded []map[string]interface{}
@@ -233,7 +233,7 @@ var _ = Describe("Query Controller Message Serialization", func() {
 
 		It("should handle empty messages gracefully", func() {
 			messages := []genai.Message{{}}
-			jsonStr, err := serializeMessages(messages, genai.A2APayloadModeCompat)
+			jsonStr, err := serializeMessages(messages, nil, genai.A2APayloadModeCompat)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(jsonStr).NotTo(BeEmpty())
 		})
@@ -244,7 +244,7 @@ var _ = Describe("Query Controller Message Serialization", func() {
 				genai.NewUserMessage("hi"),
 			}
 
-			jsonStr, err := serializeMessages(messages, genai.A2APayloadModeNative)
+			jsonStr, err := serializeMessages(messages, nil, genai.A2APayloadModeNative)
 			Expect(err).NotTo(HaveOccurred())
 
 			var decoded []protocol.Message
@@ -254,12 +254,31 @@ var _ = Describe("Query Controller Message Serialization", func() {
 			Expect(string(decoded[1].Role)).To(Equal("user"))
 		})
 
+		It("should serialize provided A2A messages directly in native mode", func() {
+			a2aMessages := []protocol.Message{
+				protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+					protocol.NewDataPart(map[string]any{
+						"structured": "payload",
+					}),
+				}),
+			}
+
+			jsonStr, err := serializeMessages(nil, a2aMessages, genai.A2APayloadModeNative)
+			Expect(err).NotTo(HaveOccurred())
+
+			var decoded []protocol.Message
+			Expect(json.Unmarshal([]byte(jsonStr), &decoded)).To(Succeed())
+			Expect(decoded).To(HaveLen(1))
+			Expect(decoded[0].Role).To(Equal(protocol.MessageRoleUser))
+			Expect(genai.ExtractA2ATextFromMessage(decoded[0])).To(ContainSubstring(`"structured":"payload"`))
+		})
+
 		It("should default to OpenAI format when payload mode is explicitly compat", func() {
 			messages := []genai.Message{
 				genai.NewUserMessage("test"),
 			}
 
-			jsonStr, err := serializeMessages(messages, genai.A2APayloadModeCompat)
+			jsonStr, err := serializeMessages(messages, nil, genai.A2APayloadModeCompat)
 			Expect(err).NotTo(HaveOccurred())
 
 			var decoded []map[string]interface{}
@@ -268,5 +287,80 @@ var _ = Describe("Query Controller Message Serialization", func() {
 			Expect(decoded[0]).To(HaveKeyWithValue("role", "user"))
 			Expect(decoded[0]).NotTo(HaveKey("parts"))
 		})
+	})
+})
+
+var _ = Describe("Query Controller Delegated A2A Aggregation", func() {
+	It("should collect delegated A2A payloads from tool messages", func() {
+		envelope := map[string]interface{}{
+			"contextId": "ctx-1",
+			"taskId":    "task-1",
+			"artifacts": []map[string]interface{}{
+				{
+					"artifactId": "artifact-1",
+				},
+			},
+		}
+		rawEnvelope, err := json.Marshal(envelope)
+		Expect(err).NotTo(HaveOccurred())
+
+		messages := []genai.Message{
+			genai.NewUserMessage("hello"),
+			genai.ToolMessage(string(rawEnvelope), "tool-call-1"),
+			genai.NewAssistantMessage("done"),
+		}
+
+		contextID, taskIDs, artifacts := collectDelegatedA2AFromMessages(messages)
+		Expect(contextID).To(Equal("ctx-1"))
+		Expect(taskIDs).To(Equal([]string{"task-1"}))
+		Expect(artifacts).To(HaveLen(1))
+		Expect(artifacts[0]).To(HaveKeyWithValue("artifactId", "artifact-1"))
+	})
+
+	It("should hydrate delegated A2A data only for native experimental mode", func() {
+		envelope := map[string]interface{}{
+			"contextId": "ctx-2",
+			"taskId":    "task-2",
+		}
+		rawEnvelope, err := json.Marshal(envelope)
+		Expect(err).NotTo(HaveOccurred())
+
+		result := &genai.ExecutionResult{
+			Messages:       []genai.Message{genai.ToolMessage(string(rawEnvelope), "tool-call-2")},
+			A2APayloadMode: genai.A2APayloadModeNative,
+		}
+		expCtx := genai.WithA2AExperimentalEnabled(context.Background(), true)
+		hydrateDelegatedA2AData(expCtx, result)
+		Expect(result.DelegatedA2AContextID).To(Equal("ctx-2"))
+		Expect(result.DelegatedA2ATaskIDs).To(Equal([]string{"task-2"}))
+
+		compatResult := &genai.ExecutionResult{
+			Messages:       []genai.Message{genai.ToolMessage(string(rawEnvelope), "tool-call-2")},
+			A2APayloadMode: genai.A2APayloadModeCompat,
+		}
+		hydrateDelegatedA2AData(expCtx, compatResult)
+		Expect(compatResult.DelegatedA2AContextID).To(BeEmpty())
+		Expect(compatResult.DelegatedA2ATaskIDs).To(BeEmpty())
+
+		nonExpResult := &genai.ExecutionResult{
+			Messages:       []genai.Message{genai.ToolMessage(string(rawEnvelope), "tool-call-2")},
+			A2APayloadMode: genai.A2APayloadModeNative,
+		}
+		hydrateDelegatedA2AData(context.Background(), nonExpResult)
+		Expect(nonExpResult.DelegatedA2AContextID).To(BeEmpty())
+		Expect(nonExpResult.DelegatedA2ATaskIDs).To(BeEmpty())
+	})
+
+	It("should fallback response A2A metadata from delegated aggregation", func() {
+		response := &arkv1alpha1.Response{}
+		executionResult := &genai.ExecutionResult{
+			DelegatedA2AContextID: "ctx-fallback",
+			DelegatedA2ATaskIDs:   []string{"task-old", "task-latest"},
+		}
+
+		applyA2AMetadataFromExecutionResult(response, executionResult)
+		Expect(response.A2A).NotTo(BeNil())
+		Expect(response.A2A.ContextID).To(Equal("ctx-fallback"))
+		Expect(response.A2A.TaskID).To(Equal("task-latest"))
 	})
 })

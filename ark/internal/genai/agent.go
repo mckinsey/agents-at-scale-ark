@@ -9,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
@@ -56,6 +57,29 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 			return nil, err
 		}
 		return result, err
+	}
+
+	a.telemetryRecorder.RecordSuccess(span)
+	a.eventingRecorder.Complete(ctx, "AgentExecution", "Agent execution completed successfully", operationData)
+	return result, nil
+}
+
+func (a *Agent) ExecuteA2A(ctx context.Context, userInput protocol.Message, history []protocol.Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	ctx, span := a.telemetryRecorder.StartAgentExecution(ctx, a.Name, a.Namespace)
+	defer span.End()
+
+	operationData := map[string]string{
+		"agent": a.FullName(),
+	}
+	ctx = a.eventingRecorder.Start(ctx, "AgentExecution", fmt.Sprintf("Executing agent %s", a.FullName()), operationData)
+
+	result, err := a.executeAgentA2A(ctx, userInput, history, memory, eventStream)
+	if err != nil {
+		a.telemetryRecorder.RecordError(span, err)
+		if !IsTerminateTeam(err) {
+			a.eventingRecorder.Fail(ctx, "AgentExecution", fmt.Sprintf("Agent execution failed: %v", err), err, operationData)
+		}
+		return nil, err
 	}
 
 	a.telemetryRecorder.RecordSuccess(span)
@@ -116,6 +140,25 @@ func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Mes
 	a2aEngine := NewA2AExecutionEngine(a.client, a.eventing.A2aRecorder())
 	contextID := GetA2AContextID(ctx)
 	return a2aEngine.Execute(ctx, a.Name, a.Namespace, a.Annotations, contextID, userInput, history, eventStream)
+}
+
+func (a *Agent) executeWithA2AExecutionEngineNative(ctx context.Context, userInput protocol.Message, history []protocol.Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	ctx = WithA2AExperimentalEnabled(ctx, true)
+	ctx = WithA2APayloadMode(ctx, A2APayloadModeNative)
+	a2aEngine := NewA2AExecutionEngine(a.client, a.eventing.A2aRecorder())
+	contextID := GetA2AContextID(ctx)
+	return a2aEngine.ExecuteNative(ctx, a.Name, a.Namespace, a.Annotations, contextID, userInput, history, eventStream)
+}
+
+func (a *Agent) executeAgentA2A(ctx context.Context, userInput protocol.Message, history []protocol.Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	if a.ExecutionEngine == nil {
+		return nil, fmt.Errorf("agent %s cannot be used in experimental A2A mode without an A2A-compatible execution engine", a.FullName())
+	}
+	if a.ExecutionEngine.Name != ExecutionEngineA2A {
+		return nil, fmt.Errorf("agent %s execution engine %s is not A2A-compatible in experimental mode", a.FullName(), a.ExecutionEngine.Name)
+	}
+	_ = memory
+	return a.executeWithA2AExecutionEngineNative(ctx, userInput, history, eventStream)
 }
 
 func (a *Agent) prepareMessages(ctx context.Context, userInput Message, history []Message) ([]Message, error) {

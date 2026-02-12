@@ -193,6 +193,38 @@ func GetQueryInputMessages(ctx context.Context, query arkv1alpha1.Query, k8sClie
 	return []Message{NewUserMessage(resolvedInput)}, nil
 }
 
+// GetQueryInputA2AMessages returns A2A-native input messages for experimental execution.
+func GetQueryInputA2AMessages(ctx context.Context, query arkv1alpha1.Query, k8sClient client.Client) ([]protocol.Message, error) {
+	queryType := query.Spec.Type
+	if queryType == "" {
+		queryType = RoleUser
+	}
+
+	if queryType != RoleUser {
+		var messages []protocol.Message
+		if err := json.Unmarshal(query.Spec.Input.Raw, &messages); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal input as A2A messages: %w", err)
+		}
+		return messages, nil
+	}
+
+	inputString, err := query.Spec.GetInputString()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get input string: %w", err)
+	}
+
+	resolvedInput, err := ResolveQueryInput(ctx, k8sClient, query.Namespace, inputString, query.Spec.Parameters)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve query input: %w", err)
+	}
+
+	return []protocol.Message{
+		protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+			protocol.NewTextPart(resolvedInput),
+		}),
+	}, nil
+}
+
 // toAnyMap converts map[string]string to map[string]any
 func toAnyMap(m map[string]string) map[string]any {
 	out := make(map[string]any, len(m))

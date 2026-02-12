@@ -8,6 +8,7 @@ import (
 	"github.com/openai/openai-go"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkann "mckinsey.com/ark/internal/annotations"
@@ -72,6 +73,35 @@ func (t *Team) Execute(ctx context.Context, userInput Message, history []Message
 
 	messages, err := t.executeWithTracking(execFunc, ctx, userInput, history)
 	return &ExecutionResult{Messages: messages}, err
+}
+
+func (t *Team) ExecuteA2A(ctx context.Context, userInput protocol.Message, history []protocol.Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	if len(t.Members) == 0 {
+		return nil, fmt.Errorf("team %s has no members configured", t.FullName())
+	}
+
+	t.memory = memory
+	t.eventStream = eventStream
+
+	var execFunc func(context.Context, protocol.Message, []protocol.Message) ([]protocol.Message, error)
+	switch t.Strategy {
+	case "sequential":
+		execFunc = t.executeSequentialA2A
+	case "round-robin":
+		execFunc = t.executeRoundRobinA2A
+	case "selector":
+		execFunc = t.executeSelectorA2A
+	case "graph":
+		execFunc = t.executeGraphA2A
+	default:
+		return nil, fmt.Errorf("unsupported strategy %s for team %s", t.Strategy, t.FullName())
+	}
+
+	messages, err := t.executeWithTrackingA2A(execFunc, ctx, userInput, history)
+	return &ExecutionResult{
+		A2AMessages:    messages,
+		A2APayloadMode: A2APayloadModeNative,
+	}, err
 }
 
 func (t *Team) executeSequential(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
@@ -180,6 +210,99 @@ func (t *Team) executeRoundRobin(ctx context.Context, userInput Message, history
 	}
 }
 
+func (t *Team) executeSequentialA2A(ctx context.Context, userInput protocol.Message, history []protocol.Message) ([]protocol.Message, error) {
+	messages := slices.Clone(history)
+	var newMessages []protocol.Message
+
+	for i, member := range t.Members {
+		if ctx.Err() != nil {
+			return newMessages, ctx.Err()
+		}
+
+		turnCtx, turnSpan := t.telemetryRecorder.StartTurn(ctx, i, member.GetName(), member.GetType())
+
+		operationData := map[string]string{
+			"teamName": t.Name,
+			"strategy": t.Strategy,
+			"turn":     fmt.Sprintf("%d", i),
+		}
+		turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s", i, t.Name), operationData)
+
+		err := t.executeMemberAndAccumulateA2A(turnCtx, member, userInput, &messages, &newMessages, i)
+
+		if len(newMessages) > 0 {
+			t.telemetryRecorder.RecordTurnOutput(turnSpan, nil, len(newMessages))
+		}
+
+		if err != nil {
+			t.telemetryRecorder.RecordError(turnSpan, err)
+			turnSpan.End()
+			t.eventingRecorder.Fail(turnCtx, "TeamTurn", fmt.Sprintf("Team turn failed: %v", err), err, operationData)
+			if IsTerminateTeam(err) {
+				return newMessages, nil
+			}
+			return newMessages, err
+		}
+
+		t.telemetryRecorder.RecordSuccess(turnSpan)
+		turnSpan.End()
+		t.eventingRecorder.Complete(turnCtx, "TeamTurn", fmt.Sprintf("Team turn %d completed successfully", i), operationData)
+	}
+
+	return newMessages, nil
+}
+
+func (t *Team) executeRoundRobinA2A(ctx context.Context, userInput protocol.Message, history []protocol.Message) ([]protocol.Message, error) {
+	messages := slices.Clone(history)
+	var newMessages []protocol.Message
+
+	messageCount := 0
+	memberIndex := 0
+
+	for {
+		if ctx.Err() != nil {
+			return newMessages, ctx.Err()
+		}
+
+		if t.MaxTurns != nil && messageCount >= *t.MaxTurns {
+			return newMessages, nil
+		}
+
+		member := t.Members[memberIndex]
+		turnCtx, turnSpan := t.telemetryRecorder.StartTurn(ctx, messageCount, member.GetName(), member.GetType())
+
+		operationData := map[string]string{
+			"teamName": t.Name,
+			"strategy": t.Strategy,
+			"turn":     fmt.Sprintf("%d", messageCount),
+		}
+		turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s", messageCount, t.Name), operationData)
+
+		err := t.executeMemberAndAccumulateA2A(turnCtx, member, userInput, &messages, &newMessages, messageCount)
+
+		if len(newMessages) > 0 {
+			t.telemetryRecorder.RecordTurnOutput(turnSpan, nil, len(newMessages))
+		}
+
+		if err != nil {
+			t.telemetryRecorder.RecordError(turnSpan, err)
+			turnSpan.End()
+			t.eventingRecorder.Fail(turnCtx, "TeamTurn", fmt.Sprintf("Team turn failed: %v", err), err, operationData)
+			if IsTerminateTeam(err) {
+				return newMessages, nil
+			}
+			return newMessages, fmt.Errorf("agent %s failed in team %s: %w", member.GetName(), t.FullName(), err)
+		}
+
+		t.telemetryRecorder.RecordSuccess(turnSpan)
+		turnSpan.End()
+		t.eventingRecorder.Complete(turnCtx, "TeamTurn", fmt.Sprintf("Team turn %d completed successfully", messageCount), operationData)
+
+		messageCount++
+		memberIndex = (memberIndex + 1) % len(t.Members)
+	}
+}
+
 func (t *Team) GetName() string {
 	return t.Name
 }
@@ -272,6 +395,42 @@ func (t *Team) executeWithTracking(execFunc func(context.Context, Message, []Mes
 	return result, err
 }
 
+func (t *Team) executeWithTrackingA2A(execFunc func(context.Context, protocol.Message, []protocol.Message) ([]protocol.Message, error), ctx context.Context, userInput protocol.Message, history []protocol.Message) ([]protocol.Message, error) {
+	maxTurns := 0
+	if t.MaxTurns != nil {
+		maxTurns = *t.MaxTurns
+	}
+
+	teamctx, span := t.telemetryRecorder.StartTeamExecution(ctx, t.Name, t.Namespace, t.Strategy, len(t.Members), maxTurns)
+	defer span.End()
+
+	teamctx = t.eventingRecorder.StartTokenCollection(teamctx)
+	operationData := map[string]string{
+		"teamName":    t.Name,
+		"strategy":    t.Strategy,
+		"memberCount": fmt.Sprintf("%d", len(t.Members)),
+	}
+	teamctx = t.eventingRecorder.Start(teamctx, "TeamExecution", fmt.Sprintf("Executing team %s", t.FullName()), operationData)
+
+	result, err := execFunc(teamctx, userInput, history)
+	if err != nil {
+		t.telemetryRecorder.RecordError(span, err)
+		t.eventingRecorder.Fail(teamctx, "TeamExecution", fmt.Sprintf("Team execution failed: %v", err), err, operationData)
+		return result, err
+	}
+
+	t.telemetryRecorder.RecordSuccess(span)
+	usage := t.eventingRecorder.GetTokenSummary(teamctx)
+	operationData["promptTokens"] = fmt.Sprintf("%d", usage.PromptTokens)
+	operationData["completionTokens"] = fmt.Sprintf("%d", usage.CompletionTokens)
+	operationData["totalTokens"] = fmt.Sprintf("%d", usage.TotalTokens)
+	t.eventingRecorder.Complete(teamctx, "TeamExecution", "Team execution completed successfully", operationData)
+
+	t.telemetryRecorder.RecordTokenUsage(span, usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens)
+	t.eventingRecorder.AddTokenUsage(ctx, usage)
+	return result, err
+}
+
 // executeMemberAndAccumulate executes a member and accumulates new messages
 func (t *Team) executeMemberAndAccumulate(ctx context.Context, member TeamMember, userInput Message, messages, newMessages *[]Message, turn int) error {
 	// Add team and current member to execution metadata for streaming
@@ -306,6 +465,73 @@ func (t *Team) executeMemberAndAccumulate(ctx context.Context, member TeamMember
 	*newMessages = append(*newMessages, messagesWithName...)
 	t.eventingRecorder.Complete(ctx, "TeamMember", "Team member execution completed successfully", operationData)
 	return nil
+}
+
+func (t *Team) executeMemberAndAccumulateA2A(ctx context.Context, member TeamMember, userInput protocol.Message, messages, newMessages *[]protocol.Message, turn int) error {
+	ctx = WithExecutionMetadata(ctx, map[string]interface{}{
+		"team":  t.Name,
+		"agent": member.GetName(),
+	})
+
+	operationData := map[string]string{
+		"memberType": member.GetType(),
+		"memberName": member.GetName(),
+		"strategy":   t.Strategy,
+		"teamName":   t.Name,
+		"turn":       fmt.Sprintf("%d", turn),
+	}
+	ctx = t.eventingRecorder.Start(ctx, "TeamMember", fmt.Sprintf("Executing member %s in team %s", member.GetName(), t.Name), operationData)
+
+	result, err := executeTeamMemberA2A(ctx, member, userInput, *messages, t.memory, t.eventStream)
+	if err != nil {
+		if result != nil {
+			memberMessages, extractErr := extractA2AMessages(result)
+			if extractErr == nil {
+				*messages = append(*messages, memberMessages...)
+				*newMessages = append(*newMessages, memberMessages...)
+			}
+		}
+		t.eventingRecorder.Fail(ctx, "TeamMember", fmt.Sprintf("Team member execution failed: %v", err), err, operationData)
+		return err
+	}
+
+	memberMessages, err := extractA2AMessages(result)
+	if err != nil {
+		t.eventingRecorder.Fail(ctx, "TeamMember", fmt.Sprintf("Team member returned invalid A2A result: %v", err), err, operationData)
+		return err
+	}
+	*messages = append(*messages, memberMessages...)
+	*newMessages = append(*newMessages, memberMessages...)
+	t.eventingRecorder.Complete(ctx, "TeamMember", "Team member execution completed successfully", operationData)
+	return nil
+}
+
+type a2aTeamMember interface {
+	ExecuteA2A(ctx context.Context, userInput protocol.Message, history []protocol.Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error)
+}
+
+func executeTeamMemberA2A(ctx context.Context, member TeamMember, userInput protocol.Message, history []protocol.Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	executable, ok := member.(a2aTeamMember)
+	if !ok {
+		return nil, fmt.Errorf("team member %s does not support experimental A2A execution", member.GetName())
+	}
+	return executable.ExecuteA2A(ctx, userInput, history, memory, eventStream)
+}
+
+func extractA2AMessages(result *ExecutionResult) ([]protocol.Message, error) {
+	if result == nil {
+		return nil, fmt.Errorf("execution result is nil")
+	}
+	if len(result.A2AMessages) > 0 {
+		return result.A2AMessages, nil
+	}
+	if result.A2AResponse != nil {
+		messages := buildA2AMessagesFromResponse(result.A2AResponse)
+		if len(messages) > 0 {
+			return messages, nil
+		}
+	}
+	return nil, fmt.Errorf("execution result does not contain A2A messages")
 }
 
 func loadTeamMember(ctx context.Context, k8sClient client.Client, memberSpec arkv1alpha1.TeamMember, namespace, teamName string, telemetryProvider telemetry.Provider, eventingProvider eventing.Provider) (TeamMember, map[string]string, error) {

@@ -1,6 +1,6 @@
 ---
 title: "RFC: Experimental A2A internal transport"
-description: Experimental internal A2A message format replacing OpenAI wire format. Subject to change or withdrawal.
+description: Experimental A2A-native execution path for Ark. Subject to change or withdrawal.
 ---
 
 import { Callout } from 'nextra/components'
@@ -21,38 +21,19 @@ import { Callout } from 'nextra/components'
 
 ## Problem
 
-ARK's internal message pipeline uses OpenAI's `ChatCompletionMessageParamUnion` as the canonical type at every layer: agent execution, team orchestration, memory storage, response serialization, and streaming. This creates several problems:
+Ark needs an A2A experiment that is isolated from the default OpenAI path and removable without side effects.
 
-- Every non-OpenAI provider must be forced into OpenAI's shape, even when the provider's native format differs significantly (e.g., Bedrock's Converse API).
-- Agent-to-agent messages carry OpenAI-specific fields (`tool_calls`, function parameters) that are irrelevant to orchestration.
-- Adding A2A-native features (extensions, history metadata, permissions) requires constant wrapping and unwrapping at every boundary.
-- The A2A protocol is the interoperability standard for agent communication. Using a vendor-specific format internally contradicts the goal of vendor-neutral orchestration.
+The previous approach mixed A2A and OpenAI internally. That created hidden overlap, made rollback harder, and reduced composability for non-OpenAI agent stacks.
 
 ## Proposal
 
-Replace the internal message type with `protocol.Message` from the A2A protocol library. OpenAI conversion happens once, at the model/provider boundary, inside `Model.ChatCompletion()`.
+When `ark.mckinsey.com/a2a-experimental-enabled: "true"` is active for an agent/team execution:
 
-### Type change
+- Ark uses `protocol.Message` end-to-end for query input, execution, delegation, memory I/O, and response serialization.
+- Ark runs a separate experimental execution path (`ExecuteA2A` / `ExecuteNative`) and keeps the default OpenAI path unchanged.
+- Ark requires agents to have an A2A-compatible execution engine and rejects local model execution in this mode.
 
-```go
-// Before
-type Message = openai.ChatCompletionMessageParamUnion
-
-// After
-type Message = protocol.Message
-```
-
-### Conversion boundary
-
-```
-[Query Input] --> OpenAIToA2AMessage() --> internal A2A pipeline
-                                            |
-[Agent/Team execution, Memory, Streaming]   |
-                                            v
-                              A2AToOpenAIMessage() --> [Model.ChatCompletion]
-```
-
-All internal code (agents, teams, memory, streaming, tool execution) operates on `protocol.Message`. OpenAI types only appear at the model call boundary.
+The OpenAI path remains the default and is unchanged when the flag is disabled.
 
 ## Enable the experiment
 
@@ -71,95 +52,61 @@ spec:
 
 When the annotation is absent or set to `"false"`, the legacy OpenAI transport is used and behavior is unchanged.
 
-### Resolution order
+## Runtime requirements
 
-The flag is resolved at execution time with this priority (highest to lowest):
+When experimental mode is enabled for a workload:
 
-1. **Team annotation** on the Team resource.
-2. **Query annotation** on the Query resource.
-3. **Agent annotation inference**: if any agent explicitly sets `"false"`, the result is `false`. If all agents with the annotation set `"true"`, the result is `true`.
-4. **Default**: disabled (`false`).
+- Target type must be `agent` or `team`.
+- Participating agents must define an `executionEngine`.
+- Local execution (no engine) is rejected with a validation error at execution time.
+- Engines used in this path must be A2A-compatible.
 
-### Fail-fast semantics
+This makes Ark transport-neutral in the experiment: Ark orchestrates with A2A, and execution engines convert to provider-specific model formats internally.
+
+## Composability model
+
+Any agent system that speaks A2A can participate through an execution engine, regardless of underlying model provider.
+
+Examples:
+
+- A LangChain-based A2A engine
+- A Claude-backed engine
+- A Gemini-backed engine
+- A custom internal engine
+
+Teams can compose heterogeneous members as long as each member is A2A-compatible.
+
+## Fail-fast behavior
 
 When experimental mode is enabled:
 
-- A2A streaming and message send are the **only** transport paths. There is no fallback to the OpenAI transport.
-- If A2A streaming fails, the error is returned immediately. No implicit retry via blocking `SendMessage` occurs.
-- The OpenAI `ChatCompletion` provider rejects calls when the experimental flag is active.
+- A2A transport failures are returned immediately.
+- No implicit fallback to local OpenAI execution is allowed.
+- The OpenAI model execution path is not used for experimental agent/team execution.
 
-This strict isolation ensures the experimental path can be evaluated independently and removed with no risk of hidden transport overlap.
-
-## Externally observable effects
-
-All effects are gated behind the experimental flag:
+## External behavior by mode
 
 | Surface | Disabled (default) | Enabled (experimental) |
 |---------|-------------------|----------------------|
-| `response.raw` | OpenAI JSON: `{"role":"assistant","content":"..."}` | A2A JSON: `{"kind":"message","role":"agent","parts":[...]}` |
-| Memory writes | OpenAI JSON via `A2AToOpenAIMessage` | Native A2A JSON |
-| Memory reads | Bidirectional: reads both OpenAI and A2A formats | Bidirectional: reads both formats |
-| Streaming chunks | OpenAI `ChatCompletionChunk` with optional A2A metadata | Native A2A `protocol.Message` events |
-| Tool delegation args | `{"input":"string"}` only | `{"message":<A2A>,"history":[...],"contextId":"..."}` or fallback to `input` |
+| Query input for agent/team | OpenAI input parsing | Native A2A parsing |
+| Internal execution payload | OpenAI message path | `protocol.Message` path |
+| `response.raw` | OpenAI JSON | A2A JSON |
+| Memory writes | OpenAI JSON | Native A2A JSON |
+| Memory reads | OpenAI JSON | Reads both OpenAI and A2A records |
+| Delegation payloads | `input` string | A2A `message`/`history` + metadata |
 
-When disabled, no external client, dashboard, or integration sees any change.
+## Memory compatibility
 
-## Implications
-
-### Memory compatibility
-
-`unmarshalMessageRobust()` reads both legacy OpenAI `{"role","content"}` and A2A `{"kind":"message","parts":[...]}` formats. Operators can switch modes without losing existing conversation history.
-
-### Tool call fidelity
-
-Tool calls are stored in A2A message metadata under `ark.mckinsey.com/tool-calls`. `recoverToolCalls()` handles typed structs, `[]interface{}` from JSON deserialization, and re-marshal fallback to ensure round-trip fidelity.
-
-### Dashboard and client impact
-
-Clients consuming `response.raw` need updating only when the experimental flag is enabled. The default behavior means no client changes are required for initial adoption.
-
-### Provider boundary
-
-Each provider (`provider_openai.go`, `provider_azure.go`, `provider_bedrock.go`) receives `[]openai.ChatCompletionMessageParamUnion` directly from `Model.ChatCompletion()`, which handles the A2A-to-OpenAI conversion. Providers do not need to know about A2A types.
+`unmarshalMessageRobust()` reads both legacy OpenAI records and A2A records. Existing OpenAI memory remains readable after enabling the experiment.
 
 ## Revert path
 
-Disabling the annotation fully restores legacy behavior at runtime. If the experiment is dropped entirely, the revert is contained to these files:
+Disabling the annotation restores the default path at runtime.
 
-| File | Revert action |
-|------|--------------|
-| `genai/types.go` | Restore `Message = openai.ChatCompletionMessageParamUnion` type alias, revert constructors |
-| `genai/message_conversion.go` | Delete (entire file is new) |
-| `genai/model_generic.go` | Remove A2A-to-OpenAI conversion in `ChatCompletion()` |
-| `genai/payload_mode.go` | Delete (entire file is new) |
-| `genai/context_utils.go` | Remove experimental flag and payload mode context helpers |
-| `genai/execution_result.go` | Remove `A2APayloadMode` field |
-| `genai/memory_http.go` | Remove payload-mode-aware `AddMessages` and `unmarshalMessageRobust` |
-| `genai/message_helpers.go` | Revert to OpenAI field access |
-| `genai/agent_tools.go` | Revert `AgentToolExecutor`/`TeamToolExecutor` to `input:string` + empty history |
-| `controller/query_controller.go` | Remove mode-aware `serializeMessages` and `createSuccessResponse` |
+If the experiment is withdrawn, removal is isolated to the experimental branch functions:
 
-## Migration path
+- `GetQueryInputA2AMessages`, `executeAgentA2A`, `executeTeamA2A`
+- `Agent.ExecuteA2A`, `Team.ExecuteA2A`, `A2AExecutionEngine.ExecuteNative`
+- `MemoryInterface` A2A methods and native serialization branches
 
-1. **Phase 1 (current):** Ship behind `a2a-experimental-enabled: "false"` default. Internal type is A2A but all external surfaces remain OpenAI-shaped.
-2. **Phase 2:** Enable per workload via annotation on selected agents, teams, or queries. Validate with production traffic.
-3. **Phase 3:** Promote to default after dashboard, SDK, and client ecosystem has adopted the A2A format.
-4. **Phase 4:** Remove the legacy compatibility layer and the conversion boundary.
-
-## Risks and mitigations
-
-| Risk | Mitigation |
-|------|-----------|
-| Tool call metadata lost in round-trip | `recoverToolCalls` handles three deserialization paths; covered by `message_conversion_test.go` |
-| Memory format incompatibility | Bidirectional read support; both formats tested |
-| Performance overhead from conversion | Single conversion per model call; negligible vs network latency |
-| Breaking change to `response.raw` consumers | Gated behind annotation; disabled by default means zero impact |
-| Multi-part content loss | `extractUserContent` handles both `OfString` and `OfArrayOfContentParts`; tested |
-
-## Open questions
-
-When should the experimental mode become the default? This depends on:
-
-- Dashboard adoption of A2A response format.
-- SDK client support for A2A message parsing.
-- Operator feedback from experimental deployments.
+The default OpenAI path remains intact.

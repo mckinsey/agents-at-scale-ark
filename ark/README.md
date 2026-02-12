@@ -17,6 +17,9 @@ make test.              # Run tests
 
 - Manages Agent, Team, Query, Tool, Model, MCPServer, and A2AServer resources
 - Supports the A2A execution engine (`executionEngine.name: a2a`) for agents backed by external A2A servers
-- An experimental internal A2A transport mode is available via the `ark.mckinsey.com/a2a-experimental-enabled` annotation. See the [RFC: Experimental A2A transport](https://mckinsey.github.io/agents-at-scale-ark/reference/a2a-experimental-rfc) for details
+- Experimental A2A mode (`ark.mckinsey.com/a2a-experimental-enabled`) runs agent/team execution with `protocol.Message` end-to-end
+- Experimental A2A mode requires A2A-compatible execution engines and rejects local model execution for those workloads
+- Legacy OpenAI memory records remain readable when experimental mode is enabled
+- See the [RFC: Experimental A2A transport](https://mckinsey.github.io/agents-at-scale-ark/reference/a2a-experimental-rfc) for behavior and removal constraints
 - Requires Go 1.21+ for development
 - Use `make generate` and `make manifests` after updating CRDs

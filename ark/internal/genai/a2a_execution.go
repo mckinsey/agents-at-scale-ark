@@ -31,6 +31,26 @@ func NewA2AExecutionEngine(k8sClient client.Client, eventingRecorder eventing.A2
 
 // Execute executes a query against an A2A agent
 func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace string, agentAnnotations map[string]string, contextID string, userInput Message, history []Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	a2aHistory := make([]protocol.Message, 0, len(history))
+	for i := range history {
+		converted, convErr := OpenAIToA2AMessage(history[i])
+		if convErr != nil {
+			return nil, fmt.Errorf("failed to convert history message %d to A2A: %w", i, convErr)
+		}
+		a2aHistory = append(a2aHistory, converted)
+	}
+	a2aUserInput, err := OpenAIToA2AMessage(userInput)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert user input to A2A: %w", err)
+	}
+	return e.executeA2A(ctx, agentName, namespace, agentAnnotations, contextID, a2aUserInput, a2aHistory, eventStream, true)
+}
+
+func (e *A2AExecutionEngine) ExecuteNative(ctx context.Context, agentName, namespace string, agentAnnotations map[string]string, contextID string, userInput protocol.Message, history []protocol.Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	return e.executeA2A(ctx, agentName, namespace, agentAnnotations, contextID, userInput, history, eventStream, false)
+}
+
+func (e *A2AExecutionEngine) executeA2A(ctx context.Context, agentName, namespace string, agentAnnotations map[string]string, contextID string, userInput protocol.Message, history []protocol.Message, eventStream EventStreamInterface, includeOpenAIMessages bool) (*ExecutionResult, error) {
 	log := logf.FromContext(ctx)
 	log.Info("executing A2A agent", "agent", agentName)
 
@@ -62,26 +82,14 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 
 	queryName := getQueryName(ctx)
 	includeHistory := shouldIncludeA2AHistory(agentAnnotations, false)
-	a2aHistory := make([]protocol.Message, 0, len(history))
-	for i := range history {
-		converted, convErr := OpenAIToA2AMessage(history[i])
-		if convErr != nil {
-			return nil, fmt.Errorf("failed to convert history message %d to A2A: %w", i, convErr)
-		}
-		a2aHistory = append(a2aHistory, converted)
-	}
-	a2aUserInput, err := OpenAIToA2AMessage(userInput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert user input to A2A: %w", err)
-	}
-	metadata, err := buildA2AMetadata(agentAnnotations, a2aHistory, includeHistory)
+	metadata, err := buildA2AMetadata(agentAnnotations, history, includeHistory)
 	if err != nil {
 		return nil, err
 	}
 
 	experimentalEnabled := resolveA2AExperimentalExecutionEnabled(ctx, agentAnnotations)
 	payloadMode := resolveA2AExecutionPayloadMode(ctx, agentAnnotations)
-	streamResult, streamed, streamErr := e.tryA2AStreamingExecution(ctx, a2aAddress, a2aServer.Spec.Headers, namespace, agentAnnotations, agentName, queryName, contextID, a2aUserInput, metadata, eventStream, payloadMode, &a2aServer)
+	streamResult, streamed, streamErr := e.tryA2AStreamingExecution(ctx, a2aAddress, a2aServer.Spec.Headers, namespace, agentAnnotations, agentName, queryName, contextID, userInput, metadata, eventStream, payloadMode, &a2aServer, includeOpenAIMessages)
 	if streamErr == nil && streamResult != nil {
 		e.eventingRecorder.Complete(ctx, "A2AExecution", "A2A execution completed successfully", operationData)
 		return streamResult, nil
@@ -96,7 +104,7 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 		log.Error(streamErr, "A2A streaming execution failed, falling back to blocking", "agent", agentName)
 	}
 
-	a2aResponse, err := ExecuteA2AAgent(ctx, e.client, a2aAddress, a2aServer.Spec.Headers, namespace, a2aUserInput, metadata, agentName, queryName, contextID, e.eventingRecorder, &a2aServer)
+	a2aResponse, err := ExecuteA2AAgent(ctx, e.client, a2aAddress, a2aServer.Spec.Headers, namespace, userInput, metadata, agentName, queryName, contextID, e.eventingRecorder, &a2aServer)
 	if err != nil {
 		modelID := fmt.Sprintf("agent/%s", agentName)
 		streamA2AError(ctx, eventStream, payloadMode, modelID, err)
@@ -104,19 +112,22 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 		return nil, err
 	}
 
-	responseMessage := buildAssistantMessageFromA2AResponse(a2aResponse)
 	emitA2ABlockingResponse(ctx, eventStream, payloadMode, agentName, a2aResponse)
 
 	e.eventingRecorder.Complete(ctx, "A2AExecution", "A2A execution completed successfully", operationData)
 
-	return &ExecutionResult{
-		Messages:       []Message{responseMessage},
+	result := &ExecutionResult{
+		A2AMessages:    buildA2AMessagesFromResponse(a2aResponse),
 		A2AResponse:    a2aResponse,
 		A2APayloadMode: payloadMode,
-	}, nil
+	}
+	if includeOpenAIMessages {
+		result.Messages = []Message{buildAssistantMessageFromA2AResponse(a2aResponse)}
+	}
+	return result, nil
 }
 
-func (e *A2AExecutionEngine) streamA2AExecution(ctx context.Context, address string, headers []arkv1prealpha1.Header, namespace, agentName, queryName, contextID string, userInput protocol.Message, metadata map[string]interface{}, eventStream EventStreamInterface, payloadMode string, a2aServer *arkv1prealpha1.A2AServer) (*ExecutionResult, error) {
+func (e *A2AExecutionEngine) streamA2AExecution(ctx context.Context, address string, headers []arkv1prealpha1.Header, namespace, agentName, queryName, contextID string, userInput protocol.Message, metadata map[string]interface{}, eventStream EventStreamInterface, payloadMode string, a2aServer *arkv1prealpha1.A2AServer, includeOpenAIMessages bool) (*ExecutionResult, error) {
 	events, err := StreamA2AAgent(ctx, e.client, address, headers, namespace, userInput, metadata, agentName, contextID, e.eventingRecorder)
 	if err != nil {
 		return nil, err
@@ -128,12 +139,15 @@ func (e *A2AExecutionEngine) streamA2AExecution(ctx context.Context, address str
 	if err != nil {
 		return nil, err
 	}
-	responseMessage := buildAssistantMessageFromA2AResponse(response)
-	return &ExecutionResult{
-		Messages:       []Message{responseMessage},
+	result := &ExecutionResult{
+		A2AMessages:    buildA2AMessagesFromResponse(response),
 		A2AResponse:    response,
 		A2APayloadMode: payloadMode,
-	}, nil
+	}
+	if includeOpenAIMessages {
+		result.Messages = []Message{buildAssistantMessageFromA2AResponse(response)}
+	}
+	return result, nil
 }
 
 func (e *A2AExecutionEngine) consumeA2AStreamEvents(ctx context.Context, events <-chan protocol.StreamingMessageEvent, eventStream EventStreamInterface, payloadMode, modelID, completionID, agentName, namespace, queryName string, a2aServer *arkv1prealpha1.A2AServer) (*A2AResponse, error) {
@@ -205,16 +219,40 @@ func resolveA2AExperimentalExecutionEnabled(ctx context.Context, agentAnnotation
 	return IsA2AExperimentalEnabled(agentAnnotations)
 }
 
-func (e *A2AExecutionEngine) tryA2AStreamingExecution(ctx context.Context, address string, headers []arkv1prealpha1.Header, namespace string, agentAnnotations map[string]string, agentName, queryName, contextID string, userInput protocol.Message, metadata map[string]interface{}, eventStream EventStreamInterface, payloadMode string, a2aServer *arkv1prealpha1.A2AServer) (*ExecutionResult, bool, error) {
+func (e *A2AExecutionEngine) tryA2AStreamingExecution(ctx context.Context, address string, headers []arkv1prealpha1.Header, namespace string, agentAnnotations map[string]string, agentName, queryName, contextID string, userInput protocol.Message, metadata map[string]interface{}, eventStream EventStreamInterface, payloadMode string, a2aServer *arkv1prealpha1.A2AServer, includeOpenAIMessages bool) (*ExecutionResult, bool, error) {
 	if !isA2AStreamingSupported(agentAnnotations) {
 		logf.FromContext(ctx).Info("A2A streaming not supported by agent", "agent", agentName)
 		return nil, false, nil
 	}
-	result, err := e.streamA2AExecution(ctx, address, headers, namespace, agentName, queryName, contextID, userInput, metadata, eventStream, payloadMode, a2aServer)
+	result, err := e.streamA2AExecution(ctx, address, headers, namespace, agentName, queryName, contextID, userInput, metadata, eventStream, payloadMode, a2aServer, includeOpenAIMessages)
 	if err != nil {
 		return nil, true, err
 	}
 	return result, true, nil
+}
+
+func buildA2AMessagesFromResponse(response *A2AResponse) []protocol.Message {
+	if response == nil {
+		return nil
+	}
+	if response.Message != nil {
+		return []protocol.Message{*response.Message}
+	}
+	if response.Content == "" {
+		return nil
+	}
+	var contextRef *string
+	if response.ContextID != "" {
+		contextRef = &response.ContextID
+	}
+	var taskRef *string
+	if response.TaskID != "" {
+		taskRef = &response.TaskID
+	}
+	message := protocol.NewMessageWithContext(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart(response.Content),
+	}, taskRef, contextRef)
+	return []protocol.Message{message}
 }
 
 func emitA2ABlockingResponse(ctx context.Context, eventStream EventStreamInterface, payloadMode, agentName string, a2aResponse *A2AResponse) {

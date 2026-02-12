@@ -282,9 +282,11 @@ type AgentToolExecutor struct {
 }
 
 type delegatedInvocation struct {
-	userInput Message
-	history   []Message
-	contextID string
+	userInput    Message
+	history      []Message
+	a2aUserInput protocol.Message
+	a2aHistory   []protocol.Message
+	contextID    string
 }
 
 func resolveDelegationMode(ctx context.Context, targetAnnotations map[string]string) string {
@@ -306,26 +308,22 @@ func parseLegacyDelegationInput(arguments map[string]any, targetType, targetName
 	}, "", nil
 }
 
-func parseMessageArgument(rawValue any) (Message, error) {
+func parseA2AMessageArgument(rawValue any) (protocol.Message, error) {
 	rawJSON, err := json.Marshal(rawValue)
 	if err != nil {
-		return Message{}, fmt.Errorf("failed to serialize message argument: %w", err)
+		return protocol.Message{}, fmt.Errorf("failed to serialize message argument: %w", err)
 	}
 	var message protocol.Message
 	if err := json.Unmarshal(rawJSON, &message); err != nil {
-		return Message{}, fmt.Errorf("failed to parse message argument: %w", err)
+		return protocol.Message{}, fmt.Errorf("failed to parse message argument: %w", err)
 	}
 	if len(message.Parts) == 0 {
-		return Message{}, fmt.Errorf("message argument must include at least one part")
+		return protocol.Message{}, fmt.Errorf("message argument must include at least one part")
 	}
-	converted, err := A2AToOpenAIMessage(message)
-	if err != nil {
-		return Message{}, fmt.Errorf("failed to convert message argument: %w", err)
-	}
-	return converted, nil
+	return message, nil
 }
 
-func parseHistoryArgument(rawValue any) ([]Message, error) {
+func parseA2AHistoryArgument(rawValue any) ([]protocol.Message, error) {
 	rawJSON, err := json.Marshal(rawValue)
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize history argument: %w", err)
@@ -334,20 +332,12 @@ func parseHistoryArgument(rawValue any) ([]Message, error) {
 	if err := json.Unmarshal(rawJSON, &history); err != nil {
 		return nil, fmt.Errorf("failed to parse history argument: %w", err)
 	}
-	converted := make([]Message, 0, len(history))
-	for i := range history {
-		message, convErr := A2AToOpenAIMessage(history[i])
-		if convErr != nil {
-			return nil, fmt.Errorf("failed to convert history argument %d: %w", i, convErr)
-		}
-		converted = append(converted, message)
-	}
-	return converted, nil
+	return history, nil
 }
 
 func parseNativeDelegationInput(arguments map[string]any, targetType, targetName string) (delegatedInvocation, string, error) {
 	invocation := delegatedInvocation{
-		history: []Message{},
+		a2aHistory: []protocol.Message{},
 	}
 	if rawContextID, exists := arguments["contextId"]; exists {
 		contextID, ok := rawContextID.(string)
@@ -361,27 +351,32 @@ func parseNativeDelegationInput(arguments map[string]any, targetType, targetName
 		invocation.contextID = normalizedContextID
 	}
 	if rawHistory, exists := arguments["history"]; exists {
-		history, err := parseHistoryArgument(rawHistory)
+		history, err := parseA2AHistoryArgument(rawHistory)
 		if err != nil {
 			return delegatedInvocation{}, "history parameter is invalid", err
 		}
-		invocation.history = history
+		invocation.a2aHistory = history
 	}
 	if rawMessage, exists := arguments["message"]; exists {
-		message, err := parseMessageArgument(rawMessage)
+		message, err := parseA2AMessageArgument(rawMessage)
 		if err != nil {
 			return delegatedInvocation{}, "message parameter is invalid", err
 		}
-		invocation.userInput = message
+		invocation.a2aUserInput = message
 		return invocation, "", nil
 	}
-	legacyInvocation, userError, err := parseLegacyDelegationInput(arguments, targetType, targetName)
-	if err != nil {
-		return delegatedInvocation{}, userError, err
+	input, exists := arguments["input"]
+	if !exists {
+		return delegatedInvocation{}, "message parameter is required", fmt.Errorf("message parameter is required for %s tool %s", targetType, targetName)
 	}
-	legacyInvocation.history = invocation.history
-	legacyInvocation.contextID = invocation.contextID
-	return legacyInvocation, "", nil
+	inputStr, ok := input.(string)
+	if !ok {
+		return delegatedInvocation{}, "input parameter must be a string", fmt.Errorf("input parameter must be a string for %s tool %s", targetType, targetName)
+	}
+	invocation.a2aUserInput = protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart(inputStr),
+	})
+	return invocation, "", nil
 }
 
 func parseDelegatedInvocation(arguments map[string]any, payloadMode, targetType, targetName string) (delegatedInvocation, string, error) {
@@ -498,26 +493,67 @@ func serializeA2AArtifacts(artifacts []protocol.Artifact) []map[string]interface
 }
 
 func buildDelegatedToolResultMetadata(result *ExecutionResult) map[string]interface{} {
-	if result == nil || result.A2AResponse == nil {
+	if result == nil {
 		return nil
 	}
 	metadata := map[string]interface{}{}
-	if result.A2AResponse.ContextID != "" {
-		metadata["contextId"] = result.A2AResponse.ContextID
+	if result.A2AResponse != nil {
+		if result.A2AResponse.ContextID != "" {
+			metadata["contextId"] = result.A2AResponse.ContextID
+		}
+		if result.A2AResponse.TaskID != "" {
+			metadata["taskId"] = result.A2AResponse.TaskID
+		}
+		if result.A2AResponse.Message != nil {
+			metadata["message"] = serializeA2AMessage(result.A2AResponse.Message)
+		}
+		if len(result.A2AResponse.Artifacts) > 0 {
+			metadata["artifacts"] = serializeA2AArtifacts(result.A2AResponse.Artifacts)
+		}
 	}
-	if result.A2AResponse.TaskID != "" {
-		metadata["taskId"] = result.A2AResponse.TaskID
-	}
-	if result.A2AResponse.Message != nil {
-		metadata["message"] = serializeA2AMessage(result.A2AResponse.Message)
-	}
-	if len(result.A2AResponse.Artifacts) > 0 {
-		metadata["artifacts"] = serializeA2AArtifacts(result.A2AResponse.Artifacts)
+	if len(result.A2AMessages) > 0 {
+		last := result.A2AMessages[len(result.A2AMessages)-1]
+		if last.ContextID != nil && *last.ContextID != "" {
+			metadata["contextId"] = *last.ContextID
+		}
+		if last.TaskID != nil && *last.TaskID != "" {
+			metadata["taskId"] = *last.TaskID
+		}
+		metadata["message"] = serializeA2AMessage(&last)
 	}
 	if len(metadata) == 0 {
 		return nil
 	}
 	return metadata
+}
+
+func buildDelegatedToolResultContent(content string, metadata map[string]interface{}, experimentalNative bool) (string, error) {
+	if len(metadata) == 0 {
+		return content, nil
+	}
+
+	if experimentalNative {
+		envelope := make(map[string]interface{}, len(metadata)+1)
+		for key, value := range metadata {
+			envelope[key] = value
+		}
+		if content != "" {
+			envelope["content"] = content
+		}
+		raw, err := json.Marshal(envelope)
+		if err != nil {
+			return "", fmt.Errorf("failed to serialize native delegated tool result: %w", err)
+		}
+		return string(raw), nil
+	}
+
+	if content == "" {
+		raw, err := json.Marshal(metadata)
+		if err == nil {
+			return string(raw), nil
+		}
+	}
+	return content, nil
 }
 
 func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
@@ -553,7 +589,12 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolRes
 
 	execCtx := applyDelegationContext(ctx, payloadMode, invocation.contextID)
 	eventStream := getDelegationEventStream(ctx, payloadMode)
-	result, err := agent.Execute(execCtx, invocation.userInput, invocation.history, nil, eventStream)
+	var result *ExecutionResult
+	if payloadMode == A2APayloadModeNative {
+		result, err = agent.ExecuteA2A(execCtx, invocation.a2aUserInput, invocation.a2aHistory, nil, eventStream)
+	} else {
+		result, err = agent.Execute(execCtx, invocation.userInput, invocation.history, nil, eventStream)
+	}
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,
@@ -562,15 +603,24 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolRes
 		}, err
 	}
 
-	content := ExtractLastAssistantMessageContent(result.Messages)
+	content := ""
+	if len(result.A2AMessages) > 0 {
+		content = ExtractA2ATextFromMessage(result.A2AMessages[len(result.A2AMessages)-1])
+	} else {
+		content = ExtractLastAssistantMessageContent(result.Messages)
+	}
 	metadata := buildDelegatedToolResultMetadata(result)
 	if content == "" && result.A2AResponse != nil {
 		content = result.A2AResponse.Content
 	}
-	if content == "" && len(metadata) > 0 {
-		if raw, err := json.Marshal(metadata); err == nil {
-			content = string(raw)
-		}
+	experimentalNative := payloadMode == A2APayloadModeNative && IsA2AExperimentalEnabledInContext(execCtx)
+	content, err = buildDelegatedToolResultContent(content, metadata, experimentalNative)
+	if err != nil {
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: "failed to serialize delegated A2A result",
+		}, err
 	}
 	if content == "" {
 		return ToolResult{
@@ -631,7 +681,12 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResu
 
 	execCtx := applyDelegationContext(ctx, payloadMode, invocation.contextID)
 	eventStream := getDelegationEventStream(ctx, payloadMode)
-	result, err := team.Execute(execCtx, invocation.userInput, invocation.history, nil, eventStream)
+	var result *ExecutionResult
+	if payloadMode == A2APayloadModeNative {
+		result, err = team.ExecuteA2A(execCtx, invocation.a2aUserInput, invocation.a2aHistory, nil, eventStream)
+	} else {
+		result, err = team.Execute(execCtx, invocation.userInput, invocation.history, nil, eventStream)
+	}
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,
@@ -640,7 +695,7 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResu
 		}, err
 	}
 
-	if len(result.Messages) == 0 {
+	if len(result.Messages) == 0 && len(result.A2AMessages) == 0 {
 		return ToolResult{
 			ID:    call.ID,
 			Name:  call.Function.Name,
@@ -648,15 +703,24 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResu
 		}, fmt.Errorf("team %s execution returned no messages", t.TeamName)
 	}
 
-	content := ExtractLastAssistantMessageContent(result.Messages)
+	content := ""
+	if len(result.A2AMessages) > 0 {
+		content = ExtractA2ATextFromMessage(result.A2AMessages[len(result.A2AMessages)-1])
+	} else {
+		content = ExtractLastAssistantMessageContent(result.Messages)
+	}
 	metadata := buildDelegatedToolResultMetadata(result)
 	if content == "" && result.A2AResponse != nil {
 		content = result.A2AResponse.Content
 	}
-	if content == "" && len(metadata) > 0 {
-		if raw, err := json.Marshal(metadata); err == nil {
-			content = string(raw)
-		}
+	experimentalNative := payloadMode == A2APayloadModeNative && IsA2AExperimentalEnabledInContext(execCtx)
+	content, err = buildDelegatedToolResultContent(content, metadata, experimentalNative)
+	if err != nil {
+		return ToolResult{
+			ID:    call.ID,
+			Name:  call.Function.Name,
+			Error: "failed to serialize delegated A2A result",
+		}, err
 	}
 	if content == "" {
 		return ToolResult{
