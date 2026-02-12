@@ -110,6 +110,9 @@ func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Messag
 }
 
 func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Message, history []Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	if !HasA2AExperimentalEnabledInContext(ctx) {
+		ctx = WithA2AExperimentalEnabled(ctx, IsA2AExperimentalEnabled(a.Annotations))
+	}
 	a2aEngine := NewA2AExecutionEngine(a.client, a.eventing.A2aRecorder())
 	contextID := GetA2AContextID(ctx)
 	return a2aEngine.Execute(ctx, a.Name, a.Namespace, a.Annotations, contextID, userInput, history, eventStream)

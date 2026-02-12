@@ -681,6 +681,13 @@ func TestGetDelegationEventStreamGatedByPayloadMode(t *testing.T) {
 	require.NotNil(t, nativeStream)
 }
 
+func TestApplyDelegationContextSetsExperimentalFlagFromPayloadMode(t *testing.T) {
+	nativeCtx := applyDelegationContext(context.Background(), A2APayloadModeNative, "")
+	require.True(t, IsA2AExperimentalEnabledInContext(nativeCtx))
+	compatCtx := applyDelegationContext(context.Background(), A2APayloadModeCompat, "")
+	require.False(t, IsA2AExperimentalEnabledInContext(compatCtx))
+}
+
 func TestAgentToolExecutor_NativeMessageDelegationWithoutInput(t *testing.T) {
 	agentCRD := &arkv1alpha1.Agent{
 		ObjectMeta: metav1.ObjectMeta{

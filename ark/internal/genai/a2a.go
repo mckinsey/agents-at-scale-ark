@@ -420,6 +420,9 @@ func StreamA2AAgent(ctx context.Context, k8sClient client.Client, address string
 	if streamErr == nil {
 		return events, nil
 	}
+	if IsA2AExperimentalEnabledInContext(ctx) {
+		return nil, streamErr
+	}
 
 	log := logf.FromContext(ctx)
 	log.V(1).Info("A2A message/stream failed, falling back to message/send", "agent", agentName, "error", streamErr)

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	arkann "mckinsey.com/ark/internal/annotations"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
@@ -172,4 +173,22 @@ func TestConsumeA2AStreamEventsNoEvents(t *testing.T) {
 	_, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
 
 	assert.Error(t, err)
+}
+
+func TestResolveA2AExecutionPayloadModeDefaultsCompat(t *testing.T) {
+	mode := resolveA2AExecutionPayloadMode(context.Background(), nil)
+	assert.Equal(t, A2APayloadModeCompat, mode)
+}
+
+func TestResolveA2AExecutionPayloadModeUsesExperimentalContext(t *testing.T) {
+	ctx := WithA2AExperimentalEnabled(context.Background(), true)
+	mode := resolveA2AExecutionPayloadMode(ctx, nil)
+	assert.Equal(t, A2APayloadModeNative, mode)
+}
+
+func TestResolveA2AExecutionPayloadModeUsesAgentExperimentalAnnotation(t *testing.T) {
+	mode := resolveA2AExecutionPayloadMode(context.Background(), map[string]string{
+		arkann.A2AExperimentalEnabled: "true",
+	})
+	assert.Equal(t, A2APayloadModeNative, mode)
 }

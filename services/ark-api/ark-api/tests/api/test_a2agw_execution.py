@@ -17,6 +17,10 @@ class TestA2AGatewayExecution(unittest.IsolatedAsyncioTestCase):
         context = SimpleNamespace(task_id="task-1", context_id="ctx-old", message=SimpleNamespace(parts=[]))
 
         with patch(
+            "ark_api.api.v1.a2agw.execution.ARKAgentExecutor._resolve_experimental_enabled",
+            new_callable=AsyncMock,
+            return_value=False,
+        ), patch(
             "ark_api.api.v1.a2agw.execution.build_query_payload",
             return_value=QueryPayload(query_type="user", input_data="hello", preview_text="hello"),
         ), patch(
@@ -42,6 +46,10 @@ class TestA2AGatewayExecution(unittest.IsolatedAsyncioTestCase):
         context = SimpleNamespace(message=SimpleNamespace(parts=[]))
 
         with patch(
+            "ark_api.api.v1.a2agw.execution.ARKAgentExecutor._resolve_experimental_enabled",
+            new_callable=AsyncMock,
+            return_value=False,
+        ), patch(
             "ark_api.api.v1.a2agw.execution.build_query_payload",
             return_value=QueryPayload(query_type="user", input_data="hello", preview_text="hello"),
         ), patch(
@@ -64,6 +72,35 @@ class TestA2AGatewayExecution(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(generated_call.kwargs["task_id"])
         self.assertNotEqual(generated_call.kwargs["context_id"], "default")
         self.assertNotEqual(generated_call.kwargs["task_id"], "unknown")
+
+    async def test_execute_passes_experimental_flag_to_query_layer(self):
+        executor = ARKAgentExecutor("test-agent", "default", timeout=1)
+        event_queue = SimpleNamespace(enqueue_event=AsyncMock())
+        context = SimpleNamespace(task_id="task-1", context_id="ctx-old", message=SimpleNamespace(parts=[]))
+
+        with patch(
+            "ark_api.api.v1.a2agw.execution.ARKAgentExecutor._resolve_experimental_enabled",
+            new_callable=AsyncMock,
+            return_value=True,
+        ), patch(
+            "ark_api.api.v1.a2agw.execution.build_query_payload",
+            return_value=QueryPayload(query_type="messages", input_data=[{"role": "user", "parts": []}], preview_text="hello"),
+        ) as mock_build_query_payload, patch(
+            "ark_api.api.v1.a2agw.execution.post_query_and_wait",
+            new_callable=AsyncMock,
+            return_value=QueryExecutionResult(content="done", context_id="ctx-new"),
+        ) as mock_post_query, patch(
+            "ark_api.api.v1.a2agw.execution.new_agent_text_message",
+            side_effect=lambda text, context_id=None, task_id=None: {
+                "text": text,
+                "context_id": context_id,
+                "task_id": task_id,
+            },
+        ):
+            await executor.execute(context, event_queue)
+
+        mock_build_query_payload.assert_called_once_with(context, experimental_enabled=True)
+        self.assertTrue(mock_post_query.await_args.kwargs["experimental_enabled"])
 
     async def test_cancel_cancels_active_task(self):
         executor = ARKAgentExecutor("test-agent", "default", timeout=1)

@@ -380,6 +380,7 @@ func parseDelegatedInvocation(arguments map[string]any, payloadMode, targetType,
 }
 
 func applyDelegationContext(ctx context.Context, payloadMode, contextID string) context.Context {
+	ctx = WithA2AExperimentalEnabled(ctx, payloadMode == A2APayloadModeNative)
 	ctx = WithA2APayloadMode(ctx, payloadMode)
 	if contextID == "" {
 		return ctx

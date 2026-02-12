@@ -10,9 +10,14 @@ from a2a.server.agent_execution.context import RequestContext
 from a2a.server.events.event_queue import EventQueue
 from a2a.types import TaskState, TaskStatus, TaskStatusUpdateEvent
 from a2a.utils import new_agent_text_message
+from ark_sdk.client import V1_ALPHA1, with_ark_client
 
 from .message_conversion import build_query_payload
 from .query import QueryExecutionResult, post_query_and_wait
+from ark_api.constants.annotations import (
+    A2A_EXPERIMENTAL_ENABLED_ANNOTATION,
+    parse_bool_annotation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +126,7 @@ class ARKAgentExecutor(AgentExecutor):
         query_input: str | list[dict[str, Any]],
         query_type: str,
         context_id: str | None,
+        experimental_enabled: bool,
     ) -> QueryExecutionResult:
         """Process the query and return the result.
         
@@ -140,7 +146,24 @@ class ARKAgentExecutor(AgentExecutor):
             query_type=query_type,
             timeout=self.timeout,
             context_id=context_id,
+            experimental_enabled=experimental_enabled,
         )
+
+    async def _resolve_experimental_enabled(self) -> bool:
+        try:
+            async with with_ark_client(self.namespace, V1_ALPHA1) as ark_client:
+                agent = await ark_client.agents.a_get(self.target_name)
+                metadata = getattr(agent, "metadata", {})
+                annotations = metadata.get("annotations") if isinstance(metadata, dict) else {}
+                if not isinstance(annotations, dict):
+                    return False
+                return parse_bool_annotation(
+                    annotations.get(A2A_EXPERIMENTAL_ENABLED_ANNOTATION),
+                    False,
+                )
+        except Exception as exc:
+            logger.warning(f"Failed to resolve experimental A2A flag for {self.target_name}: {exc}")
+            return False
     
     async def execute(
             self, context: RequestContext, event_queue: EventQueue
@@ -156,8 +179,9 @@ class ARKAgentExecutor(AgentExecutor):
         context_id = self._resolve_context_id(getattr(context, 'context_id', None))
         
         try:
+            experimental_enabled = await self._resolve_experimental_enabled()
             # Extract and log the message
-            query_payload = build_query_payload(context)
+            query_payload = build_query_payload(context, experimental_enabled=experimental_enabled)
             logger.info(f"Task {task_id} Context {context_id} - Processing query: {query_payload.preview_text}")
             logger.info(f"Task {task_id} - Using timeout: {self.timeout} seconds")
             
@@ -171,6 +195,7 @@ class ARKAgentExecutor(AgentExecutor):
                         query_payload.input_data,
                         query_payload.query_type,
                         context_id,
+                        experimental_enabled,
                     )
                 )
 

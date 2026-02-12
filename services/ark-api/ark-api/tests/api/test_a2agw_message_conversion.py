@@ -63,6 +63,19 @@ class TestA2AGatewayMessageConversion(unittest.TestCase):
         self.assertEqual(payload.input_data[0]["role"], "assistant")
         self.assertEqual(payload.input_data[1]["role"], "user")
 
+    def test_build_query_payload_uses_native_messages_when_experimental_enabled(self):
+        message = SimpleNamespace(
+            role="user",
+            parts=[SimpleNamespace(root=SimpleNamespace(kind="text", text="hello"))],
+        )
+        context = SimpleNamespace(message=message, history=[])
+        payload = build_query_payload(context, experimental_enabled=True)
+        self.assertEqual(payload.query_type, "messages")
+        self.assertIsInstance(payload.input_data, list)
+        self.assertEqual(payload.input_data[0]["role"], "user")
+        self.assertEqual(payload.input_data[0]["parts"][0]["kind"], "text")
+        self.assertEqual(payload.input_data[0]["parts"][0]["text"], "hello")
+
     def test_a2a_message_to_openai_message_maps_agent_role(self):
         message = SimpleNamespace(
             role="agent",

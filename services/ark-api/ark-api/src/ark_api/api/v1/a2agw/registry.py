@@ -10,6 +10,7 @@ from ark_sdk.k8s import get_namespace
 from ark_api.constants.annotations import (
     A2A_SERVER_SKILLS_ANNOTATION,
     A2A_STREAMING_SUPPORTED_ANNOTATION,
+    parse_bool_annotation,
 )
 
 logger = logging.getLogger(__name__)
@@ -28,17 +29,6 @@ def get_external(agent_name):
     scheme, host, port, path = _get_agent_card_url_components()
     return f"{scheme}://{host}:{port}{path}/a2a/agent/{agent_name}/"
 
-def _parse_bool_annotation(value: object, default: bool) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in {"true", "1", "yes"}:
-            return True
-        if normalized in {"false", "0", "no"}:
-            return False
-    return default
-
 def ark_to_agent_card(ark_agent) -> AgentCard:
     metadata = ark_agent.metadata
     annotations = metadata.get('annotations') or {}
@@ -47,7 +37,7 @@ def ark_to_agent_card(ark_agent) -> AgentCard:
     spec = ark_agent.spec
     
     # Create capabilities object
-    streaming_supported = _parse_bool_annotation(
+    streaming_supported = parse_bool_annotation(
         annotations.get(A2A_STREAMING_SUPPORTED_ANNOTATION),
         True,
     )

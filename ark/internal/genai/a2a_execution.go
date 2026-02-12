@@ -67,6 +67,7 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 		return nil, err
 	}
 
+	experimentalEnabled := resolveA2AExperimentalExecutionEnabled(ctx, agentAnnotations)
 	payloadMode := resolveA2AExecutionPayloadMode(ctx, agentAnnotations)
 	streamResult, streamed, streamErr := e.tryA2AStreamingExecution(ctx, a2aAddress, a2aServer.Spec.Headers, namespace, agentAnnotations, agentName, queryName, contextID, userInput, metadata, eventStream, payloadMode, &a2aServer)
 	if streamErr == nil && streamResult != nil {
@@ -74,6 +75,12 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 		return streamResult, nil
 	}
 	if streamed && streamErr != nil {
+		if experimentalEnabled {
+			modelID := fmt.Sprintf("agent/%s", agentName)
+			streamA2AError(ctx, eventStream, payloadMode, modelID, streamErr)
+			e.eventingRecorder.Fail(ctx, "A2AExecution", fmt.Sprintf("A2A execution failed: %v", streamErr), streamErr, operationData)
+			return nil, streamErr
+		}
 		log.Error(streamErr, "A2A streaming execution failed, falling back to blocking", "agent", agentName)
 	}
 
@@ -173,7 +180,17 @@ func resolveA2AExecutionPayloadMode(ctx context.Context, agentAnnotations map[st
 	if payloadMode != A2APayloadModeCompat {
 		return payloadMode
 	}
-	return GetA2APayloadMode(agentAnnotations)
+	if resolveA2AExperimentalExecutionEnabled(ctx, agentAnnotations) {
+		return A2APayloadModeNative
+	}
+	return A2APayloadModeCompat
+}
+
+func resolveA2AExperimentalExecutionEnabled(ctx context.Context, agentAnnotations map[string]string) bool {
+	if HasA2AExperimentalEnabledInContext(ctx) {
+		return IsA2AExperimentalEnabledInContext(ctx)
+	}
+	return IsA2AExperimentalEnabled(agentAnnotations)
 }
 
 func (e *A2AExecutionEngine) tryA2AStreamingExecution(ctx context.Context, address string, headers []arkv1prealpha1.Header, namespace string, agentAnnotations map[string]string, agentName, queryName, contextID string, userInput Message, metadata map[string]interface{}, eventStream EventStreamInterface, payloadMode string, a2aServer *arkv1prealpha1.A2AServer) (*ExecutionResult, bool, error) {

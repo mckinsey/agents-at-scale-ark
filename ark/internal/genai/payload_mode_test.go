@@ -10,7 +10,7 @@ import (
 
 func TestResolvePayloadModeTeamAnnotation(t *testing.T) {
 	teamAnnotations := map[string]string{
-		arkann.A2APayloadMode: A2APayloadModeNative,
+		arkann.A2AExperimentalEnabled: "true",
 	}
 	mode := ResolvePayloadMode(teamAnnotations, nil, nil)
 	assert.Equal(t, A2APayloadModeNative, mode)
@@ -18,29 +18,29 @@ func TestResolvePayloadModeTeamAnnotation(t *testing.T) {
 
 func TestResolvePayloadModeQueryAnnotation(t *testing.T) {
 	queryAnnotations := map[string]string{
-		arkann.A2APayloadMode: A2APayloadModeCompat,
+		arkann.A2AExperimentalEnabled: "true",
 	}
 	mode := ResolvePayloadMode(nil, queryAnnotations, nil)
-	assert.Equal(t, A2APayloadModeCompat, mode)
+	assert.Equal(t, A2APayloadModeNative, mode)
 }
 
 func TestResolvePayloadModeAgentsNative(t *testing.T) {
 	agents := []map[string]string{
 		{
-			arkann.A2APayloadMode: A2APayloadModeNative,
+			arkann.A2AExperimentalEnabled: "true",
 		},
 	}
 	mode := ResolvePayloadMode(nil, nil, agents)
 	assert.Equal(t, A2APayloadModeNative, mode)
 }
 
-func TestResolvePayloadModeAgentsPreferCompat(t *testing.T) {
+func TestResolvePayloadModeAgentsPreferLegacy(t *testing.T) {
 	agents := []map[string]string{
 		{
-			arkann.A2APayloadMode: A2APayloadModeNative,
+			arkann.A2AExperimentalEnabled: "true",
 		},
 		{
-			arkann.A2APayloadMode: A2APayloadModeCompat,
+			arkann.A2AExperimentalEnabled: "false",
 		},
 	}
 	mode := ResolvePayloadMode(nil, nil, agents)
@@ -64,7 +64,7 @@ func TestResolvePayloadModeAgentsNoModeAnnotation(t *testing.T) {
 func TestResolvePayloadModeNilAnnotationsInSlice(t *testing.T) {
 	agents := []map[string]string{
 		nil,
-		{arkann.A2APayloadMode: A2APayloadModeNative},
+		{arkann.A2AExperimentalEnabled: "true"},
 	}
 	mode := ResolvePayloadMode(nil, nil, agents)
 	assert.Equal(t, A2APayloadModeNative, mode)
@@ -78,11 +78,10 @@ func TestResolvePayloadModeEmptyAgentSlice(t *testing.T) {
 
 func TestResolvePayloadModeTeamOverridesMixedAgents(t *testing.T) {
 	teamAnnotations := map[string]string{
-		arkann.A2APayloadMode: A2APayloadModeNative,
+		arkann.A2AExperimentalEnabled: "true",
 	}
 	agents := []map[string]string{
-		{arkann.A2APayloadMode: A2APayloadModeNative},
-		{arkann.A2APayloadMode: A2APayloadModeCompat},
+		{arkann.A2AExperimentalEnabled: "false"},
 	}
 	mode := ResolvePayloadMode(teamAnnotations, nil, agents)
 	assert.Equal(t, A2APayloadModeNative, mode)
@@ -90,21 +89,21 @@ func TestResolvePayloadModeTeamOverridesMixedAgents(t *testing.T) {
 
 func TestResolvePayloadModeQueryOverridesAgents(t *testing.T) {
 	queryAnnotations := map[string]string{
-		arkann.A2APayloadMode: A2APayloadModeNative,
+		arkann.A2AExperimentalEnabled: "false",
 	}
 	agents := []map[string]string{
-		{arkann.A2APayloadMode: A2APayloadModeCompat},
+		{arkann.A2AExperimentalEnabled: "true"},
 	}
 	mode := ResolvePayloadMode(nil, queryAnnotations, agents)
-	assert.Equal(t, A2APayloadModeNative, mode)
+	assert.Equal(t, A2APayloadModeCompat, mode)
 }
 
 func TestResolvePayloadModeTeamTakesPriorityOverQuery(t *testing.T) {
 	teamAnnotations := map[string]string{
-		arkann.A2APayloadMode: A2APayloadModeCompat,
+		arkann.A2AExperimentalEnabled: "false",
 	}
 	queryAnnotations := map[string]string{
-		arkann.A2APayloadMode: A2APayloadModeNative,
+		arkann.A2AExperimentalEnabled: "true",
 	}
 	mode := ResolvePayloadMode(teamAnnotations, queryAnnotations, nil)
 	assert.Equal(t, A2APayloadModeCompat, mode)
@@ -122,8 +121,24 @@ func TestResolveDelegationPayloadModeContext(t *testing.T) {
 func TestResolveDelegationPayloadModeAnnotations(t *testing.T) {
 	ctx := context.Background()
 	annotations := map[string]string{
-		arkann.A2APayloadMode: A2APayloadModeNative,
+		arkann.A2AExperimentalEnabled: "true",
 	}
 	mode := ResolveDelegationPayloadMode(ctx, annotations)
 	assert.Equal(t, A2APayloadModeNative, mode)
+}
+
+func TestGetA2AExperimentalEnabled(t *testing.T) {
+	enabled, hasValue := GetA2AExperimentalEnabled(map[string]string{
+		arkann.A2AExperimentalEnabled: "yes",
+	})
+	assert.True(t, hasValue)
+	assert.True(t, enabled)
+}
+
+func TestGetA2AExperimentalEnabledInvalidDefaultsToFalse(t *testing.T) {
+	enabled, hasValue := GetA2AExperimentalEnabled(map[string]string{
+		arkann.A2AExperimentalEnabled: "invalid",
+	})
+	assert.True(t, hasValue)
+	assert.False(t, enabled)
 }

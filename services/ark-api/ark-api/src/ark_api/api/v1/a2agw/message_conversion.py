@@ -192,6 +192,47 @@ def a2a_message_to_openai_message(message: Any) -> dict[str, Any]:
     return {"role": role, "content": content}
 
 
+def a2a_message_to_native_message(message: Any) -> dict[str, Any]:
+    message_dict = _to_dict(message)
+    role = "user"
+    if _is_dict(message_dict):
+        raw_role = message_dict.get("role")
+        if isinstance(raw_role, str) and raw_role:
+            role = raw_role
+    elif hasattr(message, "role"):
+        raw_role = getattr(message, "role")
+        if isinstance(raw_role, str) and raw_role:
+            role = raw_role
+
+    parts: list[dict[str, Any]] = []
+    raw_parts: Any = []
+    if _is_dict(message_dict):
+        raw_parts = message_dict.get("parts", [])
+    elif hasattr(message, "parts"):
+        raw_parts = getattr(message, "parts")
+    if _is_list(raw_parts):
+        for raw_part in raw_parts:
+            part_root = _extract_part_value(raw_part, "root") or raw_part
+            part_dict = _to_dict(part_root)
+            if _is_dict(part_dict):
+                parts.append(part_dict)
+    if not parts:
+        fallback_text = extract_text_from_message(message)
+        if fallback_text == "No message":
+            fallback_text = ""
+        parts = [{"kind": "text", "text": fallback_text}]
+
+    native_message: dict[str, Any] = {"role": role, "parts": parts}
+    if _is_dict(message_dict):
+        context_id = message_dict.get("contextId") or message_dict.get("context_id")
+        if isinstance(context_id, str) and context_id:
+            native_message["contextId"] = context_id
+        task_id = message_dict.get("taskId") or message_dict.get("task_id")
+        if isinstance(task_id, str) and task_id:
+            native_message["taskId"] = task_id
+    return native_message
+
+
 def _extract_history(context: Any) -> list[Any]:
     history = getattr(context, "history", None)
     if _is_list(history):
@@ -206,13 +247,22 @@ def _extract_history(context: Any) -> list[Any]:
     return []
 
 
-def build_query_payload(context: Any) -> QueryPayload:
+def build_query_payload(context: Any, experimental_enabled: bool = False) -> QueryPayload:
     current_message = getattr(context, "message", None)
     if current_message is None:
         return QueryPayload(query_type="user", input_data="No message", preview_text="No message")
 
-    current_openai_message = a2a_message_to_openai_message(current_message)
     preview_text = extract_text_from_message(current_message)
+    if experimental_enabled:
+        messages_input = [a2a_message_to_native_message(msg) for msg in _extract_history(context)]
+        messages_input.append(a2a_message_to_native_message(current_message))
+        return QueryPayload(
+            query_type="messages",
+            input_data=messages_input,
+            preview_text=preview_text,
+        )
+
+    current_openai_message = a2a_message_to_openai_message(current_message)
 
     history_messages = [a2a_message_to_openai_message(msg) for msg in _extract_history(context)]
     has_history = len(history_messages) > 0

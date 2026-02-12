@@ -2,6 +2,7 @@ package genai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
@@ -149,6 +150,18 @@ func GetQueryInputMessages(ctx context.Context, query arkv1alpha1.Query, k8sClie
 	}
 
 	if queryType != RoleUser {
+		experimentalEnabled := IsA2AExperimentalEnabled(query.Annotations)
+		if HasA2AExperimentalEnabledInContext(ctx) {
+			experimentalEnabled = IsA2AExperimentalEnabledInContext(ctx)
+		}
+		if experimentalEnabled {
+			var messages []Message
+			if err := json.Unmarshal(query.Spec.Input.Raw, &messages); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal input as A2A messages: %w", err)
+			}
+			return messages, nil
+		}
+
 		openaiMessages, err := query.Spec.GetInputMessages()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get input messages: %w", err)

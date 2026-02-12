@@ -36,6 +36,9 @@ func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStr
 	if m.Provider == nil {
 		return nil, nil
 	}
+	if IsA2AExperimentalEnabledInContext(ctx) {
+		return nil, fmt.Errorf("openai transport is disabled while A2A experimental mode is enabled")
+	}
 
 	ctx, span := m.telemetryRecorder.StartModelExecution(ctx, m.Model, m.Type)
 	defer span.End()

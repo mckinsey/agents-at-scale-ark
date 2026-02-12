@@ -173,6 +173,9 @@ func (m *HTTPMemory) AddMessages(ctx context.Context, queryID string, messages [
 	}
 
 	payloadMode := GetA2APayloadModeFromContext(ctx)
+	if IsA2AExperimentalEnabledInContext(ctx) {
+		payloadMode = A2APayloadModeNative
+	}
 	var reqBody []byte
 	var err error
 	if payloadMode == A2APayloadModeNative {

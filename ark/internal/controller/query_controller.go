@@ -716,7 +716,12 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 	if agentCRD.Annotations != nil && agentCRD.Annotations[annotations.A2AServerAddress] != "" {
 		agentAnnotations = []map[string]string{agentCRD.Annotations}
 	}
-	payloadMode := genai.ResolvePayloadMode(nil, query.Annotations, agentAnnotations)
+	experimentalEnabled := genai.ResolveA2AExperimentalEnabled(nil, query.Annotations, agentAnnotations)
+	ctx = genai.WithA2AExperimentalEnabled(ctx, experimentalEnabled)
+	payloadMode := genai.A2APayloadModeCompat
+	if experimentalEnabled {
+		payloadMode = genai.A2APayloadModeNative
+	}
 	ctx = genai.WithA2APayloadMode(ctx, payloadMode)
 
 	// Load existing messages from memory
@@ -762,11 +767,14 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 		return nil, fmt.Errorf("unable to make team %v, error:%w", teamKey, err)
 	}
 
-	payloadMode := team.PayloadMode
-	if teamCRD.Annotations == nil || teamCRD.Annotations[annotations.A2APayloadMode] == "" {
-		if query.Annotations != nil && query.Annotations[annotations.A2APayloadMode] != "" {
-			payloadMode = genai.GetA2APayloadMode(query.Annotations)
-		}
+	experimentalEnabled := team.PayloadMode == genai.A2APayloadModeNative
+	if queryExperimentalEnabled, hasValue := genai.GetA2AExperimentalEnabled(query.Annotations); hasValue {
+		experimentalEnabled = queryExperimentalEnabled
+	}
+	ctx = genai.WithA2AExperimentalEnabled(ctx, experimentalEnabled)
+	payloadMode := genai.A2APayloadModeCompat
+	if experimentalEnabled {
+		payloadMode = genai.A2APayloadModeNative
 	}
 	ctx = genai.WithA2APayloadMode(ctx, payloadMode)
 
