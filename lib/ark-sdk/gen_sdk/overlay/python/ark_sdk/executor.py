@@ -2,8 +2,8 @@
 
 import logging
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any
-from pydantic import BaseModel
+from typing import List, Dict, Any, Optional
+from pydantic import BaseModel, Field
 
 
 logger = logging.getLogger(__name__)
@@ -55,12 +55,16 @@ class ExecutionEngineRequest(BaseModel):
     agent: AgentConfig
     userInput: Message
     history: List[Message]
-    tools: List[ToolDefinition] = []
+    tools: List[ToolDefinition] = Field(default_factory=list)
+    payloadMode: str = "compat"
+    a2aUserInput: Dict[str, Any] | None = None
+    a2aHistory: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class ExecutionEngineResponse(BaseModel):
     """Response from agent execution."""
-    messages: List[Message]
+    messages: List[Message] = Field(default_factory=list)
+    a2aMessages: List[Dict[str, Any]] = Field(default_factory=list)
     error: str = ""
 
 
@@ -87,7 +91,7 @@ class BaseExecutor(ABC):
         """
         pass
 
-    def _resolve_prompt(self, agent_config, base_prompt: str = None) -> str:
+    def _resolve_prompt(self, agent_config, base_prompt: Optional[str] = None) -> str:
         """Resolve agent prompt with parameter substitution."""
         prompt = base_prompt or agent_config.prompt or "You are a helpful assistant."
         

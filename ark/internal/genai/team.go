@@ -11,7 +11,6 @@ import (
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	arkann "mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
 )
@@ -549,8 +548,9 @@ func (t *Team) validateSelectorA2ACompatibility(ctx context.Context) error {
 	if err := t.Client.Get(ctx, key, &agentCRD); err != nil {
 		return fmt.Errorf("failed to validate selector agent %s for A2A team %s: %w", t.Selector.Agent, t.FullName(), err)
 	}
-	if agentCRD.Spec.ExecutionEngine == nil || agentCRD.Spec.ExecutionEngine.Name != ExecutionEngineA2A {
-		return fmt.Errorf("selector agent %s in team %s must have execution engine '%s' for A2A mode", t.Selector.Agent, t.FullName(), ExecutionEngineA2A)
+	_, err := resolveA2AExecutionCapability(ctx, t.Client, fmt.Sprintf("%s/%s", agentCRD.Namespace, agentCRD.Name), t.Namespace, agentCRD.Spec.ExecutionEngine)
+	if err != nil {
+		return fmt.Errorf("failed to validate selector agent %s for A2A team %s: %w", t.Selector.Agent, t.FullName(), err)
 	}
 	return nil
 }
@@ -565,7 +565,7 @@ func loadTeamMember(ctx context.Context, k8sClient client.Client, memberSpec ark
 			return nil, nil, fmt.Errorf("failed to get agent %s for team %s: %w", memberSpec.Name, teamName, err)
 		}
 		var annotations map[string]string
-		if agentCRD.Annotations != nil && agentCRD.Annotations[arkann.A2AServerAddress] != "" {
+		if agentCRD.Annotations != nil {
 			annotations = agentCRD.Annotations
 		}
 		member, err := MakeAgent(ctx, k8sClient, &agentCRD, telemetryProvider, eventingProvider)

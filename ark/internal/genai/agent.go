@@ -151,14 +151,23 @@ func (a *Agent) executeWithA2AExecutionEngineNative(ctx context.Context, userInp
 }
 
 func (a *Agent) executeAgentA2A(ctx context.Context, userInput protocol.Message, history []protocol.Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
-	if a.ExecutionEngine == nil {
-		return nil, fmt.Errorf("agent %s cannot be used in experimental A2A mode without an A2A-compatible execution engine", a.FullName())
+	capability, err := resolveA2AExecutionCapability(ctx, a.client, a.FullName(), a.Namespace, a.ExecutionEngine)
+	if err != nil {
+		return nil, err
 	}
-	if a.ExecutionEngine.Name != ExecutionEngineA2A {
-		return nil, fmt.Errorf("agent %s execution engine %s is not A2A-compatible in experimental mode", a.FullName(), a.ExecutionEngine.Name)
+
+	switch capability {
+	case executionCapabilityA2ANativeA2AEngine:
+		_ = memory
+		return a.executeWithA2AExecutionEngineNative(ctx, userInput, history, eventStream)
+	case executionCapabilityA2ANativeExternalEngine:
+		_ = memory
+		return a.executeWithExternalA2ANativeExecutionEngine(ctx, userInput, history, eventStream)
+	case executionCapabilityOpenAICompat:
+		return a.executeWithA2ACompatExecution(ctx, userInput, history, memory, eventStream)
+	default:
+		return nil, fmt.Errorf("agent %s has unsupported experimental execution capability %s", a.FullName(), capability)
 	}
-	_ = memory
-	return a.executeWithA2AExecutionEngineNative(ctx, userInput, history, eventStream)
 }
 
 func (a *Agent) prepareMessages(ctx context.Context, userInput Message, history []Message) ([]Message, error) {

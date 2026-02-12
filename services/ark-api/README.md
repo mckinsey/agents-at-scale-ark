@@ -179,7 +179,12 @@ The ARK API includes an A2A Gateway that exposes all ARK agents via the [A2A pro
 
 Streaming is supported by default when a broker is available.
 
-The gateway also supports an experimental A2A-native controller execution mode via `ark.mckinsey.com/a2a-experimental-enabled: "true"`. In that mode, Ark keeps A2A message types end-to-end for agent/team execution and requires A2A-compatible execution engines for participating agents. See the [RFC: Experimental A2A transport](https://mckinsey.github.io/agents-at-scale-ark/reference/a2a-experimental-rfc) for details.
+The gateway also supports an experimental A2A-native controller execution mode via `ark.mckinsey.com/a2a-experimental-enabled: "true"`. In that mode, Ark keeps A2A message types end-to-end for agent/team execution and routes by executor capability:
+- reserved `a2a` engine for native A2A servers
+- known native external engine types (currently `langchain`)
+- known OpenAI-compatible executors through a boundary compat wrapper
+
+Unknown execution engine types fail fast in experimental mode. See the [RFC: Experimental A2A transport](https://mckinsey.github.io/agents-at-scale-ark/reference/a2a-experimental-rfc) for details.
 
 ## Notes
 - Requires Python 3.11+ and uv package manager

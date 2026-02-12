@@ -808,7 +808,7 @@ func (r *QueryReconciler) dispatchAgent(ctx context.Context, query arkv1alpha1.Q
 	}
 
 	agentAnnotations := []map[string]string(nil)
-	if agentCRD.Annotations != nil && agentCRD.Annotations[annotations.A2AServerAddress] != "" {
+	if agentCRD.Annotations != nil {
 		agentAnnotations = []map[string]string{agentCRD.Annotations}
 	}
 	useA2A := genai.ResolveA2AExperimentalEnabled(nil, query.Annotations, agentAnnotations)

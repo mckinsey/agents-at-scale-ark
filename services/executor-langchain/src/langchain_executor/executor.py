@@ -1,7 +1,7 @@
 """LangChain execution logic."""
 
 import logging
-from typing import List, Optional
+from typing import Any, List, Optional, TypeGuard
 from langchain.schema import Document, HumanMessage, AIMessage, SystemMessage
 from langchain_community.vectorstores import FAISS
 from ark_sdk.executor import BaseExecutor, Message
@@ -15,6 +15,72 @@ from .utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _is_dict(value: object) -> TypeGuard[dict[str, Any]]:
+    return isinstance(value, dict)
+
+
+def _is_list(value: object) -> TypeGuard[list[Any]]:
+    return isinstance(value, list)
+
+
+def _extract_native_text(message: object) -> str:
+    if not _is_dict(message):
+        return ""
+    parts = message.get("parts")
+    if not _is_list(parts):
+        return ""
+    values: List[str] = []
+    for part in parts:
+        if not _is_dict(part):
+            continue
+        kind = part.get("kind")
+        if kind == "text":
+            text = part.get("text")
+            if isinstance(text, str) and text:
+                values.append(text)
+            continue
+        if kind == "data":
+            data_value = part.get("data")
+            if isinstance(data_value, str) and data_value:
+                values.append(data_value)
+            continue
+        if kind == "file":
+            uri = part.get("uri")
+            if isinstance(uri, str) and uri:
+                values.append(uri)
+            continue
+    return "\n".join(values).strip()
+
+
+def _extract_native_role(message: object) -> str:
+    if not _is_dict(message):
+        return "user"
+    role = message.get("role")
+    if role == "agent":
+        return "assistant"
+    if role in {"user", "assistant", "system"}:
+        return role
+    return "user"
+
+
+def _build_native_langchain_messages(history: object) -> List:
+    native_messages: List = []
+    if not _is_list(history):
+        return native_messages
+    for message in history:
+        role = _extract_native_role(message)
+        content = _extract_native_text(message)
+        if not content:
+            continue
+        if role == "system":
+            native_messages.insert(0, SystemMessage(content=content))
+        elif role == "assistant":
+            native_messages.append(AIMessage(content=content))
+        else:
+            native_messages.append(HumanMessage(content=content))
+    return native_messages
 
 
 class LangChainExecutor(BaseExecutor):
@@ -47,23 +113,26 @@ class LangChainExecutor(BaseExecutor):
             else:
                 logger.info(f"Standard LangChain execution (no RAG) for agent: {request.agent.name}")
 
-            # Convert message history to LangChain format
+            payload_mode = getattr(request, "payloadMode", "compat")
             langchain_messages = []
-            for msg in request.history:
-                if msg.role == "user":
-                    langchain_messages.append(HumanMessage(content=msg.content))
-                elif msg.role == "assistant":
-                    langchain_messages.append(AIMessage(content=msg.content))
-                elif msg.role == "system":
-                    langchain_messages.insert(0, SystemMessage(content=msg.content))
-
-            # Add current user message
-            if use_rag and rag_context:
-                # For RAG, include context in the user message
-                rag_instruction = "Use this code context to answer the user's question accurately!"
-                user_content = f"🔥 RELEVANT CODE CONTEXT:\n\n{rag_context}\n\n{rag_instruction}\n\nUser: {request.userInput.content}"
+            user_content = request.userInput.content
+            if payload_mode == "native":
+                langchain_messages = _build_native_langchain_messages(getattr(request, "a2aHistory", []))
+                native_user = _extract_native_text(getattr(request, "a2aUserInput", None))
+                if native_user:
+                    user_content = native_user
             else:
-                user_content = request.userInput.content
+                for msg in request.history:
+                    if msg.role == "user":
+                        langchain_messages.append(HumanMessage(content=msg.content))
+                    elif msg.role == "assistant":
+                        langchain_messages.append(AIMessage(content=msg.content))
+                    elif msg.role == "system":
+                        langchain_messages.insert(0, SystemMessage(content=msg.content))
+
+            if use_rag and rag_context:
+                rag_instruction = "Use this code context to answer the user's question accurately!"
+                user_content = f"🔥 RELEVANT CODE CONTEXT:\n\n{rag_context}\n\n{rag_instruction}\n\nUser: {user_content}"
 
             langchain_messages.append(HumanMessage(content=user_content))
 

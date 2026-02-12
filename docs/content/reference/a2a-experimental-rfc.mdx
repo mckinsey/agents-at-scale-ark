@@ -37,7 +37,10 @@ When `ark.mckinsey.com/a2a-experimental-enabled: "true"` is active:
 
 - The controller dispatches to `executeAgentA2A` / `executeTeamA2A` (separate from `executeAgent` / `executeTeam`).
 - Query input is parsed via `GetQueryInputA2AMessages` (returns `[]protocol.Message` directly).
-- Agent execution routes through `Agent.ExecuteA2A` -> `A2AExecutionEngine.ExecuteNative`.
+- Agent execution routes through capability resolution:
+  - reserved `a2a` engine -> `A2AExecutionEngine.ExecuteNative`
+  - known native external engines -> native `ExecutionEngine` payload mode
+  - known OpenAI-compatible executors -> boundary compat wrapper
 - Team strategies use parallel A2A methods (`executeSequentialA2A`, `executeRoundRobinA2A`, etc.).
 - Memory reads/writes use `AddA2AMessages` / `GetA2AMessages`.
 - Tool delegation uses `ExecuteA2A` / `ExecuteNative` and returns structured A2A metadata.
@@ -74,9 +77,13 @@ When the annotation is absent or set to `"false"`, the OpenAI path is used and b
 When experimental mode is enabled for a workload:
 
 - Target type must be `agent` or `team`.
-- Participating agents must define an `executionEngine` with `name: a2a`.
-- Local execution (no engine) is rejected with a validation error at execution time.
-- Engines used in this path must accept and emit A2A messages. Ark does not convert to any LLM provider format.
+- Participating agents must resolve to one of:
+  - reserved `a2a` execution engine
+  - known native external execution engine type (currently `langchain`)
+  - local or external known OpenAI-compatible executor via boundary compat wrapper
+- Unknown execution engine types fail fast with a compatibility error.
+- Native external engines are expected to accept and emit A2A messages.
+- Compat-wrapped local execution keeps existing tool behavior, including MCP-backed filesystem tools.
 
 ## Composability model
 
@@ -96,8 +103,8 @@ Teams can compose heterogeneous members as long as each member is A2A-compatible
 When experimental mode is enabled:
 
 - A2A transport failures are returned immediately.
-- No implicit fallback to local OpenAI execution is allowed.
-- The OpenAI model execution path (`Model.ChatCompletion`) rejects calls when the experimental flag is active.
+- Unknown execution engines fail fast instead of silently falling back.
+- The OpenAI model execution path (`Model.ChatCompletion`) rejects calls when the experimental flag is active unless execution is explicitly routed through the compat wrapper.
 - Native response serialization fails if `ExecutionResult` does not contain A2A-native messages.
 - Native event streams do not emit OpenAI completion chunks at finalize time.
 - Native error events use `TaskStatusUpdateEvent` with `state=failed`, not plain messages.
@@ -111,7 +118,8 @@ The `ark-api` service exposes an A2A JSON-RPC gateway that discovers Ark agents,
 | Surface | Disabled (default) | Enabled (experimental) |
 |---------|-------------------|----------------------|
 | Query input for agent/team | `GetQueryInputMessages` (OpenAI) | `GetQueryInputA2AMessages` (A2A) |
-| Internal execution payload | `Agent.Execute` / `Team.Execute` | `Agent.ExecuteA2A` / `Team.ExecuteA2A` |
+| Internal execution payload | `Agent.Execute` / `Team.Execute` | `Agent.ExecuteA2A` / `Team.ExecuteA2A` with capability routing |
+| Executor compatibility | N/A | reserved `a2a`, native external types (`langchain`), or known OpenAI compat wrapper |
 | `response.raw` | OpenAI JSON | A2A JSON |
 | Memory writes | `AddMessages` (OpenAI JSON) | `AddA2AMessages` (A2A JSON) |
 | Memory reads | `GetMessages` (OpenAI) | `GetA2AMessages` (A2A, reads both formats) |
@@ -130,7 +138,7 @@ If the experiment is withdrawn, removal is isolated to these additive functions 
 | Component | Functions to remove |
 |-----------|-------------------|
 | Controller | `dispatchAgent`, `dispatchTeam`, `executeAgentA2A`, `executeTeamA2A`, `loadInitialA2AMessages` |
-| Agent | `ExecuteA2A`, `executeAgentA2A`, `executeWithA2AExecutionEngineNative` |
+| Agent | `ExecuteA2A`, `executeAgentA2A`, `executeWithA2AExecutionEngineNative`, compat/native external capability routing |
 | Team | `ExecuteA2A`, `executeSequentialA2A`, `executeRoundRobinA2A`, `executeSelectorA2A`, `executeGraphA2A`, `executeMemberAndAccumulateA2A`, `executeTeamMemberA2A` |
 | A2A engine | `ExecuteNative`, `buildA2AMessagesFromResponse` |
 | Memory | `AddA2AMessages`, `GetA2AMessages` (interface + implementations) |
