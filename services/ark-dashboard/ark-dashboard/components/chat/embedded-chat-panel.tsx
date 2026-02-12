@@ -10,10 +10,7 @@ import {
   RotateCcw,
   Send,
 } from 'lucide-react';
-import type {
-  ChatCompletionChunk,
-  ChatCompletionMessageParam,
-} from 'openai/resources/chat/completions';
+import type { ChatCompletionChunk } from 'openai/resources/chat/completions';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { chatHistoryAtom, createNewSessionId } from '@/atoms/chat-history';
@@ -29,6 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { hashPromptSync } from '@/lib/analytics/utils';
 import { chatService } from '@/lib/services';
+import type { ExtendedChatMessage } from '@/lib/types/chat-message';
 
 type ChatType = 'model' | 'team' | 'agent';
 type TabType = 'chat' | 'debug';
@@ -547,10 +545,8 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
   const setChatMessages = useCallback(
     (
       updater:
-        | ChatCompletionMessageParam[]
-        | ((
-            prev: ChatCompletionMessageParam[],
-          ) => ChatCompletionMessageParam[]),
+        | ExtendedChatMessage[]
+        | ((prev: ExtendedChatMessage[]) => ExtendedChatMessage[]),
     ) => {
       setChatHistory(prev => {
         const safePrev = prev || {};
@@ -618,9 +614,9 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
   }, [chatMessages]);
 
   const buildChatMessages = (
-    chatMsgs: ChatCompletionMessageParam[],
+    chatMsgs: ExtendedChatMessage[],
     currentMsg: string,
-  ): ChatCompletionMessageParam[] => {
+  ): ExtendedChatMessage[] => {
     return [...chatMsgs, { role: 'user', content: currentMsg }];
   };
 
@@ -636,12 +632,30 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
       function: { name: string; arguments: string };
     }> = [];
 
+    let hasError = false;
+    let errorMessage = '';
+    let queryName = '';
+
     for await (const chunk of chatService.streamChatResponse(
       messageArray,
       type,
       name,
       sessionId,
     )) {
+      if ('error' in chunk && chunk.error) {
+        hasError = true;
+        const errorObj = chunk.error as {
+          message?: string;
+          code?: string;
+        };
+        errorMessage = errorObj.message || 'An error occurred';
+        if ('ark' in chunk) {
+          const arkData = chunk.ark as { query?: string };
+          queryName = arkData.query || '';
+        }
+        break;
+      }
+
       const typedChunk = chunk as unknown as ChatCompletionChunk;
       const delta = typedChunk?.choices?.[0]?.delta;
       if (delta?.content) {
@@ -679,6 +693,22 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
         };
         return updated;
       });
+    }
+
+    if (hasError) {
+      setChatMessages(prev => {
+        const updated = [...prev];
+        updated[assistantMessageIndex] = {
+          role: 'assistant',
+          content: errorMessage,
+          metadata: {
+            status: 'failed',
+            queryName: queryName || undefined,
+          },
+        };
+        return updated;
+      });
+      return;
     }
 
     if (accumulatedToolCalls.length > 0) {
@@ -781,12 +811,23 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
               {
                 role: 'assistant',
                 content: result.response || 'Query failed',
+                metadata: {
+                  status: 'failed',
+                  queryName: query.name,
+                },
               },
             ]);
           } else if (result.status === 'unknown') {
             setChatMessages(prev => [
               ...prev,
-              { role: 'assistant', content: 'Query status unknown' },
+              {
+                role: 'assistant',
+                content: 'Query status unknown',
+                metadata: {
+                  status: 'failed',
+                  queryName: query.name,
+                },
+              },
             ]);
           }
 
@@ -797,7 +838,14 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
         console.error('Error polling query status:', err);
         setChatMessages(prev => [
           ...prev,
-          { role: 'assistant', content: 'Error while processing query' },
+          {
+            role: 'assistant',
+            content: 'Error while processing query',
+            metadata: {
+              status: 'failed',
+              queryName: query.name,
+            },
+          },
         ]);
         pollingStopped = true;
       }
@@ -848,6 +896,16 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
         }
       }
 
+      setChatMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: errorMessage,
+          metadata: {
+            status: 'failed',
+          },
+        },
+      ]);
       setError(errorMessage);
     } finally {
       setIsProcessing(false);
@@ -1008,6 +1066,8 @@ export function EmbeddedChatPanel({ name, type }: EmbeddedChatPanelProps) {
                         content={content}
                         viewMode="markdown"
                         sender={senderName}
+                        status={message.metadata?.status}
+                        queryName={message.metadata?.queryName}
                       />
                     )}
                     {hasTermination && (

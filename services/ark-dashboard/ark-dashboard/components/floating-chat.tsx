@@ -12,10 +12,7 @@ import {
   Square,
   X,
 } from 'lucide-react';
-import type {
-  ChatCompletionChunk,
-  ChatCompletionMessageParam,
-} from 'openai/resources/chat/completions';
+import type { ChatCompletionChunk } from 'openai/resources/chat/completions';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { chatHistoryAtom, createNewSessionId } from '@/atoms/chat-history';
@@ -40,6 +37,7 @@ import {
 import { trackEvent } from '@/lib/analytics/singleton';
 import { hashPromptSync } from '@/lib/analytics/utils';
 import { chatService } from '@/lib/services';
+import type { ExtendedChatMessage } from '@/lib/types/chat-message';
 
 type ChatType = 'model' | 'team' | 'agent';
 type WindowState = 'default' | 'minimized' | 'maximized';
@@ -93,10 +91,8 @@ export default function FloatingChat({
   const updateChatMessages = useCallback(
     (
       updater:
-        | ChatCompletionMessageParam[]
-        | ((
-            prev: ChatCompletionMessageParam[],
-          ) => ChatCompletionMessageParam[]),
+        | ExtendedChatMessage[]
+        | ((prev: ExtendedChatMessage[]) => ExtendedChatMessage[]),
     ) => {
       setChatHistory(prev => {
         const safePrev = prev || {};
@@ -156,17 +152,16 @@ export default function FloatingChat({
   }, [chatMessages]);
 
   const buildChatMessages = (
-    messages: ChatCompletionMessageParam[],
+    messages: ExtendedChatMessage[],
     currentMsg: string,
-  ): ChatCompletionMessageParam[] => {
+  ): ExtendedChatMessage[] => {
     return [...messages, { role: 'user', content: currentMsg }];
   };
 
   const handleStreamChatResponse = async (userMessage: string) => {
     const messageArray = buildChatMessages(chatMessages, userMessage);
 
-    // Add empty assistant message that will be updated with streamed content
-    const assistantMessageIndex = chatMessages.length + 1; // +1 for user message already added
+    const assistantMessageIndex = chatMessages.length + 1;
     updateChatMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
     let accumulatedContent = '';
@@ -176,6 +171,10 @@ export default function FloatingChat({
       function: { name: string; arguments: string };
     }> = [];
 
+    let hasError = false;
+    let errorMessage = '';
+    let queryName = '';
+
     for await (const chunk of chatService.streamChatResponse(
       messageArray,
       type,
@@ -183,7 +182,20 @@ export default function FloatingChat({
       sessionId,
       queryTimeout,
     )) {
-      // Extract content from the chunk (OpenAI format)
+      if ('error' in chunk && chunk.error) {
+        hasError = true;
+        const errorObj = chunk.error as {
+          message?: string;
+          code?: string;
+        };
+        errorMessage = errorObj.message || 'An error occurred';
+        if ('ark' in chunk) {
+          const arkData = chunk.ark as { query?: string };
+          queryName = arkData.query || '';
+        }
+        break;
+      }
+
       const typedChunk = chunk as unknown as ChatCompletionChunk;
       const delta = typedChunk?.choices?.[0]?.delta;
       if (delta?.content) {
@@ -193,7 +205,6 @@ export default function FloatingChat({
       if (delta?.tool_calls) {
         let index = accumulatedToolCalls.length - 1;
         for (const toolCallDelta of delta.tool_calls) {
-          // name is only defined when starting a new tool invocation
           if (toolCallDelta.function?.name) {
             index += 1;
             accumulatedToolCalls.push({
@@ -224,12 +235,25 @@ export default function FloatingChat({
       });
     }
 
-    // After streaming completes, add tool messages (OpenAI format)
-    // These won't be displayed but they will be part of the history
+    if (hasError) {
+      updateChatMessages(prev => {
+        const updated = [...prev];
+        updated[assistantMessageIndex] = {
+          role: 'assistant',
+          content: errorMessage,
+          metadata: {
+            status: 'failed',
+            queryName: queryName || undefined,
+          },
+        };
+        return updated;
+      });
+      return;
+    }
+
     if (accumulatedToolCalls.length > 0) {
       updateChatMessages(prev => {
         const newMessages = [...prev];
-        // Add a tool message for each tool call
         accumulatedToolCalls.forEach(toolCall => {
           newMessages.push({
             role: 'tool',
@@ -333,12 +357,23 @@ export default function FloatingChat({
               {
                 role: 'assistant',
                 content: result.response || 'Query failed',
+                metadata: {
+                  status: 'failed',
+                  queryName: query.name,
+                },
               },
             ]);
           } else if (result.status === 'unknown') {
             updateChatMessages(prev => [
               ...prev,
-              { role: 'assistant', content: 'Query status unknown' },
+              {
+                role: 'assistant',
+                content: 'Query status unknown',
+                metadata: {
+                  status: 'failed',
+                  queryName: query.name,
+                },
+              },
             ]);
           }
 
@@ -350,7 +385,14 @@ export default function FloatingChat({
 
         updateChatMessages(prev => [
           ...prev,
-          { role: 'assistant', content: 'Error while processing query' },
+          {
+            role: 'assistant',
+            content: 'Error while processing query',
+            metadata: {
+              status: 'failed',
+              queryName: query.name,
+            },
+          },
         ]);
 
         pollingStopped = true;
@@ -409,6 +451,16 @@ export default function FloatingChat({
         }
       }
 
+      updateChatMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: errorMessage,
+          metadata: {
+            status: 'failed',
+          },
+        },
+      ]);
       setError(errorMessage);
       setIsProcessing(false);
     } finally {
@@ -674,6 +726,8 @@ export default function FloatingChat({
                           content={content}
                           viewMode={viewMode}
                           sender={senderName}
+                          status={message.metadata?.status}
+                          queryName={message.metadata?.queryName}
                         />
                       )}
                       {hasTermination && (
