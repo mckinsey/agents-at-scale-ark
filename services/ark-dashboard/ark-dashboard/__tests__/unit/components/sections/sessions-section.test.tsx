@@ -307,7 +307,7 @@ describe('SessionsSection', () => {
 
       render(<SessionsSection />);
 
-      expect(screen.getByText('No sessions to display')).toBeInTheDocument();
+      expect(screen.getByText('No workflow runs to display')).toBeInTheDocument();
     });
 
     it('should show filtered empty state when filters applied', async () => {
@@ -321,11 +321,11 @@ describe('SessionsSection', () => {
       
       render(<SessionsSection />);
 
-      const searchInput = screen.getByPlaceholderText('Search workflow...');
+      const searchInput = screen.getByPlaceholderText('Search workflows...');
       await user.type(searchInput, 'nonexistent');
 
       await waitFor(() => {
-        expect(screen.getByText(/no sessions found matching/i)).toBeInTheDocument();
+        expect(screen.getByText(/no workflow runs found matching/i)).toBeInTheDocument();
       });
     });
 
@@ -420,7 +420,7 @@ describe('SessionsSection', () => {
       
       render(<SessionsSection />);
 
-      const searchInput = screen.getByPlaceholderText('Search workflow...');
+      const searchInput = screen.getByPlaceholderText('Search workflows...');
       await user.type(searchInput, 'failed');
 
       await waitFor(() => {
@@ -480,7 +480,7 @@ describe('SessionsSection', () => {
       const mockUseWorkflows = vi.mocked(useWorkflows);
       render(<SessionsSection />);
 
-      const searchInput = screen.getByPlaceholderText('Search workflow...');
+      const searchInput = screen.getByPlaceholderText('Search workflows...');
       await user.type(searchInput, 'test');
 
       const clearButton = screen.getByRole('button', { name: /clear filters/i });
@@ -504,7 +504,7 @@ describe('SessionsSection', () => {
       const user = userEvent.setup();
       render(<SessionsSection />);
 
-      const searchInput = screen.getByPlaceholderText('Search workflow...');
+      const searchInput = screen.getByPlaceholderText('Search workflows...');
       await user.type(searchInput, 'test');
 
       await waitFor(() => {
@@ -765,7 +765,7 @@ describe('SessionsSection', () => {
       const user = userEvent.setup();
       render(<SessionsSection />);
 
-      const searchInput = screen.getByPlaceholderText('Search workflow...');
+      const searchInput = screen.getByPlaceholderText('Search workflows...');
       await user.type(searchInput, 'test');
 
       await waitFor(() => {
@@ -818,7 +818,7 @@ describe('SessionsSection', () => {
       const user = userEvent.setup();
       render(<SessionsSection />);
 
-      const searchInput = screen.getByPlaceholderText('Search workflow...');
+      const searchInput = screen.getByPlaceholderText('Search workflows...');
       await user.type(searchInput, 'test');
 
       const clearButton = screen.getByRole('button', { name: /clear filters/i });
