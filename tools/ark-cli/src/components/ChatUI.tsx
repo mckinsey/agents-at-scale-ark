@@ -559,26 +559,28 @@ const ChatUI: React.FC<ChatUIProps> = ({
           (msg) =>
             msg.type === 'user' || msg.type === 'agent' || msg.type === 'team'
         )
-        .map((msg) => {
+        .flatMap((msg) => {
           if (msg.type === 'user') {
-            return {
-              role: 'user' as const,
-              content: msg.content,
-            };
+            return [
+              {
+                role: 'user' as const,
+                content: msg.content,
+              },
+            ];
           } else if (msg.type === 'agent') {
-            return {
-              role: 'assistant' as const,
-              content: msg.content,
-            };
+            return [
+              {
+                role: 'assistant' as const,
+                content: msg.content,
+              },
+            ];
           } else if (msg.type === 'team') {
-            // For teams, concatenate all member responses
-            const content = msg.members.map((m) => m.content).join(' ');
-            return {
+            return msg.members.map((m) => ({
               role: 'assistant' as const,
-              content: content || '',
-            };
+              content: m.content || '',
+            }));
           }
-          return {role: 'user' as const, content: ''};
+          return [];
         });
 
       // Add the new user message

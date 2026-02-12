@@ -634,7 +634,8 @@ export function EmbeddedChatPanel({
 
   const handleStreamChatResponse = async (userMessage: string) => {
     const messageArray = buildChatMessages(chatMessages, userMessage);
-    const assistantMessageIndex = chatMessages.length + 1;
+    let currentMessageIndex = chatMessages.length + 1;
+
     setChatMessages(prev => [
       ...prev,
       { role: 'assistant', content: '' } as ExtendedChatMessage,
@@ -650,7 +651,33 @@ export function EmbeddedChatPanel({
     let hasError = false;
     let errorMessage = '';
     let queryName = '';
-    let agentName: string | undefined;
+    let currentAgent: string | undefined;
+    let completedQueryMessages: Array<{
+      role: string;
+      content?: string;
+      name?: string;
+    }> = [];
+
+    const finalizeCurrentMessage = () => {
+      if (accumulatedContent || accumulatedToolCalls.length > 0) {
+        setChatMessages(prev => {
+          const updated = [...prev];
+          const updatedMessage: ExtendedChatMessage = {
+            role: 'assistant',
+            content: accumulatedContent,
+            tool_calls:
+              accumulatedToolCalls.length > 0
+                ? accumulatedToolCalls
+                : undefined,
+          } as ExtendedChatMessage;
+          if (currentAgent) {
+            (updatedMessage as { name?: string }).name = currentAgent;
+          }
+          updated[currentMessageIndex] = updatedMessage;
+          return updated;
+        });
+      }
+    };
 
     for await (const chunk of chatService.streamChatResponse(
       messageArray as ChatCompletionMessageParam[],
@@ -679,17 +706,37 @@ export function EmbeddedChatPanel({
           completedQuery?: {
             status?: {
               response?: {
-                target?: {
-                  name?: string;
-                };
+                raw?: string;
               };
             };
           };
         };
-        const targetName =
-          arkData.completedQuery?.status?.response?.target?.name;
-        if (targetName) {
-          agentName = targetName;
+        const rawMessages = arkData.completedQuery?.status?.response?.raw;
+        if (rawMessages) {
+          try {
+            completedQueryMessages = JSON.parse(rawMessages);
+          } catch (e) {
+            console.error('Failed to parse completed query messages:', e);
+          }
+        }
+      }
+
+      if ('ark' in chunk) {
+        const arkData = chunk.ark as { agent?: string };
+        const chunkAgent = arkData.agent;
+
+        if (chunkAgent && chunkAgent !== currentAgent) {
+          if (currentAgent) {
+            finalizeCurrentMessage();
+            accumulatedContent = '';
+            accumulatedToolCalls.length = 0;
+            currentMessageIndex++;
+            setChatMessages(prev => [
+              ...prev,
+              { role: 'assistant', content: '' } as ExtendedChatMessage,
+            ]);
+          }
+          currentAgent = chunkAgent;
         }
       }
 
@@ -720,25 +767,29 @@ export function EmbeddedChatPanel({
           }
         }
       }
+
       setChatMessages(prev => {
         const updated = [...prev];
         const updatedMessage: ExtendedChatMessage = {
           role: 'assistant',
           content: accumulatedContent,
-          tool_calls: accumulatedToolCalls,
+          tool_calls:
+            accumulatedToolCalls.length > 0 ? accumulatedToolCalls : undefined,
         } as ExtendedChatMessage;
-        if (agentName) {
-          (updatedMessage as { name?: string }).name = agentName;
+        if (currentAgent) {
+          (updatedMessage as { name?: string }).name = currentAgent;
         }
-        updated[assistantMessageIndex] = updatedMessage;
+        updated[currentMessageIndex] = updatedMessage;
         return updated;
       });
     }
 
+    finalizeCurrentMessage();
+
     if (hasError) {
       setChatMessages(prev => {
         const updated = [...prev];
-        updated[assistantMessageIndex] = {
+        updated[currentMessageIndex] = {
           role: 'assistant',
           content: errorMessage,
           metadata: {
@@ -749,6 +800,24 @@ export function EmbeddedChatPanel({
         return updated;
       });
       return;
+    }
+
+    if (completedQueryMessages.length > 0) {
+      const systemMessages = completedQueryMessages.filter(
+        msg => msg.role === 'system',
+      );
+      if (systemMessages.length > 0) {
+        setChatMessages(prev => [
+          ...prev,
+          ...systemMessages.map(
+            msg =>
+              ({
+                role: 'system',
+                content: msg.content || '',
+              }) as ExtendedChatMessage,
+          ),
+        ]);
+      }
     }
 
     if (accumulatedToolCalls.length > 0) {
