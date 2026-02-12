@@ -8,10 +8,10 @@ import { modelsService } from './models';
 export const GET_ALL_MODELS_QUERY_KEY = 'get-all-models';
 export const GET_MODEL_BY_ID_QUERY_KEY = 'get-model-by-id';
 
-export const useGetAllModels = () => {
+export const useGetAllModels = (namespace?: string) => {
   return useQuery({
-    queryKey: [GET_ALL_MODELS_QUERY_KEY],
-    queryFn: modelsService.getAll,
+    queryKey: [GET_ALL_MODELS_QUERY_KEY, namespace],
+    queryFn: () => modelsService.getAll(namespace),
   });
 };
 

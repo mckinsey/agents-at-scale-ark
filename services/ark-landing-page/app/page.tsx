@@ -1,83 +1,69 @@
-'use client';
-
-import { useEffect, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import Image from 'next/image';
 import qbLogoLight from './img/qb-logo-light.svg';
+import * as k8s from '@kubernetes/client-node';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 interface Demo {
   name: string;
   displayName: string;
   description: string;
+  url: string;
 }
 
-export default function LandingPage() {
-  const [demos, setDemos] = useState<Demo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+function getDemoUrl(demoName: string): string {
+  const dashboardUrl = process.env.NEXT_PUBLIC_ARK_DASHBOARD_URL || 'https://dashboard-demo.dev.agents-at-scale.com';
 
-  useEffect(() => {
-    fetch('/api/demos')
-      .then(res => {
-        if (!res.ok) {
-          throw new Error(`Failed to fetch demos: ${res.status}`);
-        }
-        return res.json();
-      })
-      .then(data => {
-        if (data.error) {
-          throw new Error(data.error);
-        }
-        setDemos(data);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error('Failed to load demos:', err);
-        setError('Failed to load demos. Check console for details.');
-        setLoading(false);
-      });
-  }, []);
+  const url = new URL(dashboardUrl);
+  url.searchParams.set('namespace', demoName);
+  return url.toString();
+}
 
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-xl text-muted-foreground">Loading demos...</div>
-      </main>
+async function getDemos(): Promise<Demo[]> {
+  try {
+    const kc = new k8s.KubeConfig();
+    kc.loadFromDefault();
+
+    const coreApi = kc.makeApiClient(k8s.CoreV1Api);
+    const customApi = kc.makeApiClient(k8s.CustomObjectsApi);
+
+    const namespacesResponse = await coreApi.listNamespace();
+    const demoNamespaces = namespacesResponse.body.items.filter(ns => {
+      const labels = ns.metadata?.labels || {};
+      return labels['ark.mckinsey.com/demo'] === 'true';
+    });
+
+    const httpRoutesResponse = await customApi.listClusterCustomObject(
+      'gateway.networking.k8s.io',
+      'v1',
+      'httproutes'
+    ) as { body: { items: Array<{ metadata?: { namespace?: string } }> } };
+
+    const namespacesWithRoutes = new Set(
+      httpRoutesResponse.body.items.map(route => route.metadata?.namespace).filter(Boolean)
     );
+
+    const availableDemos = demoNamespaces
+      .filter(ns => namespacesWithRoutes.has(ns.metadata?.name || ''))
+      .map(ns => ({
+        name: ns.metadata?.name || '',
+        displayName: ns.metadata?.annotations?.['ark.mckinsey.com/demo-name'] || ns.metadata?.name || '',
+        description: ns.metadata?.annotations?.['ark.mckinsey.com/demo-description'] || '',
+        url: getDemoUrl(ns.metadata?.name || ''),
+      }))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+    return availableDemos;
+  } catch (error) {
+    console.error('Error fetching demos:', error);
+    return [];
   }
+}
 
-  if (error) {
-    return (
-      <main className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-xl text-destructive">{error}</div>
-      </main>
-    );
-  }
-
-  const getDemoUrl = (demoName: string) => {
-    if (typeof window === 'undefined') return '';
-
-    const dashboardUrl = process.env.NEXT_PUBLIC_ARK_DASHBOARD_URL;
-    const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN;
-
-    // Use explicit dashboard URL or subdomain routing
-    if (dashboardUrl) {
-      const url = new URL(dashboardUrl);
-      url.searchParams.set('namespace', demoName);
-      return url.toString();
-    }
-
-    if (baseDomain) {
-      return `${window.location.protocol}//${demoName}.${baseDomain}`;
-    }
-
-    // Fallback to localhost port-forward
-    if (window.location.hostname === 'localhost') {
-      return `http://localhost:3003?namespace=${demoName}`;
-    }
-
-    return `http://${demoName}.127.0.0.1.nip.io`;
-  };
+export default async function LandingPage() {
+  const demos = await getDemos();
 
   return (
     <main className="min-h-screen bg-background">
@@ -113,7 +99,7 @@ export default function LandingPage() {
             {demos.map((demo) => (
               <a
                 key={demo.name}
-                href={getDemoUrl(demo.name)}
+                href={demo.url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="border border-border bg-card text-card-foreground hover:border-primary/50 hover:shadow-primary/10 p-8 cursor-pointer transition-all duration-200 hover:shadow-lg block group w-full max-w-sm"

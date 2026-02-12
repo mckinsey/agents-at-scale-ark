@@ -13,8 +13,12 @@ export type SecretDetailResponse =
 // Service with list operation
 export const secretsService = {
   // Get all secrets for a given namespace
-  async getAll(): Promise<Secret[]> {
-    const response = await apiClient.get<SecretListResponse>(`/api/v1/secrets`);
+  async getAll(namespace?: string): Promise<Secret[]> {
+    const params = namespace ? { namespace } : undefined;
+    const response = await apiClient.get<SecretListResponse>(
+      `/api/v1/secrets`,
+      params ? { params } : undefined,
+    );
     return response.items;
   },
 

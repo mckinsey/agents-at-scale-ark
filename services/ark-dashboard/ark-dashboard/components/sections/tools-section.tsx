@@ -74,8 +74,8 @@ export const ToolsSection = forwardRef<
       setLoading(true);
       try {
         const [toolsData, agentsData] = await Promise.all([
-          toolsService.getAll(),
-          agentsService.getAll(),
+          toolsService.getAll(namespace),
+          agentsService.getAll(namespace),
         ]);
         setTools(toolsData);
         setAgents(agentsData);

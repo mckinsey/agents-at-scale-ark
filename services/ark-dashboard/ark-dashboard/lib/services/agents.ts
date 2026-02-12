@@ -49,14 +49,18 @@ export type Agent = AgentDetailResponseWithA2A & { id: string };
 // CRUD Operations
 export const agentsService = {
   // Get all agents
-  async getAll(): Promise<Agent[]> {
-    const response = await apiClient.get<AgentListResponse>(`/api/v1/agents`);
+  async getAll(namespace?: string): Promise<Agent[]> {
+    const params = namespace ? { namespace } : undefined;
+    const response = await apiClient.get<AgentListResponse>(
+      `/api/v1/agents`,
+      params ? { params } : undefined,
+    );
 
     // Map the response items to include id for UI compatibility
     const agents = await Promise.all(
       response.items.map(async item => {
         // Fetch detailed info for each agent to get full data
-        const detailed = await agentsService.getByName(item.name);
+        const detailed = await agentsService.getByName(item.name, namespace);
         return detailed!;
       }),
     );
@@ -65,10 +69,12 @@ export const agentsService = {
   },
 
   // Get a single agent by name
-  async getByName(name: string): Promise<Agent | null> {
+  async getByName(name: string, namespace?: string): Promise<Agent | null> {
     try {
+      const params = namespace ? { namespace } : undefined;
       const response = await apiClient.get<AgentDetailResponse>(
         `/api/v1/agents/${name}`,
+        params ? { params } : undefined,
       );
       return {
         ...response,

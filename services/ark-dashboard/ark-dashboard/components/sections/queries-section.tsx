@@ -36,6 +36,7 @@ import { queriesService } from '@/lib/services/queries';
 import { useListQueries } from '@/lib/services/queries-hooks';
 import { getResourceEventsUrl } from '@/lib/utils/events';
 import { formatAge } from '@/lib/utils/time';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 type QueryResponse = components['schemas']['QueryResponse'];
 
@@ -53,6 +54,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(
     const [outputViewMode, setOutputViewMode] =
       useState<OutputViewMode>('content'); // NEW
     const router = useRouter();
+    const { namespace } = useNamespace();
 
     useImperativeHandle(ref, () => ({
       openAddEditor: () => {
@@ -71,7 +73,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(
       isError: listQueriesError,
       error: listQueriesErrorObject,
       refetch: loadQueries,
-    } = useListQueries();
+    } = useListQueries(namespace);
 
     useEffect(() => {
       if (listQueriesData && !listQueriesError) {

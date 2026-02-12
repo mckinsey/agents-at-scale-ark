@@ -23,14 +23,18 @@ export type Team = TeamDetailResponse & { id: string };
 // CRUD Operations
 export const teamsService = {
   // Get all teams
-  async getAll(): Promise<Team[]> {
-    const response = await apiClient.get<TeamListResponse>(`/api/v1/teams`);
+  async getAll(namespace?: string): Promise<Team[]> {
+    const params = namespace ? { namespace } : undefined;
+    const response = await apiClient.get<TeamListResponse>(
+      `/api/v1/teams`,
+      params ? { params } : undefined,
+    );
 
     // Map the response items to include id for UI compatibility
     const teams = await Promise.all(
       response.items.map(async item => {
         // Fetch detailed info for each team to get full data
-        const detailed = await teamsService.getByName(item.name);
+        const detailed = await teamsService.getByName(item.name, namespace);
         return detailed!;
       }),
     );
@@ -39,10 +43,12 @@ export const teamsService = {
   },
 
   // Get a single team by name
-  async getByName(name: string): Promise<Team | null> {
+  async getByName(name: string, namespace?: string): Promise<Team | null> {
     try {
+      const params = namespace ? { namespace } : undefined;
       const response = await apiClient.get<TeamDetailResponse>(
         `/api/v1/teams/${name}`,
+        params ? { params } : undefined,
       );
       return {
         ...response,

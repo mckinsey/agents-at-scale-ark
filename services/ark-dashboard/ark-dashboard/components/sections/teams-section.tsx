@@ -43,7 +43,7 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
       { id: 'compact', label: 'compact view', active: !showCompactView },
       { id: 'card', label: 'card view', active: showCompactView },
     ];
-    const { readOnlyMode } = useNamespace();
+    const { readOnlyMode, namespace } = useNamespace();
 
     useImperativeHandle(ref, () => ({
       openAddEditor: () => router.push('/teams/new'),
@@ -54,8 +54,8 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
         setLoading(true);
         try {
           const [teamsData, agentsData] = await Promise.all([
-            teamsService.getAll(),
-            agentsService.getAll(),
+            teamsService.getAll(namespace),
+            agentsService.getAll(namespace),
           ]);
           setTeams(teamsData);
           setAgents(agentsData);
@@ -73,7 +73,7 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
       };
 
       loadData();
-    }, []);
+    }, [namespace]);
 
     const handleSaveTeam = async (
       team: (TeamCreateRequest | TeamUpdateRequest) & { id?: string },

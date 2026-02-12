@@ -5,11 +5,13 @@ import { toast } from 'sonner';
 
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { useGetAllAgents } from '@/lib/services/agents-hooks';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { MetricCard } from './metric-card';
 
 export function HomepageAgentsCard() {
-  const { data, isPending, error } = useGetAllAgents();
+  const { namespace } = useNamespace();
+  const { data, isPending, error } = useGetAllAgents(namespace);
 
   const count = data?.length || 0;
 

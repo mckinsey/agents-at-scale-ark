@@ -7,9 +7,11 @@ import { toast } from 'sonner';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useGetAllModels } from '@/lib/services/models-hooks';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 export function NoDefaultModelAlert() {
-  const { data: models, error } = useGetAllModels();
+  const { namespace } = useNamespace();
+  const { data: models, error } = useGetAllModels(namespace);
 
   useEffect(() => {
     if (error) {

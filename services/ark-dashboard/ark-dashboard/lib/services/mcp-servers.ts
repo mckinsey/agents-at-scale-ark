@@ -39,14 +39,17 @@ export type ValueFrom = {
 // Service for MCP server operations
 export const mcpServersService = {
   // Get all MCP servers in a namespace
-  async getAll(): Promise<MCPServer[]> {
-    const response =
-      await apiClient.get<MCPServerListResponse>(`/api/v1/mcp-servers`);
+  async getAll(namespace?: string): Promise<MCPServer[]> {
+    const params = namespace ? { namespace } : undefined;
+    const response = await apiClient.get<MCPServerListResponse>(
+      `/api/v1/mcp-servers`,
+      params ? { params } : undefined,
+    );
 
     const mcpservers = await Promise.all(
       response.items.map(async item => {
         if (item.available !== 'True') {
-          const mcp = await mcpServersService.get(item.name);
+          const mcp = await mcpServersService.get(item.name, namespace);
           item.available = mcp?.available;
         }
         return {
@@ -58,10 +61,15 @@ export const mcpServersService = {
     return mcpservers;
   },
 
-  async get(mcpServerName: string): Promise<MCPServerDetail | null> {
+  async get(
+    mcpServerName: string,
+    namespace?: string,
+  ): Promise<MCPServerDetail | null> {
     try {
+      const params = namespace ? { namespace } : undefined;
       const response = await apiClient.get<MCPServerDetailResponse>(
         `/api/v1/mcp-servers/${mcpServerName}`,
+        params ? { params } : undefined,
       );
       return {
         ...response,

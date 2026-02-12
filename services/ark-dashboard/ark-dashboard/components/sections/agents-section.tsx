@@ -35,7 +35,7 @@ export const AgentsSection = forwardRef<AgentsSectionHandle, object>(
     const [loading, setLoading] = useState(true);
     const showLoading = useDelayedLoading(loading);
     const [showCompactView, setShowCompactView] = useState(false);
-    const { readOnlyMode } = useNamespace();
+    const { readOnlyMode, namespace } = useNamespace();
 
     const viewOptions: ToggleOption[] = [
       { id: 'compact', label: 'compact view', active: !showCompactView },
@@ -50,7 +50,7 @@ export const AgentsSection = forwardRef<AgentsSectionHandle, object>(
       const loadData = async () => {
         setLoading(true);
         try {
-          const agentsData = await agentsService.getAll();
+          const agentsData = await agentsService.getAll(namespace);
           setAgents(agentsData);
         } catch (error) {
           console.error('Failed to load data:', error);
@@ -66,7 +66,7 @@ export const AgentsSection = forwardRef<AgentsSectionHandle, object>(
       };
 
       loadData();
-    }, []);
+    }, [namespace]);
 
     const handleDeleteAgent = async (id: string) => {
       try {

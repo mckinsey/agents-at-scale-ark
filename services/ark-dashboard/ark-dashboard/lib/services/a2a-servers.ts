@@ -61,9 +61,12 @@ export interface A2AServerConfiguration {
 // Service for A2A server operations
 export const A2AServersService = {
   // Get all A2A servers in a namespace
-  async getAll(): Promise<A2AServer[]> {
-    const response =
-      await apiClient.get<A2AServerListResponse>(`/api/v1/a2a-servers`);
+  async getAll(namespace?: string): Promise<A2AServer[]> {
+    const params = namespace ? { namespace } : undefined;
+    const response = await apiClient.get<A2AServerListResponse>(
+      `/api/v1/a2a-servers`,
+      params ? { params } : undefined,
+    );
     console.log('A2A Servers:', response.items);
     return response.items.map(item => ({
       ...item,
@@ -71,9 +74,11 @@ export const A2AServersService = {
     }));
   },
 
-  async get(A2AServerName: string): Promise<A2AServer> {
+  async get(A2AServerName: string, namespace?: string): Promise<A2AServer> {
+    const params = namespace ? { namespace } : undefined;
     const response = await apiClient.get<A2AServer>(
       `/api/v1/a2a-servers/${A2AServerName}`,
+      params ? { params } : undefined,
     );
     return {
       ...response,

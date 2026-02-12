@@ -25,6 +25,7 @@ import {
   type EvaluatorCreateRequest,
   evaluatorsService,
 } from '@/lib/services';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }>(
   function EvaluatorsSection(_props, ref) {
@@ -33,6 +34,7 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }>(
     const [loading, setLoading] = useState(true);
     const [showCompactView, setShowCompactView] = useState(false);
     const showLoading = useDelayedLoading(loading);
+    const { namespace } = useNamespace();
 
     const viewOptions: ToggleOption[] = [
       { id: 'compact', label: 'compact view', active: !showCompactView },
@@ -47,7 +49,7 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }>(
       const loadData = async () => {
         setLoading(true);
         try {
-          const evaluatorsData = await evaluatorsService.getAll();
+          const evaluatorsData = await evaluatorsService.getAll(namespace);
           setEvaluators(evaluatorsData);
         } catch (error) {
           toast.error('Failed to Load Evaluators', {
@@ -62,7 +64,7 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }>(
       };
 
       loadData();
-    }, []);
+    }, [namespace]);
 
     const handleCreateEvaluator = async (
       evaluator: EvaluatorCreateRequest & { id?: string },
@@ -73,7 +75,7 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }>(
         toast.success('Evaluator Created', {
           description: `Successfully created ${createData.name}`,
         });
-        const updatedEvaluators = await evaluatorsService.getAll();
+        const updatedEvaluators = await evaluatorsService.getAll(namespace);
         setEvaluators(updatedEvaluators);
       } catch (error) {
         toast.error('Failed to Create Evaluator', {
@@ -95,7 +97,7 @@ export const EvaluatorsSection = forwardRef<{ openAddEditor: () => void }>(
         toast.success('Evaluator Deleted', {
           description: `Successfully deleted ${evaluator.name}`,
         });
-        const updatedEvaluators = await evaluatorsService.getAll();
+        const updatedEvaluators = await evaluatorsService.getAll(namespace);
         setEvaluators(updatedEvaluators);
       } catch (error) {
         toast.error('Failed to Delete Evaluator', {

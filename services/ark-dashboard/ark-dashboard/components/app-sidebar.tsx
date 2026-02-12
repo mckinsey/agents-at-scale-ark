@@ -218,7 +218,10 @@ export function AppSidebar() {
         fromSection: pathname.split('/')[1],
       },
     });
-    router.push(`/${sectionKey}`);
+    const searchParams = new URLSearchParams(window.location.search);
+    const queryString = searchParams.toString();
+    const path = sectionKey ? `/${sectionKey}` : '/';
+    router.push(queryString ? `${path}?${queryString}` : path);
   };
 
   const getCurrentSection = () => pathname.split('/')[1];

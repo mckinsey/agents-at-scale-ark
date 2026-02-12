@@ -45,7 +45,7 @@ export const McpServersSection = forwardRef<
     const loadData = async () => {
       setLoading(true);
       try {
-        const data = await mcpServersService.getAll();
+        const data = await mcpServersService.getAll(namespace);
         setMcpServers(data);
       } catch (error) {
         console.error('Failed to load MCP servers:', error);
@@ -106,7 +106,7 @@ export const McpServersSection = forwardRef<
           description: `Successfully updated ${mcpServer.name}`,
         });
       }
-      const data = await mcpServersService.getAll();
+      const data = await mcpServersService.getAll(namespace);
       setMcpServers(data);
       setMcpEditorOpen(false);
     } catch (error) {

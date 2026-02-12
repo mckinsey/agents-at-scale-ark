@@ -60,8 +60,8 @@ export const SecretsSection = forwardRef<
       setLoading(true);
       try {
         const [secretsData, modelsData] = await Promise.all([
-          secretsService.getAll(),
-          modelsService.getAll(),
+          secretsService.getAll(namespace),
+          modelsService.getAll(namespace),
         ]);
         setSecrets(secretsData);
         setModels(modelsData);
@@ -98,7 +98,7 @@ export const SecretsSection = forwardRef<
         });
       }
       // Reload data
-      const updatedSecrets = await secretsService.getAll();
+      const updatedSecrets = await secretsService.getAll(namespace);
       setSecrets(updatedSecrets);
     } catch (error) {
       const isUpdate = secrets.some(s => s.name === name);
@@ -125,7 +125,7 @@ export const SecretsSection = forwardRef<
         description: 'Successfully deleted the secret',
       });
       // Reload data
-      const updatedSecrets = await secretsService.getAll();
+      const updatedSecrets = await secretsService.getAll(namespace);
       setSecrets(updatedSecrets);
     } catch (error) {
       toast.error('Failed to Delete Secret', {

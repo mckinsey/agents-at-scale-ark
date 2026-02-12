@@ -45,7 +45,7 @@ export const ModelsSection = function ModelsSection({
     const loadData = async () => {
       setLoading(true);
       try {
-        const modelsData = await modelsService.getAll();
+        const modelsData = await modelsService.getAll(namespace);
         setModels(modelsData);
       } catch (error) {
         console.error('Failed to load data:', error);

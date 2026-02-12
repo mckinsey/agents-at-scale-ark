@@ -22,14 +22,18 @@ export type Model = ModelDetailResponse & { id: string };
 // CRUD Operations
 export const modelsService = {
   // Get all models
-  async getAll(): Promise<Model[]> {
-    const response = await apiClient.get<ModelListResponse>(`/api/v1/models`);
+  async getAll(namespace?: string): Promise<Model[]> {
+    const params = namespace ? { namespace } : undefined;
+    const response = await apiClient.get<ModelListResponse>(
+      `/api/v1/models`,
+      params ? { params } : undefined,
+    );
 
     // Map the response items to include id for UI compatibility
     const models = await Promise.all(
       response.items.map(async item => {
         // Fetch detailed info for each model to get full data
-        const detailed = await modelsService.getByName(item.name);
+        const detailed = await modelsService.getByName(item.name, namespace);
         return detailed!;
       }),
     );
@@ -38,10 +42,12 @@ export const modelsService = {
   },
 
   // Get a single model by name
-  async getByName(name: string): Promise<Model | null> {
+  async getByName(name: string, namespace?: string): Promise<Model | null> {
     try {
+      const params = namespace ? { namespace } : undefined;
       const response = await apiClient.get<ModelDetailResponse>(
         `/api/v1/models/${name}`,
+        params ? { params } : undefined,
       );
       return {
         ...response,
