@@ -1,5 +1,8 @@
+import logging
 from playwright.sync_api import Page
 from .base_page import BasePage
+
+logger = logging.getLogger(__name__)
 
 
 class WorkflowsPage(BasePage):
