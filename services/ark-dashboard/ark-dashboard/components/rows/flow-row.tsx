@@ -16,7 +16,8 @@ import {
 import type { WorkflowParameter } from '@/lib/services/workflow-templates';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
-const ARGO_BASE_URL = process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746';
+const ARGO_BASE_URL =
+  process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746';
 
 export interface Flow {
   id: string;
@@ -38,7 +39,13 @@ interface FlowRowProps {
   readonly onDelete?: (flowId: string) => Promise<void>;
 }
 
-export function FlowRow({ flow, parameters, readOnly, onRun, onDelete }: FlowRowProps) {
+export function FlowRow({
+  flow,
+  parameters,
+  readOnly,
+  onRun,
+  onDelete,
+}: FlowRowProps) {
   const { namespace } = useNamespace();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
@@ -128,7 +135,9 @@ export function FlowRow({ flow, parameters, readOnly, onRun, onDelete }: FlowRow
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{readOnly ? 'Delete disabled in demo mode' : 'Delete template'}</TooltipContent>
+              <TooltipContent>
+                {readOnly ? 'Delete disabled in demo mode' : 'Delete template'}
+              </TooltipContent>
             </Tooltip>
           </TooltipProvider>
         )}

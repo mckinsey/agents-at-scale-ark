@@ -41,7 +41,8 @@ import { countWorkflowTasks } from '@/lib/utils/workflow';
 import { showWorkflowStartedToast } from '@/lib/utils/workflow-toast';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
-const ARGO_BASE_URL = process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746';
+const ARGO_BASE_URL =
+  process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746';
 
 export default function FlowDetailPage() {
   const params = useParams();
@@ -357,7 +358,11 @@ export default function FlowDetailPage() {
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>{readOnlyMode ? 'Delete disabled in demo mode' : 'Delete template'}</TooltipContent>
+                  <TooltipContent>
+                    {readOnlyMode
+                      ? 'Delete disabled in demo mode'
+                      : 'Delete template'}
+                  </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
               {template && (
