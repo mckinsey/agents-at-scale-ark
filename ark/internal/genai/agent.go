@@ -166,6 +166,8 @@ func (a *Agent) executeAgentA2A(ctx context.Context, userInput protocol.Message,
 		return a.executeWithA2AExecutionEngineNative(ctx, userInput, history, eventStream)
 	case executionCapabilityA2ANativeExternalEngine:
 		return a.executeWithExternalA2ANativeExecutionEngine(ctx, userInput, history, eventStream)
+	case executionCapabilityA2ANativeLocal:
+		return a.executeLocallyA2ANative(ctx, userInput, history, memory, eventStream)
 	case executionCapabilityOpenAICompat:
 		return a.executeWithA2ACompatExecution(ctx, userInput, history, memory, eventStream)
 	default:
@@ -408,7 +410,7 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 		return nil, err
 	}
 
-	resolvedCapability := executionCapabilityOpenAICompat
+	resolvedCapability := executionCapabilityA2ANativeLocal
 	if crd.Spec.ExecutionEngine != nil {
 		engineType, err := ValidateExecutionEngine(ctx, k8sClient, crd.Spec.ExecutionEngine, crd.Namespace)
 		if err != nil {

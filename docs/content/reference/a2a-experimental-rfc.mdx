@@ -40,6 +40,7 @@ When `ark.mckinsey.com/a2a-experimental-enabled: "true"` is active:
 - Agent execution routes through capability resolution:
   - reserved `a2a` engine -> `A2AExecutionEngine.ExecuteNative`
   - known native external engines -> native `ExecutionEngine` payload mode on `/execute-a2a`
+  - model-backed agents with no `ExecutionEngine` -> native local A2A loop (`executionCapabilityA2ANativeLocal`)
   - known OpenAI-compatible executors -> boundary compat wrapper
 - Team strategies use parallel A2A methods (`executeSequentialA2A`, `executeRoundRobinA2A`, etc.).
 - Memory reads/writes use `AddA2AMessages` / `GetA2AMessages`.
@@ -80,6 +81,7 @@ When experimental mode is enabled for a workload:
 - Participating agents must resolve to one of:
   - reserved `a2a` execution engine
   - known native external execution engine type (currently `a2a-langchain`)
+  - native local model-backed execution (`executionCapabilityA2ANativeLocal`)
   - local or external known OpenAI-compatible executor via boundary compat wrapper
 - Unknown execution engine types fail fast with a compatibility error.
 - Native external engines are expected to accept and emit A2A messages.
@@ -104,7 +106,7 @@ When experimental mode is enabled:
 
 - A2A transport failures are returned immediately.
 - Unknown execution engines fail fast instead of silently falling back.
-- The OpenAI model execution path (`Model.ChatCompletion`) rejects calls when the experimental flag is active unless execution is explicitly routed through the compat wrapper.
+- The OpenAI model execution path (`Model.ChatCompletion`) rejects calls when the experimental flag is active unless execution is routed through the native-local A2A boundary or the compat wrapper.
 - Native response serialization fails if `ExecutionResult` does not contain A2A-native messages.
 - Native event streams do not emit OpenAI completion chunks at finalize time.
 - Native error events use `TaskStatusUpdateEvent` with `state=failed`, not plain messages.
@@ -119,7 +121,7 @@ The `ark-api` service exposes an A2A JSON-RPC gateway that discovers Ark agents,
 |---------|-------------------|----------------------|
 | Query input for agent/team | `GetQueryInputMessages` (OpenAI) | `GetQueryInputA2AMessages` (A2A) |
 | Internal execution payload | `Agent.Execute` / `Team.Execute` | `Agent.ExecuteA2A` / `Team.ExecuteA2A` with capability routing |
-| Executor compatibility | N/A | reserved `a2a`, native external types (`a2a-langchain` via `/execute-a2a`), or known OpenAI compat wrapper (`langchain` via `/execute`) |
+| Executor compatibility | N/A | reserved `a2a`, native local model-backed execution (`a2a-native-local`), native external types (`a2a-langchain` via `/execute-a2a`), or known OpenAI compat wrapper (`langchain` via `/execute`) |
 | `response.raw` | OpenAI JSON | A2A JSON |
 | Memory writes | `AddMessages` (OpenAI JSON) | `AddA2AMessages` (A2A JSON) |
 | Memory reads | `GetMessages` (OpenAI) | `GetA2AMessages` (A2A, reads both formats) |
@@ -147,6 +149,7 @@ If the experiment is withdrawn, removal is isolated to these additive functions 
 | Tool delegation | A2A branches in `AgentToolExecutor.Execute`, `TeamToolExecutor.Execute` |
 | ExecutionResult | `A2AMessages` field |
 | Capability split | `executor_capability.go`, `a2a_execution_compat.go`, `Agent.resolvedCapability`, `ExecutionEngineClient.ExecuteA2A` |
+| Native local loop | `a2a_execution_local.go`, `executionCapabilityA2ANativeLocal`, `executeLocallyA2ANative` routing in `executeAgentA2A` |
 | LangChain executor | `services/executor-langchain/src/langchain_executor/a2a_executor.py`, `services/executor-langchain/src/langchain_executor/app.py` (`/execute-a2a`) |
 | SDK/contract | `ExecutionEngineRequest`/`ExecutionEngineResponse` A2A fields, `ExecutorApp.setup_a2a_route` |
 | Helm registration | optional `a2a-langchain` `ExecutionEngine` template (`services/executor-langchain/chart/templates/executionengine.yaml`) |

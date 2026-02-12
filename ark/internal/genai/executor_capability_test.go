@@ -16,7 +16,7 @@ import (
 func TestResolveA2AExecutionCapabilityNilEngine(t *testing.T) {
 	capability, err := resolveA2AExecutionCapability(context.Background(), nil, "default/agent", "default", nil)
 	require.NoError(t, err)
-	assert.Equal(t, executionCapabilityOpenAICompat, capability)
+	assert.Equal(t, executionCapabilityA2ANativeLocal, capability)
 }
 
 func TestResolveA2AExecutionCapabilityReservedA2AEngine(t *testing.T) {

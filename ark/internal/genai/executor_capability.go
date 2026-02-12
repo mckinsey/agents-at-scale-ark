@@ -18,6 +18,7 @@ type executionCapability string
 const (
 	executionCapabilityA2ANativeA2AEngine      executionCapability = "a2a-native-a2a-engine"
 	executionCapabilityA2ANativeExternalEngine executionCapability = "a2a-native-external-engine"
+	executionCapabilityA2ANativeLocal          executionCapability = "a2a-native-local"
 	executionCapabilityOpenAICompat            executionCapability = "openai-compat"
 )
 
@@ -47,7 +48,7 @@ func listKnownExecutionEngineTypes(source map[string]struct{}) string {
 
 func resolveA2AExecutionCapability(ctx context.Context, k8sClient client.Client, fullName, defaultNamespace string, engineRef *arkv1alpha1.ExecutionEngineRef) (executionCapability, error) {
 	if engineRef == nil {
-		return executionCapabilityOpenAICompat, nil
+		return executionCapabilityA2ANativeLocal, nil
 	}
 	if engineRef.Name == ExecutionEngineA2A {
 		return executionCapabilityA2ANativeA2AEngine, nil
