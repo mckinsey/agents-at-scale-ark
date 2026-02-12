@@ -1,0 +1,19 @@
+{{- if and .Values.storage (ne .Values.storage.backend "etcd") }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: ark-apiserver
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.storage.apiserver.port }}
+      targetPort: {{ .Values.storage.apiserver.port }}
+      protocol: TCP
+      name: https
+  selector:
+    {{- include "chart.selectorLabels" . | nindent 4 }}
+    control-plane: ark-controller
+{{- end }}

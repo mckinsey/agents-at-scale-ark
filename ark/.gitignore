@@ -37,3 +37,6 @@ certs
 
 # Generated install file (use Helm instead)
 dist/install.yaml
+
+# Generated CRD copies for apiserver embedding
+internal/apiserver/crds/*.yaml
