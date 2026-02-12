@@ -450,13 +450,18 @@ func streamA2AEvent(ctx context.Context, eventStream EventStreamInterface, paylo
 	if eventStream == nil {
 		return
 	}
+	log := logf.FromContext(ctx)
 	if payloadMode == A2APayloadModeNative {
-		_ = eventStream.StreamChunk(ctx, payload)
+		if err := eventStream.StreamChunk(ctx, payload); err != nil {
+			log.V(1).Error(err, "failed to stream native A2A event")
+		}
 		return
 	}
 	chunk := NewContentChunk(completionID, modelID, content)
 	chunkWithMeta := WrapChunkWithA2A(ctx, chunk, modelID, nil, payload)
-	_ = eventStream.StreamChunk(ctx, chunkWithMeta)
+	if err := eventStream.StreamChunk(ctx, chunkWithMeta); err != nil {
+		log.V(1).Error(err, "failed to stream compat A2A event")
+	}
 }
 
 func streamA2AError(ctx context.Context, eventStream EventStreamInterface, payloadMode, modelID string, err error) {
@@ -464,10 +469,21 @@ func streamA2AError(ctx context.Context, eventStream EventStreamInterface, paylo
 		return
 	}
 	if payloadMode == A2APayloadModeNative {
-		message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		taskID := getQueryID(ctx)
+		contextID := GetA2AContextID(ctx)
+		statusMessage := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
 			protocol.NewTextPart(err.Error()),
 		})
-		streamA2AEvent(ctx, eventStream, payloadMode, modelID, getQueryID(ctx), err.Error(), &message)
+		failedEvent := &protocol.TaskStatusUpdateEvent{
+			TaskID:    taskID,
+			ContextID: contextID,
+			Final:     true,
+			Status: protocol.TaskStatus{
+				State:   protocol.TaskStateFailed,
+				Message: &statusMessage,
+			},
+		}
+		streamA2AEvent(ctx, eventStream, payloadMode, modelID, taskID, err.Error(), failedEvent)
 		return
 	}
 	StreamError(ctx, eventStream, err, "a2a_execution_failed", modelID)

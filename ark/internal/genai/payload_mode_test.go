@@ -135,10 +135,10 @@ func TestGetA2AExperimentalEnabled(t *testing.T) {
 	assert.True(t, enabled)
 }
 
-func TestGetA2AExperimentalEnabledInvalidDefaultsToFalse(t *testing.T) {
+func TestGetA2AExperimentalEnabledInvalidTreatedAsNotSet(t *testing.T) {
 	enabled, hasValue := GetA2AExperimentalEnabled(map[string]string{
 		arkann.A2AExperimentalEnabled: "invalid",
 	})
-	assert.True(t, hasValue)
+	assert.False(t, hasValue)
 	assert.False(t, enabled)
 }

@@ -507,6 +507,30 @@ func TestExtractLastAssistantMessageContent(t *testing.T) {
 	}
 }
 
+func TestPrepareExecutionMessagesEmptyInput(t *testing.T) {
+	memory := []Message{createTestMessage("system", "sys")}
+	current, context := PrepareExecutionMessages(nil, memory)
+	if ExtractTextFromMessage(current) != "" {
+		t.Fatal("expected zero-value current for empty input")
+	}
+	if len(context) != 1 {
+		t.Fatalf("expected memory passthrough, got %d", len(context))
+	}
+}
+
+func TestPrepareA2AExecutionMessagesEmptyInput(t *testing.T) {
+	memory := []protocol.Message{
+		protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{protocol.NewTextPart("history")}),
+	}
+	current, context := PrepareA2AExecutionMessages(nil, memory)
+	if current.Role != "" {
+		t.Fatal("expected zero-value current for empty input")
+	}
+	if len(context) != 1 {
+		t.Fatalf("expected memory passthrough, got %d", len(context))
+	}
+}
+
 func TestPrepareA2AExecutionMessages(t *testing.T) {
 	input := []protocol.Message{
 		protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{protocol.NewTextPart("first")}),

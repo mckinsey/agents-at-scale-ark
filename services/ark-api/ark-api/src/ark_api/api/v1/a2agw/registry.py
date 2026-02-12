@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 @functools.lru_cache(maxsize=1)
 def _get_agent_card_url_components():
-    # Use PORT env var (8000 for ark-api) as default, or ARK_A2A_AGENT_CARD_PORT if set
     port = os.getenv('ARK_A2A_AGENT_CARD_PORT', os.getenv('PORT', '8000'))
     host = os.getenv('ARK_A2A_AGENT_CARD_HOST', 'localhost')
     scheme = os.getenv('ARK_A2A_AGENT_CARD_PROTOCOL', 'http')
@@ -29,14 +28,27 @@ def get_external(agent_name):
     scheme, host, port, path = _get_agent_card_url_components()
     return f"{scheme}://{host}:{port}{path}/a2a/agent/{agent_name}/"
 
+def _safe_metadata(ark_agent) -> dict:
+    metadata = getattr(ark_agent, "metadata", None)
+    if isinstance(metadata, dict):
+        return metadata
+    if hasattr(metadata, "__dict__"):
+        return metadata.__dict__
+    if metadata is not None:
+        try:
+            return dict(metadata)
+        except (TypeError, ValueError):
+            pass
+    return {}
+
 def ark_to_agent_card(ark_agent) -> AgentCard:
-    metadata = ark_agent.metadata
+    metadata = _safe_metadata(ark_agent)
     annotations = metadata.get('annotations') or {}
     if not isinstance(annotations, dict):
         annotations = {}
-    spec = ark_agent.spec
-    
-    # Create capabilities object
+    spec = getattr(ark_agent, "spec", None) or ark_agent
+    agent_name = metadata.get("name", "")
+
     streaming_supported = parse_bool_annotation(
         annotations.get(A2A_STREAMING_SUPPORTED_ANNOTATION),
         True,
@@ -44,7 +56,7 @@ def ark_to_agent_card(ark_agent) -> AgentCard:
     capabilities = AgentCapabilities(
         streaming=streaming_supported, pushNotifications=False, stateTransitionHistory=False
     )
-    
+
     skills_list = []
     skills_data = annotations.get(A2A_SERVER_SKILLS_ANNOTATION)
     parsed_skills = []
@@ -54,14 +66,14 @@ def ark_to_agent_card(ark_agent) -> AgentCard:
             if isinstance(parsed, list):
                 parsed_skills = parsed
         except json.JSONDecodeError:
-            logger.warning(f"Unable to parse skills annotation for agent {metadata['name']}")
+            logger.warning("Unable to parse skills annotation for agent %s", agent_name)
     elif isinstance(skills_data, list):
         parsed_skills = skills_data
 
     for idx, skill_dict in enumerate(parsed_skills):
         if isinstance(skill_dict, dict):
             skill_payload = dict(skill_dict)
-            skill_payload['id'] = skill_payload.get('id') or f"{metadata['name']}-skill-{idx}"
+            skill_payload['id'] = skill_payload.get('id') or f"{agent_name}-skill-{idx}"
             skill_payload['name'] = skill_payload.get('name') or f"skill-{idx + 1}"
             skill_payload['description'] = skill_payload.get('description') or "No description"
             raw_tags = skill_payload.get('tags')
@@ -72,26 +84,28 @@ def ark_to_agent_card(ark_agent) -> AgentCard:
             try:
                 skills_list.append(AgentSkill(**skill_payload))
             except Exception:
-                logger.warning(f"Unable to recover skill from annotation: {skill_dict}")
+                logger.warning("Unable to recover skill from annotation: %s", skill_dict)
         else:
-            logger.warning(f"Unable to recover skill from annotation: {skill_dict}")
+            logger.warning("Unable to recover skill from annotation: %s", skill_dict)
 
     if not skills_list:
         skills_list.append(
             AgentSkill(
-                id=f"{metadata['name']}-default-skill",
+                id=f"{agent_name}-default-skill",
                 name="General",
                 description="General agent capabilities",
                 tags=["general"],
             )
         )
-    
+
+    description = getattr(spec, "description", None) or "No description"
+
     return AgentCard(
-        name=metadata["name"],
-        description=spec.description or "No description",
+        name=agent_name,
+        description=description,
         capabilities=capabilities,
         skills=skills_list,
-        url=get_external(metadata['name']),
+        url=get_external(agent_name),
         version="1.0.0",
         defaultInputModes=["text/plain", "application/json"],
         defaultOutputModes=["text/plain", "application/json"],
@@ -103,9 +117,13 @@ class AgentRegistry:
         self._namespace = namespace
 
     async def get_agent(self, name: str) -> AgentCard | None:
-        async with with_ark_client(self._namespace, V1_ALPHA1) as ark_client:
-            agent = await ark_client.agents.a_get(name)
-            return ark_to_agent_card(agent)
+        try:
+            async with with_ark_client(self._namespace, V1_ALPHA1) as ark_client:
+                agent = await ark_client.agents.a_get(name)
+                return ark_to_agent_card(agent)
+        except Exception:
+            logger.debug("Agent %s not found or inaccessible", name)
+            return None
 
     async def list_agents(self) -> list[AgentCard]:
         async with with_ark_client(self._namespace, V1_ALPHA1) as ark_client:

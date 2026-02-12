@@ -32,7 +32,7 @@ class TestA2AGatewayMessageConversion(unittest.TestCase):
             role="user",
             parts=[
                 {"root": {"kind": "text", "text": "describe this"}},
-                {"root": {"kind": "file", "file": {"uri": "https://example.com/image.png"}}},
+                {"root": {"kind": "file", "file": {"uri": "https://example.com/image.png"}, "mediaType": "image/png"}},
             ],
         )
         context = SimpleNamespace(message=message, history=[])

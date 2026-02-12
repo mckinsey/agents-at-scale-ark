@@ -199,7 +199,7 @@ class TestA2AGatewayExecution(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(captured_task_stores), 2)
         self.assertIs(captured_task_stores[0], captured_task_stores[1])
 
-    async def test_manager_sync_removes_orphaned_task_stores(self):
+    async def test_manager_sync_removes_orphaned_task_stores_after_grace_period(self):
         manager = DynamicManager()
         manager.agents = {"agent-1": SimpleNamespace(name="agent-1")}
 
@@ -210,6 +210,12 @@ class TestA2AGatewayExecution(unittest.IsolatedAsyncioTestCase):
         manager.executors = {"agent-1": DummyExecutor()}
         manager.task_stores = {"agent-1": object()}
         manager.registry = SimpleNamespace(list_agents=AsyncMock(return_value=[]))
+
+        with patch.object(manager, "_update_routes"):
+            await manager._sync_with_registry()
+
+        self.assertIn("agent-1", manager.agents)
+        self.assertIn("agent-1", manager.task_stores)
 
         with patch.object(manager, "_update_routes") as mock_update_routes:
             await manager._sync_with_registry()

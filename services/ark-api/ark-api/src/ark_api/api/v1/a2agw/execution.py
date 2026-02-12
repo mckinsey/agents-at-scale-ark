@@ -1,6 +1,8 @@
 import asyncio
+import contextlib
 import logging
 import os
+import time
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -22,6 +24,7 @@ from ark_api.constants.annotations import (
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = int(os.getenv('A2A_DEFAULT_TIMEOUT', '300'))
+_EXPERIMENTAL_CACHE_TTL = 30
 
 class ARKAgentExecutor(AgentExecutor):
     def __init__(self, target_name, namespace, timeout=None):
@@ -31,6 +34,8 @@ class ARKAgentExecutor(AgentExecutor):
         self.timeout = timeout if timeout is not None else DEFAULT_TIMEOUT
         self.tasks_lock = asyncio.Lock()
         self.active_tasks: dict[str, asyncio.Task] = {}
+        self._experimental_enabled: bool = False
+        self._experimental_resolved_at: float = 0
 
     def _resolve_task_id(self, task_id: object) -> str:
         if isinstance(task_id, str) and task_id.strip():
@@ -42,30 +47,6 @@ class ARKAgentExecutor(AgentExecutor):
             return context_id.strip()
         return str(uuid4())
 
-    def _extract_message_text(self, message) -> str:
-        """Extract text content from a message object.
-        
-        Args:
-            message: The message object containing parts
-            
-        Returns:
-            The extracted text or "No message" if not found
-        """
-        if not message or not hasattr(message, 'parts'):
-            return "No message"
-            
-        for part in message.parts:
-            # Check if it's a Part wrapper object
-            if hasattr(part, 'root'):
-                part_root = part.root
-                if hasattr(part_root, 'kind') and part_root.kind == 'text' and hasattr(part_root, 'text'):
-                    return part_root.text
-            # Or if it's directly a text part
-            elif hasattr(part, 'kind') and part.kind == 'text' and hasattr(part, 'text'):
-                return part.text
-                
-        return "No message"
-    
     def _create_status_event(
         self,
         context_id: str,
@@ -74,33 +55,21 @@ class ARKAgentExecutor(AgentExecutor):
         final: bool = False,
         error_msg: str | None = None,
     ) -> TaskStatusUpdateEvent:
-        """Create a task status update event.
-        
-        Args:
-            context_id: The context ID
-            task_id: The task ID
-            state: The task state
-            final: Whether this is the final status
-            error_msg: Optional error message for failed states
-            
-        Returns:
-            A TaskStatusUpdateEvent
-        """
         status = TaskStatus(
             state=state,
             timestamp=datetime.now(UTC).isoformat()
         )
-        
+
         if error_msg and state == TaskState.failed:
             status.message = new_agent_text_message(f"Task failed: {error_msg}")
-            
+
         return TaskStatusUpdateEvent(
             contextId=context_id,
             taskId=task_id,
             status=status,
             final=final
         )
-    
+
     async def _send_task_update(
         self,
         event_queue: EventQueue,
@@ -109,18 +78,9 @@ class ARKAgentExecutor(AgentExecutor):
         state: TaskState,
         final: bool = False,
     ):
-        """Send a task status update to the event queue.
-        
-        Args:
-            event_queue: The event queue
-            context_id: The context ID
-            task_id: The task ID
-            state: The task state
-            final: Whether this is the final status
-        """
         status_event = self._create_status_event(context_id, task_id, state, final)
         await event_queue.enqueue_event(status_event)
-    
+
     async def _process_query(
         self,
         query_input: str | list[dict[str, Any]],
@@ -128,16 +88,6 @@ class ARKAgentExecutor(AgentExecutor):
         context_id: str | None,
         experimental_enabled: bool,
     ) -> QueryExecutionResult:
-        """Process the query and return the result.
-        
-        Args:
-            query_input: The query payload
-            query_type: The query payload type
-            context_id: A2A context id
-            
-        Returns:
-            The query result
-        """
         return await post_query_and_wait(
             self.namespace,
             'agent',
@@ -150,46 +100,43 @@ class ARKAgentExecutor(AgentExecutor):
         )
 
     async def _resolve_experimental_enabled(self) -> bool:
+        now = time.monotonic()
+        if now - self._experimental_resolved_at < _EXPERIMENTAL_CACHE_TTL:
+            return self._experimental_enabled
         try:
             async with with_ark_client(self.namespace, V1_ALPHA1) as ark_client:
                 agent = await ark_client.agents.a_get(self.target_name)
                 metadata = getattr(agent, "metadata", {})
                 annotations = metadata.get("annotations") if isinstance(metadata, dict) else {}
                 if not isinstance(annotations, dict):
-                    return False
-                return parse_bool_annotation(
-                    annotations.get(A2A_EXPERIMENTAL_ENABLED_ANNOTATION),
-                    False,
-                )
+                    self._experimental_enabled = False
+                else:
+                    self._experimental_enabled = parse_bool_annotation(
+                        annotations.get(A2A_EXPERIMENTAL_ENABLED_ANNOTATION),
+                        False,
+                    )
+                self._experimental_resolved_at = now
         except Exception as exc:
-            logger.warning(f"Failed to resolve experimental A2A flag for {self.target_name}: {exc}")
-            return False
-    
+            logger.warning("Failed to resolve experimental A2A flag for %s: %s", self.target_name, exc)
+            self._experimental_enabled = False
+            self._experimental_resolved_at = now
+        return self._experimental_enabled
+
     async def execute(
             self, context: RequestContext, event_queue: EventQueue
     ) -> None:
-        """Execute the agent's logic for a given request context.
-
-        Args:
-            context: The request context containing the message, task ID, etc.
-            event_queue: The queue to publish events to.
-        """
-        # Extract IDs from context
         task_id = self._resolve_task_id(getattr(context, 'task_id', None))
         context_id = self._resolve_context_id(getattr(context, 'context_id', None))
-        
+
         try:
             experimental_enabled = await self._resolve_experimental_enabled()
-            # Extract and log the message
             query_payload = build_query_payload(context, experimental_enabled=experimental_enabled)
-            logger.info(f"Task {task_id} Context {context_id} - Processing query: {query_payload.preview_text}")
-            logger.info(f"Task {task_id} - Using timeout: {self.timeout} seconds")
-            
-            # Send starting status
+            logger.info("Task %s Context %s - Processing query: %s", task_id, context_id, query_payload.preview_text)
+            logger.info("Task %s - Using timeout: %s seconds", task_id, self.timeout)
+
             await self._send_task_update(event_queue, context_id, task_id, TaskState.working, final=False)
 
             try:
-                # Process the query with timeout
                 result_task = asyncio.create_task(
                     self._process_query(
                         query_payload.input_data,
@@ -203,11 +150,9 @@ class ARKAgentExecutor(AgentExecutor):
                     self.active_tasks[task_id] = result_task
 
                 try:
-                    # Wait up to configured timeout for result
                     result = await asyncio.wait_for(asyncio.shield(result_task), timeout=self.timeout)
 
                     response_context_id = result.context_id or context_id
-                    # Send the result
                     result_msg = new_agent_text_message(
                         result.content,
                         context_id=response_context_id,
@@ -215,39 +160,38 @@ class ARKAgentExecutor(AgentExecutor):
                     )
                     await event_queue.enqueue_event(result_msg)
 
-                    # Send completion status
                     await self._send_task_update(event_queue, response_context_id, task_id, TaskState.completed, final=True)
 
-                    logger.info(f"Task {task_id} - Query completed successfully")
-                    
+                    logger.info("Task %s - Query completed successfully", task_id)
+
                 except TimeoutError:
-                    logger.error(f"Task {task_id} - Query timed out after {self.timeout} seconds")
+                    logger.error("Task %s - Query timed out after %s seconds", task_id, self.timeout)
 
                     if not result_task.done():
                         result_task.cancel()
-                    
-                    # Send timeout error
+                    with contextlib.suppress(asyncio.CancelledError, Exception):
+                        await result_task
+
                     timeout_msg = new_agent_text_message(
                         f"Query timed out after {self.timeout} seconds",
                         context_id=context_id,
                         task_id=task_id
                     )
                     await event_queue.enqueue_event(timeout_msg)
-                    
-                    # Send failure status
+
                     failure_event = self._create_status_event(
                         context_id, task_id, TaskState.failed,
                         final=True, error_msg=f"Query timeout after {self.timeout}s"
                     )
                     await event_queue.enqueue_event(failure_event)
-                    
+
             finally:
                 async with self.tasks_lock:
                     self.active_tasks.pop(task_id, None)
 
         except Exception as e:
             await self._handle_error(e, event_queue, context_id, task_id)
-    
+
     async def _handle_error(
         self,
         error: Exception,
@@ -255,25 +199,15 @@ class ARKAgentExecutor(AgentExecutor):
         context_id: str,
         task_id: str,
     ):
-        """Handle errors during query processing.
-        
-        Args:
-            error: The exception that occurred
-            event_queue: The event queue
-            context_id: The context ID
-            task_id: The task ID
-        """
-        logger.error(f"Task {task_id} - Error processing query: {str(error)}")
-        
-        # Send error message
-        error_message = new_agent_text_message(f"Error: {str(error)}", 
-                                             context_id=context_id, 
+        logger.error("Task %s - Error processing query: %s", task_id, error)
+
+        error_message = new_agent_text_message(f"Error: {error}",
+                                             context_id=context_id,
                                              task_id=task_id)
         await event_queue.enqueue_event(error_message)
-        
-        # Send failure status
+
         failure_event = self._create_status_event(
-            context_id, task_id, TaskState.failed, 
+            context_id, task_id, TaskState.failed,
             final=True, error_msg=str(error)
         )
         await event_queue.enqueue_event(failure_event)
@@ -281,31 +215,24 @@ class ARKAgentExecutor(AgentExecutor):
     async def cancel(
             self, context: RequestContext, event_queue: EventQueue
     ) -> None:
-        """Request the agent to cancel an ongoing task.
-
-        Args:
-            context: The request context containing the task ID to cancel.
-            event_queue: The queue to publish the cancellation status update to.
-        """
         task_id_raw = getattr(context, 'task_id', "unknown")
         context_id_raw = getattr(context, 'context_id', None)
         task_id = self._resolve_task_id(task_id_raw)
         context_id = self._resolve_context_id(context_id_raw)
-        
+
         async with self.tasks_lock:
             task = self.active_tasks.pop(task_id, None)
 
         if task:
-            logger.info(f"Cancellation requested for active task {task_id}")
+            logger.info("Cancellation requested for active task %s", task_id)
 
             if not task.done():
                 task.cancel()
-                logger.info(f"Cancelled task {task_id}")
-            
-            # Send cancellation status
+                logger.info("Cancelled task %s", task_id)
+
             await self._send_task_update(event_queue, context_id, task_id, TaskState.canceled, final=True)
         else:
-            logger.warning(f"Cancellation requested for task {task_id}, but task is not active")
+            logger.warning("Cancellation requested for task %s, but task is not active", task_id)
 
     async def cancel_all_tasks(self) -> None:
         async with self.tasks_lock:

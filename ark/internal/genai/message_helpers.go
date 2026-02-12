@@ -15,6 +15,9 @@ import (
 // as the current input, while all previous messages (from memory and input)
 // serve as conversation context.
 func PrepareExecutionMessages(inputMessages, memoryMessages []Message) (currentMessage Message, contextMessages []Message) {
+	if len(inputMessages) == 0 {
+		return Message{}, memoryMessages
+	}
 	currentMessage = inputMessages[len(inputMessages)-1]
 	contextMessages = make([]Message, 0, len(memoryMessages)+len(inputMessages)-1)
 	contextMessages = append(contextMessages, memoryMessages...)
@@ -58,6 +61,9 @@ func PrepareNewMessagesForMemory(inputMessages, responseMessages []Message) []Me
 }
 
 func PrepareA2AExecutionMessages(inputMessages, memoryMessages []protocol.Message) (currentMessage protocol.Message, contextMessages []protocol.Message) {
+	if len(inputMessages) == 0 {
+		return protocol.Message{}, memoryMessages
+	}
 	currentMessage = inputMessages[len(inputMessages)-1]
 	contextMessages = make([]protocol.Message, 0, len(memoryMessages)+len(inputMessages)-1)
 	contextMessages = append(contextMessages, memoryMessages...)

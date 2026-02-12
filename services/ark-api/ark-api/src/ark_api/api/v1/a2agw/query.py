@@ -1,8 +1,8 @@
 import asyncio
 import logging
+import time
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any, TypeGuard
 
 from ark_sdk.client import V1_ALPHA1, with_ark_client
@@ -77,7 +77,7 @@ async def post_query(
         )
 
         # Create query object
-        query_name = f"a2agw-query-{uuid.uuid4().hex[:8]}"
+        query_name = f"a2agw-query-{uuid.uuid4().hex[:12]}"
         metadata: dict[str, Any] = {"name": query_name, "namespace": namespace}
         annotations: dict[str, str] = {}
         if context_id:
@@ -115,8 +115,8 @@ async def wait_for_query(namespace: str, query_name: str, timeout: int = 60) -> 
     async with with_ark_client(namespace, V1_ALPHA1) as ark_client:
         try:
             # Poll for completion
-            start_time = datetime.now()
-            while (datetime.now() - start_time).total_seconds() < timeout:
+            start_time = time.monotonic()
+            while time.monotonic() - start_time < timeout:
                 # Get latest status
                 query_status = await ark_client.queries.a_get(query_name)
 

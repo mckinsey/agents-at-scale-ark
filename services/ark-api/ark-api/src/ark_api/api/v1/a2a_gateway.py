@@ -1,6 +1,6 @@
 """A2A Gateway routes for agent-to-agent communication."""
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter
 
@@ -35,7 +35,7 @@ async def list_agents():
             "host": "localhost",
             "agent-card": f"/a2a/agent/{agent.name}/.well-known/agent-card.json",
             "agent-card-legacy": f"/a2a/agent/{agent.name}/.well-known/agent.json",
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
             "metadata": {"type": "analytical", "version": agent.version},
         }
         for agent in agents

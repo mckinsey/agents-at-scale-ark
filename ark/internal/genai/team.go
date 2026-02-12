@@ -80,6 +80,12 @@ func (t *Team) ExecuteA2A(ctx context.Context, userInput protocol.Message, histo
 		return nil, fmt.Errorf("team %s has no members configured", t.FullName())
 	}
 
+	if t.Strategy == "selector" && t.Selector != nil && t.Selector.Agent != "" {
+		if err := t.validateSelectorA2ACompatibility(ctx); err != nil {
+			return nil, err
+		}
+	}
+
 	t.memory = memory
 	t.eventStream = eventStream
 
@@ -532,6 +538,21 @@ func extractA2AMessages(result *ExecutionResult) ([]protocol.Message, error) {
 		}
 	}
 	return nil, fmt.Errorf("execution result does not contain A2A messages")
+}
+
+func (t *Team) validateSelectorA2ACompatibility(ctx context.Context) error {
+	if t.Selector == nil || t.Selector.Agent == "" {
+		return nil
+	}
+	var agentCRD arkv1alpha1.Agent
+	key := types.NamespacedName{Name: t.Selector.Agent, Namespace: t.Namespace}
+	if err := t.Client.Get(ctx, key, &agentCRD); err != nil {
+		return fmt.Errorf("failed to validate selector agent %s for A2A team %s: %w", t.Selector.Agent, t.FullName(), err)
+	}
+	if agentCRD.Spec.ExecutionEngine == nil || agentCRD.Spec.ExecutionEngine.Name != ExecutionEngineA2A {
+		return fmt.Errorf("selector agent %s in team %s must have execution engine '%s' for A2A mode", t.Selector.Agent, t.FullName(), ExecutionEngineA2A)
+	}
+	return nil
 }
 
 func loadTeamMember(ctx context.Context, k8sClient client.Client, memberSpec arkv1alpha1.TeamMember, namespace, teamName string, telemetryProvider telemetry.Provider, eventingProvider eventing.Provider) (TeamMember, map[string]string, error) {

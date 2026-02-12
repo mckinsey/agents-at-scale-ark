@@ -367,10 +367,6 @@ func DiscoverA2AAgents(ctx context.Context, k8sClient client.Client, address str
 func DiscoverA2AAgentsWithRecorder(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace string, a2aRecorder eventing.A2aRecorder, obj client.Object) (*A2AAgentCard, error) {
 	baseURL := strings.TrimSuffix(address, "/")
 
-	if err := validateA2AClient(address, headers, ctx, k8sClient, namespace); err != nil {
-		return nil, err
-	}
-
 	endpoints := []struct {
 		url     string
 		version string
@@ -783,28 +779,6 @@ func convertToA2AHistory(history []protocol.Message) []protocol.Message {
 		results = append(results, msg)
 	}
 	return results
-}
-
-// validateA2AClient validates A2A client creation
-func validateA2AClient(address string, headers []arkv1prealpha1.Header, ctx context.Context, k8sClient client.Client, namespace string) error {
-	var clientOptions []a2aclient.Option
-	clientOptions = append(clientOptions, a2aclient.WithTimeout(30*time.Second))
-
-	if len(headers) > 0 {
-		resolvedHeaders, err := resolveA2AHeaders(ctx, k8sClient, headers, namespace)
-		if err != nil {
-			return err
-		}
-		clientOptions = append(clientOptions, a2aclient.WithHTTPReqHandler(&customA2ARequestHandler{
-			headers: resolvedHeaders,
-		}))
-	}
-
-	_, err := a2aclient.NewA2AClient(address, clientOptions...)
-	if err != nil {
-		return fmt.Errorf("failed to create A2A client: %w", err)
-	}
-	return nil
 }
 
 // createA2ARequest creates and configures HTTP request for A2A discovery

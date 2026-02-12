@@ -47,7 +47,7 @@ func GetA2AExperimentalEnabled(annotations map[string]string) (bool, bool) {
 	case "false", "0", "no":
 		return false, true
 	default:
-		return false, true
+		return false, false
 	}
 }
 

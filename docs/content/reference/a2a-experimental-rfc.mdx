@@ -100,6 +100,11 @@ When experimental mode is enabled:
 - The OpenAI model execution path (`Model.ChatCompletion`) rejects calls when the experimental flag is active.
 - Native response serialization fails if `ExecutionResult` does not contain A2A-native messages.
 - Native event streams do not emit OpenAI completion chunks at finalize time.
+- Native error events use `TaskStatusUpdateEvent` with `state=failed`, not plain messages.
+
+## A2A gateway bridge (ark-api)
+
+The `ark-api` service exposes an A2A JSON-RPC gateway that discovers Ark agents, builds A2A AgentCards, and routes incoming A2A requests to Kubernetes Query CRDs. When the experimental annotation is present on the target agent, the gateway resolves the flag (with a 30-second TTL cache) and propagates it as an annotation on the created Query resource. The controller then dispatches based on the annotation. The gateway persists per-agent task stores across dynamic route refreshes to preserve A2A task lifecycle continuity.
 
 ## External behavior by mode
 

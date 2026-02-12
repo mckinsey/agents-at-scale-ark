@@ -46,16 +46,20 @@ func TestStreamA2AEventNative(t *testing.T) {
 
 func TestStreamA2AErrorNative(t *testing.T) {
 	ctx := context.Background()
+	ctx = WithA2AContextID(ctx, "ctx-err")
+	ctx = WithQueryContext(ctx, "query-err", "session-1", "query-name")
 	stream := &fakeEventStream{}
 
 	streamA2AError(ctx, stream, A2APayloadModeNative, "agent/test", errors.New("boom"))
 
 	assert.Len(t, stream.chunks, 1)
-	message, ok := stream.chunks[0].(*protocol.Message)
+	event, ok := stream.chunks[0].(*protocol.TaskStatusUpdateEvent)
 	assert.True(t, ok)
-	assert.Equal(t, protocol.KindMessage, message.Kind)
-	assert.Equal(t, protocol.MessageRoleAgent, message.Role)
-	assert.Equal(t, "boom", extractTextFromParts(message.Parts))
+	assert.Equal(t, protocol.TaskStateFailed, event.Status.State)
+	assert.True(t, event.Final)
+	assert.Equal(t, "ctx-err", event.ContextID)
+	assert.NotNil(t, event.Status.Message)
+	assert.Equal(t, "boom", extractTextFromParts(event.Status.Message.Parts))
 }
 
 func TestConsumeA2AStreamEventsMessageCompat(t *testing.T) {

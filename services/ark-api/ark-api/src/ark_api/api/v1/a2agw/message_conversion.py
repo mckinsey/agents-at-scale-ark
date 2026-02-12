@@ -169,8 +169,12 @@ def a2a_message_to_openai_message(message: Any) -> dict[str, Any]:
 
         if kind == "file":
             url = _extract_file_url(part_dict)
+            media_type = part_dict.get("mediaType") or part_dict.get("mimeType") or part_dict.get("mime_type") or ""
             if url:
-                content_parts.append({"type": "image_url", "image_url": {"url": url}})
+                if isinstance(media_type, str) and media_type.startswith("image/"):
+                    content_parts.append({"type": "image_url", "image_url": {"url": url}})
+                else:
+                    content_parts.append({"type": "text", "text": url})
             continue
 
         if kind == "data":
