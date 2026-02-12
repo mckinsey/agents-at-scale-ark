@@ -554,12 +554,13 @@ const ChatUI: React.FC<ChatUIProps> = ({
       setAbortController(controller);
 
       // Convert messages to format expected by OpenAI API - only include user and agent messages
-      const apiMessages = messages
+      type ApiMessage = {role: 'user' | 'assistant' | 'system'; content: string};
+      const apiMessages: ApiMessage[] = messages
         .filter(
           (msg) =>
             msg.type === 'user' || msg.type === 'agent' || msg.type === 'team'
         )
-        .flatMap((msg) => {
+        .flatMap((msg): ApiMessage[] => {
           if (msg.type === 'user') {
             return [
               {
