@@ -151,26 +151,6 @@ func GetQueryInputMessages(ctx context.Context, query arkv1alpha1.Query, k8sClie
 	}
 
 	if queryType != RoleUser {
-		experimentalEnabled := IsA2AExperimentalEnabled(query.Annotations)
-		if HasA2AExperimentalEnabledInContext(ctx) {
-			experimentalEnabled = IsA2AExperimentalEnabledInContext(ctx)
-		}
-		if experimentalEnabled {
-			var a2aMessages []protocol.Message
-			if err := json.Unmarshal(query.Spec.Input.Raw, &a2aMessages); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal input as A2A messages: %w", err)
-			}
-			messages := make([]Message, 0, len(a2aMessages))
-			for i := range a2aMessages {
-				converted, convErr := A2AToOpenAIMessage(a2aMessages[i])
-				if convErr != nil {
-					return nil, fmt.Errorf("failed to convert A2A input message %d: %w", i, convErr)
-				}
-				messages = append(messages, converted)
-			}
-			return messages, nil
-		}
-
 		openaiMessages, err := query.Spec.GetInputMessages()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get input messages: %w", err)

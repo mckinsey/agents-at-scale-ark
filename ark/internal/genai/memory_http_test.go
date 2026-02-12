@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/eventing"
@@ -359,6 +360,118 @@ func TestHTTPMemoryAddMessagesFormatCompat(t *testing.T) {
 	require.Nil(t, decoded.Messages[0]["parts"])
 }
 
+func TestHTTPMemoryAddMessagesCompatIgnoresExperimentalContext(t *testing.T) {
+	var requestBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == MessagesEndpoint && r.Method == http.MethodPost {
+			requestBody, _ = io.ReadAll(r.Body)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	resolvedAddress := server.URL
+	memory := &arkv1alpha1.Memory{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-memory",
+			Namespace: "default",
+		},
+		Spec: arkv1alpha1.MemorySpec{
+			Address: arkv1alpha1.ValueSource{
+				Value: server.URL,
+			},
+		},
+		Status: arkv1alpha1.MemoryStatus{
+			LastResolvedAddress: &resolvedAddress,
+			Phase:               "ready",
+		},
+	}
+
+	fakeClient := setupMemoryTestClient([]client.Object{memory})
+	httpMemory := &HTTPMemory{
+		client:           fakeClient,
+		httpClient:       server.Client(),
+		baseURL:          server.URL,
+		conversationId:   "test-conv-id",
+		name:             "test-memory",
+		namespace:        "default",
+		headers:          make(map[string]string),
+		eventingRecorder: &noOpMemoryRecorder{},
+	}
+
+	ctx := WithA2AExperimentalEnabled(context.Background(), true)
+	ctx = WithA2APayloadMode(ctx, A2APayloadModeNative)
+	err := httpMemory.AddMessages(ctx, "query-id", []Message{NewUserMessage("hello")})
+	require.NoError(t, err)
+
+	var decoded struct {
+		Messages []map[string]interface{} `json:"messages"`
+	}
+	require.NoError(t, json.Unmarshal(requestBody, &decoded))
+	require.Len(t, decoded.Messages, 1)
+	require.NotNil(t, decoded.Messages[0]["content"], "AddMessages must always write OpenAI format regardless of context flags")
+	require.Nil(t, decoded.Messages[0]["parts"], "AddMessages must not produce A2A parts even when experimental context is set")
+}
+
+func TestHTTPMemoryGetMessagesReturnsOpenAIDirectly(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == MessagesEndpoint && r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			response := MessagesResponse{
+				Messages: []MessageRecord{
+					{Message: json.RawMessage(`{"role": "user", "content": "hello from memory"}`)},
+					{Message: json.RawMessage(`{"role": "assistant", "content": "hi there"}`)},
+				},
+			}
+			_ = json.NewEncoder(w).Encode(response)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	resolvedAddress := server.URL
+	memory := &arkv1alpha1.Memory{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-memory",
+			Namespace: "default",
+		},
+		Spec: arkv1alpha1.MemorySpec{
+			Address: arkv1alpha1.ValueSource{
+				Value: server.URL,
+			},
+		},
+		Status: arkv1alpha1.MemoryStatus{
+			LastResolvedAddress: &resolvedAddress,
+			Phase:               "ready",
+		},
+	}
+
+	fakeClient := setupMemoryTestClient([]client.Object{memory})
+	httpMemory := &HTTPMemory{
+		client:           fakeClient,
+		httpClient:       server.Client(),
+		baseURL:          server.URL,
+		conversationId:   "test-conv-id",
+		name:             "test-memory",
+		namespace:        "default",
+		headers:          make(map[string]string),
+		eventingRecorder: &noOpMemoryRecorder{},
+	}
+
+	ctx := context.Background()
+	messages, err := httpMemory.GetMessages(ctx)
+	require.NoError(t, err)
+	require.Len(t, messages, 2)
+
+	require.Equal(t, RoleUser, resolveMessageRole(messages[0]))
+	require.Equal(t, "hello from memory", ExtractTextFromMessage(messages[0]))
+	require.Equal(t, RoleAssistant, resolveMessageRole(messages[1]))
+	require.Equal(t, "hi there", ExtractTextFromMessage(messages[1]))
+}
+
 func TestHTTPMemoryAddMessagesFormatNative(t *testing.T) {
 	var requestBody []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -400,8 +513,11 @@ func TestHTTPMemoryAddMessagesFormatNative(t *testing.T) {
 		eventingRecorder: &noOpMemoryRecorder{},
 	}
 
-	ctx := WithA2APayloadMode(context.Background(), A2APayloadModeNative)
-	err := httpMemory.AddMessages(ctx, "query-id", []Message{NewUserMessage("hello")})
+	ctx := context.Background()
+	a2aMessages := []protocol.Message{
+		protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{protocol.NewTextPart("hello")}),
+	}
+	err := httpMemory.AddA2AMessages(ctx, "query-id", a2aMessages)
 	require.NoError(t, err)
 
 	var decoded struct {

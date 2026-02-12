@@ -26,6 +26,7 @@ import (
 	"mckinsey.com/ark/internal/annotations"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	"mckinsey.com/ark/internal/genai"
+	"mckinsey.com/ark/internal/telemetry"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 )
 
@@ -739,39 +740,6 @@ func (r *QueryReconciler) performTargetExecution(ctx context.Context, query arkv
 		"target": targetString,
 	})
 
-	useA2AExecution := false
-	var err error
-	switch target.Type {
-	case targetTypeAgent:
-		useA2AExecution, err = r.isAgentA2AExperimental(ctx, query, target.Name, impersonatedClient)
-	case targetTypeTeam:
-		useA2AExecution, err = r.isTeamA2AExperimental(ctx, query, target.Name, impersonatedClient)
-	}
-	if err != nil {
-		r.Telemetry.QueryRecorder().RecordError(span, err)
-		return nil, err
-	}
-
-	var inputMessages []genai.Message
-	var inputA2AMessages []protocol.Message
-	if useA2AExecution {
-		inputA2AMessages, err = genai.GetQueryInputA2AMessages(ctx, query, impersonatedClient)
-		if err != nil {
-			r.Telemetry.QueryRecorder().RecordError(span, err)
-			return nil, err
-		}
-		userContent := genai.ExtractA2AUserMessageContent(inputA2AMessages)
-		r.Telemetry.QueryRecorder().RecordInput(span, userContent)
-	} else {
-		inputMessages, err = genai.GetQueryInputMessages(ctx, query, impersonatedClient)
-		if err != nil {
-			r.Telemetry.QueryRecorder().RecordError(span, err)
-			return nil, err
-		}
-		userContent := genai.ExtractUserMessageContent(inputMessages)
-		r.Telemetry.QueryRecorder().RecordInput(span, userContent)
-	}
-
 	timeout := 5 * time.Minute
 	if query.Spec.Timeout != nil {
 		timeout = query.Spec.Timeout.Duration
@@ -780,24 +748,29 @@ func (r *QueryReconciler) performTargetExecution(ctx context.Context, query arkv
 	defer cancel()
 
 	var result *genai.ExecutionResult
+	var err error
 	switch target.Type {
 	case targetTypeAgent:
-		if useA2AExecution {
-			result, err = r.executeAgentA2A(execCtx, query, inputA2AMessages, target.Name, impersonatedClient, memory, eventStream)
-		} else {
-			result, err = r.executeAgent(execCtx, query, inputMessages, target.Name, impersonatedClient, memory, eventStream)
-		}
+		result, err = r.dispatchAgent(execCtx, query, target.Name, impersonatedClient, memory, eventStream, span)
 	case targetTypeTeam:
-		if useA2AExecution {
-			result, err = r.executeTeamA2A(execCtx, query, inputA2AMessages, target.Name, impersonatedClient, memory, eventStream)
-		} else {
-			result, err = r.executeTeam(execCtx, query, inputMessages, target.Name, impersonatedClient, memory, eventStream)
-		}
+		result, err = r.dispatchTeam(execCtx, query, target.Name, impersonatedClient, memory, eventStream, span)
 	case targetTypeModel:
+		inputMessages, inputErr := genai.GetQueryInputMessages(ctx, query, impersonatedClient)
+		if inputErr != nil {
+			r.Telemetry.QueryRecorder().RecordError(span, inputErr)
+			return nil, inputErr
+		}
+		r.Telemetry.QueryRecorder().RecordInput(span, genai.ExtractUserMessageContent(inputMessages))
 		var messages []genai.Message
 		messages, err = r.executeModel(execCtx, query, inputMessages, target.Name, impersonatedClient, memory, eventStream)
 		result = &genai.ExecutionResult{Messages: messages, A2APayloadMode: genai.A2APayloadModeCompat}
 	case targetTypeTool:
+		inputMessages, inputErr := genai.GetQueryInputMessages(ctx, query, impersonatedClient)
+		if inputErr != nil {
+			r.Telemetry.QueryRecorder().RecordError(span, inputErr)
+			return nil, inputErr
+		}
+		r.Telemetry.QueryRecorder().RecordInput(span, genai.ExtractUserMessageContent(inputMessages))
 		var messages []genai.Message
 		messages, err = r.executeTool(execCtx, query, inputMessages, target.Name, impersonatedClient, memory)
 		result = &genai.ExecutionResult{Messages: messages, A2APayloadMode: genai.A2APayloadModeCompat}
@@ -831,72 +804,72 @@ func (r *QueryReconciler) performTargetExecution(ctx context.Context, query arkv
 	return result, nil
 }
 
-func (r *QueryReconciler) isAgentA2AExperimental(ctx context.Context, query arkv1alpha1.Query, agentName string, impersonatedClient client.Client) (bool, error) {
+func (r *QueryReconciler) dispatchAgent(ctx context.Context, query arkv1alpha1.Query, agentName string, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface, span telemetry.Span) (*genai.ExecutionResult, error) {
 	var agentCRD arkv1alpha1.Agent
 	agentKey := types.NamespacedName{Name: agentName, Namespace: query.Namespace}
 	if err := impersonatedClient.Get(ctx, agentKey, &agentCRD); err != nil {
-		return false, fmt.Errorf("unable to get %v, error:%w", agentKey, err)
+		return nil, fmt.Errorf("unable to get %v, error:%w", agentKey, err)
 	}
 
 	agentAnnotations := []map[string]string(nil)
 	if agentCRD.Annotations != nil && agentCRD.Annotations[annotations.A2AServerAddress] != "" {
 		agentAnnotations = []map[string]string{agentCRD.Annotations}
 	}
-	return genai.ResolveA2AExperimentalEnabled(nil, query.Annotations, agentAnnotations), nil
+	useA2A := genai.ResolveA2AExperimentalEnabled(nil, query.Annotations, agentAnnotations)
+
+	ctx = genai.WithExecutionMetadata(ctx, map[string]interface{}{
+		"agent": agentName,
+	})
+
+	if useA2A {
+		return r.executeAgentA2A(ctx, query, &agentCRD, impersonatedClient, memory, eventStream, span)
+	}
+	return r.executeAgent(ctx, query, &agentCRD, impersonatedClient, memory, eventStream, span)
 }
 
-func (r *QueryReconciler) isTeamA2AExperimental(ctx context.Context, query arkv1alpha1.Query, teamName string, impersonatedClient client.Client) (bool, error) {
+func (r *QueryReconciler) dispatchTeam(ctx context.Context, query arkv1alpha1.Query, teamName string, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface, span telemetry.Span) (*genai.ExecutionResult, error) {
 	var teamCRD arkv1alpha1.Team
 	teamKey := types.NamespacedName{Name: teamName, Namespace: query.Namespace}
 	if err := impersonatedClient.Get(ctx, teamKey, &teamCRD); err != nil {
-		return false, fmt.Errorf("unable to fetch team %v, error:%w", teamKey, err)
+		return nil, fmt.Errorf("unable to fetch team %v, error:%w", teamKey, err)
 	}
 
 	team, err := genai.MakeTeam(ctx, impersonatedClient, &teamCRD, r.Telemetry, r.Eventing)
 	if err != nil {
-		return false, fmt.Errorf("unable to make team %v, error:%w", teamKey, err)
+		return nil, fmt.Errorf("unable to make team %v, error:%w", teamKey, err)
 	}
 
 	experimentalEnabled := team.PayloadMode == genai.A2APayloadModeNative
 	if queryExperimentalEnabled, hasValue := genai.GetA2AExperimentalEnabled(query.Annotations); hasValue {
 		experimentalEnabled = queryExperimentalEnabled
 	}
-	return experimentalEnabled, nil
+
+	if experimentalEnabled {
+		return r.executeTeamA2A(ctx, query, team, impersonatedClient, memory, eventStream, span)
+	}
+	return r.executeTeam(ctx, query, team, impersonatedClient, memory, eventStream, span)
 }
 
-func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Query, inputMessages []genai.Message, agentName string, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface) (*genai.ExecutionResult, error) {
-	var agentCRD arkv1alpha1.Agent
-	agentKey := types.NamespacedName{Name: agentName, Namespace: query.Namespace}
-
-	if err := impersonatedClient.Get(ctx, agentKey, &agentCRD); err != nil {
-		return nil, fmt.Errorf("unable to get %v, error:%w", agentKey, err)
-	}
-
-	// Add agent to execution metadata
-	// This ensures that clients can see the specific agent being queried when streaming
-	ctx = genai.WithExecutionMetadata(ctx, map[string]interface{}{
-		"agent": agentName,
-	})
-
-	// Regular agent execution
-	agent, err := genai.MakeAgent(ctx, impersonatedClient, &agentCRD, r.Telemetry, r.Eventing)
+func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Query, agentCRD *arkv1alpha1.Agent, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface, span telemetry.Span) (*genai.ExecutionResult, error) {
+	inputMessages, err := genai.GetQueryInputMessages(ctx, query, impersonatedClient)
 	if err != nil {
-		return nil, fmt.Errorf("unable to make agent %v, error:%w", agentKey, err)
+		return nil, err
+	}
+	r.Telemetry.QueryRecorder().RecordInput(span, genai.ExtractUserMessageContent(inputMessages))
+
+	agent, err := genai.MakeAgent(ctx, impersonatedClient, agentCRD, r.Telemetry, r.Eventing)
+	if err != nil {
+		return nil, fmt.Errorf("unable to make agent %s/%s: %w", agentCRD.Namespace, agentCRD.Name, err)
 	}
 
 	ctx = genai.WithA2AExperimentalEnabled(ctx, false)
 	ctx = genai.WithA2APayloadMode(ctx, genai.A2APayloadModeCompat)
 
-	// Load existing messages from memory
 	memoryMessages, err := r.loadInitialMessages(ctx, memory)
 	if err != nil {
 		return nil, fmt.Errorf("unable to load initial messages: %w", err)
 	}
 
-	// Log the memory messages
-	logf.FromContext(ctx).Info("Memory messages", "messages", memoryMessages)
-
-	// Execute agent with the last message as the current input and previous messages as context
 	currentMessage, contextMessages := genai.PrepareExecutionMessages(inputMessages, memoryMessages)
 
 	result, err := agent.Execute(ctx, currentMessage, contextMessages, memory, eventStream)
@@ -908,7 +881,6 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 
 	result.A2APayloadMode = genai.A2APayloadModeCompat
 
-	// Save all new messages (input + response) to memory
 	newMessages := genai.PrepareNewMessagesForMemory(inputMessages, result.Messages)
 	if err := memory.AddMessages(ctx, query.Name, newMessages); err != nil {
 		return nil, fmt.Errorf("failed to save new messages to memory: %w", err)
@@ -917,23 +889,19 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 	return result, nil
 }
 
-func (r *QueryReconciler) executeAgentA2A(ctx context.Context, query arkv1alpha1.Query, inputMessages []protocol.Message, agentName string, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface) (*genai.ExecutionResult, error) {
-	var agentCRD arkv1alpha1.Agent
-	agentKey := types.NamespacedName{Name: agentName, Namespace: query.Namespace}
-
-	if err := impersonatedClient.Get(ctx, agentKey, &agentCRD); err != nil {
-		return nil, fmt.Errorf("unable to get %v, error:%w", agentKey, err)
+func (r *QueryReconciler) executeAgentA2A(ctx context.Context, query arkv1alpha1.Query, agentCRD *arkv1alpha1.Agent, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface, span telemetry.Span) (*genai.ExecutionResult, error) {
+	inputMessages, err := genai.GetQueryInputA2AMessages(ctx, query, impersonatedClient)
+	if err != nil {
+		return nil, err
 	}
+	r.Telemetry.QueryRecorder().RecordInput(span, genai.ExtractA2AUserMessageContent(inputMessages))
 
-	ctx = genai.WithExecutionMetadata(ctx, map[string]interface{}{
-		"agent": agentName,
-	})
 	ctx = genai.WithA2AExperimentalEnabled(ctx, true)
 	ctx = genai.WithA2APayloadMode(ctx, genai.A2APayloadModeNative)
 
-	agent, err := genai.MakeAgent(ctx, impersonatedClient, &agentCRD, r.Telemetry, r.Eventing)
+	agent, err := genai.MakeAgent(ctx, impersonatedClient, agentCRD, r.Telemetry, r.Eventing)
 	if err != nil {
-		return nil, fmt.Errorf("unable to make agent %v, error:%w", agentKey, err)
+		return nil, fmt.Errorf("unable to make agent %s/%s: %w", agentCRD.Namespace, agentCRD.Name, err)
 	}
 
 	memoryMessages, err := r.loadInitialA2AMessages(ctx, memory)
@@ -957,18 +925,12 @@ func (r *QueryReconciler) executeAgentA2A(ctx context.Context, query arkv1alpha1
 	return result, nil
 }
 
-func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Query, inputMessages []genai.Message, teamName string, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface) (*genai.ExecutionResult, error) {
-	var teamCRD arkv1alpha1.Team
-	teamKey := types.NamespacedName{Name: teamName, Namespace: query.Namespace}
-
-	if err := impersonatedClient.Get(ctx, teamKey, &teamCRD); err != nil {
-		return nil, fmt.Errorf("unable to fetch team %v, error:%w", teamKey, err)
-	}
-
-	team, err := genai.MakeTeam(ctx, impersonatedClient, &teamCRD, r.Telemetry, r.Eventing)
+func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Query, team *genai.Team, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface, span telemetry.Span) (*genai.ExecutionResult, error) {
+	inputMessages, err := genai.GetQueryInputMessages(ctx, query, impersonatedClient)
 	if err != nil {
-		return nil, fmt.Errorf("unable to make team %v, error:%w", teamKey, err)
+		return nil, err
 	}
+	r.Telemetry.QueryRecorder().RecordInput(span, genai.ExtractUserMessageContent(inputMessages))
 
 	ctx = genai.WithA2AExperimentalEnabled(ctx, false)
 	ctx = genai.WithA2APayloadMode(ctx, genai.A2APayloadModeCompat)
@@ -978,7 +940,6 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 		return nil, fmt.Errorf("unable to load initial messages: %w", err)
 	}
 
-	// Execute team with the last message as the current input and previous messages as context
 	currentMessage, contextMessages := genai.PrepareExecutionMessages(inputMessages, historyMessages)
 
 	result, err := team.Execute(ctx, currentMessage, contextMessages, memory, eventStream)
@@ -988,7 +949,6 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 
 	result.A2APayloadMode = genai.A2APayloadModeCompat
 
-	// Save all new messages (input + response) to memory
 	newMessages := genai.PrepareNewMessagesForMemory(inputMessages, result.Messages)
 	if err := memory.AddMessages(ctx, query.Name, newMessages); err != nil {
 		return nil, fmt.Errorf("failed to save new messages to memory: %w", err)
@@ -997,18 +957,12 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 	return result, nil
 }
 
-func (r *QueryReconciler) executeTeamA2A(ctx context.Context, query arkv1alpha1.Query, inputMessages []protocol.Message, teamName string, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface) (*genai.ExecutionResult, error) {
-	var teamCRD arkv1alpha1.Team
-	teamKey := types.NamespacedName{Name: teamName, Namespace: query.Namespace}
-
-	if err := impersonatedClient.Get(ctx, teamKey, &teamCRD); err != nil {
-		return nil, fmt.Errorf("unable to fetch team %v, error:%w", teamKey, err)
-	}
-
-	team, err := genai.MakeTeam(ctx, impersonatedClient, &teamCRD, r.Telemetry, r.Eventing)
+func (r *QueryReconciler) executeTeamA2A(ctx context.Context, query arkv1alpha1.Query, team *genai.Team, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface, span telemetry.Span) (*genai.ExecutionResult, error) {
+	inputMessages, err := genai.GetQueryInputA2AMessages(ctx, query, impersonatedClient)
 	if err != nil {
-		return nil, fmt.Errorf("unable to make team %v, error:%w", teamKey, err)
+		return nil, err
 	}
+	r.Telemetry.QueryRecorder().RecordInput(span, genai.ExtractA2AUserMessageContent(inputMessages))
 
 	ctx = genai.WithA2AExperimentalEnabled(ctx, true)
 	ctx = genai.WithA2APayloadMode(ctx, genai.A2APayloadModeNative)

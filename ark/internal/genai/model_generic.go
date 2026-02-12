@@ -113,8 +113,9 @@ func (m *Model) HealthCheck(ctx context.Context) error {
 	case *BedrockModel:
 		return provider.HealthCheck(ctx)
 	default:
+		healthCtx := WithA2AExperimentalEnabled(ctx, false)
 		testMessages := []Message{NewUserMessage("Hello")}
-		_, err := m.ChatCompletion(ctx, testMessages, nil, 1)
+		_, err := m.ChatCompletion(healthCtx, testMessages, nil, 1)
 		return err
 	}
 }

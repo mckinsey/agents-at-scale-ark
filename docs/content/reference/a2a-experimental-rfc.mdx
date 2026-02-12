@@ -1,11 +1,11 @@
 ---
-title: "RFC: Experimental A2A internal transport"
+title: "RFC: Experimental A2A native execution"
 description: Experimental A2A-native execution path for Ark. Subject to change or withdrawal.
 ---
 
 import { Callout } from 'nextra/components'
 
-# RFC: Experimental A2A internal transport
+# RFC: Experimental A2A native execution
 
 <Callout type="warning">
 **Experimental / RFC.** This feature is subject to change or withdrawal without notice. Do not depend on it for production workloads without accepting the risk of breaking changes.
@@ -25,15 +25,31 @@ Ark needs an A2A experiment that is isolated from the default OpenAI path and re
 
 The previous approach mixed A2A and OpenAI internally. That created hidden overlap, made rollback harder, and reduced composability for non-OpenAI agent stacks.
 
-## Proposal
+## Goal
 
-When `ark.mckinsey.com/a2a-experimental-enabled: "true"` is active for an agent/team execution:
+A separate execution path where `protocol.Message` flows end-to-end -- from query input through agent/team execution, delegation, memory, and response serialization -- with zero A2A-to-OpenAI conversion inside Ark's control plane.
 
-- Ark uses `protocol.Message` end-to-end for query input, execution, delegation, memory I/O, and response serialization.
-- Ark runs a separate experimental execution path (`ExecuteA2A` / `ExecuteNative`) and keeps the default OpenAI path unchanged.
-- Ark requires agents to have an A2A-compatible execution engine and rejects local model execution in this mode.
+The default OpenAI path must remain unchanged when the flag is disabled: no extra conversions, no extra K8s API calls, no behavioral differences.
 
-The OpenAI path remains the default and is unchanged when the flag is disabled.
+## Architecture
+
+When `ark.mckinsey.com/a2a-experimental-enabled: "true"` is active:
+
+- The controller dispatches to `executeAgentA2A` / `executeTeamA2A` (separate from `executeAgent` / `executeTeam`).
+- Query input is parsed via `GetQueryInputA2AMessages` (returns `[]protocol.Message` directly).
+- Agent execution routes through `Agent.ExecuteA2A` -> `A2AExecutionEngine.ExecuteNative`.
+- Team strategies use parallel A2A methods (`executeSequentialA2A`, `executeRoundRobinA2A`, etc.).
+- Memory reads/writes use `AddA2AMessages` / `GetA2AMessages`.
+- Tool delegation uses `ExecuteA2A` / `ExecuteNative` and returns structured A2A metadata.
+- Response serialization writes `ExecutionResult.A2AMessages` directly.
+
+When the flag is disabled:
+
+- The controller dispatches to `executeAgent` / `executeTeam` (unchanged OpenAI path).
+- `GetQueryInputMessages` parses OpenAI input only (no A2A branches).
+- `AddMessages` writes OpenAI format only (no context sniffing).
+- `GetMessages` reads records and converts via `unmarshalMessageRobust` -> `A2AToOpenAIMessage` (handles both legacy and A2A records).
+- No experimental functions are called.
 
 ## Enable the experiment
 
@@ -50,18 +66,16 @@ spec:
   # ...
 ```
 
-When the annotation is absent or set to `"false"`, the legacy OpenAI transport is used and behavior is unchanged.
+When the annotation is absent or set to `"false"`, the OpenAI path is used and behavior is unchanged.
 
 ## Runtime requirements
 
 When experimental mode is enabled for a workload:
 
 - Target type must be `agent` or `team`.
-- Participating agents must define an `executionEngine`.
+- Participating agents must define an `executionEngine` with `name: a2a`.
 - Local execution (no engine) is rejected with a validation error at execution time.
-- Engines used in this path must be A2A-compatible.
-
-This makes Ark transport-neutral in the experiment: Ark orchestrates with A2A, and execution engines convert to provider-specific model formats internally.
+- Engines used in this path must accept and emit A2A messages. Ark does not convert to any LLM provider format.
 
 ## Composability model
 
@@ -82,31 +96,39 @@ When experimental mode is enabled:
 
 - A2A transport failures are returned immediately.
 - No implicit fallback to local OpenAI execution is allowed.
-- The OpenAI model execution path is not used for experimental agent/team execution.
+- The OpenAI model execution path (`Model.ChatCompletion`) rejects calls when the experimental flag is active.
 
 ## External behavior by mode
 
 | Surface | Disabled (default) | Enabled (experimental) |
 |---------|-------------------|----------------------|
-| Query input for agent/team | OpenAI input parsing | Native A2A parsing |
-| Internal execution payload | OpenAI message path | `protocol.Message` path |
+| Query input for agent/team | `GetQueryInputMessages` (OpenAI) | `GetQueryInputA2AMessages` (A2A) |
+| Internal execution payload | `Agent.Execute` / `Team.Execute` | `Agent.ExecuteA2A` / `Team.ExecuteA2A` |
 | `response.raw` | OpenAI JSON | A2A JSON |
-| Memory writes | OpenAI JSON | Native A2A JSON |
-| Memory reads | OpenAI JSON | Reads both OpenAI and A2A records |
+| Memory writes | `AddMessages` (OpenAI JSON) | `AddA2AMessages` (A2A JSON) |
+| Memory reads | `GetMessages` (OpenAI) | `GetA2AMessages` (A2A, reads both formats) |
 | Delegation payloads | `input` string | A2A `message`/`history` + metadata |
 
 ## Memory compatibility
 
-`unmarshalMessageRobust()` reads both legacy OpenAI records and A2A records. Existing OpenAI memory remains readable after enabling the experiment.
+`unmarshalMessageRobust()` reads both legacy OpenAI `{"role","content"}` records and A2A `{"role","parts":[...]}` records. Existing OpenAI memory remains readable after enabling the experiment.
 
 ## Revert path
 
 Disabling the annotation restores the default path at runtime.
 
-If the experiment is withdrawn, removal is isolated to the experimental branch functions:
+If the experiment is withdrawn, removal is isolated to these additive functions (no modifications to the OpenAI path required):
 
-- `GetQueryInputA2AMessages`, `executeAgentA2A`, `executeTeamA2A`
-- `Agent.ExecuteA2A`, `Team.ExecuteA2A`, `A2AExecutionEngine.ExecuteNative`
-- `MemoryInterface` A2A methods and native serialization branches
+| Component | Functions to remove |
+|-----------|-------------------|
+| Controller | `dispatchAgent`, `dispatchTeam`, `executeAgentA2A`, `executeTeamA2A`, `loadInitialA2AMessages` |
+| Agent | `ExecuteA2A`, `executeAgentA2A`, `executeWithA2AExecutionEngineNative` |
+| Team | `ExecuteA2A`, `executeSequentialA2A`, `executeRoundRobinA2A`, `executeSelectorA2A`, `executeGraphA2A`, `executeMemberAndAccumulateA2A`, `executeTeamMemberA2A` |
+| A2A engine | `ExecuteNative`, `buildA2AMessagesFromResponse` |
+| Memory | `AddA2AMessages`, `GetA2AMessages` (interface + implementations) |
+| Query input | `GetQueryInputA2AMessages` |
+| Helpers | `PrepareA2AExecutionMessages`, `PrepareA2ANewMessagesForMemory`, `ExtractA2ATextFromMessage`, `ExtractA2AUserMessageContent` |
+| Tool delegation | A2A branches in `AgentToolExecutor.Execute`, `TeamToolExecutor.Execute` |
+| ExecutionResult | `A2AMessages` field |
 
-The default OpenAI path remains intact.
+The default OpenAI path (`executeAgent`, `executeTeam`, `Agent.Execute`, `Team.Execute`, `GetQueryInputMessages`, `AddMessages`, `GetMessages`) remains intact and requires no changes on removal.
