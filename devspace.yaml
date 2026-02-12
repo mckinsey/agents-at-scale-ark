@@ -1,11 +1,12 @@
 # DevSpace configuration for local ARK services development
 version: v2beta1
+name: ark-stack
 
 # Dependencies - include other DevSpace configurations
 dependencies:
   localhost-gateway:
     path: ./services/localhost-gateway
-  ark:
+  ark-controller:
     path: ./ark
   ark-broker:
     path: ./services/ark-broker
@@ -40,7 +41,11 @@ dependencies:
 
 # Vars - To disable, set environment variables before the devspace commands
 #        For example: ENABLE_CERT_MANAGER=false devspace dev
+#        For PostgreSQL: STORAGE_BACKEND=postgresql devspace dev
 vars:
+  STORAGE_BACKEND:
+    source: env
+    default: "etcd"
   ENABLE_CERT_MANAGER:
     source: env
     default: true
@@ -105,36 +110,48 @@ profiles:
 
 pipelines:
   deploy: |-
-    
+
     if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
       create_deployments cert-manager
     fi
-    
+
     if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then
       create_deployments gateway-api
     fi
-    
-    run_dependency_pipelines ark --pipeline=deploy
-    
+
+    run_dependency_pipelines ark-controller --pipeline=deploy
+
     if [ "${ENABLE_ARK_TENANT}" == "true" ]; then
+      echo "Waiting for Ark API to be available..."
+      if [ "${STORAGE_BACKEND}" == "etcd" ]; then
+        kubectl wait --for=condition=Established crd/tools.ark.mckinsey.com --timeout=60s
+      else
+        kubectl wait --for=condition=Available apiservice/v1alpha1.ark.mckinsey.com --timeout=300s
+      fi
       create_deployments ark-tenant
     fi
-    
-    run_dependency_pipelines --all --exclude ark --pipeline=deploy
+
+    run_dependency_pipelines --all --exclude ark-controller --pipeline=deploy
   dev: |-
-    
+
     if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
       create_deployments cert-manager
     fi
-    
+
     if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then
       create_deployments gateway-api
     fi
-    
-    run_dependency_pipelines ark --pipeline=dev
-    
+
+    run_dependency_pipelines ark-controller --pipeline=dev
+
     if [ "${ENABLE_ARK_TENANT}" == "true" ]; then
+      echo "Waiting for Ark API to be available..."
+      if [ "${STORAGE_BACKEND}" == "etcd" ]; then
+        kubectl wait --for=condition=Established crd/tools.ark.mckinsey.com --timeout=60s
+      else
+        kubectl wait --for=condition=Available apiservice/v1alpha1.ark.mckinsey.com --timeout=300s
+      fi
       create_deployments ark-tenant
     fi
-    
-    run_dependency_pipelines --all --exclude ark --pipeline=dev
+
+    run_dependency_pipelines --all --exclude ark-controller --pipeline=dev
