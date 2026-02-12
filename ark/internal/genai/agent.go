@@ -150,30 +150,20 @@ func (a *Agent) executeModelCall(ctx context.Context, agentMessages []Message, t
 }
 
 func (a *Agent) processAssistantMessage(choice openai.ChatCompletionChoice) Message {
-	assistantMessage := NewAssistantMessage(choice.Message.Content)
-	metadata := map[string]interface{}{
-		MetadataAgentNameKey: a.Name,
-	}
+	assistantMessage := openai.AssistantMessage(choice.Message.Content)
 	if len(choice.Message.ToolCalls) > 0 {
 		toolCalls := make([]openai.ChatCompletionMessageToolCallParam, len(choice.Message.ToolCalls))
 		for i, call := range choice.Message.ToolCalls {
 			toolCalls[i] = call.ToParam()
 		}
-		metadata[MetadataToolCallsKey] = toolCalls
+		assistantMessage.OfAssistant.ToolCalls = toolCalls
 	}
-	assistantMessage.Metadata = metadata
 	return assistantMessage
 }
 
 func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) (Message, error) {
 	result, err := a.Tools.ExecuteTool(ctx, toolCall)
 	toolMessage := ToolMessage(result.Content, result.ID)
-	if len(result.Metadata) > 0 {
-		if toolMessage.Metadata == nil {
-			toolMessage.Metadata = map[string]interface{}{}
-		}
-		toolMessage.Metadata[MetadataA2AResultKey] = result.Metadata
-	}
 
 	if err != nil {
 		return toolMessage, err

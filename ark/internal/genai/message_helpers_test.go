@@ -36,7 +36,7 @@ func createTestMessage(role, content string) Message {
 }
 
 func messageSignature(message Message) string {
-	return resolveMessageRole(message) + ":" + extractTextFromParts(message.Parts)
+	return resolveMessageRole(message) + ":" + ExtractTextFromMessage(message)
 }
 
 func messagesSignature(messages []Message) []string {

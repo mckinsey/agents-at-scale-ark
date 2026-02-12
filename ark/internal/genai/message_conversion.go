@@ -8,8 +8,18 @@ import (
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
-func A2AToOpenAIMessage(msg Message) (openai.ChatCompletionMessageParamUnion, error) {
-	role := resolveMessageRole(msg)
+func A2AToOpenAIMessage(msg protocol.Message) (openai.ChatCompletionMessageParamUnion, error) {
+	role := RoleAssistant
+	switch msg.Role {
+	case protocol.MessageRoleUser:
+		role = RoleUser
+	case protocol.MessageRoleAgent:
+		if msg.Metadata != nil {
+			if value, ok := msg.Metadata[MetadataRoleKey].(string); ok && value != "" {
+				role = value
+			}
+		}
+	}
 	content := extractTextFromParts(msg.Parts)
 	switch role {
 	case RoleUser:
@@ -82,7 +92,7 @@ func extractUserContent(msg *openai.ChatCompletionUserMessageParam) string {
 	return ""
 }
 
-func OpenAIToA2AMessage(msg openai.ChatCompletionMessageParamUnion) (Message, error) {
+func OpenAIToA2AMessage(msg openai.ChatCompletionMessageParamUnion) (protocol.Message, error) {
 	switch {
 	case msg.OfUser != nil:
 		content := extractUserContent(msg.OfUser)
@@ -120,6 +130,6 @@ func OpenAIToA2AMessage(msg openai.ChatCompletionMessageParamUnion) (Message, er
 		}
 		return message, nil
 	default:
-		return Message{}, fmt.Errorf("unsupported OpenAI message type")
+		return protocol.Message{}, fmt.Errorf("unsupported OpenAI message type")
 	}
 }

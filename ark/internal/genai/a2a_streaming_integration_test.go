@@ -103,7 +103,9 @@ func TestStreamA2AAgentIntegrationCompat(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	events, err := StreamA2AAgent(ctx, nil, testServer.URL, nil, "", NewUserMessage("hello"), nil, "test-agent", "", nil)
+	userInput, convErr := OpenAIToA2AMessage(NewUserMessage("hello"))
+	require.NoError(t, convErr)
+	events, err := StreamA2AAgent(ctx, nil, testServer.URL, nil, "", userInput, nil, "test-agent", "", nil)
 	require.NoError(t, err)
 
 	engine := &A2AExecutionEngine{}
@@ -133,7 +135,9 @@ func TestStreamA2AAgentIntegrationNative(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	events, err := StreamA2AAgent(ctx, nil, testServer.URL, nil, "", NewUserMessage("hello"), nil, "test-agent", "", nil)
+	userInput, convErr := OpenAIToA2AMessage(NewUserMessage("hello"))
+	require.NoError(t, convErr)
+	events, err := StreamA2AAgent(ctx, nil, testServer.URL, nil, "", userInput, nil, "test-agent", "", nil)
 	require.NoError(t, err)
 
 	engine := &A2AExecutionEngine{}

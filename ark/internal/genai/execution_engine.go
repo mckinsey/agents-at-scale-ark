@@ -78,7 +78,7 @@ type ExecutionEngineResponse struct {
 // convertToExecutionEngineMessage converts internal genai.Message to ExecutionEngineMessage format
 func convertToExecutionEngineMessage(msg Message) ExecutionEngineMessage {
 	role := resolveMessageRole(msg)
-	content := extractTextFromParts(msg.Parts)
+	content := ExtractTextFromMessage(msg)
 	return ExecutionEngineMessage{
 		Role:    role,
 		Content: content,

@@ -5,56 +5,30 @@ import (
 	"errors"
 
 	"github.com/openai/openai-go"
-	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
 type (
-	Message  = protocol.Message
-	ToolCall = openai.ChatCompletionMessageToolCall
+	Message          = openai.ChatCompletionMessageParamUnion
+	ToolCall         = openai.ChatCompletionMessageToolCall
+	UserMessage      = openai.ChatCompletionUserMessageParam
+	AssistantMessage = openai.ChatCompletionAssistantMessageParam
+	SystemMessage    = openai.ChatCompletionSystemMessageParam
 )
 
 func NewSystemMessage(content string) Message {
-	message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
-		protocol.NewTextPart(content),
-	})
-	message.Metadata = map[string]interface{}{
-		MetadataRoleKey: RoleSystem,
-	}
-	return message
+	return openai.SystemMessage(content)
 }
 
 func NewUserMessage(content string) Message {
-	return protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
-		protocol.NewTextPart(content),
-	})
+	return openai.UserMessage(content)
 }
 
 func NewAssistantMessage(content string) Message {
-	return protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
-		protocol.NewTextPart(content),
-	})
+	return openai.AssistantMessage(content)
 }
 
 func ToolMessage[T string | []openai.ChatCompletionContentPartTextParam](content T, toolCallID string) Message {
-	text := ""
-	switch value := any(content).(type) {
-	case string:
-		text = value
-	case []openai.ChatCompletionContentPartTextParam:
-		for _, part := range value {
-			if part.Text != "" {
-				text += part.Text
-			}
-		}
-	}
-	message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
-		protocol.NewTextPart(text),
-	})
-	message.Metadata = map[string]interface{}{
-		MetadataRoleKey:       RoleTool,
-		MetadataToolCallIDKey: toolCallID,
-	}
-	return message
+	return openai.ToolMessage(content, toolCallID)
 }
 
 type TeamMember interface {

@@ -279,10 +279,11 @@ func TestBuildA2AMetadataWithHistory(t *testing.T) {
 		arkann.A2AHistoryLimit:        "1",
 		arkann.A2ASupportedExtensions: `["https://ark.mckinsey.com/extensions/history/v1"]`,
 	}
-	history := []Message{
-		NewUserMessage("first"),
-		NewAssistantMessage("second"),
-	}
+	first, err := OpenAIToA2AMessage(NewUserMessage("first"))
+	assert.NoError(t, err)
+	second, err := OpenAIToA2AMessage(NewAssistantMessage("second"))
+	assert.NoError(t, err)
+	history := []protocol.Message{first, second}
 
 	metadata, err := buildA2AMetadata(annotations, history, true)
 

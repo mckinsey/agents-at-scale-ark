@@ -129,9 +129,7 @@ func TestSerializeMessagesProducesOpenAIFormat(t *testing.T) {
 
 	openaiMessages := make([]interface{}, 0, len(messages))
 	for _, msg := range messages {
-		oai, err := A2AToOpenAIMessage(msg)
-		require.NoError(t, err)
-		openaiMessages = append(openaiMessages, oai)
+		openaiMessages = append(openaiMessages, msg)
 	}
 
 	raw, err := json.Marshal(openaiMessages)

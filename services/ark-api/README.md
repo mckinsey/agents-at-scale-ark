@@ -168,6 +168,17 @@ AUTH_MODE=open
 
 For detailed usage examples including API key authentication, JWT authentication, and code examples in multiple languages, see the [Authentication Guide](../../docs/content/developer-guide/authentication.mdx).
 
+## A2A Gateway
+
+The ARK API includes an A2A Gateway that exposes all ARK agents via the [A2A protocol](https://github.com/a2aproject/A2A) with streaming support. Agents are automatically discovered from Kubernetes and exposed as A2A-compatible endpoints.
+
+**Key endpoints:**
+- `GET /a2a/agents` - List available agents
+- `GET /a2a/agent/{agent-name}/.well-known/agent-card.json` - Get agent card
+- `POST /a2a/agent/{agent-name}/` - A2A JSON-RPC (message/send, message/stream)
+
+Streaming is supported by default when a broker is available. An experimental internal A2A transport mode is available via the `ark.mckinsey.com/a2a-experimental-enabled` annotation on agent resources. See the [RFC: Experimental A2A transport](https://mckinsey.github.io/agents-at-scale-ark/reference/a2a-experimental-rfc) for details.
+
 ## Notes
 - Requires Python 3.11+ and uv package manager
 - Run commands from repository root directory

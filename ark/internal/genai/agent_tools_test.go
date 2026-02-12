@@ -11,7 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	eventnoop "mckinsey.com/ark/internal/eventing/noop"
@@ -592,9 +591,8 @@ func TestParseDelegatedInvocationCompat(t *testing.T) {
 	invocation, userError, err := parseDelegatedInvocation(args, A2APayloadModeCompat, "agent", "test-agent")
 	require.NoError(t, err)
 	require.Equal(t, "", userError)
-	require.Equal(t, protocol.MessageRoleUser, invocation.userInput.Role)
-	require.Len(t, invocation.userInput.Parts, 1)
-	require.Equal(t, "hello", extractTextFromParts(invocation.userInput.Parts))
+	require.Equal(t, RoleUser, resolveMessageRole(invocation.userInput))
+	require.Equal(t, "hello", ExtractTextFromMessage(invocation.userInput))
 	require.Len(t, invocation.history, 0)
 	require.Equal(t, "", invocation.contextID)
 }
@@ -635,11 +633,10 @@ func TestParseDelegatedInvocationNativeMessageHistoryContext(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "", userError)
 	require.Equal(t, "ctx-123", invocation.contextID)
-	require.Equal(t, protocol.MessageRoleUser, invocation.userInput.Role)
-	require.Len(t, invocation.userInput.Parts, 1)
-	require.Equal(t, "delegate this", extractTextFromParts(invocation.userInput.Parts))
+	require.Equal(t, RoleUser, resolveMessageRole(invocation.userInput))
+	require.Equal(t, "delegate this", ExtractTextFromMessage(invocation.userInput))
 	require.Len(t, invocation.history, 1)
-	require.Equal(t, protocol.MessageRoleAgent, invocation.history[0].Role)
+	require.Equal(t, RoleAssistant, resolveMessageRole(invocation.history[0]))
 }
 
 func TestParseDelegatedInvocationNativeFallsBackToInput(t *testing.T) {
@@ -649,9 +646,8 @@ func TestParseDelegatedInvocationNativeFallsBackToInput(t *testing.T) {
 	invocation, userError, err := parseDelegatedInvocation(args, A2APayloadModeNative, "team", "test-team")
 	require.NoError(t, err)
 	require.Equal(t, "", userError)
-	require.Equal(t, protocol.MessageRoleUser, invocation.userInput.Role)
-	require.Len(t, invocation.userInput.Parts, 1)
-	require.Equal(t, "fallback input", extractTextFromParts(invocation.userInput.Parts))
+	require.Equal(t, RoleUser, resolveMessageRole(invocation.userInput))
+	require.Equal(t, "fallback input", ExtractTextFromMessage(invocation.userInput))
 }
 
 func TestParseDelegatedInvocationNativeInvalidContextID(t *testing.T) {

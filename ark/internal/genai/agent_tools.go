@@ -311,14 +311,18 @@ func parseMessageArgument(rawValue any) (Message, error) {
 	if err != nil {
 		return Message{}, fmt.Errorf("failed to serialize message argument: %w", err)
 	}
-	var message Message
+	var message protocol.Message
 	if err := json.Unmarshal(rawJSON, &message); err != nil {
 		return Message{}, fmt.Errorf("failed to parse message argument: %w", err)
 	}
 	if len(message.Parts) == 0 {
 		return Message{}, fmt.Errorf("message argument must include at least one part")
 	}
-	return message, nil
+	converted, err := A2AToOpenAIMessage(message)
+	if err != nil {
+		return Message{}, fmt.Errorf("failed to convert message argument: %w", err)
+	}
+	return converted, nil
 }
 
 func parseHistoryArgument(rawValue any) ([]Message, error) {
@@ -326,11 +330,19 @@ func parseHistoryArgument(rawValue any) ([]Message, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize history argument: %w", err)
 	}
-	var history []Message
+	var history []protocol.Message
 	if err := json.Unmarshal(rawJSON, &history); err != nil {
 		return nil, fmt.Errorf("failed to parse history argument: %w", err)
 	}
-	return history, nil
+	converted := make([]Message, 0, len(history))
+	for i := range history {
+		message, convErr := A2AToOpenAIMessage(history[i])
+		if convErr != nil {
+			return nil, fmt.Errorf("failed to convert history argument %d: %w", i, convErr)
+		}
+		converted = append(converted, message)
+	}
+	return converted, nil
 }
 
 func parseNativeDelegationInput(arguments map[string]any, targetType, targetName string) (delegatedInvocation, string, error) {

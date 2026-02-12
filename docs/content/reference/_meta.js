@@ -21,6 +21,9 @@ export default {
   troubleshooting: 'Troubleshooting',
   'utility-images': 'Utility Images',
 
+  '---rfcs': { type: 'separator', title: 'RFCs' },
+  'a2a-experimental-rfc': 'RFC: Experimental A2A transport',
+
   '---project': { type: 'separator', title: 'Project' },
   contributors: 'Contributors'
 }

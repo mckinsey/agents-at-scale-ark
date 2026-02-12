@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -246,7 +247,7 @@ var _ = Describe("Query Controller Message Serialization", func() {
 			jsonStr, err := serializeMessages(messages, genai.A2APayloadModeNative)
 			Expect(err).NotTo(HaveOccurred())
 
-			var decoded []genai.Message
+			var decoded []protocol.Message
 			Expect(json.Unmarshal([]byte(jsonStr), &decoded)).To(Succeed())
 			Expect(decoded).To(HaveLen(2))
 			Expect(string(decoded[0].Role)).To(Equal("agent"))

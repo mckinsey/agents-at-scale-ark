@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/openai/openai-go"
 	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/eventing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -179,33 +180,34 @@ func (m *HTTPMemory) AddMessages(ctx context.Context, queryID string, messages [
 	var reqBody []byte
 	var err error
 	if payloadMode == A2APayloadModeNative {
+		a2aMessages := make([]protocol.Message, 0, len(messages))
+		for i := range messages {
+			converted, convErr := OpenAIToA2AMessage(messages[i])
+			if convErr != nil {
+				operationData := map[string]string{"result": fmt.Sprintf("Failed to convert message %d to A2A: %v", i, convErr)}
+				m.eventingRecorder.Fail(ctx, "MemoryAddMessages", operationData["result"], convErr, operationData)
+				return fmt.Errorf("failed to convert message %d to A2A: %w", i, convErr)
+			}
+			a2aMessages = append(a2aMessages, converted)
+		}
 		reqBody, err = json.Marshal(struct {
-			ConversationID string    `json:"conversation_id,omitempty"`
-			QueryID        string    `json:"query_id"`
-			Messages       []Message `json:"messages"`
+			ConversationID string             `json:"conversation_id,omitempty"`
+			QueryID        string             `json:"query_id"`
+			Messages       []protocol.Message `json:"messages"`
+		}{
+			ConversationID: m.conversationId,
+			QueryID:        queryID,
+			Messages:       a2aMessages,
+		})
+	} else {
+		reqBody, err = json.Marshal(struct {
+			ConversationID string                                   `json:"conversation_id,omitempty"`
+			QueryID        string                                   `json:"query_id"`
+			Messages       []openai.ChatCompletionMessageParamUnion `json:"messages"`
 		}{
 			ConversationID: m.conversationId,
 			QueryID:        queryID,
 			Messages:       messages,
-		})
-	} else {
-		compatMessages := make([]interface{}, 0, len(messages))
-		for _, msg := range messages {
-			oaiMsg, convErr := A2AToOpenAIMessage(msg)
-			if convErr != nil {
-				compatMessages = append(compatMessages, msg)
-				continue
-			}
-			compatMessages = append(compatMessages, oaiMsg)
-		}
-		reqBody, err = json.Marshal(struct {
-			ConversationID string        `json:"conversation_id,omitempty"`
-			QueryID        string        `json:"query_id"`
-			Messages       []interface{} `json:"messages"`
-		}{
-			ConversationID: m.conversationId,
-			QueryID:        queryID,
-			Messages:       compatMessages,
 		})
 	}
 	if err != nil {
@@ -305,13 +307,19 @@ func (m *HTTPMemory) GetMessages(ctx context.Context) ([]Message, error) {
 
 	messages := make([]Message, 0, len(response.Items))
 	for i, record := range response.Items {
-		message, err := unmarshalMessageRobust(record.Message)
+		a2aMessage, err := unmarshalMessageRobust(record.Message)
 		if err != nil {
 			operationData := map[string]string{"result": fmt.Sprintf("Failed to unmarshal message at index %d: %v", i, err)}
 			m.eventingRecorder.Fail(ctx, "MemoryGetMessages", operationData["result"], err, operationData)
 			return nil, fmt.Errorf("failed to unmarshal message at index %d: %w", i, err)
 		}
-		messages = append(messages, message)
+		openaiMessage, convErr := A2AToOpenAIMessage(a2aMessage)
+		if convErr != nil {
+			operationData := map[string]string{"result": fmt.Sprintf("Failed to convert message at index %d: %v", i, convErr)}
+			m.eventingRecorder.Fail(ctx, "MemoryGetMessages", operationData["result"], convErr, operationData)
+			return nil, fmt.Errorf("failed to convert message at index %d: %w", i, convErr)
+		}
+		messages = append(messages, openaiMessage)
 	}
 
 	operationData := map[string]string{

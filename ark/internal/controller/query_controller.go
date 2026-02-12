@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
@@ -498,21 +499,21 @@ func messageToText(message genai.Message) string {
 
 func serializeMessages(messages []genai.Message, payloadMode string) (string, error) {
 	if payloadMode == genai.A2APayloadModeNative {
-		rawBytes, err := json.Marshal(messages)
+		a2aMessages := make([]protocol.Message, 0, len(messages))
+		for i, msg := range messages {
+			a2aMessage, err := genai.OpenAIToA2AMessage(msg)
+			if err != nil {
+				return "", fmt.Errorf("failed to convert message %d for native serialization: %w", i, err)
+			}
+			a2aMessages = append(a2aMessages, a2aMessage)
+		}
+		rawBytes, err := json.Marshal(a2aMessages)
 		if err != nil {
 			return "", fmt.Errorf("failed to marshal messages: %w", err)
 		}
 		return string(rawBytes), nil
 	}
-	openaiMessages := make([]interface{}, 0, len(messages))
-	for _, msg := range messages {
-		oaiMsg, err := genai.A2AToOpenAIMessage(msg)
-		if err != nil {
-			return "", fmt.Errorf("failed to convert message for serialization: %w", err)
-		}
-		openaiMessages = append(openaiMessages, oaiMsg)
-	}
-	rawBytes, err := json.Marshal(openaiMessages)
+	rawBytes, err := json.Marshal(messages)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal messages: %w", err)
 	}
@@ -1011,11 +1012,7 @@ func (r *QueryReconciler) executeModelWithStreaming(ctx context.Context, model *
 
 	// Create the assistant message with the full response (preserves tool calls if present)
 	// This matches the non-streaming path but uses the full message instead of just content
-	assistantMessage, err := genai.OpenAIToA2AMessage(choice.Message.ToParam())
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert model message: %w", err)
-	}
-	responseMessages := []genai.Message{assistantMessage}
+	responseMessages := []genai.Message{choice.Message.ToParam()}
 
 	return responseMessages, nil
 }

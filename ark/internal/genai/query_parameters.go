@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/common"
@@ -155,9 +156,17 @@ func GetQueryInputMessages(ctx context.Context, query arkv1alpha1.Query, k8sClie
 			experimentalEnabled = IsA2AExperimentalEnabledInContext(ctx)
 		}
 		if experimentalEnabled {
-			var messages []Message
-			if err := json.Unmarshal(query.Spec.Input.Raw, &messages); err != nil {
+			var a2aMessages []protocol.Message
+			if err := json.Unmarshal(query.Spec.Input.Raw, &a2aMessages); err != nil {
 				return nil, fmt.Errorf("failed to unmarshal input as A2A messages: %w", err)
+			}
+			messages := make([]Message, 0, len(a2aMessages))
+			for i := range a2aMessages {
+				converted, convErr := A2AToOpenAIMessage(a2aMessages[i])
+				if convErr != nil {
+					return nil, fmt.Errorf("failed to convert A2A input message %d: %w", i, convErr)
+				}
+				messages = append(messages, converted)
 			}
 			return messages, nil
 		}
@@ -168,13 +177,7 @@ func GetQueryInputMessages(ctx context.Context, query arkv1alpha1.Query, k8sClie
 		}
 
 		messages := make([]Message, 0, len(openaiMessages))
-		for i := range openaiMessages {
-			converted, convErr := OpenAIToA2AMessage(openaiMessages[i])
-			if convErr != nil {
-				return nil, fmt.Errorf("failed to convert input message %d: %w", i, convErr)
-			}
-			messages = append(messages, converted)
-		}
+		messages = append(messages, openaiMessages...)
 		return messages, nil
 	}
 

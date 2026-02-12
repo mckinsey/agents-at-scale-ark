@@ -50,16 +50,7 @@ func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStr
 	ctx = m.eventingRecorder.Start(ctx, "LLMCall", fmt.Sprintf("Calling model %s", m.Model), operationData)
 
 	otelMessages := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages))
-	for i, msg := range messages {
-		converted, err := A2AToOpenAIMessage(msg)
-		if err != nil {
-			convertErr := fmt.Errorf("failed to convert message %d: %w", i, err)
-			m.telemetryRecorder.RecordError(span, convertErr)
-			m.eventingRecorder.Fail(ctx, "LLMCall", convertErr.Error(), convertErr, operationData)
-			return nil, convertErr
-		}
-		otelMessages = append(otelMessages, converted)
-	}
+	otelMessages = append(otelMessages, messages...)
 
 	m.telemetryRecorder.RecordInput(span, otelMessages)
 	m.telemetryRecorder.RecordModelDetails(span, m.Model, m.Type)

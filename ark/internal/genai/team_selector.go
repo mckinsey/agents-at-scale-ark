@@ -31,19 +31,13 @@ func buildHistory(messages []Message) string {
 	var history []string
 	for _, msg := range messages {
 		role := resolveMessageRole(msg)
-		text := extractTextFromParts(msg.Parts)
+		text := ExtractTextFromMessage(msg)
 		if text == "" {
 			continue
 		}
 		switch role {
 		case RoleAssistant:
-			name := "assistant"
-			if msg.Metadata != nil {
-				if value, ok := msg.Metadata[MetadataAgentNameKey].(string); ok && value != "" {
-					name = value
-				}
-			}
-			history = append(history, fmt.Sprintf("# %s:\n%s\n", name, text))
+			history = append(history, fmt.Sprintf("# assistant:\n%s\n", text))
 		case RoleUser:
 			history = append(history, fmt.Sprintf("# user:\n%s\n", text))
 		}
@@ -131,7 +125,7 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	var selectedName string
 	lastMsg := result.Messages[len(result.Messages)-1]
 	if resolveMessageRole(lastMsg) == RoleAssistant {
-		selectedName = strings.TrimSpace(extractTextFromParts(lastMsg.Parts))
+		selectedName = strings.TrimSpace(ExtractTextFromMessage(lastMsg))
 	}
 	if selectedName == "" {
 		return nil, fmt.Errorf("selector agent returned invalid response")

@@ -62,14 +62,26 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 
 	queryName := getQueryName(ctx)
 	includeHistory := shouldIncludeA2AHistory(agentAnnotations, false)
-	metadata, err := buildA2AMetadata(agentAnnotations, history, includeHistory)
+	a2aHistory := make([]protocol.Message, 0, len(history))
+	for i := range history {
+		converted, convErr := OpenAIToA2AMessage(history[i])
+		if convErr != nil {
+			return nil, fmt.Errorf("failed to convert history message %d to A2A: %w", i, convErr)
+		}
+		a2aHistory = append(a2aHistory, converted)
+	}
+	a2aUserInput, err := OpenAIToA2AMessage(userInput)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert user input to A2A: %w", err)
+	}
+	metadata, err := buildA2AMetadata(agentAnnotations, a2aHistory, includeHistory)
 	if err != nil {
 		return nil, err
 	}
 
 	experimentalEnabled := resolveA2AExperimentalExecutionEnabled(ctx, agentAnnotations)
 	payloadMode := resolveA2AExecutionPayloadMode(ctx, agentAnnotations)
-	streamResult, streamed, streamErr := e.tryA2AStreamingExecution(ctx, a2aAddress, a2aServer.Spec.Headers, namespace, agentAnnotations, agentName, queryName, contextID, userInput, metadata, eventStream, payloadMode, &a2aServer)
+	streamResult, streamed, streamErr := e.tryA2AStreamingExecution(ctx, a2aAddress, a2aServer.Spec.Headers, namespace, agentAnnotations, agentName, queryName, contextID, a2aUserInput, metadata, eventStream, payloadMode, &a2aServer)
 	if streamErr == nil && streamResult != nil {
 		e.eventingRecorder.Complete(ctx, "A2AExecution", "A2A execution completed successfully", operationData)
 		return streamResult, nil
@@ -84,7 +96,7 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 		log.Error(streamErr, "A2A streaming execution failed, falling back to blocking", "agent", agentName)
 	}
 
-	a2aResponse, err := ExecuteA2AAgent(ctx, e.client, a2aAddress, a2aServer.Spec.Headers, namespace, userInput, metadata, agentName, queryName, contextID, e.eventingRecorder, &a2aServer)
+	a2aResponse, err := ExecuteA2AAgent(ctx, e.client, a2aAddress, a2aServer.Spec.Headers, namespace, a2aUserInput, metadata, agentName, queryName, contextID, e.eventingRecorder, &a2aServer)
 	if err != nil {
 		modelID := fmt.Sprintf("agent/%s", agentName)
 		streamA2AError(ctx, eventStream, payloadMode, modelID, err)
@@ -104,7 +116,7 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 	}, nil
 }
 
-func (e *A2AExecutionEngine) streamA2AExecution(ctx context.Context, address string, headers []arkv1prealpha1.Header, namespace, agentName, queryName, contextID string, userInput Message, metadata map[string]interface{}, eventStream EventStreamInterface, payloadMode string, a2aServer *arkv1prealpha1.A2AServer) (*ExecutionResult, error) {
+func (e *A2AExecutionEngine) streamA2AExecution(ctx context.Context, address string, headers []arkv1prealpha1.Header, namespace, agentName, queryName, contextID string, userInput protocol.Message, metadata map[string]interface{}, eventStream EventStreamInterface, payloadMode string, a2aServer *arkv1prealpha1.A2AServer) (*ExecutionResult, error) {
 	events, err := StreamA2AAgent(ctx, e.client, address, headers, namespace, userInput, metadata, agentName, contextID, e.eventingRecorder)
 	if err != nil {
 		return nil, err
@@ -193,7 +205,7 @@ func resolveA2AExperimentalExecutionEnabled(ctx context.Context, agentAnnotation
 	return IsA2AExperimentalEnabled(agentAnnotations)
 }
 
-func (e *A2AExecutionEngine) tryA2AStreamingExecution(ctx context.Context, address string, headers []arkv1prealpha1.Header, namespace string, agentAnnotations map[string]string, agentName, queryName, contextID string, userInput Message, metadata map[string]interface{}, eventStream EventStreamInterface, payloadMode string, a2aServer *arkv1prealpha1.A2AServer) (*ExecutionResult, bool, error) {
+func (e *A2AExecutionEngine) tryA2AStreamingExecution(ctx context.Context, address string, headers []arkv1prealpha1.Header, namespace string, agentAnnotations map[string]string, agentName, queryName, contextID string, userInput protocol.Message, metadata map[string]interface{}, eventStream EventStreamInterface, payloadMode string, a2aServer *arkv1prealpha1.A2AServer) (*ExecutionResult, bool, error) {
 	if !isA2AStreamingSupported(agentAnnotations) {
 		logf.FromContext(ctx).Info("A2A streaming not supported by agent", "agent", agentName)
 		return nil, false, nil
@@ -273,7 +285,9 @@ func (s *a2aStreamState) finalize() *A2AResponse {
 	s.applyLatestTaskContent()
 	s.response.Content = s.finalContent.String()
 	if s.response.Message == nil && s.response.Content != "" {
-		message := NewAssistantMessage(s.response.Content)
+		message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+			protocol.NewTextPart(s.response.Content),
+		})
 		s.response.Message = &message
 	}
 	return s.response
@@ -376,7 +390,10 @@ func (s *a2aStreamState) handleTaskArtifactUpdateEvent(ctx context.Context, k8sC
 
 func buildAssistantMessageFromA2AResponse(response *A2AResponse) Message {
 	if response != nil && response.Message != nil {
-		return *response.Message
+		converted, err := A2AToOpenAIMessage(*response.Message)
+		if err == nil {
+			return converted
+		}
 	}
 	if response != nil {
 		return NewAssistantMessage(response.Content)

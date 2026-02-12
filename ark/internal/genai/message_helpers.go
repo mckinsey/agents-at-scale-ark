@@ -2,7 +2,11 @@
 
 package genai
 
-import "trpc.group/trpc-go/trpc-a2a-go/protocol"
+import (
+	"strings"
+
+	"github.com/openai/openai-go"
+)
 
 // PrepareExecutionMessages separates the current message from context messages
 // and combines with memory history for agent/team execution.
@@ -22,8 +26,11 @@ func PrepareExecutionMessages(inputMessages, memoryMessages []Message) (currentM
 // to capture the initial query input.
 func ExtractUserMessageContent(messages []Message) string {
 	for _, msg := range messages {
-		if resolveMessageRole(msg) == RoleUser {
-			return extractTextFromParts(msg.Parts)
+		msgUnion := openai.ChatCompletionMessageParamUnion(msg)
+		if msgUnion.OfUser != nil {
+			if content := extractUserContent(msgUnion.OfUser); content != "" {
+				return content
+			}
 		}
 	}
 	return ""
@@ -55,32 +62,61 @@ func PrepareNewMessagesForMemory(inputMessages, responseMessages []Message) []Me
 // the final response from agent/team execution results.
 func ExtractLastAssistantMessageContent(messages []Message) string {
 	for i := len(messages) - 1; i >= 0; i-- {
-		msg := messages[i]
-		if resolveMessageRole(msg) == RoleAssistant {
-			if text := extractTextFromParts(msg.Parts); text != "" {
-				return text
-			}
+		msgUnion := openai.ChatCompletionMessageParamUnion(messages[i])
+		if msgUnion.OfAssistant == nil {
+			continue
+		}
+		if text := extractTextFromMessageParam(msgUnion); text != "" {
+			return text
 		}
 	}
 	return ""
 }
 
 func ExtractTextFromMessage(message Message) string {
-	return extractTextFromParts(message.Parts)
+	return extractTextFromMessageParam(openai.ChatCompletionMessageParamUnion(message))
 }
 
 func resolveMessageRole(msg Message) string {
-	switch msg.Role {
-	case protocol.MessageRoleUser:
+	msgUnion := openai.ChatCompletionMessageParamUnion(msg)
+	switch {
+	case msgUnion.OfUser != nil:
 		return RoleUser
-	case protocol.MessageRoleAgent:
-		if msg.Metadata != nil {
-			if value, ok := msg.Metadata[MetadataRoleKey].(string); ok && value != "" {
-				return value
-			}
-		}
+	case msgUnion.OfSystem != nil:
+		return RoleSystem
+	case msgUnion.OfTool != nil:
+		return RoleTool
+	case msgUnion.OfAssistant != nil:
 		return RoleAssistant
 	default:
 		return RoleAssistant
 	}
+}
+
+func extractTextFromMessageParam(msg openai.ChatCompletionMessageParamUnion) string {
+	switch {
+	case msg.OfUser != nil:
+		return extractUserContent(msg.OfUser)
+	case msg.OfAssistant != nil:
+		return msg.OfAssistant.Content.OfString.Value
+	case msg.OfSystem != nil:
+		return msg.OfSystem.Content.OfString.Value
+	case msg.OfTool != nil:
+		return msg.OfTool.Content.OfString.Value
+	default:
+		return ""
+	}
+}
+
+func extractTextFromContentParts(parts []openai.ChatCompletionContentPartTextParam) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	var builder strings.Builder
+	for _, part := range parts {
+		if part.Text != "" {
+			builder.WriteString(part.Text)
+		}
+	}
+	return builder.String()
 }

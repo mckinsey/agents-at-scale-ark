@@ -168,7 +168,7 @@ func parseA2APermissions(raw string) (map[string]interface{}, error) {
 	return encodeA2APermissions(permissions)
 }
 
-func buildA2AMetadata(agentAnnotations map[string]string, history []Message, includeHistory bool) (map[string]interface{}, error) {
+func buildA2AMetadata(agentAnnotations map[string]string, history []protocol.Message, includeHistory bool) (map[string]interface{}, error) {
 	supportsPermissions := supportsA2AExtension(agentAnnotations, a2aPermissionsExtensionKey)
 	supportsHistory := supportsA2AExtension(agentAnnotations, a2aHistoryExtensionKey)
 	metadata, err := parseA2AExtensionsMetadata(agentAnnotations)
@@ -300,7 +300,7 @@ func addA2APermissionsMetadata(metadata map[string]interface{}, agentAnnotations
 	return metadata, nil
 }
 
-func addA2AHistoryMetadata(metadata map[string]interface{}, history []Message, include bool, agentAnnotations map[string]string) map[string]interface{} {
+func addA2AHistoryMetadata(metadata map[string]interface{}, history []protocol.Message, include bool, agentAnnotations map[string]string) map[string]interface{} {
 	if !include || len(history) == 0 {
 		return metadata
 	}
@@ -320,7 +320,7 @@ func ensureA2AMetadata(metadata map[string]interface{}) map[string]interface{} {
 	return map[string]interface{}{}
 }
 
-func buildA2ASendMessageParams(userInput Message, contextID string, metadata map[string]interface{}, blocking bool) protocol.SendMessageParams {
+func buildA2ASendMessageParams(userInput protocol.Message, contextID string, metadata map[string]interface{}, blocking bool) protocol.SendMessageParams {
 	message := userInput
 	message.Role = protocol.MessageRoleUser
 	if contextID != "" {
@@ -396,7 +396,7 @@ func DiscoverA2AAgentsWithRecorder(ctx context.Context, k8sClient client.Client,
 }
 
 // ExecuteA2AAgent executes a task on an A2A agent with optional K8s event recording and query context
-func ExecuteA2AAgent(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace string, userInput Message, metadata map[string]interface{}, agentName, queryName, contextID string, a2aRecorder eventing.A2aRecorder, obj client.Object) (*A2AResponse, error) {
+func ExecuteA2AAgent(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace string, userInput protocol.Message, metadata map[string]interface{}, agentName, queryName, contextID string, a2aRecorder eventing.A2aRecorder, obj client.Object) (*A2AResponse, error) {
 	rpcURL := strings.TrimSuffix(address, "/")
 
 	// Create and configure A2A client
@@ -409,7 +409,7 @@ func ExecuteA2AAgent(ctx context.Context, k8sClient client.Client, address strin
 	return executeA2AAgentMessage(ctx, k8sClient, a2aClient, userInput, metadata, agentName, namespace, queryName, contextID, obj, a2aRecorder, true)
 }
 
-func StreamA2AAgent(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace string, userInput Message, metadata map[string]interface{}, agentName, contextID string, a2aRecorder eventing.A2aRecorder) (<-chan protocol.StreamingMessageEvent, error) {
+func StreamA2AAgent(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace string, userInput protocol.Message, metadata map[string]interface{}, agentName, contextID string, a2aRecorder eventing.A2aRecorder) (<-chan protocol.StreamingMessageEvent, error) {
 	rpcURL := strings.TrimSuffix(address, "/")
 	a2aClient, err := CreateA2AClient(ctx, k8sClient, rpcURL, headers, namespace, agentName, a2aRecorder)
 	if err != nil {
@@ -506,7 +506,7 @@ func CreateA2AClient(ctx context.Context, k8sClient client.Client, rpcURL string
 }
 
 // executeA2AAgentMessage sends message to A2A agent and processes response
-func executeA2AAgentMessage(ctx context.Context, k8sClient client.Client, a2aClient *a2aclient.A2AClient, userInput Message, metadata map[string]interface{}, agentName, namespace, queryName, contextID string, obj client.Object, a2aRecorder eventing.A2aRecorder, blocking bool) (*A2AResponse, error) {
+func executeA2AAgentMessage(ctx context.Context, k8sClient client.Client, a2aClient *a2aclient.A2AClient, userInput protocol.Message, metadata map[string]interface{}, agentName, namespace, queryName, contextID string, obj client.Object, a2aRecorder eventing.A2aRecorder, blocking bool) (*A2AResponse, error) {
 	params := buildA2ASendMessageParams(userInput, contextID, metadata, blocking)
 	result, err := a2aClient.SendMessage(ctx, params)
 	if err != nil {
@@ -702,7 +702,7 @@ func extractFilePartText(file interface{}) string {
 	}
 }
 
-func convertToA2AHistory(history []Message) []protocol.Message {
+func convertToA2AHistory(history []protocol.Message) []protocol.Message {
 	results := make([]protocol.Message, 0, len(history))
 	for _, msg := range history {
 		if msg.Role == "" {
