@@ -8,14 +8,23 @@ type QueryCreateRequest = components['schemas']['QueryCreateRequest'];
 type QueryUpdateRequest = components['schemas']['QueryUpdateRequest'];
 
 export const queriesService = {
-  async list(): Promise<QueryListResponse> {
-    const response = await apiClient.get<QueryListResponse>(`/api/v1/queries`);
+  async list(namespace?: string): Promise<QueryListResponse> {
+    const params = namespace ? { namespace } : undefined;
+    const response = await apiClient.get<QueryListResponse>(
+      `/api/v1/queries`,
+      params ? { params } : undefined,
+    );
     return response;
   },
 
-  async get(queryName: string): Promise<QueryDetailResponse> {
+  async get(
+    queryName: string,
+    namespace?: string,
+  ): Promise<QueryDetailResponse> {
+    const params = namespace ? { namespace } : undefined;
     const response = await apiClient.get<QueryDetailResponse>(
       `/api/v1/queries/${queryName}`,
+      params ? { params } : undefined,
     );
     return response;
   },

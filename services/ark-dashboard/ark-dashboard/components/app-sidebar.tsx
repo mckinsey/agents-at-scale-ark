@@ -139,7 +139,10 @@ export function AppSidebar() {
         fromSection: getCurrentSection(),
       },
     });
-    router.push(`/${sectionKey}`);
+    const searchParams = new URLSearchParams(window.location.search);
+    const queryString = searchParams.toString();
+    const path = sectionKey ? `/${sectionKey}` : '/';
+    router.push(queryString ? `${path}?${queryString}` : path);
   };
 
   const getCurrentSection = () => {

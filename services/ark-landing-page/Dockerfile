@@ -10,7 +10,10 @@ FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
+
+ARG NEXT_PUBLIC_ARK_DASHBOARD_URL
+RUN echo "Building with NEXT_PUBLIC_ARK_DASHBOARD_URL=${NEXT_PUBLIC_ARK_DASHBOARD_URL}" && \
+    NEXT_PUBLIC_ARK_DASHBOARD_URL=${NEXT_PUBLIC_ARK_DASHBOARD_URL} npm run build
 
 FROM base AS runner
 WORKDIR /app
@@ -20,8 +23,8 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+RUN mkdir -p ./public
+COPY --from=builder /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs

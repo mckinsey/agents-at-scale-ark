@@ -142,9 +142,12 @@ export const evaluationsService = {
   /**
    * Get all evaluations in a namespace with optional filtering
    */
-  async getAll(): Promise<Evaluation[]> {
-    const response =
-      await apiClient.get<EvaluationListResponse>(`/api/v1/evaluations`);
+  async getAll(namespace?: string): Promise<Evaluation[]> {
+    const params = namespace ? { namespace } : undefined;
+    const response = await apiClient.get<EvaluationListResponse>(
+      `/api/v1/evaluations`,
+      params ? { params } : undefined,
+    );
 
     // For now, just use the response items directly
     // TODO: Implement proper filtering once we have real spec data

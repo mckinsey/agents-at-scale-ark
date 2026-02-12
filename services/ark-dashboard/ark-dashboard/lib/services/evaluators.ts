@@ -24,9 +24,12 @@ export const evaluatorsService = {
   /**
    * Get all evaluators in a namespace
    */
-  async getAll(): Promise<Evaluator[]> {
-    const response =
-      await apiClient.get<EvaluatorListResponse>(`/api/v1/evaluators`);
+  async getAll(namespace?: string): Promise<Evaluator[]> {
+    const params = namespace ? { namespace } : undefined;
+    const response = await apiClient.get<EvaluatorListResponse>(
+      `/api/v1/evaluators`,
+      params ? { params } : undefined,
+    );
 
     return response.items || [];
   },
@@ -34,10 +37,12 @@ export const evaluatorsService = {
   /**
    * Get a single evaluator by name (basic response)
    */
-  async getByName(name: string): Promise<Evaluator | null> {
+  async getByName(name: string, namespace?: string): Promise<Evaluator | null> {
     try {
+      const params = namespace ? { namespace } : undefined;
       const response = await apiClient.get<EvaluatorResponse>(
         `/api/v1/evaluators/${name}`,
+        params ? { params } : undefined,
       );
       return response;
     } catch (error) {

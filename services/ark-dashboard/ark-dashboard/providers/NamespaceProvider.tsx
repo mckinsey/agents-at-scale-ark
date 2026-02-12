@@ -45,7 +45,7 @@ function NamespaceProvider({ children }: PropsWithChildren) {
   const [isNamespaceResolved, setIsNamespaceResolved] = useState(false);
   const [readOnlyMode, setReadOnlyMode] = useState(true);
 
-  const { data, isPending, error } = useGetContext();
+  const { data, isPending, error } = useGetContext(namespaceFromQueryParams);
 
   const createQueryString = useCallback((name: string, value: string) => {
     const params = new URLSearchParams();

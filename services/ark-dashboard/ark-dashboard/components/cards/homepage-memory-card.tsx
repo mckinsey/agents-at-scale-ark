@@ -2,11 +2,13 @@
 
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { useGetMemoryResources } from '@/lib/services/memory-hooks';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { MetricCard } from './metric-card';
 
 export function HomepageMemoryCard() {
-  const { data, isPending, error } = useGetMemoryResources();
+  const { namespace } = useNamespace();
+  const { data, isPending, error } = useGetMemoryResources(namespace);
 
   const count = data?.length || 0;
 

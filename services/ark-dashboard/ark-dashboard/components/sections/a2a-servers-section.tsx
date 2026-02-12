@@ -58,7 +58,7 @@ export const A2AServersSection = forwardRef<
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await A2AServersService.getAll();
+      const data = await A2AServersService.getAll(namespace);
       setA2AServers(data);
     } catch (error) {
       console.error('Failed to load A2A servers:', error);
@@ -71,7 +71,7 @@ export const A2AServersSection = forwardRef<
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [namespace]);
 
   useEffect(() => {
     void loadData();

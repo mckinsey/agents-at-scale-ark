@@ -5,11 +5,13 @@ import { toast } from 'sonner';
 
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { useGetAllModels } from '@/lib/services/models-hooks';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { MetricCard } from './metric-card';
 
 export function HomepageModelsCard() {
-  const { data, isPending, error } = useGetAllModels();
+  const { namespace } = useNamespace();
+  const { data, isPending, error } = useGetAllModels(namespace);
 
   const count = data?.length || 0;
   const section = DASHBOARD_SECTIONS.models;

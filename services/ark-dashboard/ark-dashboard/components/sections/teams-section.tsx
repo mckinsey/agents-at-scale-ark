@@ -35,7 +35,7 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
     const [teamEditorOpen, setTeamEditorOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const showLoading = useDelayedLoading(loading);
-    const { readOnlyMode } = useNamespace();
+    const { readOnlyMode, namespace } = useNamespace();
 
     useImperativeHandle(ref, () => ({
       openAddEditor: () => setTeamEditorOpen(true),
@@ -46,8 +46,8 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
         setLoading(true);
         try {
           const [teamsData, agentsData] = await Promise.all([
-            teamsService.getAll(),
-            agentsService.getAll(),
+            teamsService.getAll(namespace),
+            agentsService.getAll(namespace),
           ]);
           setTeams(teamsData);
           setAgents(agentsData);
@@ -65,7 +65,7 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
       };
 
       loadData();
-    }, []);
+    }, [namespace]);
 
     const handleSaveTeam = async (
       team: (TeamCreateRequest | TeamUpdateRequest) & { id?: string },

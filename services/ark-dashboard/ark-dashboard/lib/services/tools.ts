@@ -35,15 +35,21 @@ interface ToolListResponse {
 // Service for tool operations
 export const toolsService = {
   // Get all tools in a namespace
-  async getAll(): Promise<Tool[]> {
-    const response = await apiClient.get<ToolListResponse>(`/api/v1/tools`);
+  async getAll(namespace?: string): Promise<Tool[]> {
+    const params = namespace ? { namespace } : undefined;
+    const response = await apiClient.get<ToolListResponse>(
+      `/api/v1/tools`,
+      params ? { params } : undefined,
+    );
     return response.items.map(item => ({ ...item, id: item.name }));
   },
 
   // Get detailed tool information including schema
-  async getDetail(toolName: string): Promise<ToolDetail> {
+  async getDetail(toolName: string, namespace?: string): Promise<ToolDetail> {
+    const params = namespace ? { namespace } : undefined;
     const response = await apiClient.get<ToolDetail>(
       `/api/v1/tools/${toolName}`,
+      params ? { params } : undefined,
     );
     return response;
   },

@@ -9,10 +9,10 @@ import type { Secret, SecretDetailResponse } from './secrets';
 export const GET_ALL_SECRETS_QUERY_KEY = 'get-all-secrets';
 export const CREATE_SECRET_MUTATION_KEY = 'create-secret';
 
-export const useGetAllSecrets = () => {
+export const useGetAllSecrets = (namespace?: string) => {
   return useQuery({
-    queryKey: [GET_ALL_SECRETS_QUERY_KEY],
-    queryFn: secretsService.getAll,
+    queryKey: [GET_ALL_SECRETS_QUERY_KEY, namespace],
+    queryFn: () => secretsService.getAll(namespace),
   });
 };
 
