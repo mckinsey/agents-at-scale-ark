@@ -12,7 +12,10 @@ import {
   Square,
   X,
 } from 'lucide-react';
-import type { ChatCompletionChunk } from 'openai/resources/chat/completions';
+import type {
+  ChatCompletionChunk,
+  ChatCompletionMessageParam,
+} from 'openai/resources/chat/completions';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { chatHistoryAtom, createNewSessionId } from '@/atoms/chat-history';
@@ -158,14 +161,20 @@ export default function FloatingChat({
     messages: ExtendedChatMessage[],
     currentMsg: string,
   ): ExtendedChatMessage[] => {
-    return [...messages, { role: 'user', content: currentMsg }];
+    return [
+      ...messages,
+      { role: 'user', content: currentMsg } as ExtendedChatMessage,
+    ];
   };
 
   const handleStreamChatResponse = async (userMessage: string) => {
     const messageArray = buildChatMessages(chatMessages, userMessage);
 
     const assistantMessageIndex = chatMessages.length + 1;
-    updateChatMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+    updateChatMessages(prev => [
+      ...prev,
+      { role: 'assistant', content: '' } as ExtendedChatMessage,
+    ]);
 
     let accumulatedContent = '';
     const accumulatedToolCalls: Array<{
@@ -179,7 +188,7 @@ export default function FloatingChat({
     let queryName = '';
 
     for await (const chunk of chatService.streamChatResponse(
-      messageArray,
+      messageArray as ChatCompletionMessageParam[],
       type,
       name,
       sessionId,
@@ -233,7 +242,7 @@ export default function FloatingChat({
           role: 'assistant',
           content: accumulatedContent,
           tool_calls: accumulatedToolCalls,
-        };
+        } as ExtendedChatMessage;
         return updated;
       });
     }
@@ -248,7 +257,7 @@ export default function FloatingChat({
             status: 'failed',
             queryName: queryName || undefined,
           },
-        };
+        } as ExtendedChatMessage;
         return updated;
       });
       return;
@@ -262,7 +271,7 @@ export default function FloatingChat({
             role: 'tool',
             tool_call_id: toolCall.id,
             content: `Called ${toolCall.function.name} with ${toolCall.function.arguments}`,
-          });
+          } as ExtendedChatMessage);
         });
         return newMessages;
       });
@@ -277,7 +286,7 @@ export default function FloatingChat({
     // updateChatMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
     const query = await chatService.submitChatQuery(
-      messageArray,
+      messageArray as ChatCompletionMessageParam[],
       type,
       name,
       sessionId,
@@ -299,13 +308,13 @@ export default function FloatingChat({
             if (result.messages && result.messages.length > 0) {
               updateChatMessages(prev => [
                 ...prev,
-                ...result.messages!.map((msg): ChatCompletionMessageParam => {
+                ...result.messages!.map((msg): ExtendedChatMessage => {
                   if (msg.role === 'tool') {
                     return {
                       role: 'tool',
                       content: msg.content || '',
                       tool_call_id: msg.tool_call_id || '',
-                    };
+                    } as ExtendedChatMessage;
                   } else if (msg.role === 'assistant') {
                     const baseMsg: {
                       role: 'assistant';
@@ -330,28 +339,34 @@ export default function FloatingChat({
                         function: tc.function,
                       }));
                     }
-                    return baseMsg;
+                    return baseMsg as ExtendedChatMessage;
                   } else if (msg.role === 'user') {
                     const baseMsg = {
                       role: 'user' as const,
                       content: msg.content || '',
                     };
                     if (msg.name) {
-                      return { ...baseMsg, name: msg.name };
+                      return {
+                        ...baseMsg,
+                        name: msg.name,
+                      } as ExtendedChatMessage;
                     }
-                    return baseMsg;
+                    return baseMsg as ExtendedChatMessage;
                   } else {
                     return {
                       role: 'system',
                       content: msg.content || '',
-                    };
+                    } as ExtendedChatMessage;
                   }
                 }),
               ]);
             } else if (result.response) {
               updateChatMessages(prev => [
                 ...prev,
-                { role: 'assistant', content: result.response! },
+                {
+                  role: 'assistant',
+                  content: result.response!,
+                } as ExtendedChatMessage,
               ]);
             }
           } else if (result.status === 'error') {
@@ -427,7 +442,7 @@ export default function FloatingChat({
     // Add user message
     updateChatMessages(prev => [
       ...prev,
-      { role: 'user', content: userMessage },
+      { role: 'user', content: userMessage } as ExtendedChatMessage,
     ]);
 
     // Keep focus on input
@@ -627,15 +642,16 @@ export default function FloatingChat({
                 )}
 
                 {chatMessages.map((message, index) => {
-                  if (message.role === 'tool') {
+                  const msg = message as ChatCompletionMessageParam;
+                  if (msg.role === 'tool') {
                     return '';
                   }
 
                   let content = '';
-                  if (typeof message.content === 'string') {
-                    content = message.content;
-                  } else if (Array.isArray(message.content)) {
-                    content = message.content
+                  if (typeof msg.content === 'string') {
+                    content = msg.content;
+                  } else if (Array.isArray(msg.content)) {
+                    content = msg.content
                       .filter(
                         part =>
                           typeof part === 'object' &&
@@ -654,20 +670,20 @@ export default function FloatingChat({
                   }
 
                   const toolCalls =
-                    'tool_calls' in message ? message.tool_calls : undefined;
+                    'tool_calls' in msg ? msg.tool_calls : undefined;
 
-                  const senderName =
-                    'name' in message ? message.name : undefined;
+                  const senderName = 'name' in msg ? msg.name : undefined;
 
                   const toolCallsWithResults = toolCalls?.map(toolCall => {
                     const toolResultMessage = chatMessages
                       .slice(index + 1)
                       .find(
-                        msg =>
-                          msg.role === 'tool' &&
-                          'tool_call_id' in msg &&
-                          msg.tool_call_id === toolCall.id,
-                      );
+                        m =>
+                          (m as ChatCompletionMessageParam).role === 'tool' &&
+                          'tool_call_id' in m &&
+                          (m as { tool_call_id: string }).tool_call_id ===
+                            toolCall.id,
+                      ) as ChatCompletionMessageParam | undefined;
 
                     return {
                       ...toolCall,
@@ -687,7 +703,7 @@ export default function FloatingChat({
                   });
 
                   const isMaxTurnsMessage =
-                    message.role === 'system' &&
+                    msg.role === 'system' &&
                     content.includes('maximum turns limit');
 
                   const hasToolCalls =
@@ -729,7 +745,7 @@ export default function FloatingChat({
                         ))}
                       {hasContent && (
                         <ChatMessage
-                          role={message.role as 'user' | 'assistant' | 'system'}
+                          role={msg.role as 'user' | 'assistant' | 'system'}
                           content={content}
                           viewMode={viewMode}
                           sender={senderName}

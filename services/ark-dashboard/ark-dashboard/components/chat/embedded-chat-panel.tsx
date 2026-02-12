@@ -998,7 +998,7 @@ export function EmbeddedChatPanel({
                 if (typeof msg.content === 'string') {
                   content = msg.content;
                 } else if (Array.isArray(msg.content)) {
-                  content = message.content
+                  content = msg.content
                     .filter(
                       part =>
                         typeof part === 'object' &&
@@ -1030,7 +1030,7 @@ export function EmbeddedChatPanel({
                         'tool_call_id' in m &&
                         (m as { tool_call_id: string }).tool_call_id ===
                           toolCall.id,
-                    );
+                    ) as ChatCompletionMessageParam | undefined;
 
                   return {
                     ...toolCall,
