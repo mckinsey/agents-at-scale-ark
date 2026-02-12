@@ -23,3 +23,6 @@
 
 # Helm chart artifacts
 dist/chart/*.tgz
+
+# Claude Code artifacts
+CLAUDE.md

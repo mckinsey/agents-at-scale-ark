@@ -1,5 +1,11 @@
 # DevSpace configuration for ark service
 version: v2beta1
+name: ark
+
+vars:
+  STORAGE_BACKEND:
+    source: env
+    default: "etcd"
 
 images:
   ark-controller:
@@ -10,9 +16,35 @@ images:
 pipelines:
   deploy: |-
     build_images --all
-    create_deployments --all
+    if [ "${STORAGE_BACKEND}" == "postgresql" ]; then
+      create_deployments ark-storage-dev
+      for crd in $(kubectl get crd -o name 2>/dev/null | grep ark.mckinsey.com); do
+        kubectl delete "$crd" --wait=false 2>/dev/null || true
+        kubectl patch "$crd" -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null || true
+      done
+      for svc in v1alpha1.ark.mckinsey.com v1prealpha1.ark.mckinsey.com; do
+        if kubectl get apiservice "$svc" --no-headers 2>/dev/null; then
+          kubectl label apiservice "$svc" app.kubernetes.io/managed-by=Helm --overwrite 2>/dev/null || true
+          kubectl annotate apiservice "$svc" meta.helm.sh/release-name=ark-controller meta.helm.sh/release-namespace=ark-system --overwrite 2>/dev/null || true
+        fi
+      done
+    fi
+    create_deployments ark-controller
   dev: |-
-    create_deployments --all
+    if [ "${STORAGE_BACKEND}" == "postgresql" ]; then
+      create_deployments ark-storage-dev
+      for crd in $(kubectl get crd -o name 2>/dev/null | grep ark.mckinsey.com); do
+        kubectl delete "$crd" --wait=false 2>/dev/null || true
+        kubectl patch "$crd" -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null || true
+      done
+      for svc in v1alpha1.ark.mckinsey.com v1prealpha1.ark.mckinsey.com; do
+        if kubectl get apiservice "$svc" --no-headers 2>/dev/null; then
+          kubectl label apiservice "$svc" app.kubernetes.io/managed-by=Helm --overwrite 2>/dev/null || true
+          kubectl annotate apiservice "$svc" meta.helm.sh/release-name=ark-controller meta.helm.sh/release-namespace=ark-system --overwrite 2>/dev/null || true
+        fi
+      done
+    fi
+    create_deployments ark-controller
     start_dev --all
 
 deployments:
@@ -29,12 +61,11 @@ deployments:
               tag: ${runtime.images.ark-controller.tag}
             resources:
               limits:
-                memory: "2048Mi"
+                memory: "4096Mi"
                 cpu: "2000m"
               requests:
-                memory: "256Mi"
+                memory: "512Mi"
                 cpu: "200m"
-          # Override security context for development
           securityContext:
             runAsNonRoot: false
         webhook:
@@ -45,11 +76,10 @@ dev:
     imageSelector: ark-controller
     devImage: golang:1.24.13-bookworm
     command:
-      ["sh", "-c", "cd /app && GOTOOLCHAIN=auto go run cmd/main.go --leader-elect=false"]
+      ["sh", "-c", "cd /app && mkdir -p internal/apiserver/crds && cp config/crd/bases/*.yaml internal/apiserver/crds/ && GOTOOLCHAIN=auto go run cmd/main.go --leader-elect=false"]
     namespace: ark-system
     logs:
       lastLines: 50
-    # File synchronization for hot reload
     sync:
       - path: .:/app
         startContainer: true
@@ -57,7 +87,49 @@ dev:
         uploadExcludeFile: .dockerignore
         onUpload:
           restartContainer: true
-    # Enable SSH for IDE integration
     ssh:
       enabled: true
+
+profiles:
+  - name: storage-postgresql
+    activation:
+      - vars:
+          STORAGE_BACKEND: "postgresql"
+    patches:
+      - op: add
+        path: deployments.ark-storage-dev
+        value:
+          namespace: ark-system
+          helm:
+            chart:
+              path: ../charts/ark-storage-dev
+            releaseName: ark-storage-dev
+      - op: add
+        path: deployments.ark-controller.helm.values.storage
+        value:
+          backend: postgresql
+          postgresql:
+            host: ark-storage-dev
+            port: 5432
+            database: ark
+            user: postgres
+            passwordSecretName: ark-storage-dev-password
+      - op: replace
+        path: dev.ark-controller.command
+        value:
+          - "sh"
+          - "-c"
+          - |
+            cd /app
+            mkdir -p internal/apiserver/crds && cp config/crd/bases/*.yaml internal/apiserver/crds/
+            GOTOOLCHAIN=auto \
+            ARK_STORAGE_BACKEND=postgresql \
+            ARK_POSTGRES_HOST=ark-storage-dev.ark-system.svc.cluster.local \
+            ARK_POSTGRES_PORT=5432 \
+            ARK_POSTGRES_DATABASE=ark \
+            ARK_POSTGRES_USER=postgres \
+            ARK_POSTGRES_PASSWORD=arkdev123 \
+            ARK_POSTGRES_SSL_MODE=disable \
+            ARK_APISERVER_PORT=6443 \
+            go run cmd/main.go --leader-elect=false
 

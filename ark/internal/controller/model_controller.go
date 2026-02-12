@@ -64,6 +64,8 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// Probe the model to test whether it is available.
 	result := r.probeModel(ctx, model)
 
+	pollInterval := getPollInterval(model.Spec.PollInterval)
+
 	if !result.Available {
 		changed, err := r.reconcileCondition(ctx, &model, ModelAvailable, metav1.ConditionFalse, "ModelProbeFailed", result.Message)
 		if err != nil {
@@ -78,7 +80,7 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		if changed {
 			r.Eventing.ModelRecorder().ModelUnavailable(ctx, &model, result.Message)
 		}
-		return ctrl.Result{RequeueAfter: addJitter(model.Spec.PollInterval.Duration)}, nil
+		return ctrl.Result{RequeueAfter: addJitter(pollInterval)}, nil
 	}
 
 	// Success case - model is available
@@ -87,7 +89,7 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	// Continue polling at regular interval with jitter to prevent thundering herd
-	return ctrl.Result{RequeueAfter: addJitter(model.Spec.PollInterval.Duration)}, nil
+	return ctrl.Result{RequeueAfter: addJitter(pollInterval)}, nil
 }
 
 // addJitter adds ±10% random jitter to a duration to prevent thundering herd
