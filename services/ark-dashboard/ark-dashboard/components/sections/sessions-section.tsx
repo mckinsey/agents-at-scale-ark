@@ -393,7 +393,7 @@ function WorkflowStepDetail({
                   </div>
                   {detail.workflowName && detail.nodeId && detail.namespace && (
                     <a
-                      href={`http://argo.127.0.0.1.nip.io:8080/workflows/${detail.namespace}/${detail.workflowName}?tab=workflow&nodeId=${detail.nodeId}`}
+                      href={`${process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746'}/workflows/${detail.namespace}/${detail.workflowName}?tab=workflow&nodeId=${detail.nodeId}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-xs break-all text-blue-400 underline hover:text-blue-300">
@@ -866,7 +866,7 @@ function SessionDetailView({
               session.uid && (
                 <Button variant="outline" size="sm" asChild>
                   <a
-                    href={`http://argo.127.0.0.1.nip.io:8080/workflows/${session.namespace}/${session.name}?uid=${session.uid}`}
+                    href={`${process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746'}/workflows/${session.namespace}/${session.name}?uid=${session.uid}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     title="View in Argo Workflows"
