@@ -61,8 +61,10 @@ Ark supports the [A2A (Agent-to-Agent) protocol](https://github.com/a2aproject/A
 Ark also includes an experimental A2A-native execution mode behind `ark.mckinsey.com/a2a-experimental-enabled: "true"`. In this mode:
 
 - Ark executes agent and team targets with `protocol.Message` end-to-end.
-- Agents must use an A2A-compatible execution engine (`executionEngine` required, no local OpenAI execution path).
-- Existing OpenAI-format memory records are still readable for compatibility.
+- Model-backed agents run a native-local A2A loop with OpenAI conversion only at the model provider boundary.
+- Agents with execution engines route to native A2A endpoints (`a2a-langchain` via `/execute-a2a`) or through a compat wrapper (`langchain` via `/execute`).
+- All stream writes are strict: failures propagate as errors and halt execution.
+- Existing OpenAI-format memory records remain readable for compatibility.
 
 See the [RFC: Experimental A2A transport](https://mckinsey.github.io/agents-at-scale-ark/reference/a2a-experimental-rfc) for details and constraints.
 

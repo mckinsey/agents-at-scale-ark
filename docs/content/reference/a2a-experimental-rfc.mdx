@@ -98,6 +98,8 @@ Examples:
 - A Gemini-backed engine
 - A custom internal engine
 
+Model-backed agents (those without an `ExecutionEngine`) run a native-local A2A loop where `protocol.Message` is the internal type and OpenAI conversion occurs only at the model provider boundary. This means tools, delegation, streaming, and result composition all operate on A2A messages natively.
+
 Teams can compose heterogeneous members as long as each member is A2A-compatible.
 
 ## Fail-fast behavior
@@ -110,6 +112,8 @@ When experimental mode is enabled:
 - Native response serialization fails if `ExecutionResult` does not contain A2A-native messages.
 - Native event streams do not emit OpenAI completion chunks at finalize time.
 - Native error events use `TaskStatusUpdateEvent` with `state=failed`, not plain messages.
+- All A2A execution paths (native-local, compat wrapper, external engine) use strict streaming: stream write failures propagate as errors and halt execution. No stream write is silently discarded.
+- In the native-local tool loop, tool execution errors are checked before streaming the tool result to consumers, preventing partial/ambiguous stream state.
 
 ## A2A gateway bridge (ark-api)
 
@@ -149,8 +153,8 @@ If the experiment is withdrawn, removal is isolated to these additive functions 
 | Tool delegation | A2A branches in `AgentToolExecutor.Execute`, `TeamToolExecutor.Execute` |
 | ExecutionResult | `A2AMessages` field |
 | Capability split | `executor_capability.go`, `a2a_execution_compat.go`, `Agent.resolvedCapability`, `ExecutionEngineClient.ExecuteA2A` |
-| Native local loop | `a2a_execution_local.go`, `executionCapabilityA2ANativeLocal`, `executeLocallyA2ANative` routing in `executeAgentA2A` |
-| LangChain executor | `services/executor-langchain/src/langchain_executor/a2a_executor.py`, `services/executor-langchain/src/langchain_executor/app.py` (`/execute-a2a`) |
+| Native local loop | `a2a_execution_local.go` (`executeLocallyA2ANative`, `executeToolCallsA2ANative`, `streamNativeA2AMessageStrict`), `executionCapabilityA2ANativeLocal` routing in `executeAgentA2A` |
+| LangChain executor | `services/executor-langchain/src/langchain_executor/a2a_executor.py`, `services/executor-langchain/src/langchain_executor/app.py` (`/execute-a2a`, `_execute_a2a_fallback`) |
 | SDK/contract | `ExecutionEngineRequest`/`ExecutionEngineResponse` A2A fields, `ExecutorApp.setup_a2a_route` |
 | Helm registration | optional `a2a-langchain` `ExecutionEngine` template (`services/executor-langchain/chart/templates/executionengine.yaml`) |
 

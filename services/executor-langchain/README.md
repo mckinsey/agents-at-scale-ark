@@ -15,3 +15,4 @@ make dev      # Run in development mode
 - Compat endpoint: `POST /execute` via engine type `langchain`
 - Native endpoint: `POST /execute-a2a` via engine type `a2a-langchain`
 - `a2a-langchain` registration is optional via Helm value `a2aExecutionEngine.enabled`
+- Fallback `/execute-a2a` route (when SDK lacks `setup_a2a_route`) returns structured `ExecutionEngineResponse` errors
