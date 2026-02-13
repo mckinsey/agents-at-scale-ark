@@ -1,6 +1,5 @@
 'use client';
 
-import * as ToggleGroupPrimitive from '@radix-ui/react-toggle-group';
 import { type VariantProps, cva } from 'class-variance-authority';
 import * as React from 'react';
 
@@ -28,40 +27,92 @@ const toggleVariants = cva(
   },
 );
 
-const ToggleGroupContext = React.createContext<
-  VariantProps<typeof toggleVariants>
->({
-  size: 'default',
-  variant: 'default',
-});
+interface ToggleGroupProps
+  extends React.HTMLAttributes<HTMLDivElement>,
+    VariantProps<typeof toggleVariants> {
+  type?: 'single' | 'multiple';
+  value?: string | string[];
+  defaultValue?: string | string[];
+  onValueChange?: (value: string) => void;
+}
 
-const ToggleGroup = React.forwardRef<
-  React.ElementRef<typeof ToggleGroupPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof ToggleGroupPrimitive.Root> &
-    VariantProps<typeof toggleVariants>
->(({ className, variant, size, children, ...props }, ref) => (
-  <ToggleGroupPrimitive.Root
-    ref={ref}
-    className={cn('flex items-center justify-center gap-1', className)}
-    {...props}>
-    <ToggleGroupContext.Provider value={{ variant, size }}>
-      {children}
-    </ToggleGroupContext.Provider>
-  </ToggleGroupPrimitive.Root>
-));
+const ToggleGroupContext = React.createContext<{
+  value?: string | string[];
+  onValueChange?: (value: string) => void;
+  variant?: 'default' | 'outline' | null;
+  size?: 'default' | 'sm' | 'lg' | null;
+}>({});
 
-ToggleGroup.displayName = ToggleGroupPrimitive.Root.displayName;
+const ToggleGroup = React.forwardRef<HTMLDivElement, ToggleGroupProps>(
+  (
+    {
+      className,
+      variant,
+      size,
+      children,
+      type = 'single',
+      value,
+      defaultValue,
+      onValueChange,
+      ...props
+    },
+    ref,
+  ) => {
+    const [internalValue, setInternalValue] = React.useState(
+      defaultValue || '',
+    );
+    const currentValue = value !== undefined ? value : internalValue;
+
+    const handleValueChange = (newValue: string) => {
+      if (type === 'single') {
+        const updatedValue = currentValue === newValue ? '' : newValue;
+        setInternalValue(updatedValue);
+        onValueChange?.(updatedValue);
+      }
+    };
+
+    return (
+      <div
+        ref={ref}
+        className={cn('flex items-center justify-center gap-1', className)}
+        {...props}>
+        <ToggleGroupContext.Provider
+          value={{
+            value: currentValue,
+            onValueChange: handleValueChange,
+            variant,
+            size,
+          }}>
+          {children}
+        </ToggleGroupContext.Provider>
+      </div>
+    );
+  },
+);
+
+ToggleGroup.displayName = 'ToggleGroup';
+
+interface ToggleGroupItemProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof toggleVariants> {
+  value: string;
+  'aria-label'?: string;
+}
 
 const ToggleGroupItem = React.forwardRef<
-  React.ElementRef<typeof ToggleGroupPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof ToggleGroupPrimitive.Item> &
-    VariantProps<typeof toggleVariants>
->(({ className, children, variant, size, ...props }, ref) => {
+  HTMLButtonElement,
+  ToggleGroupItemProps
+>(({ className, children, variant, size, value, ...props }, ref) => {
   const context = React.useContext(ToggleGroupContext);
+  const isSelected = context.value === value;
 
   return (
-    <ToggleGroupPrimitive.Item
+    <button
       ref={ref}
+      type="button"
+      role="radio"
+      aria-checked={isSelected}
+      data-state={isSelected ? 'on' : 'off'}
       className={cn(
         toggleVariants({
           variant: context.variant || variant,
@@ -69,12 +120,13 @@ const ToggleGroupItem = React.forwardRef<
         }),
         className,
       )}
+      onClick={() => context.onValueChange?.(value)}
       {...props}>
       {children}
-    </ToggleGroupPrimitive.Item>
+    </button>
   );
 });
 
-ToggleGroupItem.displayName = ToggleGroupPrimitive.Item.displayName;
+ToggleGroupItem.displayName = 'ToggleGroupItem';
 
 export { ToggleGroup, ToggleGroupItem, toggleVariants };
