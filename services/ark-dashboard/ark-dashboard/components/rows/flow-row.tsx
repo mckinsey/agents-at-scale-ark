@@ -14,6 +14,10 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import type { WorkflowParameter } from '@/lib/services/workflow-templates';
+import { useNamespace } from '@/providers/NamespaceProvider';
+
+const ARGO_BASE_URL =
+  process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746';
 
 export interface Flow {
   id: string;
@@ -26,6 +30,7 @@ export interface Flow {
 interface FlowRowProps {
   readonly flow: Flow;
   readonly parameters?: WorkflowParameter[];
+  readonly readOnly?: boolean;
   readonly onRun?: (
     flowId: string,
     parameters?: Record<string, string>,
@@ -34,7 +39,14 @@ interface FlowRowProps {
   readonly onDelete?: (flowId: string) => Promise<void>;
 }
 
-export function FlowRow({ flow, parameters, onRun, onDelete }: FlowRowProps) {
+export function FlowRow({
+  flow,
+  parameters,
+  readOnly,
+  onRun,
+  onDelete,
+}: FlowRowProps) {
+  const { namespace } = useNamespace();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const handleRunWorkflow = async (
@@ -99,7 +111,7 @@ export function FlowRow({ flow, parameters, onRun, onDelete }: FlowRowProps) {
                 className="pointer-events-auto h-8 w-8 cursor-pointer p-0"
                 asChild>
                 <a
-                  href={`http://argo.127.0.0.1.nip.io:8080/workflow-templates/default/${flow.id}`}
+                  href={`${ARGO_BASE_URL}/workflow-templates/${namespace}/${flow.id}`}
                   target="_blank"
                   rel="noopener noreferrer">
                   <ExternalLink className="h-4 w-4" />
@@ -118,11 +130,14 @@ export function FlowRow({ flow, parameters, onRun, onDelete }: FlowRowProps) {
                   variant="ghost"
                   size="sm"
                   className="pointer-events-auto h-8 w-8 cursor-pointer p-0"
+                  disabled={readOnly}
                   onClick={handleDeleteClick}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Delete template</TooltipContent>
+              <TooltipContent>
+                {readOnly ? 'Delete disabled in demo mode' : 'Delete template'}
+              </TooltipContent>
             </Tooltip>
           </TooltipProvider>
         )}

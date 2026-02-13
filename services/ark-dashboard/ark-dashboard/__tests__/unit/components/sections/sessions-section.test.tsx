@@ -890,7 +890,7 @@ describe('SessionsSection', () => {
         const argoLink = screen.getByRole('link', { name: /view in argo/i });
         expect(argoLink).toHaveAttribute(
           'href',
-          'http://argo.127.0.0.1.nip.io:8080/workflows/default/test-workflow-123?uid=abc-123-def'
+          'http://localhost:2746/workflows/default/test-workflow-123?uid=abc-123-def'
         );
         expect(argoLink).toHaveAttribute('target', '_blank');
         expect(argoLink).toHaveAttribute('rel', 'noopener noreferrer');

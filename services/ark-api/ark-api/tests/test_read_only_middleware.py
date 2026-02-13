@@ -240,3 +240,50 @@ class TestReadOnlyMiddleware(unittest.IsolatedAsyncioTestCase):
 
         call_next.assert_not_called()
         self.assertEqual(response.status_code, 403)
+
+    @patch.dict(os.environ, {"READ_ONLY_MODE": "true"})
+    async def test_read_only_enabled_allows_create_workflow(self):
+        middleware = ReadOnlyMiddleware(Mock())
+
+        request = Mock()
+        request.method = "POST"
+        request.url.path = "/v1/resources/apis/argoproj.io/v1alpha1/Workflow"
+
+        call_next = AsyncMock()
+        call_next.return_value = Mock(status_code=200)
+
+        response = await middleware.dispatch(request, call_next)
+
+        call_next.assert_called_once_with(request)
+        self.assertEqual(response.status_code, 200)
+
+    @patch.dict(os.environ, {"READ_ONLY_MODE": "true"})
+    async def test_read_only_enabled_allows_delete_workflow(self):
+        middleware = ReadOnlyMiddleware(Mock())
+
+        request = Mock()
+        request.method = "DELETE"
+        request.url.path = "/v1/resources/apis/argoproj.io/v1alpha1/Workflow/my-wf"
+
+        call_next = AsyncMock()
+        call_next.return_value = Mock(status_code=204)
+
+        response = await middleware.dispatch(request, call_next)
+
+        call_next.assert_called_once_with(request)
+        self.assertEqual(response.status_code, 204)
+
+    @patch.dict(os.environ, {"READ_ONLY_MODE": "true"})
+    async def test_read_only_enabled_still_blocks_create_agent(self):
+        middleware = ReadOnlyMiddleware(Mock())
+
+        request = Mock()
+        request.method = "POST"
+        request.url.path = "/v1/agents"
+
+        call_next = AsyncMock()
+
+        response = await middleware.dispatch(request, call_next)
+
+        call_next.assert_not_called()
+        self.assertEqual(response.status_code, 403)

@@ -41,22 +41,6 @@ spec:
         {{- end }}
         ports:
         - containerPort: {{ .Values.service.targetPort }}
-        readinessProbe:
-          httpGet:
-            path: /
-            port: {{ .Values.service.targetPort }}
-          initialDelaySeconds: 5
-          periodSeconds: 5
-          timeoutSeconds: 3
-          failureThreshold: 3
-        livenessProbe:
-          httpGet:
-            path: /
-            port: {{ .Values.service.targetPort }}
-          initialDelaySeconds: 10
-          periodSeconds: 10
-          timeoutSeconds: 3
-          failureThreshold: 3
         env:
           - name: NODE_ENV
             value: {{ required "app.config.nodeEnv is required" .Values.app.config.nodeEnv | quote }}
