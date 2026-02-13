@@ -1,0 +1,145 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: a2a-experimental-team-graph
+spec:
+  description: Test graph team execution with A2A experimental enabled
+  timeouts:
+    apply: 30s
+    assert: 90s
+    exec: 120s
+  steps:
+  - name: setup-mock-llm
+    try:
+    - script:
+        content: |
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.28 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml \
+            --wait --timeout=120s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - apply:
+        file: manifests/*.yaml
+    catch:
+    - events: {}
+
+  - name: wait-for-resources
+    try:
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: test-model
+          status:
+            conditions:
+            - type: ModelAvailable
+              status: "True"
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: researcher
+          status:
+            conditions:
+            - type: Available
+              status: "True"
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: analyzer
+          status:
+            conditions:
+            - type: Available
+              status: "True"
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: reviewer
+          status:
+            conditions:
+            - type: Available
+              status: "True"
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: writer
+          status:
+            conditions:
+            - type: Available
+              status: "True"
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Team
+          metadata:
+            name: graph-team
+          status:
+            conditions:
+            - type: Available
+              status: "True"
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model
+
+  - name: validate-query-completion
+    try:
+    - assert:
+        timeout: 180s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: a2a-graph-team-query
+          status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: a2a-graph-team-query
+
+  - name: validate-response
+    try:
+    - assert:
+        timeout: 5s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: a2a-graph-team-query
+          status:
+            (response != null): true
+            (response.target.type): team
+            (response.target.name): 'graph-team'
+            (length(response.content) > `200`): true
+    catch:
+    - events: {}
+    - script:
+        content: |
+          echo "=== Query response ==="
+          kubectl get query a2a-graph-team-query -n $NAMESPACE -o jsonpath='{.status.response}' 2>/dev/null || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

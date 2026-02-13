@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: reviewer
+spec:
+  prompt: |
+    You are a quality reviewer. Review the analysis and ensure accuracy and completeness.
+    Provide review feedback and validation. Keep responses brief for testing.
+  modelRef:
+    name: test-model

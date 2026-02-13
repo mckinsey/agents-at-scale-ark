@@ -1,0 +1,131 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: a2a-experimental-memory
+spec:
+  description: Test A2A memory operations (AddA2AMessages, GetA2AMessages) with experimental enabled
+  timeouts:
+    apply: 30s
+    assert: 60s
+    exec: 120s
+  steps:
+  - name: setup-mock-llm
+    try:
+    - script:
+        content: |
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.28 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml \
+            --wait --timeout=120s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1prealpha1
+          kind: A2AServer
+          metadata:
+            name: mock-llm-message-counter
+          status:
+            (contains(conditions[?type == 'Ready'].status, 'True')): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1prealpha1
+        kind: A2AServer
+        name: mock-llm-message-counter
+
+  - name: test-first-query
+    try:
+    - apply:
+        file: manifests/a01-query-first.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: a2a-memory-first
+          status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
+    - assert:
+        timeout: 5s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: a2a-memory-first
+          status:
+            (response != null): true
+            (contains(response.content, '1 message(s) received')): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: a2a-memory-first
+
+  - name: test-second-query-with-context
+    try:
+    - script:
+        content: |
+          CONTEXT_ID=$(kubectl get query a2a-memory-first -n $NAMESPACE -o jsonpath='{.status.response.a2a.contextId}')
+          if [ -z "$CONTEXT_ID" ]; then
+            echo "ERROR: contextId not set in response a2a metadata" >&2
+            exit 1
+          fi
+          printf '%s' "$CONTEXT_ID"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        outputs:
+        - name: contextId
+          value: ($stdout)
+    - apply:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: a2a-memory-second
+            annotations:
+              ark.mckinsey.com/a2a-experimental-enabled: "true"
+              ark.mckinsey.com/a2a-context-id: ($contextId)
+          spec:
+            input: "Second message to verify context"
+            target:
+              type: agent
+              name: message-counter-agent
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: a2a-memory-second
+          status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
+            (response != null): true
+            (contains(response.content, '2 message(s) received')): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: a2a-memory-second
+    - script:
+        content: |
+          echo "=== First query response ==="
+          kubectl get query a2a-memory-first -n $NAMESPACE -o jsonpath='{.status.response}' 2>/dev/null || true
+          echo ""
+          echo "=== Second query response ==="
+          kubectl get query a2a-memory-second -n $NAMESPACE -o jsonpath='{.status.response}' 2>/dev/null || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

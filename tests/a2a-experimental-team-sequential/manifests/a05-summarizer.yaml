@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: summarizer
+spec:
+  prompt: |
+    You are a Summarizer Agent. Create a final summary of all contributions.
+    Start your response with "SUMMARY:" to identify your contribution.
+  modelRef:
+    name: test-model

@@ -1,0 +1,91 @@
+terminationGracePeriodSeconds: 3
+ark:
+  a2a:
+    enabled: true
+  model:
+    enabled: true
+    name: test-model
+    type: completions
+    provider: openai
+    model: gpt-4
+    apiKey: mock-api-key
+
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "gpt-4",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            },
+            {
+              "id": "gpt-4o-mini",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            },
+            {
+              "id": "gpt-4.1",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            },
+            {
+              "id": "gpt-5",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            }
+          ]
+        }
+
+  # Catch-all - matches everything but gets overridden by more specific rules.
+  - path: "/v1/chat/completions"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}]}'
+
+  # Brainstormer Agent - generate ideas
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'brainstormer')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"IDEA: Implement AI-driven customer support with 24/7 availability."},"finish_reason":"stop"}]}'
+
+  # Critic Agent - evaluate ideas
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'critic')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"CRITIQUE: The AI support idea is viable but needs human escalation paths."},"finish_reason":"stop"}]}'
+
+  # Coordinator Agent - terminate with final summary (uses terminate tool)
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'coordinator')"
+    response:
+      status: 200
+      content: |
+        {
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "tool_calls": [{
+                "id": "call_terminate",
+                "type": "function",
+                "function": {
+                  "name": "terminate",
+                  "arguments": "{\"summary\":\"Round-robin brainstorming complete. AI customer support with human escalation recommended for improved customer satisfaction.\"}"
+                }
+              }]
+            },
+            "finish_reason": "tool_calls"
+          }]
+        }

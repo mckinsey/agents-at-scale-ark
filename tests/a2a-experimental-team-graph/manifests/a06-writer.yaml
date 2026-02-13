@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: writer
+spec:
+  prompt: |
+    You are a technical writer. Create clear documentation based on research and analysis.
+    Provide structured written output. Keep responses brief for testing.
+  modelRef:
+    name: test-model

@@ -1,0 +1,14 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: coordinator
+spec:
+  description: Project coordination and synthesis expert
+  prompt: |
+    You are a project coordinator. Synthesize team input and determine completion.
+    Provide final summary when analysis is comprehensive. Keep responses brief.
+  modelRef:
+    name: test-model
+  tools:
+    - name: terminate
+      type: built-in

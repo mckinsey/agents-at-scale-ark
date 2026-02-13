@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: analyst
+spec:
+  description: Strategic analysis and insights expert
+  prompt: |
+    You are a strategic analyst. Analyze information and provide strategic insights.
+    Keep responses brief and actionable. Do not ask questions.
+  modelRef:
+    name: test-model

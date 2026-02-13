@@ -1,0 +1,128 @@
+terminationGracePeriodSeconds: 3
+ark:
+  a2a:
+    enabled: true
+  model:
+    enabled: true
+    name: test-model
+    type: completions
+    provider: openai
+    model: gpt-4
+    apiKey: mock-api-key
+
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "gpt-4",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            },
+            {
+              "id": "gpt-4o-mini",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            },
+            {
+              "id": "gpt-4.1",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            },
+            {
+              "id": "gpt-5",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            }
+          ]
+        }
+
+  # Catch-all - matches everything but gets overridden by more specific rules.
+  - path: "/v1/chat/completions"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}]}'
+
+  # Selector prompt - select researcher first (when no RESEARCH in history)
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'coordinating a team') && !contains(body.messages[length(body.messages)-1].content || '', 'RESEARCH:')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"researcher"},"finish_reason":"stop"}]}'
+
+  # Selector prompt - select analyst after researcher (when RESEARCH in history but not ANALYSIS)
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'coordinating a team') && contains(body.messages[length(body.messages)-1].content || '', 'RESEARCH:') && !contains(body.messages[length(body.messages)-1].content || '', 'ANALYSIS:')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"analyst"},"finish_reason":"stop"}]}'
+
+  # Selector prompt - terminate after both complete (uses terminate tool)
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'Project coordination') && contains(body.messages[length(body.messages)-1].content || '', 'ANALYSIS:')"
+    response:
+      status: 200
+      content: |
+        {
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "tool_calls": [{
+                "id": "call_terminate",
+                "type": "function",
+                "function": {
+                  "name": "terminate",
+                  "arguments": "{\"summary\":\"Selector team analysis complete. Research and analysis gathered on microservices architecture.\"}"
+                }
+              }]
+            },
+            "finish_reason": "tool_calls"
+          }]
+        }
+
+  # Researcher Agent
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'research specialist')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"RESEARCH: Market analysis shows 65% growth in cloud adoption."},"finish_reason":"stop"}]}'
+
+  # Analyst Agent
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'strategic analyst')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"ANALYSIS: Cloud growth indicates strong ROI potential for migration."},"finish_reason":"stop"}]}'
+
+  # Coordinator Agent (when acting as participant, not selector)
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'project coordinator')"
+    response:
+      status: 200
+      content: |
+        {
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "tool_calls": [{
+                "id": "call_terminate",
+                "type": "function",
+                "function": {
+                  "name": "terminate",
+                  "arguments": "{\"summary\":\"Selector team analysis complete. Research and analysis gathered on microservices architecture.\"}"
+                }
+              }]
+            },
+            "finish_reason": "tool_calls"
+          }]
+        }

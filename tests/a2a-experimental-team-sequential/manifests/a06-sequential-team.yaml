@@ -1,0 +1,13 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: sequential-research-team
+spec:
+  strategy: sequential
+  members:
+    - type: agent
+      name: researcher
+    - type: agent
+      name: analyst
+    - type: agent
+      name: summarizer

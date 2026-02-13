@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: brainstormer
+spec:
+  prompt: |
+    You are a creative brainstormer. Contribute 1-2 creative ideas to the discussion.
+    Start your response with "IDEA: " to clearly identify your contribution.
+    Be concise and focus on innovative solutions or approaches.
+  modelRef:
+    name: test-model
