@@ -27,6 +27,90 @@ jobs:
         with:
           ref: ${{ inputs.branch || github.ref }}
           fetch-depth: 0
+
+      - name: Download coverage artifacts
+        id: download-coverage
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          path: coverage-artifacts
+          merge-multiple: true
+        continue-on-error: true
+
+      - name: Check for coverage files
+        id: check-coverage
+        run: |
+          if [ -d "coverage-artifacts" ] && find coverage-artifacts -name "lcov.info" | grep -q .; then
+            echo "found=true" >> $GITHUB_OUTPUT
+            echo "Coverage artifacts found"
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+            echo "No coverage artifacts found - will run tests"
+          fi
+
+      - name: Organize existing coverage files
+        if: steps.check-coverage.outputs.found == 'true'
+        run: |
+          echo "=== Organizing existing coverage files ==="
+          mkdir -p ark/unit-tests
+          mkdir -p services/ark-api/ark-api/coverage
+          mkdir -p services/ark-dashboard/ark-dashboard/coverage
+
+          find coverage-artifacts -path "*/ark/*" -name "lcov.info" -exec cp {} ark/unit-tests/ \; 2>/dev/null || true
+          find coverage-artifacts -path "*/ark/*" -name "cover.out" -exec cp {} ark/unit-tests/ \; 2>/dev/null || true
+          find coverage-artifacts -path "*/ark-api/*" -name "lcov.info" -exec cp {} services/ark-api/ark-api/coverage/ \; 2>/dev/null || true
+          find coverage-artifacts -path "*/ark-dashboard/*" -name "lcov.info" -exec cp {} services/ark-dashboard/ark-dashboard/coverage/ \; 2>/dev/null || true
+
+          echo "Coverage files organized:"
+          find . -name "lcov.info" 2>/dev/null | grep -v node_modules | grep -v coverage-artifacts || true
+
+      - name: Setup Go
+        if: steps.check-coverage.outputs.found == 'false'
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.11"
+          cache: true
+          cache-dependency-path: ark/go.sum
+
+      - name: Setup Node.js
+        if: steps.check-coverage.outputs.found == 'false'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+
+      - name: Install uv
+        if: steps.check-coverage.outputs.found == 'false'
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install Helm
+        if: steps.check-coverage.outputs.found == 'false'
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.18.6"
+
+      - name: Install gcov2lcov
+        if: steps.check-coverage.outputs.found == 'false'
+        run: go install github.com/jandelgado/gcov2lcov@latest
+
+      - name: Run tests to generate coverage
+        if: steps.check-coverage.outputs.found == 'false'
+        run: |
+          echo "=== Running Go tests ==="
+          cd ark
+          make test || true
+          mkdir -p unit-tests
+          if [ -f "cover.out" ]; then
+            cp cover.out unit-tests/
+            gcov2lcov -infile cover.out -outfile unit-tests/lcov.info || true
+          fi
+          cd ..
+
+          echo "=== Running services tests ==="
+          make -j4 services-test-all || true
+
+          echo "=== Coverage files generated ==="
+          find . -name "lcov.info" -o -name "coverage.xml" 2>/dev/null | grep -v node_modules | grep -v .venv | head -20 || echo "No coverage files found"
+
       - name: Set up Cloudflare WARP
         uses: Boostport/setup-cloudflare-warp@v1
         with:
