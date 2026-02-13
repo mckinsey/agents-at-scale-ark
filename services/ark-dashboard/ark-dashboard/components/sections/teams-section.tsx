@@ -26,6 +26,7 @@ import {
   agentsService,
   teamsService,
 } from '@/lib/services';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
   function TeamsSection(_, ref) {
@@ -34,6 +35,7 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
     const [teamEditorOpen, setTeamEditorOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const showLoading = useDelayedLoading(loading);
+    const { readOnlyMode } = useNamespace();
 
     useImperativeHandle(ref, () => ({
       openAddEditor: () => setTeamEditorOpen(true),
@@ -146,7 +148,9 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
               </EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
-              <Button onClick={() => setTeamEditorOpen(true)}>
+              <Button
+                onClick={() => setTeamEditorOpen(true)}
+                disabled={readOnlyMode}>
                 <Plus className="h-4 w-4" />
                 Create Team
               </Button>

@@ -20,6 +20,7 @@ RUN go mod download
 COPY cmd/main.go cmd/main.go
 COPY api/ api/
 COPY internal/ internal/
+COPY config/crd/bases/ internal/apiserver/crds/
 COPY version.txt version.txt
 
 # Build

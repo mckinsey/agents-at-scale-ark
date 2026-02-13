@@ -1,0 +1,20 @@
+image:
+  repository: postgres
+  tag: 16-alpine
+
+database: ark
+user: postgres
+password: arkdev123
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+persistence:
+  enabled: true
+  size: 1Gi
+  storageClass: ""

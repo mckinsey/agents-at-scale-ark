@@ -1,0 +1,9 @@
+# KYC Demo configuration for ark-api (read-only mode enabled)
+app:
+  env:
+    - name: READ_ONLY_MODE
+      value: "true"
+    - name: AUTH_MODE
+      value: "open"
+    - name: CORS_ORIGINS
+      value: "*"

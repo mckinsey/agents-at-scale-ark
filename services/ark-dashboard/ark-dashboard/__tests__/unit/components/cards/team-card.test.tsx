@@ -102,6 +102,18 @@ vi.mock('@/lib/chat-events', () => ({
   toggleFloatingChat: vi.fn(),
 }));
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: vi.fn(() => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    availableNamespaces: [{ name: 'default' }],
+    isPending: false,
+    setNamespace: vi.fn(),
+    createNamespace: vi.fn(),
+    readOnlyMode: false,
+  })),
+}));
+
 vi.mock('@/components/cards/base-card', () => ({
   BaseCard: vi.fn(
     ({
