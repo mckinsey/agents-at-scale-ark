@@ -70,11 +70,17 @@ func convertA2AAssistantMessage(metadata map[string]interface{}, content string)
 func recoverToolCalls(value interface{}) []openai.ChatCompletionMessageToolCallParam {
 	switch calls := value.(type) {
 	case []openai.ChatCompletionMessageToolCallParam:
-		return calls
+		return rebuildToolCallParams(calls)
 	case []openai.ChatCompletionMessageToolCall:
 		params := make([]openai.ChatCompletionMessageToolCallParam, len(calls))
 		for i, call := range calls {
-			params[i] = call.ToParam()
+			params[i] = openai.ChatCompletionMessageToolCallParam{
+				ID: call.ID,
+				Function: openai.ChatCompletionMessageToolCallFunctionParam{
+					Name:      call.Function.Name,
+					Arguments: call.Function.Arguments,
+				},
+			}
 		}
 		return params
 	default:
@@ -84,10 +90,28 @@ func recoverToolCalls(value interface{}) []openai.ChatCompletionMessageToolCallP
 		}
 		var params []openai.ChatCompletionMessageToolCallParam
 		if err := json.Unmarshal(raw, &params); err == nil && len(params) > 0 {
-			return params
+			return rebuildToolCallParams(params)
 		}
 		return nil
 	}
+}
+
+func rebuildToolCallParams(params []openai.ChatCompletionMessageToolCallParam) []openai.ChatCompletionMessageToolCallParam {
+	result := make([]openai.ChatCompletionMessageToolCallParam, len(params))
+	for i, p := range params {
+		args := p.Function.Arguments
+		if args == "" {
+			args = "{}"
+		}
+		result[i] = openai.ChatCompletionMessageToolCallParam{
+			ID: p.ID,
+			Function: openai.ChatCompletionMessageToolCallFunctionParam{
+				Name:      p.Function.Name,
+				Arguments: args,
+			},
+		}
+	}
+	return result
 }
 
 func extractUserContent(msg *openai.ChatCompletionUserMessageParam) string {

@@ -209,6 +209,11 @@ func (a *Agent) processAssistantMessage(choice openai.ChatCompletionChoice) Mess
 	if assistantMessage.OfAssistant != nil {
 		assistantMessage.OfAssistant.Name = param.Opt[string]{Value: a.Name}
 	}
+	// NOTE: call.ToParam() uses param.Override with json.RawMessage internally,
+	// which can produce empty RawMessage on A2A metadata round-trips. The A2A
+	// path defends against this in recoverToolCalls/rebuildToolCallParams. If
+	// this path also exhibits MarshalJSON errors, apply the same explicit field
+	// construction here instead of ToParam().
 	if len(choice.Message.ToolCalls) > 0 {
 		toolCalls := make([]openai.ChatCompletionMessageToolCallParam, len(choice.Message.ToolCalls))
 		for i, call := range choice.Message.ToolCalls {

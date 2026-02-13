@@ -144,3 +144,67 @@ func TestSerializeMessagesProducesOpenAIFormat(t *testing.T) {
 	assert.Equal(t, "system", decoded[2]["role"])
 	assert.Equal(t, "tool", decoded[3]["role"])
 }
+
+func TestToolCallRoundTripMarshalSafe(t *testing.T) {
+	assistant := openai.AssistantMessage("thinking")
+	assistant.OfAssistant.ToolCalls = []openai.ChatCompletionMessageToolCallParam{
+		{
+			ID:   "call-1",
+			Type: "function",
+			Function: openai.ChatCompletionMessageToolCallFunctionParam{
+				Name:      "get_weather",
+				Arguments: `{"city":"london"}`,
+			},
+		},
+	}
+
+	a2aMessage, err := OpenAIToA2AMessage(assistant)
+	require.NoError(t, err)
+
+	recovered, err := A2AToOpenAIMessage(a2aMessage)
+	require.NoError(t, err)
+	require.NotNil(t, recovered.OfAssistant)
+	require.Len(t, recovered.OfAssistant.ToolCalls, 1)
+
+	_, marshalErr := json.Marshal(recovered)
+	require.NoError(t, marshalErr, "recovered assistant message with tool calls must be JSON-marshalable")
+
+	assert.Equal(t, "call-1", recovered.OfAssistant.ToolCalls[0].ID)
+	assert.Equal(t, "get_weather", recovered.OfAssistant.ToolCalls[0].Function.Name)
+	assert.Equal(t, `{"city":"london"}`, recovered.OfAssistant.ToolCalls[0].Function.Arguments)
+}
+
+func TestToolCallRoundTripViaSerialization(t *testing.T) {
+	assistant := openai.AssistantMessage("thinking")
+	assistant.OfAssistant.ToolCalls = []openai.ChatCompletionMessageToolCallParam{
+		{
+			ID:   "call-2",
+			Type: "function",
+			Function: openai.ChatCompletionMessageToolCallFunctionParam{
+				Name:      "read_file",
+				Arguments: `{"path":"/tmp/test.txt"}`,
+			},
+		},
+	}
+
+	a2aMessage, err := OpenAIToA2AMessage(assistant)
+	require.NoError(t, err)
+
+	serialized, err := json.Marshal(a2aMessage)
+	require.NoError(t, err)
+
+	var deserialized protocol.Message
+	require.NoError(t, json.Unmarshal(serialized, &deserialized))
+
+	recovered, err := A2AToOpenAIMessage(deserialized)
+	require.NoError(t, err)
+	require.NotNil(t, recovered.OfAssistant)
+	require.Len(t, recovered.OfAssistant.ToolCalls, 1)
+
+	_, marshalErr := json.Marshal(recovered)
+	require.NoError(t, marshalErr, "tool calls recovered after JSON round-trip must be marshalable")
+
+	assert.Equal(t, "call-2", recovered.OfAssistant.ToolCalls[0].ID)
+	assert.Equal(t, "read_file", recovered.OfAssistant.ToolCalls[0].Function.Name)
+	assert.Equal(t, `{"path":"/tmp/test.txt"}`, recovered.OfAssistant.ToolCalls[0].Function.Arguments)
+}
