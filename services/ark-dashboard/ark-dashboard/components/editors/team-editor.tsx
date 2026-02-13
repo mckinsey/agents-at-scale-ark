@@ -50,6 +50,15 @@ import { TeamMemberSelectionSection } from './member-editor';
 
 type GraphEdge = components['schemas']['GraphEdge'];
 
+const DEFAULT_SELECTOR_PROMPT = `You are in a role play game. The following roles are available:
+{{.Roles}}.
+Read the following conversation. Then select the next role from {{.Participants}} to play. Only return the role.
+Make sure to choose the role which is best suited to respond to the most recent message.
+
+{{.History}}
+
+Read the above conversation. Then select the next role from {{.Participants}} to play. Only return the role.`;
+
 interface TeamEditorProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -697,12 +706,16 @@ export function TeamEditor({
                         <FormLabel>Selector Prompt</FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder="Enter the selector prompt..."
+                            placeholder={DEFAULT_SELECTOR_PROMPT}
                             className="min-h-[100px]"
                             disabled={form.formState.isSubmitting}
                             {...field}
                           />
                         </FormControl>
+                        <p className="text-muted-foreground text-xs">
+                          Custom prompt for the selector agent. Leave empty to
+                          use the default prompt shown above.
+                        </p>
                         <FormMessage />
                       </FormItem>
                     )}
