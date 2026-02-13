@@ -61,3 +61,27 @@ app.kubernetes.io/instance: {{ .Release.Name }}
     $hasValidating = true }}{{- end }}
 {{- end }}
 {{ $hasValidating }}}}{{- end }}
+
+{{/*
+Determine if CRDs should be installed.
+CRDs are only installed when using etcd backend (standard CRD-based storage).
+When using postgresql, the embedded apiserver serves the APIs via APIServices.
+*/}}
+{{- define "chart.crdEnabled" -}}
+{{- if and .Values.crd.enable (eq .Values.storage.backend "etcd") -}}
+true
+{{- else -}}
+false
+{{- end -}}
+{{- end -}}
+
+{{/*
+Determine if embedded apiserver is enabled (non-etcd storage backend).
+*/}}
+{{- define "chart.apiserverEnabled" -}}
+{{- if ne .Values.storage.backend "etcd" -}}
+true
+{{- else -}}
+false
+{{- end -}}
+{{- end -}}

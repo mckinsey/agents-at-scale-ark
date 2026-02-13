@@ -1,0 +1,35 @@
+{{- if and .Values.storage (ne .Values.storage.backend "etcd") }}
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1alpha1.ark.mckinsey.com
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+spec:
+  group: ark.mckinsey.com
+  version: v1alpha1
+  service:
+    name: ark-apiserver
+    namespace: {{ .Release.Namespace }}
+    port: {{ .Values.storage.apiserver.port }}
+  groupPriorityMinimum: 1000
+  versionPriority: 15
+  insecureSkipTLSVerify: true
+---
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1prealpha1.ark.mckinsey.com
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+spec:
+  group: ark.mckinsey.com
+  version: v1prealpha1
+  service:
+    name: ark-apiserver
+    namespace: {{ .Release.Namespace }}
+    port: {{ .Values.storage.apiserver.port }}
+  groupPriorityMinimum: 1000
+  versionPriority: 10
+  insecureSkipTLSVerify: true
+{{- end }}

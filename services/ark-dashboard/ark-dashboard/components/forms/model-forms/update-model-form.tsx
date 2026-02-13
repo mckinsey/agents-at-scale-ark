@@ -9,6 +9,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { TrackedButton } from '@/components/ui/tracked-button';
 import type { Model } from '@/lib/services';
 import { useUpdateModelById } from '@/lib/services/models-hooks';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { ModelConfiguratorForm } from './model-configuration-form';
 import type { DisabledFields } from './model-configuration-form-context';
@@ -30,6 +31,7 @@ type UpdateModelFormProps = {
 
 export function UpdateModelForm({ model }: UpdateModelFormProps) {
   const router = useRouter();
+  const { readOnlyMode } = useNamespace();
 
   const defaultValues = getDefaultValuesForUpdate(model);
   const form = useForm<FormValues>({
@@ -77,7 +79,7 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
           <TrackedButton
             type="submit"
             form={formId}
-            disabled={isPending}
+            disabled={isPending || readOnlyMode}
             className="mt-8 w-full"
             trackingEvent="update_model_clicked"
             trackingProperties={{ modelId: model.id }}>

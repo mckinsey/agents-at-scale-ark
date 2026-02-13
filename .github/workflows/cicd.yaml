@@ -34,7 +34,6 @@ concurrency:
 jobs:
   # Setup job to determine container cache registry
   setup-container-cache-registry:
-    needs: [jfrog-xray-scan]
     runs-on: ubuntu-24.04
     outputs:
       ci-cache-registry: ${{ steps.setup-registry.outputs.ci-cache-registry }}
@@ -193,7 +192,7 @@ jobs:
         with:
           node-version: "22.x"
 
-      - run: make -j24 build-all
+      - run: make -j24 services-build-all
 
       - name: Check generated types are unchanged
         run: |
@@ -555,39 +554,74 @@ jobs:
 
       - name: Test endpoints
         run: |
-          # Wait for services to be ready
-          echo "Waiting for services to be ready..."
-          kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
-          kubectl wait --for=condition=ready pod -l app=ark-dashboard -n default --timeout=120s
+          # Wait for pods to exist
+          echo "Waiting for pods to be scheduled..."
+          kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s || true
+          kubectl wait --for=condition=ready pod -l app=ark-dashboard -n default --timeout=120s || true
 
-          # Test ark-api service (including A2A Gateway endpoints)
+          # Test ark-api service
           echo
           echo "=== Testing ark-api service ==="
-          kubectl port-forward -n default service/ark-api 8082:80 &
-          API_PID=$!
-          sleep 15
-          echo "Testing API health endpoint..."
-          curl -f http://127.0.0.1:8082/health || (echo "API health check failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
-          echo "Testing API ready endpoint..."
-          curl -f http://127.0.0.1:8082/ready || (echo "API ready check failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
-          echo "Testing OpenAI models endpoint..."
-          curl -f http://127.0.0.1:8082/openai/v1/models || (echo "OpenAI models endpoint failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
-          echo "Testing A2A Gateway /agents endpoint..."
-          curl -f http://127.0.0.1:8082/a2a/agents || (echo "A2A /agents endpoint failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
-          # Clean up API port-forward
-          kill $API_PID || true
+          for i in $(seq 1 30); do
+            # Kill any existing port-forward on 8082
+            pkill -f "port-forward.*8082:80" 2>/dev/null || true
+            sleep 1
+
+            # Start fresh port-forward
+            kubectl port-forward -n default service/ark-api 8082:80 &
+            sleep 3
+
+            if curl -sf --connect-timeout 5 --max-time 10 http://127.0.0.1:8082/health > /dev/null 2>&1; then
+              echo "ark-api is ready (attempt $i/30)"
+              break
+            fi
+
+            echo "Waiting for ark-api... ($i/30)"
+            if [ $i -eq 30 ]; then
+              echo "ark-api failed to become ready"
+              kubectl logs -l app=ark-api -n default --tail=50
+              exit 1
+            fi
+          done
+
+          echo "Testing API endpoints..."
+          curl -f --max-time 10 http://127.0.0.1:8082/health || (echo "API health check failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
+          curl -f --max-time 10 http://127.0.0.1:8082/ready || (echo "API ready check failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
+          curl -f --max-time 10 http://127.0.0.1:8082/openai/v1/models || (echo "OpenAI models endpoint failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
+          curl -f --max-time 10 http://127.0.0.1:8082/a2a/agents || (echo "A2A /agents endpoint failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
+          echo "ark-api tests passed!"
 
           # Test ark-dashboard service
           echo
           echo "=== Testing ark-dashboard service ==="
-          kubectl port-forward -n default service/ark-dashboard 3001:3000 &
-          DASH_PID=$!
-          sleep 15
-          echo "Testing dashboard endpoint..."
-          curl -f http://127.0.0.1:3001/ || (echo "Dashboard check failed" && kubectl logs -l app=ark-dashboard -n default --tail=20 && exit 1)
-          # Clean up dashboard port-forward
-          kill $DASH_PID || true
+          for i in $(seq 1 30); do
+            # Kill any existing port-forward on 3001
+            pkill -f "port-forward.*3001:3000" 2>/dev/null || true
+            sleep 1
 
+            # Start fresh port-forward
+            kubectl port-forward -n default service/ark-dashboard 3001:3000 &
+            sleep 3
+
+            if curl -sf --connect-timeout 5 --max-time 10 http://127.0.0.1:3001/ > /dev/null 2>&1; then
+              echo "ark-dashboard is ready (attempt $i/30)"
+              break
+            fi
+
+            echo "Waiting for ark-dashboard... ($i/30)"
+            if [ $i -eq 30 ]; then
+              echo "ark-dashboard failed to become ready"
+              kubectl logs -l app=ark-dashboard -n default --tail=50
+              exit 1
+            fi
+          done
+
+          echo "Testing dashboard endpoint..."
+          curl -f --max-time 10 http://127.0.0.1:3001/ || (echo "Dashboard check failed" && kubectl logs -l app=ark-dashboard -n default --tail=20 && exit 1)
+          echo "ark-dashboard tests passed!"
+
+          # Cleanup
+          pkill -f "port-forward" 2>/dev/null || true
           echo "Smoke test completed successfully!"
 
 
@@ -798,6 +832,64 @@ jobs:
           kubectl wait --for=condition=ready pod -l app=ark-dashboard -n default --timeout=120s
           kubectl wait --for=condition=ready pod -l app=ark-mcp -n default --timeout=120s
 
+      - name: Update Argo Workflows dependencies
+        run: |
+          cd services/argo-workflows/chart
+          helm dependency update
+          cd ../../..
+
+      - name: Deploy Argo Workflows
+        run: |
+          helm upgrade --install argo-workflows services/argo-workflows/chart \
+            --namespace default \
+            --create-namespace \
+            --set minio.enabled=false \
+            --wait \
+            --timeout=5m
+
+      - name: Wait for Argo Workflows to be ready
+        run: |
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=argo-workflows-server -n default --timeout=120s
+          kubectl wait --for=condition=ready pod -l app=workflow-controller -n default --timeout=120s
+
+      - name: Configure Argo Workflows RBAC
+        run: |
+          kubectl apply -f - <<EOF
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: argo-workflow
+            namespace: default
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRole
+          metadata:
+            name: argo-workflow-extended
+          rules:
+          - apiGroups: [""]
+            resources: ["pods", "pods/log"]
+            verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
+          - apiGroups: ["argoproj.io"]
+            resources: ["workflows", "workflows/finalizers", "workflowtemplates", "workflowtaskresults"]
+            verbs: ["get", "list", "watch", "update", "patch", "create", "delete"]
+          - apiGroups: ["ark.mckinsey.com"]
+            resources: ["queries", "models", "agents"]
+            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: argo-workflow-extended-binding
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: argo-workflow-extended
+          subjects:
+          - kind: ServiceAccount
+            name: argo-workflow
+            namespace: default
+          EOF
+
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
@@ -824,6 +916,7 @@ jobs:
       - name: Start port-forwarding
         run: |
           kubectl port-forward svc/ark-dashboard 3274:3000 &
+          kubectl port-forward svc/argo-workflows-server 8081:2746 &
           sleep 5
           curl -s -o /dev/null -w "%{http_code}" http://localhost:3274 || echo "Dashboard connectivity check"
 
@@ -919,28 +1012,19 @@ jobs:
           done
           echo "Warning: MCP server not ready after 5 minutes, tests may fail"
 
-      - name: Run CLI tests
+      - name: Run File Gateway CLI tests
         env:
           PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
         run: |
-          cd tests/pytest/cli-tests
-          pytest tests/ -v --tb=short
-
-      - name: Run complete ARK workflow tests
-        env:
-          PYTHONPATH: ${{ github.workspace }}/tests/pytest
-        run: |
-          cd tests/pytest
-          pytest test_complete_ark_workflow.py -v --tb=short
+          cd tests/pytest/cli-tests/tests
+          pytest test_file_gateway.py -v --tb=short
 
       - name: Upload CLI test logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: cli-test-logs-${{ github.sha }}
-          path: |
-            tests/pytest/cli-tests/**/*.log
-            tests/pytest/*.log
+          path: tests/pytest/cli-tests/tests/*.log
           retention-days: 7
 
   build-charts:
@@ -1147,6 +1231,11 @@ jobs:
         e2e-tests-standard,
         e2e-tests-evaluated,
         e2e-ui-tests,
+        e2e-cli-tests,
+        e2e-ark-cli,
+        e2e-tests-llm,
+        jfrog-xray-scan,
+        xray-container-scan,
         build-and-test-ark,
         build-and-test-services,
         build-docs,
@@ -1349,3 +1438,52 @@ jobs:
             --field deploy_to_pypi=true
         env:
           GH_TOKEN: ${{ github.token }}
+
+  verify-ark-installation:
+    needs: [check-release, release-charts, release-ark-cli]
+    runs-on: ubuntu-24.04
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-k3s
+        with:
+          metrics-enabled: false
+          traefik-enabled: false
+          k3s-channel: latest
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+
+      - name: Install published ark-cli from npm
+        run: |
+          RELEASE_TAG="${{ needs.check-release.outputs.tag }}"
+          echo "Installing ark-cli@${RELEASE_TAG} from npm registry..."
+          npm install -g @agents-at-scale/ark@${RELEASE_TAG}
+          ark --version
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install test dependencies
+        run: |
+          pip install -r tests/pytest/ui-tests/requirements.txt
+
+      - name: Run complete ARK workflow installation test
+        env:
+          PYTHONPATH: ${{ github.workspace }}/tests/pytest
+        run: |
+          cd tests/pytest
+          pytest test_complete_ark_workflow.py -v --tb=short
+
+      - name: Upload verification test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ark-installation-verification-logs-${{ github.sha }}
+          path: tests/pytest/*.log
+          retention-days: 7

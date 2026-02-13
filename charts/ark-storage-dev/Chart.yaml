@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ark-storage-dev
+description: Storage backend for Ark development
+type: application
+version: 0.1.0
+appVersion: "16"
