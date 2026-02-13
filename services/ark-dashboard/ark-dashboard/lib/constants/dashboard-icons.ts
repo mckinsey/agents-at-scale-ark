@@ -10,6 +10,7 @@ import {
   Key,
   Lock,
   type LucideIcon,
+  Package,
   Play,
   Search,
   Server,
@@ -154,6 +155,12 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     key: 'api-keys',
     title: 'Service API Keys',
     icon: Key,
+    group: 'service',
+  },
+  marketplace: {
+    key: 'marketplace',
+    title: 'Marketplace',
+    icon: Package,
     group: 'service',
   },
 } as const satisfies Record<string, DashboardSection>;

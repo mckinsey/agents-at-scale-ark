@@ -7,6 +7,7 @@ import {
   HomepageTeamsCard,
 } from '@/components/cards';
 import { PageHeader } from '@/components/common/page-header';
+import { MarketplaceSection } from '@/components/sections/marketplace-section';
 
 export default function HomePage() {
   return (
@@ -31,6 +32,9 @@ export default function HomePage() {
           <HomepageMcpServersCard />
           <HomepageMemoryCard />
         </div>
+        <section className="mt-12">
+          <MarketplaceSection />
+        </section>
       </main>
     </div>
   );
