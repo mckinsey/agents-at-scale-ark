@@ -2,7 +2,7 @@
 # This demonstrates both legacy and A2A-native agent-as-tool patterns.
 #
 # For full documentation, see:
-# - samples/agents-as-tools/README.md
+# - samples/a2a-experimental/agent-as-tool/README.md
 # - docs/content/reference/a2a-native-execution.mdx
 
 # ==============================================================================

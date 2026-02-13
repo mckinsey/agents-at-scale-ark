@@ -30,11 +30,11 @@ Query (A2A) --> Coordinator Agent --> call-specialist-a2a (Tool) --> Specialist 
 ## Running
 
 ```bash
-chainsaw test --test-dir tests/a2a-agent-as-tool-message
+chainsaw test --test-dir tests/a2a-experimental-agent-as-tool
 ```
 
 ## Related
 
 - [A2A Native Execution RFC](../../docs/content/reference/a2a-native-execution.mdx)
-- [Agent-as-Tool Samples](../../samples/agents-as-tools/)
+- [Agent-as-Tool Samples](../../samples/a2a-experimental/agent-as-tool/)
 - [A2A Message Context Test](../a2a-message-context/) - Tests contextId propagation

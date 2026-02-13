@@ -155,7 +155,7 @@ spec:
 
 1. **Deploy the example**:
    ```bash
-   kubectl apply -f samples/agents-as-tools/coordinator-example.yaml
+   kubectl apply -f samples/a2a-experimental/agent-as-tool/coordinator-example.yaml
    ```
 
 2. **Test legacy pattern**:
@@ -201,5 +201,5 @@ The A2A inputSchema exposes:
 
 ## Documentation
 
-- [A2A Native Execution RFC](../../docs/content/reference/a2a-native-execution.mdx) - Full technical specification
-- [ARK Reference Documentation](../../docs/content/reference/) - System reference docs
+- [A2A Native Execution RFC](../../../docs/content/reference/a2a-native-execution.mdx) - Full technical specification
+- [ARK Reference Documentation](../../../docs/content/reference/) - System reference docs
