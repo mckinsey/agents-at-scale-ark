@@ -17,10 +17,7 @@ import {
 } from '@/components/ui/empty';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { MarketplaceFilters } from '@/lib/api/generated/marketplace-types';
-import {
-  useGetMarketplaceItems,
-  useInstallMarketplaceItem,
-} from '@/lib/services/marketplace-hooks';
+import { useGetMarketplaceItems } from '@/lib/services/marketplace-hooks';
 
 interface MarketplaceSectionProps {
   filters?: MarketplaceFilters;
@@ -33,7 +30,6 @@ export const MarketplaceSection = forwardRef<
   MarketplaceSectionProps
 >(({ filters = { featured: true }, showHeader = true, limit = 6 }, ref) => {
   const { data, isPending, error } = useGetMarketplaceItems(filters);
-  const installMutation = useInstallMarketplaceItem();
 
   useEffect(() => {
     if (error) {
@@ -45,10 +41,6 @@ export const MarketplaceSection = forwardRef<
       });
     }
   }, [error]);
-
-  const handleInstall = (id: string) => {
-    installMutation.mutate(id);
-  };
 
   const displayItems = data?.items.slice(0, limit) || [];
 
@@ -105,11 +97,7 @@ export const MarketplaceSection = forwardRef<
       {!isPending && !error && displayItems.length > 0 && (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           {displayItems.map(item => (
-            <MarketplaceItemCard
-              key={item.id}
-              item={item}
-              onInstall={handleInstall}
-            />
+            <MarketplaceItemCard key={item.id} item={item} />
           ))}
         </div>
       )}

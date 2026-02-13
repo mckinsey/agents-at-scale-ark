@@ -25,26 +25,17 @@ import { cn } from '@/lib/utils';
 
 interface MarketplaceItemCardProps {
   item: MarketplaceItem;
-  onInstall?: (id: string) => void;
   className?: string;
 }
 
 export function MarketplaceItemCard({
   item,
-  onInstall,
   className,
 }: MarketplaceItemCardProps) {
   const router = useRouter();
 
   const handleCardClick = () => {
     router.push(`/marketplace/${item.id}`);
-  };
-
-  const handleInstallClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (onInstall) {
-      onInstall(item.id);
-    }
   };
 
   const getCategoryColor = (category: string) => {
@@ -191,7 +182,6 @@ export function MarketplaceItemCard({
             <Button
               variant="default"
               size="sm"
-              onClick={handleInstallClick}
               className="h-8 gap-1 transition-all group-hover:gap-2">
               View
               <ArrowRight className="h-3 w-3" />
