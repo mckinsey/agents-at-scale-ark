@@ -11,3 +11,4 @@ export { HomepageAgentsCard } from './homepage-agents-card';
 export { HomepageTeamsCard } from './homepage-teams-card';
 export { HomepageMcpServersCard } from './homepage-mcp-servers-card';
 export { HomepageMemoryCard } from './homepage-memory-card';
+export { HomepageWorkflowTemplatesCard } from './homepage-workflow-templates-card';
