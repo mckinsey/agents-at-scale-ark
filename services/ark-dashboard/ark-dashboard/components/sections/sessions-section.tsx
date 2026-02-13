@@ -43,6 +43,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useDebounce } from '@/lib/hooks/use-debounce';
+import { configService } from '@/lib/services/config';
 import {
   mapArgoWorkflowToSession,
   mapArgoWorkflowsToSessions,
@@ -218,9 +219,11 @@ function getStatusBadgeVariant(
 function WorkflowStepDetail({
   detail,
   message,
+  argoBaseUrl,
 }: {
   detail: WorkflowStepDetail;
   message?: string;
+  argoBaseUrl: string;
 }) {
   const [logs, setLogs] = useState<string>('');
   const [loadingLogs, setLoadingLogs] = useState(false);
@@ -393,7 +396,7 @@ function WorkflowStepDetail({
                   </div>
                   {detail.workflowName && detail.nodeId && detail.namespace && (
                     <a
-                      href={`${process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746'}/workflows/${detail.namespace}/${detail.workflowName}?tab=workflow&nodeId=${detail.nodeId}`}
+                      href={`${argoBaseUrl}/workflows/${detail.namespace}/${detail.workflowName}?tab=workflow&nodeId=${detail.nodeId}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-xs break-all text-blue-400 underline hover:text-blue-300">
@@ -542,10 +545,12 @@ function WorkflowStepNode({
   step,
   depth = 0,
   isLast = false,
+  argoBaseUrl,
 }: {
   step: WorkflowStep;
   depth?: number;
   isLast?: boolean;
+  argoBaseUrl: string;
 }) {
   const [showDetail, setShowDetail] = useState(false);
   const hasChildren = step.children && step.children.length > 0;
@@ -566,6 +571,7 @@ function WorkflowStepNode({
             step={child}
             depth={depth + 1}
             isLast={index === step.children!.length - 1}
+            argoBaseUrl={argoBaseUrl}
           />
         ))}
       </>
@@ -666,7 +672,11 @@ function WorkflowStepNode({
 
         {hasDetail && showDetail && (
           <div className="mt-3 ml-2 sm:ml-6">
-            <WorkflowStepDetail detail={step.detail!} message={step.message} />
+            <WorkflowStepDetail
+              detail={step.detail!}
+              message={step.message}
+              argoBaseUrl={argoBaseUrl}
+            />
           </div>
         )}
 
@@ -678,6 +688,7 @@ function WorkflowStepNode({
                 step={child}
                 depth={childDepth}
                 isLast={index === step.children!.length - 1}
+                argoBaseUrl={argoBaseUrl}
               />
             ))}
           </div>
@@ -815,9 +826,11 @@ function TeamStepNode({
 function SessionDetailView({
   session,
   isLoading = false,
+  argoBaseUrl,
 }: {
   session: Session;
   isLoading?: boolean;
+  argoBaseUrl: string;
 }) {
   return (
     <Card className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
@@ -866,7 +879,7 @@ function SessionDetailView({
               session.uid && (
                 <Button variant="outline" size="sm" asChild>
                   <a
-                    href={`${process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746'}/workflows/${session.namespace}/${session.name}?uid=${session.uid}`}
+                    href={`${argoBaseUrl}/workflows/${session.namespace}/${session.name}?uid=${session.uid}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     title="View in Argo Workflows"
@@ -884,7 +897,11 @@ function SessionDetailView({
         <div className="min-w-0 overflow-hidden">
           {session.type === 'workflow'
             ? session.steps.map(step => (
-                <WorkflowStepNode key={step.id} step={step} />
+                <WorkflowStepNode
+                  key={step.id}
+                  step={step}
+                  argoBaseUrl={argoBaseUrl}
+                />
               ))
             : session.steps.map(step => (
                 <TeamStepNode key={step.id} step={step} />
@@ -969,13 +986,12 @@ export function SessionsSection() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Note: sourceFilter is currently unused but reserved for future support of Team sessions
-  // Currently only workflow sessions are implemented
   const [sourceFilter] = useState<SessionSourceFilter>('all');
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null,
   );
   const [useRealData] = useState(true);
+  const argoBaseUrl = configService.getArgoUrl();
 
   const [workflowNameInput, setWorkflowNameInput] = useState(
     searchParams.get('workflowName') || '',
@@ -1292,9 +1308,27 @@ export function SessionsSection() {
             <div className="flex flex-col items-center gap-4 p-8 text-center">
               <AlertCircle className="h-16 w-16 text-red-500 opacity-80" />
               <div className="flex flex-col gap-2">
-                <span className="text-base font-semibold">
-                  Error: {error.message}
-                </span>
+                {(error.message.includes('404') ||
+                  error.message.includes('500') ||
+                  error.message.toLowerCase().includes('not found') ||
+                  error.message
+                    .toLowerCase()
+                    .includes('no matches for kind')) && (
+                  <div className="text-muted-foreground mt-2 flex flex-col items-center justify-center gap-2 text-sm">
+                    <p>
+                      Something went wrong. Argo Workflows was not found or is
+                      not installed.
+                    </p>
+                    <a
+                      href="https://mckinsey.github.io/agents-at-scale-ark/developer-guide/workflows/argo-workflows/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary mt-2 inline-flex items-center gap-1 hover:underline">
+                      View installation guide
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                )}
               </div>
             </div>
           </Card>
@@ -1320,6 +1354,7 @@ export function SessionsSection() {
                 <SessionDetailView
                   session={selectedSession}
                   isLoading={loadingDetail && useRealData}
+                  argoBaseUrl={argoBaseUrl}
                 />
               ) : (
                 <Card className="flex flex-1 items-center justify-center">

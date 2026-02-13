@@ -1,6 +1,11 @@
 # DevSpace configuration for ark-dashboard service
 version: v2beta1
 
+vars:
+  NEXT_PUBLIC_ARGO_URL:
+    source: env
+    default: "http://argo.127.0.0.1.nip.io:8080"
+
 images:
   ark-dashboard:
     image: ark-dashboard
@@ -60,6 +65,8 @@ dev:
     env:
       - name: NODE_ENV
         value: development
+      - name: NEXT_PUBLIC_ARGO_URL
+        value: ${NEXT_PUBLIC_ARGO_URL}
     command:
       [
         "sh",

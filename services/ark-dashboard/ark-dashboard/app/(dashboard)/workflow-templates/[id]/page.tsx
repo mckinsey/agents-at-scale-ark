@@ -32,6 +32,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { WorkflowDagViewer } from '@/components/workflow-dag-viewer';
+import { configService } from '@/lib/services/config';
 import {
   type WorkflowStats,
   type WorkflowTemplate,
@@ -40,9 +41,6 @@ import {
 import { countWorkflowTasks } from '@/lib/utils/workflow';
 import { showWorkflowStartedToast } from '@/lib/utils/workflow-toast';
 import { useNamespace } from '@/providers/NamespaceProvider';
-
-const ARGO_BASE_URL =
-  process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746';
 
 export default function FlowDetailPage() {
   const params = useParams();
@@ -58,6 +56,7 @@ export default function FlowDetailPage() {
   const [statsLoading, setStatsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('tree');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const argoBaseUrl = configService.getArgoUrl();
 
   useEffect(() => {
     async function fetchFlow() {
@@ -336,7 +335,7 @@ export default function FlowDetailPage() {
                       className="h-8 w-8 cursor-pointer p-0"
                       asChild>
                       <a
-                        href={`${ARGO_BASE_URL}/workflow-templates/${namespace}/${flowId}`}
+                        href={`${argoBaseUrl}/workflow-templates/${namespace}/${flowId}`}
                         target="_blank"
                         rel="noopener noreferrer">
                         <ExternalLink className="h-4 w-4" />

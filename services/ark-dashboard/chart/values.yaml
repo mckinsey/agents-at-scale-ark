@@ -25,6 +25,9 @@ app:
   
   # Other environment variables
   env:
+    # Argo Workflows URL for "View in Argo" links
+    - name: NEXT_PUBLIC_ARGO_URL
+      value: "http://argo.127.0.0.1.nip.io:8080"
     # Authentication configuration
     - name: BASE_URL
       value: ""
