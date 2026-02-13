@@ -157,7 +157,6 @@ jobs:
             -w /app \
             sonarsource/sonar-scanner-cli:5.0.1 \
               -Dsonar.projectKey=$PROJECT_KEY \
-              -Dsonar.sources=./ \
               -Dsonar.branch.name=$BRANCH \
               -Dsonar.qualitygate.wait=true
 
@@ -175,7 +174,6 @@ jobs:
             -w /app \
             sonarsource/sonar-scanner-cli:5.0.1 \
               -Dsonar.projectKey=$PROJECT_KEY \
-              -Dsonar.sources=./ \
               -Dsonar.pullrequest.key=$PR_KEY \
               -Dsonar.pullrequest.branch=$PR_BRANCH \
               -Dsonar.pullrequest.base=$PR_BASE \
@@ -186,10 +184,10 @@ jobs:
         run: |
           # Check and reconnect WARP if needed
           echo "Checking Cloudflare WARP status..."
-          warp-cli status || true
-          warp-cli connect || true
+          warp-cli --accept-tos status || true
+          warp-cli --accept-tos connect || true
           sleep 2
-          warp-cli status || true
+          warp-cli --accept-tos status || true
 
           if [ "${{ github.event_name }}" == "pull_request" ]; then
             PR_KEY="${{ github.event.number }}"
