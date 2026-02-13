@@ -146,8 +146,8 @@ func (e *A2AExecutionEngine) executeStreaming(ctx context.Context, address strin
 }
 
 func consumeA2AStreamEvents(ctx context.Context, k8sClient client.Client, events <-chan protocol.StreamingMessageEvent, eventStream EventStreamInterface, modelID, completionID, agentName, namespace, queryName string, a2aServer *arkv1prealpha1.A2AServer) (*ExecutionResult, error) {
-	var finalContent strings.Builder
-	var a2aResponse A2AResponse
+	var content strings.Builder
+	var response A2AResponse
 	received := false
 
 	for {
@@ -159,73 +159,85 @@ func consumeA2AStreamEvents(ctx context.Context, k8sClient client.Client, events
 				if !received {
 					return nil, fmt.Errorf("a2a streaming returned no events")
 				}
-				a2aResponse.Content = finalContent.String()
-				return &ExecutionResult{
-					Messages:    []Message{NewAssistantMessage(a2aResponse.Content)},
-					A2AResponse: &a2aResponse,
-				}, nil
+				return buildA2AStreamResult(&content, &response), nil
 			}
 			received = true
 			if event.Result == nil {
 				continue
 			}
-
 			switch result := event.Result.(type) {
 			case *protocol.Message:
-				text := extractTextFromParts(result.Parts)
-				if text != "" {
-					finalContent.WriteString(text)
-				}
-				if result.ContextID != nil && *result.ContextID != "" {
-					a2aResponse.ContextID = *result.ContextID
-				}
-				streamContentChunk(ctx, eventStream, completionID, modelID, text)
-
+				consumeA2AMessageEvent(ctx, result, &content, &response, eventStream, completionID, modelID)
 			case *protocol.Task:
-				a2aResponse.TaskID = result.ID
-				a2aResponse.ContextID = result.ContextID
-				text := extractTextFromTaskStatus(result)
-				if text != "" {
-					finalContent.Reset()
-					finalContent.WriteString(text)
-				}
-				maybeCreateA2ATask(ctx, k8sClient, result, agentName, namespace, queryName, a2aServer)
-				streamContentChunk(ctx, eventStream, completionID, modelID, text)
-
+				consumeA2ATaskEvent(ctx, k8sClient, result, &content, &response, eventStream, completionID, modelID, agentName, namespace, queryName, a2aServer)
 			case *protocol.TaskStatusUpdateEvent:
-				if a2aResponse.TaskID == "" {
-					a2aResponse.TaskID = result.TaskID
+				if consumeA2AStatusUpdateEvent(ctx, result, &content, &response, eventStream, completionID, modelID) {
+					return buildA2AStreamResult(&content, &response), nil
 				}
-				if a2aResponse.ContextID == "" {
-					a2aResponse.ContextID = result.ContextID
-				}
-				var text string
-				if result.Status.Message != nil {
-					text = extractTextFromParts(result.Status.Message.Parts)
-				}
-				if result.Final && text != "" && finalContent.Len() == 0 {
-					finalContent.WriteString(text)
-				}
-				streamContentChunk(ctx, eventStream, completionID, modelID, text)
-				if result.Final {
-					a2aResponse.Content = finalContent.String()
-					return &ExecutionResult{
-						Messages:    []Message{NewAssistantMessage(a2aResponse.Content)},
-						A2AResponse: &a2aResponse,
-					}, nil
-				}
-
 			case *protocol.TaskArtifactUpdateEvent:
-				if a2aResponse.TaskID == "" {
-					a2aResponse.TaskID = result.TaskID
-				}
-				text := extractTextFromParts(result.Artifact.Parts)
-				if text != "" {
-					finalContent.WriteString(text)
-				}
-				streamContentChunk(ctx, eventStream, completionID, modelID, text)
+				consumeA2AArtifactUpdateEvent(ctx, result, &content, &response, eventStream, completionID, modelID)
 			}
 		}
+	}
+}
+
+func consumeA2AMessageEvent(ctx context.Context, msg *protocol.Message, content *strings.Builder, response *A2AResponse, eventStream EventStreamInterface, completionID, modelID string) {
+	text := extractTextFromParts(msg.Parts)
+	if text != "" {
+		content.WriteString(text)
+	}
+	if msg.ContextID != nil && *msg.ContextID != "" {
+		response.ContextID = *msg.ContextID
+	}
+	streamContentChunk(ctx, eventStream, completionID, modelID, text)
+}
+
+func consumeA2ATaskEvent(ctx context.Context, k8sClient client.Client, task *protocol.Task, content *strings.Builder, response *A2AResponse, eventStream EventStreamInterface, completionID, modelID, agentName, namespace, queryName string, a2aServer *arkv1prealpha1.A2AServer) {
+	response.TaskID = task.ID
+	response.ContextID = task.ContextID
+	text := extractTextFromTaskStatus(task)
+	if text != "" {
+		content.Reset()
+		content.WriteString(text)
+	}
+	maybeCreateA2ATask(ctx, k8sClient, task, agentName, namespace, queryName, a2aServer)
+	streamContentChunk(ctx, eventStream, completionID, modelID, text)
+}
+
+func consumeA2AStatusUpdateEvent(ctx context.Context, event *protocol.TaskStatusUpdateEvent, content *strings.Builder, response *A2AResponse, eventStream EventStreamInterface, completionID, modelID string) bool {
+	if response.TaskID == "" {
+		response.TaskID = event.TaskID
+	}
+	if response.ContextID == "" {
+		response.ContextID = event.ContextID
+	}
+	var text string
+	if event.Status.Message != nil {
+		text = extractTextFromParts(event.Status.Message.Parts)
+	}
+	if event.Final && text != "" && content.Len() == 0 {
+		content.WriteString(text)
+	}
+	streamContentChunk(ctx, eventStream, completionID, modelID, text)
+	return event.Final
+}
+
+func consumeA2AArtifactUpdateEvent(ctx context.Context, event *protocol.TaskArtifactUpdateEvent, content *strings.Builder, response *A2AResponse, eventStream EventStreamInterface, completionID, modelID string) {
+	if response.TaskID == "" {
+		response.TaskID = event.TaskID
+	}
+	text := extractTextFromParts(event.Artifact.Parts)
+	if text != "" {
+		content.WriteString(text)
+	}
+	streamContentChunk(ctx, eventStream, completionID, modelID, text)
+}
+
+func buildA2AStreamResult(content *strings.Builder, response *A2AResponse) *ExecutionResult {
+	response.Content = content.String()
+	return &ExecutionResult{
+		Messages:    []Message{NewAssistantMessage(response.Content)},
+		A2AResponse: response,
 	}
 }
 

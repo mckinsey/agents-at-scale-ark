@@ -19,7 +19,7 @@ func (m *mockEventStream) StreamChunk(_ context.Context, chunk interface{}) erro
 }
 
 func (m *mockEventStream) NotifyCompletion(_ context.Context) error { return nil }
-func (m *mockEventStream) Close() error                            { return nil }
+func (m *mockEventStream) Close() error                             { return nil }
 
 func TestConsumeA2AStreamEventsMessage(t *testing.T) {
 	ctx := context.Background()
