@@ -184,6 +184,13 @@ jobs:
       - name: Get SonarQube Results
         if: always()
         run: |
+          # Check and reconnect WARP if needed
+          echo "Checking Cloudflare WARP status..."
+          warp-cli status || true
+          warp-cli connect || true
+          sleep 2
+          warp-cli status || true
+
           if [ "${{ github.event_name }}" == "pull_request" ]; then
             PR_KEY="${{ github.event.number }}"
             QG_RESPONSE=$(curl -s -u "${SONAR_TOKEN}:" \
