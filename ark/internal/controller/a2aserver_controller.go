@@ -76,7 +76,7 @@ func (r *A2AServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		if err := r.reconcileConditionsAddressResolutionFailed(ctx, &a2aServer); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: a2aServer.Spec.PollInterval.Duration}, nil
+		return ctrl.Result{RequeueAfter: getPollInterval(a2aServer.Spec.PollInterval)}, nil
 	}
 	a2aServer.Status.LastResolvedAddress = resolvedAddress
 
@@ -102,7 +102,7 @@ func (r *A2AServerReconciler) processServer(ctx context.Context, a2aServer arkv1
 		if err := r.reconcileConditionsDiscoveryFailed(ctx, &a2aServer, err, resolvedAddress); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: a2aServer.Spec.PollInterval.Duration}, nil
+		return ctrl.Result{RequeueAfter: getPollInterval(a2aServer.Spec.PollInterval)}, nil
 	}
 
 	// Create/update agents and check if anything actually changed
@@ -111,7 +111,7 @@ func (r *A2AServerReconciler) processServer(ctx context.Context, a2aServer arkv1
 		if err := r.reconcileConditionsAgentCreationFailed(ctx, &a2aServer, err, agentCard.Name); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: a2aServer.Spec.PollInterval.Duration}, nil
+		return ctrl.Result{RequeueAfter: getPollInterval(a2aServer.Spec.PollInterval)}, nil
 	}
 
 	return r.finalizeA2AServerProcessing(ctx, a2aServer, agentsChanged)
@@ -329,14 +329,14 @@ func (r *A2AServerReconciler) finalizeA2AServerProcessing(ctx context.Context, a
 	readyCondition := meta.FindStatusCondition(a2aServer.Status.Conditions, A2AServerReady)
 	if readyCondition != nil && readyCondition.Status == metav1.ConditionTrue && readyCondition.Reason == "AgentDiscovered" && !agentsChanged {
 		// Already ready and no changes - skip event emission
-		return ctrl.Result{RequeueAfter: a2aServer.Spec.PollInterval.Duration}, nil
+		return ctrl.Result{RequeueAfter: getPollInterval(a2aServer.Spec.PollInterval)}, nil
 	}
 
 	if err := r.reconcileConditionsReady(ctx, &a2aServer, agentsChanged); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{RequeueAfter: a2aServer.Spec.PollInterval.Duration}, nil
+	return ctrl.Result{RequeueAfter: getPollInterval(a2aServer.Spec.PollInterval)}, nil
 }
 
 func (r *A2AServerReconciler) sanitizeAgentName(name string) string {

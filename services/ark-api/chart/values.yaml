@@ -72,6 +72,9 @@ app:
     # ARK_A2A_AGENT_CARD_PATH is optional - leave empty for root path
     # - name: ARK_A2A_AGENT_CARD_PATH
     #   value: ""
+    # Read-only mode - set to "true" to disable write operations
+    - name: READ_ONLY_MODE
+      value: "false"
   # Optional: Import entire secrets/configmaps as env vars
   # envFrom:
   #   - secretRef:

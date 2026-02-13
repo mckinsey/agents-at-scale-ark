@@ -1,0 +1,21 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: otel-test-agent
+  namespace: default
+spec:
+  description: "Simple agent for testing OTEL routing"
+  prompt: "You are a helpful assistant. Answer questions briefly."
+  modelRef:
+    name: gpt-4o-mini
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: otel-test-query
+  namespace: default
+spec:
+  input: "What is 2 + 2?"
+  target:
+    type: agent
+    name: otel-test-agent
