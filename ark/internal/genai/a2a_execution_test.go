@@ -158,6 +158,46 @@ func TestStreamContentChunkSkipsEmpty(t *testing.T) {
 	assert.Len(t, stream.chunks, 1)
 }
 
+func TestConvertHistoryToA2AMetadata(t *testing.T) {
+	t.Run("nil history", func(t *testing.T) {
+		result := convertHistoryToA2AMetadata(nil)
+		assert.Nil(t, result)
+	})
+
+	t.Run("empty history", func(t *testing.T) {
+		result := convertHistoryToA2AMetadata([]Message{})
+		assert.Nil(t, result)
+	})
+
+	t.Run("user and assistant messages", func(t *testing.T) {
+		history := []Message{
+			NewUserMessage("hello"),
+			NewAssistantMessage("hi there"),
+		}
+		result := convertHistoryToA2AMetadata(history)
+		require.Len(t, result, 2)
+
+		first := result[0].(map[string]interface{})
+		assert.Equal(t, "user", first["role"])
+		assert.Equal(t, "hello", first["content"])
+
+		second := result[1].(map[string]interface{})
+		assert.Equal(t, "assistant", second["role"])
+		assert.Equal(t, "hi there", second["content"])
+	})
+
+	t.Run("skips empty content", func(t *testing.T) {
+		history := []Message{
+			NewUserMessage("hello"),
+			NewAssistantMessage(""),
+		}
+		result := convertHistoryToA2AMetadata(history)
+		require.Len(t, result, 1)
+		first := result[0].(map[string]interface{})
+		assert.Equal(t, "user", first["role"])
+	})
+}
+
 func TestExtractTextFromTaskStatus(t *testing.T) {
 	t.Run("from status message", func(t *testing.T) {
 		task := &protocol.Task{

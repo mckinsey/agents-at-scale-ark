@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/openai/openai-go"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
@@ -29,7 +30,7 @@ func NewA2AExecutionEngine(k8sClient client.Client, eventingRecorder eventing.A2
 	}
 }
 
-func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace string, agentAnnotations map[string]string, contextID string, userInput Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
+func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace string, agentAnnotations map[string]string, contextID string, userInput Message, history []Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	log := logf.FromContext(ctx)
 	log.Info("executing A2A agent", "agent", agentName)
 
@@ -73,9 +74,10 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 
 	queryName := getQueryName(ctx)
 	modelID := fmt.Sprintf("agent/%s", agentName)
+	historyMeta := convertHistoryToA2AMetadata(history)
 
 	if agentAnnotations[arkann.A2AStreamingSupported] == TrueString && eventStream != nil {
-		result, err := e.executeStreaming(ctx, a2aAddress, a2aServer.Spec.Headers, namespace, content, agentName, queryName, contextID, modelID, eventStream, &a2aServer)
+		result, err := e.executeStreaming(ctx, a2aAddress, a2aServer.Spec.Headers, namespace, content, agentName, queryName, contextID, modelID, historyMeta, eventStream, &a2aServer)
 		if err != nil {
 			log.Error(err, "A2A streaming failed, falling back to blocking", "agent", agentName)
 		} else {
@@ -84,7 +86,7 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 		}
 	}
 
-	a2aResponse, err := ExecuteA2AAgent(ctx, e.client, a2aAddress, a2aServer.Spec.Headers, namespace, content, agentName, queryName, contextID, e.eventingRecorder, &a2aServer)
+	a2aResponse, err := ExecuteA2AAgent(ctx, e.client, a2aAddress, a2aServer.Spec.Headers, namespace, content, agentName, queryName, contextID, historyMeta, e.eventingRecorder, &a2aServer)
 	if err != nil {
 		StreamError(ctx, eventStream, err, "a2a_execution_failed", modelID)
 		e.eventingRecorder.Fail(ctx, "A2AExecution", fmt.Sprintf("A2A execution failed: %v", err), err, operationData)
@@ -112,7 +114,7 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 	}, nil
 }
 
-func (e *A2AExecutionEngine) executeStreaming(ctx context.Context, address string, headers []arkv1prealpha1.Header, namespace, input, agentName, queryName, contextID, modelID string, eventStream EventStreamInterface, a2aServer *arkv1prealpha1.A2AServer) (*ExecutionResult, error) {
+func (e *A2AExecutionEngine) executeStreaming(ctx context.Context, address string, headers []arkv1prealpha1.Header, namespace, input, agentName, queryName, contextID, modelID string, historyMeta []interface{}, eventStream EventStreamInterface, a2aServer *arkv1prealpha1.A2AServer) (*ExecutionResult, error) {
 	rpcURL := strings.TrimSuffix(address, "/")
 
 	a2aClient, err := CreateA2AClient(ctx, e.client, rpcURL, headers, namespace, agentName, e.eventingRecorder)
@@ -134,6 +136,11 @@ func (e *A2AExecutionEngine) executeStreaming(ctx context.Context, address strin
 	params := protocol.SendMessageParams{
 		RPCID:   protocol.GenerateRPCID(),
 		Message: message,
+	}
+	if len(historyMeta) > 0 {
+		params.Metadata = map[string]interface{}{
+			"history": historyMeta,
+		}
 	}
 
 	events, err := a2aClient.StreamMessage(ctx, params)
@@ -274,4 +281,33 @@ func maybeCreateA2ATask(ctx context.Context, k8sClient client.Client, task *prot
 		return
 	}
 	_ = handleA2ATaskResponse(ctx, k8sClient, task, agentName, namespace, queryName, a2aServer)
+}
+
+func convertHistoryToA2AMetadata(history []Message) []interface{} {
+	if len(history) == 0 {
+		return nil
+	}
+	var result []interface{}
+	for _, msg := range history {
+		msgUnion := openai.ChatCompletionMessageParamUnion(msg)
+		entry := map[string]interface{}{}
+		switch {
+		case msgUnion.OfUser != nil:
+			entry["role"] = "user"
+			entry["content"] = msgUnion.OfUser.Content.OfString.Value
+		case msgUnion.OfAssistant != nil:
+			entry["role"] = "assistant"
+			entry["content"] = msgUnion.OfAssistant.Content.OfString.Value
+		case msgUnion.OfSystem != nil:
+			entry["role"] = "system"
+			entry["content"] = msgUnion.OfSystem.Content.OfString.Value
+		default:
+			continue
+		}
+		if entry["content"] == "" {
+			continue
+		}
+		result = append(result, entry)
+	}
+	return result
 }

@@ -79,17 +79,15 @@ func DiscoverA2AAgentsWithRecorder(ctx context.Context, k8sClient client.Client,
 }
 
 // ExecuteA2AAgent executes a task on an A2A agent with optional K8s event recording and query context
-func ExecuteA2AAgent(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace, input, agentName, queryName, contextID string, a2aRecorder eventing.A2aRecorder, obj client.Object) (*A2AResponse, error) {
+func ExecuteA2AAgent(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace, input, agentName, queryName, contextID string, historyMeta []interface{}, a2aRecorder eventing.A2aRecorder, obj client.Object) (*A2AResponse, error) {
 	rpcURL := strings.TrimSuffix(address, "/")
 
-	// Create and configure A2A client
 	a2aClient, err := CreateA2AClient(ctx, k8sClient, rpcURL, headers, namespace, agentName, a2aRecorder)
 	if err != nil {
 		return nil, err
 	}
 
-	// Execute agent and get response
-	return executeA2AAgentMessage(ctx, k8sClient, a2aClient, input, agentName, namespace, queryName, contextID, obj, a2aRecorder)
+	return executeA2AAgentMessage(ctx, k8sClient, a2aClient, input, agentName, namespace, queryName, contextID, historyMeta, obj, a2aRecorder)
 }
 
 // CreateA2AClient creates and configures A2A client with header resolution and injection
@@ -127,8 +125,7 @@ func CreateA2AClient(ctx context.Context, k8sClient client.Client, rpcURL string
 	return a2aClient, nil
 }
 
-// executeA2AAgentMessage sends message to A2A agent and processes response
-func executeA2AAgentMessage(ctx context.Context, k8sClient client.Client, a2aClient *a2aclient.A2AClient, input, agentName, namespace, queryName, contextID string, obj client.Object, a2aRecorder eventing.A2aRecorder) (*A2AResponse, error) {
+func executeA2AAgentMessage(ctx context.Context, k8sClient client.Client, a2aClient *a2aclient.A2AClient, input, agentName, namespace, queryName, contextID string, historyMeta []interface{}, obj client.Object, a2aRecorder eventing.A2aRecorder) (*A2AResponse, error) {
 	var message protocol.Message
 	if contextID != "" {
 		message = protocol.NewMessageWithContext(protocol.MessageRoleUser, []protocol.Part{
@@ -151,6 +148,11 @@ func executeA2AAgentMessage(ctx context.Context, k8sClient client.Client, a2aCli
 		Configuration: &protocol.SendMessageConfiguration{
 			Blocking: &blocking,
 		},
+	}
+	if len(historyMeta) > 0 {
+		params.Metadata = map[string]interface{}{
+			"history": historyMeta,
+		}
 	}
 
 	result, err := a2aClient.SendMessage(ctx, params)
