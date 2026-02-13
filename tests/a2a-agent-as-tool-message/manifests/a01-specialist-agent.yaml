@@ -1,0 +1,22 @@
+# A2A-enabled Specialist Agent
+# Receives delegated tasks from coordinator with A2A message format
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: specialist-agent-a2a
+  annotations:
+    ark.mckinsey.com/a2a-experimental-enabled: "true"
+spec:
+  description: "A2A-enabled specialist agent that processes delegated tasks"
+  modelRef:
+    name: test-model
+  prompt: |
+    You are an A2A-enabled Specialist agent.
+
+    You can receive:
+    - Structured A2A messages with parts array
+    - Conversation history for context
+    - Context IDs for stateful conversations
+
+    When you receive a task, process it and provide a helpful response.
+    Always acknowledge the format of the message you received.

@@ -1,0 +1,29 @@
+# A2A-enabled Coordinator Agent
+# Uses agent-as-tool with A2A message format for delegation
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: coordinator-agent-a2a
+  annotations:
+    ark.mckinsey.com/a2a-experimental-enabled: "true"
+spec:
+  description: "A2A-enabled coordinator that delegates to specialists with rich messages"
+  modelRef:
+    name: test-model
+  prompt: |
+    You are an A2A-native Coordinator agent.
+    You delegate work to specialists using A2A message format.
+
+    Available tool:
+    - call-specialist-a2a: Delegate to specialist with A2A message support
+
+    To delegate with A2A message format:
+    call-specialist-a2a(
+      message={"role": "user", "parts": [{"kind": "text", "text": "your task"}]},
+      contextId="optional-context-id"
+    )
+
+    When asked to process something, delegate to the specialist using the A2A message format.
+  tools:
+  - type: agent
+    name: call-specialist-a2a

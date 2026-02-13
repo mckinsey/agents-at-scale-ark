@@ -442,10 +442,43 @@ The Chat Completions path remains intact and requires no changes on removal.
 - [ ] Formalize ChatCompletions adapter as explicit boundary
 - [ ] Claude/Gemini model boundary adapters (currently: conversion at model call)
 
-### Phase 4: Composability (Planned)
-- [ ] Structured agent-as-tool delegation (#1082) - currently `input` string only
+### Phase 4: Composability (In Progress)
+- [x] Structured agent-as-tool delegation (#1082) - Schema exposed for `message`, `history`, `contextId`
 - [ ] History propagation extension
 - [ ] Identity/permissions extension
+
+#### Agent-as-Tool A2A Schema
+
+When using agent-as-tool with A2A native mode, expose the following inputSchema:
+
+```yaml
+inputSchema:
+  type: object
+  properties:
+    message:
+      type: object
+      description: "A2A message with parts array"
+      properties:
+        role:
+          type: string
+          enum: ["user"]
+        parts:
+          type: array
+          description: "Message content parts (text, file, or data)"
+    history:
+      type: array
+      description: "Previous messages for context"
+    contextId:
+      type: string
+      description: "Context ID for stateful conversations"
+    input:
+      type: string
+      description: "Simple text (fallback)"
+```
+
+Both Tool and target Agent must have `ark.mckinsey.com/a2a-experimental-enabled: "true"` annotation.
+
+See `samples/agents-as-tools/coordinator-example.yaml` for complete examples
 
 ---
 
