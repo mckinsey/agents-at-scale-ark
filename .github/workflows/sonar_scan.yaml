@@ -1,8 +1,14 @@
 name: SonarQube Scan
 
 on:
-  workflow_call:
   workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to scan (defaults to current branch)'
+        required: false
+        type: string
+        default: ''
+  workflow_call:
     inputs:
       branch:
         description: 'Branch to scan (defaults to current branch)'
@@ -181,58 +187,58 @@ jobs:
 
       - name: Get SonarQube Results
         if: always()
+        env:
+          PR_KEY: ${{ github.event.number }}
+          EVENT_NAME: ${{ github.event_name }}
+          BRANCH_NAME: ${{ inputs.branch || github.ref_name }}
         run: |
-          # Check and reconnect WARP if needed
-          echo "Checking Cloudflare WARP status..."
-          warp-cli --accept-tos status || true
-          warp-cli --accept-tos connect || true
-          sleep 2
-          warp-cli --accept-tos status || true
+          # Run API fetch inside Docker container (same network path as scan)
+          docker run --rm \
+            -e SONAR_TOKEN \
+            -e SONAR_HOST_URL \
+            -e PROJECT_KEY \
+            -e PR_KEY \
+            -e EVENT_NAME \
+            -e BRANCH_NAME \
+            -v "$(pwd):/workspace" \
+            alpine:3.19 sh -c '
+              apk add --no-cache curl jq >/dev/null 2>&1
 
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            PR_KEY="${{ github.event.number }}"
-            QG_RESPONSE=$(curl -s -u "${SONAR_TOKEN}:" \
-              "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${PROJECT_KEY}&pullRequest=${PR_KEY}")
-            MEASURES=$(curl -s -u "${SONAR_TOKEN}:" \
-              "${SONAR_HOST_URL}/api/measures/component?component=${PROJECT_KEY}&pullRequest=${PR_KEY}&metricKeys=bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,ncloc")
-          else
-            BRANCH="${{ inputs.branch || github.ref_name }}"
-            QG_RESPONSE=$(curl -s -u "${SONAR_TOKEN}:" \
-              "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${PROJECT_KEY}&branch=${BRANCH}")
-            MEASURES=$(curl -s -u "${SONAR_TOKEN}:" \
-              "${SONAR_HOST_URL}/api/measures/component?component=${PROJECT_KEY}&branch=${BRANCH}&metricKeys=bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,ncloc")
-          fi
+              if [ "$EVENT_NAME" = "pull_request" ]; then
+                QG_RESPONSE=$(curl -sf -m 30 -u "${SONAR_TOKEN}:" \
+                  "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${PROJECT_KEY}&pullRequest=${PR_KEY}" 2>/dev/null || echo "{}")
+                MEASURES=$(curl -sf -m 30 -u "${SONAR_TOKEN}:" \
+                  "${SONAR_HOST_URL}/api/measures/component?component=${PROJECT_KEY}&pullRequest=${PR_KEY}&metricKeys=bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,ncloc" 2>/dev/null || echo "{}")
+              else
+                QG_RESPONSE=$(curl -sf -m 30 -u "${SONAR_TOKEN}:" \
+                  "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${PROJECT_KEY}&branch=${BRANCH_NAME}" 2>/dev/null || echo "{}")
+                MEASURES=$(curl -sf -m 30 -u "${SONAR_TOKEN}:" \
+                  "${SONAR_HOST_URL}/api/measures/component?component=${PROJECT_KEY}&branch=${BRANCH_NAME}&metricKeys=bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,ncloc" 2>/dev/null || echo "{}")
+              fi
 
-          if echo "$QG_RESPONSE" | jq -e . >/dev/null 2>&1; then
-            QG_STATUS=$(echo "$QG_RESPONSE" | jq -r '.projectStatus.status // "UNKNOWN"')
-          else
-            echo "Warning: Could not parse quality gate response"
-            echo "Response: $QG_RESPONSE"
-            QG_STATUS="UNKNOWN"
-          fi
+              QG_STATUS=$(echo "$QG_RESPONSE" | jq -r ".projectStatus.status // \"UNKNOWN\"")
+              BUGS=$(echo "$MEASURES" | jq -r ".component.measures[] | select(.metric==\"bugs\") | .value // \"N/A\"" 2>/dev/null || echo "N/A")
+              VULNERABILITIES=$(echo "$MEASURES" | jq -r ".component.measures[] | select(.metric==\"vulnerabilities\") | .value // \"N/A\"" 2>/dev/null || echo "N/A")
+              CODE_SMELLS=$(echo "$MEASURES" | jq -r ".component.measures[] | select(.metric==\"code_smells\") | .value // \"N/A\"" 2>/dev/null || echo "N/A")
+              COVERAGE=$(echo "$MEASURES" | jq -r ".component.measures[] | select(.metric==\"coverage\") | .value // \"N/A\"" 2>/dev/null || echo "N/A")
+              DUPLICATIONS=$(echo "$MEASURES" | jq -r ".component.measures[] | select(.metric==\"duplicated_lines_density\") | .value // \"N/A\"" 2>/dev/null || echo "N/A")
+              LINES=$(echo "$MEASURES" | jq -r ".component.measures[] | select(.metric==\"ncloc\") | .value // \"N/A\"" 2>/dev/null || echo "N/A")
 
-          if echo "$MEASURES" | jq -e . >/dev/null 2>&1; then
-            BUGS=$(echo "$MEASURES" | jq -r '.component.measures[] | select(.metric=="bugs") | .value // "N/A"' 2>/dev/null || echo "N/A")
-            VULNERABILITIES=$(echo "$MEASURES" | jq -r '.component.measures[] | select(.metric=="vulnerabilities") | .value // "N/A"' 2>/dev/null || echo "N/A")
-            CODE_SMELLS=$(echo "$MEASURES" | jq -r '.component.measures[] | select(.metric=="code_smells") | .value // "N/A"' 2>/dev/null || echo "N/A")
-            COVERAGE=$(echo "$MEASURES" | jq -r '.component.measures[] | select(.metric=="coverage") | .value // "N/A"' 2>/dev/null || echo "N/A")
-            DUPLICATIONS=$(echo "$MEASURES" | jq -r '.component.measures[] | select(.metric=="duplicated_lines_density") | .value // "N/A"' 2>/dev/null || echo "N/A")
-            LINES=$(echo "$MEASURES" | jq -r '.component.measures[] | select(.metric=="ncloc") | .value // "N/A"' 2>/dev/null || echo "N/A")
-          else
-            echo "Warning: Could not parse measures response"
-            echo "Response: $MEASURES"
-            BUGS="N/A"; VULNERABILITIES="N/A"; CODE_SMELLS="N/A"; COVERAGE="N/A"; DUPLICATIONS="N/A"; LINES="N/A"
-          fi
+              cat > /workspace/sonar-results.txt << EOF
+          ## SonarQube Scan Results
 
-          echo "## SonarQube Scan Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Quality Gate:** ${QG_STATUS}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Bugs | ${BUGS} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Vulnerabilities | ${VULNERABILITIES} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Code Smells | ${CODE_SMELLS} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Coverage | ${COVERAGE}% |" >> $GITHUB_STEP_SUMMARY
-          echo "| Duplications | ${DUPLICATIONS}% |" >> $GITHUB_STEP_SUMMARY
-          echo "| Lines of Code | ${LINES} |" >> $GITHUB_STEP_SUMMARY
+          **Quality Gate:** ${QG_STATUS}
+
+          | Metric | Value |
+          |--------|-------|
+          | Bugs | ${BUGS} |
+          | Vulnerabilities | ${VULNERABILITIES} |
+          | Code Smells | ${CODE_SMELLS} |
+          | Coverage | ${COVERAGE}% |
+          | Duplications | ${DUPLICATIONS}% |
+          | Lines of Code | ${LINES} |
+          EOF
+            '
+
+          cat sonar-results.txt >> $GITHUB_STEP_SUMMARY
+          cat sonar-results.txt
