@@ -61,8 +61,33 @@ jobs:
           find coverage-artifacts -path "*/ark-api/*" -name "lcov.info" -exec cp {} services/ark-api/ark-api/coverage/ \; 2>/dev/null || true
           find coverage-artifacts -path "*/ark-dashboard/*" -name "lcov.info" -exec cp {} services/ark-dashboard/ark-dashboard/coverage/ \; 2>/dev/null || true
 
+          echo "=== Fixing paths in lcov.info files ==="
+          for lcov_file in $(find . -name "lcov.info" -not -path "./coverage-artifacts/*" -not -path "./node_modules/*" 2>/dev/null); do
+            dir=$(dirname "$lcov_file")
+            echo "Processing $lcov_file (dir: $dir)"
+
+            if [[ "$dir" == *"ark-api"* ]]; then
+              sed -i 's|^SF:src/|SF:services/ark-api/ark-api/src/|g' "$lcov_file"
+            elif [[ "$dir" == *"ark-dashboard"* ]]; then
+              sed -i 's|^SF:src/|SF:services/ark-dashboard/ark-dashboard/src/|g' "$lcov_file"
+              sed -i 's|^SF:app/|SF:services/ark-dashboard/ark-dashboard/app/|g' "$lcov_file"
+              sed -i 's|^SF:components/|SF:services/ark-dashboard/ark-dashboard/components/|g' "$lcov_file"
+              sed -i 's|^SF:lib/|SF:services/ark-dashboard/ark-dashboard/lib/|g' "$lcov_file"
+            elif [[ "$dir" == *"ark/unit-tests"* ]]; then
+              sed -i 's|^SF:internal/|SF:ark/internal/|g' "$lcov_file"
+              sed -i 's|^SF:cmd/|SF:ark/cmd/|g' "$lcov_file"
+              sed -i 's|^SF:api/|SF:ark/api/|g' "$lcov_file"
+            fi
+          done
+
           echo "Coverage files organized:"
           find . -name "lcov.info" 2>/dev/null | grep -v node_modules | grep -v coverage-artifacts || true
+
+          echo "=== Sample of rewritten paths ==="
+          for f in $(find . -name "lcov.info" -not -path "./coverage-artifacts/*" -not -path "./node_modules/*" 2>/dev/null | head -3); do
+            echo "--- $f ---"
+            grep "^SF:" "$f" | head -5
+          done
 
       - name: Setup Go
         if: steps.check-coverage.outputs.found == 'false'
@@ -161,26 +186,38 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" == "pull_request" ]; then
             PR_KEY="${{ github.event.number }}"
-            QG_STATUS=$(curl -s -u "${SONAR_TOKEN}:" \
-              "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${PROJECT_KEY}&pullRequest=${PR_KEY}" \
-              | jq -r '.projectStatus.status')
+            QG_RESPONSE=$(curl -s -u "${SONAR_TOKEN}:" \
+              "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${PROJECT_KEY}&pullRequest=${PR_KEY}")
             MEASURES=$(curl -s -u "${SONAR_TOKEN}:" \
               "${SONAR_HOST_URL}/api/measures/component?component=${PROJECT_KEY}&pullRequest=${PR_KEY}&metricKeys=bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,ncloc")
           else
             BRANCH="${{ inputs.branch || github.ref_name }}"
-            QG_STATUS=$(curl -s -u "${SONAR_TOKEN}:" \
-              "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${PROJECT_KEY}&branch=${BRANCH}" \
-              | jq -r '.projectStatus.status')
+            QG_RESPONSE=$(curl -s -u "${SONAR_TOKEN}:" \
+              "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${PROJECT_KEY}&branch=${BRANCH}")
             MEASURES=$(curl -s -u "${SONAR_TOKEN}:" \
               "${SONAR_HOST_URL}/api/measures/component?component=${PROJECT_KEY}&branch=${BRANCH}&metricKeys=bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,ncloc")
           fi
 
-          BUGS=$(echo "$MEASURES" | jq -r '.component.measures[] | select(.metric=="bugs") | .value // "N/A"')
-          VULNERABILITIES=$(echo "$MEASURES" | jq -r '.component.measures[] | select(.metric=="vulnerabilities") | .value // "N/A"')
-          CODE_SMELLS=$(echo "$MEASURES" | jq -r '.component.measures[] | select(.metric=="code_smells") | .value // "N/A"')
-          COVERAGE=$(echo "$MEASURES" | jq -r '.component.measures[] | select(.metric=="coverage") | .value // "N/A"')
-          DUPLICATIONS=$(echo "$MEASURES" | jq -r '.component.measures[] | select(.metric=="duplicated_lines_density") | .value // "N/A"')
-          LINES=$(echo "$MEASURES" | jq -r '.component.measures[] | select(.metric=="ncloc") | .value // "N/A"')
+          if echo "$QG_RESPONSE" | jq -e . >/dev/null 2>&1; then
+            QG_STATUS=$(echo "$QG_RESPONSE" | jq -r '.projectStatus.status // "UNKNOWN"')
+          else
+            echo "Warning: Could not parse quality gate response"
+            echo "Response: $QG_RESPONSE"
+            QG_STATUS="UNKNOWN"
+          fi
+
+          if echo "$MEASURES" | jq -e . >/dev/null 2>&1; then
+            BUGS=$(echo "$MEASURES" | jq -r '.component.measures[] | select(.metric=="bugs") | .value // "N/A"' 2>/dev/null || echo "N/A")
+            VULNERABILITIES=$(echo "$MEASURES" | jq -r '.component.measures[] | select(.metric=="vulnerabilities") | .value // "N/A"' 2>/dev/null || echo "N/A")
+            CODE_SMELLS=$(echo "$MEASURES" | jq -r '.component.measures[] | select(.metric=="code_smells") | .value // "N/A"' 2>/dev/null || echo "N/A")
+            COVERAGE=$(echo "$MEASURES" | jq -r '.component.measures[] | select(.metric=="coverage") | .value // "N/A"' 2>/dev/null || echo "N/A")
+            DUPLICATIONS=$(echo "$MEASURES" | jq -r '.component.measures[] | select(.metric=="duplicated_lines_density") | .value // "N/A"' 2>/dev/null || echo "N/A")
+            LINES=$(echo "$MEASURES" | jq -r '.component.measures[] | select(.metric=="ncloc") | .value // "N/A"' 2>/dev/null || echo "N/A")
+          else
+            echo "Warning: Could not parse measures response"
+            echo "Response: $MEASURES"
+            BUGS="N/A"; VULNERABILITIES="N/A"; CODE_SMELLS="N/A"; COVERAGE="N/A"; DUPLICATIONS="N/A"; LINES="N/A"
+          fi
 
           echo "## SonarQube Scan Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
