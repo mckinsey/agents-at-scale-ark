@@ -70,6 +70,9 @@ deployments:
             runAsNonRoot: false
         webhook:
           enable: true
+        telemetry:
+          tenantRouting:
+            otelDiscovery: true
 
 dev:
   ark-controller:

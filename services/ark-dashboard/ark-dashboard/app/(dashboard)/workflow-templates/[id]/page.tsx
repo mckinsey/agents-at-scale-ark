@@ -39,11 +39,16 @@ import {
 } from '@/lib/services/workflow-templates';
 import { countWorkflowTasks } from '@/lib/utils/workflow';
 import { showWorkflowStartedToast } from '@/lib/utils/workflow-toast';
+import { useNamespace } from '@/providers/NamespaceProvider';
+
+const ARGO_BASE_URL =
+  process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746';
 
 export default function FlowDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { state: sidebarState, isMobile } = useSidebar();
+  const { namespace, readOnlyMode } = useNamespace();
   const flowId = params.id as string;
   const [flow, setFlow] = useState<Flow | null>(null);
   const [template, setTemplate] = useState<WorkflowTemplate | null>(null);
@@ -331,7 +336,7 @@ export default function FlowDetailPage() {
                       className="h-8 w-8 cursor-pointer p-0"
                       asChild>
                       <a
-                        href={`http://argo.127.0.0.1.nip.io:8080/workflow-templates/default/${flowId}`}
+                        href={`${ARGO_BASE_URL}/workflow-templates/${namespace}/${flowId}`}
                         target="_blank"
                         rel="noopener noreferrer">
                         <ExternalLink className="h-4 w-4" />
@@ -348,11 +353,16 @@ export default function FlowDetailPage() {
                       variant="ghost"
                       size="sm"
                       className="h-8 w-8 cursor-pointer p-0"
+                      disabled={readOnlyMode}
                       onClick={handleDeleteClick}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Delete template</TooltipContent>
+                  <TooltipContent>
+                    {readOnlyMode
+                      ? 'Delete disabled in demo mode'
+                      : 'Delete template'}
+                  </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
               {template && (
