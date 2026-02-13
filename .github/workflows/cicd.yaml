@@ -585,55 +585,74 @@ jobs:
 
       - name: Test endpoints
         run: |
-          wait_for_endpoint() {
-            local url=$1
-            local name=$2
-            local max_attempts=30
-            for i in $(seq 1 $max_attempts); do
-              if curl -sf "$url" > /dev/null 2>&1; then
-                echo "$name is ready"
-                return 0
-              fi
-              echo "Waiting for $name... ($i/$max_attempts)"
-              sleep 2
-            done
-            echo "$name failed to become ready"
-            return 1
-          }
+          # Wait for pods to exist
+          echo "Waiting for pods to be scheduled..."
+          kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s || true
+          kubectl wait --for=condition=ready pod -l app=ark-dashboard -n default --timeout=120s || true
 
-          # Wait for services to be ready
-          echo "Waiting for services to be ready..."
-          kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
-          kubectl wait --for=condition=ready pod -l app=ark-dashboard -n default --timeout=120s
-
-          # Test ark-api service (including A2A Gateway endpoints)
+          # Test ark-api service
           echo
           echo "=== Testing ark-api service ==="
-          kubectl port-forward -n default service/ark-api 8082:80 &
-          API_PID=$!
-          wait_for_endpoint "http://127.0.0.1:8082/health" "ark-api" || (kubectl logs -l app=ark-api -n default --tail=50 && exit 1)
-          echo "Testing API health endpoint..."
-          curl -f http://127.0.0.1:8082/health || (echo "API health check failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
-          echo "Testing API ready endpoint..."
-          curl -f http://127.0.0.1:8082/ready || (echo "API ready check failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
-          echo "Testing OpenAI models endpoint..."
-          curl -f http://127.0.0.1:8082/openai/v1/models || (echo "OpenAI models endpoint failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
-          echo "Testing A2A Gateway /agents endpoint..."
-          curl -f http://127.0.0.1:8082/a2a/agents || (echo "A2A /agents endpoint failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
-          # Clean up API port-forward
-          kill $API_PID || true
+          for i in $(seq 1 30); do
+            # Kill any existing port-forward on 8082
+            pkill -f "port-forward.*8082:80" 2>/dev/null || true
+            sleep 1
+
+            # Start fresh port-forward
+            kubectl port-forward -n default service/ark-api 8082:80 &
+            sleep 3
+
+            if curl -sf --connect-timeout 5 --max-time 10 http://127.0.0.1:8082/health > /dev/null 2>&1; then
+              echo "ark-api is ready (attempt $i/30)"
+              break
+            fi
+
+            echo "Waiting for ark-api... ($i/30)"
+            if [ $i -eq 30 ]; then
+              echo "ark-api failed to become ready"
+              kubectl logs -l app=ark-api -n default --tail=50
+              exit 1
+            fi
+          done
+
+          echo "Testing API endpoints..."
+          curl -f --max-time 10 http://127.0.0.1:8082/health || (echo "API health check failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
+          curl -f --max-time 10 http://127.0.0.1:8082/ready || (echo "API ready check failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
+          curl -f --max-time 10 http://127.0.0.1:8082/openai/v1/models || (echo "OpenAI models endpoint failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
+          curl -f --max-time 10 http://127.0.0.1:8082/a2a/agents || (echo "A2A /agents endpoint failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
+          echo "ark-api tests passed!"
 
           # Test ark-dashboard service
           echo
           echo "=== Testing ark-dashboard service ==="
-          kubectl port-forward -n default service/ark-dashboard 3001:3000 &
-          DASH_PID=$!
-          wait_for_endpoint "http://127.0.0.1:3001/" "ark-dashboard" || (kubectl logs -l app=ark-dashboard -n default --tail=50 && exit 1)
-          echo "Testing dashboard endpoint..."
-          curl -f http://127.0.0.1:3001/ || (echo "Dashboard check failed" && kubectl logs -l app=ark-dashboard -n default --tail=20 && exit 1)
-          # Clean up dashboard port-forward
-          kill $DASH_PID || true
+          for i in $(seq 1 30); do
+            # Kill any existing port-forward on 3001
+            pkill -f "port-forward.*3001:3000" 2>/dev/null || true
+            sleep 1
 
+            # Start fresh port-forward
+            kubectl port-forward -n default service/ark-dashboard 3001:3000 &
+            sleep 3
+
+            if curl -sf --connect-timeout 5 --max-time 10 http://127.0.0.1:3001/ > /dev/null 2>&1; then
+              echo "ark-dashboard is ready (attempt $i/30)"
+              break
+            fi
+
+            echo "Waiting for ark-dashboard... ($i/30)"
+            if [ $i -eq 30 ]; then
+              echo "ark-dashboard failed to become ready"
+              kubectl logs -l app=ark-dashboard -n default --tail=50
+              exit 1
+            fi
+          done
+
+          echo "Testing dashboard endpoint..."
+          curl -f --max-time 10 http://127.0.0.1:3001/ || (echo "Dashboard check failed" && kubectl logs -l app=ark-dashboard -n default --tail=20 && exit 1)
+          echo "ark-dashboard tests passed!"
+
+          # Cleanup
+          pkill -f "port-forward" 2>/dev/null || true
           echo "Smoke test completed successfully!"
 
 
