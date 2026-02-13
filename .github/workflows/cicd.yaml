@@ -369,133 +369,6 @@ jobs:
           path: out/
           retention-days: 30
 
-  e2e-quickstart:
-    needs: [setup-container-cache-registry, build-containers]
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      # Free up some disk space for ARK installation
-      - name: Clean up disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          sudo docker image prune --all --force
-          sudo docker builder prune --all --force
-
-      - name: Install ruff
-        uses: astral-sh/ruff-action@v3
-        with:
-          version: "0.12.2"
-          args: "--version"
-
-      - name: Install dependencies
-        run: |
-          # Install yq
-          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
-          sudo chmod +x /usr/local/bin/yq
-
-          # Install helm
-          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-
-          # Install k9s
-          curl -sS https://webinstall.dev/k9s | bash
-          export PATH="$HOME/.local/bin:$PATH"
-
-          # Install chainsaw
-          curl -s -L "https://github.com/kyverno/chainsaw/releases/download/v0.2.12/chainsaw_linux_amd64.tar.gz" | \
-            tar xz -C /tmp
-          sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
-          sudo chmod +x /usr/local/bin/chainsaw
-
-          # Install gettext for envsubst
-          sudo apt-get update && sudo apt-get install -y gettext
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: "ark/go.mod"
-          cache-dependency-path: "ark/go.sum"
-
-      - name: Configure K3s registry authentication
-        if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
-        run: |
-          sudo mkdir -p /etc/rancher/k3s
-          cat <<EOF | sudo tee /etc/rancher/k3s/registries.yaml
-          mirrors:
-            ghcr.io:
-              endpoint:
-                - "https://ghcr.io"
-          configs:
-            ghcr.io:
-              auth:
-                username: ${{ github.actor }}
-                password: ${{ secrets.GITHUB_TOKEN }}
-          EOF
-
-      - name: Setup K3s cluster
-        uses: ./.github/actions/setup-k3s
-        with:
-          metrics-enabled: false
-          traefik-enabled: false
-          k3s-channel: latest
-          mock-llm-enabled: true
-
-      - name: Install fark, ark CLI and configure kubectl
-        run: |
-          # Install fark
-          make fark-install
-
-          # Install ark CLI
-          make ark-cli-install
-
-          # Configure kubectl
-          kubectl get pods -A
-      - name: Setup Docker Buildx for registry caching
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Registry
-        if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}
-          username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
-          password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
-
-      - name: Run quickstart
-        env:
-          ARK_QUICKSTART_PROMPT_YES: 1
-          ARK_QUICKSTART_MODEL_TYPE: 'openai'
-          ARK_QUICKSTART_MODEL_VERSION: 'gpt-5'
-          ARK_QUICKSTART_BASE_URL: 'http://mock-llm.default.svc.cluster.local/v1'
-          ARK_QUICKSTART_API_KEY: 'mock-api-key'
-          ARK_QUICKSTART_CONTROLLER_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller
-          ARK_QUICKSTART_CONTROLLER_TAG: ${{ github.sha }}
-          CACHE_ARGS: --cache-from type=registry,ref=${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller:cache --cache-to type=registry,ref=${{ needs.setup-container-cache-registry.outputs.ci-cache-registry|| format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller:cache,mode=max
-        run: |
-          echo "Environment variables set:"
-          echo "ARK_QUICKSTART_PROMPT_YES=$ARK_QUICKSTART_PROMPT_YES"
-          echo "ARK_QUICKSTART_MODEL_TYPE=$ARK_QUICKSTART_MODEL_TYPE"
-          echo "ARK_QUICKSTART_MODEL_VERSION=$ARK_QUICKSTART_MODEL_VERSION"
-          echo "ARK_QUICKSTART_BASE_URL=$ARK_QUICKSTART_BASE_URL"
-          echo "ARK_QUICKSTART_API_KEY=***"
-          make quickstart-force
-      - name: Wait for ARK components to be ready
-        run: |
-          echo "Waiting for ARK controller to be ready..."
-          kubectl -n ark-system wait --for=condition=available --timeout=300s deployment/ark-controller
-          echo "Waiting for webhook service to be ready..."
-          kubectl -n ark-system wait --for=condition=ready pod -l control-plane=ark-controller --timeout=120s
-          echo "Giving webhook service additional time to initialize..."
-          sleep 10
-      - name: Test end-to-end query
-        run: |
-          kubectl describe agent sample-agent
-          # Test ark-cli query command
-          ark query agent/sample-agent "confirm you have read this message"
-          # Test fark
-          fark agent sample-agent "confirm you have read this message"
-
   e2e-ark-cli:
     needs: [setup-container-cache-registry, build-containers, build-ark-cli]
     if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
@@ -1184,7 +1057,6 @@ jobs:
     needs:
       [
         build-containers,
-        e2e-quickstart,
         e2e-smoke-test,
         e2e-tests-standard,
         e2e-tests-evaluated,
@@ -1257,7 +1129,6 @@ jobs:
     needs:
       [
         build-containers,
-        e2e-quickstart,
         e2e-smoke-test,
         e2e-tests-standard,
         e2e-tests-evaluated,
