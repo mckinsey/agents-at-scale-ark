@@ -14,6 +14,11 @@ vi.mock('sonner', () => ({
   },
 }));
 
+// Mock the PageHeader component to avoid sidebar issues
+vi.mock('@/components/common/page-header', () => ({
+  PageHeader: () => null,
+}));
+
 const mockResources = {
   agents: [
     { id: 'agent-1', name: 'Agent 1', type: 'agent', selected: false },
@@ -104,25 +109,16 @@ describe('ExportPage', () => {
     });
   });
 
-  it('should show error when no resources are selected', async () => {
-    const user = userEvent.setup();
-    const { toast } = await import('sonner');
-
+  it('should disable Export Selected button when no resources are selected', async () => {
     render(<ExportPage />);
 
     await waitFor(() => {
       expect(screen.getByText('Agent 1')).toBeInTheDocument();
     });
 
-    const exportButton = screen.getByRole('button', { name: /Export Selected/ });
-    await user.click(exportButton);
-
-    expect(toast.error).toHaveBeenCalledWith(
-      'No resources selected',
-      expect.objectContaining({
-        description: 'Please select at least one resource to export',
-      })
-    );
+    // Export Selected should be disabled when nothing is selected
+    const exportButton = screen.getByRole('button', { name: /Export Selected \(0\)/ });
+    expect(exportButton).toBeDisabled();
   });
 
   it('should display last export time', async () => {

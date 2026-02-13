@@ -22,7 +22,6 @@ describe('exportService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
-    document.body.innerHTML = '';
     mockCreateObjectURL.mockReturnValue('blob:http://example.com/123');
   });
 
@@ -73,13 +72,13 @@ describe('exportService', () => {
         blob: () => Promise.resolve(mockBlob),
       });
 
-      const mockLink = {
-        href: '',
-        setAttribute: vi.fn(),
-        click: vi.fn(),
-        remove: vi.fn(),
-      };
-      vi.spyOn(document, 'createElement').mockReturnValue(mockLink as any);
+      // Mock DOM elements
+      const mockLink = document.createElement('a');
+      const clickSpy = vi.spyOn(mockLink, 'click').mockImplementation(() => {});
+      const removeSpy = vi.spyOn(mockLink, 'remove').mockImplementation(() => {});
+
+      vi.spyOn(document, 'createElement').mockReturnValue(mockLink);
+      vi.spyOn(document.body, 'appendChild').mockImplementation(() => mockLink);
 
       await exportService.exportResources(selectedItems);
 
@@ -96,7 +95,8 @@ describe('exportService', () => {
         })
       );
 
-      expect(mockLink.click).toHaveBeenCalled();
+      expect(clickSpy).toHaveBeenCalled();
+      expect(removeSpy).toHaveBeenCalled();
       expect(localStorage.getItem('ark-dashboard-last-export')).toBeTruthy();
     });
 
