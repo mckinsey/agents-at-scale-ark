@@ -17,6 +17,12 @@ import (
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 )
 
+const (
+	testEngineName    = "langchain-engine"
+	testEngineTypeA2A = "a2a-langchain"
+	testEngineNS      = "default"
+)
+
 type testExecutionEngineRecorder struct{}
 
 func (testExecutionEngineRecorder) InitializeQueryContext(ctx context.Context, _ *arkv1alpha1.Query) context.Context {
@@ -51,15 +57,15 @@ func TestExecutionEngineClientExecuteA2AIncludesNativePayload(t *testing.T) {
 	require.NoError(t, arkv1prealpha1.AddToScheme(scheme))
 
 	engine := &arkv1prealpha1.ExecutionEngine{}
-	engine.Name = "langchain-engine"
-	engine.Namespace = "default"
-	engine.Spec.Type = "a2a-langchain"
+	engine.Name = testEngineName
+	engine.Namespace = testEngineNS
+	engine.Spec.Type = testEngineTypeA2A
 	engine.Status.LastResolvedAddress = server.URL
 	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(engine).Build()
 
 	engineClient := NewExecutionEngineClient(k8sClient, testExecutionEngineRecorder{})
-	engineRef := &arkv1alpha1.ExecutionEngineRef{Name: "langchain-engine"}
-	agentConfig := AgentConfig{Name: "test-agent", Namespace: "default"}
+	engineRef := &arkv1alpha1.ExecutionEngineRef{Name: testEngineName}
+	agentConfig := AgentConfig{Name: "test-agent", Namespace: testEngineNS}
 	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{protocol.NewTextPart("hello")})
 	history := []protocol.Message{
 		protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{protocol.NewTextPart("prior")}),
@@ -105,15 +111,15 @@ func TestExecutionEngineClientExecuteA2AReturnsNativeMessages(t *testing.T) {
 	require.NoError(t, arkv1prealpha1.AddToScheme(scheme))
 
 	engine := &arkv1prealpha1.ExecutionEngine{}
-	engine.Name = "langchain-engine"
-	engine.Namespace = "default"
-	engine.Spec.Type = "a2a-langchain"
+	engine.Name = testEngineName
+	engine.Namespace = testEngineNS
+	engine.Spec.Type = testEngineTypeA2A
 	engine.Status.LastResolvedAddress = server.URL
 	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(engine).Build()
 
 	engineClient := NewExecutionEngineClient(k8sClient, testExecutionEngineRecorder{})
-	engineRef := &arkv1alpha1.ExecutionEngineRef{Name: "langchain-engine"}
-	agentConfig := AgentConfig{Name: "test-agent", Namespace: "default"}
+	engineRef := &arkv1alpha1.ExecutionEngineRef{Name: testEngineName}
+	agentConfig := AgentConfig{Name: "test-agent", Namespace: testEngineNS}
 	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{protocol.NewTextPart("hello")})
 
 	messages, err := engineClient.ExecuteA2A(context.Background(), engineRef, agentConfig, userInput, nil, nil)

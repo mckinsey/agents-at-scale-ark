@@ -666,7 +666,7 @@ func extractResponseFromMessageResult(ctx context.Context, k8sClient client.Clie
 	}
 }
 
-// extractTextFromTask extracts text from a completed or failed Task
+//nolint:gocognit // Extracts text from task status message, artifacts, and history; cohesive extraction logic
 func extractTextFromTask(task *protocol.Task) (string, error) {
 	if task.Status.State == "" {
 		return "", fmt.Errorf("task has no status state")

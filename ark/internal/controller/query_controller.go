@@ -554,6 +554,7 @@ func applyA2AMetadataFromExecutionResult(response *arkv1alpha1.Response, executi
 	}
 }
 
+//nolint:gocognit // Parses JSON metadata from tool messages; splitting would scatter related extraction logic
 func collectDelegatedA2AFromMessages(messages []genai.Message) (string, []string, []map[string]interface{}) {
 	contextID := ""
 	taskIDs := make([]string, 0)
@@ -972,6 +973,7 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 	return result, nil
 }
 
+//nolint:dupl // A2A variant intentionally mirrors executeTeam for separate removability
 func (r *QueryReconciler) executeTeamA2A(ctx context.Context, query arkv1alpha1.Query, team *genai.Team, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface, span telemetry.Span) (*genai.ExecutionResult, error) {
 	inputMessages, err := genai.GetQueryInputA2AMessages(ctx, query, impersonatedClient)
 	if err != nil {

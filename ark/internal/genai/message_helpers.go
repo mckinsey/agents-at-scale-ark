@@ -3,8 +3,6 @@
 package genai
 
 import (
-	"strings"
-
 	"github.com/openai/openai-go"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
@@ -30,9 +28,8 @@ func PrepareExecutionMessages(inputMessages, memoryMessages []Message) (currentM
 // to capture the initial query input.
 func ExtractUserMessageContent(messages []Message) string {
 	for _, msg := range messages {
-		msgUnion := openai.ChatCompletionMessageParamUnion(msg)
-		if msgUnion.OfUser != nil {
-			if content := extractUserContent(msgUnion.OfUser); content != "" {
+		if msg.OfUser != nil {
+			if content := extractUserContent(msg.OfUser); content != "" {
 				return content
 			}
 		}
@@ -97,11 +94,10 @@ func ExtractA2AUserMessageContent(messages []protocol.Message) string {
 // the final response from agent/team execution results.
 func ExtractLastAssistantMessageContent(messages []Message) string {
 	for i := len(messages) - 1; i >= 0; i-- {
-		msgUnion := openai.ChatCompletionMessageParamUnion(messages[i])
-		if msgUnion.OfAssistant == nil {
+		if messages[i].OfAssistant == nil {
 			continue
 		}
-		if text := extractTextFromMessageParam(msgUnion); text != "" {
+		if text := extractTextFromMessageParam(messages[i]); text != "" {
 			return text
 		}
 	}
@@ -109,19 +105,18 @@ func ExtractLastAssistantMessageContent(messages []Message) string {
 }
 
 func ExtractTextFromMessage(message Message) string {
-	return extractTextFromMessageParam(openai.ChatCompletionMessageParamUnion(message))
+	return extractTextFromMessageParam(message)
 }
 
 func resolveMessageRole(msg Message) string {
-	msgUnion := openai.ChatCompletionMessageParamUnion(msg)
 	switch {
-	case msgUnion.OfUser != nil:
+	case msg.OfUser != nil:
 		return RoleUser
-	case msgUnion.OfSystem != nil:
+	case msg.OfSystem != nil:
 		return RoleSystem
-	case msgUnion.OfTool != nil:
+	case msg.OfTool != nil:
 		return RoleTool
-	case msgUnion.OfAssistant != nil:
+	case msg.OfAssistant != nil:
 		return RoleAssistant
 	default:
 		return RoleAssistant
@@ -141,17 +136,4 @@ func extractTextFromMessageParam(msg openai.ChatCompletionMessageParamUnion) str
 	default:
 		return ""
 	}
-}
-
-func extractTextFromContentParts(parts []openai.ChatCompletionContentPartTextParam) string {
-	if len(parts) == 0 {
-		return ""
-	}
-	var builder strings.Builder
-	for _, part := range parts {
-		if part.Text != "" {
-			builder.WriteString(part.Text)
-		}
-	}
-	return builder.String()
 }

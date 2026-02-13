@@ -9,17 +9,7 @@ import (
 )
 
 func A2AToOpenAIMessage(msg protocol.Message) (openai.ChatCompletionMessageParamUnion, error) {
-	role := RoleAssistant
-	switch msg.Role {
-	case protocol.MessageRoleUser:
-		role = RoleUser
-	case protocol.MessageRoleAgent:
-		if msg.Metadata != nil {
-			if value, ok := msg.Metadata[MetadataRoleKey].(string); ok && value != "" {
-				role = value
-			}
-		}
-	}
+	role := resolveA2AMessageRole(msg)
 	content := extractTextFromParts(msg.Parts)
 	switch role {
 	case RoleUser:
@@ -27,30 +17,54 @@ func A2AToOpenAIMessage(msg protocol.Message) (openai.ChatCompletionMessageParam
 	case RoleSystem:
 		return openai.SystemMessage(content), nil
 	case RoleTool:
-		toolCallID := ""
-		if msg.Metadata != nil {
-			if value, ok := msg.Metadata[MetadataToolCallIDKey].(string); ok {
-				toolCallID = value
-			}
-		}
-		if toolCallID == "" {
-			return openai.AssistantMessage(content), nil
-		}
-		return openai.ToolMessage(content, toolCallID), nil
+		return convertA2AToolMessage(msg.Metadata, content), nil
 	case RoleAssistant:
-		assistant := openai.AssistantMessage(content)
-		if assistant.OfAssistant != nil && msg.Metadata != nil {
-			if value, ok := msg.Metadata[MetadataToolCallsKey]; ok {
-				toolCalls := recoverToolCalls(value)
-				if len(toolCalls) > 0 {
-					assistant.OfAssistant.ToolCalls = toolCalls
-				}
-			}
-		}
-		return assistant, nil
+		return convertA2AAssistantMessage(msg.Metadata, content), nil
 	default:
 		return openai.UserMessage(content), nil
 	}
+}
+
+func resolveA2AMessageRole(msg protocol.Message) string {
+	switch msg.Role {
+	case protocol.MessageRoleUser:
+		return RoleUser
+	case protocol.MessageRoleAgent:
+		if msg.Metadata != nil {
+			if value, ok := msg.Metadata[MetadataRoleKey].(string); ok && value != "" {
+				return value
+			}
+		}
+		return RoleAssistant
+	default:
+		return RoleAssistant
+	}
+}
+
+func convertA2AToolMessage(metadata map[string]interface{}, content string) openai.ChatCompletionMessageParamUnion {
+	toolCallID := ""
+	if metadata != nil {
+		if value, ok := metadata[MetadataToolCallIDKey].(string); ok {
+			toolCallID = value
+		}
+	}
+	if toolCallID == "" {
+		return openai.AssistantMessage(content)
+	}
+	return openai.ToolMessage(content, toolCallID)
+}
+
+func convertA2AAssistantMessage(metadata map[string]interface{}, content string) openai.ChatCompletionMessageParamUnion {
+	assistant := openai.AssistantMessage(content)
+	if assistant.OfAssistant != nil && metadata != nil {
+		if value, ok := metadata[MetadataToolCallsKey]; ok {
+			toolCalls := recoverToolCalls(value)
+			if len(toolCalls) > 0 {
+				assistant.OfAssistant.ToolCalls = toolCalls
+			}
+		}
+	}
+	return assistant
 }
 
 func recoverToolCalls(value interface{}) []openai.ChatCompletionMessageToolCallParam {

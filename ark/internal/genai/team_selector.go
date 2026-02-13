@@ -28,7 +28,7 @@ type SelectorTemplateData struct {
 }
 
 func buildHistory(messages []Message) string {
-	var history []string
+	history := make([]string, 0, len(messages))
 	for _, msg := range messages {
 		role := resolveMessageRole(msg)
 		text := ExtractTextFromMessage(msg)
@@ -46,7 +46,7 @@ func buildHistory(messages []Message) string {
 }
 
 func buildA2AHistory(messages []protocol.Message) string {
-	var history []string
+	history := make([]string, 0, len(messages))
 	for _, msg := range messages {
 		text := ExtractA2ATextFromMessage(msg)
 		if text == "" {
@@ -174,6 +174,7 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	return nil, fmt.Errorf("no members available")
 }
 
+//nolint:dupl // A2A variant intentionally mirrors selectMember for separate removability
 func (t *Team) selectMemberA2A(ctx context.Context, messages []protocol.Message, tmpl *template.Template, participantsList, rolesList, previousMember string, candidateMembers []TeamMember) (TeamMember, error) {
 	history := buildA2AHistory(messages)
 	data := SelectorTemplateData{
@@ -412,34 +413,41 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 	}
 }
 
-func (t *Team) executeSelectorA2A(ctx context.Context, userInput protocol.Message, history []protocol.Message) ([]protocol.Message, error) {
-	messages := append([]protocol.Message{}, history...)
-	var newMessages []protocol.Message
-
+func (t *Team) resolveSelectorTemplate() (*template.Template, error) {
 	promptTemplate := defaultSelectorPrompt
 	if t.Selector != nil && t.Selector.SelectorPrompt != "" {
 		promptTemplate = t.Selector.SelectorPrompt
 	}
+	return template.New("selector").Parse(promptTemplate)
+}
 
-	tmpl, err := template.New("selector").Parse(promptTemplate)
+func (t *Team) buildLegalTransitions() map[string][]TeamMember {
+	legalTransitions := make(map[string][]TeamMember)
+	if t.Graph == nil {
+		return legalTransitions
+	}
+	memberLookup := make(map[string]TeamMember)
+	for _, member := range t.Members {
+		memberLookup[member.GetName()] = member
+	}
+	for _, edge := range t.Graph.Edges {
+		if member, exists := memberLookup[edge.To]; exists {
+			legalTransitions[edge.From] = append(legalTransitions[edge.From], member)
+		}
+	}
+	return legalTransitions
+}
+
+func (t *Team) executeSelectorA2A(ctx context.Context, userInput protocol.Message, history []protocol.Message) ([]protocol.Message, error) {
+	messages := append([]protocol.Message{}, history...)
+	var newMessages []protocol.Message
+
+	tmpl, err := t.resolveSelectorTemplate()
 	if err != nil {
 		return newMessages, err
 	}
 
-	legalTransitions := make(map[string][]TeamMember)
-	if t.Graph != nil {
-		memberLookup := make(map[string]TeamMember)
-		for _, member := range t.Members {
-			memberLookup[member.GetName()] = member
-		}
-
-		for _, edge := range t.Graph.Edges {
-			if member, exists := memberLookup[edge.To]; exists {
-				legalTransitions[edge.From] = append(legalTransitions[edge.From], member)
-			}
-		}
-	}
-
+	legalTransitions := t.buildLegalTransitions()
 	previousMember := ""
 
 	for turn := 0; ; turn++ {
@@ -451,39 +459,49 @@ func (t *Team) executeSelectorA2A(ctx context.Context, userInput protocol.Messag
 			return newMessages, err
 		}
 
-		turnCtx, turnSpan := t.telemetryRecorder.StartTurn(ctx, turn, nextMember.GetName(), nextMember.GetType())
-
-		operationData := map[string]string{
-			"teamName": t.Name,
-			"strategy": t.Strategy,
-			"turn":     fmt.Sprintf("%d", turn),
-		}
-		turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s", turn, t.Name), operationData)
-
-		err = t.executeMemberAndAccumulateA2A(turnCtx, nextMember, userInput, &messages, &newMessages, turn)
-
-		if len(newMessages) > 0 {
-			t.telemetryRecorder.RecordTurnOutput(turnSpan, nil, len(newMessages))
-		}
-
+		done, err := t.executeSelectorTurnA2A(ctx, turn, nextMember, userInput, &messages, &newMessages)
 		if err != nil {
-			t.telemetryRecorder.RecordError(turnSpan, err)
-			turnSpan.End()
-			t.eventingRecorder.Fail(turnCtx, "TeamTurn", fmt.Sprintf("Team turn failed: %v", err), err, operationData)
-			if IsTerminateTeam(err) {
-				return newMessages, nil
-			}
 			return newMessages, err
 		}
-
-		t.telemetryRecorder.RecordSuccess(turnSpan)
-		turnSpan.End()
-		t.eventingRecorder.Complete(turnCtx, "TeamTurn", fmt.Sprintf("Team turn %d completed successfully", turn), operationData)
-
 		previousMember = nextMember.GetName()
-
-		if t.MaxTurns != nil && turn+1 >= *t.MaxTurns {
+		if done {
 			return newMessages, nil
 		}
 	}
+}
+
+func (t *Team) executeSelectorTurnA2A(ctx context.Context, turn int, member TeamMember, userInput protocol.Message, messages, newMessages *[]protocol.Message) (bool, error) {
+	turnCtx, turnSpan := t.telemetryRecorder.StartTurn(ctx, turn, member.GetName(), member.GetType())
+
+	operationData := map[string]string{
+		"teamName": t.Name,
+		"strategy": t.Strategy,
+		"turn":     fmt.Sprintf("%d", turn),
+	}
+	turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s", turn, t.Name), operationData)
+
+	err := t.executeMemberAndAccumulateA2A(turnCtx, member, userInput, messages, newMessages, turn)
+
+	if len(*newMessages) > 0 {
+		t.telemetryRecorder.RecordTurnOutput(turnSpan, nil, len(*newMessages))
+	}
+
+	if err != nil {
+		t.telemetryRecorder.RecordError(turnSpan, err)
+		turnSpan.End()
+		t.eventingRecorder.Fail(turnCtx, "TeamTurn", fmt.Sprintf("Team turn failed: %v", err), err, operationData)
+		if IsTerminateTeam(err) {
+			return true, nil
+		}
+		return false, err
+	}
+
+	t.telemetryRecorder.RecordSuccess(turnSpan)
+	turnSpan.End()
+	t.eventingRecorder.Complete(turnCtx, "TeamTurn", fmt.Sprintf("Team turn %d completed successfully", turn), operationData)
+
+	if t.MaxTurns != nil && turn+1 >= *t.MaxTurns {
+		return true, nil
+	}
+	return false, nil
 }

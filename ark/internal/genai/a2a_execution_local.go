@@ -9,6 +9,7 @@ import (
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
+//nolint:gocognit // Main A2A execution loop with tool calling; cohesive single-function flow
 func (a *Agent) executeLocallyA2ANative(ctx context.Context, userInput protocol.Message, history []protocol.Message, _ MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	if a.Model == nil {
 		return nil, fmt.Errorf("agent %s has no model configured", a.FullName())

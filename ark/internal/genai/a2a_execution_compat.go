@@ -57,10 +57,7 @@ func (a *Agent) executeWithA2ACompatExecution(ctx context.Context, userInput pro
 func (a *Agent) executeWithExternalA2ANativeExecutionEngine(ctx context.Context, userInput protocol.Message, history []protocol.Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	engineClient := NewExecutionEngineClient(a.client, a.eventing.ExecutionEngineRecorder())
 
-	agentConfig, err := buildAgentConfig(a)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build agent config: %w", err)
-	}
+	agentConfig := buildAgentConfig(a)
 
 	resolvedPrompt, err := a.resolvePrompt(ctx)
 	if err != nil {

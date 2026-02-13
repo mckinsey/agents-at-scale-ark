@@ -110,24 +110,6 @@ func convertFromExecutionEngineMessage(msg ExecutionEngineMessage) Message {
 	}
 }
 
-func convertA2AMessageToExecutionEngineMessage(msg protocol.Message) ExecutionEngineMessage {
-	return ExecutionEngineMessage{
-		Role:    resolveMessageRoleFromA2A(msg),
-		Content: ExtractA2ATextFromMessage(msg),
-	}
-}
-
-func resolveMessageRoleFromA2A(msg protocol.Message) string {
-	switch msg.Role {
-	case protocol.MessageRoleAgent:
-		return RoleAssistant
-	case protocol.MessageRoleUser:
-		return RoleUser
-	default:
-		return RoleUser
-	}
-}
-
 // ExecutionEngineClient handles communication with external execution engines
 type ExecutionEngineClient struct {
 	client           client.Client
@@ -234,6 +216,7 @@ func (c *ExecutionEngineClient) Execute(ctx context.Context, engineRef *arkv1alp
 	return convertedMessages, nil
 }
 
+//nolint:gocognit // Mirrors Execute with A2A payload handling; cohesive HTTP request/response flow
 func (c *ExecutionEngineClient) ExecuteA2A(ctx context.Context, engineRef *arkv1alpha1.ExecutionEngineRef, agentConfig AgentConfig, userInput protocol.Message, history []protocol.Message, tools []ToolDefinition) ([]protocol.Message, error) {
 	operationData := map[string]string{
 		"engineName": engineRef.Name,
@@ -378,7 +361,7 @@ func resolveExecutionEngineURL(engineAddress, fallbackPath string) (string, erro
 }
 
 // buildAgentConfig creates an AgentConfig from the agent and model data
-func buildAgentConfig(agent *Agent) (AgentConfig, error) {
+func buildAgentConfig(agent *Agent) AgentConfig {
 	model := ExecutionEngineModel{}
 	if agent.Model != nil {
 		model = ExecutionEngineModel{
@@ -398,7 +381,7 @@ func buildAgentConfig(agent *Agent) (AgentConfig, error) {
 		Parameters:   parameters,
 		Model:        model,
 		OutputSchema: agent.OutputSchema,
-	}, nil
+	}
 }
 
 func buildParameters(agentParams []arkv1alpha1.Parameter) []Parameter {

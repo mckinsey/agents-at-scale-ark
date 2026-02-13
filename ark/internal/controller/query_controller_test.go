@@ -315,7 +315,7 @@ var _ = Describe("Query Controller Event Stream Finalization", func() {
 
 		reconciler.finalizeEventStream(context.Background(), stream, query, genai.A2APayloadModeNative)
 
-		Expect(stream.chunks).To(HaveLen(0))
+		Expect(stream.chunks).To(BeEmpty())
 		Expect(stream.notified).To(BeTrue())
 		Expect(stream.closed).To(BeTrue())
 	})

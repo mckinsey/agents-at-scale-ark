@@ -59,13 +59,13 @@ func (t *Team) Execute(ctx context.Context, userInput Message, history []Message
 
 	var execFunc func(context.Context, Message, []Message) ([]Message, error)
 	switch t.Strategy {
-	case "sequential":
+	case StrategySequential:
 		execFunc = t.executeSequential
-	case "round-robin":
+	case StrategyRoundRobin:
 		execFunc = t.executeRoundRobin
-	case "selector":
+	case StrategySelector:
 		execFunc = t.executeSelector
-	case "graph":
+	case StrategyGraph:
 		execFunc = t.executeGraph
 	default:
 		return nil, fmt.Errorf("unsupported strategy %s for team %s", t.Strategy, t.FullName())
@@ -80,7 +80,7 @@ func (t *Team) ExecuteA2A(ctx context.Context, userInput protocol.Message, histo
 		return nil, fmt.Errorf("team %s has no members configured", t.FullName())
 	}
 
-	if t.Strategy == "selector" && t.Selector != nil && t.Selector.Agent != "" {
+	if t.Strategy == StrategySelector && t.Selector != nil && t.Selector.Agent != "" {
 		if err := t.validateSelectorA2ACompatibility(ctx); err != nil {
 			return nil, err
 		}
@@ -91,13 +91,13 @@ func (t *Team) ExecuteA2A(ctx context.Context, userInput protocol.Message, histo
 
 	var execFunc func(context.Context, protocol.Message, []protocol.Message) ([]protocol.Message, error)
 	switch t.Strategy {
-	case "sequential":
+	case StrategySequential:
 		execFunc = t.executeSequentialA2A
-	case "round-robin":
+	case StrategyRoundRobin:
 		execFunc = t.executeRoundRobinA2A
-	case "selector":
+	case StrategySelector:
 		execFunc = t.executeSelectorA2A
-	case "graph":
+	case StrategyGraph:
 		execFunc = t.executeGraphA2A
 	default:
 		return nil, fmt.Errorf("unsupported strategy %s for team %s", t.Strategy, t.FullName())
@@ -216,6 +216,7 @@ func (t *Team) executeRoundRobin(ctx context.Context, userInput Message, history
 	}
 }
 
+//nolint:dupl // A2A variant intentionally mirrors executeSequential for separate removability
 func (t *Team) executeSequentialA2A(ctx context.Context, userInput protocol.Message, history []protocol.Message) ([]protocol.Message, error) {
 	messages := slices.Clone(history)
 	var newMessages []protocol.Message
@@ -352,13 +353,13 @@ func loadTeamMembers(ctx context.Context, k8sClient client.Client, crd *arkv1alp
 	agentAnnotations := make([]map[string]string, 0, len(crd.Spec.Members))
 
 	for _, memberSpec := range crd.Spec.Members {
-		member, annotations, err := loadTeamMember(ctx, k8sClient, memberSpec, crd.Namespace, crd.Name, telemetryProvider, eventingProvider)
+		member, memberAnnotations, err := loadTeamMember(ctx, k8sClient, memberSpec, crd.Namespace, crd.Name, telemetryProvider, eventingProvider)
 		if err != nil {
 			return nil, nil, err
 		}
 		members = append(members, member)
-		if annotations != nil {
-			agentAnnotations = append(agentAnnotations, annotations)
+		if memberAnnotations != nil {
+			agentAnnotations = append(agentAnnotations, memberAnnotations)
 		}
 	}
 
@@ -401,6 +402,7 @@ func (t *Team) executeWithTracking(execFunc func(context.Context, Message, []Mes
 	return result, err
 }
 
+//nolint:dupl // A2A variant intentionally mirrors executeWithTracking for separate removability
 func (t *Team) executeWithTrackingA2A(execFunc func(context.Context, protocol.Message, []protocol.Message) ([]protocol.Message, error), ctx context.Context, userInput protocol.Message, history []protocol.Message) ([]protocol.Message, error) {
 	maxTurns := 0
 	if t.MaxTurns != nil {
@@ -565,15 +567,15 @@ func loadTeamMember(ctx context.Context, k8sClient client.Client, memberSpec ark
 		if err := k8sClient.Get(ctx, key, &agentCRD); err != nil {
 			return nil, nil, fmt.Errorf("failed to get agent %s for team %s: %w", memberSpec.Name, teamName, err)
 		}
-		var annotations map[string]string
+		var memberAnnotations map[string]string
 		if shouldIncludeMemberAnnotationsForA2A(agentCRD.Annotations) {
-			annotations = agentCRD.Annotations
+			memberAnnotations = agentCRD.Annotations
 		}
 		member, err := MakeAgent(ctx, k8sClient, &agentCRD, telemetryProvider, eventingProvider)
 		if err != nil {
 			return nil, nil, err
 		}
-		return member, annotations, nil
+		return member, memberAnnotations, nil
 
 	case "team":
 		var nestedTeamCRD arkv1alpha1.Team

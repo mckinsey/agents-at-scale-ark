@@ -83,6 +83,7 @@ func (t *Team) executeGraph(ctx context.Context, userInput Message, history []Me
 	return newMessages, nil
 }
 
+//nolint:dupl // A2A variant intentionally mirrors executeGraph for separate removability
 func (t *Team) executeGraphA2A(ctx context.Context, userInput protocol.Message, history []protocol.Message) ([]protocol.Message, error) {
 	if len(t.Members) == 0 {
 		return nil, fmt.Errorf("team %s has no members for graph execution", t.FullName())

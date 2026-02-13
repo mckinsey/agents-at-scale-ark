@@ -75,6 +75,14 @@ const (
 	MemberTypeAgent = "agent"
 )
 
+// Team strategy constants
+const (
+	StrategySequential = "sequential"
+	StrategyRoundRobin = "round-robin"
+	StrategySelector   = "selector"
+	StrategyGraph      = "graph"
+)
+
 // Built-in tool name constants
 const (
 	BuiltinToolNoop      = "noop"

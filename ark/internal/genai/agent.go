@@ -119,10 +119,7 @@ func (a *Agent) executeWithExecutionEngineRouter(ctx context.Context, userInput 
 func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
 	engineClient := NewExecutionEngineClient(a.client, a.eventing.ExecutionEngineRecorder())
 
-	agentConfig, err := buildAgentConfig(a)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build agent config: %w", err)
-	}
+	agentConfig := buildAgentConfig(a)
 
 	resolvedPrompt, err := a.resolvePrompt(ctx)
 	if err != nil {
@@ -421,8 +418,8 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 			return nil, fmt.Errorf("failed to validate execution engine %s for agent %s/%s: %w",
 				crd.Spec.ExecutionEngine.Name, crd.Namespace, crd.Name, err)
 		}
-		switch {
-		case crd.Spec.ExecutionEngine.Name == ExecutionEngineA2A:
+		switch crd.Spec.ExecutionEngine.Name {
+		case ExecutionEngineA2A:
 			resolvedCapability = executionCapabilityA2ANativeA2AEngine
 		default:
 			if capability, ok := resolveA2AExecutionCapabilityFromEngineType(engineType); ok {

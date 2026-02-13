@@ -88,10 +88,10 @@ func newTestAgentForLocalExecution(provider ChatCompletionProvider, tools *ToolR
 	}
 }
 
-func newTestToolRegistry(toolName string, executor ToolExecutor) *ToolRegistry {
+func newTestToolRegistry(executor ToolExecutor) *ToolRegistry {
 	registry := NewToolRegistry(nil, telemetrynoop.NewToolRecorder(), eventingnoop.NewProvider().ToolRecorder())
 	registry.RegisterTool(ToolDefinition{
-		Name:        toolName,
+		Name:        "lookup",
 		Description: "test tool",
 		Parameters: map[string]any{
 			"type": "object",
@@ -178,7 +178,7 @@ func TestExecuteLocallyA2ANativeWithToolCalls(t *testing.T) {
 	executor := &testToolExecutor{
 		result: ToolResult{Content: "tool result"},
 	}
-	registry := newTestToolRegistry("lookup", executor)
+	registry := newTestToolRegistry(executor)
 	agent := newTestAgentForLocalExecution(provider, registry)
 	userInput := protocol.NewMessageWithContext(protocol.MessageRoleUser, []protocol.Part{
 		protocol.NewTextPart("hello"),
@@ -218,7 +218,7 @@ func TestExecuteLocallyA2ANativeContextAndTaskIDPropagation(t *testing.T) {
 	executor := &testToolExecutor{
 		result: ToolResult{Content: "tool result"},
 	}
-	agent := newTestAgentForLocalExecution(provider, newTestToolRegistry("lookup", executor))
+	agent := newTestAgentForLocalExecution(provider, newTestToolRegistry(executor))
 	userInput := protocol.NewMessageWithContext(protocol.MessageRoleUser, []protocol.Part{
 		protocol.NewTextPart("hello"),
 	}, stringPointer("task-input"), stringPointer("ctx-input"))
@@ -253,7 +253,7 @@ func TestExecuteLocallyA2ANativeEventStreamEmitsA2AMessages(t *testing.T) {
 	executor := &testToolExecutor{
 		result: ToolResult{Content: "tool result"},
 	}
-	agent := newTestAgentForLocalExecution(provider, newTestToolRegistry("lookup", executor))
+	agent := newTestAgentForLocalExecution(provider, newTestToolRegistry(executor))
 	stream := &fakeEventStream{}
 	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
 		protocol.NewTextPart("hello"),
@@ -288,7 +288,7 @@ func TestExecuteLocallyA2ANativeIntermediateStreamFailure(t *testing.T) {
 	executor := &testToolExecutor{
 		result: ToolResult{Content: "tool result"},
 	}
-	agent := newTestAgentForLocalExecution(provider, newTestToolRegistry("lookup", executor))
+	agent := newTestAgentForLocalExecution(provider, newTestToolRegistry(executor))
 	stream := &failingEventStream{failOnCall: 2}
 	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
 		protocol.NewTextPart("hello"),
@@ -353,7 +353,7 @@ func TestExecuteLocallyA2ANativeToolError(t *testing.T) {
 		result: ToolResult{Content: "tool failed"},
 		err:    errors.New("tool boom"),
 	}
-	agent := newTestAgentForLocalExecution(provider, newTestToolRegistry("lookup", executor))
+	agent := newTestAgentForLocalExecution(provider, newTestToolRegistry(executor))
 	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
 		protocol.NewTextPart("hello"),
 	})
