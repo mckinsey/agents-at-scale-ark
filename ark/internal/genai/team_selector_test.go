@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
@@ -207,6 +208,16 @@ func (m *mockSelectorAgent) Execute(ctx context.Context, userInput Message, hist
 
 func (m *mockSelectorAgent) FullName() string {
 	return "mock-selector"
+}
+
+func (m *mockSelectorAgent) ExecuteA2A(ctx context.Context, userInput protocol.Message, history []protocol.Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	return &ExecutionResult{
+		A2AMessages: []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("selected"),
+			}),
+		},
+	}, nil
 }
 
 func TestDetermineNextMember(t *testing.T) {

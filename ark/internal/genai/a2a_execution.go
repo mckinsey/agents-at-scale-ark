@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/openai/openai-go"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
