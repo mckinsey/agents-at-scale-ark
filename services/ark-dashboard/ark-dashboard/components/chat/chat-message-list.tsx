@@ -5,6 +5,7 @@ import type { RefObject } from 'react';
 
 import { ChatMessage } from '@/components/chat/chat-message';
 import { GraphEnd } from '@/components/chat/graph-end';
+import { MaxTurnsEvent } from '@/components/chat/max-turns-event';
 import { GraphTransition } from '@/components/chat/graph-transition';
 import { StrategyIndicator } from '@/components/chat/strategy-indicator';
 import { TerminationEvent } from '@/components/chat/termination-event';
@@ -227,10 +228,7 @@ export function ChatMessageList({
           for (let j = pmIndex - 1; j >= 0; j--) {
             const prev = processedMessages[j];
             if (prev.msg.role === 'assistant' && prev.senderName) {
-              if (
-                prev.senderName !== pm.senderName &&
-                transitionMap.get(prev.senderName)?.has(pm.senderName)
-              ) {
+              if (transitionMap.get(prev.senderName)?.has(pm.senderName)) {
                 transitionElement = (
                   <GraphTransition
                     from={prev.senderName}
@@ -288,9 +286,13 @@ export function ChatMessageList({
               </div>
             )}
             {pm.isMaxTurnsMessage && (
-              <div className="text-muted-foreground text-sm italic">
-                {pm.content}
-              </div>
+              isGraphStrategy ? (
+                <MaxTurnsEvent message={pm.content} />
+              ) : (
+                <div className="text-muted-foreground text-sm italic">
+                  {pm.content}
+                </div>
+              )
             )}
           </div>
         );
