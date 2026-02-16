@@ -238,38 +238,22 @@ export function AppSidebar() {
         <SidebarHeader>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton
-                size="lg"
-                className="pointer-events-none mb-4 !p-0 group-data-[collapsible=icon]:!h-12">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
-                  <Image
-                    src={
-                      isExperimentalDarkModeEnabled ? qbLogoDark : qbLogoLight
-                    }
-                    alt="ARK"
-                    width={32}
-                    height={32}
-                  />
-                </div>
-                <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="text-sidebar-accent-foreground font-medium">
-                    ARK
-                  </span>
-                </div>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-          <SidebarMenu>
-            <SidebarMenuItem>
               <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild>
                   <SidebarMenuButton
                     size="lg"
                     className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground !p-0 group-data-[collapsible=icon]:!h-12">
-                    <div
-                      className="flex aspect-square size-8 items-center justify-center rounded-lg p-1"
-                      style={{ backgroundColor: '#0085FF99' }}>
-                      <span className="text-xs text-white">ARK</span>
+                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
+                      <Image
+                        src={
+                          isExperimentalDarkModeEnabled
+                            ? qbLogoDark
+                            : qbLogoLight
+                        }
+                        alt="QB Logo"
+                        width={32}
+                        height={32}
+                      />
                     </div>
                     <div className="flex flex-col gap-0.5 leading-none">
                       <span className="text-sidebar-accent-foreground font-medium">
