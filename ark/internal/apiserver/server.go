@@ -25,6 +25,8 @@ import (
 	"mckinsey.com/ark/internal/apiserver/registry"
 	"mckinsey.com/ark/internal/storage"
 	"mckinsey.com/ark/internal/storage/postgresql"
+	"mckinsey.com/ark/internal/validation"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var (
@@ -48,6 +50,7 @@ type Config struct {
 	PostgresPass string
 	PostgresSSL  string
 	BindPort     int
+	K8sClient    client.Client
 }
 
 type Server struct {
@@ -140,6 +143,9 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 
 	printerColumns := GetPrinterColumnRegistry()
 
+	lookup := &validation.StorageLookup{Backend: s.backend, K8sClient: s.config.K8sClient}
+	v := validation.NewValidator(lookup)
+
 	v1alpha1Storage := make(map[string]rest.Storage)
 	for _, res := range V1Alpha1Resources {
 		cfg := registry.ResourceConfig{
@@ -149,7 +155,8 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 			NewFunc:      res.NewFunc,
 			NewListFunc:  res.NewListFunc,
 		}
-		v1alpha1Storage[res.Resource] = registry.NewGenericStorage(s.backend, converter, cfg, printerColumns)
+		inner := registry.NewGenericStorage(s.backend, converter, cfg, printerColumns)
+		v1alpha1Storage[res.Resource] = NewAdmissionStorage(inner, v)
 		v1alpha1Storage[res.Resource+"/status"] = registry.NewStatusStorage(s.backend, converter, cfg)
 	}
 	apiGroupInfo.VersionedResourcesStorageMap[arkv1alpha1.GroupVersion.Version] = v1alpha1Storage
@@ -163,7 +170,8 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 			NewFunc:      res.NewFunc,
 			NewListFunc:  res.NewListFunc,
 		}
-		v1prealpha1Storage[res.Resource] = registry.NewGenericStorage(s.backend, converter, cfg, printerColumns)
+		inner := registry.NewGenericStorage(s.backend, converter, cfg, printerColumns)
+		v1prealpha1Storage[res.Resource] = NewAdmissionStorage(inner, v)
 		v1prealpha1Storage[res.Resource+"/status"] = registry.NewStatusStorage(s.backend, converter, cfg)
 	}
 	apiGroupInfo.VersionedResourcesStorageMap[arkv1prealpha1.GroupVersion.Version] = v1prealpha1Storage
