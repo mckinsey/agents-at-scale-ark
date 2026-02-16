@@ -9,7 +9,7 @@ spec:
   delayBeforeCleanup: 20s                # Extra delay for LLM-based tests
   timeouts:
     apply: 360s                           # Longer timeout for resource creation
-    assert: 360s                         # 6 minutes for LLM assertions
+    assert: 30s
     cleanup: 360s                         # Longer cleanup for complex resources
     delete: 360s                          # Longer delete timeout
     error: 360s                           # Longer error handling
