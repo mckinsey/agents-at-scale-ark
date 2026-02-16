@@ -533,6 +533,19 @@ jobs:
     needs: [setup-container-cache-registry, build-containers]
     if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }} # Remove skipping these tests once chainsaw can be run with mock-llm
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        test-group:
+          - name: "agents"
+            tests: "agent-default-model agent-overrides agent-parameters agent-partial-tool agent-partial-tool-invalid agent-partial-tool-valuefrom agent-structured-output agent-tools agent-tools-lifecycle agents admission-failures"
+          - name: "queries"
+            tests: "queries queries-ttl-timeout query-event-recorder query-input-type query-label-selector query-model-target query-overrides query-parameter-ref query-parameters query-token-usage query-tool-target"
+          - name: "teams-a2a"
+            tests: "team-graph team-graph-selector team-of-teams team-round-robin team-round-robin-max-turns team-selector team-sequential a2a-agent-discovery a2a-blocking-task-completed a2a-blocking-task-failed a2a-message-context"
+          - name: "infra"
+            tests: "a2a-message-query model-custom-headers model-deprecated-type model-properties model-token-usage models filesystem-mcp mcp-ark mcp-discovery prometheus-tls-config tool-type-deprecation-warning jq-filter-test"
+    name: e2e-standard (${{ matrix.test-group.name }})
     steps:
       - uses: actions/checkout@v4
 
@@ -552,7 +565,7 @@ jobs:
           sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
           sudo chmod +x /usr/local/bin/chainsaw
 
-      - name: Run standard E2E tests
+      - name: Run standard E2E tests (${{ matrix.test-group.name }})
         env:
           E2E_TEST_AZURE_OPENAI_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY != '' && secrets.CICD_AZURE_OPENAI_KEY || 'xxxxxxxxxxx' }}
           E2E_TEST_AZURE_OPENAI_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL != '' &&  secrets.CICD_AZURE_OPENAI_BASE_URL || 'http://mock-llm.default.svc.cluster.local/v1' }}
@@ -565,16 +578,27 @@ jobs:
         run: |
           cd tests
           mkdir -p /tmp/chainsaw-report
-          chainsaw test --config .chainsaw.yaml --selector '!evaluated,!llm'
+          chainsaw test --config .chainsaw.yaml ${{ matrix.test-group.tests }}
 
       - uses: ./.github/actions/collect-coverage-e2e
         with:
-          artifact-name: coverage-reports-standard
+          artifact-name: coverage-reports-standard-${{ matrix.test-group.name }}
 
   e2e-tests-evaluated:
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
     if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }} # Remove skipping these tests once chainsaw can be run with mock-llm
+    strategy:
+      fail-fast: false
+      matrix:
+        test-group:
+          - name: "eval-core"
+            tests: "evaluation-baseline evaluation-direct evaluation-event-basic evaluation-query"
+          - name: "eval-advanced"
+            tests: "evaluation-direct-ragas evaluation-parameters-priority evaluator-context-enhanced evaluator-selector"
+          - name: "eval-weather"
+            tests: "weather-chicago weather-chicago-tools"
+    name: e2e-evaluated (${{ matrix.test-group.name }})
     steps:
       - uses: actions/checkout@v4
 
@@ -595,7 +619,7 @@ jobs:
             tar xz -C /tmp
           sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
           sudo chmod +x /usr/local/bin/chainsaw
-      - name: Run evaluated E2E tests
+      - name: Run evaluated E2E tests (${{ matrix.test-group.name }})
         env:
           E2E_TEST_AZURE_OPENAI_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY != '' && secrets.CICD_AZURE_OPENAI_KEY || 'xxxxxxxxxxx' }}
           E2E_TEST_AZURE_OPENAI_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL != '' &&  secrets.CICD_AZURE_OPENAI_BASE_URL || 'http://mock-llm.default.svc.cluster.local/v1' }}
@@ -612,10 +636,12 @@ jobs:
           MAX_RETRIES=3
           RETRY_DELAY=30
           for ((attempt=1; attempt<=$MAX_RETRIES; attempt++)); do
-            if chainsaw test --config .chainsaw-evaluated.yaml --selector 'evaluated=true'; then
+            echo "Running test group: ${{ matrix.test-group.name }} (attempt $attempt/$MAX_RETRIES)"
+            if chainsaw test --config .chainsaw-evaluated.yaml ${{ matrix.test-group.tests }}; then
               exit 0
             fi
             if [ $attempt -lt $MAX_RETRIES ]; then
+              echo "Test group failed, waiting ${RETRY_DELAY}s before retry..."
               sleep $RETRY_DELAY
             fi
           done
@@ -623,7 +649,7 @@ jobs:
 
       - uses: ./.github/actions/collect-coverage-e2e
         with:
-          artifact-name: coverage-reports-evaluated
+          artifact-name: coverage-reports-evaluated-${{ matrix.test-group.name }}
     
   e2e-tests-llm:
     needs: [setup-container-cache-registry, build-containers]
