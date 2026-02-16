@@ -721,7 +721,9 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 
 	result, err := agent.Execute(ctx, currentMessage, contextMessages, memory, eventStream)
 	if err != nil {
-		return nil, err
+		if !genai.IsTerminateTeam(err) {
+			return nil, err
+		}
 	}
 
 	// Save all new messages (input + response) to memory

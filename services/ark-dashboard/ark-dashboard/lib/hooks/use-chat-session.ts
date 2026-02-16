@@ -299,19 +299,24 @@ export function useChatSession({
       finalizeCurrentMessage();
 
       if (hasError) {
-        updateChatMessages(prev => {
-          const updated = [...prev];
-          updated[currentMessageIndex] = {
-            role: 'assistant',
-            content: errorMessage,
-            metadata: {
-              status: 'failed',
-              queryName: queryName || undefined,
-            },
-          } as ExtendedChatMessage;
-          return updated;
-        });
-        return;
+        const hasTerminateToolCall = accumulatedToolCalls.some(
+          tc => tc.function.name === 'terminate',
+        );
+        if (!hasTerminateToolCall) {
+          updateChatMessages(prev => {
+            const updated = [...prev];
+            updated[currentMessageIndex] = {
+              role: 'assistant',
+              content: errorMessage,
+              metadata: {
+                status: 'failed',
+                queryName: queryName || undefined,
+              },
+            } as ExtendedChatMessage;
+            return updated;
+          });
+          return;
+        }
       }
 
       if (completedQueryMessages.length > 0) {
