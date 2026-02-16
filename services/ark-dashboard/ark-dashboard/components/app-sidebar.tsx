@@ -453,6 +453,18 @@ export function AppSidebar() {
                 </SidebarMenuItem>
 
                 <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <a
+                      href="https://mckinsey.github.io/agents-at-scale-ark/"
+                      target="_blank"
+                      rel="noopener noreferrer">
+                      <HelpCircle className="mr-2 h-4 w-4" />
+                      <span>Help</span>
+                    </a>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+
+                <SidebarMenuItem>
                   <SidebarMenuButton
                     onClick={() =>
                       setStoredIsExperimentalDarkModeEnabled(
@@ -469,18 +481,6 @@ export function AppSidebar() {
                         ? 'Light Mode'
                         : 'Dark Mode'}
                     </span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <a
-                      href="https://mckinsey.github.io/agents-at-scale-ark/"
-                      target="_blank"
-                      rel="noopener noreferrer">
-                      <HelpCircle className="mr-2 h-4 w-4" />
-                      <span>Help</span>
-                    </a>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>
