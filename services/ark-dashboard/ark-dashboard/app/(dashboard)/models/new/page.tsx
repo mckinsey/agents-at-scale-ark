@@ -1,4 +1,7 @@
-import { PageHeader } from '@/components/common/page-header';
+import {
+  type BreadcrumbElement,
+  PageHeader,
+} from '@/components/common/page-header';
 import { CreateModelForm } from '@/components/forms';
 
 type SearchParams = {
@@ -12,9 +15,14 @@ type Props = {
 export default async function CreateModelPage({ searchParams }: Props) {
   const params = await searchParams;
 
+  const breadcrumbs: BreadcrumbElement[] = [
+    { label: 'Dashboard', href: '/' },
+    { label: 'Models', href: '/models' },
+  ];
+
   return (
     <div className="min-h-screen">
-      <PageHeader />
+      <PageHeader breadcrumbs={breadcrumbs} currentPage="New Model" />
       <main className="container px-6 py-8">
         <CreateModelForm defaultName={params.name} />
       </main>

@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useRef } from 'react';
 
 import { PageHeader } from '@/components/common/page-header';
+import type { BreadcrumbElement } from '@/components/common/page-header';
 import { SecretsSection } from '@/components/sections/secrets-section';
 import { Button } from '@/components/ui/button';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -14,10 +15,15 @@ export default function SecretsPage() {
   const namespace = searchParams.get('namespace') || 'default';
   const secretsSectionRef = useRef<{ openAddEditor: () => void }>(null);
   const { readOnlyMode } = useNamespace();
+  const breadcrumbs: BreadcrumbElement[] = [
+    { href: '/', label: 'ARK Dashboard' },
+  ];
 
   return (
     <>
       <PageHeader
+        breadcrumbs={breadcrumbs}
+        currentPage="Secrets"
         actions={
           <Button
             onClick={() => secretsSectionRef.current?.openAddEditor()}

@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { WorkflowStatsCard } from '@/components/cards/workflow-stats-card';
 import { CodeViewer } from '@/components/code-viewer';
 import { PageHeader } from '@/components/common/page-header';
+import type { BreadcrumbElement } from '@/components/common/page-header';
 import { DeleteWorkflowTemplateDialog } from '@/components/dialogs/delete-workflow-template-dialog';
 import { RunWorkflowDialog } from '@/components/dialogs/run-workflow-dialog';
 import type { Flow } from '@/components/rows/flow-row';
@@ -118,10 +119,15 @@ export default function FlowDetailPage() {
     };
   }, [flowId]);
 
+  const breadcrumbs: BreadcrumbElement[] = [
+    { href: '/', label: 'ARK Dashboard' },
+    { href: '/workflow-templates', label: 'Workflow Templates' },
+  ];
+
   if (loading) {
     return (
       <>
-        <PageHeader />
+        <PageHeader breadcrumbs={breadcrumbs} />
         <div className="flex flex-1 items-center justify-center">
           <p className="text-muted-foreground">Loading flow...</p>
         </div>
@@ -132,7 +138,7 @@ export default function FlowDetailPage() {
   if (error || !flow) {
     return (
       <>
-        <PageHeader />
+        <PageHeader breadcrumbs={breadcrumbs} />
         <div className="flex flex-1 items-center justify-center">
           <p className="text-muted-foreground">{error || 'Flow not found'}</p>
         </div>
@@ -263,7 +269,10 @@ export default function FlowDetailPage() {
 
   return (
     <>
-      <PageHeader />
+      <PageHeader
+        breadcrumbs={breadcrumbs}
+        currentPage={flow.title || flow.id}
+      />
       <div className="flex flex-col gap-6 p-6">
         <div className="bg-card flex w-full flex-wrap items-center gap-4 rounded-md border px-4 py-3">
           <div className="flex flex-grow items-center gap-3 overflow-hidden">

@@ -4,11 +4,16 @@ import { Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
+import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { ModelsSection } from '@/components/sections/models-section';
 import { Button } from '@/components/ui/button';
 import { useGetAllModels } from '@/lib/services/models-hooks';
 import { useNamespace } from '@/providers/NamespaceProvider';
+
+const breadcrumbs: BreadcrumbElement[] = [
+  { href: '/', label: 'ARK Dashboard' },
+];
 
 export default function ModelsPage() {
   const searchParams = useSearchParams();
@@ -21,6 +26,8 @@ export default function ModelsPage() {
   return (
     <>
       <PageHeader
+        breadcrumbs={breadcrumbs}
+        currentPage="Models"
         actions={
           readOnlyMode ? (
             <Button disabled>

@@ -1,8 +1,13 @@
 'use client';
 
+import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { A2ATasksSection } from '@/components/sections/a2a-tasks-section';
 import { useListA2ATasks } from '@/lib/services/a2a-tasks-hooks';
+
+const breadcrumbs: BreadcrumbElement[] = [
+  { href: '/', label: 'ARK Dashboard' },
+];
 
 export default function TasksPage() {
   const { data } = useListA2ATasks();
@@ -11,7 +16,7 @@ export default function TasksPage() {
 
   return (
     <>
-      <PageHeader />
+      <PageHeader breadcrumbs={breadcrumbs} currentPage="Tasks" />
       <div className="flex flex-1 flex-col">
         <div>
           <h1 className="text-xl">{pageTitle}</h1>

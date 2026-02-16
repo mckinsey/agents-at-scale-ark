@@ -18,6 +18,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
+import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { Button } from '@/components/ui/button';
 import {
@@ -48,6 +49,11 @@ import {
 } from './sections';
 import { AgentFormMode, type AgentFormProps } from './types';
 import { useAgentForm } from './use-agent-form';
+
+const breadcrumbs: BreadcrumbElement[] = [
+  { href: '/', label: 'ARK Dashboard' },
+  { href: '/agents', label: 'Agents' },
+];
 
 export function AgentForm({
   mode,
@@ -227,6 +233,11 @@ export function AgentForm({
     );
   }
 
+  const pageTitle = isViewing
+    ? agent?.name || ''
+    : isEditing
+      ? 'Edit Agent'
+      : 'Create Agent';
   const submitButtonText = isEditing ? 'Save Changes' : 'Create Agent';
   const cancelHref = onCancel ? undefined : '/agents';
 
@@ -234,6 +245,8 @@ export function AgentForm({
     <div className="absolute inset-0 flex flex-col overflow-hidden">
       <div className="flex-none">
         <PageHeader
+          breadcrumbs={breadcrumbs}
+          currentPage={pageTitle}
           actions={
             isViewing ? (
               <div className="flex items-center gap-2">

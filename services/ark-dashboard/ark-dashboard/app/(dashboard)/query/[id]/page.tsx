@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { queryTimeoutSettingAtom } from '@/atoms/experimental-features';
 import { ErrorResponseContent } from '@/components/ErrorResponseContent';
 import JsonDisplay from '@/components/JsonDisplay';
+import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { QueryEvaluationActions } from '@/components/query-actions';
 import { QueryMemoryField } from '@/components/query-fields/query-memory-field';
@@ -680,9 +681,18 @@ function QueryDetailContent() {
     );
   }
 
+  const breadcrumbs: BreadcrumbElement[] = [
+    { href: '/', label: 'ARK Dashboard' },
+    { href: '/queries', label: 'Queries' },
+  ];
+
+  const pageTitle = isNew ? 'New Query' : query?.name || queryId;
+
   return (
     <>
       <PageHeader
+        breadcrumbs={breadcrumbs}
+        currentPage={pageTitle}
         actions={
           <>
             {!isNew && <QueryEvaluationActions queryName={queryId} />}

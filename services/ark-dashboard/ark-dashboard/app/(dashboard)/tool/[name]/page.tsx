@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { PageHeader } from '@/components/common/page-header';
+import type { BreadcrumbElement } from '@/components/common/page-header';
 import { toolsService } from '@/lib/services';
 import type { ToolDetail } from '@/lib/services/tools';
 
@@ -15,6 +16,11 @@ export default function ToolDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [tool, setTool] = useState<ToolDetail | null>(null);
   const toolName = params.name as string;
+
+  const breadcrumbs: BreadcrumbElement[] = [
+    { href: '/', label: 'ARK Dashboard' },
+    { href: '/tools', label: 'Tools' },
+  ];
 
   useEffect(() => {
     const fetchTool = async () => {
@@ -35,12 +41,17 @@ export default function ToolDetailsPage() {
   }, [toolName]);
 
   if (loading) {
-    return <div className="py-8 text-center">Loading...</div>;
+    return (
+      <>
+        <PageHeader breadcrumbs={breadcrumbs} />
+        <div className="py-8 text-center">Loading...</div>
+      </>
+    );
   }
 
   return (
     <>
-      <PageHeader />
+      <PageHeader breadcrumbs={breadcrumbs} currentPage={toolName} />
       {/* Tool Details Content */}
       <div className="m-4">
         <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">

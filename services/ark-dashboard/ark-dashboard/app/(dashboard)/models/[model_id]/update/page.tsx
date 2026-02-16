@@ -2,7 +2,10 @@
 
 import { use } from 'react';
 
-import { PageHeader } from '@/components/common/page-header';
+import {
+  type BreadcrumbElement,
+  PageHeader,
+} from '@/components/common/page-header';
 import { UpdateModelForm } from '@/components/forms';
 import { Spinner } from '@/components/ui/spinner';
 import { useGetModelbyId } from '@/lib/services/models-hooks';
@@ -15,9 +18,16 @@ export default function ModelUpdatePage({ params }: PageProps) {
   const { model_id: modelId } = use(params);
   const { data, isPending } = useGetModelbyId({ modelId });
 
+  const breadcrumbs: BreadcrumbElement[] = [
+    { label: 'Dashboard', href: '/' },
+    { label: 'Models', href: '/models' },
+  ];
+
+  const currentPage = data?.name || 'Update Model';
+
   return (
     <div className="flex min-h-screen flex-col">
-      <PageHeader />
+      <PageHeader breadcrumbs={breadcrumbs} currentPage={currentPage} />
       {isPending && (
         <div className="flex w-full flex-1 items-center justify-center">
           <Spinner />

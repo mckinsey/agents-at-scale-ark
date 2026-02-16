@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -616,6 +617,10 @@ function SessionsView({
   );
 }
 
+const breadcrumbs: BreadcrumbElement[] = [
+  { href: '/', label: 'ARK Dashboard' },
+];
+
 export default function BrokerPage() {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [selectedMemory, setSelectedMemory] = useState<string>('default');
@@ -645,7 +650,7 @@ export default function BrokerPage() {
 
   return (
     <>
-      <PageHeader />
+      <PageHeader breadcrumbs={breadcrumbs} currentPage="Broker" />
       <div className="flex flex-1 flex-col gap-4">
         <h1 className="text-xl">Broker</h1>
         <Tabs

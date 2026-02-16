@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 
 import JsonDisplay from '@/components/JsonDisplay';
 import { PageHeader } from '@/components/common/page-header';
+import type { BreadcrumbElement } from '@/components/common/page-header';
 import { StatusDot } from '@/components/sections/a2a-tasks-section/status-dot';
 import { mapTaskPhaseToVariant } from '@/components/sections/a2a-tasks-section/utils';
 import { Button } from '@/components/ui/button';
@@ -17,30 +18,41 @@ export default function A2ATaskPage() {
 
   const { data: task, isLoading, error } = useA2ATask(taskId);
 
+  const breadcrumbs: BreadcrumbElement[] = [
+    { href: '/', label: 'ARK Dashboard' },
+    { href: '/tasks', label: 'Tasks' },
+  ];
+
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="text-muted-foreground">Loading task...</div>
-      </div>
+      <>
+        <PageHeader breadcrumbs={breadcrumbs} />
+        <div className="flex h-screen items-center justify-center">
+          <div className="text-muted-foreground">Loading task...</div>
+        </div>
+      </>
     );
   }
 
   if (error || !task) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="text-center">
-          <h1 className="mb-2 text-xl font-semibold">Error loading task</h1>
-          <p className="text-muted-foreground">
-            {error instanceof Error ? error.message : 'Task not found'}
-          </p>
-          <Button
-            variant="outline"
-            onClick={() => router.back()}
-            className="mt-4">
-            ← Back
-          </Button>
+      <>
+        <PageHeader breadcrumbs={breadcrumbs} />
+        <div className="flex h-screen items-center justify-center">
+          <div className="text-center">
+            <h1 className="mb-2 text-xl font-semibold">Error loading task</h1>
+            <p className="text-muted-foreground">
+              {error instanceof Error ? error.message : 'Task not found'}
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => router.back()}
+              className="mt-4">
+              ← Back
+            </Button>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
@@ -56,7 +68,10 @@ export default function A2ATaskPage() {
 
   return (
     <>
-      <PageHeader />
+      <PageHeader
+        breadcrumbs={breadcrumbs}
+        currentPage={task.taskId || taskId}
+      />
       <div className="flex flex-1 flex-col overflow-auto p-4">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {/* Column 1: Identity & Status */}

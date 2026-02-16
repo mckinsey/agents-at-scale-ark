@@ -5,6 +5,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { PageHeader } from '@/components/common/page-header';
+import type { BreadcrumbElement } from '@/components/common/page-header';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -123,6 +124,11 @@ function EventDetailContent() {
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const breadcrumbs: BreadcrumbElement[] = [
+    { href: '/', label: 'ARK Dashboard' },
+    { href: '/query-logs', label: 'Query Logs' },
+  ];
+
   useEffect(() => {
     const loadEvent = async () => {
       try {
@@ -145,28 +151,34 @@ function EventDetailContent() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="text-muted-foreground">Loading event...</div>
-      </div>
+      <>
+        <PageHeader breadcrumbs={breadcrumbs} />
+        <div className="flex h-screen items-center justify-center">
+          <div className="text-muted-foreground">Loading event...</div>
+        </div>
+      </>
     );
   }
 
   if (!event) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="text-center">
-          <h1 className="mb-2 text-xl font-semibold">Event Not Found</h1>
-          <Button variant="outline" onClick={() => router.back()}>
-            ← Back to Events
-          </Button>
+      <>
+        <PageHeader breadcrumbs={breadcrumbs} />
+        <div className="flex h-screen items-center justify-center">
+          <div className="text-center">
+            <h1 className="mb-2 text-xl font-semibold">Event Not Found</h1>
+            <Button variant="outline" onClick={() => router.back()}>
+              ← Back to Events
+            </Button>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   return (
     <>
-      <PageHeader />
+      <PageHeader breadcrumbs={breadcrumbs} currentPage={eventId} />
       <div className="flex h-full flex-col">
         {/* Event Details - Four Column Layout */}
         <div className="border-b bg-gray-50/30 px-4 py-3 dark:bg-gray-900/10">

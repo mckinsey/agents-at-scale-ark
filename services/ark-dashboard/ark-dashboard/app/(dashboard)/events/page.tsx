@@ -2,12 +2,16 @@
 
 import { useSearchParams } from 'next/navigation';
 
+import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { EventsSection } from '@/components/sections/events-section';
 import { useGetEventsCount } from '@/lib/services/events-hooks';
 
 const defaultPage = 1;
 const defaultLimit = 10;
+const breadcrumbs: BreadcrumbElement[] = [
+  { href: '/', label: 'ARK Dashboard' },
+];
 
 export default function EventsPage() {
   const searchParams = useSearchParams();
@@ -30,7 +34,7 @@ export default function EventsPage() {
 
   return (
     <>
-      <PageHeader />
+      <PageHeader breadcrumbs={breadcrumbs} currentPage="Query Logs" />
       <div className="flex flex-1 flex-col">
         <div>
           <h1 className="text-xl">{pageTitle}</h1>

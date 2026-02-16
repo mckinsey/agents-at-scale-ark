@@ -4,6 +4,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 
 import { PageHeader } from '@/components/common/page-header';
+import type { BreadcrumbElement } from '@/components/common/page-header';
 import { EvaluationDetailView } from '@/components/evaluation';
 
 function EvaluationDetailContent() {
@@ -13,9 +14,14 @@ function EvaluationDetailContent() {
   const namespace = searchParams.get('namespace') || 'default';
   const enhanced = searchParams.get('enhanced') === 'true';
 
+  const breadcrumbs: BreadcrumbElement[] = [
+    { href: '/', label: 'ARK Dashboard' },
+    { href: '/evaluations', label: 'Evaluations' },
+  ];
+
   return (
     <>
-      <PageHeader />
+      <PageHeader breadcrumbs={breadcrumbs} currentPage={evaluationId} />
       <div className="flex flex-1 flex-col gap-4 p-4">
         <EvaluationDetailView
           evaluationId={evaluationId}

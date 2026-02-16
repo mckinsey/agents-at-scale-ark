@@ -4,7 +4,10 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-import { PageHeader } from '@/components/common/page-header';
+import {
+  type BreadcrumbElement,
+  PageHeader,
+} from '@/components/common/page-header';
 import { EvaluatorEditForm } from '@/components/forms/evaluator-edit-form';
 import {
   type EvaluatorDetailResponse,
@@ -88,9 +91,16 @@ function EvaluatorEditContent({
     );
   }
 
+  const breadcrumbs: BreadcrumbElement[] = [
+    { label: 'Dashboard', href: '/' },
+    { label: 'Evaluators', href: '/evaluators' },
+  ];
+
+  const currentPage = evaluator.name || 'Edit Evaluator';
+
   return (
     <>
-      <PageHeader />
+      <PageHeader breadcrumbs={breadcrumbs} currentPage={currentPage} />
       <div className="flex-1 overflow-hidden">
         <EvaluatorEditForm
           evaluator={evaluator}
