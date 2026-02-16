@@ -477,7 +477,7 @@ export function AppSidebar() {
                   <Sun className="mr-2 h-4 w-4" />
                 )}
                 <span>
-                  {isExperimentalDarkModeEnabled ? 'Dark Mode' : 'Light Mode'}
+                  {isExperimentalDarkModeEnabled ? 'Light Mode' : 'Dark Mode'}
                 </span>
               </SidebarMenuButton>
             </SidebarMenuItem>
