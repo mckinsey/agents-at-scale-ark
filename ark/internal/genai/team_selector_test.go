@@ -190,11 +190,31 @@ func (m *mockTeamMember) Execute(ctx context.Context, userInput Message, history
 	return &ExecutionResult{}, nil
 }
 
+// mockSelectorAgent implements SelectorAgentInterface for testing selector logic
+type mockSelectorAgent struct{}
+
+func newMockSelectorAgent() *mockSelectorAgent {
+	return &mockSelectorAgent{}
+}
+
+func (m *mockSelectorAgent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	return &ExecutionResult{
+		Messages: []Message{
+			NewAssistantMessage("selected"),
+		},
+	}, nil
+}
+
+func (m *mockSelectorAgent) FullName() string {
+	return "mock-selector"
+}
+
 func TestDetermineNextMember(t *testing.T) {
 	members := []TeamMember{
 		&mockTeamMember{name: "researcher"},
 		&mockTeamMember{name: "analyst"},
 		&mockTeamMember{name: "writer"},
+		&mockTeamMember{name: "selected"},
 	}
 
 	tests := []struct {
@@ -205,16 +225,10 @@ func TestDetermineNextMember(t *testing.T) {
 		wantError        bool
 	}{
 		{
-			name:             "first turn returns first member",
-			previousMember:   "",
-			legalTransitions: map[string][]TeamMember{},
-			wantMember:       "researcher",
-		},
-		{
-			name:             "no graph constraints uses all members",
+			name:             "no graph constraints uses selector suggestion",
 			previousMember:   "researcher",
 			legalTransitions: map[string][]TeamMember{},
-			wantMember:       "researcher", // Will be selected by selector (mocked)
+			wantMember:       "selected",
 		},
 		{
 			name:           "single legal transition",
@@ -228,9 +242,9 @@ func TestDetermineNextMember(t *testing.T) {
 			name:           "multiple legal transitions",
 			previousMember: "researcher",
 			legalTransitions: map[string][]TeamMember{
-				"researcher": {members[1], members[2]},
+				"researcher": {members[1], members[3]},
 			},
-			wantMember: "analyst", // Will be selected by selector (mocked)
+			wantMember: "selected",
 		},
 		{
 			name:           "no legal transitions falls back to first",
@@ -247,24 +261,12 @@ func TestDetermineNextMember(t *testing.T) {
 			team := &Team{
 				Members: members,
 			}
+			team.mockSelectorAgent = newMockSelectorAgent()
 
 			ctx := context.Background()
 			messages := []Message{}
 			tmpl, err := template.New("test").Parse("test template")
 			require.NoError(t, err)
-
-			// Skip tests that require selector agent (no graph or multiple transitions)
-			legal := tt.legalTransitions[tt.previousMember]
-			if len(legal) == 0 && tt.previousMember != "" {
-				// No graph constraints - requires selector agent
-				t.Skip("Requires selector agent mocking - tested in integration tests")
-				return
-			}
-			if len(legal) > 1 {
-				// Multiple transitions - requires selector agent
-				t.Skip("Requires selector agent mocking - tested in integration tests")
-				return
-			}
 
 			member, err := team.determineNextMember(ctx, messages, tmpl, tt.previousMember, tt.legalTransitions)
 
@@ -276,7 +278,6 @@ func TestDetermineNextMember(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, member)
 			assert.Equal(t, tt.wantMember, member.GetName())
-			// Index is no longer returned, verify member name matches expected
 		})
 	}
 }
@@ -286,6 +287,7 @@ func TestSelectFromGraphConstraints(t *testing.T) {
 		&mockTeamMember{name: "researcher"},
 		&mockTeamMember{name: "analyst"},
 		&mockTeamMember{name: "writer"},
+		&mockTeamMember{name: "selected"},
 	}
 
 	tests := []struct {
@@ -296,6 +298,14 @@ func TestSelectFromGraphConstraints(t *testing.T) {
 		wantError        bool
 		errorSubstring   string
 	}{
+		{
+			name:           "no previous member",
+			previousMember: "",
+			legalTransitions: map[string][]TeamMember{
+				"researcher": {members[1]},
+			},
+			wantMember: "selected",
+		},
 		{
 			name:           "no legal transitions",
 			previousMember: "writer",
@@ -316,17 +326,9 @@ func TestSelectFromGraphConstraints(t *testing.T) {
 			name:           "multiple legal transitions",
 			previousMember: "researcher",
 			legalTransitions: map[string][]TeamMember{
-				"researcher": {members[1], members[2]},
+				"researcher": {members[2], members[3]},
 			},
-			wantMember: "analyst", // Will be selected by selector
-		},
-		{
-			name:           "previous member not found falls back to first",
-			previousMember: "nonexistent",
-			legalTransitions: map[string][]TeamMember{
-				"researcher": {members[1]},
-			},
-			wantMember: "researcher", // Falls back to first when previous member not found
+			wantMember: "selected",
 		},
 	}
 
@@ -336,18 +338,12 @@ func TestSelectFromGraphConstraints(t *testing.T) {
 				Members: members,
 			}
 
+			team.mockSelectorAgent = newMockSelectorAgent()
+
 			ctx := context.Background()
 			messages := []Message{}
 			tmpl, err := template.New("test").Parse("test template")
 			require.NoError(t, err)
-
-			legal := tt.legalTransitions[tt.previousMember]
-			if len(legal) > 1 {
-				// For multiple transitions, we need to mock the selector agent
-				// This is complex, so we'll test the logic path without full execution
-				t.Skip("Multiple transitions require selector agent mocking - tested in integration tests")
-				return
-			}
 
 			member, err := team.selectFromGraphConstraints(ctx, messages, tmpl, tt.previousMember, tt.legalTransitions)
 
@@ -362,7 +358,6 @@ func TestSelectFromGraphConstraints(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, member)
 			assert.Equal(t, tt.wantMember, member.GetName())
-			// Index is no longer returned, verify member name matches expected
 		})
 	}
 }

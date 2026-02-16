@@ -13,6 +13,12 @@ import (
 	"mckinsey.com/ark/internal/telemetry"
 )
 
+// SelectorAgentInterface defines the interface for selector agents (used for testing)
+type SelectorAgentInterface interface {
+	Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error)
+	FullName() string
+}
+
 type Team struct {
 	Name              string
 	Members           []TeamMember
@@ -29,6 +35,8 @@ type Team struct {
 	Namespace         string
 	memory            MemoryInterface
 	eventStream       EventStreamInterface
+	// mockSelectorAgent is used for testing to inject a mock selector agent
+	mockSelectorAgent SelectorAgentInterface
 }
 
 // FullName returns the namespace/name format for the team

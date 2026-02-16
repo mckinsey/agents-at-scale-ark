@@ -317,9 +317,13 @@ spec:
               ark.mckinsey.com/mcp-server-settings: ($mcp_settings_a_read)
           spec:
             input: |
-              Read the file "agent-a-data.txt" and confirm it contains Agent A's data.
+              Read the file "agent-a-data.txt" and provide the following in your response:
+              1. The exact filename you read (must include "agent-a-data.txt")
+              2. The complete file contents exactly as written in the file
 
               Then list all files in the current directory.
+
+              Important: Your response must include both the exact filename and the full file content.
             target:
               type: agent
               name: filesystem-agent-a
@@ -369,9 +373,13 @@ spec:
               ark.mckinsey.com/mcp-server-settings: ($mcp_settings_b_read)
           spec:
             input: |
-              Read the file "agent-b-data.txt" and confirm it contains Agent B's data.
+              Read the file "agent-b-data.txt" and provide the following in your response:
+              1. The exact filename you read (must include "agent-b-data.txt")
+              2. The complete file contents exactly as written in the file
 
               Then list all files in the current directory.
+
+              Important: Your response must include both the exact filename and the full file content.
             target:
               type: agent
               name: filesystem-agent-b

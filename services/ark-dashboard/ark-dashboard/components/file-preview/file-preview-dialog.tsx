@@ -94,7 +94,7 @@ export function FilePreviewDialog({
               </SyntaxHighlighter>
             </div>
           ) : (
-            <pre className="font-mono text-sm break-words whitespace-pre-wrap">
+            <pre className="pl-4 font-mono text-sm break-words whitespace-pre-wrap">
               {content}
             </pre>
           )}
