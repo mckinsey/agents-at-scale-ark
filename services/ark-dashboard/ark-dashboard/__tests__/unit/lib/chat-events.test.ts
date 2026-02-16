@@ -27,7 +27,7 @@ describe('chat-events', () => {
       expect(dispatchEventSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'open-floating-chat',
-          detail: { name, type, strategy: undefined },
+          detail: { name, type, strategy: undefined, graphEdges: undefined },
         }),
       );
     });
@@ -42,7 +42,7 @@ describe('chat-events', () => {
       expect(dispatchEventSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'open-floating-chat',
-          detail: { name, type, strategy },
+          detail: { name, type, strategy, graphEdges: undefined },
         }),
       );
     });
@@ -56,7 +56,26 @@ describe('chat-events', () => {
       expect(dispatchEventSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'open-floating-chat',
-          detail: { name, type, strategy: undefined },
+          detail: { name, type, strategy: undefined, graphEdges: undefined },
+        }),
+      );
+    });
+
+    it('should dispatch event with graphEdges when provided', () => {
+      const name = 'test-team';
+      const type: ChatType = 'team';
+      const strategy = 'graph';
+      const graphEdges = [
+        { from: 'agent-a', to: 'agent-b' },
+        { from: 'agent-b', to: 'agent-c' },
+      ];
+
+      openFloatingChat(name, type, strategy, graphEdges);
+
+      expect(dispatchEventSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'open-floating-chat',
+          detail: { name, type, strategy, graphEdges },
         }),
       );
     });
@@ -72,7 +91,7 @@ describe('chat-events', () => {
       expect(dispatchEventSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'toggle-floating-chat',
-          detail: { name, type, strategy: undefined },
+          detail: { name, type, strategy: undefined, graphEdges: undefined },
         }),
       );
     });
@@ -87,7 +106,7 @@ describe('chat-events', () => {
       expect(dispatchEventSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'toggle-floating-chat',
-          detail: { name, type, strategy },
+          detail: { name, type, strategy, graphEdges: undefined },
         }),
       );
     });
@@ -102,7 +121,23 @@ describe('chat-events', () => {
       expect(dispatchEventSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'toggle-floating-chat',
-          detail: { name, type, strategy: 'round-robin' },
+          detail: { name, type, strategy: 'round-robin', graphEdges: undefined },
+        }),
+      );
+    });
+
+    it('should dispatch event with graphEdges when provided', () => {
+      const name = 'graph-team';
+      const type: ChatType = 'team';
+      const strategy = 'graph';
+      const graphEdges = [{ from: 'a', to: 'b' }];
+
+      toggleFloatingChat(name, type, strategy, graphEdges);
+
+      expect(dispatchEventSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'toggle-floating-chat',
+          detail: { name, type, strategy, graphEdges },
         }),
       );
     });

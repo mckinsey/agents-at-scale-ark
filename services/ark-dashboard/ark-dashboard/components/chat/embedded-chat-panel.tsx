@@ -18,6 +18,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { useChatSession } from '@/lib/hooks';
+import type { GraphEdge } from '@/lib/types/chat-message';
 
 type ChatType = 'model' | 'team' | 'agent';
 type TabType = 'chat' | 'debug';
@@ -499,12 +500,14 @@ interface EmbeddedChatPanelProps {
   name: string;
   type: ChatType;
   strategy?: string;
+  graphEdges?: GraphEdge[];
 }
 
 export function EmbeddedChatPanel({
   name,
   type,
   strategy,
+  graphEdges,
 }: EmbeddedChatPanelProps) {
   const {
     messages,
@@ -582,6 +585,7 @@ export function EmbeddedChatPanel({
                 messages={messages}
                 type={type}
                 strategy={strategy}
+                graphEdges={graphEdges}
                 debugMode={debugMode}
                 isProcessing={isProcessing}
                 error={error}

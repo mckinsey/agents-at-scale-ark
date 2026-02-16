@@ -424,6 +424,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
               name={teamName || ''}
               type="team"
               strategy={team?.strategy}
+              graphEdges={team?.graph?.edges}
             />
           </div>
         </div>

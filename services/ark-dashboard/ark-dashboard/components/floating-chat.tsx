@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/tooltip';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { useChatSession } from '@/lib/hooks';
+import type { GraphEdge } from '@/lib/types/chat-message';
 
 type ChatType = 'model' | 'team' | 'agent';
 type WindowState = 'default' | 'minimized' | 'maximized';
@@ -36,6 +37,7 @@ interface FloatingChatProps {
   type: ChatType;
   position: number;
   strategy?: string;
+  graphEdges?: GraphEdge[];
   onClose: () => void;
 }
 
@@ -44,6 +46,7 @@ export default function FloatingChat({
   type,
   position,
   strategy,
+  graphEdges,
   onClose,
 }: FloatingChatProps) {
   const {
@@ -210,6 +213,7 @@ export default function FloatingChat({
                   messages={messages}
                   type={type}
                   strategy={strategy}
+                  graphEdges={graphEdges}
                   debugMode={debugMode}
                   isProcessing={isProcessing}
                   error={error}

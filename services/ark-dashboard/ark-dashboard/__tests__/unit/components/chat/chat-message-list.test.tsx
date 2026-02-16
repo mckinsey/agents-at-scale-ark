@@ -264,4 +264,148 @@ describe('ChatMessageList', () => {
       expect(ref.current).toBeInstanceOf(HTMLDivElement);
     });
   });
+
+  describe('graph transitions', () => {
+    const graphEdges = [
+      { from: 'agent-a', to: 'agent-b' },
+      { from: 'agent-b', to: 'agent-c' },
+    ];
+
+    it('should render transition between agent messages with graph strategy', () => {
+      const messages: ExtendedChatMessage[] = [
+        { role: 'user', content: 'Hello' } as ExtendedChatMessage,
+        {
+          role: 'assistant',
+          content: 'Response from A',
+          name: 'agent-a',
+        } as ExtendedChatMessage,
+        {
+          role: 'assistant',
+          content: 'Response from B',
+          name: 'agent-b',
+        } as ExtendedChatMessage,
+      ];
+
+      renderChatMessageList({
+        messages,
+        strategy: 'graph',
+        graphEdges,
+      });
+
+      expect(screen.getByText(/agent-a/)).toBeInTheDocument();
+      expect(screen.getByText(/agent-b/)).toBeInTheDocument();
+      expect(screen.getByText('Response from A')).toBeInTheDocument();
+      expect(screen.getByText('Response from B')).toBeInTheDocument();
+    });
+
+    it('should render end of graph when last agent has no outgoing edges', () => {
+      const messages: ExtendedChatMessage[] = [
+        { role: 'user', content: 'Hello' } as ExtendedChatMessage,
+        {
+          role: 'assistant',
+          content: 'Response from C',
+          name: 'agent-c',
+        } as ExtendedChatMessage,
+      ];
+
+      renderChatMessageList({
+        messages,
+        strategy: 'graph',
+        graphEdges,
+        isProcessing: false,
+      });
+
+      expect(screen.getByText('End of graph')).toBeInTheDocument();
+    });
+
+    it('should not render end of graph while processing', () => {
+      const messages: ExtendedChatMessage[] = [
+        { role: 'user', content: 'Hello' } as ExtendedChatMessage,
+        {
+          role: 'assistant',
+          content: 'Response from C',
+          name: 'agent-c',
+        } as ExtendedChatMessage,
+      ];
+
+      renderChatMessageList({
+        messages,
+        strategy: 'graph',
+        graphEdges,
+        isProcessing: true,
+      });
+
+      expect(screen.queryByText('End of graph')).not.toBeInTheDocument();
+    });
+
+    it('should not render transitions for non-graph strategy', () => {
+      const messages: ExtendedChatMessage[] = [
+        { role: 'user', content: 'Hello' } as ExtendedChatMessage,
+        {
+          role: 'assistant',
+          content: 'Response from A',
+          name: 'agent-a',
+        } as ExtendedChatMessage,
+        {
+          role: 'assistant',
+          content: 'Response from B',
+          name: 'agent-b',
+        } as ExtendedChatMessage,
+      ];
+
+      renderChatMessageList({
+        messages,
+        strategy: 'round-robin',
+        graphEdges,
+      });
+
+      expect(screen.queryByText('End of graph')).not.toBeInTheDocument();
+    });
+
+    it('should not render graph end when termination event exists', () => {
+      const messages: ExtendedChatMessage[] = [
+        { role: 'user', content: 'Hello' } as ExtendedChatMessage,
+        {
+          role: 'assistant',
+          content: '',
+          name: 'agent-c',
+          tool_calls: [
+            {
+              id: 'tc-1',
+              type: 'function' as const,
+              function: {
+                name: 'terminate',
+                arguments: JSON.stringify({ response: 'Done' }),
+              },
+            },
+          ],
+        } as ExtendedChatMessage,
+      ];
+
+      renderChatMessageList({
+        messages,
+        strategy: 'graph',
+        graphEdges,
+        isProcessing: false,
+      });
+
+      expect(screen.queryByText('End of graph')).not.toBeInTheDocument();
+    });
+
+    it('should render graph strategy indicator', () => {
+      const messages: ExtendedChatMessage[] = [
+        { role: 'user', content: 'Hello' } as ExtendedChatMessage,
+      ];
+
+      renderChatMessageList({
+        messages,
+        strategy: 'graph',
+        graphEdges,
+      });
+
+      expect(
+        screen.getByText('Agents respond following graph edges'),
+      ).toBeInTheDocument();
+    });
+  });
 });

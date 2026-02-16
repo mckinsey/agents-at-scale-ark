@@ -18,10 +18,12 @@ describe('StrategyIndicator', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('should not render for graph strategy', () => {
-    const { container } = render(<StrategyIndicator strategy="graph" />);
+  it('should render for graph strategy', () => {
+    render(<StrategyIndicator strategy="graph" />);
 
-    expect(container.firstChild).toBeNull();
+    expect(
+      screen.getByText('Agents respond following graph edges'),
+    ).toBeInTheDocument();
   });
 
   it('should not render for sequential strategy', () => {
