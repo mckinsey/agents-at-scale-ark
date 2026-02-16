@@ -8,16 +8,19 @@ export function createEventsRouter(events: EventBroker): Router {
 
   router.get('/', (req, res) => {
     const watch = req.query['watch'] === 'true';
+    const sessionId = req.query['session_id'] as string | undefined;
 
     if (watch) {
       const cursor = req.query['cursor'] ? parseInt(req.query['cursor'] as string, 10) : undefined;
-      console.log(`[EVENTS] GET /events?watch=true${cursor ? `&cursor=${cursor}` : ''} - starting SSE stream for all events`);
+      console.log(`[EVENTS] GET /events?watch=true${cursor ? `&cursor=${cursor}` : ''}${sessionId ? `&session_id=${sessionId}` : ''} - starting SSE stream for all events`);
 
       let replayItems: EventData[] | undefined;
       if (cursor !== undefined && !isNaN(cursor)) {
-        replayItems = events.all()
-          .filter(item => item.sequenceNumber > cursor)
-          .map(item => item.data);
+        let items = events.all().filter(item => item.sequenceNumber > cursor);
+        if (sessionId) {
+          items = items.filter(item => item.data.data.sessionId === sessionId);
+        }
+        replayItems = items.map(item => item.data);
       }
 
       streamSSE({
@@ -25,13 +28,19 @@ export function createEventsRouter(events: EventBroker): Router {
         req,
         tag: 'EVENTS',
         itemName: 'events',
-        subscribe: (callback) => events.subscribe((item) => callback(item.data)),
+        subscribe: (callback) => events.subscribe((item) => {
+          if (!sessionId || item.data.data.sessionId === sessionId) {
+            callback(item.data);
+          }
+        }),
         replayItems
       });
     } else {
       try {
         const params = parsePaginationParams(req.query as Record<string, unknown>);
-        const result = events.paginate(params);
+        const result = sessionId
+          ? events.paginateBySessionId(sessionId, params)
+          : events.paginate(params);
 
         const response: PaginatedList<EventData> = {
           items: result.items.map(item => item.data),

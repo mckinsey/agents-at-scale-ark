@@ -14,6 +14,7 @@ import type { Model } from '@/lib/services/models';
 import type { Secret } from '@/lib/services/secrets';
 import { cn } from '@/lib/utils';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 interface SecretRowProps {
   secret: Secret;
@@ -55,6 +56,7 @@ export function SecretRow({
   onDelete,
 }: SecretRowProps) {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const { readOnlyMode } = useNamespace();
   // Count models using this secret
   const modelsUsingSecret = models.filter(model =>
     modelUsesSecret(model, secret.name),
@@ -122,11 +124,14 @@ export function SecretRow({
                     variant="ghost"
                     size="sm"
                     className="h-8 w-8 p-0"
-                    onClick={() => onEdit(secret)}>
+                    onClick={() => !readOnlyMode && onEdit(secret)}
+                    disabled={readOnlyMode}>
                     <Pencil className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Edit secret</TooltipContent>
+                <TooltipContent>
+                  {readOnlyMode ? 'Read-only mode' : 'Edit secret'}
+                </TooltipContent>
               </Tooltip>
             </TooltipProvider>
           )}
@@ -140,15 +145,22 @@ export function SecretRow({
                     size="sm"
                     className={cn(
                       'h-8 w-8 p-0',
-                      isInUse && 'cursor-not-allowed opacity-50',
+                      (isInUse || readOnlyMode) &&
+                        'cursor-not-allowed opacity-50',
                     )}
-                    onClick={() => !isInUse && setDeleteConfirmOpen(true)}
-                    disabled={isInUse}>
+                    onClick={() =>
+                      !isInUse && !readOnlyMode && setDeleteConfirmOpen(true)
+                    }
+                    disabled={isInUse || readOnlyMode}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {isInUse ? 'Cannot delete secret in use' : 'Delete secret'}
+                  {readOnlyMode
+                    ? 'Read-only mode'
+                    : isInUse
+                      ? 'Cannot delete secret in use'
+                      : 'Delete secret'}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

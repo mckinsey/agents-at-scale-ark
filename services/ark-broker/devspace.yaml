@@ -6,6 +6,7 @@ pipelines:
     build_images --all
     create_deployments --all
   dev: |-
+    build_images --all
     create_deployments --all
     start_dev --all
 
@@ -59,25 +60,6 @@ deployments:
           namespaces:
             - ark-system
             - default
-
-hooks:
-  - command: |-
-      echo "Restarting ark-controller to pick up broker OTEL configuration..."
-
-      # Check if ark-controller-devspace exists first (DevSpace deployment)
-      if kubectl get deployment ark-controller-devspace -n ark-system >/dev/null 2>&1; then
-        echo "Found ark-controller-devspace, restarting..."
-        kubectl rollout restart deployment/ark-controller-devspace -n ark-system
-        kubectl rollout status deployment/ark-controller-devspace -n ark-system --timeout=120s
-      # Otherwise check for regular ark-controller deployment
-      elif kubectl get deployment ark-controller -n ark-system >/dev/null 2>&1; then
-        echo "Found ark-controller, restarting..."
-        kubectl rollout restart deployment/ark-controller -n ark-system
-        kubectl rollout status deployment/ark-controller -n ark-system --timeout=120s
-      else
-        echo "Warning: No ark-controller deployment found in ark-system namespace"
-      fi
-    events: ["after:deploy:ark-broker"]
 
 dev:
   ark-broker:

@@ -12,10 +12,10 @@ class DashboardPage(BasePage):
     TOOLS_TAB = "text='Tools'"
     TEAMS_TAB = "text='Teams'"
     SECRETS_TAB = "text='Secrets'"
-    MAIN_CONTENT = "main, [role='main'], body"
+    MAIN_CONTENT = "main[data-slot='sidebar-inset']"
     SIDEBAR = "[data-testid='sidebar'], aside, nav"
     
-    ADD_AGENT_BUTTON = "button:has-text('Add Agent'), button:has-text('Create Agent'), a:has-text('Add Agent')"
+    ADD_AGENT_BUTTON = "a[href='/agents/new']:has-text('Create Agent')"
     ADD_MODEL_BUTTON = "button:has-text('Add Model'), button:has-text('Create Model'), a:has-text('Add Model')"
     ADD_QUERY_BUTTON = "button:has-text('Add Query'), button:has-text('Create Query'), a:has-text('Add Query')"
     ADD_TOOL_BUTTON = "button:has-text('Add Tool'), button:has-text('Create Tool'), a:has-text('Add Tool')"
@@ -34,7 +34,7 @@ class DashboardPage(BasePage):
     
     def is_dashboard_loaded(self) -> bool:
         try:
-            return self.page.locator(self.MAIN_CONTENT).first.is_visible(timeout=5000)
+            return self.page.locator(self.MAIN_CONTENT).is_visible(timeout=5000)
         except:
             return False
     
@@ -43,4 +43,3 @@ class DashboardPage(BasePage):
             return self.page.locator(self.DASHBOARD_TITLE).first.inner_text()
         except:
             return ""
-

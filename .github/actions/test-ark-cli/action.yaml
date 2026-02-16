@@ -17,11 +17,23 @@ inputs:
   model-api-version:
     description: Model API version (Azure only)
     required: true
+  ci-cache-registry:
+    description: CI cache registry URL
+    required: true
+  ci-cache-registry-hostname:
+    description: CI cache registry hostname
+    required: true
   ci-cache-registry-username:
     description: Username for CI cache registry
     required: true
   ci-cache-registry-password:
     description: Password for CI cache registry
+    required: true
+  ark-image-tag:
+    description: Tag for Ark images
+    required: true
+  is-fork-pr:
+    description: Whether this is a fork PR
     required: true
 
 runs:
@@ -41,6 +53,23 @@ runs:
       uses: actions/setup-node@v4
       with:
         node-version: '24.x'
+
+    - name: Configure K3s registry authentication
+      if: ${{ inputs.is-fork-pr == 'false' }}
+      shell: bash
+      run: |
+        sudo mkdir -p /etc/rancher/k3s
+        cat <<EOF | sudo tee /etc/rancher/k3s/registries.yaml
+        mirrors:
+          ${{ inputs.ci-cache-registry-hostname }}:
+            endpoint:
+              - "https://${{ inputs.ci-cache-registry-hostname }}"
+        configs:
+          ${{ inputs.ci-cache-registry-hostname }}:
+            auth:
+              username: ${{ inputs.ci-cache-registry-username }}
+              password: ${{ inputs.ci-cache-registry-password }}
+        EOF
 
     - name: Setup K3s cluster
       uses: ./.github/actions/setup-k3s
@@ -78,6 +107,12 @@ runs:
         sudo k3s ctr images import /tmp/ark-controller-ci.tar
         rm /tmp/ark-controller-ci.tar
 
+    - name: Login to Docker Registry
+      if: ${{ inputs.is-fork-pr == 'false' }}
+      shell: bash
+      run: |
+        echo "${{ inputs.ci-cache-registry-password }}" | docker login ${{ inputs.ci-cache-registry-hostname }} -u "${{ inputs.ci-cache-registry-username }}" --password-stdin
+
     - name: Install Ark from local charts
       shell: bash
       run: |
@@ -107,11 +142,17 @@ runs:
         # Install ark-api from local chart
         helm upgrade --install ark-api services/ark-api/chart \
           --namespace default \
+          --set app.image.repository="${{ inputs.ci-cache-registry }}/ark-api" \
+          --set app.image.tag="${{ inputs.ark-image-tag }}" \
+          --set app.image.pullPolicy="Always" \
           --wait --timeout=5m
 
         # Install ark-dashboard from local chart
         helm upgrade --install ark-dashboard services/ark-dashboard/chart \
           --namespace default \
+          --set app.image.repository="${{ inputs.ci-cache-registry }}/ark-dashboard" \
+          --set app.image.tag="${{ inputs.ark-image-tag }}" \
+          --set app.image.pullPolicy="Always" \
           --wait --timeout=5m
 
         ark --version

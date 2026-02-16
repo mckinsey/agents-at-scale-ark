@@ -1,14 +1,25 @@
 'use client';
 
-import { AlertCircle, Save } from 'lucide-react';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Save } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
+import * as z from 'zod';
 
 import { ParameterDetailPanel } from '@/components/panels/parameter-detail-panel';
 import { SelectorDetailPanel } from '@/components/panels/selector-detail-panel';
+import { Button } from '@/components/ui/button';
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -16,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import {
   type EvaluatorDetailResponse,
@@ -23,8 +35,6 @@ import {
   type Model,
   modelsService,
 } from '@/lib/services';
-
-import { Button } from '../ui/button';
 
 interface Parameter {
   name: string;
@@ -45,6 +55,18 @@ interface Selector {
   };
 }
 
+const formSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  description: z.string().optional(),
+  address: z
+    .string()
+    .min(1, 'Address is required')
+    .url('Address must be a valid URL'),
+  modelRef: z.string().optional(),
+});
+
+type FormValues = z.infer<typeof formSchema>;
+
 interface EvaluatorEditFormProps {
   evaluator: EvaluatorDetailResponse;
   namespace: string;
@@ -60,15 +82,22 @@ export function EvaluatorEditForm({
   onCancel,
   saving,
 }: EvaluatorEditFormProps) {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [address, setAddress] = useState('');
-  const [modelRef, setModelRef] = useState('');
   const [parameters, setParameters] = useState<Parameter[]>([]);
   const [selector, setSelector] = useState<Selector | null>(null);
   const [models, setModels] = useState<Model[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [parametersError, setParametersError] = useState<string | undefined>();
+  const [selectorError, setSelectorError] = useState<string | undefined>();
+
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      name: '',
+      description: '',
+      address: '',
+      modelRef: '',
+    },
+  });
 
   useEffect(() => {
     const loadModels = async () => {
@@ -92,14 +121,15 @@ export function EvaluatorEditForm({
 
   useEffect(() => {
     if (evaluator) {
-      setName(evaluator.name);
-      setDescription((evaluator.spec?.description as string) || '');
-
       const addressSpec = evaluator.spec?.address as { value?: string };
-      setAddress(addressSpec?.value || '');
-
       const modelRefSpec = evaluator.spec?.modelRef as { name?: string };
-      setModelRef(modelRefSpec?.name || '');
+
+      form.reset({
+        name: evaluator.name,
+        description: (evaluator.spec?.description as string) || '',
+        address: addressSpec?.value || '',
+        modelRef: modelRefSpec?.name || '',
+      });
 
       const parametersSpec = evaluator.spec?.parameters as Parameter[];
       setParameters(parametersSpec || []);
@@ -128,67 +158,57 @@ export function EvaluatorEditForm({
         setSelector(null);
       }
     }
-  }, [evaluator]);
+  }, [evaluator, form]);
 
-  const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
+  const validateParametersAndSelector = (): boolean => {
+    let isValid = true;
+    setParametersError(undefined);
+    setSelectorError(undefined);
 
-    if (!name.trim()) {
-      newErrors.name = 'Name is required';
-    } else if (!name.match(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/)) {
-      newErrors.name =
-        'Name must be a valid Kubernetes name (lowercase letters, numbers, and hyphens only)';
-    }
-
-    if (!address.trim()) {
-      newErrors.address = 'Address is required';
-    } else {
-      try {
-        new URL(address);
-      } catch {
-        newErrors.address = 'Address must be a valid URL';
-      }
-    }
-
-    // Validate parameters
     const paramNames = new Set();
     for (const param of parameters) {
       if (!param.name.trim()) {
-        newErrors.parameters = 'All parameters must have names';
+        setParametersError('All parameters must have names');
+        isValid = false;
         break;
       }
       if (paramNames.has(param.name)) {
-        newErrors.parameters = `Duplicate parameter name: ${param.name}`;
+        setParametersError(`Duplicate parameter name: ${param.name}`);
+        isValid = false;
         break;
       }
       paramNames.add(param.name);
     }
 
-    // Validate selector labels
     if (selector?.labelSelector?.matchLabels) {
       for (const [key] of Object.entries(selector.labelSelector.matchLabels)) {
         if (!key.trim()) {
-          newErrors.selector = 'Selector labels cannot have empty keys';
+          setSelectorError('Selector labels cannot have empty keys');
+          isValid = false;
           break;
         }
       }
     }
 
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return isValid;
   };
 
-  const handleSubmit = async () => {
-    if (!validateForm()) {
+  const onSubmit = async (values: FormValues) => {
+    if (!validateParametersAndSelector()) {
       return;
     }
 
+    const modelRefValue =
+      values.modelRef && values.modelRef !== '__none__'
+        ? values.modelRef
+        : undefined;
+
     const evaluatorData: EvaluatorUpdateRequest = {
-      description: description || undefined,
+      description: values.description || undefined,
       address: {
-        value: address,
+        value: values.address,
       },
-      ...(modelRef && { modelRef: { name: modelRef } }),
+      ...(modelRefValue && { modelRef: { name: modelRefValue } }),
       ...(parameters.length > 0 && { parameters }),
       ...(selector &&
         selector.labelSelector &&
@@ -202,7 +222,6 @@ export function EvaluatorEditForm({
 
   return (
     <div className="flex h-full">
-      {/* Main Form Panel - Left Side */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="space-y-6">
           <div>
@@ -212,116 +231,149 @@ export function EvaluatorEditForm({
             </p>
           </div>
 
-          <div className="flex w-full flex-col gap-3">
-            <CardHeader className="w-full px-0">
-              <CardTitle className="text-lg">Basic Information</CardTitle>
-            </CardHeader>
-            <CardContent className="w-full space-y-6 px-0">
-              <div className="flex flex-col gap-1 space-y-2">
-                <Label htmlFor="name">Name</Label>
-                <Input
-                  id="name"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  disabled={true}
-                  className={errors.name ? 'border-destructive' : ''}
-                />
-                {errors.name && (
-                  <div className="text-destructive flex items-center gap-1 text-sm">
-                    <AlertCircle className="h-4 w-4" />
-                    {errors.name}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-1 space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  value={description}
-                  onChange={e => setDescription(e.target.value)}
-                  placeholder="Describe what this evaluator does..."
-                  rows={3}
-                />
-              </div>
-
-              <div className="flex flex-col gap-1 space-y-2">
-                <Label htmlFor="address">Address</Label>
-                <Input
-                  id="address"
-                  value={address}
-                  onChange={e => setAddress(e.target.value)}
-                  placeholder="http://evaluator-service:8080"
-                  className={errors.address ? 'border-destructive' : ''}
-                />
-                {errors.address && (
-                  <div className="text-destructive flex items-center gap-1 text-sm">
-                    <AlertCircle className="h-4 w-4" />
-                    {errors.address}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-1 space-y-2">
-                <Label htmlFor="model">Model Reference (Optional)</Label>
-                <Select
-                  value={modelRef || '__none__'}
-                  onValueChange={value =>
-                    setModelRef(value === '__none__' ? '' : value)
-                  }>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a model (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">
-                      <span className="text-muted-foreground">None</span>
-                    </SelectItem>
-                    {modelsLoading ? (
-                      <SelectItem value="__loading__" disabled>
-                        Loading models...
-                      </SelectItem>
-                    ) : (
-                      models.map(model => (
-                        <SelectItem key={model.name} value={model.name}>
-                          {model.name}
-                        </SelectItem>
-                      ))
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <div className="flex w-full flex-col gap-3">
+                <CardHeader className="w-full px-0">
+                  <CardTitle className="text-lg">Basic Information</CardTitle>
+                </CardHeader>
+                <CardContent className="w-full space-y-6 px-0">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Name</FormLabel>
+                        <FormControl>
+                          <Input {...field} disabled={true} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
                     )}
-                  </SelectContent>
-                </Select>
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Description</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            {...field}
+                            placeholder="Describe what this evaluator does..."
+                            rows={3}
+                            disabled={saving}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="address"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>
+                          Address <span className="text-red-500">*</span>
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            placeholder="http://evaluator-service:8080"
+                            disabled={saving}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="modelRef"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Model Reference (Optional)</FormLabel>
+                        <Select
+                          value={field.value || '__none__'}
+                          onValueChange={value =>
+                            field.onChange(value === '__none__' ? '' : value)
+                          }
+                          disabled={saving}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a model (optional)" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="__none__">
+                              <span className="text-muted-foreground">
+                                None
+                              </span>
+                            </SelectItem>
+                            {modelsLoading ? (
+                              <SelectItem value="__loading__" disabled>
+                                Loading models...
+                              </SelectItem>
+                            ) : (
+                              models.map(model => (
+                                <SelectItem key={model.name} value={model.name}>
+                                  {model.name}
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </CardContent>
               </div>
-            </CardContent>
-          </div>
 
-          <hr />
+              <hr />
 
-          <SelectorDetailPanel
-            selector={selector}
-            onSelectorChange={setSelector}
-            error={errors.selector}
-          />
+              <SelectorDetailPanel
+                selector={selector}
+                onSelectorChange={setSelector}
+                error={selectorError}
+              />
 
-          <div className="flex items-center justify-end gap-2 border-t pt-6">
-            <Button
-              onClick={handleSubmit}
-              disabled={saving}
-              className="min-w-24">
-              <Save className="h-4 w-4" />
-              {saving ? 'Saving...' : 'Save Changes'}
-            </Button>
-            <Button variant="outline" onClick={onCancel} disabled={saving}>
-              Cancel
-            </Button>
-          </div>
+              <div className="flex items-center justify-end gap-2 border-t pt-6">
+                <Button type="submit" disabled={saving} className="min-w-24">
+                  {saving ? (
+                    <>
+                      <Spinner size="sm" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" />
+                      <span>Save Changes</span>
+                    </>
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onCancel}
+                  disabled={saving}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </Form>
         </div>
       </div>
 
-      {/* Parameters Detail Panel - Right Side */}
       <div className="bg-muted/30 max-h-screen w-96 overflow-hidden border-l">
         <ParameterDetailPanel
           parameters={parameters}
           onParametersChange={setParameters}
-          error={errors.parameters}
+          error={parametersError}
         />
       </div>
     </div>

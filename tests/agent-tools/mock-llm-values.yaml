@@ -10,17 +10,52 @@ ark:
 
 config:
   rules:
-    # Catch-all - matches everything but gets overridden by more specific rules.
-    # This catches model probes which don't match the agent-specific rules below.
-    - path: "/v1/chat/completions"
-      response:
-        status: 200
-        content: '{"choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}]}'
+  - path: "^/v1/models$"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "gpt-4",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            },
+            {
+              "id": "gpt-4o-mini",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            },
+            {
+              "id": "gpt-4.1",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            },
+            {
+              "id": "gpt-5",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            }
+          ]
+        }
 
-    # Weather Agent - first call (no tool results yet) → returns tool_calls
-    - path: "/v1/chat/completions"
-      match: "contains(body.messages[0].content || '', 'Weather Agent')"
-      response:
+  # Catch-all - matches everything but gets overridden by more specific rules.
+  # This catches model probes which don't match the agent-specific rules below.
+  - path: "/v1/chat/completions"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}]}'
+
+  # Weather Agent - first call (no tool results yet) → returns tool_calls
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'Weather Agent')"
+    response:
         status: 200
         content: |
           {
@@ -40,9 +75,9 @@ config:
             }]
           }
 
-    # Weather Agent - second call (has tool result) → returns final answer
-    - path: "/v1/chat/completions"
-      match: "body.messages[?role=='tool']"
-      response:
+  # Weather Agent - second call (has tool result) → returns final answer
+  - path: "/v1/chat/completions"
+    match: "body.messages[?role=='tool']"
+    response:
         status: 200
         content: '{"choices":[{"message":{"role":"assistant","content":"NYC weather: 68°F, partly cloudy."},"finish_reason":"stop"}]}'
