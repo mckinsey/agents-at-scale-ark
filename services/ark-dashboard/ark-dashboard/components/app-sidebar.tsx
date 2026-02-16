@@ -53,13 +53,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { Separator } from '@/components/ui/separator';
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -440,56 +438,50 @@ export function AppSidebar() {
               </Popover>
             </SidebarMenuItem>
           </SidebarMenu>
-
-          <SidebarGroup>
-            <SidebarGroupLabel>Preferences</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton onClick={() => setSettingsModalOpen(true)}>
-                    <Settings className="mr-2 h-4 w-4" />
-                    <span>Settings</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <a
-                      href="https://mckinsey.github.io/agents-at-scale-ark/"
-                      target="_blank"
-                      rel="noopener noreferrer">
-                      <HelpCircle className="mr-2 h-4 w-4" />
-                      <span>Help</span>
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={() =>
-                      setStoredIsExperimentalDarkModeEnabled(
-                        !isExperimentalDarkModeEnabled,
-                      )
-                    }>
-                    {isExperimentalDarkModeEnabled ? (
-                      <Sun className="mr-2 h-4 w-4" />
-                    ) : (
-                      <Moon className="mr-2 h-4 w-4" />
-                    )}
-                    <span>
-                      {isExperimentalDarkModeEnabled
-                        ? 'Light Mode'
-                        : 'Dark Mode'}
-                    </span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
         </SidebarContent>
 
-        <div className="p-2">
+        <SidebarContent></SidebarContent>
+        <Separator className="my-4 !w-10" />
+
+        <div className="px-4">
           <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={() => setSettingsModalOpen(true)}>
+                <Settings className="mr-2 h-4 w-4" />
+                <span>Settings</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild>
+                <a
+                  href="https://mckinsey.github.io/agents-at-scale-ark/"
+                  target="_blank"
+                  rel="noopener noreferrer">
+                  <HelpCircle className="mr-2 h-4 w-4" />
+                  <span>Help</span>
+                </a>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={() =>
+                  setStoredIsExperimentalDarkModeEnabled(
+                    !isExperimentalDarkModeEnabled,
+                  )
+                }>
+                {isExperimentalDarkModeEnabled ? (
+                  <Sun className="mr-2 h-4 w-4" />
+                ) : (
+                  <Moon className="mr-2 h-4 w-4" />
+                )}
+                <span>
+                  {isExperimentalDarkModeEnabled ? 'Light Mode' : 'Dark Mode'}
+                </span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
             <SidebarMenuItem className="w-8 bg-[var(--primary-500)]">
               <SidebarMenuButton
                 onClick={() =>
