@@ -472,9 +472,9 @@ export function AppSidebar() {
                   )
                 }>
                 {isExperimentalDarkModeEnabled ? (
-                  <Moon className="mr-2 h-4 w-4" />
-                ) : (
                   <Sun className="mr-2 h-4 w-4" />
+                ) : (
+                  <Moon className="mr-2 h-4 w-4" />
                 )}
                 <span>
                   {isExperimentalDarkModeEnabled ? 'Light Mode' : 'Dark Mode'}
