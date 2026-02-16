@@ -890,6 +890,7 @@ jobs:
 
       - name: Wait for services to be ready
         run: |
+          kubectl wait --for=condition=available -n ark-system --timeout=300s deployment/ark-controller
           kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
           kubectl wait --for=condition=ready pod -l app=ark-mcp -n default --timeout=120s
 
@@ -901,20 +902,6 @@ jobs:
       - name: Install CLI test dependencies
         run: |
           pip install -r tests/pytest/ui-tests/requirements.txt
-
-      - name: Wait for MCP server to be ready
-        run: |
-          # Wait for File Gateway MCP server to be reconciled by ark-mcp
-          echo "Waiting for MCPServer resource to be ready..."
-          for i in {1..60}; do
-            if kubectl get mcpserver file-gateway-mcpserver -o jsonpath='{.status.toolCount}' 2>/dev/null | grep -q '[0-9]'; then
-              echo "MCP server ready!"
-              exit 0
-            fi
-            echo "Waiting for ark-mcp reconciliation... (attempt $i/60)"
-            sleep 5
-          done
-          echo "Warning: MCP server not ready after 5 minutes, tests may fail"
 
       - name: Run File Gateway CLI tests
         env:
