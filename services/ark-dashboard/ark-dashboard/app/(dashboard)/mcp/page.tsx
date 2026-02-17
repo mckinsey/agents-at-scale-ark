@@ -4,15 +4,11 @@ import { Plus } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useRef } from 'react';
 
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { McpServersSection } from '@/components/sections/mcp-servers-section';
 import { Button } from '@/components/ui/button';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { useGetAllMcpServers } from '@/lib/services/mcp-servers-hooks';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-];
 
 export default function McpPage() {
   const searchParams = useSearchParams();
@@ -27,7 +23,7 @@ export default function McpPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={breadcrumbs}
+        breadcrumbs={BASE_BREADCRUMBS}
         currentPage="MCP Servers"
         actions={
           <Button onClick={() => mcpSectionRef.current?.openAddEditor()}>

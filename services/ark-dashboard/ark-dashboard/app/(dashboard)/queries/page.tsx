@@ -3,15 +3,11 @@
 import { Plus } from 'lucide-react';
 import { useRef } from 'react';
 
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { QueriesSection } from '@/components/sections/queries-section';
 import { Button } from '@/components/ui/button';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { useListQueries } from '@/lib/services/queries-hooks';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-];
 
 export default function QueriesPage() {
   const queriesSectionRef = useRef<{ openAddEditor: () => void }>(null);
@@ -22,7 +18,7 @@ export default function QueriesPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={breadcrumbs}
+        breadcrumbs={BASE_BREADCRUMBS}
         currentPage="Queries"
         actions={
           <Button onClick={() => queriesSectionRef.current?.openAddEditor()}>

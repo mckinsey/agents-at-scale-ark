@@ -10,7 +10,6 @@ import { ExternalLink } from 'lucide-react';
 import { Suspense, useEffect, useState } from 'react';
 
 import { PageHeader } from '@/components/common/page-header';
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { Badge } from '@/components/ui/badge';
 import {
   Table,
@@ -26,6 +25,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { type ArkService, arkServicesService } from '@/lib/services';
 
 // Column definitions
@@ -242,9 +242,6 @@ function ServicesContent() {
   const [services, setServices] = useState<ArkService[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const breadcrumbs: BreadcrumbElement[] = [
-    { href: '/', label: 'ARK Dashboard' },
-  ];
 
   useEffect(() => {
     const fetchServices = async () => {
@@ -268,7 +265,7 @@ function ServicesContent() {
   if (loading) {
     return (
       <>
-        <PageHeader breadcrumbs={breadcrumbs} currentPage="Services" />
+        <PageHeader breadcrumbs={BASE_BREADCRUMBS} currentPage="Services" />
         <div className="flex flex-1 flex-col">
           <main className="flex-1 overflow-auto p-4">
             <div className="flex h-32 items-center justify-center">
@@ -283,7 +280,7 @@ function ServicesContent() {
   if (error) {
     return (
       <>
-        <PageHeader breadcrumbs={breadcrumbs} currentPage="Services" />
+        <PageHeader breadcrumbs={BASE_BREADCRUMBS} currentPage="Services" />
         <div className="flex flex-1 flex-col">
           <main className="flex-1 overflow-auto p-4">
             <div className="rounded-md border border-red-200 bg-red-50 p-4 text-red-600">
@@ -298,7 +295,7 @@ function ServicesContent() {
 
   return (
     <>
-      <PageHeader breadcrumbs={breadcrumbs} currentPage="Services" />
+      <PageHeader breadcrumbs={BASE_BREADCRUMBS} currentPage="Services" />
       <div className="flex flex-1 flex-col">
         <main className="flex-1 overflow-auto p-4">
           <h1 className="mb-4 px-2 text-3xl font-bold">ARK Services</h1>

@@ -5,22 +5,19 @@ import { useSearchParams } from 'next/navigation';
 import { useRef } from 'react';
 
 import { PageHeader } from '@/components/common/page-header';
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { ToolsSection } from '@/components/sections/tools-section';
 import { Button } from '@/components/ui/button';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 
 export default function ToolsPage() {
   const searchParams = useSearchParams();
   const namespace = searchParams.get('namespace') || 'default';
   const toolsSectionRef = useRef<{ openAddEditor: () => void }>(null);
-  const breadcrumbs: BreadcrumbElement[] = [
-    { href: '/', label: 'ARK Dashboard' },
-  ];
 
   return (
     <>
       <PageHeader
-        breadcrumbs={breadcrumbs}
+        breadcrumbs={BASE_BREADCRUMBS}
         currentPage="Tools"
         actions={
           <Button onClick={() => toolsSectionRef.current?.openAddEditor()}>

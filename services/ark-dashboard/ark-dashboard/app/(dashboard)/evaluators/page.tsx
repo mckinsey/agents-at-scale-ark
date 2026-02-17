@@ -4,20 +4,17 @@ import { Plus } from 'lucide-react';
 import { useRef } from 'react';
 
 import { PageHeader } from '@/components/common/page-header';
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { EvaluatorsSection } from '@/components/sections';
 import { Button } from '@/components/ui/button';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 
 export default function EvaluatorsPage() {
   const evaluatorsSectionRef = useRef<{ openAddEditor: () => void }>(null);
-  const breadcrumbs: BreadcrumbElement[] = [
-    { href: '/', label: 'ARK Dashboard' },
-  ];
 
   return (
     <>
       <PageHeader
-        breadcrumbs={breadcrumbs}
+        breadcrumbs={BASE_BREADCRUMBS}
         currentPage="Evaluators"
         actions={
           <Button onClick={() => evaluatorsSectionRef.current?.openAddEditor()}>

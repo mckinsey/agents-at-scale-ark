@@ -4,15 +4,11 @@ import { Plus } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useRef } from 'react';
 
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { A2AServersSection } from '@/components/sections/a2a-servers-section';
 import type { A2AServersSectionHandle } from '@/components/sections/a2a-servers-section';
 import { Button } from '@/components/ui/button';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-];
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 
 export default function A2APage() {
   const searchParams = useSearchParams();
@@ -22,7 +18,7 @@ export default function A2APage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={breadcrumbs}
+        breadcrumbs={BASE_BREADCRUMBS}
         currentPage="A2A"
         actions={
           <Button onClick={() => a2aSectionRef.current?.openAddEditor()}>
