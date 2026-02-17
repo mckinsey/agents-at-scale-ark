@@ -73,6 +73,14 @@ livenessProbe:
   initialDelaySeconds: 30
   periodSeconds: 10
 
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  failureThreshold: 3
+
 startupProbe:
   httpGet:
     path: /health
