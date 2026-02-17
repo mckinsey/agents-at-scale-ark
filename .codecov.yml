@@ -36,3 +36,6 @@ ignore:
   - "**/node_modules/**"
   - "**/*.pb.go"
   - "**/generated/**"
+  - "ark/api/**/zz_generated.*.go"
+  - "**/*_gen.go"
+  - "**/mock_*.go"
