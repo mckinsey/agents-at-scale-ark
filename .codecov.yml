@@ -9,6 +9,8 @@ coverage:
       default:
         target: auto
         threshold: 0.1%
+        only_pulls: true
+        removed_code_behavior: adjust_base
         flags:
           - ark-cli
           - combined-coverage
@@ -16,6 +18,7 @@ coverage:
       default:
         target: auto
         threshold: 0.1%
+        only_pulls: true
 
 flags:
   ark-cli:
