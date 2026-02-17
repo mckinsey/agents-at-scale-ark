@@ -26,58 +26,68 @@ class WorkflowsPage(BasePage):
             try:
                 modal = self.page.locator(".modal, [role='dialog'], .argo-dialog, div[class*='modal']").first
                 if modal.is_visible(timeout=1000):
+                    logger.debug("Modal visible, pressing Escape (attempt %d)", attempt + 1)
                     self.page.keyboard.press("Escape")
-                    modal.wait_for(state="hidden", timeout=1000)
+                    modal.wait_for(state="hidden", timeout=2000)
                     continue
             except PlaywrightTimeoutError:
-                logger.debug("Modal close timed out on attempt %d", attempt + 1)
+                logger.debug("Modal close via Escape timed out on attempt %d", attempt + 1)
             
             try:
                 close_button = self.page.locator("button:has-text('×'), button[aria-label='Close'], button[class*='close']").first
                 if close_button.is_visible(timeout=1000):
                     close_button.click()
-                    self.page.locator(".modal, [role='dialog']").first.wait_for(state="hidden", timeout=1000)
+                    close_button.wait_for(state="hidden", timeout=2000)
                     continue
             except PlaywrightTimeoutError:
-                logger.debug("Close button not found or modal did not close")
+                logger.debug("Modal close via button timed out on attempt %d", attempt + 1)
             
             break
         
         try:
             self.page.keyboard.press("Escape")
             self.page.keyboard.press("Escape")
-        except Exception as e:
-            logger.debug("Final escape press failed: %s", e)
+        except PlaywrightTimeoutError:
+            logger.debug("Final Escape key press timed out")
     
     def navigate_to_workflows(self):
         self.page.goto(self.base_url, timeout=60000)
         self.wait_for_load_state("domcontentloaded")
-        self.wait_for_load_state("networkidle")
+        try:
+            self.page.wait_for_load_state("networkidle", timeout=5000)
+        except PlaywrightTimeoutError:
+            logger.debug("Argo UI networkidle timed out (expected for WebSocket-based UI), continuing")
         
         self.close_modal_if_present()
     
     def search_workflow(self, workflow_name: str):
-        search_box = self.page.locator(self.SEARCH_INPUT).first
-        if search_box.is_visible(timeout=5000):
+        try:
+            search_box = self.page.locator(self.SEARCH_INPUT).first
+            search_box.wait_for(state="visible", timeout=5000)
             search_box.fill(workflow_name)
+            self.page.wait_for_load_state("domcontentloaded")
+        except PlaywrightTimeoutError:
+            logger.warning("Search input not visible within timeout")
     
     def click_workflow(self, workflow_name: str):
         self.close_modal_if_present()
         
         workflow_link = self.page.locator(f"a[href*='{workflow_name}']").first
-        if not workflow_link.is_visible(timeout=3000):
+        try:
+            workflow_link.wait_for(state="visible", timeout=3000)
+        except PlaywrightTimeoutError:
+            logger.debug("Link by href not found, falling back to text selector")
             workflow_link = self.page.locator(f"text={workflow_name}").first
         
         workflow_link.wait_for(state="visible", timeout=15000)
         workflow_link.click(force=True)
         self.wait_for_load_state("domcontentloaded")
-        self.wait_for_load_state("networkidle")
     
     def is_workflow_visible(self, workflow_name: str) -> bool:
         try:
             return self.page.locator(f"text={workflow_name}").first.is_visible(timeout=10000)
         except PlaywrightTimeoutError:
-            logger.debug("Workflow %s not visible", workflow_name)
+            logger.debug("Workflow %s not visible within timeout", workflow_name)
             return False
     
     def get_workflow_status(self) -> str:
@@ -95,9 +105,6 @@ class WorkflowsPage(BasePage):
                 if element.is_visible(timeout=3000):
                     return element.inner_text()
             except PlaywrightTimeoutError:
-                continue
-            except Exception as e:
-                logger.debug("Error getting status from selector %s: %s", selector, e)
                 continue
         
         return "Unknown"
@@ -118,7 +125,7 @@ class WorkflowsPage(BasePage):
             time.sleep(5)
             waited += 5
             self.page.reload()
-            self.wait_for_load_state("networkidle")
+            self.wait_for_load_state("domcontentloaded")
         
         return False
     
@@ -131,9 +138,7 @@ class WorkflowsPage(BasePage):
             if logs_element.is_visible(timeout=5000):
                 return logs_element.inner_text()
         except PlaywrightTimeoutError:
-            logger.debug("Logs section not visible")
-        except Exception as e:
-            logger.debug("Error getting workflow logs: %s", e)
+            logger.debug("Logs section not visible within timeout")
         return ""
     
     def verify_workflow_completed(self) -> bool:

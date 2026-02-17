@@ -119,8 +119,17 @@ class SecretsPage(BasePage):
             logger.debug("Success popup not visible")
             popup_visible = False
         
+        self.wait_for_modal_close(timeout=10000)
         self.wait_for_load_state("networkidle")
+        self.wait_for_table_content(timeout=10000)
         in_table = self.is_secret_in_table(secret_name)
+        
+        if not in_table:
+            logger.warning("Secret not found in table after create, reloading page")
+            self.page.reload()
+            self.wait_for_load_state("networkidle")
+            self.wait_for_table_content(timeout=10000)
+            in_table = self.is_secret_in_table(secret_name)
         
         return {
             "name": secret_name,
