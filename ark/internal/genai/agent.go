@@ -217,7 +217,17 @@ func (a *Agent) processAssistantMessage(choice openai.ChatCompletionChoice) Mess
 	if len(choice.Message.ToolCalls) > 0 {
 		toolCalls := make([]openai.ChatCompletionMessageToolCallParam, len(choice.Message.ToolCalls))
 		for i, call := range choice.Message.ToolCalls {
-			toolCalls[i] = call.ToParam()
+			args := call.Function.Arguments
+			if args == "" {
+				args = "{}"
+			}
+			toolCalls[i] = openai.ChatCompletionMessageToolCallParam{
+				ID: call.ID,
+				Function: openai.ChatCompletionMessageToolCallFunctionParam{
+					Name:      call.Function.Name,
+					Arguments: args,
+				},
+			}
 		}
 		assistantMessage.OfAssistant.ToolCalls = toolCalls
 	}

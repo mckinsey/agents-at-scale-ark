@@ -419,7 +419,63 @@ The Chat Completions path remains intact and requires no changes on removal.
 
 ---
 
-## Part 8: Implementation Roadmap
+## Part 8: Native Execution Engine Architecture
+
+### Old Path vs New Path
+
+The native A2A local execution loop previously relied on OpenAI Chat Completions types as its internal conversation representation. Every loop iteration converted A2A `protocol.Message` to `openai.ChatCompletionMessageParamUnion`, called the model, then converted the response back to A2A format.
+
+```
+Old native loop:
+  protocol.Message → convertA2AMessagesToCompat() → []openai.ChatCompletionMessageParamUnion
+                   → Model.ChatCompletion()       → openai.ChatCompletion
+                   → processAssistantMessage()    → openai.ChatCompletionMessageParamUnion
+                   → OpenAIToA2AMessage()          → protocol.Message
+```
+
+The new architecture introduces a **dedicated A2A local engine** (`A2ALocalEngine`) that operates entirely on `protocol.Message` and provider-neutral types. OpenAI-specific conversion is isolated inside a **model adapter** boundary.
+
+```
+New native loop:
+  protocol.Message → A2ALocalEngine.Execute()
+                   → A2AModelProvider.A2ATurn()  ← provider-neutral interface
+                   → A2ATurnResult{Message, ToolCalls}
+                   → executeA2AToolCalls() using A2AToolCall (no OpenAI types)
+```
+
+### Boundary Contracts
+
+| Type | Purpose | Location |
+|------|---------|----------|
+| `A2AModelProvider` | Provider-neutral model interface accepting `[]protocol.Message` | `a2a_model_provider.go` |
+| `A2ATurnResult` | Model response: `protocol.Message` + `[]A2AToolCall` | `a2a_model_provider.go` |
+| `A2AToolCall` | Tool call with `ID`, `Name`, `Arguments` (no OpenAI types) | `a2a_model_provider.go` |
+| `A2AToolDefinition` | Tool schema with `Name`, `Description`, `Parameters` | `a2a_model_provider.go` |
+| `A2ALocalEngine` | Turn loop operating on A2A types only | `a2a_local_engine.go` |
+| `OpenAIA2AModelAdapter` | Adapter wrapping `ChatCompletionProvider` behind `A2AModelProvider` | `openai_a2a_model_adapter.go` |
+| `ErrA2AModelProviderNotSupported` | Hard-fail sentinel when no A2A adapter is available | `a2a_model_provider.go` |
+
+### Execution Engine Strategy
+
+The engine boundary is designed for pluggable model backends:
+
+```
+A2ALocalEngine
+  ├── OpenAIA2AModelAdapter   (wraps OpenAI/Azure/Bedrock ChatCompletion providers)
+  ├── [future] claudeAdapter  (wraps Anthropic Messages API)
+  ├── [future] geminiAdapter  (wraps Google GenerateContent)
+  └── nil → ErrA2AModelProviderNotSupported (hard-fail, no silent fallback)
+```
+
+To add a new backend, implement `A2AModelProvider` and wire it in `executeLocallyA2ANative()`. The engine loop, tool execution, streaming, and telemetry remain unchanged.
+
+### Hard-Fail Behavior
+
+If a provider does not have an A2A adapter, the engine returns `ErrA2AModelProviderNotSupported` immediately. There is no silent fallback from native mode to compat mode. This is enforced at the `A2ALocalEngine.Execute()` entry point.
+
+---
+
+## Part 9: Implementation Roadmap
 
 ### Phase 1: Foundation (Complete)
 - [x] A2A experimental annotation (`ark.mckinsey.com/a2a-experimental-enabled`)
@@ -428,6 +484,10 @@ The Chat Completions path remains intact and requires no changes on removal.
 - [x] Compat wrapper for existing executors (`executionCapabilityOpenAICompat`)
 - [x] Capability resolution (`resolveA2AExecutionCapability` with engine type routing)
 - [x] Native local A2A execution loop (`executeLocallyA2ANative`)
+- [x] Dedicated A2A local engine (`A2ALocalEngine`) decoupled from OpenAI types
+- [x] Provider-neutral model interface (`A2AModelProvider`) with OpenAI adapter (`OpenAIA2AModelAdapter`)
+- [x] A2A tool call types (`A2AToolCall`, `A2AToolDefinition`) without OpenAI dependency
+- [x] Hard-fail for unsupported providers (`ErrA2AModelProviderNotSupported`)
 
 ### Phase 2: Streaming (Largely Complete)
 - [x] Native A2A SSE streaming (`streamA2AEvent` with `A2APayloadModeNative` passthrough)
