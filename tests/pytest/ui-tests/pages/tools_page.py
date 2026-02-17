@@ -1,5 +1,5 @@
 import logging
-from playwright.sync_api import Page
+from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
 from datetime import datetime
 
@@ -46,9 +46,9 @@ class ToolsPage(BasePage):
             dialog = self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first
             if dialog.is_visible(timeout=1000):
                 self.page.keyboard.press("Escape")
-                self.wait_for_timeout(500)
-        except:
-            pass
+                dialog.wait_for(state="hidden", timeout=2000)
+        except PlaywrightTimeoutError:
+            logger.debug("No dialog to close or dialog already closed")
     
     def generate_tool_name(self, prefix: str = "tool") -> str:
         date_str = datetime.now().strftime("%d%m%y%H%M%S")
@@ -57,7 +57,8 @@ class ToolsPage(BasePage):
     def is_tool_in_table(self, tool_name: str) -> bool:
         try:
             return self.page.get_by_text(tool_name, exact=False).count() > 0
-        except:
+        except Exception as e:
+            logger.debug("Error checking tool in table: %s", e)
             return False
     
     def create_http_tool_with_verification(self, tool_name: str, description: str, url: str) -> dict:
@@ -75,10 +76,10 @@ class ToolsPage(BasePage):
             try:
                 name_input.wait_for(state="visible", timeout=5000)
                 break
-            except:
+            except PlaywrightTimeoutError:
                 logger.info(f"Name input not visible (attempt {attempt + 1}), retrying click")
                 add_button.click()
-                self.wait_for_timeout(1000)
+                self.wait_for_form_ready()
         
         name_input.fill(tool_name)
         
@@ -93,8 +94,6 @@ class ToolsPage(BasePage):
         else:
             self.page.locator("[role='option']:has-text('HTTP')").first.click()
         
-        self.wait_for_timeout(1000)
-        
         description_input = self.page.locator("input#description, input[name='description'], [role='dialog'] input:nth-of-type(2)").first
         description_input.wait_for(state="visible", timeout=5000)
         description_input.fill(description)
@@ -104,13 +103,9 @@ class ToolsPage(BasePage):
         schema_textarea.wait_for(state="visible", timeout=5000)
         schema_textarea.fill(input_schema)
         
-        self.wait_for_timeout(500)
-        
         dialog = self.page.locator("[role='dialog'], [data-slot='dialog-content']").first
         if dialog.count() > 0:
             dialog.evaluate("el => el.scrollTo(0, el.scrollHeight)")
-        
-        self.wait_for_timeout(500)
         
         url_input = self.page.locator("input[name='httpUrl'], input#http-url, input#httpUrl, input[placeholder*='https://']").first
         
@@ -118,11 +113,10 @@ class ToolsPage(BasePage):
             try:
                 url_input.wait_for(state="visible", timeout=3000)
                 break
-            except:
+            except PlaywrightTimeoutError:
                 logger.info(f"URL input not visible (attempt {attempt + 1}), scrolling dialog")
                 if dialog.count() > 0:
                     dialog.evaluate("el => el.scrollTo(0, el.scrollHeight)")
-                self.wait_for_timeout(500)
         
         url_input.scroll_into_view_if_needed()
         url_input.fill(url)
@@ -134,7 +128,7 @@ class ToolsPage(BasePage):
         save_button.scroll_into_view_if_needed()
         save_button.evaluate("el => el.click()")
         
-        self.wait_for_timeout(2000)
+        self.wait_for_navigation_complete()
         
         error_banner = self.page.locator("[role='alert']:has-text('error'), [role='alert']:has-text('Error'), .error, .toast-error").first
         if error_banner.count() > 0 and error_banner.is_visible():
@@ -145,11 +139,9 @@ class ToolsPage(BasePage):
         logger.info(f"Success popup visible: {popup_visible}")
         
         self.wait_for_modal_close()
-        self.wait_for_timeout(1000)
         
         logger.info(f"Navigating back to tools list...")
         self.navigate_to_tools_tab()
-        self.wait_for_timeout(2000)
         self.wait_for_table_content()
         
         in_table = self.is_tool_in_table(tool_name)
@@ -183,7 +175,8 @@ class ToolsPage(BasePage):
                 return self._delete_not_available(tool_name)
             
             buttons[-1].click()
-        except:
+        except Exception as e:
+            logger.warning("Delete button not found for tool %s: %s", tool_name, e)
             return self._delete_not_available(tool_name)
         
         # Wait for confirmation dialog to appear
@@ -224,7 +217,8 @@ class ToolsPage(BasePage):
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
             return True
-        except:
+        except PlaywrightTimeoutError:
+            logger.debug("Success popup not visible")
             return False
     
     def create_tool_for_test(self, prefix: str, test_data_key: str = "get_coordinates"):

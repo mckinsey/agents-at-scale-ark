@@ -1,5 +1,5 @@
 import logging
-from playwright.sync_api import Page
+from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
 from datetime import datetime
 
@@ -91,7 +91,8 @@ class ModelsPage(BasePage):
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
             popup_visible = True
-        except:
+        except PlaywrightTimeoutError:
+            logger.debug("Success popup not visible")
             popup_visible = False
         
         logger.info(f"Navigating back to models list...")
@@ -102,7 +103,7 @@ class ModelsPage(BasePage):
         
         try:
             self.page.get_by_text(model_name, exact=True).first.wait_for(state="visible", timeout=10000)
-        except:
+        except PlaywrightTimeoutError:
             logger.info(f"Model {model_name} not found with exact match, checking if it exists in table...")
             if not self.is_model_in_table(model_name):
                 logger.warning(f"Model {model_name} not found in table after creation")
@@ -136,7 +137,8 @@ class ModelsPage(BasePage):
                 return self._delete_not_available(model_name)
             
             buttons[-1].click()
-        except:
+        except Exception as e:
+            logger.warning("Delete button not found for model %s: %s", model_name, e)
             return self._delete_not_available(model_name)
         
         # Wait for confirmation dialog to appear
@@ -177,7 +179,8 @@ class ModelsPage(BasePage):
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
             return True
-        except:
+        except PlaywrightTimeoutError:
+            logger.debug("Success popup not visible")
             return False
     
     def create_model_for_test(self, prefix: str, secret_name: str, secrets_page):

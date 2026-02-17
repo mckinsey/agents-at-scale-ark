@@ -1,5 +1,5 @@
 import logging
-from playwright.sync_api import Page
+from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
 from datetime import datetime
 import os
@@ -58,7 +58,7 @@ class SecretsPage(BasePage):
             self.page.locator(dashboard.SECRETS_TAB).first.click(force=True)
         
         self.wait_for_load_state("domcontentloaded")
-        self.wait_for_timeout(1000)
+        self.wait_for_load_state("networkidle")
     
     def _close_dialog_if_open(self) -> None:
         for attempt in range(3):
@@ -67,18 +67,19 @@ class SecretsPage(BasePage):
                 if dialog_overlay.is_visible(timeout=1000):
                     logger.info(f"Dialog still open, attempting to close (attempt {attempt + 1})")
                     self.page.keyboard.press("Escape")
-                    self.wait_for_timeout(500)
-                else:
+                    dialog_overlay.wait_for(state="hidden", timeout=2000)
                     return
-            except:
-                pass
+            except PlaywrightTimeoutError:
+                logger.debug("Dialog close attempt %d timed out", attempt + 1)
+        
+        logger.warning("Could not close dialog after 3 attempts, forcing Escape")
         self.page.keyboard.press("Escape")
-        self.wait_for_timeout(300)
     
     def is_secret_in_table(self, secret_name: str) -> bool:
         try:
             return self.page.get_by_text(secret_name, exact=False).count() > 0
-        except:
+        except Exception as e:
+            logger.debug("Error checking secret in table: %s", e)
             return False
     
     def create_secret_with_verification(self, prefix: str, env_key: str) -> dict:
@@ -90,7 +91,6 @@ class SecretsPage(BasePage):
         
         self.page.locator(self.ADD_SECRET_BUTTON).first.click()
         self.wait_for_load_state("domcontentloaded")
-        self.wait_for_timeout(1000)
         
         inputs = self.page.locator("[role='dialog'] input:visible, [data-slot='dialog-content'] input:visible")
         inputs.first.wait_for(state="visible", timeout=10000)
@@ -107,8 +107,6 @@ class SecretsPage(BasePage):
             if textarea.is_visible():
                 textarea.fill(secret_value)
         
-        self.wait_for_timeout(1000)
-        
         save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
         save_button.evaluate("el => el.click()")
         
@@ -117,10 +115,11 @@ class SecretsPage(BasePage):
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
             popup_visible = True
-        except:
+        except PlaywrightTimeoutError:
+            logger.debug("Success popup not visible")
             popup_visible = False
         
-        self.wait_for_timeout(3000)
+        self.wait_for_load_state("networkidle")
         in_table = self.is_secret_in_table(secret_name)
         
         return {
@@ -142,10 +141,9 @@ class SecretsPage(BasePage):
                 return self._delete_not_available(secret_name)
             
             buttons[-1].click()
-        except:
+        except Exception as e:
+            logger.warning("Delete button not found for secret %s: %s", secret_name, e)
             return self._delete_not_available(secret_name)
-        
-        self.wait_for_timeout(1000)
         confirm_dialog_visible = self.page.locator(self.CONFIRM_DELETE_DIALOG).first.is_visible()
         confirm_button_visible = self.page.locator(self.CONFIRM_DELETE_BUTTON).first.is_visible()
         
@@ -154,7 +152,7 @@ class SecretsPage(BasePage):
         
         self.wait_for_load_state("domcontentloaded")
         popup_visible = self._check_success_popup()
-        self.wait_for_timeout(3000)
+        self.wait_for_load_state("networkidle")
         deleted_from_table = not self.is_secret_in_table(secret_name)
         
         return {
@@ -180,7 +178,8 @@ class SecretsPage(BasePage):
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
             return True
-        except:
+        except PlaywrightTimeoutError:
+            logger.debug("Success popup not visible")
             return False
     
     def create_secret_for_test(self, prefix: str, env_key: str):

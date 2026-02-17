@@ -1,5 +1,8 @@
-from playwright.sync_api import Page
+from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class DashboardPage(BasePage):
@@ -30,16 +33,18 @@ class DashboardPage(BasePage):
         if self.base_url not in self.page.url:
             self.page.goto(self.base_url)
         self.wait_for_load_state("domcontentloaded")
-        self.wait_for_timeout(1000)
+        self.wait_for_load_state("networkidle")
     
     def is_dashboard_loaded(self) -> bool:
         try:
             return self.page.locator(self.MAIN_CONTENT).is_visible(timeout=5000)
-        except:
+        except PlaywrightTimeoutError:
+            logger.debug("Dashboard main content not visible")
             return False
     
     def get_dashboard_title(self) -> str:
         try:
             return self.page.locator(self.DASHBOARD_TITLE).first.inner_text()
-        except:
+        except Exception as e:
+            logger.debug("Could not get dashboard title: %s", e)
             return ""
