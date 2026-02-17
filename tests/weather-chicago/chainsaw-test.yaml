@@ -174,7 +174,7 @@ spec:
         content: |
           echo "=== Evaluation Created - Initial State ==="
           sleep 2
-          kubectl get evaluation test-query-ref-evaluation -n $NAMESPACE -o yaml
+          kubectl get evaluation weather-query-ref-evaluation -n $NAMESPACE -o yaml
           echo "=== Evaluator Service Status ==="
           kubectl get evaluator evaluator-llm -n $NAMESPACE -o yaml
           echo "=== Checking for Evaluator Service Pods ==="

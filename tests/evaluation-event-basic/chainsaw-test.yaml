@@ -101,11 +101,11 @@ spec:
           echo "=== Checking for Semantic Expression Integration ==="
           
           # Check if semantic expressions were processed (look for our rule names)
-          kubectl get evaluation test-event-evaluation -o yaml | grep -E "(query_was_resolved|agent_was_executed)" && echo "✓ Semantic rule names found in evaluation"
+          kubectl get evaluation test-event-evaluation -n $NAMESPACE -o yaml | grep -E "(query_was_resolved|agent_was_executed)" && echo "✓ Semantic rule names found in evaluation"
           
           # Check evaluation passed with reasonable score
-          SCORE=$(kubectl get evaluation test-event-evaluation -o jsonpath='{.status.score}')
-          PASSED=$(kubectl get evaluation test-event-evaluation -o jsonpath='{.status.passed}')
+          SCORE=$(kubectl get evaluation test-event-evaluation -n $NAMESPACE -o jsonpath='{.status.score}')
+          PASSED=$(kubectl get evaluation test-event-evaluation -n $NAMESPACE -o jsonpath='{.status.passed}')
           
           echo "✓ Evaluation Score: $SCORE"
           echo "✓ Evaluation Passed: $PASSED"
@@ -139,15 +139,15 @@ spec:
           
           # Show full evaluation details for semantic expression verification
           echo "--- Evaluation Configuration ---"
-          kubectl get evaluation test-event-evaluation -o jsonpath='{.spec.config.rules[*].name}' | tr ' ' '\n' | sort
+          kubectl get evaluation test-event-evaluation -n $NAMESPACE -o jsonpath='{.spec.config.rules[*].name}' | tr ' ' '\n' | sort
           echo ""
           
           echo "--- Evaluation Results ---"  
-          kubectl get evaluation test-event-evaluation -o jsonpath='{.status}'
+          kubectl get evaluation test-event-evaluation -n $NAMESPACE -o jsonpath='{.status}'
           echo ""
           
           echo "--- Sample Query Events (showing event generation) ---"
-          kubectl get events --field-selector involvedObject.name=test-event-query,involvedObject.kind=Query --sort-by='.firstTimestamp' | head -5
+          kubectl get events -n $NAMESPACE --field-selector involvedObject.name=test-event-query,involvedObject.kind=Query --sort-by='.firstTimestamp' | head -5
           
           echo "✅ Semantic expression integration test completed successfully!"
     catch:

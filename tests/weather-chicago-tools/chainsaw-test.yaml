@@ -166,20 +166,21 @@ spec:
           kind: Agent
           metadata:
             name: chicago-weather-agent
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: chicago-weather-query
-          status:
-            phase: done
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        timeout: 5m
+        name: chicago-weather-query
+        for:
+          jsonPath:
+            path: '{.status.phase}'
+            value: 'done'
     - apply:
        file: manifests/weather-tools-event-evaluation.yaml
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
-        timeout: 10m
+        timeout: 2m
         name: weather-tools-event-evaluation
         for:
           jsonPath:
@@ -191,22 +192,15 @@ spec:
           kind: Evaluation
           metadata:
             name: weather-tools-event-evaluation
+            # Verify enhanced evaluation has more rules and higher expectations
+            (to_number(annotations."evaluation.metadata/total_rules") == `8`): true
+            (to_number(annotations."evaluation.metadata/events_analyzed") > `0`): true
+            (to_number(annotations."evaluation.metadata/passed_rules") > `0` ): true
           status:
             phase: done
             (type(score) == 'string'): true
             (to_number(score) >= `0.0` && to_number(score) <= `1.0`): true
             (type(passed) == 'boolean'): true
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Evaluation
-          metadata:
-            name: weather-tools-event-evaluation
-            # Verify enhanced evaluation has more rules and higher expectations
-            (to_number(annotations."evaluation.metadata/total_rules") == `8`): true
-            (to_number(annotations."evaluation.metadata/events_analyzed") > `0`): true  
-            (to_number(annotations."evaluation.metadata/passed_rules") > `0` ): true   
-          status:
             passed: true
     catch:
     - events: {}
