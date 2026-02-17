@@ -29,7 +29,9 @@ export default function DashboardLayout({
     <>
       <SidebarProvider>
         <AppSidebar />
-        <SidebarInset>{children}</SidebarInset>
+        <SidebarInset>
+          <div className="flex flex-col gap-4 p-4">{children}</div>
+        </SidebarInset>
       </SidebarProvider>
       <ExperimentalFeaturesDialog />
       <ChatManager />

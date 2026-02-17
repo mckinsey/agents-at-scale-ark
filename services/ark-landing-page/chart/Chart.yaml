@@ -1,0 +1,13 @@
+apiVersion: v2
+name: ark-landing-page
+description: Landing page for Ark multi-demo environment
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+annotations:
+  category: Landing
+  licenses: Apache-2.0
+  ark.mckinsey.com/service: ark-landing-page
+  ark.mckinsey.com/resources: service
+  description: Landing page for ARK multi-demo environment
+  usage: Provides access to multiple demo environments

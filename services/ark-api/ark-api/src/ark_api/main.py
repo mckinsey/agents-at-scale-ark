@@ -23,6 +23,7 @@ from .core.config import setup_logging
 from .auth.middleware import AuthMiddleware
 from .auth.constants import AuthMode
 from .auth.config import get_public_routes
+from .middleware import ReadOnlyMiddleware
 from .openapi.security import add_security_to_openapi
 from .api.v1.a2a_gateway import get_a2a_manager
 from ark_sdk.k8s import init_k8s
@@ -195,6 +196,9 @@ app.include_router(router)
 
 # Add global authentication middleware (protects all routes by default except PUBLIC_ROUTES)
 app.add_middleware(AuthMiddleware)
+
+# Add read-only middleware (blocks write operations when READ_ONLY_MODE=true)
+app.add_middleware(ReadOnlyMiddleware)
 
 
 @app.middleware("http")

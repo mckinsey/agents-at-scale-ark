@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.1.53](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.52...v0.1.53) (2026-02-10)
+
+
+### Features
+
+* add file preview ([#958](https://github.com/mckinsey/agents-at-scale-ark/issues/958)) ([eae607b](https://github.com/mckinsey/agents-at-scale-ark/commit/eae607b1facc39314b37720795a160b4f185c4fe))
+* add landing page for ark demos ([#1014](https://github.com/mckinsey/agents-at-scale-ark/issues/1014)) ([926dd08](https://github.com/mckinsey/agents-at-scale-ark/commit/926dd08884a361d3782b5120e12736f963eda87d))
+* add loading spinner to Unknown status badges ([#990](https://github.com/mckinsey/agents-at-scale-ark/issues/990)) ([9844458](https://github.com/mckinsey/agents-at-scale-ark/commit/9844458cf90b4039bb5c282b876b39cb28fd26df))
+* pin ark cli version for install command ([#1010](https://github.com/mckinsey/agents-at-scale-ark/issues/1010)) ([c8930a5](https://github.com/mckinsey/agents-at-scale-ark/commit/c8930a56f3c4c44c65028b1e87f0e4f7a41900f4))
+* Run Workflows And Sessions View ([#962](https://github.com/mckinsey/agents-at-scale-ark/issues/962)) ([582d8ea](https://github.com/mckinsey/agents-at-scale-ark/commit/582d8ea493090a80120d441addcd0d953931bff7))
+
+
+### Bug Fixes
+
+* Add support for Depends Keyword in Workflow Template Viewer ([#1076](https://github.com/mckinsey/agents-at-scale-ark/issues/1076)) ([1ae1b8f](https://github.com/mckinsey/agents-at-scale-ark/commit/1ae1b8f3d7b8341bad4bc0606432611079880823)), closes [#1072](https://github.com/mckinsey/agents-at-scale-ark/issues/1072)
+* agent status badge link to availability events ([#1036](https://github.com/mckinsey/agents-at-scale-ark/issues/1036)) ([d87c30c](https://github.com/mckinsey/agents-at-scale-ark/commit/d87c30cbeb1402272475b8f37227b575fa9420ba))
+* agent studio tool removal enabled ([#1057](https://github.com/mckinsey/agents-at-scale-ark/issues/1057)) ([f392889](https://github.com/mckinsey/agents-at-scale-ark/commit/f39288948af7adfdb107423b6469741703b052b9))
+* ci tests and cves ([#1050](https://github.com/mckinsey/agents-at-scale-ark/issues/1050)) ([3698514](https://github.com/mckinsey/agents-at-scale-ark/commit/369851417852d9b48934e761d8d9ffbd23b4bf68))
+* CVE-2026-25639: update to axios v1.13.5 ([#1067](https://github.com/mckinsey/agents-at-scale-ark/issues/1067)) ([351424c](https://github.com/mckinsey/agents-at-scale-ark/commit/351424cd19c15bd756627065ec087cf8ebc2b482))
+* model probes list + fallback ([#1044](https://github.com/mckinsey/agents-at-scale-ark/issues/1044)) ([237cd6d](https://github.com/mckinsey/agents-at-scale-ark/commit/237cd6d7f8d1654c070829cbfd9ff8f28ba723ab))
+
 ## [0.1.52](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.51...v0.1.52) (2026-02-02)
 
 
