@@ -30,7 +30,7 @@ export function SettingsSidebar() {
         <h2 className="text-md text-sidebar-foreground">Settings</h2>
         <button
           onClick={handleClose}
-          className="text-sidebar-foreground/60 hover:text-sidebar-foreground rounded-md p-1.5 transition-colors"
+          className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground rounded-md p-2 transition-all duration-200 hover:scale-110"
           aria-label="Close settings">
           <X className="h-5 w-5" />
         </button>
