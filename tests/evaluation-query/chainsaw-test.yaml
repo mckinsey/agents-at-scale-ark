@@ -45,15 +45,16 @@ spec:
         for:
           condition:
             name: ModelAvailable
-            value: 'True' 
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Evaluator
-          metadata:
-            name: test-query-evaluator
-          status:
-            phase: ready
+            value: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluator
+        timeout: 1m
+        name: test-query-evaluator
+        for:
+          jsonPath:
+            path: '{.status.phase}'
+            value: 'ready'
     - assert:
         resource:
           apiVersion: v1

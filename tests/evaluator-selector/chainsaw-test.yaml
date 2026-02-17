@@ -42,14 +42,15 @@ spec:
         - apply:
             file: manifests/a03-evaluator-with-selector.yaml
             timeout: 30s
-        - assert:
-            resource:
-              apiVersion: ark.mckinsey.com/v1alpha1
-              kind: Evaluator
-              metadata:
-                name: production-evaluator
-              status:
-                phase: ready
+        - wait:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Evaluator
+            timeout: 1m
+            name: production-evaluator
+            for:
+              jsonPath:
+                path: '{.status.phase}'
+                value: 'ready'
 
     - name: test-matching-query
       description: Create query that matches evaluator selector
