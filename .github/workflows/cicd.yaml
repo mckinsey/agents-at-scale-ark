@@ -592,14 +592,20 @@ jobs:
       fail-fast: false
       matrix:
         test-group:
-          - name: "eval-group-1"
-            tests: "evaluation-baseline evaluation-direct weather-chicago"
-          - name: "eval-group-2"
-            tests: "evaluation-event-basic evaluation-query weather-chicago-tools"
-          - name: "eval-group-3"
-            tests: "evaluation-direct-ragas evaluation-parameters-priority"
-          - name: "eval-group-4"
-            tests: "evaluator-context-enhanced evaluator-selector"
+          - name: "eval-direct"
+            tests: "evaluation-direct"
+          - name: "eval-event"
+            tests: "evaluation-event-basic"
+          - name: "eval-enhanced"
+            tests: "evaluator-context-enhanced"
+          - name: "weather-chi"
+            tests: "weather-chicago"
+          - name: "weather-tools"
+            tests: "weather-chicago-tools"
+          - name: "eval-ragas"
+            tests: "evaluation-direct-ragas"
+          - name: "eval-fast"
+            tests: "evaluation-baseline evaluation-query evaluation-parameters-priority evaluator-selector"
     name: e2e-evaluated (${{ matrix.test-group.name }})
     steps:
       - uses: actions/checkout@v4
