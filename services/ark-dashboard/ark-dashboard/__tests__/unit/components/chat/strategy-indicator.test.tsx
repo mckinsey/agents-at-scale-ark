@@ -12,10 +12,25 @@ describe('StrategyIndicator', () => {
     ).toBeInTheDocument();
   });
 
-  it('should not render for non-round-robin strategy', () => {
-    const { container } = render(<StrategyIndicator strategy="selector" />);
+  it('should render for selector strategy with default name', () => {
+    render(<StrategyIndicator strategy="selector" />);
 
-    expect(container.firstChild).toBeNull();
+    expect(
+      screen.getByText('AI selector chooses each respondent'),
+    ).toBeInTheDocument();
+  });
+
+  it('should render selector agent name when provided', () => {
+    render(
+      <StrategyIndicator
+        strategy="selector"
+        selectorAgentName="selector-agent"
+      />,
+    );
+
+    expect(
+      screen.getByText('selector-agent chooses each respondent'),
+    ).toBeInTheDocument();
   });
 
   it('should render for graph strategy', () => {

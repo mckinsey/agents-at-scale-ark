@@ -37,6 +37,7 @@ interface FloatingChatProps {
   type: ChatType;
   position: number;
   strategy?: string;
+  selectorAgentName?: string;
   graphEdges?: GraphEdge[];
   onClose: () => void;
 }
@@ -46,6 +47,7 @@ export default function FloatingChat({
   type,
   position,
   strategy,
+  selectorAgentName,
   graphEdges,
   onClose,
 }: FloatingChatProps) {
@@ -213,6 +215,7 @@ export default function FloatingChat({
                   messages={messages}
                   type={type}
                   strategy={strategy}
+                  selectorAgentName={selectorAgentName}
                   graphEdges={graphEdges}
                   debugMode={debugMode}
                   isProcessing={isProcessing}

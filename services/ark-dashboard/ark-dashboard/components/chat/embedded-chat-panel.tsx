@@ -500,6 +500,7 @@ interface EmbeddedChatPanelProps {
   name: string;
   type: ChatType;
   strategy?: string;
+  selectorAgentName?: string;
   graphEdges?: GraphEdge[];
 }
 
@@ -507,6 +508,7 @@ export function EmbeddedChatPanel({
   name,
   type,
   strategy,
+  selectorAgentName,
   graphEdges,
 }: EmbeddedChatPanelProps) {
   const {
@@ -585,6 +587,7 @@ export function EmbeddedChatPanel({
                 messages={messages}
                 type={type}
                 strategy={strategy}
+                selectorAgentName={selectorAgentName}
                 graphEdges={graphEdges}
                 debugMode={debugMode}
                 isProcessing={isProcessing}

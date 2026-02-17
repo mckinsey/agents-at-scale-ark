@@ -7,6 +7,7 @@ import { ChatMessage } from '@/components/chat/chat-message';
 import { GraphEnd } from '@/components/chat/graph-end';
 import { MaxTurnsEvent } from '@/components/chat/max-turns-event';
 import { GraphTransition } from '@/components/chat/graph-transition';
+import { SelectorTransition } from '@/components/chat/selector-transition';
 import { StrategyIndicator } from '@/components/chat/strategy-indicator';
 import { TerminationEvent } from '@/components/chat/termination-event';
 import type { ExtendedChatMessage, GraphEdge } from '@/lib/types/chat-message';
@@ -15,6 +16,7 @@ interface ChatMessageListProps {
   messages: ExtendedChatMessage[];
   type: string;
   strategy?: string;
+  selectorAgentName?: string;
   graphEdges?: GraphEdge[];
   debugMode: boolean;
   isProcessing: boolean;
@@ -27,6 +29,7 @@ export function ChatMessageList({
   messages,
   type,
   strategy,
+  selectorAgentName,
   graphEdges,
   debugMode,
   isProcessing,
@@ -47,6 +50,7 @@ export function ChatMessageList({
   }, [graphEdges]);
 
   const isGraphStrategy = strategy === 'graph' && graphEdges && graphEdges.length > 0;
+  const isSelectorStrategy = strategy === 'selector';
 
   const processedMessages = useMemo(() => {
     const result: Array<{
@@ -218,7 +222,7 @@ export function ChatMessageList({
       )}
 
       {strategy && messages.length > 0 && (
-        <StrategyIndicator strategy={strategy} />
+        <StrategyIndicator strategy={strategy} selectorAgentName={selectorAgentName} />
       )}
 
       {processedMessages.map((pm, pmIndex) => {
@@ -239,6 +243,12 @@ export function ChatMessageList({
               break;
             }
           }
+        }
+
+        if (isSelectorStrategy && pm.msg.role === 'assistant' && pm.senderName) {
+          transitionElement = (
+            <SelectorTransition agentName={pm.senderName} selectorAgentName={selectorAgentName} />
+          );
         }
 
         return (
@@ -286,7 +296,7 @@ export function ChatMessageList({
               </div>
             )}
             {pm.isMaxTurnsMessage && (
-              isGraphStrategy ? (
+              isGraphStrategy || isSelectorStrategy ? (
                 <MaxTurnsEvent message={pm.content} />
               ) : (
                 <div className="text-muted-foreground text-sm italic">

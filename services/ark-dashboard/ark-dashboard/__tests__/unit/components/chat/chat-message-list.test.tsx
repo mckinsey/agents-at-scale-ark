@@ -265,6 +265,133 @@ describe('ChatMessageList', () => {
     });
   });
 
+  describe('selector transitions', () => {
+    it('should render transition between different agents with selector strategy', () => {
+      const messages: ExtendedChatMessage[] = [
+        { role: 'user', content: 'Hello' } as ExtendedChatMessage,
+        {
+          role: 'assistant',
+          content: 'Response from A',
+          name: 'agent-a',
+        } as ExtendedChatMessage,
+        {
+          role: 'assistant',
+          content: 'Response from B',
+          name: 'agent-b',
+        } as ExtendedChatMessage,
+      ];
+
+      renderChatMessageList({ messages, strategy: 'selector' });
+
+      expect(
+        screen.getByText('Selector chose agent-a'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText('Selector chose agent-b'),
+      ).toBeInTheDocument();
+    });
+
+    it('should render transition for every assistant message even when same agent', () => {
+      const messages: ExtendedChatMessage[] = [
+        { role: 'user', content: 'Hello' } as ExtendedChatMessage,
+        {
+          role: 'assistant',
+          content: 'First response',
+          name: 'agent-a',
+        } as ExtendedChatMessage,
+        {
+          role: 'assistant',
+          content: 'Second response',
+          name: 'agent-a',
+        } as ExtendedChatMessage,
+      ];
+
+      renderChatMessageList({ messages, strategy: 'selector' });
+
+      const transitions = screen.getAllByText('Selector chose agent-a');
+      expect(transitions).toHaveLength(2);
+    });
+
+    it('should render selector strategy indicator', () => {
+      const messages: ExtendedChatMessage[] = [
+        { role: 'user', content: 'Hello' } as ExtendedChatMessage,
+      ];
+
+      renderChatMessageList({ messages, strategy: 'selector' });
+
+      expect(
+        screen.getByText('AI selector chooses each respondent'),
+      ).toBeInTheDocument();
+    });
+
+    it('should use selector agent name in transitions and indicator', () => {
+      const messages: ExtendedChatMessage[] = [
+        { role: 'user', content: 'Hello' } as ExtendedChatMessage,
+        {
+          role: 'assistant',
+          content: 'Response from A',
+          name: 'agent-a',
+        } as ExtendedChatMessage,
+      ];
+
+      renderChatMessageList({
+        messages,
+        strategy: 'selector',
+        selectorAgentName: 'my-selector',
+      });
+
+      expect(
+        screen.getByText('my-selector chooses each respondent'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText('my-selector chose agent-a'),
+      ).toBeInTheDocument();
+    });
+
+    it('should render max turns as badge for selector strategy', () => {
+      const messages: ExtendedChatMessage[] = [
+        { role: 'user', content: 'Hello' } as ExtendedChatMessage,
+        {
+          role: 'assistant',
+          content: 'Response',
+          name: 'agent-a',
+        } as ExtendedChatMessage,
+        {
+          role: 'system',
+          content: 'Team conversation reached maximum turns limit (3)',
+        } as ExtendedChatMessage,
+      ];
+
+      renderChatMessageList({ messages, strategy: 'selector' });
+
+      expect(
+        screen.getByText('Maximum turns reached (3)'),
+      ).toBeInTheDocument();
+    });
+
+    it('should not render selector transitions for non-selector strategy', () => {
+      const messages: ExtendedChatMessage[] = [
+        { role: 'user', content: 'Hello' } as ExtendedChatMessage,
+        {
+          role: 'assistant',
+          content: 'Response from A',
+          name: 'agent-a',
+        } as ExtendedChatMessage,
+        {
+          role: 'assistant',
+          content: 'Response from B',
+          name: 'agent-b',
+        } as ExtendedChatMessage,
+      ];
+
+      renderChatMessageList({ messages, strategy: 'round-robin' });
+
+      expect(
+        screen.queryByText(/Selector chose/),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   describe('graph transitions', () => {
     const graphEdges = [
       { from: 'agent-a', to: 'agent-b' },
