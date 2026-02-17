@@ -151,6 +151,7 @@ export function useChatSession({
       let errorMessage = '';
       let queryName = '';
       let currentAgent: string | undefined;
+      let turnComplete = false;
       let completedQueryMessages: Array<{
         role: string;
         content?: string;
@@ -235,7 +236,7 @@ export function useChatSession({
           const arkData = chunk.ark as { agent?: string };
           const chunkAgent = arkData.agent;
 
-          if (chunkAgent && chunkAgent !== currentAgent) {
+          if (chunkAgent && (chunkAgent !== currentAgent || turnComplete)) {
             if (currentAgent) {
               finalizeCurrentMessage();
               accumulatedContent = '';
@@ -247,6 +248,7 @@ export function useChatSession({
               ]);
             }
             currentAgent = chunkAgent;
+            turnComplete = false;
           }
         }
 
@@ -294,6 +296,11 @@ export function useChatSession({
           updated[currentMessageIndex] = updatedMessage;
           return updated;
         });
+
+        const finishReason = typedChunk?.choices?.[0]?.finish_reason;
+        if (finishReason) {
+          turnComplete = true;
+        }
       }
 
       finalizeCurrentMessage();
