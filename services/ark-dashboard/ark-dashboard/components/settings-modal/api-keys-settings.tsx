@@ -33,7 +33,7 @@ import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { type APIKey, type APIKeyCreateResponse } from '@/lib/services';
 import { useDeleteAPIKey, useListAPIKeys } from '@/lib/services/api-keys-hooks';
 
-function DataTable({
+function ApiKeysTable({
   data,
   onRevoke,
   onCreate,
@@ -234,7 +234,7 @@ export function ApiKeysSettings() {
         </Button>
       </div>
 
-      <DataTable
+      <ApiKeysTable
         data={apiKeys}
         onRevoke={handleRevoke}
         onCreate={() => setAddDialogOpen(true)}
