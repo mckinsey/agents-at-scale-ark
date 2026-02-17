@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 
 import { PageHeader } from '@/components/common/page-header';
 import type { BreadcrumbElement } from '@/components/common/page-header';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { toolsService } from '@/lib/services';
 import type { ToolDetail } from '@/lib/services/tools';
 
@@ -18,7 +19,7 @@ export default function ToolDetailsPage() {
   const toolName = params.name as string;
 
   const breadcrumbs: BreadcrumbElement[] = [
-    { href: '/', label: 'ARK Dashboard' },
+    ...BASE_BREADCRUMBS,
     { href: '/tools', label: 'Tools' },
   ];
 

@@ -3,6 +3,7 @@ import {
   PageHeader,
 } from '@/components/common/page-header';
 import { CreateModelForm } from '@/components/forms';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 
 type SearchParams = {
   name?: string;
@@ -16,7 +17,7 @@ export default async function CreateModelPage({ searchParams }: Props) {
   const params = await searchParams;
 
   const breadcrumbs: BreadcrumbElement[] = [
-    { label: 'Dashboard', href: '/' },
+    ...BASE_BREADCRUMBS,
     { label: 'Models', href: '/models' },
   ];
 

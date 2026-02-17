@@ -9,6 +9,7 @@ import {
   PageHeader,
 } from '@/components/common/page-header';
 import { EvaluatorEditForm } from '@/components/forms/evaluator-edit-form';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import {
   type EvaluatorDetailResponse,
   evaluatorsService,
@@ -92,7 +93,7 @@ function EvaluatorEditContent({
   }
 
   const breadcrumbs: BreadcrumbElement[] = [
-    { label: 'Dashboard', href: '/' },
+    ...BASE_BREADCRUMBS,
     { label: 'Evaluators', href: '/evaluators' },
   ];
 

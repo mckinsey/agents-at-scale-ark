@@ -8,6 +8,7 @@ import {
 } from '@/components/common/page-header';
 import { UpdateModelForm } from '@/components/forms';
 import { Spinner } from '@/components/ui/spinner';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { useGetModelbyId } from '@/lib/services/models-hooks';
 
 type PageProps = {
@@ -19,7 +20,7 @@ export default function ModelUpdatePage({ params }: PageProps) {
   const { data, isPending } = useGetModelbyId({ modelId });
 
   const breadcrumbs: BreadcrumbElement[] = [
-    { label: 'Dashboard', href: '/' },
+    ...BASE_BREADCRUMBS,
     { label: 'Models', href: '/models' },
   ];
 

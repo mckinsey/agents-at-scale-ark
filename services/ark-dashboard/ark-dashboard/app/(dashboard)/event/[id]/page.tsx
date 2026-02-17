@@ -14,6 +14,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import type { Event } from '@/lib/services/events';
 import { eventsService } from '@/lib/services/events';
 
@@ -125,7 +126,7 @@ function EventDetailContent() {
   const [loading, setLoading] = useState(true);
 
   const breadcrumbs: BreadcrumbElement[] = [
-    { href: '/', label: 'ARK Dashboard' },
+    ...BASE_BREADCRUMBS,
     { href: '/query-logs', label: 'Query Logs' },
   ];
 

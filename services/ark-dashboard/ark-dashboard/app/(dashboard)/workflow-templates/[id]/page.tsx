@@ -31,6 +31,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { WorkflowDagViewer } from '@/components/workflow-dag-viewer';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import {
   type WorkflowStats,
   type WorkflowTemplate,
@@ -120,7 +121,7 @@ export default function FlowDetailPage() {
   }, [flowId]);
 
   const breadcrumbs: BreadcrumbElement[] = [
-    { href: '/', label: 'ARK Dashboard' },
+    ...BASE_BREADCRUMBS,
     { href: '/workflow-templates', label: 'Workflow Templates' },
   ];
 

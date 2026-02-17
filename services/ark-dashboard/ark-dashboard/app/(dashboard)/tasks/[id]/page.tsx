@@ -8,6 +8,7 @@ import type { BreadcrumbElement } from '@/components/common/page-header';
 import { StatusDot } from '@/components/sections/a2a-tasks-section/status-dot';
 import { mapTaskPhaseToVariant } from '@/components/sections/a2a-tasks-section/utils';
 import { Button } from '@/components/ui/button';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { useA2ATask } from '@/lib/services/a2a-tasks-hooks';
 import { simplifyDuration } from '@/lib/utils/time';
 
@@ -19,7 +20,7 @@ export default function A2ATaskPage() {
   const { data: task, isLoading, error } = useA2ATask(taskId);
 
   const breadcrumbs: BreadcrumbElement[] = [
-    { href: '/', label: 'ARK Dashboard' },
+    ...BASE_BREADCRUMBS,
     { href: '/tasks', label: 'Tasks' },
   ];
 

@@ -6,6 +6,7 @@ import { Suspense } from 'react';
 import { PageHeader } from '@/components/common/page-header';
 import type { BreadcrumbElement } from '@/components/common/page-header';
 import { EvaluationDetailView } from '@/components/evaluation';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 
 function EvaluationDetailContent() {
   const params = useParams();
@@ -15,7 +16,7 @@ function EvaluationDetailContent() {
   const enhanced = searchParams.get('enhanced') === 'true';
 
   const breadcrumbs: BreadcrumbElement[] = [
-    { href: '/', label: 'ARK Dashboard' },
+    ...BASE_BREADCRUMBS,
     { href: '/evaluations', label: 'Evaluations' },
   ];
 

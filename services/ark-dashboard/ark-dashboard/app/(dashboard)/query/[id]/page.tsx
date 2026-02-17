@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/tooltip';
 import type { components } from '@/lib/api/generated/types';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { useMarkdownProcessor } from '@/lib/hooks/use-markdown-processor';
 import {
   agentsService,
@@ -682,7 +683,7 @@ function QueryDetailContent() {
   }
 
   const breadcrumbs: BreadcrumbElement[] = [
-    { href: '/', label: 'ARK Dashboard' },
+    ...BASE_BREADCRUMBS,
     { href: '/queries', label: 'Queries' },
   ];
 
