@@ -31,16 +31,15 @@ spec:
         file: manifests/a01-secret.yaml
     - apply:
         file: manifests/a02-model.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          metadata:
-            name: weather-default-model
-          status:
-            conditions:
-            - type: ModelAvailable
-              status: "True"
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: weather-default-model
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True' 
     - assert:
         resource:
           apiVersion: apps/v1
@@ -159,14 +158,15 @@ spec:
           kind: Agent
           metadata:
             name: chicago-weather-agent
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: chicago-weather-query
-          status:
-            phase: done
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        timeout: 5m
+        name: chicago-weather-query
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     - apply:
         file: manifests/query-evaluation.yaml
     # Debug evaluation immediately after creation

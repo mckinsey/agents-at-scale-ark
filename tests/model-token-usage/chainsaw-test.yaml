@@ -26,16 +26,15 @@ spec:
 
   - name: wait-for-model-ready
     try:
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          metadata:
-            name: model-token-test
-          status:
-            conditions:
-            - type: ModelAvailable
-              status: "True"
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: model-token-test
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True' 
 
   - name: wait-for-query-completion
     try:
