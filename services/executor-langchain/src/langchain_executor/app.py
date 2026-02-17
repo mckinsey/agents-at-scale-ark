@@ -18,14 +18,24 @@ def _make_execution_engine_response(messages, a2a_messages, error):
     return ExecutionEngineResponse(**payload)
 
 
+def _get_a2a_input_field(a2a_input, *keys):
+    if a2a_input is None:
+        return ""
+    for key in keys:
+        if isinstance(a2a_input, dict):
+            value = a2a_input.get(key)
+        else:
+            value = getattr(a2a_input, key, None)
+        if isinstance(value, str) and value:
+            return value
+    return ""
+
+
 async def _execute_a2a_fallback(request: ExecutionEngineRequest) -> ExecutionEngineResponse:
     try:
         response_messages = await a2a_executor.execute_agent(request)
-        context_id = ""
-        task_id = ""
-        if request.a2aUserInput is not None:
-            context_id = str(request.a2aUserInput.get("contextId", ""))
-            task_id = str(request.a2aUserInput.get("taskId", ""))
+        context_id = _get_a2a_input_field(request.a2aUserInput, "contextId", "context_id")
+        task_id = _get_a2a_input_field(request.a2aUserInput, "taskId", "task_id")
         a2a_messages = []
         for message in response_messages:
             payload = {

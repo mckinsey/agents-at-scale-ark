@@ -91,3 +91,28 @@ def test_fallback_execute_a2a_returns_structured_error(monkeypatch):
     if "a2aMessages" in payload:
         assert payload["a2aMessages"] == []
     assert "LangChain A2A execution failed for agent native-agent: boom" == payload["error"]
+
+
+def test_fallback_execute_a2a_supports_typed_a2a_user_input(monkeypatch):
+    async def successful_execute(_request):
+        return [SimpleNamespace(role="assistant", content="ok")]
+
+    monkeypatch.setattr(app_module.a2a_executor, "execute_agent", successful_execute)
+    request = SimpleNamespace(
+        agent=SimpleNamespace(name="native-agent"),
+        a2aUserInput=SimpleNamespace(contextId="ctx-typed", taskId="task-typed"),
+    )
+
+    response = asyncio.run(app_module._execute_a2a_fallback(request))
+    payload = response.model_dump()
+    assert payload["messages"] == []
+    assert payload["error"] == ""
+    if "a2aMessages" in payload:
+        assert payload["a2aMessages"] == [
+            {
+                "role": "agent",
+                "parts": [{"kind": "text", "text": "ok"}],
+                "contextId": "ctx-typed",
+                "taskId": "task-typed",
+            }
+        ]

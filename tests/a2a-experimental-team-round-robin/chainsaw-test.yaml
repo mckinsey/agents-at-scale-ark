@@ -100,7 +100,8 @@ spec:
           metadata:
             name: a2a-round-robin-team-query
           status:
-            phase: done
+            (conditions[?type == 'Completed']):
+            - status: 'True'
     catch:
     - events: {}
     - describe:

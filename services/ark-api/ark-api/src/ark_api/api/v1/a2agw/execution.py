@@ -16,6 +16,7 @@ from ark_sdk.client import V1_ALPHA1, with_ark_client
 
 from .message_conversion import build_query_payload
 from .query import QueryExecutionResult, post_query_and_wait
+from .registry import _safe_metadata
 from ark_api.constants.annotations import (
     A2A_EXPERIMENTAL_ENABLED_ANNOTATION,
     parse_bool_annotation,
@@ -106,8 +107,8 @@ class ARKAgentExecutor(AgentExecutor):
         try:
             async with with_ark_client(self.namespace, V1_ALPHA1) as ark_client:
                 agent = await ark_client.agents.a_get(self.target_name)
-                metadata = getattr(agent, "metadata", {})
-                annotations = metadata.get("annotations") if isinstance(metadata, dict) else {}
+                metadata = _safe_metadata(agent)
+                annotations = metadata.get("annotations") or {}
                 if not isinstance(annotations, dict):
                     self._experimental_enabled = False
                 else:

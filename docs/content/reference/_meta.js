@@ -23,7 +23,6 @@ export default {
 
   '---rfcs': { type: 'separator', title: 'RFCs' },
   'a2a-native-execution': 'A2A Native Execution',
-  'core-architecture': 'Core Architecture',
 
   '---project': { type: 'separator', title: 'Project' },
   contributors: 'Contributors'

@@ -102,8 +102,9 @@ class A2ALangChainExecutor(BaseExecutor):
             use_rag = should_use_rag(request.agent)
 
             user_content = _extract_native_text(getattr(request, "a2aUserInput", None))
-            if not user_content and request.userInput is not None:
-                user_content = request.userInput.content
+            user_input = getattr(request, "userInput", None)
+            if not user_content and user_input is not None:
+                user_content = user_input.content
             langchain_messages = _build_native_langchain_messages(getattr(request, "a2aHistory", []))
 
             rag_context = None

@@ -458,7 +458,11 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 	if executionResult == nil || (len(executionResult.Messages) == 0 && len(executionResult.A2AMessages) == 0) {
 		return nil, payloadMode
 	}
-	hydrateDelegatedA2AData(ctx, executionResult)
+	hydrateCtx := ctx
+	if payloadMode == genai.A2APayloadModeNative {
+		hydrateCtx = genai.WithA2AExperimentalEnabled(hydrateCtx, true)
+	}
+	hydrateDelegatedA2AData(hydrateCtx, executionResult)
 
 	response := r.createSuccessResponse(target, executionResult.Messages, executionResult.A2AMessages, executionResult.A2APayloadMode)
 	applyA2AMetadataFromExecutionResult(&response, executionResult)
