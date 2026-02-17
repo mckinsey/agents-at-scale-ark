@@ -60,11 +60,11 @@ resources:
   limits:
     cpu: 1000m
     memory: 1Gi
-    ephemeral-storage: 1Gi
+    ephemeral-storage: 2Gi
   requests:
     cpu: 500m
     memory: 512Mi
-    ephemeral-storage: 100Mi
+    ephemeral-storage: 1Gi
 
 livenessProbe:
   httpGet:
@@ -78,7 +78,8 @@ readinessProbe:
     path: /health
     port: http
   initialDelaySeconds: 10
-  periodSeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
   failureThreshold: 3
 
 startupProbe:
