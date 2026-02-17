@@ -145,12 +145,18 @@ jobs:
           echo "=== Coverage files generated ==="
           find . -name "lcov.info" -o -name "coverage.xml" 2>/dev/null | grep -v node_modules | grep -v .venv | head -20 || echo "No coverage files found"
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Set up Cloudflare WARP
         uses: Boostport/setup-cloudflare-warp@v1
         with:
           organization: ${{ secrets.CF_ORGANIZATION }}
           auth_client_id: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_ID }}
           auth_client_secret: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_SECRET }}
+
       - name: Run SonarQube Scan (Branch)
         if: github.event_name != 'pull_request'
         run: |
