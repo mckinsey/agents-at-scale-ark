@@ -55,9 +55,9 @@ spec:
         timeout: 5m
         name: test-direct-evaluation
         for:
-          jsonPath:
-            path: '{.status.phase}'
-            value: 'done'
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1

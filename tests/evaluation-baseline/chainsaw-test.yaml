@@ -57,9 +57,9 @@ spec:
         timeout: 7m
         name: test-baseline-evaluation
         for:
-          jsonPath:
-            path: '{.status.phase}'
-            value: 'done'
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1

@@ -87,9 +87,9 @@ spec:
         timeout: 5m
         name: context-enhanced-query
         for:
-          jsonPath:
-            path: '{.status.phase}'
-            value: 'done'
+          condition:
+            name: Completed
+            value: 'True'
 
   - name: create-evaluation-after-query-done
     try:
@@ -118,9 +118,9 @@ spec:
         timeout: 10m
         name: test-context-enhanced-evaluation
         for:
-          jsonPath:
-            path: '{.status.phase}'
-            value: 'done'
+          condition:
+            name: Completed
+            value: 'True'
 
   - name: validate-evaluation-results
     try:

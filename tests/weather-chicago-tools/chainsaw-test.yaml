@@ -172,9 +172,9 @@ spec:
         timeout: 5m
         name: chicago-weather-query
         for:
-          jsonPath:
-            path: '{.status.phase}'
-            value: 'done'
+          condition:
+            name: Completed
+            value: 'True'
     - apply:
        file: manifests/weather-tools-event-evaluation.yaml
     - wait:
@@ -183,9 +183,9 @@ spec:
         timeout: 2m
         name: weather-tools-event-evaluation
         for:
-          jsonPath:
-            path: '{.status.phase}'
-            value: 'done'
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1

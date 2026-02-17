@@ -114,9 +114,9 @@ spec:
             name: manual-override-evaluation
             timeout: 10m
             for:
-              jsonPath:
-                path: '{.status.phase}'
-                value: 'done'
+              condition:
+                name: Completed
+                value: 'True'
 
         - assert:
             resource:
