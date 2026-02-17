@@ -36,22 +36,6 @@ spec:
           {{- end }}
           ports:
             - containerPort: {{ .Values.service.targetPort }}
-          readinessProbe:
-            httpGet:
-              path: /ready
-              port: {{ .Values.service.targetPort }}
-            initialDelaySeconds: 5
-            periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 3
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: {{ .Values.service.targetPort }}
-            initialDelaySeconds: 10
-            periodSeconds: 10
-            timeoutSeconds: 3
-            failureThreshold: 3
           {{- if .Values.app.env }}
           env:
             {{- range .Values.app.env }}

@@ -14,10 +14,11 @@ const (
 
 // A2A annotations
 const (
-	A2AServerName    = ARKPrefix + "a2a-server-name"
-	A2AServerAddress = ARKPrefix + "a2a-server-address"
-	A2AServerSkills  = ARKPrefix + "a2a-server-skills"
-	A2AContextID     = ARKPrefix + "a2a-context-id"
+	A2AServerName         = ARKPrefix + "a2a-server-name"
+	A2AServerAddress      = ARKPrefix + "a2a-server-address"
+	A2AServerSkills       = ARKPrefix + "a2a-server-skills"
+	A2AContextID          = ARKPrefix + "a2a-context-id"
+	A2AStreamingSupported = ARKPrefix + "a2a-streaming-supported"
 )
 
 // MCP annotations
