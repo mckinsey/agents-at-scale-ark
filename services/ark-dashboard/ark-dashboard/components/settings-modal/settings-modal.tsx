@@ -37,7 +37,7 @@ export function SettingsModal() {
     <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
       <DialogContent
         className="h-screen !max-h-[100vh] w-screen !max-w-[100vw] !gap-0 overflow-hidden rounded-none p-0"
-        showCloseButton={true}
+        showCloseButton={false}
         onOpenAutoFocus={e => e.preventDefault()}>
         <DialogTitle className="sr-only">Settings</DialogTitle>
         <div className="flex h-full w-full overflow-hidden">
