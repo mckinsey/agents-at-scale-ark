@@ -7,9 +7,38 @@ metadata:
 spec:
   timeouts:
     apply: 60s
-    assert: 300s 
+    assert: 300s
     exec: 120s
   steps:
+    - name: setup-mock-service
+      try:
+        - apply:
+            file: ../../shared/mock-weather-api.yaml
+        - assert:
+            resource:
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: mock-weather-api
+              status:
+                readyReplicas: 1
+        - assert:
+            resource:
+              apiVersion: v1
+              kind: Endpoints
+              metadata:
+                name: mock-weather-api
+        - script:
+            content: |
+              kubectl wait --for=condition=ready pod -l app=mock-weather-api -n $NAMESPACE --timeout=60s
+              MOCK_URL="http://mock-weather-api.$NAMESPACE.svc.cluster.local"
+              kubectl run test-mock-ready --image=curlimages/curl --rm -i --restart=Never -n $NAMESPACE -- \
+                curl -f -s "${MOCK_URL}/v1/forecast?latitude=40.71&longitude=-74.01&current_weather=true"
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+            timeout: 30s
+
     - name: setup-model
       try:
         - script:
@@ -30,8 +59,39 @@ spec:
 
     - name: create-resources
       try:
-        - apply:
-            file: manifests/weather-tool.yaml
+        - script:
+            content: |
+              MOCK_URL="http://mock-weather-api.$NAMESPACE.svc.cluster.local"
+
+              kubectl apply -f - <<EOF
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Tool
+              metadata:
+                name: weather-tool
+                namespace: $NAMESPACE
+              spec:
+                type: http
+                inputSchema:
+                  type: object
+                  properties:
+                    latitude:
+                      type: number
+                      description: Latitude coordinate
+                    longitude:
+                      type: number
+                      description: Longitude coordinate
+                    current_weather:
+                      type: boolean
+                      description: Include current weather data
+                      default: true
+                  required: ["latitude", "longitude"]
+                description: "Fetches current weather data for given coordinates"
+                http:
+                  url: $MOCK_URL/v1/forecast?latitude={latitude}&longitude={longitude}&current_weather=true
+              EOF
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
         - apply:
             file: manifests/weather-agent.yaml
         - apply:
