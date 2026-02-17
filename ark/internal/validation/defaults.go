@@ -8,6 +8,8 @@ import (
 	"mckinsey.com/ark/internal/genai"
 )
 
+const toolTypeCustom = "custom"
+
 func DefaultAgent(agent *arkv1alpha1.Agent) {
 	_, isA2A := agent.Annotations[annotations.A2AServerName]
 	hasModel := agent.Spec.ModelRef != nil
@@ -19,7 +21,7 @@ func DefaultAgent(agent *arkv1alpha1.Agent) {
 	}
 
 	for _, tool := range agent.Spec.Tools {
-		if tool.Type == "custom" {
+		if tool.Type == toolTypeCustom {
 			if agent.Annotations == nil {
 				agent.Annotations = make(map[string]string)
 			}
