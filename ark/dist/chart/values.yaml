@@ -20,14 +20,18 @@ controllerManager:
         cpu: 10m
         memory: 64Mi
     livenessProbe:
-      initialDelaySeconds: 15
+      initialDelaySeconds: 60
       periodSeconds: 20
+      timeoutSeconds: 10
+      failureThreshold: 3
       httpGet:
         path: /healthz
         port: 8081
     readinessProbe:
-      initialDelaySeconds: 5
+      initialDelaySeconds: 30
       periodSeconds: 10
+      timeoutSeconds: 10
+      failureThreshold: 3
       httpGet:
         path: /readyz
         port: 8081
