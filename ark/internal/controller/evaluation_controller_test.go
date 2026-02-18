@@ -83,7 +83,7 @@ var _ = Describe("Evaluation Controller", func() {
 				Spec: arkv1alpha1.EvaluationSpec{
 					Type: "direct",
 					Config: arkv1alpha1.EvaluationConfig{
-						DirectEvaluationConfig: &arkv1alpha1.DirectEvaluationConfig{
+						DirectEvaluationConfig: arkv1alpha1.DirectEvaluationConfig{
 							Input:  "What is 2+2?",
 							Output: "4",
 						},
@@ -150,7 +150,7 @@ var _ = Describe("Evaluation Controller", func() {
 				Spec: arkv1alpha1.EvaluationSpec{
 					Type: "direct",
 					Config: arkv1alpha1.EvaluationConfig{
-						DirectEvaluationConfig: &arkv1alpha1.DirectEvaluationConfig{
+						DirectEvaluationConfig: arkv1alpha1.DirectEvaluationConfig{
 							Input:  "What is 2+2?",
 							Output: "4",
 						},
@@ -227,7 +227,7 @@ var _ = Describe("Evaluation Controller", func() {
 				Spec: arkv1alpha1.EvaluationSpec{
 					Type: "direct",
 					Config: arkv1alpha1.EvaluationConfig{
-						DirectEvaluationConfig: &arkv1alpha1.DirectEvaluationConfig{
+						DirectEvaluationConfig: arkv1alpha1.DirectEvaluationConfig{
 							Input:  "", // Empty input
 							Output: "4",
 						},
@@ -631,7 +631,7 @@ var _ = Describe("Evaluation Controller", func() {
 				Spec: arkv1alpha1.EvaluationSpec{
 					Type: "query",
 					Config: arkv1alpha1.EvaluationConfig{
-						QueryBasedEvaluationConfig: &arkv1alpha1.QueryBasedEvaluationConfig{
+						QueryBasedEvaluationConfig: arkv1alpha1.QueryBasedEvaluationConfig{
 							QueryRef: &arkv1alpha1.QueryRef{
 								Name: "non-existent-query",
 							},
@@ -727,7 +727,7 @@ var _ = Describe("Evaluation Controller", func() {
 				Spec: arkv1alpha1.EvaluationSpec{
 					Type: "query",
 					Config: arkv1alpha1.EvaluationConfig{
-						QueryBasedEvaluationConfig: &arkv1alpha1.QueryBasedEvaluationConfig{
+						QueryBasedEvaluationConfig: arkv1alpha1.QueryBasedEvaluationConfig{
 							QueryRef: &arkv1alpha1.QueryRef{
 								Name: "test-query",
 							},
@@ -831,7 +831,7 @@ var _ = Describe("Evaluation Controller", func() {
 				Spec: arkv1alpha1.EvaluationSpec{
 					Type: "query",
 					Config: arkv1alpha1.EvaluationConfig{
-						QueryBasedEvaluationConfig: &arkv1alpha1.QueryBasedEvaluationConfig{
+						QueryBasedEvaluationConfig: arkv1alpha1.QueryBasedEvaluationConfig{
 							QueryRef: &arkv1alpha1.QueryRef{
 								Name: "test-query-not-done",
 							},
@@ -910,7 +910,7 @@ var _ = Describe("Evaluation Controller", func() {
 				Spec: arkv1alpha1.EvaluationSpec{
 					Type: "direct",
 					Config: arkv1alpha1.EvaluationConfig{
-						DirectEvaluationConfig: &arkv1alpha1.DirectEvaluationConfig{
+						DirectEvaluationConfig: arkv1alpha1.DirectEvaluationConfig{
 							Input:  "What is 2+2?",
 							Output: "4",
 						},
@@ -983,7 +983,7 @@ var _ = Describe("Evaluation Controller", func() {
 				Spec: arkv1alpha1.EvaluationSpec{
 					Type: "direct",
 					Config: arkv1alpha1.EvaluationConfig{
-						DirectEvaluationConfig: &arkv1alpha1.DirectEvaluationConfig{
+						DirectEvaluationConfig: arkv1alpha1.DirectEvaluationConfig{
 							Input:  "What is 2+2?",
 							Output: "4",
 						},
@@ -1061,7 +1061,7 @@ var _ = Describe("Evaluation Controller", func() {
 				Spec: arkv1alpha1.EvaluationSpec{
 					Type: "direct",
 					Config: arkv1alpha1.EvaluationConfig{
-						DirectEvaluationConfig: &arkv1alpha1.DirectEvaluationConfig{
+						DirectEvaluationConfig: arkv1alpha1.DirectEvaluationConfig{
 							Input:  "What is 2+2?",
 							Output: "4",
 						},
