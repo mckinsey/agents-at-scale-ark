@@ -236,3 +236,14 @@ export async function getMarketplaceItemById(
   const items = await getMarketplaceItems();
   return items.find(item => item.id === id) || null;
 }
+
+export async function getRawMarketplaceItemById(
+  id: string,
+): Promise<GitHubMarketplaceItem | null> {
+  const manifest = await fetchMarketplaceManifest();
+  if (!manifest || !manifest.items) {
+    return null;
+  }
+
+  return manifest.items.find(item => generateItemId(item) === id) || null;
+}

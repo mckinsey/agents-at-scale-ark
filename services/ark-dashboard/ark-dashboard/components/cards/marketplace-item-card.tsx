@@ -1,7 +1,15 @@
 'use client';
 
-import { CheckCircle, Download, ExternalLink, Star } from 'lucide-react';
+import {
+  CheckCircle,
+  Download,
+  ExternalLink,
+  Loader2,
+  Star,
+} from 'lucide-react';
 import Link from 'next/link';
+import { useState } from 'react';
+import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,6 +22,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import type { MarketplaceItem } from '@/lib/api/generated/marketplace-types';
+import { useInstallMarketplaceItem } from '@/lib/services/marketplace-hooks';
 import { cn } from '@/lib/utils';
 
 interface MarketplaceItemCardProps {
@@ -25,6 +34,25 @@ export function MarketplaceItemCard({
   item,
   className,
 }: MarketplaceItemCardProps) {
+  const [isInstalling, setIsInstalling] = useState(false);
+  const [localStatus, setLocalStatus] = useState(item.status);
+  const installMutation = useInstallMarketplaceItem();
+
+  const handleInstall = async () => {
+    setIsInstalling(true);
+    try {
+      await installMutation.mutateAsync(item.id);
+      setLocalStatus('installed');
+      toast.success(`${item.name} installed successfully`);
+    } catch (error) {
+      toast.error(`Failed to install ${item.name}`, {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      });
+    } finally {
+      setIsInstalling(false);
+    }
+  };
+
   const getCategoryColor = (category: string) => {
     const colors: Record<string, string> = {
       observability: 'bg-blue-500/10 text-blue-700 dark:text-blue-400',
@@ -41,7 +69,7 @@ export function MarketplaceItemCard({
   };
 
   const getStatusIcon = () => {
-    if (item.status === 'installed') {
+    if (localStatus === 'installed') {
       return <CheckCircle className="h-4 w-4 text-green-600" />;
     }
     return null;
@@ -160,15 +188,36 @@ export function MarketplaceItemCard({
             )}
           </div>
 
-          {item.status === 'installed' ? (
-            <Button variant="outline" size="sm" disabled className="h-8">
-              Installed
-            </Button>
-          ) : (
+          <div className="flex gap-2">
+            {localStatus === 'installed' ? (
+              <Button variant="outline" size="sm" disabled className="h-8">
+                <CheckCircle className="mr-1 h-3 w-3" />
+                Installed
+              </Button>
+            ) : (
+              <Button
+                variant="default"
+                size="sm"
+                className="h-8"
+                onClick={handleInstall}
+                disabled={isInstalling}>
+                {isInstalling ? (
+                  <>
+                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                    Installing
+                  </>
+                ) : (
+                  <>
+                    <Download className="mr-1 h-3 w-3" />
+                    Install
+                  </>
+                )}
+              </Button>
+            )}
             <Button
-              variant="default"
+              variant="outline"
               size="sm"
-              className="h-8 gap-1 transition-all group-hover:gap-2"
+              className="h-8 gap-1"
               onClick={e => {
                 e.stopPropagation();
                 const url = item.documentation || item.repository;
@@ -179,7 +228,7 @@ export function MarketplaceItemCard({
               View
               <ExternalLink className="h-3 w-3" />
             </Button>
-          )}
+          </div>
         </div>
       </CardFooter>
     </Card>
