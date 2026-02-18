@@ -56,7 +56,9 @@ describe('ChatMessage', () => {
 
       expect(screen.getByText('agent-1')).toBeInTheDocument();
 
-      rerender(<ChatMessage role="assistant" content="Test" sender="agent-2" />);
+      rerender(
+        <ChatMessage role="assistant" content="Test" sender="agent-2" />,
+      );
 
       expect(screen.getByText('agent-2')).toBeInTheDocument();
     });
@@ -65,7 +67,11 @@ describe('ChatMessage', () => {
   describe('status display', () => {
     it('should render message with pending status', () => {
       render(
-        <ChatMessage role="assistant" content="Processing..." status="pending" />,
+        <ChatMessage
+          role="assistant"
+          content="Processing..."
+          status="pending"
+        />,
       );
 
       expect(screen.getByText('Processing...')).toBeInTheDocument();
@@ -131,9 +137,7 @@ describe('ChatMessage', () => {
         },
       ];
 
-      render(
-        <ChatMessage role="assistant" content="" toolCalls={toolCalls} />,
-      );
+      render(<ChatMessage role="assistant" content="" toolCalls={toolCalls} />);
 
       expect(screen.getByText('search')).toBeInTheDocument();
     });
@@ -158,9 +162,7 @@ describe('ChatMessage', () => {
         },
       ];
 
-      render(
-        <ChatMessage role="assistant" content="" toolCalls={toolCalls} />,
-      );
+      render(<ChatMessage role="assistant" content="" toolCalls={toolCalls} />);
 
       expect(screen.getByText('search')).toBeInTheDocument();
       expect(screen.getByText('calculate')).toBeInTheDocument();
@@ -201,9 +203,7 @@ describe('ChatMessage', () => {
         },
       ];
 
-      render(
-        <ChatMessage role="assistant" content="" toolCalls={toolCalls} />,
-      );
+      render(<ChatMessage role="assistant" content="" toolCalls={toolCalls} />);
 
       expect(screen.getByText('action')).toBeInTheDocument();
     });

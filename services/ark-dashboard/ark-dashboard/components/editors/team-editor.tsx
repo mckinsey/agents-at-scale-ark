@@ -67,15 +67,6 @@ import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 
 type GraphEdge = components['schemas']['GraphEdge'];
 
-const DEFAULT_SELECTOR_PROMPT = `You are in a role play game. The following roles are available:
-{{.Roles}}.
-Read the following conversation. Then select the next role from {{.Participants}} to play. Only return the role.
-Make sure to choose the role which is best suited to respond to the most recent message.
-
-{{.History}}
-
-Read the above conversation. Then select the next role from {{.Participants}} to play. Only return the role.`;
-
 interface TeamEditorProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;

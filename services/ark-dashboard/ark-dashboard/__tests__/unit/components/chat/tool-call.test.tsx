@@ -204,7 +204,8 @@ describe('ToolCall', () => {
         type: 'function',
         function: {
           name: 'update',
-          arguments: '{"user":{"name":"John","age":30},"settings":{"theme":"dark"}}',
+          arguments:
+            '{"user":{"name":"John","age":30},"settings":{"theme":"dark"}}',
         },
       };
 

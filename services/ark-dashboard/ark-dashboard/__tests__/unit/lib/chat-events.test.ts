@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  type ChatType,
   openFloatingChat,
   toggleFloatingChat,
-  type ChatType,
 } from '@/lib/chat-events';
 
 describe('chat-events', () => {
@@ -121,7 +121,12 @@ describe('chat-events', () => {
       expect(dispatchEventSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'toggle-floating-chat',
-          detail: { name, type, strategy: 'round-robin', graphEdges: undefined },
+          detail: {
+            name,
+            type,
+            strategy: 'round-robin',
+            graphEdges: undefined,
+          },
         }),
       );
     });

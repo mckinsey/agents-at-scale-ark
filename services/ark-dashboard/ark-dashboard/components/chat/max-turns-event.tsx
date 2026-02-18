@@ -5,9 +5,14 @@ interface MaxTurnsEventProps {
   className?: string;
 }
 
-export function MaxTurnsEvent({ message, className }: Readonly<MaxTurnsEventProps>) {
+export function MaxTurnsEvent({
+  message,
+  className,
+}: Readonly<MaxTurnsEventProps>) {
   const match = message?.match(/\((\d+)\)/);
-  const label = match ? `Maximum turns reached (${match[1]})` : 'Maximum turns reached';
+  const label = match
+    ? `Maximum turns reached (${match[1]})`
+    : 'Maximum turns reached';
 
   return (
     <div
