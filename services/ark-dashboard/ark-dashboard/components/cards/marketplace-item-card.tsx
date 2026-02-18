@@ -55,6 +55,7 @@ export function MarketplaceItemCard({
 
   const handleInstall = async () => {
     setIsInstalling(true);
+    toast.info(`Preparing installation for ${item.name}...`);
     try {
       const result = await installMutation.mutateAsync(item.id);
 
@@ -277,7 +278,7 @@ export function MarketplaceItemCard({
                 {isInstalling ? (
                   <>
                     <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                    Installing
+                    Loading...
                   </>
                 ) : (
                   <>
@@ -345,11 +346,11 @@ function InstallCommandDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Terminal className="h-5 w-5" />
-            Install {installCommand.name || itemName}
+            Installation Instructions for {installCommand.name || itemName}
           </DialogTitle>
           <DialogDescription>
-            Run one of these commands in your terminal to install the
-            marketplace item:
+            To complete the installation, run one of these commands in your
+            local terminal:
           </DialogDescription>
         </DialogHeader>
 
@@ -392,8 +393,9 @@ function InstallCommandDialog({
 
           <div className="rounded-lg bg-blue-50 p-3 dark:bg-blue-950/20">
             <p className="text-sm text-blue-800 dark:text-blue-200">
-              💡 Make sure you have kubectl configured to the correct cluster
-              before running these commands.
+              ℹ️ For security reasons, the dashboard cannot directly install
+              packages. Please run one of the commands above in your terminal
+              where kubectl is configured to your cluster.
             </p>
           </div>
         </div>
