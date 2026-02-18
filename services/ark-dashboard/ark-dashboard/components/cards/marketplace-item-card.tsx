@@ -45,8 +45,34 @@ export function MarketplaceItemCard({
       setLocalStatus('installed');
       toast.success(`${item.name} installed successfully`);
     } catch (error) {
+      console.error('Installation error:', error);
+
+      // Extract error details from APIError
+      let errorMessage = 'Unknown error occurred';
+      let errorDetails = '';
+
+      if (error && typeof error === 'object' && 'data' in error) {
+        // APIError includes data property with the response
+        const data = error.data;
+        if (typeof data === 'object' && data !== null) {
+          const errorData = data as Record<string, unknown>;
+          errorMessage =
+            (errorData.error as string) ||
+            ('message' in error && typeof error.message === 'string'
+              ? error.message
+              : errorMessage);
+          errorDetails =
+            (errorData.details as string) ||
+            (errorData.instructions as string) ||
+            '';
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
       toast.error(`Failed to install ${item.name}`, {
-        description: error instanceof Error ? error.message : 'Unknown error',
+        description: errorDetails || errorMessage,
+        duration: 8000, // Show for longer since it might contain instructions
       });
     } finally {
       setIsInstalling(false);

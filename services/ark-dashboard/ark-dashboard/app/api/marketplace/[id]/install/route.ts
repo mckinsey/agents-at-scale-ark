@@ -7,12 +7,77 @@ import { getRawMarketplaceItemById } from '@/lib/services/marketplace-fetcher';
 
 const execAsync = promisify(exec);
 
+async function checkHelmAvailable(): Promise<{
+  available: boolean;
+  error?: string;
+}> {
+  try {
+    const { stdout } = await execAsync('helm version --short');
+    console.log('Helm version:', stdout.trim());
+    return { available: true };
+  } catch (error) {
+    console.error('Helm not available:', error);
+    return {
+      available: false,
+      error:
+        'Helm CLI is not available. Please ensure helm is installed and accessible.',
+    };
+  }
+}
+
+async function checkKubernetesConnection(): Promise<{
+  connected: boolean;
+  error?: string;
+}> {
+  try {
+    const { stdout } = await execAsync(
+      'kubectl cluster-info --request-timeout=5s',
+    );
+    console.log('Kubernetes cluster info:', stdout.trim());
+    return { connected: true };
+  } catch (error) {
+    console.error('Kubernetes connection failed:', error);
+    return {
+      connected: false,
+      error:
+        'Cannot connect to Kubernetes cluster. Please ensure kubectl is configured.',
+    };
+  }
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params;
+
+    // Check prerequisites
+    const helmCheck = await checkHelmAvailable();
+    if (!helmCheck.available) {
+      return NextResponse.json(
+        {
+          error: 'Helm not available',
+          details: helmCheck.error,
+          instructions:
+            'The dashboard server needs access to helm CLI to install marketplace items.',
+        },
+        { status: 503 },
+      );
+    }
+
+    const k8sCheck = await checkKubernetesConnection();
+    if (!k8sCheck.connected) {
+      return NextResponse.json(
+        {
+          error: 'Kubernetes cluster not accessible',
+          details: k8sCheck.error,
+          instructions:
+            'The dashboard server needs access to a Kubernetes cluster.',
+        },
+        { status: 503 },
+      );
+    }
 
     // Fetch the raw marketplace item with Ark configuration
     const item = await getRawMarketplaceItemById(id);
@@ -73,13 +138,26 @@ export async function POST(
       });
     } catch (error) {
       console.error('Helm installation failed:', error);
+      console.error('Command was:', helmCommand);
 
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
+      let errorDetails = 'Unknown error';
+      if (error instanceof Error) {
+        errorDetails = error.message;
+        // Check for common helm errors
+        if (error.message.includes('command not found')) {
+          errorDetails = 'Helm is not installed or not in PATH';
+        } else if (error.message.includes('cannot connect')) {
+          errorDetails = 'Cannot connect to Kubernetes cluster';
+        } else if (error.message.includes('unauthorized')) {
+          errorDetails = 'Not authorized to access Kubernetes cluster';
+        }
+      }
+
       return NextResponse.json(
         {
           error: 'Installation failed',
-          details: errorMessage,
+          details: errorDetails,
+          command: helmCommand,
         },
         { status: 500 },
       );
