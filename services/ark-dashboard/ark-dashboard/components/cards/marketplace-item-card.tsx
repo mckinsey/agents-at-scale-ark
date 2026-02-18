@@ -1,14 +1,7 @@
 'use client';
 
-import {
-  ArrowRight,
-  CheckCircle,
-  Download,
-  ExternalLink,
-  Star,
-} from 'lucide-react';
+import { CheckCircle, Download, ExternalLink, Star } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -32,12 +25,6 @@ export function MarketplaceItemCard({
   item,
   className,
 }: MarketplaceItemCardProps) {
-  const router = useRouter();
-
-  const handleCardClick = () => {
-    router.push(`/marketplace/${item.id}`);
-  };
-
   const getCategoryColor = (category: string) => {
     const colors: Record<string, string> = {
       observability: 'bg-blue-500/10 text-blue-700 dark:text-blue-400',
@@ -70,10 +57,9 @@ export function MarketplaceItemCard({
   return (
     <Card
       className={cn(
-        'group relative flex h-full cursor-pointer flex-col transition-all hover:shadow-lg',
+        'group relative flex h-full flex-col transition-all hover:shadow-lg',
         className,
-      )}
-      onClick={handleCardClick}>
+      )}>
       {item.featured && (
         <div className="absolute top-2 right-2 z-10">
           <Badge
@@ -182,9 +168,16 @@ export function MarketplaceItemCard({
             <Button
               variant="default"
               size="sm"
-              className="h-8 gap-1 transition-all group-hover:gap-2">
+              className="h-8 gap-1 transition-all group-hover:gap-2"
+              onClick={e => {
+                e.stopPropagation();
+                const url = item.documentation || item.repository;
+                if (url) {
+                  window.open(url, '_blank');
+                }
+              }}>
               View
-              <ArrowRight className="h-3 w-3" />
+              <ExternalLink className="h-3 w-3" />
             </Button>
           )}
         </div>
