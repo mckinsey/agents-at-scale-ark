@@ -104,6 +104,7 @@ export default function ExportPage() {
   const [selectedCount, setSelectedCount] = useState(0);
   const [activeTab, setActiveTab] = useState<ResourceType>('agents');
   const [lastExportTime, setLastExportTime] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     loadResources();
@@ -238,7 +239,15 @@ export default function ExportPage() {
   };
 
   const renderResourceSection = (section: ResourceSection) => {
-    const items = resources[section.type] || [];
+    const allItems = resources[section.type] || [];
+
+    // Filter items based on search query
+    const items = searchQuery
+      ? allItems.filter(item =>
+          item.name.toLowerCase().includes(searchQuery.toLowerCase()),
+        )
+      : allItems;
+
     const selectedItems = items.filter(item => item.selected);
     const allSelected =
       items.length > 0 && selectedItems.length === items.length;
@@ -360,9 +369,10 @@ export default function ExportPage() {
               <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
               <Input
                 type="text"
-                placeholder="Search resources"
+                placeholder="Search resources in current tab"
                 className="pl-9"
-                disabled
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
               />
             </div>
             <Tabs
@@ -370,8 +380,18 @@ export default function ExportPage() {
               onValueChange={value => setActiveTab(value as ResourceType)}>
               <TabsList className="grid w-full grid-cols-5 lg:flex lg:w-auto lg:grid-cols-none">
                 {resourceSections.map(section => {
-                  const items = resources[section.type] || [];
-                  const selectedItems = items.filter(item => item.selected);
+                  const allItems = resources[section.type] || [];
+                  // Filter items based on search query
+                  const filteredItems = searchQuery
+                    ? allItems.filter(item =>
+                        item.name
+                          .toLowerCase()
+                          .includes(searchQuery.toLowerCase()),
+                      )
+                    : allItems;
+                  const selectedItems = filteredItems.filter(
+                    item => item.selected,
+                  );
                   const Icon = section.icon;
                   return (
                     <TabsTrigger
