@@ -39,9 +39,15 @@ class TestArkDashboard:
         tab_element = getattr(dashboard, tab_selector)
         
         if dashboard.is_visible(tab_element):
+            current_url = dashboard.get_url()
             page.locator(tab_element).first.click()
-            dashboard.wait_for_load_state("domcontentloaded")
-            page.wait_for_load_state("networkidle", timeout=5000)
+            
+            # Wait for URL to change (Next.js client-side routing)
+            try:
+                page.wait_for_url(lambda url: url != current_url, timeout=10000)
+            except:
+                # If URL doesn't change, wait for load state as fallback
+                dashboard.wait_for_load_state("domcontentloaded")
             
             new_url = dashboard.get_url()          
             assert tab_name.lower() in new_url.lower(), f"URL should contain '{tab_name.lower()}' but got: {new_url}"

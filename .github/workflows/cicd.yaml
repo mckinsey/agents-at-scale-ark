@@ -877,7 +877,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
         run: |
           cd tests/pytest/cli-tests/tests
-          pytest test_file_gateway.py -v --tb=short
+          pytest test_file_gateway.py -n 2 --dist loadscope -v --tb=short
 
       - name: Upload CLI test logs
         if: always()
