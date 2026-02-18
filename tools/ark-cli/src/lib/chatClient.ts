@@ -118,6 +118,18 @@ export class ChatClient {
           onChunk(content, undefined, arkMetadata);
         }
 
+        if (
+          !fullResponse &&
+          arkMetadata?.completedQuery?.status?.response?.content
+        ) {
+          const responseContent =
+            arkMetadata.completedQuery.status.response.content;
+          fullResponse = responseContent;
+          if (onChunk) {
+            onChunk(responseContent, undefined, arkMetadata);
+          }
+        }
+
         // Handle tool calls
         if (delta?.tool_calls) {
           for (const toolCallDelta of delta.tool_calls) {
