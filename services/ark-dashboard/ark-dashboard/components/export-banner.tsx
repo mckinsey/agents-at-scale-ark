@@ -42,32 +42,37 @@ export function ExportBanner() {
   };
 
   return (
-    <div className="flex items-center justify-between border-b border-amber-200 bg-amber-50 px-4 py-2 dark:border-amber-800 dark:bg-amber-900/20">
-      <div className="flex flex-1 items-center gap-2">
-        <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-        <span className="text-sm text-amber-900 dark:text-amber-100">
-          To bring changes made in the Dashboard locally, export the required
-          resources via{' '}
-          <Link
-            href="/export"
-            className="font-semibold underline hover:no-underline">
-            export section
-          </Link>
+    <div className="flex flex-col gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 sm:flex-row sm:items-center sm:justify-between dark:border-amber-800 dark:bg-amber-900/20">
+      <div className="flex flex-1 items-start gap-2 sm:items-center">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 sm:mt-0 dark:text-amber-400" />
+        <span className="text-xs text-amber-900 sm:text-sm dark:text-amber-100">
+          <span className="block sm:inline">
+            To bring changes made in the Dashboard locally, export the required
+            resources via{' '}
+            <Link
+              href="/export"
+              className="font-semibold underline hover:no-underline">
+              export section
+            </Link>
+          </span>
           {lastExportTime && (
-            <>
+            <span className="mt-1 block text-[10px] sm:mt-0 sm:ml-1 sm:inline sm:text-xs">
               {' - last export '}
               <span className="font-mono">
                 {formatExportTime(lastExportTime)}
               </span>
-            </>
+            </span>
           )}
         </span>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 self-end sm:self-auto">
         <Link href="/export">
-          <Button size="sm" variant="outline" className="gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1 px-2 py-1 text-xs sm:gap-2 sm:px-3 sm:py-1.5 sm:text-sm">
             <Download className="h-3 w-3" />
-            Export
+            <span className="hidden sm:inline">Export</span>
           </Button>
         </Link>
         <Button
@@ -75,7 +80,7 @@ export function ExportBanner() {
           variant="ghost"
           onClick={() => setIsVisible(false)}
           className="h-auto p-1">
-          <X className="h-4 w-4" />
+          <X className="h-3 w-3 sm:h-4 sm:w-4" />
         </Button>
       </div>
     </div>

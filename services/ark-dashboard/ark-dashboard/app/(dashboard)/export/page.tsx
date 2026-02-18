@@ -281,7 +281,7 @@ export default function ExportPage() {
               {items.map(item => (
                 <div
                   key={item.id}
-                  className="hover:bg-muted/50 flex cursor-pointer items-center gap-3 rounded-lg border p-3"
+                  className="hover:bg-muted/50 flex cursor-pointer items-center gap-2 rounded-lg border p-2 sm:gap-3 sm:p-3"
                   onClick={() =>
                     handleSelectItem(section.type, item.id, !item.selected)
                   }>
@@ -290,9 +290,12 @@ export default function ExportPage() {
                     onCheckedChange={checked =>
                       handleSelectItem(section.type, item.id, !!checked)
                     }
+                    className="h-3 w-3 sm:h-4 sm:w-4"
                   />
-                  <Icon className="text-muted-foreground h-4 w-4" />
-                  <span className="flex-1 text-sm">{item.name}</span>
+                  <Icon className="text-muted-foreground h-3 w-3 sm:h-4 sm:w-4" />
+                  <span className="flex-1 truncate text-xs sm:text-sm">
+                    {item.name}
+                  </span>
                 </div>
               ))}
             </div>
@@ -313,31 +316,32 @@ export default function ExportPage() {
   const totalCount = getTotalCount();
 
   return (
-    <div className="flex-1 space-y-6">
+    <>
       <PageHeader currentPage="Exports" />
 
-      <div className="mx-auto max-w-7xl space-y-6 p-6">
+      <div className="flex flex-1 flex-col space-y-6">
         <div>
-          <h1 className="text-3xl font-bold">Exports</h1>
-          <p className="text-muted-foreground mt-2">
+          <h1 className="text-2xl font-bold sm:text-3xl">Exports</h1>
+          <p className="text-muted-foreground mt-2 text-sm sm:text-base">
             Export your Ark resources to YAML files for backup or version
             control.
           </p>
         </div>
 
         <Card>
-          <CardHeader className="flex flex-row items-start justify-between">
+          <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-1.5">
               <CardTitle>Select Resources to Export</CardTitle>
               <CardDescription>
                 Choose specific resource to export individually or in groups
               </CardDescription>
             </div>
-            <div className="ml-auto flex gap-2">
+            <div className="flex flex-col gap-2 sm:ml-auto sm:flex-row">
               <Button
                 onClick={handleExportAll}
                 disabled={isExporting || totalCount === 0}
-                variant="outline">
+                variant="outline"
+                className="w-full sm:w-auto">
                 {isExporting ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
@@ -348,7 +352,8 @@ export default function ExportPage() {
               <Button
                 onClick={handleExportSelected}
                 disabled={isExporting || selectedCount === 0}
-                variant="default">
+                variant="default"
+                className="w-full sm:w-auto">
                 {isExporting ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
@@ -378,7 +383,7 @@ export default function ExportPage() {
             <Tabs
               value={activeTab}
               onValueChange={value => setActiveTab(value as ResourceType)}>
-              <TabsList className="grid w-full grid-cols-5 lg:flex lg:w-auto lg:grid-cols-none">
+              <TabsList className="h-auto w-full flex-wrap justify-start gap-1 p-1">
                 {resourceSections.map(section => {
                   const allItems = resources[section.type] || [];
                   // Filter items based on search query
@@ -394,9 +399,21 @@ export default function ExportPage() {
                     <TabsTrigger
                       key={section.type}
                       value={section.type}
-                      className="flex items-center gap-2">
-                      <Icon className="h-4 w-4" />
-                      {section.title} ({filteredItems.length})
+                      className="flex h-auto min-h-[32px] flex-shrink-0 items-center gap-1 px-2 py-1.5 text-xs sm:gap-1.5 sm:px-3 sm:text-sm">
+                      <Icon className="h-3 w-3 sm:h-4 sm:w-4" />
+                      <span className="hidden sm:inline">{section.title}</span>
+                      <span className="sm:hidden">
+                        {section.type === 'evaluations'
+                          ? 'Evals'
+                          : section.type === 'evaluators'
+                            ? 'Eval.'
+                            : section.type === 'workflows'
+                              ? 'Flows'
+                              : section.title.slice(0, 5)}
+                      </span>
+                      <span className="text-[10px] opacity-70 sm:text-xs">
+                        ({filteredItems.length})
+                      </span>
                     </TabsTrigger>
                   );
                 })}
@@ -414,6 +431,6 @@ export default function ExportPage() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </>
   );
 }
