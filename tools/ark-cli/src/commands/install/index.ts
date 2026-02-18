@@ -95,6 +95,79 @@ async function installService(service: ArkService, verbose: boolean = false) {
   await execute('helm', helmArgs, {stdio: 'inherit'}, {verbose});
 }
 
+async function promptStorageBackend(): Promise<string[]> {
+  const {backend} = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'backend',
+      message: 'Storage backend:',
+      choices: [
+        {name: 'etcd (default)', value: 'etcd'},
+        {name: 'postgresql', value: 'postgresql'},
+      ],
+    },
+  ]);
+
+  if (backend === 'etcd') return [];
+
+  const answers = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'host',
+      message: 'PostgreSQL host:',
+      validate: (v: string) => v.trim() !== '' || 'Host is required',
+    },
+    {
+      type: 'input',
+      name: 'port',
+      message: 'PostgreSQL port:',
+      default: '5432',
+    },
+    {
+      type: 'input',
+      name: 'database',
+      message: 'Database name:',
+      default: 'ark',
+    },
+    {
+      type: 'input',
+      name: 'user',
+      message: 'Database user:',
+      validate: (v: string) => v.trim() !== '' || 'User is required',
+    },
+    {
+      type: 'input',
+      name: 'passwordSecretName',
+      message: 'Kubernetes secret name (containing the password):',
+      validate: (v: string) => v.trim() !== '' || 'Secret name is required',
+    },
+    {
+      type: 'input',
+      name: 'passwordSecretKey',
+      message: 'Secret key for password:',
+      default: 'password',
+    },
+    {
+      type: 'list',
+      name: 'sslMode',
+      message: 'SSL mode:',
+      choices: ['disable', 'require', 'verify-ca', 'verify-full'],
+      default: 'disable',
+    },
+  ]);
+
+  return [
+    '--set', `storage.backend=postgresql`,
+    '--set', `storage.postgresql.host=${answers.host}`,
+    '--set', `storage.postgresql.port=${answers.port}`,
+    '--set', `storage.postgresql.database=${answers.database}`,
+    '--set', `storage.postgresql.user=${answers.user}`,
+    '--set', `storage.postgresql.passwordSecretName=${answers.passwordSecretName}`,
+    '--set', `storage.postgresql.passwordSecretKey=${answers.passwordSecretKey}`,
+    '--set', `storage.postgresql.sslMode=${answers.sslMode}`,
+  ];
+}
+
 export async function installArk(
   config: ArkConfig,
   serviceName?: string,
@@ -330,6 +403,11 @@ export async function installArk(
       }
     }
 
+    let storageArgs: string[] = [];
+    if (selectedComponents.includes('ark-controller')) {
+      storageArgs = await promptStorageBackend();
+    }
+
     // Install selected services
     for (const serviceName of selectedComponents) {
       const service = Object.values(arkServices).find(
@@ -337,6 +415,10 @@ export async function installArk(
       );
       if (!service || !service.chartPath) {
         continue;
+      }
+
+      if (service.helmReleaseName === 'ark-controller' && storageArgs.length > 0) {
+        service.installArgs = [...(service.installArgs || []), ...storageArgs];
       }
 
       output.info(`installing ${service.name}...`);
