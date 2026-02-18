@@ -32,7 +32,7 @@ spec:
         for:
           condition:
             name: Available
-            status: "True"
+            value: "True"
     - apply:
         file: manifests/*.yaml
     - wait:

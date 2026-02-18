@@ -32,7 +32,7 @@ spec:
         for:
           condition:
             name: Available
-            status: "True"
+            value: "True"
     - apply:
         file: manifests/a00-evaluator-llm-rbac.yaml
     - apply:
