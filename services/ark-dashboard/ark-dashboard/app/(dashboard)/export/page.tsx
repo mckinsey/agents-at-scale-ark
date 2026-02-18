@@ -351,9 +351,11 @@ export default function ExportPage() {
           </CardHeader>
           <CardContent>
             <Separator className="mb-4" />
-            <div className="text-muted-foreground mb-4 text-sm">
-              Last export: {formatLastExportTime()}
-            </div>
+            {lastExportTime && (
+              <div className="text-muted-foreground mb-4 text-sm">
+                Last export: {formatLastExportTime()}
+              </div>
+            )}
             <div className="relative mb-4">
               <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
               <Input

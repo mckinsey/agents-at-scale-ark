@@ -53,8 +53,14 @@ export function ExportBanner() {
             className="font-semibold underline hover:no-underline">
             export section
           </Link>
-          {' - last export '}
-          <span className="font-mono">{formatExportTime(lastExportTime)}</span>
+          {lastExportTime && (
+            <>
+              {' - last export '}
+              <span className="font-mono">
+                {formatExportTime(lastExportTime)}
+              </span>
+            </>
+          )}
         </span>
       </div>
       <div className="flex items-center gap-2">
