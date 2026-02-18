@@ -25,16 +25,8 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
-    - wait:
-        apiVersion: apps/v1
-        kind: Deployment
-        name: ark-evaluator
-        namespace: default
-        timeout: 3m
-        for:
-          condition:
-            name: Available
-            value: "True"
+    - script:
+        content: bash ../helpers/wait-for-evaluator.sh
     - apply:
         file: manifests/a00-evaluator-llm-rbac.yaml
     - apply:
