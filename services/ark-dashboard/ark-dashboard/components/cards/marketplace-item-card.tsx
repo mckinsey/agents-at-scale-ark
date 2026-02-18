@@ -55,7 +55,6 @@ export function MarketplaceItemCard({
 
   const handleInstall = async () => {
     setIsInstalling(true);
-    toast.info(`Preparing installation for ${item.name}...`);
     try {
       const result = await installMutation.mutateAsync(item.id);
 
