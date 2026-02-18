@@ -124,13 +124,16 @@ def cleanup_port_forwarding():
 
 
 @pytest.fixture(scope="session")
-def ark_setup(request, tmp_path_factory, worker_id):
+def ark_setup(request, tmp_path_factory):
     """Session-scoped fixture that runs once per xdist session (not per worker)"""
+    skip_install = request.config.getoption("--skip-install")
+    port_forward = None
+    
+    # Check if running with xdist
+    worker_id = getattr(request.config, "workerinput", {}).get("workerid", "master")
+    
     if worker_id == "master":
         # Not running with xdist, run setup normally
-        skip_install = request.config.getoption("--skip-install")
-        port_forward = None
-        
         try:
             if not skip_install and not is_ark_running():
                 install_ark()
@@ -162,9 +165,6 @@ def ark_setup(request, tmp_path_factory, worker_id):
         
         if worker_id == "gw0":
             # First worker does the setup
-            skip_install = request.config.getoption("--skip-install")
-            port_forward = None
-            
             try:
                 if not skip_install and not is_ark_running():
                     install_ark()
