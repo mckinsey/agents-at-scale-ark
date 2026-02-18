@@ -2,10 +2,12 @@
 
 import {
   CheckCircle,
+  Copy,
   Download,
   ExternalLink,
   Loader2,
   Star,
+  Terminal,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -21,6 +23,13 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import type { MarketplaceItem } from '@/lib/api/generated/marketplace-types';
 import { useInstallMarketplaceItem } from '@/lib/services/marketplace-hooks';
 import { cn } from '@/lib/utils';
@@ -36,14 +45,39 @@ export function MarketplaceItemCard({
 }: MarketplaceItemCardProps) {
   const [isInstalling, setIsInstalling] = useState(false);
   const [localStatus, setLocalStatus] = useState(item.status);
+  const [showCommandDialog, setShowCommandDialog] = useState(false);
+  const [installCommand, setInstallCommand] = useState<{
+    helmCommand?: string;
+    arkCommand?: string;
+    name?: string;
+  }>({});
   const installMutation = useInstallMarketplaceItem();
 
   const handleInstall = async () => {
     setIsInstalling(true);
     try {
-      await installMutation.mutateAsync(item.id);
-      setLocalStatus('installed');
-      toast.success(`${item.name} installed successfully`);
+      const result = await installMutation.mutateAsync(item.id);
+
+      // Check if we got a command back instead of a successful installation
+      if (result && typeof result === 'object' && 'status' in result) {
+        const data = result as Record<string, unknown>;
+        if (data.status === 'command') {
+          // Show command dialog
+          setInstallCommand({
+            helmCommand: data.helmCommand as string | undefined,
+            arkCommand: data.arkCommand as string | undefined,
+            name: (data.name as string | undefined) || item.name,
+          });
+          setShowCommandDialog(true);
+        } else if (data.status === 'installed') {
+          setLocalStatus('installed');
+          toast.success(`${item.name} installed successfully`);
+        }
+      } else {
+        // Assume success if no specific status
+        setLocalStatus('installed');
+        toast.success(`${item.name} installed successfully`);
+      }
     } catch (error) {
       console.error('Installation error:', error);
 
@@ -52,10 +86,23 @@ export function MarketplaceItemCard({
       let errorDetails = '';
 
       if (error && typeof error === 'object' && 'data' in error) {
-        // APIError includes data property with the response
+        // Check if it's actually a command response
         const data = error.data;
         if (typeof data === 'object' && data !== null) {
           const errorData = data as Record<string, unknown>;
+
+          // Check if this is actually a command response, not an error
+          if (errorData.status === 'command') {
+            setInstallCommand({
+              helmCommand: errorData.helmCommand as string,
+              arkCommand: errorData.arkCommand as string,
+              name: (errorData.name as string) || item.name,
+            });
+            setShowCommandDialog(true);
+            setIsInstalling(false);
+            return;
+          }
+
           errorMessage =
             (errorData.error as string) ||
             ('message' in error && typeof error.message === 'string'
@@ -72,7 +119,7 @@ export function MarketplaceItemCard({
 
       toast.error(`Failed to install ${item.name}`, {
         description: errorDetails || errorMessage,
-        duration: 8000, // Show for longer since it might contain instructions
+        duration: 8000,
       });
     } finally {
       setIsInstalling(false);
@@ -257,6 +304,100 @@ export function MarketplaceItemCard({
           </div>
         </div>
       </CardFooter>
+
+      <InstallCommandDialog
+        open={showCommandDialog}
+        onOpenChange={setShowCommandDialog}
+        installCommand={installCommand}
+        itemName={item.name}
+      />
     </Card>
+  );
+}
+
+function InstallCommandDialog({
+  open,
+  onOpenChange,
+  installCommand,
+  itemName,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  installCommand: {
+    helmCommand?: string;
+    arkCommand?: string;
+    name?: string;
+  };
+  itemName: string;
+}) {
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('Command copied to clipboard');
+    } catch {
+      toast.error('Failed to copy to clipboard');
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Terminal className="h-5 w-5" />
+            Install {installCommand.name || itemName}
+          </DialogTitle>
+          <DialogDescription>
+            Run one of these commands in your terminal to install the
+            marketplace item:
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {installCommand.arkCommand && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Using Ark CLI (Recommended)
+              </label>
+              <div className="flex items-center gap-2">
+                <code className="bg-muted flex-1 rounded-md px-3 py-2 text-sm">
+                  {installCommand.arkCommand}
+                </code>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => copyToClipboard(installCommand.arkCommand!)}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {installCommand.helmCommand && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Using Helm directly</label>
+              <div className="flex items-center gap-2">
+                <code className="bg-muted flex-1 rounded-md px-3 py-2 text-sm break-all">
+                  {installCommand.helmCommand}
+                </code>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => copyToClipboard(installCommand.helmCommand!)}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-lg bg-blue-50 p-3 dark:bg-blue-950/20">
+            <p className="text-sm text-blue-800 dark:text-blue-200">
+              💡 Make sure you have kubectl configured to the correct cluster
+              before running these commands.
+            </p>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

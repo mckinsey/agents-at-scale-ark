@@ -29,8 +29,10 @@ const marketplaceService = {
     return await apiClient.get<MarketplaceItemDetail>(`/api/marketplace/${id}`);
   },
 
-  async installMarketplaceItem(id: string): Promise<void> {
-    await apiClient.post(`/api/marketplace/${id}/install`);
+  async installMarketplaceItem(id: string): Promise<unknown> {
+    return await apiClient.post(`/api/marketplace/${id}/install`, {
+      mode: 'command',
+    });
   },
 
   async uninstallMarketplaceItem(id: string): Promise<void> {

@@ -25,26 +25,6 @@ async function checkHelmAvailable(): Promise<{
   }
 }
 
-async function checkKubernetesConnection(): Promise<{
-  connected: boolean;
-  error?: string;
-}> {
-  try {
-    const { stdout } = await execAsync(
-      'kubectl cluster-info --request-timeout=5s',
-    );
-    console.log('Kubernetes cluster info:', stdout.trim());
-    return { connected: true };
-  } catch (error) {
-    console.error('Kubernetes connection failed:', error);
-    return {
-      connected: false,
-      error:
-        'Cannot connect to Kubernetes cluster. Please ensure kubectl is configured.',
-    };
-  }
-}
-
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -52,32 +32,8 @@ export async function POST(
   try {
     const { id } = await params;
 
-    // Check prerequisites
-    const helmCheck = await checkHelmAvailable();
-    if (!helmCheck.available) {
-      return NextResponse.json(
-        {
-          error: 'Helm not available',
-          details: helmCheck.error,
-          instructions:
-            'The dashboard server needs access to helm CLI to install marketplace items.',
-        },
-        { status: 503 },
-      );
-    }
-
-    const k8sCheck = await checkKubernetesConnection();
-    if (!k8sCheck.connected) {
-      return NextResponse.json(
-        {
-          error: 'Kubernetes cluster not accessible',
-          details: k8sCheck.error,
-          instructions:
-            'The dashboard server needs access to a Kubernetes cluster.',
-        },
-        { status: 503 },
-      );
-    }
+    // Check if we should try direct installation or just return the command
+    const { mode } = await request.json().catch(() => ({ mode: 'command' }));
 
     // Fetch the raw marketplace item with Ark configuration
     const item = await getRawMarketplaceItemById(id);
@@ -119,10 +75,43 @@ export async function POST(
     }
 
     const helmCommand = `helm ${helmArgs.join(' ')}`;
-    console.log('Executing:', helmCommand);
 
-    // Execute helm command
+    // Return the command for user to run
+    if (mode === 'command') {
+      // Generate both helm and ark CLI commands
+      const arkCommand = `ark install marketplace/${item.type === 'service' ? 'services' : 'agents'}/${id}`;
+
+      return NextResponse.json({
+        status: 'command',
+        name: item.name || id,
+        helmCommand,
+        arkCommand,
+        namespace: ark.namespace,
+        message: 'Run one of these commands in your terminal to install',
+      });
+    }
+
+    // If mode is 'direct', try to execute (this will likely fail in most deployments)
+    console.log('Attempting direct execution:', helmCommand);
+
     try {
+      // First check if helm is available
+      const helmCheck = await checkHelmAvailable();
+      if (!helmCheck.available) {
+        // Return command instead of error
+        return NextResponse.json({
+          status: 'command',
+          name: item.name || id,
+          helmCommand,
+          arkCommand: `ark install marketplace/${
+            item.type === 'service' ? 'services' : 'agents'
+          }/${id}`,
+          namespace: ark.namespace,
+          message:
+            'Direct installation not available. Run this command in your terminal:',
+        });
+      }
+
       const { stdout, stderr } = await execAsync(helmCommand);
 
       if (stderr && !stderr.includes('WARNING')) {
@@ -137,30 +126,20 @@ export async function POST(
         output: stdout,
       });
     } catch (error) {
-      console.error('Helm installation failed:', error);
-      console.error('Command was:', helmCommand);
+      console.error('Direct installation failed, returning command:', error);
 
-      let errorDetails = 'Unknown error';
-      if (error instanceof Error) {
-        errorDetails = error.message;
-        // Check for common helm errors
-        if (error.message.includes('command not found')) {
-          errorDetails = 'Helm is not installed or not in PATH';
-        } else if (error.message.includes('cannot connect')) {
-          errorDetails = 'Cannot connect to Kubernetes cluster';
-        } else if (error.message.includes('unauthorized')) {
-          errorDetails = 'Not authorized to access Kubernetes cluster';
-        }
-      }
-
-      return NextResponse.json(
-        {
-          error: 'Installation failed',
-          details: errorDetails,
-          command: helmCommand,
-        },
-        { status: 500 },
-      );
+      // Return command instead of error
+      return NextResponse.json({
+        status: 'command',
+        name: item.name || id,
+        helmCommand,
+        arkCommand: `ark install marketplace/${
+          item.type === 'service' ? 'services' : 'agents'
+        }/${id}`,
+        namespace: ark.namespace,
+        message:
+          'Direct installation not available. Run this command in your terminal:',
+      });
     }
   } catch (error) {
     console.error('Error installing marketplace item:', error);
