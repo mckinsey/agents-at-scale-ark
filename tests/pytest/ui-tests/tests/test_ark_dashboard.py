@@ -35,13 +35,12 @@ class TestArkDashboard:
         dashboard = DashboardPage(page)
         dashboard.navigate_to_dashboard()
         dashboard.wait_for_load_state("domcontentloaded")
-        dashboard.wait_for_timeout(1000)
         
         tab_element = getattr(dashboard, tab_selector)
         
         if dashboard.is_visible(tab_element):
             page.locator(tab_element).first.click()
-            dashboard.wait_for_timeout(2000)
+            dashboard.wait_for_load_state("domcontentloaded")
             
             new_url = dashboard.get_url()          
             assert tab_name.lower() in new_url.lower(), f"URL should contain '{tab_name.lower()}' but got: {new_url}"

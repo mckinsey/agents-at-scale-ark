@@ -3,6 +3,8 @@ import subprocess
 import time
 import os
 import logging
+import yaml
+import tempfile
 from pathlib import Path
 from playwright.sync_api import Page, expect
 
@@ -19,10 +21,38 @@ class TestWorkflowIntegration:
         dashboard = DashboardPage(page)
         workflows_page = WorkflowsPage(page)
         workflow_name = ""
+        template_name = f"engineering-build-test-{int(time.time())}"
         
         test_dir = Path(__file__).parent.parent
-        workflow_template_path = test_dir / "fixtures" / "engineering-workflow-sample.yaml"
-        run_workflow_path = test_dir / "fixtures" / "run-engineering-workflow.yaml"
+        base_template_path = test_dir / "fixtures" / "engineering-workflow-sample.yaml"
+        
+        with open(base_template_path, 'r') as f:
+            template_yaml = yaml.safe_load(f)
+        
+        template_yaml['metadata']['name'] = template_name
+        
+        workflow_yaml = {
+            'apiVersion': 'argoproj.io/v1alpha1',
+            'kind': 'Workflow',
+            'metadata': {
+                'generateName': f'{template_name}-',
+                'namespace': 'default'
+            },
+            'spec': {
+                'workflowTemplateRef': {
+                    'name': template_name
+                },
+                'serviceAccountName': 'argo-workflow'
+            }
+        }
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as tf:
+            yaml.dump(template_yaml, tf)
+            workflow_template_path = tf.name
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as wf:
+            yaml.dump(workflow_yaml, wf)
+            run_workflow_path = wf.name
         
         try:
             create_template_result = subprocess.run(
@@ -33,16 +63,16 @@ class TestWorkflowIntegration:
             )
             if create_template_result.returncode != 0:
                 pytest.fail(f"Failed to create WorkflowTemplate: {create_template_result.stderr}")
-            logger.info("WorkflowTemplate created successfully")
+            logger.info(f"WorkflowTemplate {template_name} created successfully")
             
             wait_template_result = subprocess.run(
-                ["kubectl", "get", "workflowtemplate", "engineering-build-test", "-n", "default"],
+                ["kubectl", "get", "workflowtemplate", template_name, "-n", "default"],
                 capture_output=True,
                 text=True,
                 timeout=10
             )
             if wait_template_result.returncode == 0:
-                logger.info("WorkflowTemplate is available")
+                logger.info(f"WorkflowTemplate {template_name} is available")
             
             dashboard.navigate_to_dashboard()
             expect(page.locator(dashboard.MAIN_CONTENT)).to_be_visible(timeout=15000)
@@ -191,15 +221,23 @@ class TestWorkflowIntegration:
                 
                 logger.info("Workflow cleanup completed")
             
+            logger.info(f"Cleanup: Deleting WorkflowTemplate {template_name}")
             delete_template_result = subprocess.run(
-                ["kubectl", "delete", "-f", workflow_template_path],
+                ["kubectl", "delete", "workflowtemplate", template_name, "-n", "default"],
                 capture_output=True,
                 text=True,
                 timeout=30
             )
             
             if delete_template_result.returncode == 0:
-                logger.info("WorkflowTemplate deleted successfully")
+                logger.info(f"WorkflowTemplate {template_name} deleted successfully")
             else:
                 logger.warning(f"WorkflowTemplate deletion warning: {delete_template_result.stderr}")
+            
+            try:
+                os.unlink(workflow_template_path)
+                os.unlink(run_workflow_path)
+                logger.info("Temporary YAML files cleaned up")
+            except Exception as cleanup_error:
+                logger.warning(f"Failed to cleanup temp files: {cleanup_error}")
         

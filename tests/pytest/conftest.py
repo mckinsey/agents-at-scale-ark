@@ -11,6 +11,15 @@ from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 logger = logging.getLogger(__name__)
 
 
+def pytest_configure(config):
+    config.addinivalue_line("markers", "dashboard: marks tests as dashboard tests")
+    config.addinivalue_line("markers", "agents: marks tests as agents tests")
+    config.addinivalue_line("markers", "models: marks tests as models tests")
+    config.addinivalue_line("markers", "secrets: marks tests as secrets tests")
+    config.addinivalue_line("markers", "teams: marks tests as teams tests")
+    config.addinivalue_line("markers", "workflows: marks tests as workflows tests")
+
+
 def pytest_addoption(parser):
     try:
         parser.addoption("--visible", action="store_true", default=False)
