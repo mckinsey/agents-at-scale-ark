@@ -582,7 +582,7 @@ func (r *EvaluationReconciler) processQueryEvaluation(ctx context.Context, evalu
 	log := logf.FromContext(ctx)
 
 	// Validate query evaluation requirements
-	if evaluation.Spec.Config.QueryBasedEvaluationConfig == nil || evaluation.Spec.Config.QueryRef == nil {
+	if evaluation.Spec.Config.QueryRef == nil {
 		if err := r.updateStatus(ctx, evaluation, statusError, "Query evaluation requires queryRef in config"); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -833,9 +833,9 @@ func (r *EvaluationReconciler) ensureChildEvaluations(ctx context.Context, paren
 			Spec: arkv1alpha1.EvaluationSpec{
 				Type: "direct",
 				Config: arkv1alpha1.EvaluationConfig{
-					DirectEvaluationConfig: &arkv1alpha1.DirectEvaluationConfig{
-						Input:  "placeholder", // Would be populated from referenced evaluation
-						Output: "placeholder", // Would be populated from referenced evaluation
+					DirectEvaluationConfig: arkv1alpha1.DirectEvaluationConfig{
+						Input:  "placeholder",
+						Output: "placeholder",
 					},
 				},
 				Evaluator: parentEvaluation.Spec.Evaluator, // Use parent's evaluator
