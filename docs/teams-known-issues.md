@@ -2,7 +2,7 @@
 
 ## Graph Strategy
 
-### 1. Single outgoing edge per node
+### 1. Single outgoing edge per node ([#1150](https://github.com/mckinsey/agents-at-scale-ark/issues/1150))
 The `graph` strategy allows only one outgoing edge for each agent, since agents can't choose the next conversant and there's no designated next conversant selector. This means the most complex achievable path through the graph is a simple sequence of agents, possibly looping at the tail. This heavily limits the use case for this strategy, and makes the graph editing UX unintuitive.
 
 ### 2. Naming confusion between "graph" and "selector" with graph constraints
