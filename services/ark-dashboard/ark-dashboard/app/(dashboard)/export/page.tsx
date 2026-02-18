@@ -343,7 +343,7 @@ export default function ExportPage() {
                 ) : (
                   <Download className="mr-2 h-4 w-4" />
                 )}
-                Export All
+                Export All ({totalCount})
               </Button>
               <Button
                 onClick={handleExportSelected}
