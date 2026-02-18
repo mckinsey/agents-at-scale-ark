@@ -33,6 +33,8 @@ The selector agent cannot terminate the conversation and is forced to always sel
 ### 9. Similarity between the two strategies
 The sequential strategy's behavior can be achieved by using the round-robin strategy with the max-turns limit set to the number of team members. This makes the sequential strategy redundant.
 
+### 10. Unreachable conversants for Round-Robin
+If the number of max-turns is less than the number of team members, some of the team members never take part in the conversation. There is no visual feedback for this in the UI
 
 # Proposed Solutions
 
@@ -43,3 +45,4 @@ The sequential strategy's behavior can be achieved by using the round-robin stra
 - (5) If no next-conversant is available due to how the graph topology is structured, we should terminate the conversation and clearly state the reason for the termination.
 - (6, 7) The frontend should show warnings for possibly incorrect team topologies.
 - (9) Remove the Sequential strategy, and set the default value for max-turns to the number of team members for the Round-Robin strategy in the frontend.
+- (10) Add a validation for the max-turns field, so that it can never be set to less than the number of team members.
