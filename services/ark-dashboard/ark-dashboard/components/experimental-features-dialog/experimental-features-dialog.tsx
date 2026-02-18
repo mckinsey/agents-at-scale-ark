@@ -3,6 +3,7 @@
 import { useAtom } from 'jotai';
 import React, { useCallback, useEffect } from 'react';
 
+import { storedIsExperimentalDarkModeEnabledAtom } from '@/atoms/experimental-features';
 import { experimentalFeaturesDialogOpenAtom } from '@/atoms/internal-states';
 import {
   Dialog,
@@ -44,10 +45,18 @@ function BooleanFeatureToggle({ feature }: BooleanFeatureToggleProps) {
     [setAtom],
   );
 
+  const isDarkModeFeature =
+    feature.atom === storedIsExperimentalDarkModeEnabledAtom;
+  const label = isDarkModeFeature
+    ? atomValue
+      ? 'Light mode'
+      : 'Dark mode'
+    : feature.feature;
+
   return (
     <div className="flex flex-row items-center justify-between">
       <div className="space-y-0.5">
-        <Label>{feature.feature}</Label>
+        <Label>{label}</Label>
         {feature.description && (
           <div className="text-muted-foreground text-sm">
             {feature.description}
