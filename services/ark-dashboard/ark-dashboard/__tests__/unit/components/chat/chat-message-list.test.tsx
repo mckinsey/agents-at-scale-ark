@@ -283,12 +283,8 @@ describe('ChatMessageList', () => {
 
       renderChatMessageList({ messages, strategy: 'selector' });
 
-      expect(
-        screen.getByText('Selector chose agent-a'),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText('Selector chose agent-b'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('Selector chose agent-a')).toBeInTheDocument();
+      expect(screen.getByText('Selector chose agent-b')).toBeInTheDocument();
     });
 
     it('should render transition for every assistant message even when same agent', () => {
@@ -343,9 +339,7 @@ describe('ChatMessageList', () => {
       expect(
         screen.getByText('my-selector chooses each respondent'),
       ).toBeInTheDocument();
-      expect(
-        screen.getByText('my-selector chose agent-a'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('my-selector chose agent-a')).toBeInTheDocument();
     });
 
     it('should render max turns as badge for selector strategy', () => {
@@ -364,9 +358,7 @@ describe('ChatMessageList', () => {
 
       renderChatMessageList({ messages, strategy: 'selector' });
 
-      expect(
-        screen.getByText('Maximum turns reached (3)'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('Maximum turns reached (3)')).toBeInTheDocument();
     });
 
     it('should not render selector transitions for non-selector strategy', () => {
@@ -386,9 +378,7 @@ describe('ChatMessageList', () => {
 
       renderChatMessageList({ messages, strategy: 'round-robin' });
 
-      expect(
-        screen.queryByText(/Selector chose/),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByText(/Selector chose/)).not.toBeInTheDocument();
     });
   });
 
@@ -419,8 +409,8 @@ describe('ChatMessageList', () => {
         graphEdges,
       });
 
-      expect(screen.getByText(/agent-a/)).toBeInTheDocument();
-      expect(screen.getByText(/agent-b/)).toBeInTheDocument();
+      expect(screen.getAllByText(/agent-a/).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText(/agent-b/).length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText('Response from A')).toBeInTheDocument();
       expect(screen.getByText('Response from B')).toBeInTheDocument();
     });

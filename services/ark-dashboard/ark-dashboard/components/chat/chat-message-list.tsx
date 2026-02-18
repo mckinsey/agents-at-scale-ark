@@ -5,8 +5,8 @@ import type { RefObject } from 'react';
 
 import { ChatMessage } from '@/components/chat/chat-message';
 import { GraphEnd } from '@/components/chat/graph-end';
-import { MaxTurnsEvent } from '@/components/chat/max-turns-event';
 import { GraphTransition } from '@/components/chat/graph-transition';
+import { MaxTurnsEvent } from '@/components/chat/max-turns-event';
 import { SelectorTransition } from '@/components/chat/selector-transition';
 import { StrategyIndicator } from '@/components/chat/strategy-indicator';
 import { TerminationEvent } from '@/components/chat/termination-event';
@@ -38,7 +38,8 @@ export function ChatMessageList({
   messagesEndRef,
 }: Readonly<ChatMessageListProps>) {
   const transitionMap = useMemo(() => {
-    if (!graphEdges || graphEdges.length === 0) return new Map<string, Set<string>>();
+    if (!graphEdges || graphEdges.length === 0)
+      return new Map<string, Set<string>>();
     const map = new Map<string, Set<string>>();
     for (const edge of graphEdges) {
       if (!map.has(edge.from)) {
@@ -49,7 +50,8 @@ export function ChatMessageList({
     return map;
   }, [graphEdges]);
 
-  const isGraphStrategy = strategy === 'graph' && graphEdges && graphEdges.length > 0;
+  const isGraphStrategy =
+    strategy === 'graph' && graphEdges && graphEdges.length > 0;
   const isSelectorStrategy = strategy === 'selector';
 
   const processedMessages = useMemo(() => {
@@ -59,12 +61,14 @@ export function ChatMessageList({
       msg: ChatCompletionMessageParam;
       content: string;
       senderName: string | undefined;
-      toolCallsWithResults: Array<{
-        id: string;
-        type: 'function';
-        function: { name: string; arguments: string };
-        result?: string;
-      }> | undefined;
+      toolCallsWithResults:
+        | Array<{
+            id: string;
+            type: 'function';
+            function: { name: string; arguments: string };
+            result?: string;
+          }>
+        | undefined;
       terminateToolCall: unknown;
       terminateMessage: string | undefined;
       isMaxTurnsMessage: boolean;
@@ -165,12 +169,14 @@ export function ChatMessageList({
         msg,
         content,
         senderName,
-        toolCallsWithResults: toolCallsWithResults as Array<{
-          id: string;
-          type: 'function';
-          function: { name: string; arguments: string };
-          result?: string;
-        }> | undefined,
+        toolCallsWithResults: toolCallsWithResults as
+          | Array<{
+              id: string;
+              type: 'function';
+              function: { name: string; arguments: string };
+              result?: string;
+            }>
+          | undefined,
         terminateToolCall,
         terminateMessage,
         isMaxTurnsMessage,
@@ -195,16 +201,29 @@ export function ChatMessageList({
   }, [processedMessages, isGraphStrategy]);
 
   const hasTerminationOrMaxTurns = useMemo(() => {
-    return processedMessages.some(pm => pm.hasTermination || pm.isMaxTurnsMessage);
+    return processedMessages.some(
+      pm => pm.hasTermination || pm.isMaxTurnsMessage,
+    );
   }, [processedMessages]);
 
   const showGraphEnd = useMemo(() => {
-    if (!isGraphStrategy || isProcessing || !lastAssistantName || hasTerminationOrMaxTurns) {
+    if (
+      !isGraphStrategy ||
+      isProcessing ||
+      !lastAssistantName ||
+      hasTerminationOrMaxTurns
+    ) {
       return false;
     }
     const outgoing = transitionMap.get(lastAssistantName);
     return !outgoing || outgoing.size === 0;
-  }, [isGraphStrategy, isProcessing, lastAssistantName, transitionMap, hasTerminationOrMaxTurns]);
+  }, [
+    isGraphStrategy,
+    isProcessing,
+    lastAssistantName,
+    transitionMap,
+    hasTerminationOrMaxTurns,
+  ]);
 
   return (
     <>
@@ -222,7 +241,10 @@ export function ChatMessageList({
       )}
 
       {strategy && messages.length > 0 && (
-        <StrategyIndicator strategy={strategy} selectorAgentName={selectorAgentName} />
+        <StrategyIndicator
+          strategy={strategy}
+          selectorAgentName={selectorAgentName}
+        />
       )}
 
       {processedMessages.map((pm, pmIndex) => {
@@ -234,10 +256,7 @@ export function ChatMessageList({
             if (prev.msg.role === 'assistant' && prev.senderName) {
               if (transitionMap.get(prev.senderName)?.has(pm.senderName)) {
                 transitionElement = (
-                  <GraphTransition
-                    from={prev.senderName}
-                    to={pm.senderName}
-                  />
+                  <GraphTransition from={prev.senderName} to={pm.senderName} />
                 );
               }
               break;
@@ -245,9 +264,16 @@ export function ChatMessageList({
           }
         }
 
-        if (isSelectorStrategy && pm.msg.role === 'assistant' && pm.senderName) {
+        if (
+          isSelectorStrategy &&
+          pm.msg.role === 'assistant' &&
+          pm.senderName
+        ) {
           transitionElement = (
-            <SelectorTransition agentName={pm.senderName} selectorAgentName={selectorAgentName} />
+            <SelectorTransition
+              agentName={pm.senderName}
+              selectorAgentName={selectorAgentName}
+            />
           );
         }
 
@@ -284,7 +310,9 @@ export function ChatMessageList({
             )}
             {pm.hasTermination && (
               <div className="mt-2 flex flex-col gap-2">
-                <TerminationEvent agentName={pm.senderName || 'Unknown Agent'} />
+                <TerminationEvent
+                  agentName={pm.senderName || 'Unknown Agent'}
+                />
                 {pm.terminateMessage && (
                   <ChatMessage
                     role="assistant"
@@ -295,15 +323,14 @@ export function ChatMessageList({
                 )}
               </div>
             )}
-            {pm.isMaxTurnsMessage && (
-              isGraphStrategy || isSelectorStrategy ? (
+            {pm.isMaxTurnsMessage &&
+              (isGraphStrategy || isSelectorStrategy ? (
                 <MaxTurnsEvent message={pm.content} />
               ) : (
                 <div className="text-muted-foreground text-sm italic">
                   {pm.content}
                 </div>
-              )
-            )}
+              ))}
           </div>
         );
       })}
