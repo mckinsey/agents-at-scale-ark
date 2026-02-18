@@ -1,0 +1,23 @@
+{{- if and .Values.gatewayRoutes .Values.gatewayRoutes.enabled -}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ark-dashboard
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: ark-dashboard
+spec:
+  parentRefs:
+    - name: {{ .Values.gatewayRoutes.gateway.name }}
+      namespace: {{ .Values.gatewayRoutes.gateway.namespace }}
+  hostnames:
+    {{- toYaml .Values.gatewayRoutes.arkDashboard.hostnames | nindent 4 }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: ark-dashboard
+          port: {{ .Values.gatewayRoutes.arkDashboard.servicePort }}
+{{- end }}
