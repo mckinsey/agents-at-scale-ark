@@ -68,29 +68,31 @@ export function StrategySection({
         )}
       />
 
-      <FormField
-        control={form.control}
-        name="maxTurns"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>
-              Max Turns{' '}
-              {selectedStrategy === 'graph' && (
-                <span className="text-red-500">*</span>
-              )}
-            </FormLabel>
-            <FormControl>
-              <Input
-                type="number"
-                placeholder="e.g., 10"
-                disabled={disabled}
-                {...field}
-              />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
+      {selectedStrategy !== 'sequential' && (
+        <FormField
+          control={form.control}
+          name="maxTurns"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>
+                Max Turns{' '}
+                {selectedStrategy === 'graph' && (
+                  <span className="text-red-500">*</span>
+                )}
+              </FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  placeholder="e.g., 10"
+                  disabled={disabled}
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
     </div>
   );
 }
