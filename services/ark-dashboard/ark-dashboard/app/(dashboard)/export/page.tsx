@@ -389,9 +389,6 @@ export default function ExportPage() {
                           .includes(searchQuery.toLowerCase()),
                       )
                     : allItems;
-                  const selectedItems = filteredItems.filter(
-                    item => item.selected,
-                  );
                   const Icon = section.icon;
                   return (
                     <TabsTrigger
@@ -399,7 +396,7 @@ export default function ExportPage() {
                       value={section.type}
                       className="flex items-center gap-2">
                       <Icon className="h-4 w-4" />
-                      {section.title} ({selectedItems.length})
+                      {section.title} ({filteredItems.length})
                     </TabsTrigger>
                   );
                 })}
