@@ -9,24 +9,29 @@ import (
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/genai"
+	"mckinsey.com/ark/internal/validation"
 )
 
 var _ = Describe("Tool Webhook", func() {
 	var (
 		ctx       context.Context
-		validator *ToolCustomValidator
+		validator *validation.WebhookValidator
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		validator = &ToolCustomValidator{}
 
-		// Setup scheme
 		s := runtime.NewScheme()
 		Expect(arkv1alpha1.AddToScheme(s)).To(Succeed())
+
+		fakeClient := fake.NewClientBuilder().WithScheme(s).Build()
+		validator = &validation.WebhookValidator{
+			V: validation.NewValidator(&validation.WebhookLookup{Client: fakeClient}),
+		}
 	})
 
 	Context("When validating team tool", func() {
