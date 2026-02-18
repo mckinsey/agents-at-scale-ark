@@ -40,7 +40,11 @@ If the number of max-turns is less than the number of team members, some of the 
 
 - (1, 2) Remove the Graph strategy, as its use case is too narrow and a very similar behavior can be achieved with the Sequential or Round-Robin strategies. The exact same behavior (sequence of agents looping at the tail end) can also be achieved with the Selector strategy using the graph constraint.
 - (3, 5) When the selector agent fails to select the next conversant, or if no next-conversant can be selected due to the graph topology, the conversation should terminate in a clear error state instead of silently transitioning to the first team member.
-- (3, 4) The selection of the next conversant should happen through a dedicated `select-next-conversant` tool. This tool should specify the available next conversants in its schema. The selector prompt should simply instruct the selector on what criteria to use to select the next conversant, not how to express its decision. Moreover, if we transition to the Responses API, we can force the selector agent to always select the next conversant by setting the `tool_choice` parameter to `required` and passing the selector the `select-next-conversant` tool as the only available tool.
+- (3, 4) The selection of the next conversant should happen through a dedicated `select-next-conversant` tool. This tool should specify the available next conversants in its schema. The selector prompt should simply instruct the selector on what criteria to use to select the next conversant, not how to express its decision.
+
+> [!NOTE]
+>  If we transition to the Responses API, we can force the selector agent to always select the next conversant by setting the `tool_choice` parameter to `required` and passing the selector the `select-next-conversant` tool as the only available tool.
+
 - (8) We should add an option to give the selector access to the `terminate` tool. If we decide to implement the `select-next-conversant` tool and leverage the Responses API to force a tool call, we can pass both tools as the only available tools.
 - (5) If no next-conversant is available due to how the graph topology is structured, we should terminate the conversation and clearly state the reason for the termination.
 - (6, 7) The frontend should show warnings for possibly incorrect team topologies.
