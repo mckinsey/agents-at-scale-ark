@@ -168,12 +168,51 @@ func (v *ModelValidator) validateAzureConfig(ctx context.Context, model *arkv1al
 	if err := v.validateValueSource(ctx, &model.Spec.Config.Azure.BaseURL, model.GetNamespace(), "spec.config.azure.baseUrl"); err != nil {
 		return err
 	}
-	if err := v.validateValueSource(ctx, &model.Spec.Config.Azure.APIKey, model.GetNamespace(), "spec.config.azure.apiKey"); err != nil {
-		return err
-	}
 	if model.Spec.Config.Azure.APIVersion != nil {
 		if err := v.validateValueSource(ctx, model.Spec.Config.Azure.APIVersion, model.GetNamespace(), "spec.config.azure.apiVersion"); err != nil {
 			return err
+		}
+	}
+
+	if model.Spec.Config.Azure.Auth == nil {
+		if model.Spec.Config.Azure.APIKey == nil {
+			return fmt.Errorf("spec.config.azure.apiKey or spec.config.azure.auth is required")
+		}
+		if err := v.validateValueSource(ctx, model.Spec.Config.Azure.APIKey, model.GetNamespace(), "spec.config.azure.apiKey"); err != nil {
+			return err
+		}
+	} else {
+		auth := model.Spec.Config.Azure.Auth
+		n := 0
+		if auth.APIKey != nil {
+			n++
+		}
+		if auth.ManagedIdentity != nil {
+			n++
+		}
+		if auth.WorkloadIdentity != nil {
+			n++
+		}
+		if n != 1 {
+			return fmt.Errorf("spec.config.azure.auth must have exactly one of apiKey, managedIdentity, or workloadIdentity")
+		}
+		if auth.APIKey != nil {
+			if err := v.validateValueSource(ctx, auth.APIKey, model.GetNamespace(), "spec.config.azure.auth.apiKey"); err != nil {
+				return err
+			}
+		}
+		if auth.ManagedIdentity != nil && auth.ManagedIdentity.ClientID != nil {
+			if err := v.validateValueSource(ctx, auth.ManagedIdentity.ClientID, model.GetNamespace(), "spec.config.azure.auth.managedIdentity.clientId"); err != nil {
+				return err
+			}
+		}
+		if auth.WorkloadIdentity != nil {
+			if err := v.validateValueSource(ctx, &auth.WorkloadIdentity.ClientID, model.GetNamespace(), "spec.config.azure.auth.workloadIdentity.clientId"); err != nil {
+				return err
+			}
+			if err := v.validateValueSource(ctx, &auth.WorkloadIdentity.TenantID, model.GetNamespace(), "spec.config.azure.auth.workloadIdentity.tenantId"); err != nil {
+				return err
+			}
 		}
 	}
 
