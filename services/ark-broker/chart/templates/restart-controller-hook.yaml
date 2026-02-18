@@ -24,7 +24,7 @@ spec:
       serviceAccountName: {{ include "ark-broker.fullname" . }}-restart-hook
       containers:
       - name: restart-controller
-        image: bitnami/kubectl:1.28
+        image: alpine/k8s:1.28.3
         imagePullPolicy: IfNotPresent
         resources:
           requests:

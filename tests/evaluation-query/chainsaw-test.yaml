@@ -49,7 +49,7 @@ spec:
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluator
-        timeout: 1m
+        timeout: 3m
         name: test-query-evaluator
         for:
           jsonPath:

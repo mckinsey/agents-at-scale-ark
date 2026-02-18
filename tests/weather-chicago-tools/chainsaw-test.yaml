@@ -56,7 +56,7 @@ spec:
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluator
-        timeout: 5m
+        timeout: 3m
         name: evaluator-llm
         for:
           jsonPath:
