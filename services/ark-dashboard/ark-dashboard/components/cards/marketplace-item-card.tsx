@@ -345,11 +345,11 @@ function InstallCommandDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Terminal className="h-5 w-5" />
-            Installation Instructions for {installCommand.name || itemName}
+            Install {installCommand.name || itemName}
           </DialogTitle>
           <DialogDescription>
-            To complete the installation, run one of these commands in your
-            local terminal:
+            Run one of these commands in your terminal to install the
+            marketplace item:
           </DialogDescription>
         </DialogHeader>
 
@@ -392,9 +392,8 @@ function InstallCommandDialog({
 
           <div className="rounded-lg bg-blue-50 p-3 dark:bg-blue-950/20">
             <p className="text-sm text-blue-800 dark:text-blue-200">
-              ℹ️ For security reasons, the dashboard cannot directly install
-              packages. Please run one of the commands above in your terminal
-              where kubectl is configured to your cluster.
+              💡 Make sure you have kubectl configured to the correct cluster
+              before running these commands.
             </p>
           </div>
         </div>

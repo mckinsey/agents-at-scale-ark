@@ -31,10 +31,8 @@ export function useInstallMarketplaceItem() {
 
   return useMutation({
     mutationFn: (id: string) => marketplaceService.installMarketplaceItem(id),
-    onSuccess: (_, id) => {
-      toast.success('Installation started', {
-        description: `Installing marketplace item ${id}`,
-      });
+    onSuccess: () => {
+      // Don't show a success toast since we're just showing commands
       queryClient.invalidateQueries({ queryKey: ['marketplace'] });
     },
     onError: error => {
