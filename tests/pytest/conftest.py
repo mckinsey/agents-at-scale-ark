@@ -169,7 +169,7 @@ def playwright():
         yield p
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def browser(playwright, ark_setup, request):
     visible = request.config.getoption("--visible")
     browser_type = request.config.getoption("--browser-type")
@@ -188,7 +188,7 @@ def browser(playwright, ark_setup, request):
     browser.close()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def context(browser, request):
     visible = request.config.getoption("--visible")
     context_args = {
@@ -200,7 +200,7 @@ def context(browser, request):
     context.close()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def page(context):
     page = context.new_page()
     yield page
