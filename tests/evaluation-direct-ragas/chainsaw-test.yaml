@@ -6,6 +6,7 @@ metadata:
     evaluated: "true"
 spec:
   description: Test direct evaluation functionality with input/output pairs
+  concurrent: false
   steps:
   - name: step-1
     try:
