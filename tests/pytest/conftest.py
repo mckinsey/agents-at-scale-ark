@@ -11,15 +11,6 @@ from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 logger = logging.getLogger(__name__)
 
 
-def pytest_configure(config):
-    config.addinivalue_line("markers", "dashboard: marks tests as dashboard tests")
-    config.addinivalue_line("markers", "agents: marks tests as agents tests")
-    config.addinivalue_line("markers", "models: marks tests as models tests")
-    config.addinivalue_line("markers", "secrets: marks tests as secrets tests")
-    config.addinivalue_line("markers", "teams: marks tests as teams tests")
-    config.addinivalue_line("markers", "workflows: marks tests as workflows tests")
-
-
 def pytest_addoption(parser):
     try:
         parser.addoption("--visible", action="store_true", default=False)
@@ -133,34 +124,86 @@ def cleanup_port_forwarding():
 
 
 @pytest.fixture(scope="session")
-def ark_setup(request):
-    skip_install = request.config.getoption("--skip-install")
-    port_forward = None
-    
-    try:
-        if not skip_install and not is_ark_running():
-            install_ark()
-            time.sleep(30)
+def ark_setup(request, tmp_path_factory, worker_id):
+    """Session-scoped fixture that runs once per xdist session (not per worker)"""
+    if worker_id == "master":
+        # Not running with xdist, run setup normally
+        skip_install = request.config.getoption("--skip-install")
+        port_forward = None
         
-        wait_for_pods_ready()
-        cleanup_port_forwarding()
+        try:
+            if not skip_install and not is_ark_running():
+                install_ark()
+                time.sleep(30)
+            
+            wait_for_pods_ready()
+            cleanup_port_forwarding()
+            
+            port_forward = subprocess.Popen(
+                ['kubectl', 'port-forward', '-n', 'default', 'service/ark-dashboard', '3274:3000'],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
+            time.sleep(5)
+            
+            if port_forward.poll() is not None:
+                pytest.exit("Port forwarding failed", returncode=1)
+            
+            wait_for_dashboard()
+            
+            yield
+        finally:
+            if port_forward:
+                port_forward.terminate()
+                port_forward.wait(timeout=5)
+    else:
+        # Running with xdist - use file-based lock to ensure setup runs once
+        root_tmp_dir = tmp_path_factory.getbasetemp().parent
+        ark_setup_lock = root_tmp_dir / "ark_setup.lock"
         
-        port_forward = subprocess.Popen(
-            ['kubectl', 'port-forward', '-n', 'default', 'service/ark-dashboard', '3274:3000'],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
-        time.sleep(5)
-        
-        if port_forward.poll() is not None:
-            pytest.exit("Port forwarding failed", returncode=1)
-        
-        wait_for_dashboard()
-        
-        yield
-    finally:
-        if port_forward:
-            port_forward.terminate()
-            port_forward.wait(timeout=5)
+        if worker_id == "gw0":
+            # First worker does the setup
+            skip_install = request.config.getoption("--skip-install")
+            port_forward = None
+            
+            try:
+                if not skip_install and not is_ark_running():
+                    install_ark()
+                    time.sleep(30)
+                
+                wait_for_pods_ready()
+                cleanup_port_forwarding()
+                
+                port_forward = subprocess.Popen(
+                    ['kubectl', 'port-forward', '-n', 'default', 'service/ark-dashboard', '3274:3000'],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                )
+                time.sleep(5)
+                
+                if port_forward.poll() is not None:
+                    pytest.exit("Port forwarding failed", returncode=1)
+                
+                wait_for_dashboard()
+                
+                # Signal other workers that setup is complete
+                ark_setup_lock.write_text("ready")
+                
+                yield
+            finally:
+                if port_forward:
+                    port_forward.terminate()
+                    port_forward.wait(timeout=5)
+                if ark_setup_lock.exists():
+                    ark_setup_lock.unlink()
+        else:
+            # Other workers wait for setup to complete
+            for _ in range(60):
+                if ark_setup_lock.exists() and ark_setup_lock.read_text() == "ready":
+                    break
+                time.sleep(1)
+            else:
+                pytest.exit("Timed out waiting for ark_setup", returncode=1)
+            
+            yield
 
 
 @pytest.fixture(scope="session")
