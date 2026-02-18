@@ -664,7 +664,7 @@ func (r *QueryReconciler) performTargetExecution(ctx context.Context, query arkv
 		result = &genai.ExecutionResult{Messages: messages}
 	case targetTypeTool:
 		var messages []genai.Message
-		messages, err = r.executeTool(execCtx, query, inputMessages, target.Name, impersonatedClient)
+		messages, err = r.executeTool(execCtx, query, inputMessages, target.Name, impersonatedClient, memory)
 		result = &genai.ExecutionResult{Messages: messages}
 	default:
 		panic(fmt.Errorf("unknown query target type:%s", target.Type))
@@ -715,6 +715,9 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 	if err != nil {
 		return nil, fmt.Errorf("unable to load initial messages: %w", err)
 	}
+
+	// Log the memory messages
+	logf.FromContext(ctx).Info("Memory messages", "messages", memoryMessages)
 
 	// Execute agent with the last message as the current input and previous messages as context
 	currentMessage, contextMessages := genai.PrepareExecutionMessages(inputMessages, memoryMessages)
@@ -821,7 +824,7 @@ func (r *QueryReconciler) executeModel(ctx context.Context, query arkv1alpha1.Qu
 	return responseMessages, nil
 }
 
-func (r *QueryReconciler) executeTool(ctx context.Context, crd arkv1alpha1.Query, inputMessages []genai.Message, toolName string, impersonatedClient client.Client) ([]genai.Message, error) {
+func (r *QueryReconciler) executeTool(ctx context.Context, crd arkv1alpha1.Query, inputMessages []genai.Message, toolName string, impersonatedClient client.Client, memory genai.MemoryInterface) ([]genai.Message, error) {
 	log := logf.FromContext(ctx)
 
 	query, err := genai.MakeQuery(&crd)
@@ -894,6 +897,11 @@ func (r *QueryReconciler) executeTool(ctx context.Context, crd arkv1alpha1.Query
 	// Create response message with tool result
 	assistantMessage := genai.NewAssistantMessage(result.Content)
 	responseMessages := []genai.Message{assistantMessage}
+
+	newMessages := genai.PrepareNewMessagesForMemory(inputMessages, responseMessages)
+	if err := memory.AddMessages(ctx, crd.Name, newMessages); err != nil {
+		return nil, fmt.Errorf("failed to save new messages to memory: %w", err)
+	}
 
 	return responseMessages, nil
 }

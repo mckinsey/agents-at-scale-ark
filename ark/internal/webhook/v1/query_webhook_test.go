@@ -3,54 +3,46 @@
 package v1
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	// TODO (user): Add any additional imports if needed
+	"mckinsey.com/ark/internal/validation"
 )
 
 var _ = Describe("Query Webhook", func() {
 	var (
 		obj       *arkv1alpha1.Query
 		oldObj    *arkv1alpha1.Query
-		validator QueryCustomValidator
+		validator *validation.WebhookValidator
 	)
 
 	BeforeEach(func() {
+		s := runtime.NewScheme()
+		Expect(arkv1alpha1.AddToScheme(s)).To(Succeed())
+
+		fakeClient := fake.NewClientBuilder().WithScheme(s).Build()
+		validator = &validation.WebhookValidator{
+			V: validation.NewValidator(&validation.WebhookLookup{Client: fakeClient}),
+		}
+
 		obj = &arkv1alpha1.Query{}
 		oldObj = &arkv1alpha1.Query{}
-		validator = QueryCustomValidator{}
-		Expect(validator).NotTo(BeNil(), "Expected validator to be initialized")
-		Expect(oldObj).NotTo(BeNil(), "Expected oldObj to be initialized")
-		Expect(obj).NotTo(BeNil(), "Expected obj to be initialized")
-		// TODO (user): Add any setup logic common to all tests
-	})
-
-	AfterEach(func() {
-		// TODO (user): Add any teardown logic common to all tests
+		Expect(validator).NotTo(BeNil())
+		Expect(oldObj).NotTo(BeNil())
+		Expect(obj).NotTo(BeNil())
 	})
 
 	Context("When creating or updating Query under Validating Webhook", func() {
-		// TODO (user): Add logic for validating webhooks
-		// Example:
-		// It("Should deny creation if a required field is missing", func() {
-		//     By("simulating an invalid creation scenario")
-		//     obj.SomeRequiredField = ""
-		//     Expect(validator.ValidateCreate(ctx, obj)).Error().To(HaveOccurred())
-		// })
-		//
-		// It("Should admit creation if all required fields are present", func() {
-		//     By("simulating an invalid creation scenario")
-		//     obj.SomeRequiredField = "valid_value"
-		//     Expect(validator.ValidateCreate(ctx, obj)).To(BeNil())
-		// })
-		//
-		// It("Should validate updates correctly", func() {
-		//     By("simulating a valid update scenario")
-		//     oldObj.SomeRequiredField = "updated_value"
-		//     obj.SomeRequiredField = "updated_value"
-		//     Expect(validator.ValidateUpdate(ctx, oldObj, obj)).To(BeNil())
-		// })
+		It("Should require target or selector", func() {
+			ctx := context.Background()
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("target or selector must be specified"))
+		})
 	})
 })

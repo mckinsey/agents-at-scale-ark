@@ -1,0 +1,195 @@
+name: SonarQube Scan
+
+on:
+  pull_request:
+    branches: ["main"]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to scan (defaults to current branch)'
+        required: false
+        type: string
+        default: ''
+  workflow_call:
+    inputs:
+      branch:
+        description: 'Branch to scan (defaults to current branch)'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  sonar_scan:
+    runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: "${{ secrets.SONAR_HOST_URL }}"
+      PROJECT_KEY: ${{ secrets.SONARQUBE_PROJECT_KEY }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch || github.ref }}
+          fetch-depth: 0
+
+      - name: Download coverage artifacts
+        id: download-coverage
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          path: coverage-artifacts
+          merge-multiple: true
+        continue-on-error: true
+
+      - name: Check for coverage files
+        id: check-coverage
+        run: |
+          if [ -d "coverage-artifacts" ] && find coverage-artifacts -name "lcov.info" | grep -q .; then
+            echo "found=true" >> $GITHUB_OUTPUT
+            echo "Coverage artifacts found"
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+            echo "No coverage artifacts found - will run tests"
+          fi
+
+      - name: Organize existing coverage files
+        if: steps.check-coverage.outputs.found == 'true'
+        run: |
+          echo "=== Organizing existing coverage files ==="
+          mkdir -p ark/unit-tests
+          mkdir -p services/ark-api/ark-api/coverage
+          mkdir -p services/ark-dashboard/ark-dashboard/coverage
+
+          find coverage-artifacts -path "*/ark/*" -name "lcov.info" -exec cp {} ark/unit-tests/ \; 2>/dev/null || true
+          find coverage-artifacts -path "*/ark/*" -name "cover.out" -exec cp {} ark/unit-tests/ \; 2>/dev/null || true
+          find coverage-artifacts -path "*/ark-api/*" -name "lcov.info" -exec cp {} services/ark-api/ark-api/coverage/ \; 2>/dev/null || true
+          find coverage-artifacts -path "*/ark-dashboard/*" -name "lcov.info" -exec cp {} services/ark-dashboard/ark-dashboard/coverage/ \; 2>/dev/null || true
+
+          echo "=== Fixing paths in lcov.info files ==="
+          for lcov_file in $(find . -name "lcov.info" -not -path "./coverage-artifacts/*" -not -path "./node_modules/*" 2>/dev/null); do
+            dir=$(dirname "$lcov_file")
+            echo "Processing $lcov_file (dir: $dir)"
+
+            if [[ "$dir" == *"ark-api"* ]]; then
+              sed -i 's|^SF:src/|SF:services/ark-api/ark-api/src/|g' "$lcov_file"
+            elif [[ "$dir" == *"ark-dashboard"* ]]; then
+              sed -i 's|^SF:src/|SF:services/ark-dashboard/ark-dashboard/src/|g' "$lcov_file"
+              sed -i 's|^SF:app/|SF:services/ark-dashboard/ark-dashboard/app/|g' "$lcov_file"
+              sed -i 's|^SF:components/|SF:services/ark-dashboard/ark-dashboard/components/|g' "$lcov_file"
+              sed -i 's|^SF:lib/|SF:services/ark-dashboard/ark-dashboard/lib/|g' "$lcov_file"
+            elif [[ "$dir" == *"ark/unit-tests"* ]]; then
+              sed -i 's|^SF:internal/|SF:ark/internal/|g' "$lcov_file"
+              sed -i 's|^SF:cmd/|SF:ark/cmd/|g' "$lcov_file"
+              sed -i 's|^SF:api/|SF:ark/api/|g' "$lcov_file"
+            fi
+          done
+
+          echo "Coverage files organized:"
+          find . -name "lcov.info" 2>/dev/null | grep -v node_modules | grep -v coverage-artifacts || true
+
+          echo "=== Sample of rewritten paths ==="
+          for f in $(find . -name "lcov.info" -not -path "./coverage-artifacts/*" -not -path "./node_modules/*" 2>/dev/null | head -3); do
+            echo "--- $f ---"
+            grep "^SF:" "$f" | head -5
+          done
+
+      - name: Setup Go
+        if: steps.check-coverage.outputs.found == 'false'
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.13"
+          cache: true
+          cache-dependency-path: ark/go.sum
+
+      - name: Setup Node.js
+        if: steps.check-coverage.outputs.found == 'false'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+
+      - name: Install uv
+        if: steps.check-coverage.outputs.found == 'false'
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install Helm
+        if: steps.check-coverage.outputs.found == 'false'
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.18.6"
+
+      - name: Install gcov2lcov
+        if: steps.check-coverage.outputs.found == 'false'
+        run: go install github.com/jandelgado/gcov2lcov@latest
+
+      - name: Run tests to generate coverage
+        if: steps.check-coverage.outputs.found == 'false'
+        run: |
+          echo "=== Running Go tests ==="
+          cd ark
+          make test || true
+          mkdir -p unit-tests
+          if [ -f "cover.out" ]; then
+            cp cover.out unit-tests/
+            gcov2lcov -infile cover.out -outfile unit-tests/lcov.info || true
+          fi
+          cd ..
+
+          echo "=== Running services tests ==="
+          make -j4 services-test-all || true
+
+          echo "=== Coverage files generated ==="
+          find . -name "lcov.info" -o -name "coverage.xml" 2>/dev/null | grep -v node_modules | grep -v .venv | head -20 || echo "No coverage files found"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up Cloudflare WARP
+        uses: Boostport/setup-cloudflare-warp@v1
+        with:
+          organization: ${{ secrets.CF_ORGANIZATION }}
+          auth_client_id: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_ID }}
+          auth_client_secret: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_SECRET }}
+
+      - name: Run SonarQube Scan (Branch)
+        if: github.event_name != 'pull_request'
+        run: |
+          if [ -n "${{ inputs.branch }}" ]; then
+            BRANCH="${{ inputs.branch }}"
+          else
+            BRANCH="${GITHUB_REF#refs/heads/}"
+          fi
+          docker run -i --user $(id -u) --rm \
+            -e SONAR_TOKEN \
+            -e SONAR_HOST_URL \
+            -v $(pwd):/app \
+            -w /app \
+            sonarsource/sonar-scanner-cli:5.0.1 \
+              -Dsonar.projectKey=$PROJECT_KEY \
+              -Dsonar.branch.name=$BRANCH \
+              -Dsonar.qualitygate.wait=true
+
+      - name: Run SonarQube Scan (PR)
+        if: github.event_name == 'pull_request'
+        env:
+          PR_KEY: ${{ github.event.number }}
+          PR_BRANCH: ${{ github.head_ref }}
+          PR_BASE: ${{ github.base_ref }}
+        run: |
+          docker run -i --user $(id -u) --rm \
+            -e SONAR_TOKEN \
+            -e SONAR_HOST_URL \
+            -v $(pwd):/app \
+            -w /app \
+            sonarsource/sonar-scanner-cli:5.0.1 \
+              -Dsonar.projectKey=$PROJECT_KEY \
+              -Dsonar.pullrequest.key=$PR_KEY \
+              -Dsonar.pullrequest.branch=$PR_BRANCH \
+              -Dsonar.pullrequest.base=$PR_BASE \
+              -Dsonar.qualitygate.wait=true

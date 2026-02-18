@@ -403,11 +403,10 @@ func (r *EvaluatorReconciler) createEvaluationForQuery(ctx context.Context, eval
 		Spec: arkv1alpha1.EvaluationSpec{
 			Type: "query",
 			Config: arkv1alpha1.EvaluationConfig{
-				QueryBasedEvaluationConfig: &arkv1alpha1.QueryBasedEvaluationConfig{
+				QueryBasedEvaluationConfig: arkv1alpha1.QueryBasedEvaluationConfig{
 					QueryRef: &arkv1alpha1.QueryRef{
-						Name:           query.Name,
-						Namespace:      query.Namespace,
-						ResponseTarget: "", // Default to first response
+						Name:      query.Name,
+						Namespace: query.Namespace,
 					},
 				},
 			},
