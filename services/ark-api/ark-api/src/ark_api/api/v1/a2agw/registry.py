@@ -8,12 +8,16 @@ from ark_sdk.client import V1_ALPHA1, with_ark_client
 from ark_sdk.k8s import get_namespace
 
 from ark_api.constants.annotations import (
+    A2A_EXPERIMENTAL_ENABLED_ANNOTATION,
     A2A_SERVER_SKILLS_ANNOTATION,
     A2A_STREAMING_SUPPORTED_ANNOTATION,
     parse_bool_annotation,
 )
 
 logger = logging.getLogger(__name__)
+
+A2A_STRUCTURED_DELEGATION_CAPABILITY_URI = "https://ark.mckinsey.com/extensions/structured-delegation/v1"
+A2A_STRUCTURED_DELEGATION_SKILL_NAME = "structured-delegation"
 
 @functools.lru_cache(maxsize=1)
 def _get_agent_card_url_components():
@@ -40,6 +44,22 @@ def _safe_metadata(ark_agent) -> dict:
         except (TypeError, ValueError):
             pass
     return {}
+
+
+def _supports_structured_delegation(annotations: dict) -> bool:
+    return parse_bool_annotation(annotations.get(A2A_EXPERIMENTAL_ENABLED_ANNOTATION), False)
+
+
+def _has_structured_delegation_signal(skills: list[AgentSkill]) -> bool:
+    for skill in skills:
+        if getattr(skill, "name", None) == A2A_STRUCTURED_DELEGATION_SKILL_NAME:
+            return True
+        if getattr(skill, "id", None) == A2A_STRUCTURED_DELEGATION_CAPABILITY_URI:
+            return True
+        raw_tags = getattr(skill, "tags", None)
+        if isinstance(raw_tags, list) and A2A_STRUCTURED_DELEGATION_CAPABILITY_URI in raw_tags:
+            return True
+    return False
 
 def ark_to_agent_card(ark_agent) -> AgentCard:
     metadata = _safe_metadata(ark_agent)
@@ -95,6 +115,16 @@ def ark_to_agent_card(ark_agent) -> AgentCard:
                 name="General",
                 description="General agent capabilities",
                 tags=["general"],
+            )
+        )
+
+    if _supports_structured_delegation(annotations) and not _has_structured_delegation_signal(skills_list):
+        skills_list.append(
+            AgentSkill(
+                id=A2A_STRUCTURED_DELEGATION_CAPABILITY_URI,
+                name=A2A_STRUCTURED_DELEGATION_SKILL_NAME,
+                description="Supports structured delegation payloads: message, history, contextId, and input fallback.",
+                tags=[A2A_STRUCTURED_DELEGATION_CAPABILITY_URI],
             )
         )
 

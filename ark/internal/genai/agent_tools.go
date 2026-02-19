@@ -395,11 +395,27 @@ func applyDelegationContext(ctx context.Context, payloadMode, contextID string) 
 	return WithA2AContextID(ctx, contextID)
 }
 
-func getDelegationEventStream(ctx context.Context, payloadMode string) EventStreamInterface {
+func buildToolStepID(toolCallID string) string {
+	if toolCallID == "" {
+		return ""
+	}
+	return fmt.Sprintf("tool-step:%s", toolCallID)
+}
+
+func getDelegationEventStream(ctx context.Context, payloadMode string, call ToolCall) EventStreamInterface {
 	if payloadMode != A2APayloadModeNative {
 		return nil
 	}
-	return GetToolEventStream(ctx)
+	base := GetToolEventStream(ctx)
+	if base == nil {
+		return nil
+	}
+	extension := A2ADelegatedToolExtension{
+		ToolCallID: call.ID,
+		ToolName:   call.Function.Name,
+		StepID:     buildToolStepID(call.ID),
+	}
+	return newDelegatedToolStreamBridge(base, extension)
 }
 
 func normalizeContextID(contextID string) (string, error) {
@@ -492,17 +508,24 @@ func serializeA2AArtifacts(artifacts []protocol.Artifact) []map[string]interface
 	return serialized
 }
 
-func buildDelegatedToolResultMetadata(result *ExecutionResult) map[string]interface{} {
+func buildDelegatedToolResultMetadata(result *ExecutionResult, call ToolCall) map[string]interface{} {
 	if result == nil {
 		return nil
 	}
 	metadata := map[string]interface{}{}
+	extension := A2ADelegatedToolExtension{
+		ToolCallID: call.ID,
+		ToolName:   call.Function.Name,
+		StepID:     buildToolStepID(call.ID),
+	}
 	if result.A2AResponse != nil {
 		if result.A2AResponse.ContextID != "" {
 			metadata["contextId"] = result.A2AResponse.ContextID
+			extension.DelegatedContextID = result.A2AResponse.ContextID
 		}
 		if result.A2AResponse.TaskID != "" {
 			metadata["taskId"] = result.A2AResponse.TaskID
+			extension.DelegatedTaskID = result.A2AResponse.TaskID
 		}
 		if result.A2AResponse.Message != nil {
 			metadata["message"] = serializeA2AMessage(result.A2AResponse.Message)
@@ -515,12 +538,15 @@ func buildDelegatedToolResultMetadata(result *ExecutionResult) map[string]interf
 		last := result.A2AMessages[len(result.A2AMessages)-1]
 		if last.ContextID != nil && *last.ContextID != "" {
 			metadata["contextId"] = *last.ContextID
+			extension.DelegatedContextID = *last.ContextID
 		}
 		if last.TaskID != nil && *last.TaskID != "" {
 			metadata["taskId"] = *last.TaskID
+			extension.DelegatedTaskID = *last.TaskID
 		}
 		metadata["message"] = serializeA2AMessage(&last)
 	}
+	metadata = withA2ADelegatedToolExtension(metadata, extension)
 	if len(metadata) == 0 {
 		return nil
 	}
@@ -528,32 +554,18 @@ func buildDelegatedToolResultMetadata(result *ExecutionResult) map[string]interf
 }
 
 func buildDelegatedToolResultContent(content string, metadata map[string]interface{}, experimentalNative bool) (string, error) {
+	_ = experimentalNative
+	if content != "" {
+		return content, nil
+	}
 	if len(metadata) == 0 {
 		return content, nil
 	}
-
-	if experimentalNative {
-		envelope := make(map[string]interface{}, len(metadata)+1)
-		for key, value := range metadata {
-			envelope[key] = value
-		}
-		if content != "" {
-			envelope["content"] = content
-		}
-		raw, err := json.Marshal(envelope)
-		if err != nil {
-			return "", fmt.Errorf("failed to serialize native delegated tool result: %w", err)
-		}
-		return string(raw), nil
+	raw, err := json.Marshal(metadata)
+	if err != nil {
+		return "", fmt.Errorf("failed to serialize delegated tool result metadata: %w", err)
 	}
-
-	if content == "" {
-		raw, err := json.Marshal(metadata)
-		if err == nil {
-			return string(raw), nil
-		}
-	}
-	return content, nil
+	return string(raw), nil
 }
 
 func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
@@ -588,7 +600,7 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolRes
 	}
 
 	execCtx := applyDelegationContext(ctx, payloadMode, invocation.contextID)
-	eventStream := getDelegationEventStream(ctx, payloadMode)
+	eventStream := getDelegationEventStream(ctx, payloadMode, call)
 	var result *ExecutionResult
 	if payloadMode == A2APayloadModeNative {
 		result, err = agent.ExecuteA2A(execCtx, invocation.a2aUserInput, invocation.a2aHistory, nil, eventStream)
@@ -609,7 +621,7 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolRes
 	} else {
 		content = ExtractLastAssistantMessageContent(result.Messages)
 	}
-	metadata := buildDelegatedToolResultMetadata(result)
+	metadata := buildDelegatedToolResultMetadata(result, call)
 	if content == "" && result.A2AResponse != nil {
 		content = result.A2AResponse.Content
 	}
@@ -680,7 +692,7 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResu
 	}
 
 	execCtx := applyDelegationContext(ctx, payloadMode, invocation.contextID)
-	eventStream := getDelegationEventStream(ctx, payloadMode)
+	eventStream := getDelegationEventStream(ctx, payloadMode, call)
 	var result *ExecutionResult
 	if payloadMode == A2APayloadModeNative {
 		result, err = team.ExecuteA2A(execCtx, invocation.a2aUserInput, invocation.a2aHistory, nil, eventStream)
@@ -709,7 +721,7 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResu
 	} else {
 		content = ExtractLastAssistantMessageContent(result.Messages)
 	}
-	metadata := buildDelegatedToolResultMetadata(result)
+	metadata := buildDelegatedToolResultMetadata(result, call)
 	if content == "" && result.A2AResponse != nil {
 		content = result.A2AResponse.Content
 	}

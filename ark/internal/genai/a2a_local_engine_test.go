@@ -18,7 +18,7 @@ type testA2AModelProvider struct {
 	calls   int
 }
 
-func (p *testA2AModelProvider) A2ATurn(_ context.Context, _ []protocol.Message, _ []A2AToolDefinition, _ EventStreamInterface) (*A2ATurnResult, error) {
+func (p *testA2AModelProvider) A2ATurn(_ context.Context, _ []protocol.Message, _ []A2AToolOutcome, _ []A2AToolDefinition, _ EventStreamInterface) (*A2ATurnResult, error) {
 	idx := p.calls
 	p.calls++
 	if idx < len(p.errs) && p.errs[idx] != nil {
@@ -105,12 +105,11 @@ func TestA2ALocalEngineWithToolCalls(t *testing.T) {
 	result, err := engine.Execute(context.Background(), userInput, messages, stream)
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Len(t, result.A2AMessages, 3)
+	require.Len(t, result.A2AMessages, 2)
 	assert.Equal(t, "calling tool", ExtractA2ATextFromMessage(result.A2AMessages[0]))
-	assert.Equal(t, "tool result", ExtractA2ATextFromMessage(result.A2AMessages[1]))
-	assert.Equal(t, "final answer", ExtractA2ATextFromMessage(result.A2AMessages[2]))
+	assert.Equal(t, "final answer", ExtractA2ATextFromMessage(result.A2AMessages[1]))
 	assert.Equal(t, 2, provider.calls)
-	require.Len(t, stream.chunks, 3)
+	require.Len(t, stream.chunks, 2)
 	require.Len(t, executor.calls, 1)
 	assert.Equal(t, "lookup", executor.calls[0].Function.Name)
 }
@@ -196,20 +195,90 @@ func TestA2ALocalEngineContextIDAndTaskIDPropagation(t *testing.T) {
 	}
 }
 
-func TestA2ALocalEngineToolResultBuildsA2AMessage(t *testing.T) {
+func TestA2ALocalEngineToolResultBuildsA2AOutcome(t *testing.T) {
+	call := A2AToolCall{
+		ID:        "call-42",
+		Name:      "weather",
+		Arguments: `{"city":"london"}`,
+	}
 	result := ToolResult{
 		ID:      "call-42",
 		Name:    "weather",
 		Content: "sunny",
 	}
-	msg := buildA2AToolResultMessage(result)
+	outcome := buildA2AToolOutcome(call, result, nil, "ctx-1", "task-1")
 
-	assert.Equal(t, protocol.MessageRoleAgent, msg.Role)
-	assert.Equal(t, "sunny", ExtractA2ATextFromMessage(msg))
-	require.NotNil(t, msg.Metadata)
-	assert.Equal(t, RoleTool, msg.Metadata[MetadataRoleKey])
-	assert.Equal(t, "call-42", msg.Metadata[MetadataToolCallIDKey])
-	assert.Equal(t, "weather", msg.Metadata[MetadataToolNameKey])
+	assert.Equal(t, "call-42", outcome.ToolCallID)
+	assert.Equal(t, "weather", outcome.ToolName)
+	assert.Equal(t, "sunny", outcome.Content)
+	assert.Equal(t, "ctx-1", outcome.ContextID)
+	assert.Equal(t, "task-1", outcome.TaskID)
+	require.NotNil(t, outcome.Metadata)
+	assert.Equal(t, "call-42", outcome.Metadata[MetadataToolCallIDKey])
+	assert.Equal(t, "weather", outcome.Metadata[MetadataToolNameKey])
+	assert.Equal(t, "tool-step:call-42", outcome.Metadata[MetadataStepIDKey])
+	assert.Equal(t, "done", outcome.Metadata[MetadataStepStateKey])
+	assert.Equal(t, "tool", outcome.Metadata[MetadataStepKindKey])
+}
+
+func TestA2ALocalEngineToolResultPrefersCallIDOverResultID(t *testing.T) {
+	call := A2AToolCall{
+		ID:        "call-canonical",
+		Name:      "weather",
+		Arguments: `{"city":"london"}`,
+	}
+	result := ToolResult{
+		ID:      "call-from-result",
+		Name:    "weather",
+		Content: "sunny",
+	}
+	outcome := buildA2AToolOutcome(call, result, nil, "ctx-1", "task-1")
+
+	assert.Equal(t, "call-canonical", outcome.ToolCallID)
+	require.NotNil(t, outcome.Metadata)
+	assert.Equal(t, "call-canonical", outcome.Metadata[MetadataToolCallIDKey])
+	assert.Equal(t, "tool-step:call-canonical", outcome.Metadata[MetadataStepIDKey])
+}
+
+func TestA2ALocalEngineToolResultOmitsStepMetadataWithoutToolCallID(t *testing.T) {
+	call := A2AToolCall{
+		Name:      "weather",
+		Arguments: `{"city":"london"}`,
+	}
+	result := ToolResult{
+		Name:    "weather",
+		Content: "sunny",
+	}
+	outcome := buildA2AToolOutcome(call, result, nil, "ctx-1", "task-1")
+
+	assert.Equal(t, "", outcome.ToolCallID)
+	require.NotNil(t, outcome.Metadata)
+	_, hasToolCallID := outcome.Metadata[MetadataToolCallIDKey]
+	assert.False(t, hasToolCallID)
+	_, hasStepID := outcome.Metadata[MetadataStepIDKey]
+	assert.False(t, hasStepID)
+	assert.Equal(t, "done", outcome.Metadata[MetadataStepStateKey])
+	assert.Equal(t, "tool", outcome.Metadata[MetadataStepKindKey])
+}
+
+func TestA2ALocalEngineToolResultWithToolErrorSetsErrorState(t *testing.T) {
+	call := A2AToolCall{
+		ID:        "call-42",
+		Name:      "weather",
+		Arguments: `{"city":"london"}`,
+	}
+	result := ToolResult{
+		ID:      "call-42",
+		Name:    "weather",
+		Content: "sunny",
+		Error:   "tool output had internal error",
+	}
+	outcome := buildA2AToolOutcome(call, result, errors.New("tool boom"), "ctx-1", "task-1")
+
+	assert.Equal(t, "tool boom", outcome.Error)
+	require.NotNil(t, outcome.Metadata)
+	assert.Equal(t, "error", outcome.Metadata[MetadataStepStateKey])
+	assert.Equal(t, "tool", outcome.Metadata[MetadataStepKindKey])
 }
 
 func TestA2ALocalEngineStreamFailure(t *testing.T) {
@@ -253,7 +322,7 @@ func TestA2AToolCallRoundTripFidelity(t *testing.T) {
 
 	result, err := engine.Execute(context.Background(), userInput, []protocol.Message{userInput}, nil)
 	require.NoError(t, err)
-	require.Len(t, result.A2AMessages, 4)
+	require.Len(t, result.A2AMessages, 2)
 
 	require.Len(t, searchExec.calls, 1)
 	assert.Equal(t, "search", searchExec.calls[0].Function.Name)
@@ -265,16 +334,7 @@ func TestA2AToolCallRoundTripFidelity(t *testing.T) {
 	assert.Equal(t, `{"expr":"1+1"}`, calcExec.calls[0].Function.Arguments)
 	assert.Equal(t, "call-b", calcExec.calls[0].ID)
 
-	toolResultA := result.A2AMessages[1]
-	assert.Equal(t, "found it", ExtractA2ATextFromMessage(toolResultA))
-	assert.Equal(t, RoleTool, toolResultA.Metadata[MetadataRoleKey])
-	assert.Equal(t, "call-a", toolResultA.Metadata[MetadataToolCallIDKey])
-
-	toolResultB := result.A2AMessages[2]
-	assert.Equal(t, "2", ExtractA2ATextFromMessage(toolResultB))
-	assert.Equal(t, "call-b", toolResultB.Metadata[MetadataToolCallIDKey])
-
-	assert.Equal(t, "result is 2", ExtractA2ATextFromMessage(result.A2AMessages[3]))
+	assert.Equal(t, "result is 2", ExtractA2ATextFromMessage(result.A2AMessages[1]))
 }
 
 func TestA2ALocalEngineNoToolsConfigured(t *testing.T) {

@@ -54,6 +54,19 @@ const (
 	MetadataToolCallsKey  = "ark.mckinsey.com/tool-calls"
 	MetadataAgentNameKey  = "ark.mckinsey.com/agent-name"
 	MetadataA2AResultKey  = "ark.mckinsey.com/a2a-result"
+	MetadataStepIDKey     = "ark.mckinsey.com/step-id"
+	MetadataStepStateKey  = "ark.mckinsey.com/step-state"
+	MetadataStepKindKey   = "ark.mckinsey.com/step-kind"
+	MetadataParentStepKey = "ark.mckinsey.com/parent-step-id"
+)
+
+const (
+	A2ADelegatedToolExtensionKey = "https://ark.mckinsey.com/extensions/delegated-tool/v1"
+)
+
+const (
+	A2ADelegatedToolKindTool   = "tool"
+	A2ADelegatedToolKindStatus = "status"
 )
 
 const (

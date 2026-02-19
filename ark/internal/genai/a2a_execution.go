@@ -494,6 +494,11 @@ func streamA2AError(ctx context.Context, eventStream EventStreamInterface, paylo
 		statusMessage := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
 			protocol.NewTextPart(err.Error()),
 		})
+		statusMessage.Metadata = map[string]interface{}{
+			MetadataStepIDKey:    fmt.Sprintf("task-error:%s", taskID),
+			MetadataStepStateKey: "error",
+			MetadataStepKindKey:  "status",
+		}
 		failedEvent := &protocol.TaskStatusUpdateEvent{
 			TaskID:    taskID,
 			ContextID: contextID,

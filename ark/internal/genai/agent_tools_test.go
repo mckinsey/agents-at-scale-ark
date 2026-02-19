@@ -3,6 +3,7 @@ package genai
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/openai/openai-go"
@@ -670,10 +671,29 @@ func TestParseDelegatedInvocationNativeInvalidContextID(t *testing.T) {
 	require.Contains(t, err.Error(), "contextId parameter must be a string")
 }
 
+func TestNormalizeContextIDRejectsWhitespaceOnly(t *testing.T) {
+	_, err := normalizeContextID("   ")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "must not contain only whitespace")
+}
+
+func TestNormalizeContextIDRejectsExceedsMaxLength(t *testing.T) {
+	tooLong := strings.Repeat("a", 1025)
+	_, err := normalizeContextID(tooLong)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "exceeds max length")
+}
+
 func TestGetDelegationEventStreamGatedByPayloadMode(t *testing.T) {
 	ctx := WithToolEventStream(context.Background(), &testToolEventStream{})
-	compatStream := getDelegationEventStream(ctx, A2APayloadModeCompat)
-	nativeStream := getDelegationEventStream(ctx, A2APayloadModeNative)
+	call := ToolCall{
+		ID: "call-1",
+		Function: openai.ChatCompletionMessageToolCallFunction{
+			Name: "delegate-agent",
+		},
+	}
+	compatStream := getDelegationEventStream(ctx, A2APayloadModeCompat, call)
+	nativeStream := getDelegationEventStream(ctx, A2APayloadModeNative, call)
 	require.Nil(t, compatStream)
 	require.NotNil(t, nativeStream)
 }
@@ -689,21 +709,11 @@ func TestBuildDelegatedToolResultContentExperimentalNative(t *testing.T) {
 	metadata := map[string]interface{}{
 		"contextId": "ctx-123",
 		"taskId":    "task-456",
-		"message": map[string]interface{}{
-			"role": "agent",
-		},
 	}
 
 	content, err := buildDelegatedToolResultContent("assistant summary", metadata, true)
 	require.NoError(t, err)
-
-	var envelope map[string]interface{}
-	require.NoError(t, json.Unmarshal([]byte(content), &envelope))
-	require.Equal(t, "ctx-123", envelope["contextId"])
-	require.Equal(t, "task-456", envelope["taskId"])
-	require.Equal(t, "assistant summary", envelope["content"])
-	_, hasMessage := envelope["message"]
-	require.True(t, hasMessage)
+	require.Equal(t, "assistant summary", content)
 }
 
 func TestBuildDelegatedToolResultContentCompatPreservesTextBehavior(t *testing.T) {
@@ -727,8 +737,130 @@ func TestBuildDelegatedToolResultContentExperimentalNativeFailsFast(t *testing.T
 	}
 
 	content, err := buildDelegatedToolResultContent("assistant summary", metadata, true)
+	require.NoError(t, err)
+	require.Equal(t, "assistant summary", content)
+
+	content, err = buildDelegatedToolResultContent("", metadata, true)
 	require.Error(t, err)
 	require.Equal(t, "", content)
+}
+
+func TestDelegatedStreamBridgeAnnotatesDownstreamEvents(t *testing.T) {
+	baseStream := &fakeEventStream{}
+	ctx := WithToolEventStream(context.Background(), baseStream)
+	call := ToolCall{
+		ID: "call-stream-1",
+		Function: openai.ChatCompletionMessageToolCallFunction{
+			Name: "delegate-agent",
+		},
+	}
+	stream := getDelegationEventStream(ctx, A2APayloadModeNative, call)
+	require.NotNil(t, stream)
+
+	statusMessage := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("thinking"),
+	})
+	statusEvent := &protocol.TaskStatusUpdateEvent{
+		TaskID:    "task-1",
+		ContextID: "ctx-1",
+		Status: protocol.TaskStatus{
+			State:   protocol.TaskStateWorking,
+			Message: &statusMessage,
+		},
+	}
+	require.NoError(t, stream.StreamChunk(ctx, statusEvent))
+
+	artifactEvent := &protocol.TaskArtifactUpdateEvent{
+		TaskID:    "task-1",
+		ContextID: "ctx-1",
+		Artifact: protocol.Artifact{
+			ArtifactID: "artifact-1",
+			Parts: []protocol.Part{
+				protocol.NewTextPart("partial output"),
+			},
+		},
+	}
+	require.NoError(t, stream.StreamChunk(ctx, artifactEvent))
+
+	require.Len(t, baseStream.chunks, 2)
+	statusChunk, ok := baseStream.chunks[0].(*protocol.TaskStatusUpdateEvent)
+	require.True(t, ok)
+	extension, hasExtension := parseA2ADelegatedToolExtension(statusChunk.Metadata)
+	require.True(t, hasExtension)
+	require.Equal(t, "call-stream-1", extension.ToolCallID)
+	require.Equal(t, "delegate-agent", extension.ToolName)
+	require.Equal(t, "tool-step:call-stream-1", extension.StepID)
+	require.Equal(t, "task-1", extension.DelegatedTaskID)
+	require.Equal(t, "ctx-1", extension.DelegatedContextID)
+	require.NotNil(t, extension.Sequence)
+	require.Equal(t, 1, *extension.Sequence)
+	messageExtension, hasMessageExtension := parseA2ADelegatedToolExtension(statusChunk.Status.Message.Metadata)
+	require.True(t, hasMessageExtension)
+	require.Equal(t, extension.ToolCallID, messageExtension.ToolCallID)
+	require.Equal(t, extension.StepID, messageExtension.StepID)
+
+	artifactChunk, ok := baseStream.chunks[1].(*protocol.TaskArtifactUpdateEvent)
+	require.True(t, ok)
+	artifactExtension, hasArtifactExtension := parseA2ADelegatedToolExtension(artifactChunk.Metadata)
+	require.True(t, hasArtifactExtension)
+	require.NotNil(t, artifactExtension.Sequence)
+	require.Equal(t, 2, *artifactExtension.Sequence)
+	artifactPartExtension, hasArtifactPartExtension := parseA2ADelegatedToolExtension(artifactChunk.Artifact.Metadata)
+	require.True(t, hasArtifactPartExtension)
+	require.Equal(t, "call-stream-1", artifactPartExtension.ToolCallID)
+}
+
+func TestDelegatedStreamBridgeAnnotatesMessageEvents(t *testing.T) {
+	baseStream := &fakeEventStream{}
+	ctx := WithToolEventStream(context.Background(), baseStream)
+	call := ToolCall{
+		ID: "call-stream-2",
+		Function: openai.ChatCompletionMessageToolCallFunction{
+			Name: "delegate-agent",
+		},
+	}
+	stream := getDelegationEventStream(ctx, A2APayloadModeNative, call)
+	require.NotNil(t, stream)
+
+	message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("chain of thought delta"),
+	})
+	require.NoError(t, stream.StreamChunk(ctx, &message))
+
+	require.Len(t, baseStream.chunks, 1)
+	chunk, ok := baseStream.chunks[0].(*protocol.Message)
+	require.True(t, ok)
+	extension, hasExtension := parseA2ADelegatedToolExtension(chunk.Metadata)
+	require.True(t, hasExtension)
+	require.Equal(t, "call-stream-2", extension.ToolCallID)
+	require.NotNil(t, extension.Sequence)
+	require.Equal(t, 1, *extension.Sequence)
+}
+
+func TestDelegatedStreamBridgeWithEmptyToolCallIDOmitStepID(t *testing.T) {
+	baseStream := &fakeEventStream{}
+	ctx := WithToolEventStream(context.Background(), baseStream)
+	call := ToolCall{
+		Function: openai.ChatCompletionMessageToolCallFunction{
+			Name: "delegate-agent",
+		},
+	}
+	stream := getDelegationEventStream(ctx, A2APayloadModeNative, call)
+	require.NotNil(t, stream)
+
+	message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("delta"),
+	})
+	require.NoError(t, stream.StreamChunk(ctx, &message))
+	require.Len(t, baseStream.chunks, 1)
+
+	chunk, ok := baseStream.chunks[0].(*protocol.Message)
+	require.True(t, ok)
+	extension, hasExtension := parseA2ADelegatedToolExtension(chunk.Metadata)
+	require.True(t, hasExtension)
+	require.Equal(t, "", extension.ToolCallID)
+	require.Equal(t, "", extension.StepID)
+	require.Equal(t, "delegate-agent", extension.ToolName)
 }
 
 func TestAgentToolExecutor_NativeMessageDelegationWithoutInput(t *testing.T) {

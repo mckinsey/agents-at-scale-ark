@@ -115,6 +115,7 @@ func TestStreamA2AAgentIntegrationCompat(t *testing.T) {
 
 	assert.Contains(t, response.Content, "delta")
 	foundArtifact := false
+	foundStatus := false
 	for _, chunk := range stream.chunks {
 		wrapped, ok := chunk.(ChunkWithMetadata)
 		if !ok || wrapped.Ark == nil {
@@ -122,10 +123,13 @@ func TestStreamA2AAgentIntegrationCompat(t *testing.T) {
 		}
 		if _, ok := wrapped.Ark.A2A.(*protocol.TaskArtifactUpdateEvent); ok {
 			foundArtifact = true
-			break
+		}
+		if status, ok := wrapped.Ark.A2A.(*protocol.TaskStatusUpdateEvent); ok && status.Status.State == protocol.TaskStateWorking {
+			foundStatus = true
 		}
 	}
 	assert.True(t, foundArtifact)
+	assert.True(t, foundStatus)
 }
 
 func TestStreamA2AAgentIntegrationNative(t *testing.T) {
@@ -147,11 +151,15 @@ func TestStreamA2AAgentIntegrationNative(t *testing.T) {
 
 	assert.Contains(t, response.Content, "delta")
 	foundArtifact := false
+	foundStatus := false
 	for _, chunk := range stream.chunks {
 		if _, ok := chunk.(*protocol.TaskArtifactUpdateEvent); ok {
 			foundArtifact = true
-			break
+		}
+		if status, ok := chunk.(*protocol.TaskStatusUpdateEvent); ok && status.Status.State == protocol.TaskStateWorking {
+			foundStatus = true
 		}
 	}
 	assert.True(t, foundArtifact)
+	assert.True(t, foundStatus)
 }

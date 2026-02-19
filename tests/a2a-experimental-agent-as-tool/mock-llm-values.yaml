@@ -35,9 +35,9 @@ config:
       status: 200
       content: '{"choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}]}'
 
-  # Coordinator agent - first call: delegate to specialist via tool call with A2A message format
+  # Coordinator scenario: message + history + contextId
   - path: "/v1/chat/completions"
-    match: "contains(body.messages[0].content || '', 'A2A-native Coordinator')"
+    match: "contains(body.messages[0].content || '', 'A2A-native Coordinator') && contains(body.messages[length(body.messages)-1].content || '', '[scenario-message-history-context]')"
     response:
       status: 200
       content: |
@@ -50,7 +50,53 @@ config:
                 "type": "function",
                 "function": {
                   "name": "call-specialist-a2a",
-                  "arguments": "{\"message\":{\"role\":\"user\",\"parts\":[{\"kind\":\"text\",\"text\":\"Process this request with A2A message\"}]},\"contextId\":\"test-context-123\"}"
+                  "arguments": "{\"message\":{\"role\":\"user\",\"parts\":[{\"kind\":\"text\",\"text\":\"Process this request with A2A message\"}]},\"history\":[{\"role\":\"agent\",\"parts\":[{\"kind\":\"text\",\"text\":\"Prior discussion context\"}]}],\"contextId\":\"test-context-123\"}"
+                }
+              }]
+            },
+            "finish_reason": "tool_calls"
+          }]
+        }
+
+  # Coordinator scenario: message-only (no history/contextId)
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'A2A-native Coordinator') && contains(body.messages[length(body.messages)-1].content || '', '[scenario-message-only]')"
+    response:
+      status: 200
+      content: |
+        {
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "tool_calls": [{
+                "id": "call_delegate_a2a_message_only",
+                "type": "function",
+                "function": {
+                  "name": "call-specialist-a2a",
+                  "arguments": "{\"message\":{\"role\":\"user\",\"parts\":[{\"kind\":\"text\",\"text\":\"Process this request with message only\"}]}}"
+                }
+              }]
+            },
+            "finish_reason": "tool_calls"
+          }]
+        }
+
+  # Coordinator scenario: legacy input fallback
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'A2A-native Coordinator') && contains(body.messages[length(body.messages)-1].content || '', '[scenario-input-fallback]')"
+    response:
+      status: 200
+      content: |
+        {
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "tool_calls": [{
+                "id": "call_delegate_a2a_input_fallback",
+                "type": "function",
+                "function": {
+                  "name": "call-specialist-a2a",
+                  "arguments": "{\"input\":\"Process this request via legacy input fallback\"}"
                 }
               }]
             },

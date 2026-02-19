@@ -1,12 +1,11 @@
-# Test Query - triggers coordinator to delegate with A2A message
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
-  name: a2a-delegation-test
+  name: a2a-delegation-message-only
   annotations:
     ark.mckinsey.com/a2a-experimental-enabled: "true"
 spec:
-  input: "[scenario-message-history-context] Process this request using A2A delegation"
+  input: "[scenario-message-only] Delegate using message only"
   target:
     type: agent
     name: coordinator-agent-a2a

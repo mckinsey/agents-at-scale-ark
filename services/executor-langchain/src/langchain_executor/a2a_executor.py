@@ -1,5 +1,6 @@
 """A2A-native LangChain execution logic."""
 
+import json
 import logging
 from typing import Any, List, Optional, TypeGuard
 from langchain.schema import Document, HumanMessage, AIMessage, SystemMessage
@@ -26,12 +27,35 @@ def _is_list(value: object) -> TypeGuard[list[Any]]:
 
 
 def _extract_native_text(message: object) -> str:
+    content = _extract_native_content(message)
+    if isinstance(content, str):
+        return content
+    values: List[str] = []
+    for part in content:
+        if not _is_dict(part):
+            continue
+        if part.get("type") == "text":
+            text = part.get("text")
+            if isinstance(text, str) and text:
+                values.append(text)
+            continue
+        if part.get("type") == "image_url":
+            image_url = part.get("image_url")
+            if _is_dict(image_url):
+                url = image_url.get("url")
+                if isinstance(url, str) and url:
+                    values.append(url)
+    return "\n".join(values).strip()
+
+
+def _extract_native_content(message: object) -> str | List[dict[str, Any]]:
     if not _is_dict(message):
         return ""
     parts = message.get("parts")
     if not _is_list(parts):
         return ""
-    values: List[str] = []
+    content_parts: List[dict[str, Any]] = []
+    has_image = False
     for part in parts:
         if not _is_dict(part):
             continue
@@ -39,19 +63,59 @@ def _extract_native_text(message: object) -> str:
         if kind == "text":
             text = part.get("text")
             if isinstance(text, str) and text:
-                values.append(text)
+                content_parts.append({"type": "text", "text": text})
             continue
         if kind == "data":
             data_value = part.get("data")
-            if isinstance(data_value, str) and data_value:
-                values.append(data_value)
+            if data_value is not None:
+                text_value = data_value if isinstance(data_value, str) else json.dumps(data_value)
+                if isinstance(text_value, str) and text_value:
+                    content_parts.append({"type": "text", "text": text_value})
             continue
         if kind == "file":
+            file_payload = part.get("file")
+            file_map = file_payload if _is_dict(file_payload) else {}
             uri = part.get("uri")
+            if not isinstance(uri, str):
+                uri = file_map.get("uri")
+            mime_type = part.get("mimeType")
+            if not isinstance(mime_type, str):
+                mime_type = file_map.get("mimeType")
+            bytes_value = part.get("bytes")
+            if not isinstance(bytes_value, str):
+                bytes_value = file_map.get("bytes")
+            name = part.get("name")
+            if not isinstance(name, str):
+                name = file_map.get("name")
+
+            is_image = isinstance(mime_type, str) and mime_type.startswith("image/")
+            if is_image:
+                image_url = ""
+                if isinstance(uri, str) and uri:
+                    image_url = uri
+                elif isinstance(bytes_value, str) and bytes_value:
+                    image_url = f"data:{mime_type};base64,{bytes_value}"
+                if image_url:
+                    has_image = True
+                    content_parts.append({"type": "image_url", "image_url": {"url": image_url}})
+                    continue
+
             if isinstance(uri, str) and uri:
-                values.append(uri)
+                content_parts.append({"type": "text", "text": uri})
+                continue
+            if isinstance(name, str) and name:
+                content_parts.append({"type": "text", "text": name})
+                continue
+            if isinstance(bytes_value, str) and bytes_value:
+                content_parts.append({"type": "text", "text": "file-bytes"})
             continue
-    return "\n".join(values).strip()
+
+    if not content_parts:
+        return ""
+    if has_image:
+        return content_parts
+    text_values = [part["text"] for part in content_parts if part.get("type") == "text" and isinstance(part.get("text"), str)]
+    return "\n".join(text_values).strip()
 
 
 def _extract_native_role(message: object) -> str:
@@ -71,11 +135,11 @@ def _build_native_langchain_messages(history: object) -> List:
         return native_messages
     for message in history:
         role = _extract_native_role(message)
-        content = _extract_native_text(message)
+        content = _extract_native_content(message)
         if not content:
             continue
         if role == "system":
-            native_messages.insert(0, SystemMessage(content=content))
+            native_messages.insert(0, SystemMessage(content=_extract_native_text(message)))
         elif role == "assistant":
             native_messages.append(AIMessage(content=content))
         else:
@@ -101,20 +165,26 @@ class A2ALangChainExecutor(BaseExecutor):
             chat_client = create_chat_client(request.agent.model)
             use_rag = should_use_rag(request.agent)
 
-            user_content = _extract_native_text(getattr(request, "a2aUserInput", None))
+            user_content = _extract_native_content(getattr(request, "a2aUserInput", None))
+            user_query_text = _extract_native_text(getattr(request, "a2aUserInput", None))
             user_input = getattr(request, "userInput", None)
             if not user_content and user_input is not None:
                 user_content = user_input.content
+            if not user_query_text and user_input is not None:
+                user_query_text = user_input.content
             langchain_messages = _build_native_langchain_messages(getattr(request, "a2aHistory", []))
 
             rag_context = None
-            if use_rag:
+            if use_rag and user_query_text:
                 embeddings_model_name = request.agent.labels.get("langchain-embeddings-model") if request.agent.labels else None
-                rag_context = await self._get_code_context(user_content, request.agent.model, embeddings_model_name)
+                rag_context = await self._get_code_context(user_query_text, request.agent.model, embeddings_model_name)
 
             if use_rag and rag_context:
                 rag_instruction = "Use this code context to answer the user's question accurately!"
-                user_content = f"🔥 RELEVANT CODE CONTEXT:\n\n{rag_context}\n\n{rag_instruction}\n\nUser: {user_content}"
+                if isinstance(user_content, list):
+                    user_content = [{"type": "text", "text": f"🔥 RELEVANT CODE CONTEXT:\n\n{rag_context}\n\n{rag_instruction}\n\nUser: {user_query_text}"}] + user_content
+                else:
+                    user_content = f"🔥 RELEVANT CODE CONTEXT:\n\n{rag_context}\n\n{rag_instruction}\n\nUser: {user_content}"
 
             langchain_messages.append(HumanMessage(content=user_content))
 

@@ -31,6 +31,9 @@ func resolveA2AMessageRole(msg protocol.Message) string {
 		return RoleUser
 	case protocol.MessageRoleAgent:
 		if msg.Metadata != nil {
+			if extensionRole := resolveA2ADelegatedToolRole(msg.Metadata); extensionRole != "" {
+				return extensionRole
+			}
 			if value, ok := msg.Metadata[MetadataRoleKey].(string); ok && value != "" {
 				return value
 			}
@@ -43,8 +46,11 @@ func resolveA2AMessageRole(msg protocol.Message) string {
 
 func convertA2AToolMessage(metadata map[string]interface{}, content string) openai.ChatCompletionMessageParamUnion {
 	toolCallID := ""
+	if extension, ok := parseA2ADelegatedToolExtension(metadata); ok && extension.ToolCallID != "" {
+		toolCallID = extension.ToolCallID
+	}
 	if metadata != nil {
-		if value, ok := metadata[MetadataToolCallIDKey].(string); ok {
+		if value, ok := metadata[MetadataToolCallIDKey].(string); ok && value != "" {
 			toolCallID = value
 		}
 	}
@@ -166,6 +172,9 @@ func OpenAIToA2AMessage(msg openai.ChatCompletionMessageParamUnion) (protocol.Me
 			MetadataRoleKey:       RoleTool,
 			MetadataToolCallIDKey: msg.OfTool.ToolCallID,
 		}
+		message.Metadata = withA2ADelegatedToolExtension(message.Metadata, A2ADelegatedToolExtension{
+			ToolCallID: msg.OfTool.ToolCallID,
+		})
 		return message, nil
 	default:
 		return protocol.Message{}, fmt.Errorf("unsupported OpenAI message type")

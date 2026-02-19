@@ -20,6 +20,29 @@ def test_extract_native_text():
     assert a2a_executor_module._extract_native_text(message) == "alpha\nbeta\nfile:///tmp/test.txt"
 
 
+def test_extract_native_content_preserves_image_url():
+    message = {
+        "role": "user",
+        "parts": [
+            {"kind": "text", "text": "look"},
+            {
+                "kind": "file",
+                "file": {
+                    "mimeType": "image/png",
+                    "uri": "https://example.com/image.png",
+                },
+            },
+        ],
+    }
+
+    content = a2a_executor_module._extract_native_content(message)
+    assert isinstance(content, list)
+    assert content == [
+        {"type": "text", "text": "look"},
+        {"type": "image_url", "image_url": {"url": "https://example.com/image.png"}},
+    ]
+
+
 def test_build_native_langchain_messages_roles():
     history = [
         {"role": "user", "parts": [{"kind": "text", "text": "u1"}]},
@@ -67,6 +90,55 @@ def test_execute_agent_uses_native_payload(monkeypatch):
     assert any(isinstance(message, AIMessage) and message.content == "prior" for message in sent_messages)
     assert isinstance(sent_messages[-1], HumanMessage)
     assert sent_messages[-1].content == "native input"
+
+
+def test_execute_agent_preserves_native_image_payload(monkeypatch):
+    captured = {}
+
+    class DummyChatClient:
+        async def ainvoke(self, messages):
+            captured["messages"] = messages
+            return SimpleNamespace(content="native-ok")
+
+    monkeypatch.setattr(a2a_executor_module, "create_chat_client", lambda _model: DummyChatClient())
+    monkeypatch.setattr(a2a_executor_module, "should_use_rag", lambda _agent: False)
+
+    executor = A2ALangChainExecutor()
+    request = SimpleNamespace(
+        agent=SimpleNamespace(
+            name="native-agent",
+            model=SimpleNamespace(),
+            labels={},
+            prompt="system prompt",
+            parameters=[],
+        ),
+        payloadMode="native",
+        a2aHistory=[],
+        a2aUserInput={
+            "role": "user",
+            "parts": [
+                {"kind": "text", "text": "what is in this image"},
+                {
+                    "kind": "file",
+                    "file": {
+                        "mimeType": "image/png",
+                        "uri": "https://example.com/scene.png",
+                    },
+                },
+            ],
+        },
+        history=[],
+        userInput=SimpleNamespace(content="compat input"),
+    )
+
+    response_messages = asyncio.run(executor.execute_agent(request))
+    assert response_messages[0].content == "native-ok"
+    sent_messages = captured["messages"]
+    assert isinstance(sent_messages[-1], HumanMessage)
+    assert sent_messages[-1].content == [
+        {"type": "text", "text": "what is in this image"},
+        {"type": "image_url", "image_url": {"url": "https://example.com/scene.png"}},
+    ]
 
 
 def test_app_registers_execute_a2a_route():

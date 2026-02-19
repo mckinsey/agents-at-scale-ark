@@ -190,12 +190,16 @@ func TestExecuteLocallyA2ANativeWithToolCalls(t *testing.T) {
 	require.NotNil(t, result)
 	require.Len(t, executor.calls, 1)
 	assert.Equal(t, "lookup", executor.calls[0].Function.Name)
-	require.Len(t, result.A2AMessages, 3)
+	require.Len(t, result.A2AMessages, 2)
 	assert.Equal(t, "calling tool", ExtractA2ATextFromMessage(result.A2AMessages[0]))
-	assert.Equal(t, "tool result", ExtractA2ATextFromMessage(result.A2AMessages[1]))
-	assert.Equal(t, "final answer", ExtractA2ATextFromMessage(result.A2AMessages[2]))
+	assert.Equal(t, "final answer", ExtractA2ATextFromMessage(result.A2AMessages[1]))
 	require.Len(t, provider.calls, 2)
-	require.Len(t, stream.chunks, 3)
+	require.Len(t, stream.chunks, 2)
+	require.NotEmpty(t, provider.calls[1])
+	lastModelMessage := provider.calls[1][len(provider.calls[1])-1]
+	require.NotNil(t, lastModelMessage.OfTool)
+	assert.Equal(t, "call-1", lastModelMessage.OfTool.ToolCallID)
+	assert.Equal(t, "tool result", lastModelMessage.OfTool.Content.OfString.Value)
 }
 
 func TestExecuteLocallyA2ANativeContextAndTaskIDPropagation(t *testing.T) {
@@ -261,7 +265,7 @@ func TestExecuteLocallyA2ANativeEventStreamEmitsA2AMessages(t *testing.T) {
 
 	_, err := agent.executeLocallyA2ANative(context.Background(), userInput, nil, nil, stream)
 	require.NoError(t, err)
-	require.Len(t, stream.chunks, 3)
+	require.Len(t, stream.chunks, 2)
 	for _, chunk := range stream.chunks {
 		_, ok := chunk.(*protocol.Message)
 		assert.True(t, ok)
@@ -289,14 +293,14 @@ func TestExecuteLocallyA2ANativeIntermediateStreamFailure(t *testing.T) {
 		result: ToolResult{Content: "tool result"},
 	}
 	agent := newTestAgentForLocalExecution(provider, newTestToolRegistry(executor))
-	stream := &failingEventStream{failOnCall: 2}
+	stream := &failingEventStream{failOnCall: 1}
 	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
 		protocol.NewTextPart("hello"),
 	})
 
 	result, err := agent.executeLocallyA2ANative(context.Background(), userInput, nil, nil, stream)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to stream tool A2A message")
+	assert.Contains(t, err.Error(), "failed to stream assistant A2A message")
 	assert.Nil(t, result)
 }
 

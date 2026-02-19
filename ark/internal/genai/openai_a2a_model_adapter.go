@@ -2,6 +2,7 @@ package genai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/openai/openai-go"
@@ -24,6 +25,7 @@ type openAIA2AModelAdapter struct {
 	schemaName        string
 	telemetryRecorder telemetry.ModelRecorder
 	eventingRecorder  eventing.ModelRecorder
+	toolOutcomeByID   map[string]string
 }
 
 func NewOpenAIA2AModelAdapter(model *Model, agentName, agentNamespace string) A2AModelProvider {
@@ -37,14 +39,17 @@ func NewOpenAIA2AModelAdapter(model *Model, agentName, agentNamespace string) A2
 		schemaName:        model.SchemaName,
 		telemetryRecorder: model.telemetryRecorder,
 		eventingRecorder:  model.eventingRecorder,
+		toolOutcomeByID:   map[string]string{},
 	}
 }
 
-func (a *openAIA2AModelAdapter) A2ATurn(ctx context.Context, messages []protocol.Message, tools []A2AToolDefinition, eventStream EventStreamInterface) (*A2ATurnResult, error) {
-	compatMessages, err := convertA2AMessagesToCompat(messages)
+func (a *openAIA2AModelAdapter) A2ATurn(ctx context.Context, messages []protocol.Message, toolOutcomes []A2AToolOutcome, tools []A2AToolDefinition, eventStream EventStreamInterface) (*A2ATurnResult, error) {
+	compatMessages, err := convertA2AMessagesToCompatExperimental(messages)
 	if err != nil {
 		return nil, fmt.Errorf("adapter: failed to convert A2A messages to compat: %w", err)
 	}
+	a.cacheToolOutcomes(toolOutcomes)
+	compatMessages = a.ensureAssistantToolCallsArePaired(compatMessages)
 
 	var openAITools []openai.ChatCompletionToolParam
 	if len(tools) > 0 {
@@ -57,8 +62,9 @@ func (a *openAIA2AModelAdapter) A2ATurn(ctx context.Context, messages []protocol
 
 	modelCtx := WithA2AExperimentalEnabled(ctx, false)
 	modelCtx = WithA2APayloadMode(modelCtx, A2APayloadModeCompat)
+	forwardOpenAIChunks := eventStream != nil && !IsA2AExperimentalEnabledInContext(ctx)
 
-	response, err := a.callProvider(modelCtx, compatMessages, openAITools, eventStream)
+	response, err := a.callProvider(modelCtx, compatMessages, openAITools, eventStream, forwardOpenAIChunks)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +77,109 @@ func (a *openAIA2AModelAdapter) A2ATurn(ctx context.Context, messages []protocol
 	return a.buildA2ATurnResult(choice)
 }
 
-func (a *openAIA2AModelAdapter) callProvider(ctx context.Context, messages []Message, tools []openai.ChatCompletionToolParam, eventStream EventStreamInterface) (*openai.ChatCompletion, error) {
+func (a *openAIA2AModelAdapter) cacheToolOutcomes(outcomes []A2AToolOutcome) {
+	if len(outcomes) == 0 {
+		return
+	}
+	if a.toolOutcomeByID == nil {
+		a.toolOutcomeByID = map[string]string{}
+	}
+	for _, message := range a2aToolOutcomesToOpenAI(outcomes) {
+		if message.OfTool == nil {
+			continue
+		}
+		id := message.OfTool.ToolCallID
+		if id == "" {
+			continue
+		}
+		a.toolOutcomeByID[id] = message.OfTool.Content.OfString.Value
+	}
+}
+
+func (a *openAIA2AModelAdapter) ensureAssistantToolCallsArePaired(messages []Message) []Message {
+	if len(messages) == 0 {
+		return messages
+	}
+	out := make([]Message, 0, len(messages))
+	for i := 0; i < len(messages); {
+		current := messages[i]
+		if current.OfAssistant == nil || len(current.OfAssistant.ToolCalls) == 0 {
+			out = append(out, current)
+			i++
+			continue
+		}
+
+		out = append(out, current)
+		j := i + 1
+		explicitByID := make(map[string]Message)
+		explicitOrder := make([]Message, 0)
+		for j < len(messages) && messages[j].OfTool != nil {
+			toolMsg := messages[j]
+			explicitOrder = append(explicitOrder, toolMsg)
+			explicitByID[toolMsg.OfTool.ToolCallID] = toolMsg
+			j++
+		}
+
+		usedExplicit := make(map[string]bool)
+		for _, toolCall := range current.OfAssistant.ToolCalls {
+			toolCallID := toolCall.ID
+			if toolCallID == "" {
+				continue
+			}
+			if explicit, ok := explicitByID[toolCallID]; ok {
+				out = append(out, explicit)
+				usedExplicit[toolCallID] = true
+				continue
+			}
+			if content, ok := a.toolOutcomeByID[toolCallID]; ok {
+				out = append(out, openai.ToolMessage(content, toolCallID))
+			}
+		}
+
+		// Preserve any explicit tool messages we couldn't map to assistant calls.
+		for _, explicit := range explicitOrder {
+			if !usedExplicit[explicit.OfTool.ToolCallID] {
+				out = append(out, explicit)
+			}
+		}
+
+		i = j
+	}
+	return out
+}
+
+func a2aToolOutcomesToOpenAI(outcomes []A2AToolOutcome) []Message {
+	if len(outcomes) == 0 {
+		return nil
+	}
+	messages := make([]Message, 0, len(outcomes))
+	for _, outcome := range outcomes {
+		toolCallID := outcome.ToolCallID
+		if toolCallID == "" {
+			continue
+		}
+		content := outcome.Content
+		if content == "" {
+			content = outcome.Error
+		}
+		if content == "" && len(outcome.Metadata) > 0 {
+			raw, err := json.Marshal(outcome.Metadata)
+			if err == nil {
+				content = string(raw)
+			}
+		}
+		if content == "" {
+			content = "{}"
+		}
+		messages = append(messages, openai.ToolMessage(content, toolCallID))
+	}
+	if len(messages) == 0 {
+		return nil
+	}
+	return messages
+}
+
+func (a *openAIA2AModelAdapter) callProvider(ctx context.Context, messages []Message, tools []openai.ChatCompletionToolParam, eventStream EventStreamInterface, forwardOpenAIChunks bool) (*openai.ChatCompletion, error) {
 	ctx, span := a.telemetryRecorder.StartModelExecution(ctx, a.modelName, a.modelType)
 	defer span.End()
 
@@ -89,7 +197,7 @@ func (a *openAIA2AModelAdapter) callProvider(ctx context.Context, messages []Mes
 	var response *openai.ChatCompletion
 	var err error
 
-	if eventStream != nil {
+	if eventStream != nil && forwardOpenAIChunks {
 		response, err = a.provider.ChatCompletionStream(ctx, otelMessages, 1, func(chunk *openai.ChatCompletionChunk) error {
 			chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, a.modelName, nil)
 			return eventStream.StreamChunk(ctx, chunkWithMeta)
@@ -152,7 +260,7 @@ func (a *openAIA2AModelAdapter) buildA2ATurnResult(choice openai.ChatCompletionC
 		assistantMsg.OfAssistant.ToolCalls = toolCallParams
 	}
 
-	a2aMsg, err := OpenAIToA2AMessage(assistantMsg)
+	a2aMsg, err := OpenAIToA2AMessageExperimental(assistantMsg)
 	if err != nil {
 		return nil, fmt.Errorf("adapter: failed to convert assistant message to A2A: %w", err)
 	}

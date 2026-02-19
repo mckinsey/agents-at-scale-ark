@@ -438,9 +438,10 @@ The new architecture introduces a **dedicated A2A local engine** (`A2ALocalEngin
 ```
 New native loop:
   protocol.Message → A2ALocalEngine.Execute()
-                   → A2AModelProvider.A2ATurn()  ← provider-neutral interface
+                  → A2AModelProvider.A2ATurn()  ← provider-neutral interface
                    → A2ATurnResult{Message, ToolCalls}
-                   → executeA2AToolCalls() using A2AToolCall (no OpenAI types)
+                  → executeA2AToolCalls() using A2AToolCall (no OpenAI types)
+                  → []A2AToolOutcome (structured outcomes, no synthetic tool message)
 ```
 
 ### Boundary Contracts
@@ -450,6 +451,7 @@ New native loop:
 | `A2AModelProvider` | Provider-neutral model interface accepting `[]protocol.Message` | `a2a_model_provider.go` |
 | `A2ATurnResult` | Model response: `protocol.Message` + `[]A2AToolCall` | `a2a_model_provider.go` |
 | `A2AToolCall` | Tool call with `ID`, `Name`, `Arguments` (no OpenAI types) | `a2a_model_provider.go` |
+| `A2AToolOutcome` | Structured tool outcome for next model turn (`toolCallId`, `taskId`, `contextId`, content/error) | `a2a_model_provider.go` |
 | `A2AToolDefinition` | Tool schema with `Name`, `Description`, `Parameters` | `a2a_model_provider.go` |
 | `A2ALocalEngine` | Turn loop operating on A2A types only | `a2a_local_engine.go` |
 | `OpenAIA2AModelAdapter` | Adapter wrapping `ChatCompletionProvider` behind `A2AModelProvider` | `openai_a2a_model_adapter.go` |
@@ -472,6 +474,18 @@ To add a new backend, implement `A2AModelProvider` and wire it in `executeLocall
 ### Hard-Fail Behavior
 
 If a provider does not have an A2A adapter, the engine returns `ErrA2AModelProviderNotSupported` immediately. There is no silent fallback from native mode to compat mode. This is enforced at the `A2ALocalEngine.Execute()` entry point.
+
+### Task-First Delegated Tool Semantics
+
+Native delegated execution is task-first and event-first:
+
+- Delegated tool activity is streamed upstream as native A2A events (`TaskStatusUpdateEvent`, `TaskArtifactUpdateEvent`, task-scoped messages).
+- Correlation metadata is attached using `https://ark.mckinsey.com/extensions/delegated-tool/v1`.
+- The native loop does not inject synthetic tool-result messages into the A2A message history.
+- Tool outcomes are passed to the next provider turn through `[]A2AToolOutcome`.
+- OpenAI provider deltas are adapter-internal and are not forwarded on the native delegated event stream.
+
+This keeps the internal native path aligned with A2A task lifecycle semantics while retaining explicit adapter behavior for providers that need OpenAI tool messages.
 
 ---
 
@@ -504,8 +518,32 @@ If a provider does not have an A2A adapter, the engine returns `ErrA2AModelProvi
 
 ### Phase 4: Composability (In Progress)
 - [x] Structured agent-as-tool delegation (#1082) - Schema exposed for `message`, `history`, `contextId`
+- [x] Delegated tool extension contract (`https://ark.mckinsey.com/extensions/delegated-tool/v1`)
+- [x] Task-first delegated stream forwarding (status/artifact/message passthrough + correlation metadata)
+- [x] Structured native tool outcomes (`A2AToolOutcome`) replacing synthetic tool-result message dependency
 - [ ] History propagation extension
 - [ ] Identity/permissions extension
+
+### Experimental Multimodal Boundary
+
+Experimental multimodal handling is implemented only at A2A-native adapter boundaries.
+
+- Default completions conversion paths remain unchanged, including shared memory and compat decode surfaces.
+- `GetMessages(...)` remains legacy conversion (`A2AToOpenAIMessage`) with no experimental branching.
+- Shared compat decode remains string-only (`convertFromExecutionEngineMessage(...)`), while `contentParts` decode is experimental-only in `ExecuteA2A(...)`.
+- Experimental converter functions are additive and referenced only by experimental adapter call sites.
+- No compatibility fallback is added between native and compat paths.
+
+### Rollback Checklist (Experimental Multimodal Additions)
+
+If experimental multimodal handling must be removed, delete only the additive experimental surface:
+
+1. Remove experimental converter files/functions under `ark/internal/genai` (for example `*experimental*` conversion helpers).
+2. Revert experimental-only call sites in A2A-native adapters back to existing legacy converters.
+3. Remove experimental-only tests that validate multimodal adapter boundaries.
+4. Keep default completions and compat converter paths unchanged.
+
+This keeps rollback bounded to additive code and preserves existing non-experimental behavior.
 
 #### Agent-as-Tool A2A Schema
 
@@ -560,9 +598,31 @@ The experimental annotation ensures opt-in adoption without disrupting productio
 
 ---
 
+## Related Issue Tracking
+
+This section tracks related GitHub issues and how A2A-native execution plus files/tools/params work contributes. It does not imply issue closure.
+
+| Issue | Title | Tracking Note |
+| --- | --- | --- |
+| [#1059](https://github.com/mckinsey/agents-at-scale-ark/issues/1059) | feat: A2A native execution with capability routing, streaming, and composability | Primary umbrella for A2A-native architecture. Multimodal boundary work and AgentCard structured-delegation signaling keep experimental behavior additive, discoverable, and removable. |
+| [#530](https://github.com/mckinsey/agents-at-scale-ark/issues/530) | feat: A2A streaming for real-time task and query updates | Native event streaming path can carry richer A2A message semantics; multimodal-safe boundaries reduce risk of payload loss in streamed updates. |
+| [#965](https://github.com/mckinsey/agents-at-scale-ark/issues/965) | Add support for openAI response API | Tracked as an edge adapter. A2A internal transport and multimodal support reduce coupling and keep Response API optional. |
+| [#630](https://github.com/mckinsey/agents-at-scale-ark/issues/630) | rfc: responses api | Same framing as #965: Response API remains useful but not the internal canonical transport for rich message content. |
+| [#1028](https://github.com/mckinsey/agents-at-scale-ark/issues/1028) | Desing: upgrade the experience to enable image input and tool usage for response API | A2A experimental multimodal handling addresses the core transport problem for images/files; Response API work remains an experience and compatibility layer. |
+| [#37](https://github.com/mckinsey/agents-at-scale-ark/issues/37) | rfc: Non-Completions Models | A2A-first internal message format supports provider/API decoupling and helps avoid OpenAI-specific internal abstractions. |
+| [#869](https://github.com/mckinsey/agents-at-scale-ark/issues/869) | rfc: Claude Code A2A integration | A2A boundary model supports heterogeneous external agents while preserving internal execution semantics. |
+| [#1101](https://github.com/mckinsey/agents-at-scale-ark/issues/1101) | Reference implementation - Claude agent execution behind A2A | Directly enabled by stable A2A transport boundaries and delegated tool/event contracts. |
+| [#877](https://github.com/mckinsey/agents-at-scale-ark/issues/877) | rfc: Standalone Agent Runtime | A2A transport separation supports runtime portability by isolating provider-specific edge adapters from core execution flow. |
+| [#1082](https://github.com/mckinsey/agents-at-scale-ark/issues/1082) | feat: enable runtime parameter passing for agents-as-tools and team members | Complements A2A composability by enabling structured parameter passing alongside native message/history/context surfaces; parity coverage now includes `message`-only, `message + history + contextId`, and legacy `input` fallback scenarios. |
+| [#1116](https://github.com/mckinsey/agents-at-scale-ark/issues/1116) | Add conversation id for quries so user can call tools deterministically and pass outputs to agents | Aligns with A2A `contextId`/task correlation direction and improves deterministic multi-turn tool orchestration. |
+| [#557](https://github.com/mckinsey/agents-at-scale-ark/issues/557) | fix: partial tool parameters should support valueFrom | Parameter-sourcing capability is related to the broader tools/params track and complements A2A-native composability. |
+| [#558](https://github.com/mckinsey/agents-at-scale-ark/issues/558) | fix: agent-as-tool should not require input parameter when using partial | Related to agent-as-tool ergonomics; improves adoption of structured params and partial tool usage in A2A-enabled workflows. |
+
+---
+
 ## References
 
 - [A2A Protocol Documentation](https://github.com/a2aproject/A2A)
 - [Core Architecture](/reference/core-architecture)
 - [Response API Support](https://github.com/mckinsey/agents-at-scale-ark/issues/965)
-- GitHub Issues: #1082, #1059, #530, #877, #869, #1101, #1116, #557, #558
+- GitHub Issues: #37, #530, #557, #558, #630, #869, #877, #965, #1028, #1059, #1082, #1101, #1116

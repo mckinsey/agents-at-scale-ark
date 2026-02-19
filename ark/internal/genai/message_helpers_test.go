@@ -575,6 +575,30 @@ func TestPrepareA2ANewMessagesForMemory(t *testing.T) {
 	}
 }
 
+func TestPrepareA2ANewMessagesForMemorySkipsAssistantToolCallMessages(t *testing.T) {
+	input := []protocol.Message{
+		protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{protocol.NewTextPart("q")}),
+	}
+	intermediate := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{protocol.NewTextPart("calling tool")})
+	intermediate.Metadata = map[string]interface{}{
+		MetadataToolCallsKey: []map[string]string{
+			{"id": "call-1", "name": "filesystem-list-directory"},
+		},
+	}
+	final := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{protocol.NewTextPart("final answer")})
+
+	newMessages := PrepareA2ANewMessagesForMemory(input, []protocol.Message{intermediate, final})
+	if len(newMessages) != 2 {
+		t.Fatalf("new messages len = %d, want %d", len(newMessages), 2)
+	}
+	if got := ExtractA2ATextFromMessage(newMessages[0]); got != "q" {
+		t.Fatalf("newMessages[0] = %q, want %q", got, "q")
+	}
+	if got := ExtractA2ATextFromMessage(newMessages[1]); got != "final answer" {
+		t.Fatalf("newMessages[1] = %q, want %q", got, "final answer")
+	}
+}
+
 func TestExtractA2AUserMessageContent(t *testing.T) {
 	messages := []protocol.Message{
 		protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{protocol.NewTextPart("assistant")}),

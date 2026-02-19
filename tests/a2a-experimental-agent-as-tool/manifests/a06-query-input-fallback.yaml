@@ -1,12 +1,11 @@
-# Test Query - triggers coordinator to delegate with A2A message
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
-  name: a2a-delegation-test
+  name: a2a-delegation-input-fallback
   annotations:
     ark.mckinsey.com/a2a-experimental-enabled: "true"
 spec:
-  input: "[scenario-message-history-context] Process this request using A2A delegation"
+  input: "[scenario-input-fallback] Delegate using legacy input fallback"
   target:
     type: agent
     name: coordinator-agent-a2a

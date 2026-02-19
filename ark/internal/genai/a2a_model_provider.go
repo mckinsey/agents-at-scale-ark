@@ -13,6 +13,16 @@ type A2AToolCall struct {
 	Arguments string `json:"arguments"`
 }
 
+type A2AToolOutcome struct {
+	ToolCallID string                 `json:"toolCallId"`
+	ToolName   string                 `json:"toolName"`
+	Content    string                 `json:"content,omitempty"`
+	Error      string                 `json:"error,omitempty"`
+	TaskID     string                 `json:"taskId,omitempty"`
+	ContextID  string                 `json:"contextId,omitempty"`
+	Metadata   map[string]interface{} `json:"metadata,omitempty"`
+}
+
 type A2ATurnResult struct {
 	Message   protocol.Message
 	ToolCalls []A2AToolCall
@@ -20,7 +30,7 @@ type A2ATurnResult struct {
 }
 
 type A2AModelProvider interface {
-	A2ATurn(ctx context.Context, messages []protocol.Message, tools []A2AToolDefinition, eventStream EventStreamInterface) (*A2ATurnResult, error)
+	A2ATurn(ctx context.Context, messages []protocol.Message, toolOutcomes []A2AToolOutcome, tools []A2AToolDefinition, eventStream EventStreamInterface) (*A2ATurnResult, error)
 }
 
 type A2AToolDefinition struct {

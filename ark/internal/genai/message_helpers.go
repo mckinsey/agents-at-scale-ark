@@ -71,8 +71,23 @@ func PrepareA2AExecutionMessages(inputMessages, memoryMessages []protocol.Messag
 func PrepareA2ANewMessagesForMemory(inputMessages, responseMessages []protocol.Message) []protocol.Message {
 	newMessages := make([]protocol.Message, 0, len(inputMessages)+len(responseMessages))
 	newMessages = append(newMessages, inputMessages...)
-	newMessages = append(newMessages, responseMessages...)
+	for _, message := range responseMessages {
+		if shouldPersistA2AMessageForMemory(message) {
+			newMessages = append(newMessages, message)
+		}
+	}
 	return newMessages
+}
+
+func shouldPersistA2AMessageForMemory(message protocol.Message) bool {
+	if message.Role != protocol.MessageRoleAgent {
+		return true
+	}
+	if message.Metadata == nil {
+		return true
+	}
+	_, hasToolCalls := message.Metadata[MetadataToolCallsKey]
+	return !hasToolCalls
 }
 
 func ExtractA2ATextFromMessage(message protocol.Message) string {

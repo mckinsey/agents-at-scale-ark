@@ -89,7 +89,7 @@ spec:
     catch:
     - events: {}
 
-  - name: execute-query
+  - name: execute-query-message-history-context
     try:
     - apply:
         file: manifests/a04-query.yaml
@@ -106,7 +106,7 @@ spec:
     - events: {}
     - script:
         content: |
-          echo "=== Debug: Query status ==="
+          echo "=== Debug: Query status (message+history+contextId) ==="
           kubectl get query a2a-delegation-test -n $NAMESPACE -o yaml 2>/dev/null || true
           echo "=== Debug: Mock LLM logs ==="
           kubectl logs -l app.kubernetes.io/name=mock-llm -n $NAMESPACE --tail=100 2>/dev/null || true
@@ -114,7 +114,7 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
 
-  - name: verify-response
+  - name: verify-response-message-history-context
     try:
     - assert:
         timeout: 5s
@@ -131,8 +131,104 @@ spec:
     - events: {}
     - script:
         content: |
-          echo "=== Query response ==="
+          echo "=== Query response (message+history+contextId) ==="
           kubectl get query a2a-delegation-test -n $NAMESPACE -o jsonpath='{.status.response}' 2>/dev/null || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: execute-query-message-only
+    try:
+    - apply:
+        file: manifests/a05-query-message-only.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: a2a-delegation-message-only
+          status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
+    catch:
+    - events: {}
+    - script:
+        content: |
+          echo "=== Debug: Query status (message-only) ==="
+          kubectl get query a2a-delegation-message-only -n $NAMESPACE -o yaml 2>/dev/null || true
+          echo "=== Debug: Mock LLM logs ==="
+          kubectl logs -l app.kubernetes.io/name=mock-llm -n $NAMESPACE --tail=100 2>/dev/null || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: verify-response-message-only
+    try:
+    - assert:
+        timeout: 5s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: a2a-delegation-message-only
+          status:
+            (response != null): true
+            (response.target.name): 'coordinator-agent-a2a'
+            (length(response.content) > `10`): true
+    catch:
+    - events: {}
+    - script:
+        content: |
+          echo "=== Query response (message-only) ==="
+          kubectl get query a2a-delegation-message-only -n $NAMESPACE -o jsonpath='{.status.response}' 2>/dev/null || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: execute-query-input-fallback
+    try:
+    - apply:
+        file: manifests/a06-query-input-fallback.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: a2a-delegation-input-fallback
+          status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
+    catch:
+    - events: {}
+    - script:
+        content: |
+          echo "=== Debug: Query status (input fallback) ==="
+          kubectl get query a2a-delegation-input-fallback -n $NAMESPACE -o yaml 2>/dev/null || true
+          echo "=== Debug: Mock LLM logs ==="
+          kubectl logs -l app.kubernetes.io/name=mock-llm -n $NAMESPACE --tail=100 2>/dev/null || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: verify-response-input-fallback
+    try:
+    - assert:
+        timeout: 5s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: a2a-delegation-input-fallback
+          status:
+            (response != null): true
+            (response.target.name): 'coordinator-agent-a2a'
+            (length(response.content) > `10`): true
+    catch:
+    - events: {}
+    - script:
+        content: |
+          echo "=== Query response (input fallback) ==="
+          kubectl get query a2a-delegation-input-fallback -n $NAMESPACE -o jsonpath='{.status.response}' 2>/dev/null || true
         env:
         - name: NAMESPACE
           value: ($namespace)

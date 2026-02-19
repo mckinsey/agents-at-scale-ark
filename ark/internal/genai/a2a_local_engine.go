@@ -29,6 +29,7 @@ func (e *A2ALocalEngine) Execute(ctx context.Context, userInput protocol.Message
 
 	toolDefs := e.buildToolDefinitions()
 	agentMessages := preparedMessages
+	toolOutcomes := make([]A2AToolOutcome, 0)
 
 	contextID, taskID := resolveA2AMetadataFromInput(ctx, userInput)
 	newMessages := make([]protocol.Message, 0)
@@ -38,10 +39,11 @@ func (e *A2ALocalEngine) Execute(ctx context.Context, userInput protocol.Message
 			return nil, ctx.Err()
 		}
 
-		turnResult, err := e.provider.A2ATurn(ctx, agentMessages, toolDefs, eventStream)
+		turnResult, err := e.provider.A2ATurn(ctx, agentMessages, toolOutcomes, toolDefs, eventStream)
 		if err != nil {
 			return nil, err
 		}
+		toolOutcomes = nil
 
 		a2aAssistantMsg := stampA2AMessageMetadata(turnResult.Message, contextID, taskID)
 		agentMessages = append(agentMessages, a2aAssistantMsg)
@@ -69,13 +71,15 @@ func (e *A2ALocalEngine) Execute(ctx context.Context, userInput protocol.Message
 			return nil, err
 		}
 
-		if err := e.executeA2AToolCalls(ctx, turnResult.ToolCalls, eventStream, &agentMessages, &newMessages, contextID, taskID); err != nil {
+		outcomes, err := e.executeA2AToolCalls(ctx, turnResult.ToolCalls, eventStream, contextID, taskID)
+		if err != nil {
 			logger := logf.FromContext(ctx)
 			if !IsTerminateTeam(err) {
 				logger.Error(err, "Tool execution failed", "agent", e.agentName)
 			}
 			return nil, err
 		}
+		toolOutcomes = outcomes
 	}
 }
 
@@ -95,31 +99,26 @@ func (e *A2ALocalEngine) buildToolDefinitions() []A2AToolDefinition {
 	return a2aDefs
 }
 
-func (e *A2ALocalEngine) executeA2AToolCalls(ctx context.Context, toolCalls []A2AToolCall, eventStream EventStreamInterface, agentMessages, newMessages *[]protocol.Message, contextID, taskID string) error {
+func (e *A2ALocalEngine) executeA2AToolCalls(ctx context.Context, toolCalls []A2AToolCall, eventStream EventStreamInterface, contextID, taskID string) ([]A2AToolOutcome, error) {
 	execCtx := WithToolEventStream(ctx, eventStream)
+	outcomes := make([]A2AToolOutcome, 0, len(toolCalls))
 	for _, tc := range toolCalls {
 		if execCtx.Err() != nil {
-			return execCtx.Err()
+			return nil, execCtx.Err()
 		}
 		if e.tools == nil {
-			return fmt.Errorf("agent %s has no tools configured", e.agentName)
+			return nil, fmt.Errorf("agent %s has no tools configured", e.agentName)
 		}
 
 		result, toolErr := e.tools.ExecuteToolA2A(execCtx, tc)
-
-		toolMsg := buildA2AToolResultMessage(result)
-		toolMsg = stampA2AMessageMetadata(toolMsg, contextID, taskID)
-		*agentMessages = append(*agentMessages, toolMsg)
-		*newMessages = append(*newMessages, toolMsg)
+		outcome := buildA2AToolOutcome(tc, result, toolErr, contextID, taskID)
+		outcomes = append(outcomes, outcome)
 
 		if toolErr != nil {
-			return toolErr
-		}
-		if streamErr := streamNativeA2AMessageStrict(execCtx, eventStream, toolMsg, "tool"); streamErr != nil {
-			return streamErr
+			return outcomes, toolErr
 		}
 	}
-	return nil
+	return outcomes, nil
 }
 
 func streamNativeA2AMessageStrict(ctx context.Context, eventStream EventStreamInterface, message protocol.Message, phase string) error {
@@ -132,16 +131,50 @@ func streamNativeA2AMessageStrict(ctx context.Context, eventStream EventStreamIn
 	return nil
 }
 
-func buildA2AToolResultMessage(result ToolResult) protocol.Message {
-	message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
-		protocol.NewTextPart(result.Content),
-	})
-	message.Metadata = map[string]interface{}{
-		MetadataRoleKey:       RoleTool,
-		MetadataToolCallIDKey: result.ID,
+func buildA2AToolOutcome(call A2AToolCall, result ToolResult, toolErr error, contextID, taskID string) A2AToolOutcome {
+	toolCallID := call.ID
+	if toolCallID == "" && result.ID != "" {
+		toolCallID = result.ID
 	}
+	toolName := call.Name
 	if result.Name != "" {
-		message.Metadata[MetadataToolNameKey] = result.Name
+		toolName = result.Name
 	}
-	return message
+
+	metadata := map[string]interface{}{
+		MetadataStepKindKey: "tool",
+	}
+	if toolCallID != "" {
+		metadata[MetadataToolCallIDKey] = toolCallID
+	}
+	if stepID := buildToolStepID(toolCallID); stepID != "" {
+		metadata[MetadataStepIDKey] = stepID
+	}
+	if toolName != "" {
+		metadata[MetadataToolNameKey] = toolName
+	}
+	if len(result.Metadata) > 0 {
+		for key, value := range result.Metadata {
+			metadata[key] = value
+		}
+	}
+
+	outcome := A2AToolOutcome{
+		ToolCallID: toolCallID,
+		ToolName:   toolName,
+		Content:    result.Content,
+		TaskID:     taskID,
+		ContextID:  contextID,
+		Metadata:   metadata,
+	}
+	if toolErr != nil {
+		outcome.Error = toolErr.Error()
+		metadata[MetadataStepStateKey] = "error"
+	} else {
+		metadata[MetadataStepStateKey] = "done"
+		if result.Error != "" {
+			outcome.Error = result.Error
+		}
+	}
+	return outcome
 }

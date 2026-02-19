@@ -122,7 +122,7 @@ func (bm *BedrockModel) ChatCompletion(ctx context.Context, messages []openai.Ch
 		return nil, err
 	}
 
-	bedrockMessages, systemPrompt := bm.convertMessages(messages)
+	bedrockMessages, systemPrompt := bm.convertMessages(messages, IsA2AExperimentalEnabledInContext(ctx))
 	bedrockTools := bm.convertTools(toolsParam)
 
 	request := bm.buildRequest(bedrockMessages, systemPrompt, bedrockTools)
@@ -216,12 +216,15 @@ func (bm *BedrockModel) buildRequest(messages []bedrockMessage, systemPrompt str
 	}
 }
 
-func (bm *BedrockModel) convertMessages(messages []openai.ChatCompletionMessageParamUnion) ([]bedrockMessage, string) {
+func (bm *BedrockModel) convertMessages(messages []openai.ChatCompletionMessageParamUnion, experimental bool) ([]bedrockMessage, string) {
 	var bedrockMessages []bedrockMessage
 	var systemPrompt string
 
 	for _, msg := range messages {
 		content, role := extractMessageContent(msg)
+		if experimental {
+			content, role = extractMessageContentExperimental(msg)
+		}
 		if content == "" {
 			continue
 		}
@@ -358,6 +361,30 @@ func extractMessageContent(msg openai.ChatCompletionMessageParamUnion) (string, 
 	if toolMsg := msg.OfTool; toolMsg != nil {
 		if content := toolMsg.Content.OfString; content.Value != "" {
 			return content.Value, "tool"
+		}
+	}
+
+	return "", ""
+}
+
+func extractMessageContentExperimental(msg openai.ChatCompletionMessageParamUnion) (string, string) {
+	if content, role := extractMessageContent(msg); content != "" {
+		return content, role
+	}
+
+	if userMsg := msg.OfUser; userMsg != nil && len(userMsg.Content.OfArrayOfContentParts) > 0 {
+		values := make([]string, 0, len(userMsg.Content.OfArrayOfContentParts))
+		for _, part := range userMsg.Content.OfArrayOfContentParts {
+			if part.OfText != nil && part.OfText.Text != "" {
+				values = append(values, part.OfText.Text)
+				continue
+			}
+			if part.OfImageURL != nil && part.OfImageURL.ImageURL.URL != "" {
+				values = append(values, part.OfImageURL.ImageURL.URL)
+			}
+		}
+		if len(values) > 0 {
+			return strings.Join(values, "\n"), RoleUser
 		}
 	}
 

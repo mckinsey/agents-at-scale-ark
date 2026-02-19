@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/openai/openai-go"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -22,9 +23,10 @@ import (
 
 // ExecutionEngineMessage represents a chat message in the format expected by execution engines
 type ExecutionEngineMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-	Name    string `json:"name,omitempty"`
+	Role         string                                       `json:"role"`
+	Content      string                                       `json:"content"`
+	ContentParts []openai.ChatCompletionContentPartUnionParam `json:"contentParts,omitempty"`
+	Name         string                                       `json:"name,omitempty"`
 }
 
 // ExecutionEngineRequest represents the data sent to an external execution engine
@@ -107,6 +109,40 @@ func convertFromExecutionEngineMessage(msg ExecutionEngineMessage) Message {
 		return ToolMessage(msg.Content, "")
 	default:
 		return NewUserMessage(msg.Content)
+	}
+}
+
+func extractExecutionEngineMessageText(parts []openai.ChatCompletionContentPartUnionParam) string {
+	var text string
+	for _, part := range parts {
+		if part.OfText != nil {
+			text += part.OfText.Text
+		}
+	}
+	return text
+}
+
+func convertFromExecutionEngineMessageExperimental(msg ExecutionEngineMessage) Message {
+	content := msg.Content
+	if content == "" && len(msg.ContentParts) > 0 {
+		content = extractExecutionEngineMessageText(msg.ContentParts)
+	}
+
+	if msg.Role == RoleUser && len(msg.ContentParts) > 0 {
+		return openai.UserMessage(msg.ContentParts)
+	}
+
+	switch msg.Role {
+	case RoleUser:
+		return NewUserMessage(content)
+	case RoleAssistant:
+		return NewAssistantMessage(content)
+	case RoleSystem:
+		return NewSystemMessage(content)
+	case RoleTool:
+		return ToolMessage(content, "")
+	default:
+		return NewUserMessage(content)
 	}
 }
 
@@ -300,8 +336,12 @@ func (c *ExecutionEngineClient) ExecuteA2A(ctx context.Context, engineRef *arkv1
 	contextID := GetA2AContextID(ctx)
 	queryID := getQueryID(ctx)
 	for i := range response.Messages {
+		experimentalMode := IsA2AExperimentalEnabledInContext(ctx)
 		compatMessage := convertFromExecutionEngineMessage(response.Messages[i])
-		converted, convErr := OpenAIToA2AMessage(compatMessage)
+		if experimentalMode {
+			compatMessage = convertFromExecutionEngineMessageExperimental(response.Messages[i])
+		}
+		converted, convErr := convertCompatMessageToA2A(compatMessage, experimentalMode)
 		if convErr != nil {
 			return nil, fmt.Errorf("failed to convert execution engine response message %d to A2A: %w", i, convErr)
 		}
