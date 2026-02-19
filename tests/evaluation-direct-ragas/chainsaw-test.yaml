@@ -6,7 +6,6 @@ metadata:
     evaluated: "true"
 spec:
   description: Test direct evaluation functionality with input/output pairs
-  concurrent: false
   steps:
   - name: step-1
     try:
@@ -24,8 +23,6 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
-    - script:
-        content: bash ../helpers/wait-for-evaluator.sh
     - apply:
         file: manifests/a00-evaluator-llm-rbac.yaml
     - apply:
@@ -52,6 +49,8 @@ spec:
           jsonPath:
             path: '{.status.phase}'
             value: 'ready'
+    - script:
+        content: bash ../helpers/wait-for-evaluator.sh
     - apply:
         file: manifests/a04-evaluation.yaml
     - wait:
