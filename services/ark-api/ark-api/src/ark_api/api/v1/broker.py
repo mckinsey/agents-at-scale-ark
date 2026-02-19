@@ -2,16 +2,42 @@
 import json
 import logging
 import os
+import re
 from typing import Optional
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 
 import httpx
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 
 from ark_sdk.client import with_ark_client
 
 from ...utils.memory_client import get_memory_service_address, get_all_memory_resources
+
+VALID_RESOURCE_NAME = re.compile(r'^[a-z0-9]([a-z0-9\-\.]{0,251}[a-z0-9])?$')
+VALID_ID_PATTERN = re.compile(r'^[a-zA-Z0-9\-_\.]{1,256}$')
+
+
+def validate_resource_name(name: str, param_name: str) -> str:
+    """Validate Kubernetes resource name format."""
+    if not name or not VALID_RESOURCE_NAME.match(name):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid {param_name}: must be a valid Kubernetes resource name"
+        )
+    return name
+
+
+def validate_id(value: Optional[str], param_name: str) -> Optional[str]:
+    """Validate ID parameters to prevent injection."""
+    if value is None:
+        return None
+    if not VALID_ID_PATTERN.match(value):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid {param_name}: must contain only alphanumeric characters, hyphens, underscores, or dots"
+        )
+    return value
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +58,7 @@ async def get_broker_url(memory_name: str) -> Optional[str]:
         async with with_ark_client(None, VERSION) as client:
             memory_dicts = await get_all_memory_resources(client, memory_name)
             if not memory_dicts:
-                logger.warning(f"No memory resource found with name: {memory_name}")
+                logger.warning(f"No memory resource found with name: {quote(memory_name, safe='')}")
                 return None
             return get_memory_service_address(memory_dicts[0])
     except Exception as e:
@@ -86,7 +112,7 @@ async def proxy_broker_request(
     broker_url = await get_broker_url(memory)
     if not broker_url:
         return JSONResponse(
-            content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
+            content={"error": {"message": f"Memory service '{quote(memory, safe='')}' not available", "type": "service_unavailable"}},
             status_code=503,
         )
 
@@ -134,6 +160,8 @@ async def get_traces(
     session_id: Optional[str] = Query(None, description="Filter by session ID"),
 ):
     """Get or stream OTEL traces from the broker."""
+    memory = validate_resource_name(memory, "memory")
+    session_id = validate_id(session_id, "session_id")
     return await proxy_broker_request(
         memory, "/traces", watch,
         {"limit": limit, "cursor": cursor, "session_id": session_id}
@@ -149,10 +177,12 @@ async def get_trace(
     memory: str = Query("default", description="Memory resource name"),
 ):
     """Get or stream a specific trace from the broker."""
+    memory = validate_resource_name(memory, "memory")
+    trace_id = validate_id(trace_id, "trace_id")
     params = {"cursor": cursor}
     if from_beginning:
         params["from-beginning"] = "true"
-    return await proxy_broker_request(memory, f"/traces/{trace_id}", watch, params)
+    return await proxy_broker_request(memory, f"/traces/{quote(trace_id, safe='')}", watch, params)
 
 
 @router.get("/messages")
@@ -165,6 +195,9 @@ async def get_messages(
     query_id: Optional[str] = Query(None, description="Filter by query ID"),
 ):
     """Get or stream messages from the broker."""
+    memory = validate_resource_name(memory, "memory")
+    conversation_id = validate_id(conversation_id, "conversation_id")
+    query_id = validate_id(query_id, "query_id")
     return await proxy_broker_request(
         memory, "/messages", watch,
         {"limit": limit, "cursor": cursor, "conversation_id": conversation_id, "query_id": query_id}
@@ -180,6 +213,8 @@ async def get_events(
     session_id: Optional[str] = Query(None, description="Filter by session ID"),
 ):
     """Get or stream operation events from the broker."""
+    memory = validate_resource_name(memory, "memory")
+    session_id = validate_id(session_id, "session_id")
     return await proxy_broker_request(
         memory, "/events", watch,
         {"limit": limit, "cursor": cursor, "session_id": session_id}
@@ -196,10 +231,12 @@ async def get_events_by_query(
     limit: int = Query(100, description="Max events to return"),
 ):
     """Get or stream events for a specific query."""
+    memory = validate_resource_name(memory, "memory")
+    query_id = validate_id(query_id, "query_id")
     params = {"limit": limit, "cursor": cursor}
     if from_beginning:
         params["from-beginning"] = "true"
-    return await proxy_broker_request(memory, f"/events/{query_id}", watch, params)
+    return await proxy_broker_request(memory, f"/events/{quote(query_id, safe='')}", watch, params)
 
 
 @router.get("/chunks")
@@ -211,14 +248,16 @@ async def get_chunks(
     cursor: Optional[int] = Query(None, description="Cursor for pagination"),
 ):
     """Get or stream LLM chunks from the broker."""
+    memory = validate_resource_name(memory, "memory")
+    query_id = validate_id(query_id, "query_id")
     if watch and query_id:
         broker_url = await get_broker_url(memory)
         if not broker_url:
             return JSONResponse(
-                content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
+                content={"error": {"message": f"Memory service '{quote(memory, safe='')}' not available", "type": "service_unavailable"}},
                 status_code=503,
             )
-        url = f"{broker_url}/stream/{query_id}?from-beginning=true"
+        url = f"{broker_url}/stream/{quote(query_id, safe='')}?from-beginning=true"
         logger.info(f"Proxying chunks SSE stream from {url}")
         return StreamingResponse(
             proxy_sse_stream(url),
@@ -237,7 +276,7 @@ async def proxy_broker_delete(memory: str, path: str):
     broker_url = await get_broker_url(memory)
     if not broker_url:
         return JSONResponse(
-            content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
+            content={"error": {"message": f"Memory service '{quote(memory, safe='')}' not available", "type": "service_unavailable"}},
             status_code=503,
         )
     try:
@@ -261,22 +300,26 @@ async def proxy_broker_delete(memory: str, path: str):
 @router.delete("/traces")
 async def purge_traces(memory: str = Query("default", description="Memory resource name")):
     """Purge all traces from the broker."""
+    memory = validate_resource_name(memory, "memory")
     return await proxy_broker_delete(memory, "/traces")
 
 
 @router.delete("/events")
 async def purge_events(memory: str = Query("default", description="Memory resource name")):
     """Purge all events from the broker."""
+    memory = validate_resource_name(memory, "memory")
     return await proxy_broker_delete(memory, "/events")
 
 
 @router.delete("/messages")
 async def purge_messages(memory: str = Query("default", description="Memory resource name")):
     """Purge all messages from the broker."""
+    memory = validate_resource_name(memory, "memory")
     return await proxy_broker_delete(memory, "/messages")
 
 
 @router.delete("/chunks")
 async def purge_chunks(memory: str = Query("default", description="Memory resource name")):
     """Purge all chunks from the broker."""
+    memory = validate_resource_name(memory, "memory")
     return await proxy_broker_delete(memory, "/stream")
