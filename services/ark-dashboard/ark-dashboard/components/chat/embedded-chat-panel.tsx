@@ -6,21 +6,15 @@ import {
   ChevronRight,
   Info,
   MessageCircle,
-  RotateCcw,
-  Send,
   XCircle,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { ChatMessageList } from '@/components/chat/chat-message-list';
+import { ChatPanel } from '@/components/chat/chat-panel';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { trackEvent } from '@/lib/analytics/singleton';
-import { useChatSession } from '@/lib/hooks';
 import { type BrokerStatus, proxyService } from '@/lib/services/proxy';
 import type { GraphEdge } from '@/lib/types/chat-message';
 
@@ -515,24 +509,12 @@ export function EmbeddedChatPanel({
   selectorAgentName,
   graphEdges,
 }: EmbeddedChatPanelProps) {
-  const {
-    messages,
-    isProcessing,
-    error,
-    sendMessage,
-    clearChat,
-    messagesEndRef,
-  } = useChatSession({ name, type });
-
-  const [currentMessage, setCurrentMessage] = useState('');
   const [activeTab, setActiveTab] = useState<TabType>('chat');
   const [debugStreamType, setDebugStreamType] =
     useState<DebugStreamType>('traces');
-  const [debugMode, setDebugMode] = useState(true);
   const [brokerStatus, setBrokerStatus] = useState<BrokerStatus | 'checking'>(
     'checking',
   );
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const traces = useSSEStream('/v1/broker/traces', 'default', name);
   const events = useSSEStream('/v1/broker/events', 'default', name);
@@ -543,31 +525,6 @@ export function EmbeddedChatPanel({
       .then(setBrokerStatus)
       .catch(() => setBrokerStatus('not-installed'));
   }, []);
-
-  useEffect(() => {
-    setTimeout(() => inputRef.current?.focus(), 100);
-  }, []);
-
-  useEffect(() => {
-    if (!isProcessing) {
-      inputRef.current?.focus();
-    }
-  }, [isProcessing]);
-
-  const handleSendMessage = async () => {
-    if (!currentMessage.trim() || isProcessing) return;
-    const userMessage = currentMessage.trim();
-    setCurrentMessage('');
-    inputRef.current?.focus();
-    await sendMessage(userMessage);
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -595,82 +552,13 @@ export function EmbeddedChatPanel({
         <TabsContent
           value="chat"
           className="mt-0 flex flex-1 flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-4" style={{ minHeight: 0 }}>
-            <div className="space-y-4">
-              <ChatMessageList
-                messages={messages}
-                type={type}
-                strategy={strategy}
-                selectorAgentName={selectorAgentName}
-                graphEdges={graphEdges}
-                debugMode={debugMode}
-                isProcessing={isProcessing}
-                error={error}
-                messagesEndRef={messagesEndRef}
-              />
-            </div>
-          </div>
-
-          <div className="flex-shrink-0 border-t">
-            <div className="flex gap-2 p-4">
-              <div className="relative flex-1">
-                <Input
-                  ref={inputRef}
-                  placeholder={
-                    isProcessing ? 'Processing...' : 'Type your message...'
-                  }
-                  value={currentMessage}
-                  onChange={e => setCurrentMessage(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  disabled={isProcessing}
-                />
-              </div>
-              <Button
-                onClick={handleSendMessage}
-                disabled={!currentMessage.trim() || isProcessing}
-                size="sm"
-                variant="default"
-                aria-label="Send message">
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <Separator />
-
-            <div className="px-4 py-2">
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="debug-mode-embedded"
-                  checked={debugMode}
-                  onCheckedChange={checked => {
-                    setDebugMode(checked);
-                    trackEvent({
-                      name: 'chat_debug_mode_toggled',
-                      properties: {
-                        enabled: checked,
-                        targetType: type,
-                        targetName: name,
-                      },
-                    });
-                  }}
-                />
-                <label
-                  htmlFor="debug-mode-embedded"
-                  className="text-muted-foreground cursor-pointer text-sm">
-                  Show tool calls
-                </label>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearChat}
-                  className="ml-auto h-7 gap-1 px-2 text-xs"
-                  disabled={isProcessing || messages.length === 0}>
-                  <RotateCcw className="h-3 w-3" />
-                  New Chat
-                </Button>
-              </div>
-            </div>
-          </div>
+          <ChatPanel
+            name={name}
+            type={type}
+            strategy={strategy}
+            selectorAgentName={selectorAgentName}
+            graphEdges={graphEdges}
+          />
         </TabsContent>
 
         <TabsContent
