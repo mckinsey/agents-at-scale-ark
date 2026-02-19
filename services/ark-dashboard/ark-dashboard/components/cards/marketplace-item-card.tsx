@@ -222,14 +222,9 @@ export function MarketplaceItemCard({
             )}
           </div>
         )}
-
-        {/* Version */}
-        <div className="mt-auto pt-2 text-xs text-gray-500">
-          v{item.version}
-        </div>
       </CardContent>
 
-      <CardFooter className="flex-none border-t border-gray-800 pt-4">
+      <CardFooter className="flex-none pt-4">
         <div className="flex w-full items-center justify-between">
           <div className="text-xs text-gray-500">v{item.version}</div>
 
