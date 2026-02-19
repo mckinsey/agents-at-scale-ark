@@ -26,6 +26,11 @@ spec:
       - name: restart-controller
         image: bitnami/kubectl:latest
         imagePullPolicy: IfNotPresent
+        resources:
+          limits:
+            memory: 128Mi
+          requests:
+            memory: 64Mi
         command:
         - /bin/bash
         - -c
