@@ -1,17 +1,6 @@
 'use client';
 
-import {
-  ArrowLeft,
-  Check,
-  Code,
-  Copy,
-  Download,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Save,
-  Settings,
-  Trash2,
-} from 'lucide-react';
+import { ArrowLeft, Code, Save, Settings, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
@@ -20,6 +9,8 @@ import { toast } from 'sonner';
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
 import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
+import { PanelToggleButton } from '@/components/common/panel-toggle-button';
+import { YamlViewer } from '@/components/common/yaml-viewer';
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { Button } from '@/components/ui/button';
 import { Form } from '@/components/ui/form';
@@ -55,7 +46,6 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(false);
   const [showYaml, setShowYaml] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const isViewing = mode === TeamFormMode.VIEW;
@@ -148,38 +138,6 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
 
     return lines.join('\n');
   }, [team]);
-
-  const handleCopyYaml = () => {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(teamYaml).then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      });
-    } else {
-      const textArea = document.createElement('textarea');
-      textArea.value = teamYaml;
-      textArea.style.position = 'fixed';
-      textArea.style.left = '-9999px';
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const handleDownloadYaml = () => {
-    const blob = new Blob([teamYaml], { type: 'text/yaml' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${team?.name || 'team'}.yaml`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
 
   const handleDelete = async () => {
     if (!team) return;
@@ -354,33 +312,10 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto">
                   {showYaml ? (
-                    <div className="relative h-full">
-                      <div className="absolute top-2 right-4 z-10 flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleCopyYaml}
-                          className="h-7 gap-1 px-2 text-xs">
-                          {copied ? (
-                            <Check className="h-3 w-3" />
-                          ) : (
-                            <Copy className="h-3 w-3" />
-                          )}
-                          {copied ? 'Copied' : 'Copy'}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleDownloadYaml}
-                          className="h-7 gap-1 px-2 text-xs">
-                          <Download className="h-3 w-3" />
-                          Download
-                        </Button>
-                      </div>
-                      <pre className="bg-muted/30 h-full overflow-auto p-4 pt-10 font-mono text-xs">
-                        {teamYaml}
-                      </pre>
-                    </div>
+                    <YamlViewer
+                      yaml={teamYaml}
+                      fileName={team?.name || 'team'}
+                    />
                   ) : (
                     <div className="space-y-4 p-4">
                       <Form {...form}>{formSections}</Form>
@@ -391,23 +326,10 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
             )}
           </div>
 
-          {/* Toggle button */}
-          <Button
-            variant="outline"
-            size="sm"
-            className={`absolute top-1/2 z-10 h-12 w-6 -translate-y-1/2 rounded-l-none rounded-r-md border-l-0 px-0 transition-all duration-300 ${
-              isLeftPanelCollapsed ? 'left-0' : 'left-1/2 -translate-x-px'
-            }`}
-            onClick={() => setIsLeftPanelCollapsed(!isLeftPanelCollapsed)}
-            title={
-              isLeftPanelCollapsed ? 'Show configuration' : 'Hide configuration'
-            }>
-            {isLeftPanelCollapsed ? (
-              <PanelLeftOpen className="h-4 w-4" />
-            ) : (
-              <PanelLeftClose className="h-4 w-4" />
-            )}
-          </Button>
+          <PanelToggleButton
+            isCollapsed={isLeftPanelCollapsed}
+            onToggle={() => setIsLeftPanelCollapsed(!isLeftPanelCollapsed)}
+          />
 
           {/* Right Panel - Chat */}
           <div
