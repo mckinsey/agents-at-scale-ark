@@ -420,7 +420,7 @@ func TestHTTPMemoryGetMessagesReturnsOpenAIDirectly(t *testing.T) {
 		if r.URL.Path == MessagesEndpoint && r.Method == http.MethodGet {
 			w.Header().Set("Content-Type", "application/json")
 			response := MessagesResponse{
-				Messages: []MessageRecord{
+				Items: []MessageRecord{
 					{Message: json.RawMessage(`{"role": "user", "content": "hello from memory"}`)},
 					{Message: json.RawMessage(`{"role": "assistant", "content": "hi there"}`)},
 				},
@@ -483,7 +483,7 @@ func TestHTTPMemoryGetMessagesRemainsLegacyWhenExperimentalEnabled(t *testing.T)
 		if r.URL.Path == MessagesEndpoint && r.Method == http.MethodGet {
 			w.Header().Set("Content-Type", "application/json")
 			response := MessagesResponse{
-				Messages: []MessageRecord{
+				Items: []MessageRecord{
 					{Message: json.RawMessage(serializedA2AUser)},
 				},
 			}
