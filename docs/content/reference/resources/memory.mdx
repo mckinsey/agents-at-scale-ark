@@ -29,6 +29,8 @@ spec:
 
 Memory can be specified in a query resource. If a Memory resource named `default` exists in the namespace, it will be automatically selected for queries that don't explicitly specify a memory.
 
+Memory works with all query target types — agents, models, and tools. When a `conversationId` is provided, messages are persisted to the memory chain regardless of the target type.
+
 Memory in a query resource:
 
 ```yaml
