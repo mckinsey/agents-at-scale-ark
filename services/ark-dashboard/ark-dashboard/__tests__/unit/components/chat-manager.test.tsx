@@ -12,6 +12,19 @@ vi.mock('@/components/floating-chat', () => ({
   )),
 }));
 
+function dispatchChatEvent(
+  type: 'open-floating-chat' | 'toggle-floating-chat',
+  detail: Record<string, unknown>,
+) {
+  window.dispatchEvent(new CustomEvent(type, { detail }));
+}
+
+const agentDetail = (name: string) => ({
+  name,
+  type: 'agent',
+  namespace: 'default',
+});
+
 describe('ChatManager', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -27,17 +40,8 @@ describe('ChatManager', () => {
   it('should open chat window on open-floating-chat event', async () => {
     render(<ChatManager />);
 
-    // Dispatch open event
     act(() => {
-      window.dispatchEvent(
-        new CustomEvent('open-floating-chat', {
-          detail: {
-            name: 'test-agent',
-            type: 'agent',
-            namespace: 'default',
-          },
-        }),
-      );
+      dispatchChatEvent('open-floating-chat', agentDetail('test-agent'));
     });
 
     await waitFor(() => {
@@ -50,17 +54,8 @@ describe('ChatManager', () => {
   it('should not open duplicate chat windows', async () => {
     render(<ChatManager />);
 
-    // Dispatch first open event
     act(() => {
-      window.dispatchEvent(
-        new CustomEvent('open-floating-chat', {
-          detail: {
-            name: 'test-agent',
-            type: 'agent',
-            namespace: 'default',
-          },
-        }),
-      );
+      dispatchChatEvent('open-floating-chat', agentDetail('test-agent'));
     });
 
     await waitFor(() => {
@@ -69,17 +64,8 @@ describe('ChatManager', () => {
       ).toBeInTheDocument();
     });
 
-    // Dispatch duplicate open event
     act(() => {
-      window.dispatchEvent(
-        new CustomEvent('open-floating-chat', {
-          detail: {
-            name: 'test-agent',
-            type: 'agent',
-            namespace: 'default',
-          },
-        }),
-      );
+      dispatchChatEvent('open-floating-chat', agentDetail('test-agent'));
     });
 
     // Should still have only one chat window
@@ -90,17 +76,12 @@ describe('ChatManager', () => {
   it('should handle toggle-floating-chat event to open new chat', async () => {
     render(<ChatManager />);
 
-    // Dispatch toggle event for non-existent chat
     act(() => {
-      window.dispatchEvent(
-        new CustomEvent('toggle-floating-chat', {
-          detail: {
-            name: 'test-team',
-            type: 'team',
-            namespace: 'default',
-          },
-        }),
-      );
+      dispatchChatEvent('toggle-floating-chat', {
+        name: 'test-team',
+        type: 'team',
+        namespace: 'default',
+      });
     });
 
     await waitFor(() => {
@@ -111,17 +92,8 @@ describe('ChatManager', () => {
   it('should handle toggle-floating-chat event to close existing chat', async () => {
     render(<ChatManager />);
 
-    // First open a chat
     act(() => {
-      window.dispatchEvent(
-        new CustomEvent('open-floating-chat', {
-          detail: {
-            name: 'test-agent',
-            type: 'agent',
-            namespace: 'default',
-          },
-        }),
-      );
+      dispatchChatEvent('open-floating-chat', agentDetail('test-agent'));
     });
 
     await waitFor(() => {
@@ -130,17 +102,8 @@ describe('ChatManager', () => {
       ).toBeInTheDocument();
     });
 
-    // Toggle to close it
     act(() => {
-      window.dispatchEvent(
-        new CustomEvent('toggle-floating-chat', {
-          detail: {
-            name: 'test-agent',
-            type: 'agent',
-            namespace: 'default',
-          },
-        }),
-      );
+      dispatchChatEvent('toggle-floating-chat', agentDetail('test-agent'));
     });
 
     await waitFor(() => {
@@ -153,28 +116,9 @@ describe('ChatManager', () => {
   it('should handle multiple chat windows with correct positions', async () => {
     render(<ChatManager />);
 
-    // Open first chat
     act(() => {
-      window.dispatchEvent(
-        new CustomEvent('open-floating-chat', {
-          detail: {
-            name: 'agent1',
-            type: 'agent',
-            namespace: 'default',
-          },
-        }),
-      );
-
-      // Open second chat
-      window.dispatchEvent(
-        new CustomEvent('open-floating-chat', {
-          detail: {
-            name: 'agent2',
-            type: 'agent',
-            namespace: 'default',
-          },
-        }),
-      );
+      dispatchChatEvent('open-floating-chat', agentDetail('agent1'));
+      dispatchChatEvent('open-floating-chat', agentDetail('agent2'));
     });
 
     await waitFor(() => {
@@ -186,23 +130,10 @@ describe('ChatManager', () => {
   it('should close chat window and update positions', async () => {
     render(<ChatManager />);
 
-    // Open three chats
     act(() => {
-      window.dispatchEvent(
-        new CustomEvent('open-floating-chat', {
-          detail: { name: 'chat1', type: 'agent', namespace: 'default' },
-        }),
-      );
-      window.dispatchEvent(
-        new CustomEvent('open-floating-chat', {
-          detail: { name: 'chat2', type: 'agent', namespace: 'default' },
-        }),
-      );
-      window.dispatchEvent(
-        new CustomEvent('open-floating-chat', {
-          detail: { name: 'chat3', type: 'agent', namespace: 'default' },
-        }),
-      );
+      dispatchChatEvent('open-floating-chat', agentDetail('chat1'));
+      dispatchChatEvent('open-floating-chat', agentDetail('chat2'));
+      dispatchChatEvent('open-floating-chat', agentDetail('chat3'));
     });
 
     await waitFor(() => {
@@ -233,15 +164,7 @@ describe('ChatManager', () => {
     window.addEventListener('chat-opened', openedHandler);
 
     act(() => {
-      window.dispatchEvent(
-        new CustomEvent('open-floating-chat', {
-          detail: {
-            name: 'test-agent',
-            type: 'agent',
-            namespace: 'default',
-          },
-        }),
-      );
+      dispatchChatEvent('open-floating-chat', agentDetail('test-agent'));
     });
 
     await waitFor(() => {
@@ -261,17 +184,8 @@ describe('ChatManager', () => {
     const closedHandler = vi.fn();
     window.addEventListener('chat-closed', closedHandler);
 
-    // Open then toggle to close
     act(() => {
-      window.dispatchEvent(
-        new CustomEvent('open-floating-chat', {
-          detail: {
-            name: 'test-agent',
-            type: 'agent',
-            namespace: 'default',
-          },
-        }),
-      );
+      dispatchChatEvent('open-floating-chat', agentDetail('test-agent'));
     });
 
     await waitFor(() => {
@@ -281,15 +195,7 @@ describe('ChatManager', () => {
     });
 
     act(() => {
-      window.dispatchEvent(
-        new CustomEvent('toggle-floating-chat', {
-          detail: {
-            name: 'test-agent',
-            type: 'agent',
-            namespace: 'default',
-          },
-        }),
-      );
+      dispatchChatEvent('toggle-floating-chat', agentDetail('test-agent'));
     });
 
     await waitFor(() => {
@@ -326,15 +232,11 @@ describe('ChatManager', () => {
     render(<ChatManager />);
 
     act(() => {
-      window.dispatchEvent(
-        new CustomEvent('open-floating-chat', {
-          detail: {
-            name: 'strategy-team',
-            type: 'team',
-            strategy: 'round-robin',
-          },
-        }),
-      );
+      dispatchChatEvent('open-floating-chat', {
+        name: 'strategy-team',
+        type: 'team',
+        strategy: 'round-robin',
+      });
     });
 
     await waitFor(() => {
@@ -347,16 +249,14 @@ describe('ChatManager', () => {
   it('should toggle team chat with strategy', async () => {
     render(<ChatManager />);
 
+    const toggleDetail = {
+      name: 'toggle-strategy-team',
+      type: 'team',
+      strategy: 'round-robin',
+    };
+
     act(() => {
-      window.dispatchEvent(
-        new CustomEvent('toggle-floating-chat', {
-          detail: {
-            name: 'toggle-strategy-team',
-            type: 'team',
-            strategy: 'round-robin',
-          },
-        }),
-      );
+      dispatchChatEvent('toggle-floating-chat', toggleDetail);
     });
 
     await waitFor(() => {
@@ -366,15 +266,7 @@ describe('ChatManager', () => {
     });
 
     act(() => {
-      window.dispatchEvent(
-        new CustomEvent('toggle-floating-chat', {
-          detail: {
-            name: 'toggle-strategy-team',
-            type: 'team',
-            strategy: 'round-robin',
-          },
-        }),
-      );
+      dispatchChatEvent('toggle-floating-chat', toggleDetail);
     });
 
     await waitFor(() => {

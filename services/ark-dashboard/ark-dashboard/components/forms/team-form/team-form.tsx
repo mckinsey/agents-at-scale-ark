@@ -216,6 +216,46 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
     );
   }
 
+  const formSections = (
+    <>
+      <BasicInfoSection form={form} mode={mode} disabled={saving} />
+
+      <StrategySection form={form} disabled={saving} />
+
+      <MembersSection
+        agents={agents}
+        selectedMembers={selectedMembers}
+        unavailableMembers={unavailableMembers}
+        onMembersChange={setSelectedMembers}
+        onDeleteUnavailable={member => {
+          setUnavailableMembers(
+            unavailableMembers.filter(m => m.name !== member.name),
+          );
+          setSelectedMembers(
+            selectedMembers.filter(m => m.name !== member.name),
+          );
+        }}
+        disabled={saving}
+      />
+
+      <SelectorSection
+        form={form}
+        agents={agents}
+        unavailableAgents={unavailableMembers.map(m => m.name)}
+        disabled={saving}
+      />
+
+      <GraphSection
+        form={form}
+        selectedMembers={selectedMembers}
+        graphEdges={graphEdges}
+        unavailableMembers={unavailableMembers}
+        onGraphEdgesChange={setGraphEdges}
+        disabled={saving}
+      />
+    </>
+  );
+
   return (
     <div className="absolute inset-0 flex flex-col overflow-hidden">
       <div className="flex-none">
@@ -343,53 +383,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
                     </div>
                   ) : (
                     <div className="space-y-4 p-4">
-                      <Form {...form}>
-                        <BasicInfoSection
-                          form={form}
-                          mode={mode}
-                          disabled={saving}
-                        />
-
-                        <StrategySection form={form} disabled={saving} />
-
-                        <MembersSection
-                          agents={agents}
-                          selectedMembers={selectedMembers}
-                          unavailableMembers={unavailableMembers}
-                          onMembersChange={setSelectedMembers}
-                          onDeleteUnavailable={member => {
-                            setUnavailableMembers(
-                              unavailableMembers.filter(
-                                m => m.name !== member.name,
-                              ),
-                            );
-                            setSelectedMembers(
-                              selectedMembers.filter(
-                                m => m.name !== member.name,
-                              ),
-                            );
-                          }}
-                          disabled={saving}
-                        />
-
-                        <SelectorSection
-                          form={form}
-                          agents={agents}
-                          unavailableAgents={unavailableMembers.map(
-                            m => m.name,
-                          )}
-                          disabled={saving}
-                        />
-
-                        <GraphSection
-                          form={form}
-                          selectedMembers={selectedMembers}
-                          graphEdges={graphEdges}
-                          unavailableMembers={unavailableMembers}
-                          onGraphEdgesChange={setGraphEdges}
-                          disabled={saving}
-                        />
-                      </Form>
+                      <Form {...form}>{formSections}</Form>
                     </div>
                   )}
                 </div>
@@ -441,43 +435,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto">
-                <div className="space-y-4 p-4">
-                  <BasicInfoSection form={form} mode={mode} disabled={saving} />
-
-                  <StrategySection form={form} disabled={saving} />
-
-                  <MembersSection
-                    agents={agents}
-                    selectedMembers={selectedMembers}
-                    unavailableMembers={unavailableMembers}
-                    onMembersChange={setSelectedMembers}
-                    onDeleteUnavailable={member => {
-                      setUnavailableMembers(
-                        unavailableMembers.filter(m => m.name !== member.name),
-                      );
-                      setSelectedMembers(
-                        selectedMembers.filter(m => m.name !== member.name),
-                      );
-                    }}
-                    disabled={saving}
-                  />
-
-                  <SelectorSection
-                    form={form}
-                    agents={agents}
-                    unavailableAgents={unavailableMembers.map(m => m.name)}
-                    disabled={saving}
-                  />
-
-                  <GraphSection
-                    form={form}
-                    selectedMembers={selectedMembers}
-                    graphEdges={graphEdges}
-                    unavailableMembers={unavailableMembers}
-                    onGraphEdgesChange={setGraphEdges}
-                    disabled={saving}
-                  />
-                </div>
+                <div className="space-y-4 p-4">{formSections}</div>
               </div>
             </div>
           </form>
