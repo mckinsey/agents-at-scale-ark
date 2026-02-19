@@ -97,6 +97,8 @@ spec:
             passed: true
     catch:
     - events: {}
+    - events:
+        namespace: default
     - describe:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
