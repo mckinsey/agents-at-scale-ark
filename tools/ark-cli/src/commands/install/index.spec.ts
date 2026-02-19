@@ -28,6 +28,17 @@ vi.mock('../../arkServices.js', () => ({
   arkDependencies: mockArkDependencies,
 }));
 
+const mockIsMarketplaceService = vi.fn();
+const mockGetMarketplaceItem = vi.fn();
+const mockGetAllMarketplaceServices = vi.fn();
+const mockGetAllMarketplaceAgents = vi.fn();
+vi.mock('../../marketplaceServices.js', () => ({
+  isMarketplaceService: mockIsMarketplaceService,
+  getMarketplaceItem: mockGetMarketplaceItem,
+  getAllMarketplaceServices: mockGetAllMarketplaceServices,
+  getAllMarketplaceAgents: mockGetAllMarketplaceAgents,
+}));
+
 const mockOutput = {
   error: vi.fn(),
   info: vi.fn(),
@@ -63,6 +74,7 @@ describe('install command', () => {
       type: 'minikube',
       namespace: 'default',
     });
+    mockIsMarketplaceService.mockReturnValue(false);
   });
 
   it('creates command with correct structure', () => {
@@ -192,6 +204,26 @@ describe('install command', () => {
     await expect(
       command.parseAsync(['node', 'test', 'ark-api'])
     ).rejects.toThrow('process.exit called');
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('shows error when marketplace item not found', async () => {
+    mockIsMarketplaceService.mockReturnValue(true);
+    mockGetMarketplaceItem.mockResolvedValue(null);
+    mockGetAllMarketplaceServices.mockResolvedValue({
+      phoenix: {name: 'phoenix'},
+    });
+    mockGetAllMarketplaceAgents.mockResolvedValue(null);
+
+    const command = createInstallCommand(mockConfig);
+
+    await expect(
+      command.parseAsync(['node', 'test', 'marketplace/services/nonexistent'])
+    ).rejects.toThrow('process.exit called');
+    expect(mockOutput.error).toHaveBeenCalledWith(
+      "marketplace item 'marketplace/services/nonexistent' not found"
+    );
+    expect(mockOutput.info).toHaveBeenCalledWith('available marketplace items:');
     expect(mockExit).toHaveBeenCalledWith(1);
   });
 
