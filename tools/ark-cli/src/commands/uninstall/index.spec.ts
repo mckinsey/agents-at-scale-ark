@@ -168,4 +168,36 @@ describe('uninstall command', () => {
     ).rejects.toThrow('process.exit called');
     expect(mockExit).toHaveBeenCalledWith(1);
   });
+
+  it('handles verbose option', async () => {
+    const mockService = {
+      name: 'ark-dashboard',
+      helmReleaseName: 'ark-dashboard',
+      namespace: 'ark-system',
+    };
+    mockGetInstallableServices.mockReturnValue({
+      'ark-dashboard': mockService,
+    });
+    mockExeca.mockResolvedValue({stdout: ''});
+
+    const command = createUninstallCommand(mockConfig);
+    await command.parseAsync(['node', 'test', 'ark-dashboard', '--verbose']);
+
+    expect(mockExeca).toHaveBeenCalledWith(
+      'helm',
+      [
+        'uninstall',
+        'ark-dashboard',
+        '--ignore-not-found',
+        '--namespace',
+        'ark-system',
+      ],
+      {
+        stdio: 'inherit',
+      }
+    );
+    expect(mockOutput.success).toHaveBeenCalledWith(
+      'ark-dashboard uninstalled successfully'
+    );
+  });
 });

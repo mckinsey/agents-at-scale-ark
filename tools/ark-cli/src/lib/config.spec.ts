@@ -200,6 +200,61 @@ describe('config', () => {
     expect(config.marketplace?.repoUrl).toBe('https://custom.com/marketplace');
     expect(config.marketplace?.registry).toBe('oci://custom.com/charts');
   });
+
+  it('merges service overrides from config file', () => {
+    mockFs.existsSync.mockReturnValue(true);
+    mockFs.readFileSync.mockReturnValue('yaml');
+    mockYaml.parse.mockReturnValue({
+      services: {
+        reusePortForwards: true,
+        'ark-api': {
+          namespace: 'custom-ns',
+          port: 9090,
+        },
+      },
+    });
+
+    const config = loadConfig();
+
+    expect(config.services?.reusePortForwards).toBe(true);
+    expect(config.services?.['ark-api']).toEqual({
+      namespace: 'custom-ns',
+      port: 9090,
+    });
+  });
+
+  it('ARK_SERVICES_REUSE_PORT_FORWARDS environment variable overrides config', () => {
+    mockFs.existsSync.mockReturnValue(true);
+    mockFs.readFileSync.mockReturnValue('yaml');
+    mockYaml.parse.mockReturnValue({
+      services: {
+        reusePortForwards: false,
+      },
+    });
+    process.env.ARK_SERVICES_REUSE_PORT_FORWARDS = '1';
+
+    const config = loadConfig();
+
+    expect(config.services?.reusePortForwards).toBe(true);
+  });
+
+  it('throws error for invalid project YAML', () => {
+    const userConfigPath = path.join(os.homedir(), '.arkrc.yaml');
+    const projectConfigPath = path.join(process.cwd(), '.arkrc.yaml');
+    mockFs.existsSync.mockReturnValue(true);
+    mockFs.readFileSync.mockImplementation((filePath) => {
+      if (filePath === userConfigPath) return 'valid: true';
+      return 'invalid yaml';
+    });
+    mockYaml.parse.mockImplementation((content) => {
+      if (content === 'valid: true') return {valid: true};
+      throw new Error('YAML parse error');
+    });
+
+    expect(() => loadConfig()).toThrow(
+      `Invalid YAML in ${projectConfigPath}: YAML parse error`
+    );
+  });
 });
 
 describe('marketplace helpers', () => {

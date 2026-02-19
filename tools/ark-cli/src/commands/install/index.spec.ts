@@ -360,6 +360,42 @@ describe('install command', () => {
       );
     });
 
+    it('errors when --wait-for-ready used without -y flag', async () => {
+      const command = createInstallCommand(mockConfig);
+
+      await expect(
+        command.parseAsync(['node', 'test', '--wait-for-ready', '30s'])
+      ).rejects.toThrow('process.exit called');
+      expect(mockOutput.error).toHaveBeenCalledWith(
+        '--wait-for-ready requires -y flag for non-interactive mode'
+      );
+      expect(mockExit).toHaveBeenCalledWith(1);
+    });
+
+    it('handles install failure for single service', async () => {
+      const mockService = {
+        name: 'ark-api',
+        helmReleaseName: 'ark-api',
+        chartPath: './charts/ark-api',
+        namespace: 'ark-system',
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-api': mockService,
+      });
+
+      mockExeca
+        .mockResolvedValueOnce({stdout: ''})
+        .mockRejectedValueOnce(new Error('helm upgrade failed'));
+
+      const command = createInstallCommand(mockConfig);
+
+      await expect(
+        command.parseAsync(['node', 'test', 'ark-api'])
+      ).rejects.toThrow('process.exit called');
+      expect(mockOutput.error).toHaveBeenCalledWith('failed to install ark-api');
+      expect(mockExit).toHaveBeenCalledWith(1);
+    });
+
     it('handles service without namespace', async () => {
       const mockService = {
         name: 'ark-dashboard',
