@@ -1,5 +1,4 @@
 import {vi} from 'vitest';
-import chalk from 'chalk';
 
 const mockPrompt = vi.fn();
 vi.mock('inquirer', () => ({
@@ -67,76 +66,6 @@ vi.mock('../../../lib/security.js', () => ({
 const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
 
 const {createProjectGenerator} = await import('./project.js');
-
-interface ProjectStep {
-  desc: string;
-  cmd?: string;
-}
-
-function simulateShowNextSteps(
-  projectType: 'empty' | 'with-samples',
-  selectedModels: string | undefined,
-  namespace: string,
-  destination: string
-): (ProjectStep | string)[] {
-  const steps: (ProjectStep | string)[] = [
-    {
-      desc: 'Navigate to your new project directory',
-      cmd: `cd ${destination}`,
-    },
-  ];
-
-  if (projectType === 'empty') {
-    steps.push(
-      {desc: 'Add YAML files to agents/, teams/, queries/ directories'},
-      {
-        desc: 'Use either the default model already in models/ or a configuration template from samples/models/ of ARK repository',
-      },
-      {desc: 'Edit .env file to set your API keys'},
-      {desc: 'Deploy your project', cmd: 'devspace dev'}
-    );
-  } else if (selectedModels && selectedModels !== 'none') {
-    steps.push(
-      {desc: 'Edit .env file to set your API keys'},
-      {desc: 'Load environment variables', cmd: 'source .env'},
-      {desc: 'Deploy your project', cmd: 'devspace dev'},
-      {
-        desc: 'Test your deployment',
-        cmd: `kubectl get query sample-team-query -w --namespace ${namespace}`,
-      }
-    );
-  } else {
-    steps.push(
-      {
-        desc: 'Use either the default model already in models/ or a configuration template from samples/models/ of ARK repository',
-      },
-      {desc: 'Edit .env file to set your API keys'},
-      {desc: 'Deploy your project', cmd: 'devspace dev'}
-    );
-  }
-
-  return steps;
-}
-
-function renderSteps(steps: (ProjectStep | string)[]): void {
-  console.log(chalk.magenta.bold('🚀 NEXT STEPS:\n'));
-  let stepNumber = 1;
-  steps.forEach((step) => {
-    if (step === '') {
-      console.log();
-    } else if (typeof step === 'object' && step !== null && 'desc' in step) {
-      console.log(
-        chalk.yellow.bold(`   ▶ ${stepNumber}.`) +
-          ' ' +
-          chalk.cyan.bold(step.desc)
-      );
-      if (step.cmd) {
-        console.log(chalk.gray(`      $ ${step.cmd}`));
-      }
-      stepNumber++;
-    }
-  });
-}
 
 describe('project generator', () => {
   beforeEach(() => {
@@ -213,56 +142,6 @@ describe('project generator', () => {
       expect(mockConsoleLog).toHaveBeenCalled();
       const logCalls = mockConsoleLog.mock.calls.flat().join(' ');
       expect(logCalls).toContain('NEXT STEPS');
-    });
-  });
-
-  describe('showNextSteps logic simulation', () => {
-    it('generates correct steps for empty project type', () => {
-      const steps = simulateShowNextSteps('empty', undefined, 'default', '/tmp/test');
-
-      expect(steps.length).toBe(5);
-      const modelStep = steps.find(
-        (s) => typeof s === 'object' && s.desc.includes('default model')
-      );
-      expect(modelStep).toBeDefined();
-
-      renderSteps(steps);
-    });
-
-    it('generates correct steps for project with selected models', () => {
-      const steps = simulateShowNextSteps('with-samples', 'openai', 'default', '/tmp/test');
-
-      expect(steps.length).toBe(5);
-      const testStep = steps.find(
-        (s) => typeof s === 'object' && s.desc.includes('Test your deployment')
-      );
-      expect(testStep).toBeDefined();
-
-      renderSteps(steps);
-    });
-
-    it('generates correct steps for project without model selection', () => {
-      const steps = simulateShowNextSteps('with-samples', 'none', 'default', '/tmp/test');
-
-      expect(steps.length).toBe(4);
-      const modelStep = steps.find(
-        (s) => typeof s === 'object' && s.desc.includes('default model')
-      );
-      expect(modelStep).toBeDefined();
-
-      renderSteps(steps);
-    });
-
-    it('generates correct steps when selectedModels is undefined', () => {
-      const steps = simulateShowNextSteps('with-samples', undefined, 'default', '/tmp/test');
-
-      expect(steps.length).toBe(4);
-      const modelStep = steps.find(
-        (s) => typeof s === 'object' && s.desc.includes('default model')
-      );
-      expect(modelStep).toBeDefined();
-
-      renderSteps(steps);
     });
   });
 });
