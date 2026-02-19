@@ -10,8 +10,20 @@
 
 const { spawn } = require('child_process');
 const net = require('net');
+const path = require('path');
 
 const includeExternal = process.argv.includes('--include-external');
+
+const safeEnv = {
+  ...process.env,
+  PATH: [
+    path.join(process.cwd(), 'node_modules', '.bin'),
+    path.dirname(process.execPath),
+    '/usr/local/bin',
+    '/usr/bin',
+    '/bin'
+  ].join(path.delimiter)
+};
 
 // Get available port from system
 const server = net.createServer();
@@ -20,7 +32,8 @@ server.listen(0, () => {
   server.close(() => {
     // Start http-server on the available port
     const serve = spawn('npx', ['http-server', 'out', '-p', port], {
-      stdio: 'pipe'
+      stdio: 'pipe',
+      env: safeEnv
     });
 
     // Wait for server to start then run link checker
@@ -31,7 +44,8 @@ server.listen(0, () => {
       }
 
       const blc = spawn('npx', args, {
-        stdio: 'inherit'
+        stdio: 'inherit',
+        env: safeEnv
       });
 
       blc.on('close', (code) => {
