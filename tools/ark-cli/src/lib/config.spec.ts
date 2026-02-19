@@ -1,23 +1,23 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 import path from 'path';
 import os from 'os';
 
 const mockFs = {
-  existsSync: jest.fn(),
-  readFileSync: jest.fn(),
+  existsSync: vi.fn(),
+  readFileSync: vi.fn(),
 };
 
-jest.unstable_mockModule('fs', () => ({
+vi.mock('fs', () => ({
   default: mockFs,
   ...mockFs,
 }));
 
 const mockYaml = {
-  parse: jest.fn(),
-  stringify: jest.fn(),
+  parse: vi.fn(),
+  stringify: vi.fn(),
 };
 
-jest.unstable_mockModule('yaml', () => ({
+vi.mock('yaml', () => ({
   default: mockYaml,
   ...mockYaml,
 }));
@@ -28,7 +28,7 @@ describe('config', () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env = {...originalEnv};
   });
 
@@ -206,7 +206,7 @@ describe('marketplace helpers', () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env = {...originalEnv};
   });
 
@@ -223,7 +223,7 @@ describe('marketplace helpers', () => {
       },
     });
 
-    jest.resetModules();
+    vi.resetModules();
     const {getMarketplaceRepoUrl} = await import('./config.js');
 
     expect(getMarketplaceRepoUrl()).toBe('https://custom-repo.com/marketplace');
@@ -232,7 +232,7 @@ describe('marketplace helpers', () => {
   it('getMarketplaceRepoUrl returns default value', async () => {
     mockFs.existsSync.mockReturnValue(false);
 
-    jest.resetModules();
+    vi.resetModules();
     const {getMarketplaceRepoUrl} = await import('./config.js');
 
     expect(getMarketplaceRepoUrl()).toBe(
@@ -249,7 +249,7 @@ describe('marketplace helpers', () => {
       },
     });
 
-    jest.resetModules();
+    vi.resetModules();
     const {getMarketplaceRegistry} = await import('./config.js');
 
     expect(getMarketplaceRegistry()).toBe('oci://custom-registry.com/charts');
@@ -258,7 +258,7 @@ describe('marketplace helpers', () => {
   it('getMarketplaceRegistry returns default value', async () => {
     mockFs.existsSync.mockReturnValue(false);
 
-    jest.resetModules();
+    vi.resetModules();
     const {getMarketplaceRegistry} = await import('./config.js');
 
     expect(getMarketplaceRegistry()).toBe(

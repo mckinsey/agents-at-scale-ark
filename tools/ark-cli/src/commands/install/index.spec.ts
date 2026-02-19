@@ -1,41 +1,41 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 import {Command} from 'commander';
 
-const mockExeca = jest.fn(() => Promise.resolve()) as any;
-jest.unstable_mockModule('execa', () => ({
+const mockExeca = vi.fn(() => Promise.resolve()) as any;
+vi.mock('execa', () => ({
   execa: mockExeca,
 }));
 
-const mockGetClusterInfo = jest.fn() as any;
-jest.unstable_mockModule('../../lib/cluster.js', () => ({
+const mockGetClusterInfo = vi.fn() as any;
+vi.mock('../../lib/cluster.js', () => ({
   getClusterInfo: mockGetClusterInfo,
 }));
 
-const mockGetInstallableServices = jest.fn() as any;
+const mockGetInstallableServices = vi.fn() as any;
 const mockArkServices = {};
 const mockArkDependencies = {};
-jest.unstable_mockModule('../../arkServices.js', () => ({
+vi.mock('../../arkServices.js', () => ({
   getInstallableServices: mockGetInstallableServices,
   arkServices: mockArkServices,
   arkDependencies: mockArkDependencies,
 }));
 
 const mockOutput = {
-  error: jest.fn(),
-  info: jest.fn(),
-  success: jest.fn(),
-  warning: jest.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  success: vi.fn(),
+  warning: vi.fn(),
 };
-jest.unstable_mockModule('../../lib/output.js', () => ({
+vi.mock('../../lib/output.js', () => ({
   default: mockOutput,
 }));
 
-const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+const mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {
   throw new Error('process.exit called');
 }) as any);
 
-jest.spyOn(console, 'log').mockImplementation(() => {});
-jest.spyOn(console, 'error').mockImplementation(() => {});
+vi.spyOn(console, 'log').mockImplementation(() => {});
+vi.spyOn(console, 'error').mockImplementation(() => {});
 
 const {createInstallCommand} = await import('./index.js');
 
@@ -49,7 +49,7 @@ describe('install command', () => {
   } as any;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockGetClusterInfo.mockResolvedValue({
       context: 'test-cluster',
       type: 'minikube',
