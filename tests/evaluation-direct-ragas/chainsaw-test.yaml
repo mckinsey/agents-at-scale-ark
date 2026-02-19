@@ -101,3 +101,7 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
         name: test-direct-evaluation
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluator
+        name: test-evaluator-llm
