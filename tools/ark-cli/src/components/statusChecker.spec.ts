@@ -47,21 +47,34 @@ describe('statusChecker', () => {
       expect(version).toBe('v1.28');
     });
 
-    it('throws error when clientVersion field is missing', () => {
+    it('throws error with cause for invalid JSON', () => {
+      const config = getKubectlVersion();
+
+      try {
+        config.versionExtract('not json');
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toContain('Failed to parse kubectl version JSON');
+        expect((error as Error).cause).toBeDefined();
+      }
+    });
+
+    it('throws error with cause when clientVersion missing', () => {
       const config = getKubectlVersion();
       const jsonOutput = JSON.stringify({serverVersion: {}});
 
-      expect(() => config.versionExtract(jsonOutput)).toThrow(
-        'kubectl version output missing clientVersion field'
-      );
-    });
-
-    it('throws error for invalid JSON', () => {
-      const config = getKubectlVersion();
-
-      expect(() => config.versionExtract('not json')).toThrow(
-        'Failed to parse kubectl version JSON'
-      );
+      try {
+        config.versionExtract(jsonOutput);
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toContain('Failed to parse kubectl version JSON');
+        expect((error as Error).cause).toBeInstanceOf(Error);
+        expect(((error as Error).cause as Error).message).toBe(
+          'kubectl version output missing clientVersion field'
+        );
+      }
     });
   });
 
@@ -91,6 +104,16 @@ describe('statusChecker', () => {
 
         expect(result.dependencies).toBeDefined();
         expect(result.dependencies.length).toBeGreaterThan(0);
+      });
+
+      it('handles kubectl namespace check failure gracefully', async () => {
+        mockCheckCommandExists.mockResolvedValue(false);
+        mockExeca.mockRejectedValue(new Error('kubectl: command not found'));
+
+        const result = await checker.checkAll();
+
+        expect(result.clusterAccess).toBe(false);
+        expect(result.services).toEqual([]);
       });
     });
   });

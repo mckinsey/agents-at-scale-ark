@@ -51,20 +51,31 @@ describe('ArkApiClient', () => {
       ]);
     });
 
-    it('throws error when models list fails', async () => {
-      mockOpenAI.models.list.mockRejectedValue(new Error('Connection refused'));
+    it('throws error with cause when models list fails', async () => {
+      const originalError = new Error('Connection refused');
+      mockOpenAI.models.list.mockRejectedValue(originalError);
 
-      await expect(client.getQueryTargets()).rejects.toThrow(
-        'Failed to get query targets: Connection refused'
-      );
+      try {
+        await client.getQueryTargets();
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe('Failed to get query targets: Connection refused');
+        expect((error as Error).cause).toBe(originalError);
+      }
     });
 
-    it('handles non-Error exceptions', async () => {
+    it('handles non-Error exceptions with cause', async () => {
       mockOpenAI.models.list.mockRejectedValue('string error');
 
-      await expect(client.getQueryTargets()).rejects.toThrow(
-        'Failed to get query targets: Unknown error'
-      );
+      try {
+        await client.getQueryTargets();
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe('Failed to get query targets: Unknown error');
+        expect((error as Error).cause).toBe('string error');
+      }
     });
   });
 
@@ -93,23 +104,34 @@ describe('ArkApiClient', () => {
       expect(agents).toEqual([]);
     });
 
-    it('throws error on HTTP failure', async () => {
+    it('throws error with cause on HTTP failure', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: 500,
       });
 
-      await expect(client.getAgents()).rejects.toThrow(
-        'Failed to get agents: HTTP error! status: 500'
-      );
+      try {
+        await client.getAgents();
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe('Failed to get agents: HTTP error! status: 500');
+        expect((error as Error).cause).toBeInstanceOf(Error);
+      }
     });
 
-    it('throws error on fetch failure', async () => {
-      mockFetch.mockRejectedValue(new Error('Network error'));
+    it('throws error with cause on fetch failure', async () => {
+      const originalError = new Error('Network error');
+      mockFetch.mockRejectedValue(originalError);
 
-      await expect(client.getAgents()).rejects.toThrow(
-        'Failed to get agents: Network error'
-      );
+      try {
+        await client.getAgents();
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe('Failed to get agents: Network error');
+        expect((error as Error).cause).toBe(originalError);
+      }
     });
   });
 
@@ -127,15 +149,20 @@ describe('ArkApiClient', () => {
       expect(mockFetch).toHaveBeenCalledWith('http://localhost:8080/v1/models');
     });
 
-    it('throws error on HTTP failure', async () => {
+    it('throws error with cause on HTTP failure', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: 404,
       });
 
-      await expect(client.getModels()).rejects.toThrow(
-        'Failed to get models: HTTP error! status: 404'
-      );
+      try {
+        await client.getModels();
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe('Failed to get models: HTTP error! status: 404');
+        expect((error as Error).cause).toBeInstanceOf(Error);
+      }
     });
   });
 
@@ -153,15 +180,20 @@ describe('ArkApiClient', () => {
       expect(mockFetch).toHaveBeenCalledWith('http://localhost:8080/v1/tools');
     });
 
-    it('throws error on HTTP failure', async () => {
+    it('throws error with cause on HTTP failure', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: 503,
       });
 
-      await expect(client.getTools()).rejects.toThrow(
-        'Failed to get tools: HTTP error! status: 503'
-      );
+      try {
+        await client.getTools();
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe('Failed to get tools: HTTP error! status: 503');
+        expect((error as Error).cause).toBeInstanceOf(Error);
+      }
     });
   });
 
@@ -179,15 +211,20 @@ describe('ArkApiClient', () => {
       expect(mockFetch).toHaveBeenCalledWith('http://localhost:8080/v1/teams');
     });
 
-    it('throws error on HTTP failure', async () => {
+    it('throws error with cause on HTTP failure', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: 401,
       });
 
-      await expect(client.getTeams()).rejects.toThrow(
-        'Failed to get teams: HTTP error! status: 401'
-      );
+      try {
+        await client.getTeams();
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe('Failed to get teams: HTTP error! status: 401');
+        expect((error as Error).cause).toBeInstanceOf(Error);
+      }
     });
   });
 
@@ -205,15 +242,20 @@ describe('ArkApiClient', () => {
       expect(mockFetch).toHaveBeenCalledWith('http://localhost:8080/v1/sessions');
     });
 
-    it('throws error on HTTP failure', async () => {
+    it('throws error with cause on HTTP failure', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: 500,
       });
 
-      await expect(client.getSessions()).rejects.toThrow(
-        'Failed to get sessions: HTTP error! status: 500'
-      );
+      try {
+        await client.getSessions();
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe('Failed to get sessions: HTTP error! status: 500');
+        expect((error as Error).cause).toBeInstanceOf(Error);
+      }
     });
   });
 
@@ -233,15 +275,20 @@ describe('ArkApiClient', () => {
       );
     });
 
-    it('throws error on HTTP failure', async () => {
+    it('throws error with cause on HTTP failure', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: 404,
       });
 
-      await expect(client.deleteSession('nonexistent')).rejects.toThrow(
-        'Failed to delete session: HTTP error! status: 404'
-      );
+      try {
+        await client.deleteSession('nonexistent');
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe('Failed to delete session: HTTP error! status: 404');
+        expect((error as Error).cause).toBeInstanceOf(Error);
+      }
     });
   });
 
@@ -261,15 +308,20 @@ describe('ArkApiClient', () => {
       );
     });
 
-    it('throws error on HTTP failure', async () => {
+    it('throws error with cause on HTTP failure', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: 500,
       });
 
-      await expect(client.deleteQueryMessages('s1', 'q1')).rejects.toThrow(
-        'Failed to delete query messages: HTTP error! status: 500'
-      );
+      try {
+        await client.deleteQueryMessages('s1', 'q1');
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe('Failed to delete query messages: HTTP error! status: 500');
+        expect((error as Error).cause).toBeInstanceOf(Error);
+      }
     });
   });
 
@@ -289,15 +341,20 @@ describe('ArkApiClient', () => {
       );
     });
 
-    it('throws error on HTTP failure', async () => {
+    it('throws error with cause on HTTP failure', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: 500,
       });
 
-      await expect(client.deleteAllSessions()).rejects.toThrow(
-        'Failed to delete all sessions: HTTP error! status: 500'
-      );
+      try {
+        await client.deleteAllSessions();
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe('Failed to delete all sessions: HTTP error! status: 500');
+        expect((error as Error).cause).toBeInstanceOf(Error);
+      }
     });
   });
 
