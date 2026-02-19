@@ -1,28 +1,27 @@
 'use client';
 
-import { Package, Search } from 'lucide-react';
+import { Filter, Search, Users } from 'lucide-react';
 import { useState } from 'react';
 
 import { PageHeader } from '@/components/common/page-header';
 import { MarketplaceSection } from '@/components/sections/marketplace-section';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type {
   MarketplaceCategory,
   MarketplaceFilters,
   MarketplaceItemType,
 } from '@/lib/api/generated/marketplace-types';
+import { cn } from '@/lib/utils';
 
 export default function MarketplacePage() {
   const [filters, setFilters] = useState<MarketplaceFilters>({});
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTab, setSelectedTab] = useState<'public' | 'internal'>(
+    'public',
+  );
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   const handleSearch = (value: string) => {
     setSearchQuery(value);
@@ -32,107 +31,180 @@ export default function MarketplacePage() {
     }));
   };
 
-  const handleCategoryChange = (value: string) => {
-    setFilters(prev => ({
-      ...prev,
-      category: value === 'all' ? undefined : (value as MarketplaceCategory),
-    }));
-  };
-
-  const handleTypeChange = (value: string) => {
-    setFilters(prev => ({
-      ...prev,
-      type: value === 'all' ? undefined : (value as MarketplaceItemType),
-    }));
-  };
-
-  const handleFeaturedToggle = (value: string) => {
-    setFilters(prev => ({
-      ...prev,
-      featured: value === 'featured' ? true : undefined,
-    }));
+  const handleCategoryChange = (category: string) => {
+    setSelectedCategory(category);
+    if (category === 'all') {
+      setFilters(prev => ({
+        ...prev,
+        category: undefined,
+        type: undefined,
+      }));
+    } else if (category === 'agents') {
+      setFilters(prev => ({
+        ...prev,
+        category: 'agents' as MarketplaceCategory,
+        type: undefined,
+      }));
+    } else if (category === 'workflow') {
+      setFilters(prev => ({
+        ...prev,
+        category: 'workflows' as MarketplaceCategory,
+        type: undefined,
+      }));
+    } else if (category === 'services') {
+      setFilters(prev => ({
+        ...prev,
+        category: undefined,
+        type: 'service' as MarketplaceItemType,
+      }));
+    }
   };
 
   return (
-    <div className="bg-background min-h-screen">
+    <div className="min-h-screen bg-gray-950">
       <PageHeader currentPage="Marketplace" />
-      <main className="container space-y-8 p-6 py-8">
-        <section>
-          <div className="flex items-center gap-3">
-            <Package className="text-primary h-8 w-8" />
-            <div>
-              <h2 className="text-3xl font-bold">Marketplace</h2>
-              <p className="text-muted-foreground">
-                Explore and install extensions, tools, and integrations for Ark
-              </p>
-            </div>
-          </div>
-        </section>
+      <main className="container mx-auto px-6 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold text-white">Marketplace</h1>
+        </div>
 
-        <section className="space-y-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-            <div className="relative flex-1">
-              <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+        {/* Tabs and Search */}
+        <div className="mb-8 flex items-center justify-between">
+          <Tabs
+            value={selectedTab}
+            onValueChange={v => setSelectedTab(v as 'public' | 'internal')}>
+            <TabsList className="bg-gray-900">
+              <TabsTrigger value="public" className="flex items-center gap-2">
+                Public <span className="text-gray-500">(6)</span>
+              </TabsTrigger>
+              <TabsTrigger value="internal" className="flex items-center gap-2">
+                Internal <span className="text-gray-500">(1)</span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <Input
                 type="search"
                 placeholder="Search marketplace..."
                 value={searchQuery}
                 onChange={e => handleSearch(e.target.value)}
-                className="pl-10"
+                className="w-[300px] border-gray-800 bg-gray-900 pl-10 text-white placeholder-gray-500"
               />
             </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Select
-                value={filters.category || 'all'}
-                onValueChange={handleCategoryChange}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  <SelectItem value="observability">Observability</SelectItem>
-                  <SelectItem value="tools">Tools</SelectItem>
-                  <SelectItem value="mcp-servers">MCP Servers</SelectItem>
-                  <SelectItem value="agents">Agents</SelectItem>
-                  <SelectItem value="models">Models</SelectItem>
-                  <SelectItem value="workflows">Workflows</SelectItem>
-                  <SelectItem value="integrations">Integrations</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={filters.type || 'all'}
-                onValueChange={handleTypeChange}>
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="Type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="service">Service</SelectItem>
-                  <SelectItem value="component">Component</SelectItem>
-                  <SelectItem value="template">Template</SelectItem>
-                  <SelectItem value="plugin">Plugin</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <ToggleGroup
-                type="single"
-                value={filters.featured ? 'featured' : 'all'}
-                onValueChange={handleFeaturedToggle}>
-                <ToggleGroupItem value="all" aria-label="Show all items">
-                  All
-                </ToggleGroupItem>
-                <ToggleGroupItem
-                  value="featured"
-                  aria-label="Show featured items only">
-                  Featured
-                </ToggleGroupItem>
-              </ToggleGroup>
-            </div>
+            <Button
+              variant="outline"
+              size="icon"
+              className="border-gray-800 bg-gray-900 text-gray-400">
+              <Filter className="h-4 w-4" />
+            </Button>
           </div>
-        </section>
+        </div>
 
+        {/* Category Filters */}
+        <div className="mb-8 flex items-center gap-2">
+          <Button
+            variant={selectedCategory === 'all' ? 'secondary' : 'ghost'}
+            size="sm"
+            onClick={() => handleCategoryChange('all')}
+            className={cn(
+              'h-8 px-4',
+              selectedCategory === 'all'
+                ? 'bg-gray-800 text-white hover:bg-gray-700'
+                : 'text-gray-400 hover:bg-gray-900 hover:text-white',
+            )}>
+            All
+          </Button>
+          <Button
+            variant={selectedCategory === 'agents' ? 'secondary' : 'ghost'}
+            size="sm"
+            onClick={() => handleCategoryChange('agents')}
+            className={cn(
+              'flex h-8 items-center gap-1.5 px-4',
+              selectedCategory === 'agents'
+                ? 'bg-gray-800 text-white hover:bg-gray-700'
+                : 'text-gray-400 hover:bg-gray-900 hover:text-white',
+            )}>
+            <Users className="h-3.5 w-3.5" />
+            Agents
+          </Button>
+          <Button
+            variant={selectedCategory === 'workflow' ? 'secondary' : 'ghost'}
+            size="sm"
+            onClick={() => handleCategoryChange('workflow')}
+            className={cn(
+              'flex h-8 items-center gap-1.5 px-4',
+              selectedCategory === 'workflow'
+                ? 'bg-gray-800 text-white hover:bg-gray-700'
+                : 'text-gray-400 hover:bg-gray-900 hover:text-white',
+            )}>
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 16 16">
+              <path
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.5"
+                d="M2 4h12M4 8h8M6 12h4"
+              />
+            </svg>
+            Workflow
+          </Button>
+          <Button
+            variant={selectedCategory === 'services' ? 'secondary' : 'ghost'}
+            size="sm"
+            onClick={() => handleCategoryChange('services')}
+            className={cn(
+              'flex h-8 items-center gap-1.5 px-4',
+              selectedCategory === 'services'
+                ? 'bg-gray-800 text-white hover:bg-gray-700'
+                : 'text-gray-400 hover:bg-gray-900 hover:text-white',
+            )}>
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 16 16">
+              <rect
+                x="2"
+                y="2"
+                width="5"
+                height="5"
+                rx="1"
+                stroke="currentColor"
+                strokeWidth="1.5"
+              />
+              <rect
+                x="9"
+                y="2"
+                width="5"
+                height="5"
+                rx="1"
+                stroke="currentColor"
+                strokeWidth="1.5"
+              />
+              <rect
+                x="2"
+                y="9"
+                width="5"
+                height="5"
+                rx="1"
+                stroke="currentColor"
+                strokeWidth="1.5"
+              />
+              <rect
+                x="9"
+                y="9"
+                width="5"
+                height="5"
+                rx="1"
+                stroke="currentColor"
+                strokeWidth="1.5"
+              />
+            </svg>
+            Services
+          </Button>
+        </div>
+
+        {/* Marketplace Items */}
         <MarketplaceSection
           filters={filters}
           showHeader={false}

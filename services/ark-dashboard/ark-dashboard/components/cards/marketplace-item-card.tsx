@@ -1,15 +1,6 @@
 'use client';
 
-import {
-  CheckCircle,
-  Copy,
-  Download,
-  ExternalLink,
-  Loader2,
-  Star,
-  Terminal,
-} from 'lucide-react';
-import Link from 'next/link';
+import { Copy, Loader2, Terminal } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -126,182 +117,140 @@ export function MarketplaceItemCard({
     }
   };
 
-  const getCategoryColor = (category: string) => {
-    const colors: Record<string, string> = {
-      observability: 'bg-blue-500/10 text-blue-700 dark:text-blue-400',
-      tools: 'bg-green-500/10 text-green-700 dark:text-green-400',
-      'mcp-servers': 'bg-purple-500/10 text-purple-700 dark:text-purple-400',
-      agents: 'bg-orange-500/10 text-orange-700 dark:text-orange-400',
-      models: 'bg-pink-500/10 text-pink-700 dark:text-pink-400',
-      workflows: 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400',
-      integrations: 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-400',
-    };
-    return (
-      colors[category] || 'bg-gray-500/10 text-gray-700 dark:text-gray-400'
-    );
-  };
-
-  const getStatusIcon = () => {
-    if (localStatus === 'installed') {
-      return <CheckCircle className="h-4 w-4 text-green-600" />;
+  const getTypeIcon = (type: string) => {
+    if (type === 'service') {
+      return (
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 16 16">
+          <rect
+            x="2"
+            y="2"
+            width="5"
+            height="5"
+            rx="1"
+            stroke="currentColor"
+            strokeWidth="1.5"
+          />
+          <rect
+            x="9"
+            y="2"
+            width="5"
+            height="5"
+            rx="1"
+            stroke="currentColor"
+            strokeWidth="1.5"
+          />
+          <rect
+            x="2"
+            y="9"
+            width="5"
+            height="5"
+            rx="1"
+            stroke="currentColor"
+            strokeWidth="1.5"
+          />
+          <rect
+            x="9"
+            y="9"
+            width="5"
+            height="5"
+            rx="1"
+            stroke="currentColor"
+            strokeWidth="1.5"
+          />
+        </svg>
+      );
+    } else if (item.category === 'agents') {
+      return <Terminal className="h-4 w-4" />;
     }
     return null;
-  };
-
-  const formatDownloads = (count: number) => {
-    if (count >= 1000) {
-      return `${(count / 1000).toFixed(1)}k`;
-    }
-    return count.toString();
   };
 
   return (
     <Card
       className={cn(
-        'group relative flex h-full flex-col transition-all hover:shadow-lg',
+        'group relative flex h-full flex-col border-gray-800 bg-gray-900 transition-all hover:border-gray-700',
         className,
       )}>
-      {item.featured && (
-        <div className="absolute top-2 right-2 z-10">
+      <CardHeader className="flex-none space-y-3">
+        {/* Type Badge */}
+        <div className="flex items-center justify-between">
           <Badge
-            variant="secondary"
-            className="bg-yellow-500/10 text-yellow-700 dark:text-yellow-400">
-            Featured
+            variant="outline"
+            className={cn(
+              'flex items-center gap-1.5 border px-2 py-0.5 text-xs',
+              item.type === 'service'
+                ? 'border-blue-500/30 bg-blue-500/10 text-blue-400'
+                : item.category === 'agents'
+                  ? 'border-green-500/30 bg-green-500/10 text-green-400'
+                  : 'border-gray-700 bg-gray-800 text-gray-400',
+            )}>
+            {getTypeIcon(item.type)}
+            <span className="capitalize">
+              {item.category === 'agents' ? 'Agent' : item.type}
+            </span>
           </Badge>
         </div>
-      )}
 
-      <CardHeader className="flex-none">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-muted flex h-10 w-10 items-center justify-center rounded-lg text-xl">
-              {item.icon || '📦'}
-            </div>
-            <div className="flex-1">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                {item.name}
-                {getStatusIcon()}
-              </CardTitle>
-              <div className="mt-1 flex items-center gap-2">
-                <Badge
-                  variant="secondary"
-                  className={cn('text-xs', getCategoryColor(item.category))}>
-                  {item.category.replace('-', ' ')}
-                </Badge>
-                <Badge variant="outline" className="text-xs">
-                  {item.type}
-                </Badge>
-              </div>
-            </div>
-          </div>
+        {/* Title and Description */}
+        <div>
+          <CardTitle className="text-xl font-semibold text-white">
+            {item.name}
+          </CardTitle>
+          <CardDescription className="mt-2 line-clamp-2 text-gray-400">
+            {item.shortDescription}
+          </CardDescription>
         </div>
       </CardHeader>
 
-      <CardContent className="flex-1">
-        <CardDescription className="line-clamp-2">
-          {item.shortDescription}
-        </CardDescription>
-
-        <div className="text-muted-foreground mt-4 flex items-center gap-4 text-xs">
-          <div className="flex items-center gap-1">
-            <Download className="h-3 w-3" />
-            <span>{formatDownloads(item.downloads)}</span>
-          </div>
-          {item.rating && (
-            <div className="flex items-center gap-1">
-              <Star className="h-3 w-3 fill-current text-yellow-500" />
-              <span>{item.rating.toFixed(1)}</span>
-            </div>
-          )}
-          <div className="flex items-center gap-1">
-            <span>v{item.version}</span>
-          </div>
-        </div>
-
+      <CardContent className="flex-1 space-y-4">
+        {/* Tags */}
         {item.tags.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1">
-            {item.tags.slice(0, 3).map(tag => (
-              <Badge key={tag} variant="secondary" className="text-xs">
+          <div className="flex flex-wrap gap-2">
+            {item.tags.slice(0, 4).map(tag => (
+              <Badge
+                key={tag}
+                variant="secondary"
+                className="border-0 bg-gray-800 px-2 py-0.5 text-xs text-gray-400">
                 {tag}
               </Badge>
             ))}
-            {item.tags.length > 3 && (
-              <Badge variant="secondary" className="text-xs">
-                +{item.tags.length - 3}
+            {item.tags.length > 4 && (
+              <Badge
+                variant="secondary"
+                className="border-0 bg-gray-800 px-2 py-0.5 text-xs text-gray-400">
+                +{item.tags.length - 4}
               </Badge>
             )}
           </div>
         )}
+
+        {/* Version */}
+        <div className="mt-auto pt-2 text-xs text-gray-500">
+          v{item.version}
+        </div>
       </CardContent>
 
-      <CardFooter className="flex-none border-t pt-4">
+      <CardFooter className="flex-none border-t border-gray-800 pt-4">
         <div className="flex w-full items-center justify-between">
-          <div className="flex items-center gap-2">
-            {item.repository && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={e => {
-                  e.stopPropagation();
-                  window.open(item.repository, '_blank');
-                }}
-                className="h-8 px-2">
-                <ExternalLink className="h-4 w-4" />
-              </Button>
-            )}
-            {item.documentation && (
-              <Link
-                href={item.documentation}
-                onClick={e => e.stopPropagation()}
-                target="_blank">
-                <Button variant="ghost" size="sm" className="h-8 px-2">
-                  Docs
-                </Button>
-              </Link>
-            )}
-          </div>
+          <div className="text-xs text-gray-500">v{item.version}</div>
 
-          <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 border-gray-700 bg-transparent text-white hover:bg-gray-800"
+            onClick={handleInstall}
+            disabled={isInstalling || localStatus === 'installed'}>
             {localStatus === 'installed' ? (
-              <Button variant="outline" size="sm" disabled className="h-8">
-                <CheckCircle className="mr-1 h-3 w-3" />
-                Installed
-              </Button>
+              'Installed'
+            ) : isInstalling ? (
+              <>
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                Installing...
+              </>
             ) : (
-              <Button
-                variant="default"
-                size="sm"
-                className="h-8"
-                onClick={handleInstall}
-                disabled={isInstalling}>
-                {isInstalling ? (
-                  <>
-                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                    Loading...
-                  </>
-                ) : (
-                  <>
-                    <Download className="mr-1 h-3 w-3" />
-                    Install
-                  </>
-                )}
-              </Button>
+              'Install'
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1"
-              onClick={e => {
-                e.stopPropagation();
-                const url = item.documentation || item.repository;
-                if (url) {
-                  window.open(url, '_blank');
-                }
-              }}>
-              View
-              <ExternalLink className="h-3 w-3" />
-            </Button>
-          </div>
+          </Button>
         </div>
       </CardFooter>
 
