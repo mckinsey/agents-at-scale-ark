@@ -18,8 +18,8 @@ const server = net.createServer();
 server.listen(0, () => {
   const port = server.address().port;
   server.close(() => {
-    // Start serve on the available port
-    const serve = spawn('npx', ['serve', 'out', '-l', port], {
+    // Start http-server on the available port
+    const serve = spawn('npx', ['http-server', 'out', '-p', port], {
       stdio: 'pipe'
     });
 
