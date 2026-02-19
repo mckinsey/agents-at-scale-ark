@@ -163,7 +163,7 @@ async def get_traces(
     validated_memory = validate_resource_name(memory, "memory")
     session_id = validate_id(session_id, "session_id")
     return await proxy_broker_request(
-        memory, "/traces", watch,
+        validated_memory, "/traces", watch,
         {"limit": limit, "cursor": cursor, "session_id": session_id}
     )
 
