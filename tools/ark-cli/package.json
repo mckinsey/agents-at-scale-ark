@@ -86,6 +86,7 @@
     "node": ">=18.0.0"
   },
   "overrides": {
-    "minimatch": "^10.2.1"
+    "minimatch": "^9.0.5",
+    "test-exclude": "^7.0.1"
   }
 }
