@@ -14,16 +14,8 @@ const path = require('path');
 
 const includeExternal = process.argv.includes('--include-external');
 
-const safeEnv = {
-  ...process.env,
-  PATH: [
-    path.join(process.cwd(), 'node_modules', '.bin'),
-    path.dirname(process.execPath),
-    '/usr/local/bin',
-    '/usr/bin',
-    '/bin'
-  ].join(path.delimiter)
-};
+// Use absolute path to npx (located alongside node binary)
+const npxPath = path.join(path.dirname(process.execPath), 'npx');
 
 // Get available port from system
 const server = net.createServer();
@@ -31,9 +23,8 @@ server.listen(0, () => {
   const port = server.address().port;
   server.close(() => {
     // Start http-server on the available port
-    const serve = spawn('npx', ['http-server', 'out', '-p', port], {
-      stdio: 'pipe',
-      env: safeEnv
+    const serve = spawn(npxPath, ['http-server', 'out', '-p', port], {
+      stdio: 'pipe'
     });
 
     // Wait for server to start then run link checker
@@ -43,9 +34,8 @@ server.listen(0, () => {
         args.push('--exclude-external');
       }
 
-      const blc = spawn('npx', args, {
-        stdio: 'inherit',
-        env: safeEnv
+      const blc = spawn(npxPath, args, {
+        stdio: 'inherit'
       });
 
       blc.on('close', (code) => {
