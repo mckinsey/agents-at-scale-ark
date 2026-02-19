@@ -15,6 +15,15 @@ import { TeamFormMode } from './types';
 
 type GraphEdge = components['schemas']['GraphEdge'];
 
+export const DEFAULT_SELECTOR_PROMPT = `You are in a role play game. The following roles are available:
+{{.Roles}}.
+Read the following conversation. Then select the next role from {{.Participants}} to play. Only return the role.
+Make sure to choose the role which is best suited to respond to the most recent message.
+
+{{.History}}
+
+Read the above conversation. Then select the next role from {{.Participants}} to play. Only return the role.`;
+
 const teamFormSchema = z.object({
   name: kubernetesNameSchema,
   description: z.string().optional(),
@@ -98,7 +107,9 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
             strategy: teamData.strategy || 'round-robin',
             maxTurns: teamData.maxTurns ? String(teamData.maxTurns) : '',
             selectorAgent: teamData.selector?.agent || '',
-            selectorPrompt: teamData.selector?.selectorPrompt || '',
+            selectorPrompt:
+              teamData.selector?.selectorPrompt ||
+              (teamData.strategy === 'selector' ? DEFAULT_SELECTOR_PROMPT : ''),
           });
         } else {
           const agentsData = await agentsService.getAll();

@@ -15,6 +15,7 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 
+import { DEFAULT_SELECTOR_PROMPT } from '@/components/forms/team-form/use-team-form';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -64,6 +65,8 @@ import type {
 } from '@/lib/services';
 import { cn } from '@/lib/utils';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
+
+export { DEFAULT_SELECTOR_PROMPT };
 
 type GraphEdge = components['schemas']['GraphEdge'];
 
@@ -250,7 +253,9 @@ export function TeamEditor({
         strategy: team.strategy || 'round-robin',
         maxTurns: team.maxTurns ? String(team.maxTurns) : '',
         selectorAgent: team.selector?.agent ?? '',
-        selectorPrompt: team.selector?.selectorPrompt ?? '',
+        selectorPrompt:
+          team.selector?.selectorPrompt ||
+          (team.strategy === 'selector' ? DEFAULT_SELECTOR_PROMPT : ''),
       });
       setGraphEdges(team.graph?.edges || []);
     } else {
@@ -563,7 +568,18 @@ export function TeamEditor({
                       Strategy <span className="text-red-500">*</span>
                     </FormLabel>
                     <Select
-                      onValueChange={field.onChange}
+                      onValueChange={value => {
+                        field.onChange(value);
+                        if (
+                          value === 'selector' &&
+                          !form.getValues('selectorPrompt')
+                        ) {
+                          form.setValue(
+                            'selectorPrompt',
+                            DEFAULT_SELECTOR_PROMPT,
+                          );
+                        }
+                      }}
                       value={field.value}
                       disabled={form.formState.isSubmitting}>
                       <FormControl>

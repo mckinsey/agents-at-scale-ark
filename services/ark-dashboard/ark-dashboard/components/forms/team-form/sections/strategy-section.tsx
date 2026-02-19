@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-import type { TeamFormValues } from '../use-team-form';
+import { DEFAULT_SELECTOR_PROMPT, type TeamFormValues } from '../use-team-form';
 
 interface StrategySectionProps {
   form: UseFormReturn<TeamFormValues>;
@@ -48,7 +48,12 @@ export function StrategySection({
               Strategy <span className="text-red-500">*</span>
             </FormLabel>
             <Select
-              onValueChange={field.onChange}
+              onValueChange={value => {
+                field.onChange(value);
+                if (value === 'selector' && !form.getValues('selectorPrompt')) {
+                  form.setValue('selectorPrompt', DEFAULT_SELECTOR_PROMPT);
+                }
+              }}
               value={field.value}
               disabled={disabled}>
               <FormControl>
