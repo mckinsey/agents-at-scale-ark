@@ -1,22 +1,13 @@
 import {vi} from 'vitest';
 import chalk from 'chalk';
 
+const mockPrompt = vi.fn();
 vi.mock('inquirer', () => ({
-  default: {prompt: vi.fn()},
+  default: {prompt: mockPrompt},
 }));
 
-vi.mock('fs', () => ({
-  default: {
-    existsSync: vi.fn().mockReturnValue(false),
-    mkdirSync: vi.fn(),
-    writeFileSync: vi.fn(),
-    readFileSync: vi.fn().mockReturnValue(''),
-    readdirSync: vi.fn().mockReturnValue([]),
-    statSync: vi.fn().mockReturnValue({isDirectory: () => false}),
-    copyFileSync: vi.fn(),
-    rmSync: vi.fn(),
-  },
-  existsSync: vi.fn().mockReturnValue(false),
+const mockFs = {
+  existsSync: vi.fn(),
   mkdirSync: vi.fn(),
   writeFileSync: vi.fn(),
   readFileSync: vi.fn().mockReturnValue(''),
@@ -24,10 +15,15 @@ vi.mock('fs', () => ({
   statSync: vi.fn().mockReturnValue({isDirectory: () => false}),
   copyFileSync: vi.fn(),
   rmSync: vi.fn(),
+};
+vi.mock('fs', () => ({
+  default: mockFs,
+  ...mockFs,
 }));
 
+const mockExeca = vi.fn();
 vi.mock('execa', () => ({
-  execa: vi.fn().mockResolvedValue({stdout: '', stderr: ''}),
+  execa: mockExeca,
 }));
 
 vi.mock('ora', () => ({
@@ -43,6 +39,10 @@ vi.mock('../templateEngine.js', () => ({
   TemplateEngine: vi.fn().mockImplementation(() => ({
     processDirectory: vi.fn(),
     processFile: vi.fn(),
+    setVariables: vi.fn(),
+    getVariables: vi.fn().mockReturnValue({}),
+    processTemplate: vi.fn().mockResolvedValue(undefined),
+    processString: vi.fn().mockImplementation((str: string) => str),
   })),
 }));
 
@@ -57,10 +57,14 @@ vi.mock('../templateDiscovery.js', () => ({
 vi.mock('../../../lib/security.js', () => ({
   SecurityUtils: {
     validatePath: vi.fn(),
+    sanitizeEnvironmentValue: vi.fn().mockImplementation((value: string) => value),
+    sanitizeEnvFileContent: vi.fn().mockImplementation((content: string) => content),
+    writeFileSafe: vi.fn().mockResolvedValue(undefined),
+    validateEnvironmentFile: vi.fn(),
   },
 }));
 
-vi.spyOn(console, 'log').mockImplementation(() => {});
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
 
 const {createProjectGenerator} = await import('./project.js');
 
@@ -137,6 +141,9 @@ function renderSteps(steps: (ProjectStep | string)[]): void {
 describe('project generator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFs.existsSync.mockReturnValue(false);
+    mockFs.readdirSync.mockReturnValue([]);
+    mockExeca.mockResolvedValue({stdout: '', stderr: ''});
   });
 
   describe('createProjectGenerator', () => {
@@ -155,7 +162,61 @@ describe('project generator', () => {
     });
   });
 
-  describe('showNextSteps logic', () => {
+  describe('generate with showNextSteps', () => {
+    it('shows next steps for empty project type', async () => {
+      mockPrompt
+        .mockResolvedValueOnce({projectType: 'empty', namespace: 'test-ns'})
+        .mockResolvedValueOnce({initGit: false});
+
+      mockFs.existsSync.mockReturnValue(false);
+
+      const generator = createProjectGenerator();
+
+      await generator.generate('test-project', '/tmp', {});
+
+      expect(mockConsoleLog).toHaveBeenCalled();
+      const logCalls = mockConsoleLog.mock.calls.flat().join(' ');
+      expect(logCalls).toContain('NEXT STEPS');
+    });
+
+    it('shows next steps for project with selected models', async () => {
+      mockPrompt
+        .mockResolvedValueOnce({projectType: 'with-samples', namespace: 'test-ns'})
+        .mockResolvedValueOnce({configureModels: true})
+        .mockResolvedValueOnce({selectedModels: 'openai'})
+        .mockResolvedValueOnce({OPENAI_API_KEY: 'test-key'})
+        .mockResolvedValueOnce({initGit: false});
+
+      mockFs.existsSync.mockReturnValue(false);
+
+      const generator = createProjectGenerator();
+
+      await generator.generate('test-project', '/tmp', {});
+
+      expect(mockConsoleLog).toHaveBeenCalled();
+      const logCalls = mockConsoleLog.mock.calls.flat().join(' ');
+      expect(logCalls).toContain('NEXT STEPS');
+    });
+
+    it('shows next steps for project without model selection', async () => {
+      mockPrompt
+        .mockResolvedValueOnce({projectType: 'with-samples', namespace: 'test-ns'})
+        .mockResolvedValueOnce({configureModels: false})
+        .mockResolvedValueOnce({initGit: false});
+
+      mockFs.existsSync.mockReturnValue(false);
+
+      const generator = createProjectGenerator();
+
+      await generator.generate('test-project', '/tmp', {});
+
+      expect(mockConsoleLog).toHaveBeenCalled();
+      const logCalls = mockConsoleLog.mock.calls.flat().join(' ');
+      expect(logCalls).toContain('NEXT STEPS');
+    });
+  });
+
+  describe('showNextSteps logic simulation', () => {
     it('generates correct steps for empty project type', () => {
       const steps = simulateShowNextSteps('empty', undefined, 'default', '/tmp/test');
 
