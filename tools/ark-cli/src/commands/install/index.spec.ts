@@ -196,6 +196,31 @@ describe('install command', () => {
     );
   });
 
+  it('uninstalls prerequisites before installing service', async () => {
+    const mockService = {
+      name: 'ark-api',
+      helmReleaseName: 'ark-api',
+      chartPath: './charts/ark-api',
+      namespace: 'ark-system',
+      prerequisiteUninstalls: [
+        {releaseName: 'old-release', namespace: 'ark-system'},
+      ],
+    };
+    mockGetInstallableServices.mockReturnValue({
+      'ark-api': mockService,
+    });
+    mockExeca.mockResolvedValue({stdout: ''});
+
+    const command = createInstallCommand(mockConfig);
+    await command.parseAsync(['node', 'test', 'ark-api']);
+
+    expect(mockExeca).toHaveBeenCalledWith(
+      'helm',
+      ['uninstall', 'old-release', '--ignore-not-found', '--namespace', 'ark-system'],
+      {stdio: 'inherit'}
+    );
+  });
+
   it('exits when cluster not connected', async () => {
     mockGetClusterInfo.mockResolvedValue({error: true});
 
