@@ -24,7 +24,7 @@ spec:
 
           apk add --no-cache yq
 
-          kubectl get configmap {{ .Release.Name }}-argo-workflows-workflow-controller-configmap -n {{ .Release.Namespace }} -o yaml > /tmp/config.yaml
+          kubectl get configmap {{ .Release.Name }}-workflow-controller-configmap -n {{ .Release.Namespace }} -o yaml > /tmp/config.yaml
 
           yq eval '.data.config |= (. | from_yaml | .workflowDefaults.spec.artifactRepositoryRef = {"configMap": "artifact-repositories", "key": "default"} | to_yaml)' -i /tmp/config.yaml
 
@@ -32,7 +32,7 @@ spec:
 
           echo "Artifact repository configuration complete"
 
-          kubectl rollout restart deployment {{ .Release.Name }}-argo-workflows-workflow-controller -n {{ .Release.Namespace }} || true
+          kubectl rollout restart deployment {{ .Release.Name }}-workflow-controller -n {{ .Release.Namespace }} || true
 
           echo "Waiting for controller to restart..."
           sleep 5

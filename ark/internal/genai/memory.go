@@ -58,18 +58,18 @@ type MessagesRequest struct {
 }
 
 type MessageRecord struct {
-	ID             int64           `json:"id"`
+	Timestamp      string          `json:"timestamp"`
 	ConversationID string          `json:"conversation_id"`
 	QueryID        string          `json:"query_id"`
 	Message        json.RawMessage `json:"message"`
-	CreatedAt      string          `json:"created_at"`
+	Sequence       int64           `json:"sequence"`
 }
 
 type MessagesResponse struct {
-	Messages []MessageRecord `json:"messages"`
-	Total    int             `json:"total"`
-	Limit    int             `json:"limit"`
-	Offset   int             `json:"offset"`
+	Items      []MessageRecord `json:"items"`
+	Total      int             `json:"total"`
+	HasMore    bool            `json:"hasMore"`
+	NextCursor *string         `json:"nextCursor,omitempty"`
 }
 
 func DefaultConfig() Config {
