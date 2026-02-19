@@ -133,6 +133,19 @@ describe('ArkApiClient', () => {
         expect((error as Error).cause).toBe(originalError);
       }
     });
+
+    it('handles non-Error exceptions', async () => {
+      mockFetch.mockRejectedValue('string error');
+
+      try {
+        await client.getAgents();
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe('Failed to get agents: Unknown error');
+        expect((error as Error).cause).toBe('string error');
+      }
+    });
   });
 
   describe('getModels', () => {
@@ -162,6 +175,19 @@ describe('ArkApiClient', () => {
         expect(error).toBeInstanceOf(Error);
         expect((error as Error).message).toBe('Failed to get models: HTTP error! status: 404');
         expect((error as Error).cause).toBeInstanceOf(Error);
+      }
+    });
+
+    it('handles non-Error exceptions', async () => {
+      mockFetch.mockRejectedValue('string error');
+
+      try {
+        await client.getModels();
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe('Failed to get models: Unknown error');
+        expect((error as Error).cause).toBe('string error');
       }
     });
   });
@@ -195,6 +221,19 @@ describe('ArkApiClient', () => {
         expect((error as Error).cause).toBeInstanceOf(Error);
       }
     });
+
+    it('handles non-Error exceptions', async () => {
+      mockFetch.mockRejectedValue('string error');
+
+      try {
+        await client.getTools();
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe('Failed to get tools: Unknown error');
+        expect((error as Error).cause).toBe('string error');
+      }
+    });
   });
 
   describe('getTeams', () => {
@@ -226,6 +265,19 @@ describe('ArkApiClient', () => {
         expect((error as Error).cause).toBeInstanceOf(Error);
       }
     });
+
+    it('handles non-Error exceptions', async () => {
+      mockFetch.mockRejectedValue('string error');
+
+      try {
+        await client.getTeams();
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe('Failed to get teams: Unknown error');
+        expect((error as Error).cause).toBe('string error');
+      }
+    });
   });
 
   describe('getSessions', () => {
@@ -255,6 +307,19 @@ describe('ArkApiClient', () => {
         expect(error).toBeInstanceOf(Error);
         expect((error as Error).message).toBe('Failed to get sessions: HTTP error! status: 500');
         expect((error as Error).cause).toBeInstanceOf(Error);
+      }
+    });
+
+    it('handles non-Error exceptions', async () => {
+      mockFetch.mockRejectedValue('string error');
+
+      try {
+        await client.getSessions();
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe('Failed to get sessions: Unknown error');
+        expect((error as Error).cause).toBe('string error');
       }
     });
   });
@@ -290,6 +355,19 @@ describe('ArkApiClient', () => {
         expect((error as Error).cause).toBeInstanceOf(Error);
       }
     });
+
+    it('handles non-Error exceptions', async () => {
+      mockFetch.mockRejectedValue('string error');
+
+      try {
+        await client.deleteSession('session-123');
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe('Failed to delete session: Unknown error');
+        expect((error as Error).cause).toBe('string error');
+      }
+    });
   });
 
   describe('deleteQueryMessages', () => {
@@ -323,6 +401,19 @@ describe('ArkApiClient', () => {
         expect((error as Error).cause).toBeInstanceOf(Error);
       }
     });
+
+    it('handles non-Error exceptions', async () => {
+      mockFetch.mockRejectedValue('string error');
+
+      try {
+        await client.deleteQueryMessages('s1', 'q1');
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe('Failed to delete query messages: Unknown error');
+        expect((error as Error).cause).toBe('string error');
+      }
+    });
   });
 
   describe('deleteAllSessions', () => {
@@ -354,6 +445,19 @@ describe('ArkApiClient', () => {
         expect(error).toBeInstanceOf(Error);
         expect((error as Error).message).toBe('Failed to delete all sessions: HTTP error! status: 500');
         expect((error as Error).cause).toBeInstanceOf(Error);
+      }
+    });
+
+    it('handles non-Error exceptions', async () => {
+      mockFetch.mockRejectedValue('string error');
+
+      try {
+        await client.deleteAllSessions();
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe('Failed to delete all sessions: Unknown error');
+        expect((error as Error).cause).toBe('string error');
       }
     });
   });

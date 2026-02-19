@@ -76,6 +76,25 @@ describe('statusChecker', () => {
         );
       }
     });
+
+    it('handles non-Error exceptions in versionExtract', () => {
+      const config = getKubectlVersion();
+      const originalParse = JSON.parse;
+      JSON.parse = () => {
+        throw 'string error';
+      };
+
+      try {
+        config.versionExtract('{"test": true}');
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toContain('Failed to parse kubectl version JSON: Unknown error');
+        expect((error as Error).cause).toBe('string error');
+      } finally {
+        JSON.parse = originalParse;
+      }
+    });
   });
 
   describe('StatusChecker', () => {
@@ -133,6 +152,20 @@ describe('statusChecker', () => {
         const nodeDep = result.dependencies.find(d => d.name === 'node');
         expect(nodeDep?.installed).toBe(true);
         expect(nodeDep?.version).toBeDefined();
+      });
+
+      it('throws error with cause on non-Error exception in version check', async () => {
+        mockCheckCommandExists.mockResolvedValue(true);
+        mockExeca.mockRejectedValue('string error');
+
+        try {
+          await checker.checkAll();
+          expect.fail('Should have thrown');
+        } catch (error) {
+          expect(error).toBeInstanceOf(Error);
+          expect((error as Error).message).toContain('Failed to get node version: Unknown error');
+          expect((error as Error).cause).toBe('string error');
+        }
       });
 
       it('sets clusterAccess false when kubectl get namespaces fails', async () => {

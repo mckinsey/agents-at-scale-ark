@@ -6,6 +6,11 @@ vi.mock('execa', () => ({
   execa: mockExeca,
 }));
 
+const mockPrompt = vi.fn();
+vi.mock('inquirer', () => ({
+  default: {prompt: mockPrompt},
+}));
+
 const mockGetClusterInfo = vi.fn() as any;
 vi.mock('../../lib/cluster.js', () => ({
   getClusterInfo: mockGetClusterInfo,
@@ -263,5 +268,106 @@ describe('uninstall command', () => {
     expect(mockOutput.success).toHaveBeenCalledWith(
       'phoenix uninstalled successfully'
     );
+  });
+
+  describe('interactive uninstall', () => {
+    it('prompts for each service when no service name provided', async () => {
+      mockGetInstallableServices.mockReturnValue({
+        'ark-api': {
+          name: 'ark-api',
+          helmReleaseName: 'ark-api',
+          namespace: 'ark-system',
+        },
+        'ark-controller': {
+          name: 'ark-controller',
+          helmReleaseName: 'ark-controller',
+          namespace: 'ark-system',
+        },
+      });
+      mockPrompt.mockResolvedValue({shouldUninstall: true});
+
+      const command = createUninstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test']);
+
+      expect(mockPrompt).toHaveBeenCalled();
+      expect(mockExeca).toHaveBeenCalled();
+    });
+
+    it('skips service when user declines', async () => {
+      mockGetInstallableServices.mockReturnValue({
+        'ark-api': {
+          name: 'ark-api',
+          helmReleaseName: 'ark-api',
+          namespace: 'ark-system',
+        },
+      });
+      mockPrompt.mockResolvedValue({shouldUninstall: false});
+
+      const command = createUninstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test']);
+
+      expect(mockOutput.warning).toHaveBeenCalledWith('skipping ark-api');
+    });
+
+    it('handles Ctrl-C gracefully', async () => {
+      mockGetInstallableServices.mockReturnValue({
+        'ark-api': {
+          name: 'ark-api',
+          helmReleaseName: 'ark-api',
+          namespace: 'ark-system',
+        },
+      });
+      const exitError = new Error('User cancelled');
+      (exitError as any).name = 'ExitPromptError';
+      mockPrompt.mockRejectedValue(exitError);
+
+      const command = createUninstallCommand(mockConfig);
+
+      await expect(
+        command.parseAsync(['node', 'test'])
+      ).rejects.toThrow('process.exit called');
+      expect(mockExit).toHaveBeenCalledWith(130);
+    });
+
+    it('rethrows non-ExitPromptError errors', async () => {
+      mockGetInstallableServices.mockReturnValue({
+        'ark-api': {
+          name: 'ark-api',
+          helmReleaseName: 'ark-api',
+          namespace: 'ark-system',
+        },
+      });
+      mockPrompt.mockRejectedValue(new Error('Unexpected error'));
+
+      const command = createUninstallCommand(mockConfig);
+
+      await expect(
+        command.parseAsync(['node', 'test'])
+      ).rejects.toThrow('Unexpected error');
+    });
+
+    it('continues on uninstall error', async () => {
+      mockGetInstallableServices.mockReturnValue({
+        'ark-api': {
+          name: 'ark-api',
+          helmReleaseName: 'ark-api',
+          namespace: 'ark-system',
+        },
+        'ark-controller': {
+          name: 'ark-controller',
+          helmReleaseName: 'ark-controller',
+          namespace: 'ark-system',
+        },
+      });
+      mockPrompt.mockResolvedValue({shouldUninstall: true});
+      mockExeca
+        .mockRejectedValueOnce(new Error('uninstall failed'))
+        .mockResolvedValueOnce({});
+
+      const command = createUninstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test']);
+
+      expect(mockExeca).toHaveBeenCalledTimes(2);
+    });
   });
 });
