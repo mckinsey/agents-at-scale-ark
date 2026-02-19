@@ -27,7 +27,11 @@ spec:
     - script:
         content: bash ../helpers/wait-for-evaluator.sh
     - apply:
-        file: manifests/*.yaml
+        file: manifests/a00-evaluator-llm-rbac.yaml
+    - apply:
+        file: manifests/a01-secret.yaml
+    - apply:
+        file: manifests/a02-model.yaml
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Model
@@ -37,6 +41,8 @@ spec:
           condition:
             name: ModelAvailable
             value: 'True'
+    - apply:
+        file: manifests/a03-evaluator.yaml
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluator
@@ -46,6 +52,8 @@ spec:
           jsonPath:
             path: '{.status.phase}'
             value: 'ready'
+    - apply:
+        file: manifests/a04-evaluation.yaml
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
