@@ -160,7 +160,7 @@ async def get_traces(
     session_id: Optional[str] = Query(None, description="Filter by session ID"),
 ):
     """Get or stream OTEL traces from the broker."""
-    memory = validate_resource_name(memory, "memory")
+    validated_memory = validate_resource_name(memory, "memory")
     session_id = validate_id(session_id, "session_id")
     return await proxy_broker_request(
         memory, "/traces", watch,
@@ -177,13 +177,12 @@ async def get_trace(
     memory: str = Query("default", description="Memory resource name"),
 ):
     """Get or stream a specific trace from the broker."""
-    memory = validate_resource_name(memory, "memory")
-    trace_id = validate_id(trace_id, "trace_id")
+    validated_memory = validate_resource_name(memory, "memory")
+    validated_trace_id = validate_id(trace_id, "trace_id")
     params = {"cursor": cursor}
     if from_beginning:
         params["from-beginning"] = "true"
-    return await proxy_broker_request(memory, f"/traces/{quote(trace_id, safe='')}", watch, params)
-
+    return await proxy_broker_request(validated_memory, f"/traces/{quote(validated_trace_id, safe='')}", watch, params)
 
 @router.get("/messages")
 async def get_messages(
@@ -195,12 +194,12 @@ async def get_messages(
     query_id: Optional[str] = Query(None, description="Filter by query ID"),
 ):
     """Get or stream messages from the broker."""
-    memory = validate_resource_name(memory, "memory")
-    conversation_id = validate_id(conversation_id, "conversation_id")
-    query_id = validate_id(query_id, "query_id")
+    validated_memory = validate_resource_name(memory, "memory")
+    validated_conversation_id = validate_id(conversation_id, "conversation_id")
+    validated_query_id = validate_id(query_id, "query_id")
     return await proxy_broker_request(
-        memory, "/messages", watch,
-        {"limit": limit, "cursor": cursor, "conversation_id": conversation_id, "query_id": query_id}
+        validated_memory, "/messages", watch,
+        {"limit": limit, "cursor": cursor, "conversation_id": validated_conversation_id, "query_id": validated_query_id}
     )
 
 
@@ -213,11 +212,11 @@ async def get_events(
     session_id: Optional[str] = Query(None, description="Filter by session ID"),
 ):
     """Get or stream operation events from the broker."""
-    memory = validate_resource_name(memory, "memory")
-    session_id = validate_id(session_id, "session_id")
+    validated_memory = validate_resource_name(memory, "memory")
+    validated_session_id = validate_id(session_id, "session_id")
     return await proxy_broker_request(
-        memory, "/events", watch,
-        {"limit": limit, "cursor": cursor, "session_id": session_id}
+        validated_memory, "/events", watch,
+        {"limit": limit, "cursor": cursor, "session_id": validated_session_id}
     )
 
 
@@ -231,13 +230,12 @@ async def get_events_by_query(
     limit: int = Query(100, description="Max events to return"),
 ):
     """Get or stream events for a specific query."""
-    memory = validate_resource_name(memory, "memory")
-    query_id = validate_id(query_id, "query_id")
+    validated_memory = validate_resource_name(memory, "memory")
+    validated_query_id = validate_id(query_id, "query_id")
     params = {"limit": limit, "cursor": cursor}
     if from_beginning:
         params["from-beginning"] = "true"
-    return await proxy_broker_request(memory, f"/events/{quote(query_id, safe='')}", watch, params)
-
+    return await proxy_broker_request(validated_memory, f"/events/{quote(validated_query_id, safe='')}", watch, params)
 
 @router.get("/chunks")
 async def get_chunks(
@@ -248,16 +246,16 @@ async def get_chunks(
     cursor: Optional[int] = Query(None, description="Cursor for pagination"),
 ):
     """Get or stream LLM chunks from the broker."""
-    memory = validate_resource_name(memory, "memory")
-    query_id = validate_id(query_id, "query_id")
-    if watch and query_id:
-        broker_url = await get_broker_url(memory)
+    validated_memory = validate_resource_name(memory, "memory")
+    validated_query_id = validate_id(query_id, "query_id")
+    if watch and validated_query_id:
+        broker_url = await get_broker_url(validated_memory)
         if not broker_url:
             return JSONResponse(
-                content={"error": {"message": f"Memory service '{quote(memory, safe='')}' not available", "type": "service_unavailable"}},
+                content={"error": {"message": f"Memory service '{quote(validated_memory, safe='')}' not available", "type": "service_unavailable"}},
                 status_code=503,
             )
-        url = f"{broker_url}/stream/{quote(query_id, safe='')}?from-beginning=true"
+        url = f"{broker_url}/stream/{quote(validated_query_id, safe='')}?from-beginning=true"
         logger.info(f"Proxying chunks SSE stream from {url}")
         return StreamingResponse(
             proxy_sse_stream(url),
@@ -266,7 +264,7 @@ async def get_chunks(
         )
 
     return await proxy_broker_request(
-        memory, "/stream", watch,
+        validated_memory, "/stream", watch,
         {"limit": limit, "cursor": cursor}
     )
 
@@ -300,26 +298,26 @@ async def proxy_broker_delete(memory: str, path: str):
 @router.delete("/traces")
 async def purge_traces(memory: str = Query("default", description="Memory resource name")):
     """Purge all traces from the broker."""
-    memory = validate_resource_name(memory, "memory")
-    return await proxy_broker_delete(memory, "/traces")
+    validated_memory = validate_resource_name(memory, "memory")
+    return await proxy_broker_delete(validated_memory, "/traces")
 
 
 @router.delete("/events")
 async def purge_events(memory: str = Query("default", description="Memory resource name")):
     """Purge all events from the broker."""
-    memory = validate_resource_name(memory, "memory")
-    return await proxy_broker_delete(memory, "/events")
+    validated_memory = validate_resource_name(memory, "memory")
+    return await proxy_broker_delete(validated_memory, "/events")
 
 
 @router.delete("/messages")
 async def purge_messages(memory: str = Query("default", description="Memory resource name")):
     """Purge all messages from the broker."""
-    memory = validate_resource_name(memory, "memory")
-    return await proxy_broker_delete(memory, "/messages")
+    validated_memory = validate_resource_name(memory, "memory")
+    return await proxy_broker_delete(validated_memory, "/messages")
 
 
 @router.delete("/chunks")
 async def purge_chunks(memory: str = Query("default", description="Memory resource name")):
     """Purge all chunks from the broker."""
-    memory = validate_resource_name(memory, "memory")
-    return await proxy_broker_delete(memory, "/stream")
+    validated_memory = validate_resource_name(memory, "memory")
+    return await proxy_broker_delete(validated_memory, "/stream")
