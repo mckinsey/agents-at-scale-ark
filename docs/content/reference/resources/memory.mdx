@@ -55,10 +55,11 @@ Memory can also be specified via the CLIs:
 
 ```bash
 # Using fark
-fark query --input "Continue our conversation" --session-id "my-session" --conversation-id "my-conversation" my-agent
+fark query --input "Start our conversation" --conversation-id "my-conversation" my-agent
 
 # Using ark
-ark query agent/my-agent "Continue our conversation" --session-id "my-session" --conversation-id "my-conversation"
+ark query tool/noop "Print this message" --conversation-id "my-conversation" 
+ark query agent/my-agent "What was the last message?" --conversation-id "my-conversation" # The last message was "Print this message"
 ```
 
 **Session ID vs Conversation ID:**
