@@ -6,6 +6,14 @@ vi.mock('execa', () => ({
   execa: mockExeca,
 }));
 
+const mockPrompt = vi.fn();
+vi.mock('inquirer', () => ({
+  default: {
+    prompt: mockPrompt,
+    Separator: vi.fn().mockImplementation((text) => ({type: 'separator', line: text})),
+  },
+}));
+
 const mockGetClusterInfo = vi.fn() as any;
 vi.mock('../../lib/cluster.js', () => ({
   getClusterInfo: mockGetClusterInfo,
@@ -426,6 +434,73 @@ describe('install command', () => {
         ['uninstall', 'ark-dashboard'],
         {stdio: 'inherit'}
       );
+    });
+  });
+
+  describe('interactive install', () => {
+    it('prompts for components when no service name and no -y flag', async () => {
+      mockGetInstallableServices.mockReturnValue({
+        'ark-api': {
+          name: 'ark-api',
+          helmReleaseName: 'ark-api',
+          chartPath: './charts/ark-api',
+          namespace: 'ark-system',
+          category: 'core',
+          description: 'API service',
+        },
+      });
+      mockPrompt.mockResolvedValue({components: ['ark-api']});
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test']);
+
+      expect(mockPrompt).toHaveBeenCalled();
+    });
+
+    it('exits when no components selected', async () => {
+      mockGetInstallableServices.mockReturnValue({
+        'ark-api': {
+          name: 'ark-api',
+          helmReleaseName: 'ark-api',
+          chartPath: './charts/ark-api',
+          namespace: 'ark-system',
+          category: 'core',
+          description: 'API service',
+        },
+      });
+      mockPrompt.mockResolvedValue({components: []});
+
+      const command = createInstallCommand(mockConfig);
+
+      await expect(
+        command.parseAsync(['node', 'test'])
+      ).rejects.toThrow('process.exit called');
+      expect(mockOutput.warning).toHaveBeenCalledWith('No components selected. Exiting.');
+      expect(mockExit).toHaveBeenCalledWith(0);
+    });
+
+    it('handles Ctrl-C gracefully during component selection', async () => {
+      mockGetInstallableServices.mockReturnValue({
+        'ark-api': {
+          name: 'ark-api',
+          helmReleaseName: 'ark-api',
+          chartPath: './charts/ark-api',
+          namespace: 'ark-system',
+          category: 'core',
+          description: 'API service',
+        },
+      });
+      const exitError = new Error('User cancelled');
+      (exitError as any).name = 'ExitPromptError';
+      mockPrompt.mockRejectedValue(exitError);
+
+      const command = createInstallCommand(mockConfig);
+
+      await expect(
+        command.parseAsync(['node', 'test'])
+      ).rejects.toThrow('process.exit called');
+      expect(mockExit).toHaveBeenCalledWith(130);
     });
   });
 });
