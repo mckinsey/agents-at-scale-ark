@@ -56,9 +56,10 @@ async def get_broker_url(memory_name: str) -> Optional[str]:
     """Get the broker URL from a Memory resource."""
     try:
         async with with_ark_client(None, VERSION) as client:
-            memory_dicts = await get_all_memory_resources(client, memory_name)
+            validated_memory_name = validate_resource_name(memory_name, "memory")
+            memory_dicts = await get_all_memory_resources(client, validated_memory_name)
             if not memory_dicts:
-                logger.warning(f"No memory resource found with name: {quote(memory_name, safe='')}")
+                logger.warning(f"No memory resource found with name: {quote(validated_memory_name, safe='')}")
                 return None
             return get_memory_service_address(memory_dicts[0])
     except Exception as e:
