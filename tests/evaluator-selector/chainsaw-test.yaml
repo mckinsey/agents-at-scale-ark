@@ -54,12 +54,14 @@ spec:
                 path: '{.status.phase}'
                 value: 'ready'
 
-    - name: test-matching-query
-      description: Create query that matches evaluator selector
+    - name: create-evaluations
+      description: Create query and manual evaluation to run evaluations in parallel
       try:
         - apply:
             file: manifests/a04-query-matching.yaml
             timeout: 60s
+        - apply:
+            file: manifests/a06-manual-evaluation-override.yaml
         # Wait for automatic evaluation to be created
         - assert:
             resource:
@@ -70,6 +72,10 @@ spec:
                 labels:
                   ark.mckinsey.com/auto: "true"
             timeout: 30s
+        # Assert manual evaluation exists
+        - assert:
+            file: manifests/a06-manual-evaluation-override.yaml
+            timeout: 60s
 
     - name: test-non-matching-query
       description: Create query that doesn't match evaluator selector
@@ -88,27 +94,18 @@ spec:
                 name: production-evaluator-non-matching-query-eval
             timeout: 15s
 
-    - name: test-manual-evaluation-override
-      description: Create manual evaluation with parameter overrides
-      try:
-        - apply:
-            file: manifests/a06-manual-evaluation-override.yaml
-        - assert:
-            file: manifests/a06-manual-evaluation-override.yaml
-            timeout: 60s
-
     - name: verify-evaluations
       description: Verify all evaluations have expected parameters and status
       try:
-        - assert:
-            resource:
-              apiVersion: ark.mckinsey.com/v1alpha1
-              kind: Evaluation
-              metadata:
-                name: production-evaluator-matching-query-eval
-              status:
-                phase: done
-            timeout: 180s
+        - wait:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Evaluation
+            name: production-evaluator-matching-query-eval
+            timeout: 10m
+            for:
+              condition:
+                name: Completed
+                value: 'True'
 
         - wait:
             apiVersion: ark.mckinsey.com/v1alpha1
@@ -125,8 +122,18 @@ spec:
               apiVersion: ark.mckinsey.com/v1alpha1
               kind: Evaluation
               metadata:
+                name: production-evaluator-matching-query-eval
+              status:
+                phase: done
+            timeout: 30s
+
+        - assert:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Evaluation
+              metadata:
                 name: manual-override-evaluation
                 namespace: ($namespace)
               status:
                 phase: done
-            timeout: 180s
+            timeout: 30s
