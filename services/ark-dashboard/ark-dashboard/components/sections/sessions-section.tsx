@@ -1308,12 +1308,10 @@ export function SessionsSection() {
             <div className="flex flex-col items-center gap-4 p-8 text-center">
               <AlertCircle className="h-16 w-16 text-red-500 opacity-80" />
               <div className="flex flex-col gap-2">
-                {(error.message.includes('404') ||
-                  error.message.includes('500') ||
-                  error.message.toLowerCase().includes('not found') ||
-                  error.message
-                    .toLowerCase()
-                    .includes('no matches for kind')) && (
+                {error.message.includes('404') ||
+                error.message.includes('500') ||
+                error.message.toLowerCase().includes('not found') ||
+                error.message.toLowerCase().includes('no matches for kind') ? (
                   <div className="text-muted-foreground mt-2 flex flex-col items-center justify-center gap-2 text-sm">
                     <p>
                       Something went wrong. Argo Workflows was not found or is
@@ -1327,6 +1325,10 @@ export function SessionsSection() {
                       View installation guide
                       <ExternalLink className="h-3 w-3" />
                     </a>
+                  </div>
+                ) : (
+                  <div className="text-muted-foreground mt-2 flex flex-col items-center justify-center gap-2 text-sm">
+                    <p>{error.message}</p>
                   </div>
                 )}
               </div>

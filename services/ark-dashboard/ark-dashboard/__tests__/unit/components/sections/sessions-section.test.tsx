@@ -339,7 +339,7 @@ describe('SessionsSection', () => {
 
       render(<SessionsSection />);
 
-      expect(screen.getByText(/Error: Failed to fetch workflows/i)).toBeInTheDocument();
+      expect(screen.getByText(/Failed to fetch workflows/i)).toBeInTheDocument();
     });
 
     it('should handle network errors gracefully', () => {
