@@ -154,6 +154,21 @@ describe('statusChecker', () => {
         expect(nodeDep?.version).toBeDefined();
       });
 
+      it('throws error with cause on Error exception in version check', async () => {
+        mockCheckCommandExists.mockResolvedValue(true);
+        const originalError = new Error('command failed');
+        mockExeca.mockRejectedValue(originalError);
+
+        try {
+          await checker.checkAll();
+          expect.fail('Should have thrown');
+        } catch (error) {
+          expect(error).toBeInstanceOf(Error);
+          expect((error as Error).message).toContain('Failed to get node version: command failed');
+          expect((error as Error).cause).toBe(originalError);
+        }
+      });
+
       it('throws error with cause on non-Error exception in version check', async () => {
         mockCheckCommandExists.mockResolvedValue(true);
         mockExeca.mockRejectedValue('string error');
