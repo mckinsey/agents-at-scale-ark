@@ -174,10 +174,9 @@ export function MarketplaceItemCard({
       <CardHeader className="flex-none space-y-3">
         {/* Type Badge */}
         <div className="flex items-center justify-between">
-          <Badge
-            variant="outline"
+          <div
             className={cn(
-              'flex items-center gap-1.5 border px-2 py-0.5 text-xs',
+              'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium',
               item.type === 'service'
                 ? 'border-blue-500/30 bg-blue-500/10 text-blue-400'
                 : item.category === 'agents'
@@ -188,7 +187,7 @@ export function MarketplaceItemCard({
             <span className="capitalize">
               {item.category === 'agents' ? 'Agent' : item.type}
             </span>
-          </Badge>
+          </div>
         </div>
 
         {/* Title and Description */}
