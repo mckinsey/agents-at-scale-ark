@@ -23,6 +23,7 @@ export default {
 
   '---rfcs': { type: 'separator', title: 'RFCs' },
   'a2a-native-execution': 'A2A Native Execution',
+  'a2a-streaming-responses-primer': 'A2A Task Streaming + Responses Primer',
 
   '---project': { type: 'separator', title: 'Project' },
   contributors: 'Contributors'
