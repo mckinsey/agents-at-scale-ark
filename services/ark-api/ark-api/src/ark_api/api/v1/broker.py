@@ -25,7 +25,7 @@ def validate_resource_name(name: str, param_name: str) -> str:
             status_code=400,
             detail=f"Invalid {param_name}: must be a valid Kubernetes resource name"
         )
-    return name
+    return quote(name, safe='-.')
 
 
 def validate_id(value: Optional[str], param_name: str) -> Optional[str]:
@@ -37,7 +37,7 @@ def validate_id(value: Optional[str], param_name: str) -> Optional[str]:
             status_code=400,
             detail=f"Invalid {param_name}: must contain only alphanumeric characters, hyphens, underscores, or dots"
         )
-    return value
+    return quote(value, safe='-_.')
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ async def get_broker_url(memory_name: str) -> Optional[str]:
             validated_memory_name = validate_resource_name(memory_name, "memory")
             memory_dicts = await get_all_memory_resources(client, validated_memory_name)
             if not memory_dicts:
-                logger.warning(f"No memory resource found with name: {quote(validated_memory_name, safe='')}")
+                logger.warning(f"No memory resource found with name: {validated_memory_name}")
                 return None
             return get_memory_service_address(memory_dicts[0])
     except Exception as e:
@@ -113,7 +113,7 @@ async def proxy_broker_request(
     broker_url = await get_broker_url(memory)
     if not broker_url:
         return JSONResponse(
-            content={"error": {"message": f"Memory service '{quote(memory, safe='')}' not available", "type": "service_unavailable"}},
+            content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
             status_code=503,
         )
 
@@ -183,7 +183,7 @@ async def get_trace(
     params = {"cursor": cursor}
     if from_beginning:
         params["from-beginning"] = "true"
-    return await proxy_broker_request(validated_memory, f"/traces/{quote(validated_trace_id, safe='')}", watch, params)
+    return await proxy_broker_request(validated_memory, f"/traces/{validated_trace_id}", watch, params)
 
 @router.get("/messages")
 async def get_messages(
@@ -236,7 +236,7 @@ async def get_events_by_query(
     params = {"limit": limit, "cursor": cursor}
     if from_beginning:
         params["from-beginning"] = "true"
-    return await proxy_broker_request(validated_memory, f"/events/{quote(validated_query_id, safe='')}", watch, params)
+    return await proxy_broker_request(validated_memory, f"/events/{validated_query_id}", watch, params)
 
 @router.get("/chunks")
 async def get_chunks(
@@ -253,10 +253,10 @@ async def get_chunks(
         broker_url = await get_broker_url(validated_memory)
         if not broker_url:
             return JSONResponse(
-                content={"error": {"message": f"Memory service '{quote(validated_memory, safe='')}' not available", "type": "service_unavailable"}},
+                content={"error": {"message": f"Memory service '{validated_memory}' not available", "type": "service_unavailable"}},
                 status_code=503,
             )
-        url = f"{broker_url}/stream/{quote(validated_query_id, safe='')}?from-beginning=true"
+        url = f"{broker_url}/stream/{validated_query_id}?from-beginning=true"
         logger.info(f"Proxying chunks SSE stream from {url}")
         return StreamingResponse(
             proxy_sse_stream(url),
@@ -275,7 +275,7 @@ async def proxy_broker_delete(memory: str, path: str):
     broker_url = await get_broker_url(memory)
     if not broker_url:
         return JSONResponse(
-            content={"error": {"message": f"Memory service '{quote(memory, safe='')}' not available", "type": "service_unavailable"}},
+            content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
             status_code=503,
         )
     try:
