@@ -65,6 +65,10 @@ const (
 )
 
 const (
+	A2ADelegationInvocationArgsKey = "ark.mckinsey.com/delegation-args"
+)
+
+const (
 	A2ADelegatedToolKindTool   = "tool"
 	A2ADelegatedToolKindStatus = "status"
 )

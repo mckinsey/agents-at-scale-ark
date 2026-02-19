@@ -335,6 +335,79 @@ func parseA2AHistoryArgument(rawValue any) ([]protocol.Message, error) {
 	return history, nil
 }
 
+func ensureMessageHasExtension(message *protocol.Message, extensionURI string) {
+	for _, extension := range message.Extensions {
+		if extension == extensionURI {
+			return
+		}
+	}
+	message.Extensions = append(message.Extensions, extensionURI)
+}
+
+func extractDelegationInvocationArgs(arguments map[string]any) map[string]string {
+	rawValue, exists := arguments[A2ADelegationInvocationArgsKey]
+	if !exists || rawValue == nil {
+		return nil
+	}
+	result := map[string]string{}
+	switch typed := rawValue.(type) {
+	case map[string]any:
+		for key, value := range typed {
+			stringValue, ok := value.(string)
+			if !ok {
+				continue
+			}
+			trimmed := strings.TrimSpace(stringValue)
+			if trimmed == "" {
+				continue
+			}
+			result[key] = trimmed
+		}
+	case map[string]string:
+		for key, value := range typed {
+			trimmed := strings.TrimSpace(value)
+			if trimmed == "" {
+				continue
+			}
+			result[key] = trimmed
+		}
+	default:
+		return nil
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func applyDelegatedInvocationExtension(message *protocol.Message, arguments map[string]any) error {
+	if message == nil {
+		return nil
+	}
+	invocationArgs := extractDelegationInvocationArgs(arguments)
+	if len(invocationArgs) == 0 {
+		return nil
+	}
+
+	extension := A2ADelegatedToolExtension{}
+	if existing, ok := parseA2ADelegatedToolExtension(message.Metadata); ok {
+		extension = existing
+	}
+	if extension.InvocationArgs == nil {
+		extension.InvocationArgs = map[string]string{}
+	}
+	for key, value := range invocationArgs {
+		if _, exists := extension.InvocationArgs[key]; exists {
+			continue
+		}
+		extension.InvocationArgs[key] = value
+	}
+
+	message.Metadata = withA2ADelegatedToolExtension(message.Metadata, extension)
+	ensureMessageHasExtension(message, A2ADelegatedToolExtensionKey)
+	return nil
+}
+
 func parseNativeDelegationInput(arguments map[string]any, targetType, targetName string) (delegatedInvocation, string, error) {
 	invocation := delegatedInvocation{
 		a2aHistory: []protocol.Message{},
@@ -357,25 +430,19 @@ func parseNativeDelegationInput(arguments map[string]any, targetType, targetName
 		}
 		invocation.a2aHistory = history
 	}
-	if rawMessage, exists := arguments["message"]; exists {
-		message, err := parseA2AMessageArgument(rawMessage)
-		if err != nil {
-			return delegatedInvocation{}, "message parameter is invalid", err
-		}
-		invocation.a2aUserInput = message
-		return invocation, "", nil
-	}
-	input, exists := arguments["input"]
+	rawMessage, exists := arguments["message"]
 	if !exists {
 		return delegatedInvocation{}, "message parameter is required", fmt.Errorf("message parameter is required for %s tool %s", targetType, targetName)
 	}
-	inputStr, ok := input.(string)
-	if !ok {
-		return delegatedInvocation{}, "input parameter must be a string", fmt.Errorf("input parameter must be a string for %s tool %s", targetType, targetName)
+
+	message, err := parseA2AMessageArgument(rawMessage)
+	if err != nil {
+		return delegatedInvocation{}, "message parameter is invalid", err
 	}
-	invocation.a2aUserInput = protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
-		protocol.NewTextPart(inputStr),
-	})
+	if err := applyDelegatedInvocationExtension(&message, arguments); err != nil {
+		return delegatedInvocation{}, err.Error(), err
+	}
+	invocation.a2aUserInput = message
 	return invocation, "", nil
 }
 

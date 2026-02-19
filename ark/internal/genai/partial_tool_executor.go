@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -71,6 +72,11 @@ func (p *PartialToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolR
 		mergedParams[k] = v
 	}
 
+	invocationArgs := extractDelegationArgsFromMergedParams(mergedParams)
+	if len(invocationArgs) > 0 {
+		mergedParams[A2ADelegationInvocationArgsKey] = invocationArgs
+	}
+
 	argsBytes, err := json.Marshal(mergedParams)
 	if err != nil {
 		return ToolResult{
@@ -81,6 +87,38 @@ func (p *PartialToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolR
 	}
 	call.Function.Arguments = string(argsBytes)
 	return p.BaseExecutor.Execute(ctx, call)
+}
+
+func extractDelegationArgsFromMergedParams(params map[string]any) map[string]string {
+	if len(params) == 0 {
+		return nil
+	}
+	excluded := map[string]struct{}{
+		"message":                      {},
+		"history":                      {},
+		"contextId":                    {},
+		"input":                        {},
+		A2ADelegationInvocationArgsKey: {},
+	}
+	result := map[string]string{}
+	for key, rawValue := range params {
+		if _, skip := excluded[key]; skip {
+			continue
+		}
+		value, ok := rawValue.(string)
+		if !ok {
+			continue
+		}
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		result[key] = trimmed
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
 func (p *PartialToolExecutor) resolveParameter(ctx context.Context, param arkv1alpha1.ToolFunction, templateData map[string]any) (string, error) {

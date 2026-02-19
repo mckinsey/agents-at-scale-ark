@@ -641,15 +641,85 @@ func TestParseDelegatedInvocationNativeMessageHistoryContext(t *testing.T) {
 	require.Equal(t, protocol.MessageRoleAgent, invocation.a2aHistory[0].Role)
 }
 
-func TestParseDelegatedInvocationNativeFallsBackToInput(t *testing.T) {
+func TestParseDelegatedInvocationNativeRequiresMessage(t *testing.T) {
 	args := map[string]any{
 		"input": "fallback input",
 	}
-	invocation, userError, err := parseDelegatedInvocation(args, A2APayloadModeNative, "team", "test-team")
+	_, userError, err := parseDelegatedInvocation(args, A2APayloadModeNative, "team", "test-team")
+	require.Error(t, err)
+	require.Equal(t, "message parameter is required", userError)
+	require.Contains(t, err.Error(), "message parameter is required")
+}
+
+func TestParseDelegatedInvocationNativeAnnotatesDelegatedExtensionArgs(t *testing.T) {
+	args := map[string]any{
+		"message": map[string]any{
+			"role": "user",
+			"parts": []map[string]any{
+				{
+					"kind": "text",
+					"text": "delegate this",
+				},
+			},
+		},
+		A2ADelegationInvocationArgsKey: map[string]any{
+			"routingScope":   "scope-123",
+			"operationLabel": "define",
+			"ticketId":       "01-generic-agent",
+		},
+	}
+	invocation, userError, err := parseDelegatedInvocation(args, A2APayloadModeNative, "agent", "test-agent")
 	require.NoError(t, err)
 	require.Equal(t, "", userError)
-	require.Equal(t, protocol.MessageRoleUser, invocation.a2aUserInput.Role)
-	require.Equal(t, "fallback input", ExtractA2ATextFromMessage(invocation.a2aUserInput))
+	require.Contains(t, invocation.a2aUserInput.Extensions, A2ADelegatedToolExtensionKey)
+	extension, ok := parseA2ADelegatedToolExtension(invocation.a2aUserInput.Metadata)
+	require.True(t, ok)
+	require.Equal(t, "scope-123", extension.InvocationArgs["routingScope"])
+	require.Equal(t, "define", extension.InvocationArgs["operationLabel"])
+	require.Equal(t, "01-generic-agent", extension.InvocationArgs["ticketId"])
+}
+
+func TestExtractDelegationArgsFromMergedParams(t *testing.T) {
+	params := map[string]any{
+		"message":   map[string]any{"role": "user"},
+		"history":   []any{},
+		"contextId": "ctx-123",
+		"input":     "ignored",
+		"issueName": "01-generic-agent",
+		"command":   "define",
+		"counter":   3,
+	}
+
+	args := extractDelegationArgsFromMergedParams(params)
+	require.Equal(t, "01-generic-agent", args["issueName"])
+	require.Equal(t, "define", args["command"])
+	_, hasMessage := args["message"]
+	require.False(t, hasMessage)
+	_, hasInput := args["input"]
+	require.False(t, hasInput)
+}
+
+func TestParseDelegatedInvocationNativeDoesNotHarvestTopLevelArgs(t *testing.T) {
+	args := map[string]any{
+		"message": map[string]any{
+			"role": "user",
+			"parts": []map[string]any{
+				{
+					"kind": "text",
+					"text": "delegate this",
+				},
+			},
+		},
+		"routingScope": "scope-123",
+	}
+	invocation, userError, err := parseDelegatedInvocation(args, A2APayloadModeNative, "agent", "test-agent")
+	require.NoError(t, err)
+	require.Equal(t, "", userError)
+	extension, ok := parseA2ADelegatedToolExtension(invocation.a2aUserInput.Metadata)
+	if ok {
+		_, hasRoutingScope := extension.InvocationArgs["routingScope"]
+		require.False(t, hasRoutingScope)
+	}
 }
 
 func TestParseDelegatedInvocationNativeInvalidContextID(t *testing.T) {

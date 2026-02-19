@@ -327,6 +327,11 @@ func ensureA2AMetadata(metadata map[string]interface{}) map[string]interface{} {
 func buildA2ASendMessageParams(userInput protocol.Message, contextID string, metadata map[string]interface{}, blocking bool) protocol.SendMessageParams {
 	message := userInput
 	message.Role = protocol.MessageRoleUser
+	// A2A requires message.messageId on Message payloads.
+	// Ensure the field is always populated before dispatch.
+	if message.MessageID == "" {
+		message.MessageID = protocol.GenerateRPCID()
+	}
 	if contextID != "" {
 		message.ContextID = &contextID
 	}

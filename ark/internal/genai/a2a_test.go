@@ -368,3 +368,34 @@ func TestExtractA2AExtensionsHeaderWithoutExtensions(t *testing.T) {
 	headerValue := extractA2AExtensionsHeader(req)
 	assert.Equal(t, "https://example.com/ext/base/v1", headerValue)
 }
+
+func TestBuildA2ASendMessageParamsAssignsMessageIDWhenMissing(t *testing.T) {
+	userInput := protocol.Message{
+		Role: protocol.MessageRoleUser,
+		Parts: []protocol.Part{
+			protocol.NewTextPart("hello"),
+		},
+	}
+
+	params := buildA2ASendMessageParams(userInput, "ctx-123", nil, false)
+
+	assert.NotEmpty(t, params.Message.MessageID)
+	assert.Equal(t, protocol.MessageRoleUser, params.Message.Role)
+	if assert.NotNil(t, params.Message.ContextID) {
+		assert.Equal(t, "ctx-123", *params.Message.ContextID)
+	}
+}
+
+func TestBuildA2ASendMessageParamsPreservesExistingMessageID(t *testing.T) {
+	userInput := protocol.Message{
+		MessageID: "msg-existing",
+		Role:      protocol.MessageRoleUser,
+		Parts: []protocol.Part{
+			protocol.NewTextPart("hello"),
+		},
+	}
+
+	params := buildA2ASendMessageParams(userInput, "", nil, true)
+
+	assert.Equal(t, "msg-existing", params.Message.MessageID)
+}
