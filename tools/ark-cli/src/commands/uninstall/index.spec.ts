@@ -18,6 +18,17 @@ vi.mock('../../arkServices.js', () => ({
   arkServices: mockArkServices,
 }));
 
+const mockIsMarketplaceService = vi.fn();
+const mockGetMarketplaceItem = vi.fn();
+const mockGetAllMarketplaceServices = vi.fn();
+const mockGetAllMarketplaceAgents = vi.fn();
+vi.mock('../../marketplaceServices.js', () => ({
+  isMarketplaceService: mockIsMarketplaceService,
+  getMarketplaceItem: mockGetMarketplaceItem,
+  getAllMarketplaceServices: mockGetAllMarketplaceServices,
+  getAllMarketplaceAgents: mockGetAllMarketplaceAgents,
+}));
+
 const mockOutput = {
   error: vi.fn(),
   info: vi.fn(),
@@ -53,6 +64,7 @@ describe('uninstall command', () => {
       type: 'minikube',
       namespace: 'default',
     });
+    mockIsMarketplaceService.mockReturnValue(false);
   });
 
   it('creates command with correct structure', () => {
@@ -198,6 +210,58 @@ describe('uninstall command', () => {
     );
     expect(mockOutput.success).toHaveBeenCalledWith(
       'ark-dashboard uninstalled successfully'
+    );
+  });
+
+  it('shows error when marketplace item not found', async () => {
+    mockIsMarketplaceService.mockReturnValue(true);
+    mockGetMarketplaceItem.mockResolvedValue(null);
+    mockGetAllMarketplaceServices.mockResolvedValue({
+      phoenix: {name: 'phoenix'},
+    });
+    mockGetAllMarketplaceAgents.mockResolvedValue(null);
+
+    const command = createUninstallCommand(mockConfig);
+
+    await expect(
+      command.parseAsync(['node', 'test', 'marketplace/services/nonexistent'])
+    ).rejects.toThrow('process.exit called');
+    expect(mockOutput.error).toHaveBeenCalledWith(
+      "marketplace item 'marketplace/services/nonexistent' not found"
+    );
+    expect(mockOutput.info).toHaveBeenCalledWith('available marketplace items:');
+    expect(mockOutput.info).toHaveBeenCalledWith('  marketplace/services/phoenix');
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('uninstalls marketplace service successfully', async () => {
+    const mockMarketplaceService = {
+      name: 'phoenix',
+      helmReleaseName: 'phoenix',
+      namespace: 'observability',
+    };
+    mockIsMarketplaceService.mockReturnValue(true);
+    mockGetMarketplaceItem.mockResolvedValue(mockMarketplaceService);
+    mockExeca.mockResolvedValue({stdout: ''});
+
+    const command = createUninstallCommand(mockConfig);
+    await command.parseAsync(['node', 'test', 'marketplace/services/phoenix']);
+
+    expect(mockExeca).toHaveBeenCalledWith(
+      'helm',
+      [
+        'uninstall',
+        'phoenix',
+        '--ignore-not-found',
+        '--namespace',
+        'observability',
+      ],
+      {
+        stdio: 'inherit',
+      }
+    );
+    expect(mockOutput.success).toHaveBeenCalledWith(
+      'phoenix uninstalled successfully'
     );
   });
 });

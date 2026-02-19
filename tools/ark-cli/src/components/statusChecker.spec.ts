@@ -115,6 +115,44 @@ describe('statusChecker', () => {
         expect(result.clusterAccess).toBe(false);
         expect(result.services).toEqual([]);
       });
+
+      it('returns dependency version when command exists', async () => {
+        mockCheckCommandExists.mockResolvedValue(true);
+        mockExeca.mockImplementation((_cmd: string, args: string[]) => {
+          if (args.includes('--output=json')) {
+            return Promise.resolve({
+              stdout: JSON.stringify({clientVersion: {major: '1', minor: '28'}}),
+            });
+          }
+          return Promise.resolve({stdout: 'v1.28.0'});
+        });
+
+        const result = await checker.checkAll();
+
+        expect(result.dependencies.length).toBeGreaterThan(0);
+        const nodeDep = result.dependencies.find(d => d.name === 'node');
+        expect(nodeDep?.installed).toBe(true);
+        expect(nodeDep?.version).toBeDefined();
+      });
+
+      it('sets clusterAccess false when kubectl get namespaces fails', async () => {
+        mockCheckCommandExists.mockResolvedValue(true);
+        mockExeca.mockImplementation((_cmd: string, args: string[]) => {
+          if (args[0] === 'get' && args[1] === 'namespaces') {
+            return Promise.reject(new Error('connection refused'));
+          }
+          if (args.includes('--output=json')) {
+            return Promise.resolve({
+              stdout: JSON.stringify({clientVersion: {major: '1', minor: '28'}}),
+            });
+          }
+          return Promise.resolve({stdout: 'v1.0.0'});
+        });
+
+        const result = await checker.checkAll();
+
+        expect(result.clusterAccess).toBe(false);
+      });
     });
   });
 });
