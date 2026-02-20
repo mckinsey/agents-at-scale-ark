@@ -31,13 +31,12 @@ class ModelsPage(BasePage):
     def navigate_to_models_tab(self) -> None:
         from .dashboard_page import DashboardPage
         dashboard = DashboardPage(self.page)
-        
-        # Navigate directly to /models URL instead of clicking tabs
+
         self.page.goto(f"{dashboard.base_url}/models")
         self.wait_for_navigation_complete()
-        
-        # Wait for Add Model button to appear
-        self.wait_for_element(self.ADD_MODEL_BUTTON, timeout=10000)
+
+        # The page header always renders "Add Model" link regardless of list content
+        self.wait_for_element("a[href='/models/new'], button:has-text('Add Model')", timeout=10000)
     
     def generate_model_name(self, prefix: str = "model") -> str:
         date_str = datetime.now().strftime("%d%m%y%H%M%S")
@@ -71,18 +70,48 @@ class ModelsPage(BasePage):
         except Exception as e:
             return False
     
+    PROVIDER_LABELS = {
+        "openai": "OpenAI",
+        "azure": "Azure OpenAI",
+        "bedrock": "AWS Bedrock",
+    }
+
+    def _select_combobox_option(self, combobox_index: int, option_text: str) -> None:
+        trigger = self.page.locator("[role='combobox']").nth(combobox_index)
+        trigger.wait_for(state="visible", timeout=10000)
+        trigger.click()
+        self.wait_for_dropdown_options()
+        self.page.locator(f"[role='option']:has-text('{option_text}')").first.click()
+        self.page.locator("[role='option']").first.wait_for(state="hidden", timeout=5000)
+
     def create_model_with_verification(self, model_name: str, model_type: str, model: str, secret_name: str, base_url: str) -> dict:
         logger.info(f"Creating {model_type} model: {model_name}")
-        
-        self.page.locator(self.ADD_MODEL_BUTTON).first.click()
-        self.wait_for_form_ready()
-        
-        self.page.locator(self.MODEL_NAME_INPUT).first.wait_for(state="visible")
+
+        from .dashboard_page import DashboardPage
+        dashboard = DashboardPage(self.page)
+
+        # Navigate directly to /models/new to avoid SPA navigation timing issues.
+        # Clicking the Link button and waiting for navigation is unreliable.
+        self.page.goto(f"{dashboard.base_url}/models/new")
+        self.wait_for_navigation_complete()
+
+        # Name input (react-hook-form spreads name="name" onto the <input>)
+        self.page.locator(self.MODEL_NAME_INPUT).first.wait_for(state="visible", timeout=15000)
         self.page.locator(self.MODEL_NAME_INPUT).first.fill(model_name)
-        self.page.locator("select").first.select_option(value=model_type.lower().replace(" ", ""))
+
+        # Provider — Shadcn <Select> renders as [role='combobox'], not native <select>
+        provider_label = self.PROVIDER_LABELS.get(model_type.lower(), model_type)
+        self._select_combobox_option(0, provider_label)
+
+        # Model identifier input
         self.page.locator(self.MODEL_INPUT).first.fill(model)
-        self.page.locator("select").nth(1).select_option(value=secret_name)
+
+        # API Key secret — second combobox (appears after provider selection)
+        self._select_combobox_option(1, secret_name)
+
+        # Base URL
         self.page.locator(self.BASE_URL_INPUT).first.fill(base_url)
+
         self.page.locator(self.SAVE_BUTTON).first.wait_for(state="visible")
         self.page.locator(self.SAVE_BUTTON).first.click()
         
@@ -96,7 +125,9 @@ class ModelsPage(BasePage):
             popup_visible = False
         
         logger.info(f"Navigating back to models list...")
-        self.navigate_to_models_tab()        
+        self.navigate_to_models_tab()
+        self.wait_for_table_content()
+        
         in_table = self.is_model_in_table(model_name)
         
         try:
@@ -113,6 +144,7 @@ class ModelsPage(BasePage):
             logger.warning(f"Model not yet available, retry {retry + 1}/2...")
             self.reload()
             self.wait_for_navigation_complete()
+            self.wait_for_table_content()
             is_available = self.is_model_available(model_name)
         
         return {
@@ -150,6 +182,7 @@ class ModelsPage(BasePage):
         popup_visible = self._check_success_popup()
         
         # Wait for table to refresh
+        self.wait_for_table_content()
         deleted_from_table = not self.is_model_in_table(model_name)
         
         return {
@@ -181,17 +214,11 @@ class ModelsPage(BasePage):
     
     def create_model_for_test(self, prefix: str, secret_name: str, secrets_page):
         import pytest
-        
+
         model_data = self.TEST_DATA["openai"]
-        
-        self.navigate_to_models_tab()
-        
-        if not self.is_visible(self.ADD_MODEL_BUTTON):
-            pytest.skip("Add Model button not available")
-        
         model_display_name = self.generate_model_name(prefix)
         base_url = secrets_page.get_password_from_env(model_data["base_url_key"])
-        
+
         result = self.create_model_with_verification(
             model_name=model_display_name,
             model_type=model_data["model_type"],
@@ -199,7 +226,7 @@ class ModelsPage(BasePage):
             secret_name=secret_name,
             base_url=base_url
         )
-        
+
         logger.info(f"Model created and available: {result['name']}")
-        
+
         return result

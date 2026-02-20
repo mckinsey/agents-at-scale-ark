@@ -61,19 +61,23 @@ class SecretsPage(BasePage):
         self.wait_for_load_state("networkidle")
     
     def _close_dialog_if_open(self) -> None:
+        try:
+            dialog_overlay = self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first
+            if not dialog_overlay.is_visible(timeout=1000):
+                return
+        except PlaywrightTimeoutError:
+            return
+
         for attempt in range(3):
             try:
-                dialog_overlay = self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first
-                if dialog_overlay.is_visible(timeout=1000):
-                    logger.info(f"Dialog still open, attempting to close (attempt {attempt + 1})")
-                    self.page.keyboard.press("Escape")
-                    dialog_overlay.wait_for(state="hidden", timeout=2000)
-                    return
+                logger.info("Dialog open, closing (attempt %d)", attempt + 1)
+                self.page.keyboard.press("Escape")
+                dialog_overlay.wait_for(state="hidden", timeout=2000)
+                return
             except PlaywrightTimeoutError:
                 logger.debug("Dialog close attempt %d timed out", attempt + 1)
-        
-        logger.warning("Could not close dialog after 3 attempts, forcing Escape")
-        self.page.keyboard.press("Escape")
+
+        logger.warning("Could not close dialog after 3 attempts")
     
     def is_secret_in_table(self, secret_name: str) -> bool:
         try:
@@ -121,12 +125,14 @@ class SecretsPage(BasePage):
         
         self.wait_for_modal_close(timeout=10000)
         self.wait_for_load_state("networkidle")
+        self.wait_for_table_content(timeout=10000)
         in_table = self.is_secret_in_table(secret_name)
         
         if not in_table:
             logger.warning("Secret not found in table after create, reloading page")
             self.page.reload()
             self.wait_for_load_state("networkidle")
+            self.wait_for_table_content(timeout=10000)
             in_table = self.is_secret_in_table(secret_name)
         
         return {
