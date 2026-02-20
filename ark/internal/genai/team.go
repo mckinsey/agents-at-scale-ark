@@ -324,14 +324,10 @@ func loadTeamMember(ctx context.Context, k8sClient client.Client, memberSpec ark
 
 func addAgentNameToMessages(messages []Message, agentName string) []Message {
 	result := make([]Message, len(messages))
-	for i, msg := range messages {
-		if assistantMsg := msg.OfAssistant; assistantMsg != nil {
-			assistantMsg.Name = openai.String(agentName)
-			result[i] = Message(openai.ChatCompletionMessageParamUnion{
-				OfAssistant: assistantMsg,
-			})
-		} else {
-			result[i] = msg
+	copy(result, messages)
+	for i := range result {
+		if result[i].OfAssistant != nil {
+			result[i].OfAssistant.Name = openai.String(agentName)
 		}
 	}
 	return result
