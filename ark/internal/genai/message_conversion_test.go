@@ -361,3 +361,56 @@ func TestDefaultOpenAIToA2AMessageRemainsTextOnlyForImageURL(t *testing.T) {
 	require.Len(t, recovered.Parts, 1)
 	assert.Equal(t, "keep text", extractTextFromParts(recovered.Parts))
 }
+
+func TestA2AToOpenAIMessageAssistantWithToolCallsUsesNonEmptyFallbackContent(t *testing.T) {
+	message := protocol.NewMessage(protocol.MessageRoleAgent, appendPayloadPart(
+		[]protocol.Part{protocol.NewTextPart("")},
+		ToolCallsPayloadV1{
+			Schema: A2APayloadSchemaToolCallsV1,
+			ToolCalls: []ToolCallPayloadV1{
+				{
+					ID:        "call-1",
+					Name:      "lookup",
+					Arguments: `{"city":"london"}`,
+				},
+			},
+		},
+	))
+
+	recovered, err := A2AToOpenAIMessage(message)
+	require.NoError(t, err)
+	require.NotNil(t, recovered.OfAssistant)
+	assert.Equal(t, emptyTextContentFallback, recovered.OfAssistant.Content.OfString.Value)
+	require.Len(t, recovered.OfAssistant.ToolCalls, 1)
+	assert.Equal(t, "call-1", recovered.OfAssistant.ToolCalls[0].ID)
+}
+
+func TestA2AToOpenAIMessageToolWithEmptyContentUsesJSONFallback(t *testing.T) {
+	message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		&protocol.DataPart{
+			Kind: protocol.KindData,
+			Data: ToolResultPayloadV1{
+				Schema:     A2APayloadSchemaToolResultV1,
+				ToolCallID: "call-1",
+				Content:    "",
+			},
+		},
+	})
+
+	recovered, err := A2AToOpenAIMessage(message)
+	require.NoError(t, err)
+	require.NotNil(t, recovered.OfTool)
+	assert.Equal(t, "call-1", recovered.OfTool.ToolCallID)
+	assert.Equal(t, "{}", recovered.OfTool.Content.OfString.Value)
+}
+
+func TestA2AToOpenAIMessageExperimentalUserWithEmptyTextUsesFallbackContent(t *testing.T) {
+	message := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart(""),
+	})
+
+	recovered, err := A2AToOpenAIMessageExperimental(message)
+	require.NoError(t, err)
+	require.NotNil(t, recovered.OfUser)
+	assert.Equal(t, emptyTextContentFallback, recovered.OfUser.Content.OfString.Value)
+}

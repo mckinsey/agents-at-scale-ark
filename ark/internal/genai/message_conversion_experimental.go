@@ -46,10 +46,10 @@ func A2AToOpenAIMessageExperimental(msg protocol.Message) (openai.ChatCompletion
 	}
 
 	if len(contentParts) == 0 {
-		return openai.UserMessage(extractTextFromParts(msg.Parts)), nil
+		return openai.UserMessage(ensureNonEmptyTextContent(extractTextFromParts(msg.Parts))), nil
 	}
 	if len(contentParts) == 1 && contentParts[0].OfText != nil {
-		return openai.UserMessage(contentParts[0].OfText.Text), nil
+		return openai.UserMessage(ensureNonEmptyTextContent(contentParts[0].OfText.Text)), nil
 	}
 	return openai.UserMessage(contentParts), nil
 }

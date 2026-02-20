@@ -8,20 +8,36 @@ import (
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
+const emptyTextContentFallback = "."
+
+func ensureNonEmptyTextContent(content string) string {
+	if content == "" {
+		return emptyTextContentFallback
+	}
+	return content
+}
+
+func ensureNonEmptyToolContent(content string) string {
+	if content == "" {
+		return "{}"
+	}
+	return content
+}
+
 func A2AToOpenAIMessage(msg protocol.Message) (openai.ChatCompletionMessageParamUnion, error) {
 	role := resolveA2AMessageRole(msg)
 	content := extractTextFromParts(msg.Parts)
 	switch role {
 	case RoleUser:
-		return openai.UserMessage(content), nil
+		return openai.UserMessage(ensureNonEmptyTextContent(content)), nil
 	case RoleSystem:
-		return openai.SystemMessage(content), nil
+		return openai.SystemMessage(ensureNonEmptyTextContent(content)), nil
 	case RoleTool:
 		return convertA2AToolMessage(msg.Parts, msg.Metadata, content), nil
 	case RoleAssistant:
 		return convertA2AAssistantMessage(msg.Parts, content), nil
 	default:
-		return openai.UserMessage(content), nil
+		return openai.UserMessage(ensureNonEmptyTextContent(content)), nil
 	}
 }
 
@@ -60,13 +76,13 @@ func convertA2AToolMessage(parts []protocol.Part, metadata map[string]interface{
 		}
 	}
 	if toolCallID == "" {
-		return openai.AssistantMessage(content)
+		return openai.AssistantMessage(ensureNonEmptyTextContent(content))
 	}
-	return openai.ToolMessage(content, toolCallID)
+	return openai.ToolMessage(ensureNonEmptyToolContent(content), toolCallID)
 }
 
 func convertA2AAssistantMessage(parts []protocol.Part, content string) openai.ChatCompletionMessageParamUnion {
-	assistant := openai.AssistantMessage(content)
+	assistant := openai.AssistantMessage(ensureNonEmptyTextContent(content))
 	if assistant.OfAssistant != nil {
 		toolCalls := extractToolCallsFromParts(parts)
 		if len(toolCalls) > 0 {

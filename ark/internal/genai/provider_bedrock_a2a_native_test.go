@@ -83,3 +83,32 @@ func TestConvertBedrockResponseToA2ATurnResultIncludesToolCallsPayload(t *testin
 	require.True(t, ok)
 	require.Contains(t, payload, "toolCalls")
 }
+
+func TestBuildA2AToolOutcomeContentByIDUsesFallbackContentOrder(t *testing.T) {
+	contentByID := buildA2AToolOutcomeContentByID([]A2AToolOutcome{
+		{
+			ToolCallID: "call-content",
+			Content:    "content-first",
+			Error:      "ignored-error",
+			Metadata:   map[string]interface{}{"contextId": "ctx-a"},
+		},
+		{
+			ToolCallID: "call-error",
+			Error:      "error-second",
+			Metadata:   map[string]interface{}{"contextId": "ctx-b"},
+		},
+		{
+			ToolCallID: "call-metadata",
+			Metadata:   map[string]interface{}{"contextId": "ctx-c"},
+		},
+		{
+			ToolCallID: "call-empty",
+		},
+	})
+
+	require.Len(t, contentByID, 4)
+	assert.Equal(t, "content-first", contentByID["call-content"])
+	assert.Equal(t, "error-second", contentByID["call-error"])
+	assert.JSONEq(t, `{"contextId":"ctx-c"}`, contentByID["call-metadata"])
+	assert.Equal(t, "{}", contentByID["call-empty"])
+}

@@ -2,6 +2,7 @@ package genai
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/openai/openai-go"
@@ -324,5 +325,149 @@ func TestA2ATurnPrefersNativeProviderWhenAvailable(t *testing.T) {
 	assert.Equal(t, "native-response", extractTextFromParts(result.Message.Parts))
 	assert.Equal(t, 1, provider.nativeCalls)
 	assert.Equal(t, 0, provider.chatCalls)
+}
+
+func TestA2ATurnKeepsLegacyCompatMessageShapes(t *testing.T) {
+	provider := &adapterTestChatProvider{
+		response: &openai.ChatCompletion{
+			Choices: []openai.ChatCompletionChoice{
+				{
+					Message: openai.ChatCompletionMessage{
+						Role:    "assistant",
+						Content: "done",
+					},
+				},
+			},
+		},
+	}
+	adapter := &openAIA2AModelAdapter{
+		provider:          provider,
+		modelName:         "test-model",
+		modelType:         "openai",
+		agentName:         "test-agent",
+		telemetryRecorder: telemetrynoop.NewModelRecorder(),
+		eventingRecorder:  eventingnoop.NewModelRecorder(),
+	}
+
+	systemMessage := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("system prompt"),
+		&protocol.DataPart{
+			Kind: protocol.KindData,
+			Data: RoleHintPayloadV1{
+				Schema: A2APayloadSchemaRoleHintV1,
+				Role:   RoleSystem,
+			},
+		},
+	})
+
+	assistantMessage := protocol.NewMessage(protocol.MessageRoleAgent, appendPayloadPart(
+		[]protocol.Part{protocol.NewTextPart("calling lookup")},
+		ToolCallsPayloadV1{
+			Schema: A2APayloadSchemaToolCallsV1,
+			ToolCalls: []ToolCallPayloadV1{
+				{
+					ID:        "call-1",
+					Name:      "lookup",
+					Arguments: `{"query":"status"}`,
+				},
+			},
+		},
+	))
+
+	toolResultMessage := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart(`{"result":"ok"}`),
+		&protocol.DataPart{
+			Kind: protocol.KindData,
+			Data: ToolResultPayloadV1{
+				Schema:     A2APayloadSchemaToolResultV1,
+				ToolCallID: "call-1",
+				Content:    `{"result":"ok"}`,
+			},
+		},
+	})
+
+	userMessage := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("final question"),
+	})
+
+	_, err := adapter.A2ATurn(context.Background(), []protocol.Message{
+		systemMessage,
+		assistantMessage,
+		toolResultMessage,
+		userMessage,
+	}, nil, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, provider.chatCalls)
+	require.Len(t, provider.lastMessages, 4)
+
+	require.NotNil(t, provider.lastMessages[0].OfSystem)
+	assert.Equal(t, "system prompt", provider.lastMessages[0].OfSystem.Content.OfString.Value)
+
+	require.NotNil(t, provider.lastMessages[1].OfAssistant)
+	assert.Equal(t, "calling lookup", provider.lastMessages[1].OfAssistant.Content.OfString.Value)
+	require.Len(t, provider.lastMessages[1].OfAssistant.ToolCalls, 1)
+	assert.Equal(t, "call-1", provider.lastMessages[1].OfAssistant.ToolCalls[0].ID)
+	assert.Equal(t, "lookup", provider.lastMessages[1].OfAssistant.ToolCalls[0].Function.Name)
+
+	require.NotNil(t, provider.lastMessages[2].OfTool)
+	assert.Equal(t, "call-1", provider.lastMessages[2].OfTool.ToolCallID)
+	assert.Equal(t, `{"result":"ok"}`, provider.lastMessages[2].OfTool.Content.OfString.Value)
+
+	require.NotNil(t, provider.lastMessages[3].OfUser)
+	assert.Equal(t, "final question", provider.lastMessages[3].OfUser.Content.OfString.Value)
+	assert.Len(t, provider.lastMessages[3].OfUser.Content.OfArrayOfContentParts, 0)
+}
+
+func TestConvertA2AMessagesToCompatExperimentalMatchesLegacyForTextOnlyTraffic(t *testing.T) {
+	messages := []protocol.Message{
+		protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+			protocol.NewTextPart("system prompt"),
+			&protocol.DataPart{
+				Kind: protocol.KindData,
+				Data: RoleHintPayloadV1{
+					Schema: A2APayloadSchemaRoleHintV1,
+					Role:   RoleSystem,
+				},
+			},
+		}),
+		protocol.NewMessage(protocol.MessageRoleAgent, appendPayloadPart(
+			[]protocol.Part{protocol.NewTextPart("calling lookup")},
+			ToolCallsPayloadV1{
+				Schema: A2APayloadSchemaToolCallsV1,
+				ToolCalls: []ToolCallPayloadV1{
+					{
+						ID:        "call-1",
+						Name:      "lookup",
+						Arguments: `{"query":"status"}`,
+					},
+				},
+			},
+		)),
+		protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+			protocol.NewTextPart(`{"result":"ok"}`),
+			&protocol.DataPart{
+				Kind: protocol.KindData,
+				Data: ToolResultPayloadV1{
+					Schema:     A2APayloadSchemaToolResultV1,
+					ToolCallID: "call-1",
+					Content:    `{"result":"ok"}`,
+				},
+			},
+		}),
+		protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+			protocol.NewTextPart("final question"),
+		}),
+	}
+
+	legacyMessages, err := convertA2AMessagesToCompat(messages)
+	require.NoError(t, err)
+	experimentalMessages, err := convertA2AMessagesToCompatExperimental(messages)
+	require.NoError(t, err)
+
+	legacyJSON, err := json.Marshal(legacyMessages)
+	require.NoError(t, err)
+	experimentalJSON, err := json.Marshal(experimentalMessages)
+	require.NoError(t, err)
+	assert.JSONEq(t, string(legacyJSON), string(experimentalJSON))
 }
 
