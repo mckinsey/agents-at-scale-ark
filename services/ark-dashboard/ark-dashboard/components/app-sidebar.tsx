@@ -313,7 +313,7 @@ export function AppSidebar() {
           </SidebarMenu>
         </SidebarHeader>
 
-        <SidebarContent className="flex-initial overflow-visible px-4">
+        <SidebarContent className="px-4">
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton
@@ -424,64 +424,62 @@ export function AppSidebar() {
           </SidebarMenu>
         </SidebarContent>
 
-        <SidebarContent></SidebarContent>
-        <Separator className="my-4 !w-10" />
-
-        <div className="px-4">
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton onClick={() => setSettingsModalOpen(true)}>
-                <Settings className="mr-2 h-4 w-4" />
-                <span>Settings</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild>
-                <a
-                  href="https://mckinsey.github.io/agents-at-scale-ark/"
-                  target="_blank"
-                  rel="noopener noreferrer">
-                  <HelpCircle className="mr-2 h-4 w-4" />
-                  <span>Help</span>
-                </a>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                onClick={() =>
-                  setStoredIsExperimentalDarkModeEnabled(
-                    !isExperimentalDarkModeEnabled,
-                  )
-                }>
-                {isExperimentalDarkModeEnabled ? (
-                  <Sun className="mr-2 h-4 w-4" />
-                ) : (
-                  <Moon className="mr-2 h-4 w-4" />
-                )}
-                <span>
-                  {isExperimentalDarkModeEnabled ? 'Light Mode' : 'Dark Mode'}
-                </span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-
-            <SidebarMenuItem className="w-8 bg-[var(--primary-500)]">
-              <SidebarMenuButton
-                onClick={() =>
-                  setSidebarOpen(sidebarState === 'expanded' ? false : true)
-                }>
-                {sidebarState === 'expanded' ? (
-                  <ChevronsLeft className="mr-2 h-4 w-4" />
-                ) : (
-                  <ChevronsRight className="mr-2 h-4 w-4" />
-                )}
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </div>
-
         <SidebarFooter>
+          <div className="px-2">
+            <Separator className="my-2 !w-10" />
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton onClick={() => setSettingsModalOpen(true)}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  <span>Settings</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <a
+                    href="https://mckinsey.github.io/agents-at-scale-ark/"
+                    target="_blank"
+                    rel="noopener noreferrer">
+                    <HelpCircle className="mr-2 h-4 w-4" />
+                    <span>Help</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() =>
+                    setStoredIsExperimentalDarkModeEnabled(
+                      !isExperimentalDarkModeEnabled,
+                    )
+                  }>
+                  {isExperimentalDarkModeEnabled ? (
+                    <Sun className="mr-2 h-4 w-4" />
+                  ) : (
+                    <Moon className="mr-2 h-4 w-4" />
+                  )}
+                  <span>
+                    {isExperimentalDarkModeEnabled ? 'Light Mode' : 'Dark Mode'}
+                  </span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem className="w-8 bg-[var(--primary-500)]">
+                <SidebarMenuButton
+                  onClick={() =>
+                    setSidebarOpen(sidebarState === 'expanded' ? false : true)
+                  }>
+                  {sidebarState === 'expanded' ? (
+                    <ChevronsLeft className="mr-2 h-4 w-4" />
+                  ) : (
+                    <ChevronsRight className="mr-2 h-4 w-4" />
+                  )}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </div>
+
           {user && (
             <SidebarMenu>
               <SidebarMenuItem>
