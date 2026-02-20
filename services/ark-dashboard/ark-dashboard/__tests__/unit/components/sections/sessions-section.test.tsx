@@ -354,6 +354,60 @@ describe('SessionsSection', () => {
 
       expect(screen.getByText(/Network error/i)).toBeInTheDocument();
     });
+
+    it('should show Argo specific error message for 404 errors', () => {
+      vi.mocked(useWorkflows).mockReturnValue({
+        workflows: [],
+        loading: false,
+        error: new Error('Request failed with status 404'),
+        refetch: vi.fn(),
+      } as any);
+
+      render(<SessionsSection />);
+
+      expect(screen.getByText(/Something went wrong/i)).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /View installation guide/i })).toBeInTheDocument();
+    });
+
+    it('should show Argo specific error message for "no matches for kind" errors', () => {
+      vi.mocked(useWorkflows).mockReturnValue({
+        workflows: [],
+        loading: false,
+        error: new Error('no matches for kind "Workflow" in version "argoproj.io/v1alpha1"'),
+        refetch: vi.fn(),
+      } as any);
+
+      render(<SessionsSection />);
+
+      expect(screen.getByText(/Something went wrong/i)).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /View installation guide/i })).toBeInTheDocument();
+    });
+
+    it('should show Argo specific error message for 500 errors', () => {
+      vi.mocked(useWorkflows).mockReturnValue({
+        workflows: [],
+        loading: false,
+        error: new Error('Internal server error 500'),
+        refetch: vi.fn(),
+      } as any);
+
+      render(<SessionsSection />);
+
+      expect(screen.getByText(/Something went wrong/i)).toBeInTheDocument();
+    });
+
+    it('should show Argo specific error message for "not found" errors', () => {
+      vi.mocked(useWorkflows).mockReturnValue({
+        workflows: [],
+        loading: false,
+        error: new Error('Argo Workflows not found in cluster'),
+        refetch: vi.fn(),
+      } as any);
+
+      render(<SessionsSection />);
+
+      expect(screen.getByText(/Something went wrong/i)).toBeInTheDocument();
+    });
   });
 
   describe('Session List', () => {
