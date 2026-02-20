@@ -55,10 +55,8 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 		if !IsTerminateTeam(err) {
 			a.eventingRecorder.Fail(ctx, "AgentExecution", fmt.Sprintf("Agent execution failed: %v", err), err, operationData)
 			return nil, err
-}
-		else {
-			return result, err
 		}
+		return result, err
 	}
 
 	a.telemetryRecorder.RecordSuccess(span)
