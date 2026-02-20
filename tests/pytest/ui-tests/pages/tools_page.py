@@ -142,7 +142,6 @@ class ToolsPage(BasePage):
         
         logger.info(f"Navigating back to tools list...")
         self.navigate_to_tools_tab()
-        self.wait_for_table_content()
         
         in_table = self.is_tool_in_table(tool_name)
         logger.info(f"Tool '{tool_name}' in table after creation: {in_table}")
@@ -191,7 +190,6 @@ class ToolsPage(BasePage):
         popup_visible = self._check_success_popup()
         
         # Wait for table to refresh
-        self.wait_for_table_content()
         deleted_from_table = not self.is_tool_in_table(tool_name)
         
         return {

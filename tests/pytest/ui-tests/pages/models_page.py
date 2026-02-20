@@ -96,9 +96,7 @@ class ModelsPage(BasePage):
             popup_visible = False
         
         logger.info(f"Navigating back to models list...")
-        self.navigate_to_models_tab()
-        self.wait_for_table_content()
-        
+        self.navigate_to_models_tab()        
         in_table = self.is_model_in_table(model_name)
         
         try:
@@ -115,7 +113,6 @@ class ModelsPage(BasePage):
             logger.warning(f"Model not yet available, retry {retry + 1}/2...")
             self.reload()
             self.wait_for_navigation_complete()
-            self.wait_for_table_content()
             is_available = self.is_model_available(model_name)
         
         return {
@@ -153,7 +150,6 @@ class ModelsPage(BasePage):
         popup_visible = self._check_success_popup()
         
         # Wait for table to refresh
-        self.wait_for_table_content()
         deleted_from_table = not self.is_model_in_table(model_name)
         
         return {

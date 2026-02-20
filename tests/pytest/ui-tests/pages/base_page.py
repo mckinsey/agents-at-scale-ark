@@ -43,12 +43,6 @@ class BasePage:
         except PlaywrightTimeoutError:
             logger.debug("Element not hidden within %dms (may already be hidden): %s", timeout, selector)
     
-    def wait_for_table_content(self, timeout: int = 15000) -> None:
-        try:
-            self.page.locator("table, [role='grid'], .data-table, tbody tr, div[class*='table']").first.wait_for(state="visible", timeout=timeout)
-        except PlaywrightTimeoutError:
-            logger.warning("Table content not found within %dms, page may not have loaded correctly", timeout)
-    
     def wait_for_dropdown_options(self, timeout: int = 5000) -> None:
         try:
             self.page.locator("[role='option'], [role='listbox'], [data-slot='select-content']").first.wait_for(state="visible", timeout=timeout)
