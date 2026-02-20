@@ -12,6 +12,7 @@ import (
 	"github.com/openai/openai-go/option"
 	"k8s.io/apimachinery/pkg/runtime"
 	"mckinsey.com/ark/internal/common"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
 type AzureManagedIdentityConfig struct {
@@ -36,6 +37,8 @@ type AzureProvider struct {
 	schemaName       string
 }
 
+var _ A2ANativeTurnProvider = (*AzureProvider)(nil)
+
 func (ap *AzureProvider) SetOutputSchema(schema *runtime.RawExtension, schemaName string) {
 	ap.outputSchema = schema
 	ap.schemaName = schemaName
@@ -59,6 +62,32 @@ func (ap *AzureProvider) getCredential() (azcore.TokenCredential, error) {
 	}
 
 	return nil, fmt.Errorf("no identity configuration found")
+}
+
+func (ap *AzureProvider) A2ATurnNative(
+	ctx context.Context,
+	messages []protocol.Message,
+	toolOutcomes []A2AToolOutcome,
+	tools []A2AToolDefinition,
+	_ EventStreamInterface,
+) (*A2ATurnResult, error) {
+	compatMessages, err := convertA2AMessagesToCompatExperimental(messages)
+	if err != nil {
+		return nil, fmt.Errorf("azure native turn: failed to convert A2A messages: %w", err)
+	}
+	outcomeMessages := a2aToolOutcomesToOpenAI(toolOutcomes)
+	if len(outcomeMessages) > 0 {
+		compatMessages = append(compatMessages, outcomeMessages...)
+	}
+	openAITools := a2aToolDefsToOpenAI(tools)
+	response, err := ap.ChatCompletion(ctx, compatMessages, 1, openAITools)
+	if err != nil {
+		return nil, err
+	}
+	if len(response.Choices) == 0 {
+		return nil, fmt.Errorf("azure native turn: model returned empty response")
+	}
+	return buildA2ATurnResultFromChatChoice(response.Choices[0], "")
 }
 
 func (ap *AzureProvider) ChatCompletion(ctx context.Context, messages []openai.ChatCompletionMessageParamUnion, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {

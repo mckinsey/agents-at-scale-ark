@@ -29,6 +29,38 @@ func setupTestClientForTools(objects []client.Object) client.Client {
 		Build()
 }
 
+func extractDataPayloadBySchema(parts []protocol.Part, schema string) (map[string]interface{}, bool) {
+	for _, part := range parts {
+		switch typed := part.(type) {
+		case *protocol.DataPart:
+			raw, err := json.Marshal(typed.Data)
+			if err != nil {
+				continue
+			}
+			var payload map[string]interface{}
+			if err := json.Unmarshal(raw, &payload); err != nil {
+				continue
+			}
+			if payload["schema"] == schema {
+				return payload, true
+			}
+		case protocol.DataPart:
+			raw, err := json.Marshal(typed.Data)
+			if err != nil {
+				continue
+			}
+			var payload map[string]interface{}
+			if err := json.Unmarshal(raw, &payload); err != nil {
+				continue
+			}
+			if payload["schema"] == schema {
+				return payload, true
+			}
+		}
+	}
+	return nil, false
+}
+
 func TestRegisterToolDescriptionOverride(t *testing.T) {
 	tests := []struct {
 		name                 string
@@ -586,6 +618,21 @@ func (t *testToolEventStream) Close() error {
 	return nil
 }
 
+type captureToolExecutor struct {
+	call   ToolCall
+	called bool
+}
+
+func (c *captureToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
+	c.called = true
+	c.call = call
+	return ToolResult{
+		ID:      call.ID,
+		Name:    call.Function.Name,
+		Content: "ok",
+	}, nil
+}
+
 func TestParseDelegatedInvocationCompat(t *testing.T) {
 	args := map[string]any{
 		"input": "hello",
@@ -630,6 +677,9 @@ func TestParseDelegatedInvocationNativeMessageHistoryContext(t *testing.T) {
 			},
 		},
 		"contextId": "ctx-123",
+		A2ADelegationInvocationArgsKey: map[string]any{
+			"routingScope": "scope-123",
+		},
 	}
 	invocation, userError, err := parseDelegatedInvocation(args, A2APayloadModeNative, "agent", "test-agent")
 	require.NoError(t, err)
@@ -651,7 +701,7 @@ func TestParseDelegatedInvocationNativeRequiresMessage(t *testing.T) {
 	require.Contains(t, err.Error(), "message parameter is required")
 }
 
-func TestParseDelegatedInvocationNativeAnnotatesDelegatedExtensionArgs(t *testing.T) {
+func TestParseDelegatedInvocationNativeAppendsDelegatedInvocationPayload(t *testing.T) {
 	args := map[string]any{
 		"message": map[string]any{
 			"role": "user",
@@ -672,11 +722,13 @@ func TestParseDelegatedInvocationNativeAnnotatesDelegatedExtensionArgs(t *testin
 	require.NoError(t, err)
 	require.Equal(t, "", userError)
 	require.Contains(t, invocation.a2aUserInput.Extensions, A2ADelegatedToolExtensionKey)
-	extension, ok := parseA2ADelegatedToolExtension(invocation.a2aUserInput.Metadata)
+	payload, ok := extractDataPayloadBySchema(invocation.a2aUserInput.Parts, A2APayloadSchemaDelegatedInvocationV1)
 	require.True(t, ok)
-	require.Equal(t, "scope-123", extension.InvocationArgs["routingScope"])
-	require.Equal(t, "define", extension.InvocationArgs["operationLabel"])
-	require.Equal(t, "01-generic-agent", extension.InvocationArgs["ticketId"])
+	parameters, hasParameters := payload["parameters"].(map[string]interface{})
+	require.True(t, hasParameters)
+	require.Equal(t, "scope-123", parameters["routingScope"])
+	require.Equal(t, "define", parameters["operationLabel"])
+	require.Equal(t, "01-generic-agent", parameters["ticketId"])
 }
 
 func TestExtractDelegationArgsFromMergedParams(t *testing.T) {
@@ -699,7 +751,76 @@ func TestExtractDelegationArgsFromMergedParams(t *testing.T) {
 	require.False(t, hasInput)
 }
 
-func TestParseDelegatedInvocationNativeDoesNotHarvestTopLevelArgs(t *testing.T) {
+func TestPartialToolExecutorPartialParametersOverrideAgentArguments(t *testing.T) {
+	agentArgs := map[string]any{
+		"message": map[string]any{
+			"role": "user",
+			"parts": []map[string]any{
+				{
+					"kind": "text",
+					"text": "delegate this",
+				},
+			},
+		},
+		"routingScope":   "default-scope",
+		"operationLabel": "draft",
+		"ticketId":       "ticket-01",
+	}
+	argsJSON, err := json.Marshal(agentArgs)
+	require.NoError(t, err)
+
+	query := &arkv1alpha1.Query{
+		Spec: arkv1alpha1.QuerySpec{
+			Parameters: []arkv1alpha1.Parameter{
+				{Name: "routingScope", Value: "scope-123"},
+			},
+		},
+	}
+
+	capture := &captureToolExecutor{}
+	executor := &PartialToolExecutor{
+		BaseExecutor: capture,
+		Partial: &arkv1alpha1.ToolPartial{
+			Parameters: []arkv1alpha1.ToolFunction{
+				{
+					Name:  "routingScope",
+					Value: "{{.Query.routingScope}}",
+				},
+				{
+					Name:  "operationLabel",
+					Value: "finalize",
+				},
+			},
+		},
+	}
+
+	call := ToolCall{
+		ID: "call-1",
+		Function: openai.ChatCompletionMessageToolCallFunction{
+			Name:      "delegated-tool",
+			Arguments: string(argsJSON),
+		},
+		Type: "function",
+	}
+
+	_, err = executor.Execute(context.WithValue(context.Background(), QueryContextKey, query), call)
+	require.NoError(t, err)
+	require.True(t, capture.called)
+
+	var merged map[string]any
+	require.NoError(t, json.Unmarshal([]byte(capture.call.Function.Arguments), &merged))
+	require.Equal(t, "scope-123", merged["routingScope"])
+	require.Equal(t, "finalize", merged["operationLabel"])
+	require.Equal(t, "ticket-01", merged["ticketId"])
+
+	extArgs, ok := merged[A2ADelegationInvocationArgsKey].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "scope-123", extArgs["routingScope"])
+	require.Equal(t, "finalize", extArgs["operationLabel"])
+	require.Equal(t, "ticket-01", extArgs["ticketId"])
+}
+
+func TestParseDelegatedInvocationNativeRequiresDelegationParameters(t *testing.T) {
 	args := map[string]any{
 		"message": map[string]any{
 			"role": "user",
@@ -712,14 +833,9 @@ func TestParseDelegatedInvocationNativeDoesNotHarvestTopLevelArgs(t *testing.T) 
 		},
 		"routingScope": "scope-123",
 	}
-	invocation, userError, err := parseDelegatedInvocation(args, A2APayloadModeNative, "agent", "test-agent")
-	require.NoError(t, err)
-	require.Equal(t, "", userError)
-	extension, ok := parseA2ADelegatedToolExtension(invocation.a2aUserInput.Metadata)
-	if ok {
-		_, hasRoutingScope := extension.InvocationArgs["routingScope"]
-		require.False(t, hasRoutingScope)
-	}
+	_, userError, err := parseDelegatedInvocation(args, A2APayloadModeNative, "agent", "test-agent")
+	require.Error(t, err)
+	require.Equal(t, "delegation parameters are required", userError)
 }
 
 func TestParseDelegatedInvocationNativeInvalidContextID(t *testing.T) {
@@ -739,6 +855,30 @@ func TestParseDelegatedInvocationNativeInvalidContextID(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, "contextId parameter must be a string", userError)
 	require.Contains(t, err.Error(), "contextId parameter must be a string")
+}
+
+func TestParseDelegatedInvocationNativeAllowsUnattributedMetadataKeys(t *testing.T) {
+	args := map[string]any{
+		"message": map[string]any{
+			"role": "user",
+			"parts": []map[string]any{
+				{
+					"kind": "text",
+					"text": "delegate this",
+				},
+			},
+			"metadata": map[string]any{
+				"ark.mckinsey.com/tool-call-id": "call-1",
+			},
+		},
+		A2ADelegationInvocationArgsKey: map[string]any{
+			"routingScope": "scope-123",
+		},
+	}
+	invocation, userError, err := parseDelegatedInvocation(args, A2APayloadModeNative, "agent", "test-agent")
+	require.NoError(t, err)
+	require.Equal(t, "", userError)
+	require.Equal(t, "call-1", invocation.a2aUserInput.Metadata["ark.mckinsey.com/tool-call-id"])
 }
 
 func TestNormalizeContextIDRejectsWhitespaceOnly(t *testing.T) {
@@ -775,44 +915,71 @@ func TestApplyDelegationContextSetsExperimentalFlagFromPayloadMode(t *testing.T)
 	require.False(t, IsA2AExperimentalEnabledInContext(compatCtx))
 }
 
-func TestBuildDelegatedToolResultContentExperimentalNative(t *testing.T) {
-	metadata := map[string]interface{}{
-		"contextId": "ctx-123",
-		"taskId":    "task-456",
-	}
-
-	content, err := buildDelegatedToolResultContent("assistant summary", metadata, true)
+func TestBuildDelegatedToolResultContentBuildsTypedPayload(t *testing.T) {
+	content, err := buildDelegatedToolResultContent("assistant summary", nil, ToolCall{
+		ID: "call-1",
+		Function: openai.ChatCompletionMessageToolCallFunction{
+			Name: "delegate-agent",
+		},
+	})
 	require.NoError(t, err)
-	require.Equal(t, "assistant summary", content)
+	var payload map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(content), &payload))
+	require.Equal(t, A2APayloadSchemaToolResultV1, payload["schema"])
+	require.Equal(t, "call-1", payload["toolCallId"])
+	require.Equal(t, "delegate-agent", payload["toolName"])
+	require.Equal(t, "assistant summary", payload["content"])
 }
 
-func TestBuildDelegatedToolResultContentCompatPreservesTextBehavior(t *testing.T) {
-	metadata := map[string]interface{}{
-		"contextId": "ctx-123",
+func TestBuildDelegatedToolResultContentPreservesMessageExtensionsAndMetadata(t *testing.T) {
+	contextID := "ctx-delegated"
+	taskID := "task-delegated"
+	message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("delegated output"),
+	})
+	message.ContextID = &contextID
+	message.TaskID = &taskID
+	message.Extensions = []string{
+		"https://example.com/extensions/custom/v1",
+		"https://ark.mckinsey.com/extensions/delegated-tool/v1",
+	}
+	message.Metadata = map[string]interface{}{
+		"https://example.com/extensions/custom/v1": map[string]interface{}{
+			"capability": "streaming-hints",
+		},
 	}
 
-	content, err := buildDelegatedToolResultContent("assistant summary", metadata, false)
+	content, err := buildDelegatedToolResultContent("assistant summary", &ExecutionResult{
+		A2AResponse: &A2AResponse{
+			Message: &message,
+		},
+	}, ToolCall{
+		ID: "call-1",
+		Function: openai.ChatCompletionMessageToolCallFunction{
+			Name: "delegate-agent",
+		},
+	})
 	require.NoError(t, err)
-	require.Equal(t, "assistant summary", content)
 
-	jsonFallback, err := buildDelegatedToolResultContent("", metadata, false)
-	require.NoError(t, err)
-	require.Equal(t, `{"contextId":"ctx-123"}`, jsonFallback)
-}
+	var payload map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(content), &payload))
+	rawMessage, ok := payload["message"].(map[string]interface{})
+	require.True(t, ok)
 
-func TestBuildDelegatedToolResultContentExperimentalNativeFailsFast(t *testing.T) {
-	metadata := map[string]interface{}{
-		"contextId": "ctx-123",
-		"invalid":   make(chan int),
+	rawExtensions, ok := rawMessage["extensions"].([]interface{})
+	require.True(t, ok)
+	extensions := make([]string, 0, len(rawExtensions))
+	for _, item := range rawExtensions {
+		value, castOK := item.(string)
+		require.True(t, castOK)
+		extensions = append(extensions, value)
 	}
+	require.ElementsMatch(t, message.Extensions, extensions)
 
-	content, err := buildDelegatedToolResultContent("assistant summary", metadata, true)
-	require.NoError(t, err)
-	require.Equal(t, "assistant summary", content)
-
-	content, err = buildDelegatedToolResultContent("", metadata, true)
-	require.Error(t, err)
-	require.Equal(t, "", content)
+	rawMetadata, ok := rawMessage["metadata"].(map[string]interface{})
+	require.True(t, ok)
+	_, hasCustom := rawMetadata["https://example.com/extensions/custom/v1"]
+	require.True(t, hasCustom)
 }
 
 func TestDelegatedStreamBridgeAnnotatesDownstreamEvents(t *testing.T) {
@@ -855,29 +1022,27 @@ func TestDelegatedStreamBridgeAnnotatesDownstreamEvents(t *testing.T) {
 	require.Len(t, baseStream.chunks, 2)
 	statusChunk, ok := baseStream.chunks[0].(*protocol.TaskStatusUpdateEvent)
 	require.True(t, ok)
-	extension, hasExtension := parseA2ADelegatedToolExtension(statusChunk.Metadata)
-	require.True(t, hasExtension)
-	require.Equal(t, "call-stream-1", extension.ToolCallID)
-	require.Equal(t, "delegate-agent", extension.ToolName)
-	require.Equal(t, "tool-step:call-stream-1", extension.StepID)
-	require.Equal(t, "task-1", extension.DelegatedTaskID)
-	require.Equal(t, "ctx-1", extension.DelegatedContextID)
-	require.NotNil(t, extension.Sequence)
-	require.Equal(t, 1, *extension.Sequence)
-	messageExtension, hasMessageExtension := parseA2ADelegatedToolExtension(statusChunk.Status.Message.Metadata)
-	require.True(t, hasMessageExtension)
-	require.Equal(t, extension.ToolCallID, messageExtension.ToolCallID)
-	require.Equal(t, extension.StepID, messageExtension.StepID)
+	statusPayload, hasStatusPayload := extractDataPayloadBySchema(
+		statusChunk.Status.Message.Parts,
+		A2APayloadSchemaStepEventV1,
+	)
+	require.True(t, hasStatusPayload)
+	require.Equal(t, "call-stream-1", statusPayload["toolCallId"])
+	require.Equal(t, "delegate-agent", statusPayload["toolName"])
+	require.Equal(t, "tool-step:call-stream-1", statusPayload["stepId"])
+	require.Equal(t, "task-1", statusPayload["delegatedTaskId"])
+	require.Equal(t, "ctx-1", statusPayload["delegatedContextId"])
+	require.Equal(t, float64(1), statusPayload["sequence"])
 
 	artifactChunk, ok := baseStream.chunks[1].(*protocol.TaskArtifactUpdateEvent)
 	require.True(t, ok)
-	artifactExtension, hasArtifactExtension := parseA2ADelegatedToolExtension(artifactChunk.Metadata)
-	require.True(t, hasArtifactExtension)
-	require.NotNil(t, artifactExtension.Sequence)
-	require.Equal(t, 2, *artifactExtension.Sequence)
-	artifactPartExtension, hasArtifactPartExtension := parseA2ADelegatedToolExtension(artifactChunk.Artifact.Metadata)
-	require.True(t, hasArtifactPartExtension)
-	require.Equal(t, "call-stream-1", artifactPartExtension.ToolCallID)
+	artifactPayload, hasArtifactPayload := extractDataPayloadBySchema(
+		artifactChunk.Artifact.Parts,
+		A2APayloadSchemaStepEventV1,
+	)
+	require.True(t, hasArtifactPayload)
+	require.Equal(t, float64(2), artifactPayload["sequence"])
+	require.Equal(t, "call-stream-1", artifactPayload["toolCallId"])
 }
 
 func TestDelegatedStreamBridgeAnnotatesMessageEvents(t *testing.T) {
@@ -900,11 +1065,10 @@ func TestDelegatedStreamBridgeAnnotatesMessageEvents(t *testing.T) {
 	require.Len(t, baseStream.chunks, 1)
 	chunk, ok := baseStream.chunks[0].(*protocol.Message)
 	require.True(t, ok)
-	extension, hasExtension := parseA2ADelegatedToolExtension(chunk.Metadata)
-	require.True(t, hasExtension)
-	require.Equal(t, "call-stream-2", extension.ToolCallID)
-	require.NotNil(t, extension.Sequence)
-	require.Equal(t, 1, *extension.Sequence)
+	payload, hasPayload := extractDataPayloadBySchema(chunk.Parts, A2APayloadSchemaStepEventV1)
+	require.True(t, hasPayload)
+	require.Equal(t, "call-stream-2", payload["toolCallId"])
+	require.Equal(t, float64(1), payload["sequence"])
 }
 
 func TestDelegatedStreamBridgeWithEmptyToolCallIDOmitStepID(t *testing.T) {
@@ -926,11 +1090,13 @@ func TestDelegatedStreamBridgeWithEmptyToolCallIDOmitStepID(t *testing.T) {
 
 	chunk, ok := baseStream.chunks[0].(*protocol.Message)
 	require.True(t, ok)
-	extension, hasExtension := parseA2ADelegatedToolExtension(chunk.Metadata)
-	require.True(t, hasExtension)
-	require.Equal(t, "", extension.ToolCallID)
-	require.Equal(t, "", extension.StepID)
-	require.Equal(t, "delegate-agent", extension.ToolName)
+	payload, hasPayload := extractDataPayloadBySchema(chunk.Parts, A2APayloadSchemaStepEventV1)
+	require.True(t, hasPayload)
+	_, hasToolCallID := payload["toolCallId"]
+	require.False(t, hasToolCallID)
+	_, hasStepID := payload["stepId"]
+	require.False(t, hasStepID)
+	require.Equal(t, "delegate-agent", payload["toolName"])
 }
 
 func TestAgentToolExecutor_NativeMessageDelegationWithoutInput(t *testing.T) {
@@ -962,6 +1128,9 @@ func TestAgentToolExecutor_NativeMessageDelegationWithoutInput(t *testing.T) {
 					"text": "delegate this",
 				},
 			},
+		},
+		A2ADelegationInvocationArgsKey: map[string]any{
+			"routingScope": "scope-123",
 		},
 	}
 	argsJSON, err := json.Marshal(args)
@@ -1057,6 +1226,9 @@ func TestTeamToolExecutor_NativeMessageDelegationWithoutInput(t *testing.T) {
 					"text": "delegate this",
 				},
 			},
+		},
+		A2ADelegationInvocationArgsKey: map[string]any{
+			"routingScope": "scope-123",
 		},
 	}
 	argsJSON, err := json.Marshal(args)

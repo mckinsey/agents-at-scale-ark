@@ -580,11 +580,15 @@ func TestPrepareA2ANewMessagesForMemorySkipsAssistantToolCallMessages(t *testing
 		protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{protocol.NewTextPart("q")}),
 	}
 	intermediate := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{protocol.NewTextPart("calling tool")})
-	intermediate.Metadata = map[string]interface{}{
-		MetadataToolCallsKey: []map[string]string{
-			{"id": "call-1", "name": "filesystem-list-directory"},
+	intermediate.Parts = append(intermediate.Parts, &protocol.DataPart{
+		Kind: protocol.KindData,
+		Data: ToolCallsPayloadV1{
+			Schema: A2APayloadSchemaToolCallsV1,
+			ToolCalls: []ToolCallPayloadV1{
+				{ID: "call-1", Name: "filesystem-list-directory", Arguments: "{}"},
+			},
 		},
-	}
+	})
 	final := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{protocol.NewTextPart("final answer")})
 
 	newMessages := PrepareA2ANewMessagesForMemory(input, []protocol.Message{intermediate, final})

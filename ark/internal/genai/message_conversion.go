@@ -17,9 +17,9 @@ func A2AToOpenAIMessage(msg protocol.Message) (openai.ChatCompletionMessageParam
 	case RoleSystem:
 		return openai.SystemMessage(content), nil
 	case RoleTool:
-		return convertA2AToolMessage(msg.Metadata, content), nil
+		return convertA2AToolMessage(msg.Parts, content), nil
 	case RoleAssistant:
-		return convertA2AAssistantMessage(msg.Metadata, content), nil
+		return convertA2AAssistantMessage(msg.Parts, content), nil
 	default:
 		return openai.UserMessage(content), nil
 	}
@@ -30,13 +30,11 @@ func resolveA2AMessageRole(msg protocol.Message) string {
 	case protocol.MessageRoleUser:
 		return RoleUser
 	case protocol.MessageRoleAgent:
-		if msg.Metadata != nil {
-			if extensionRole := resolveA2ADelegatedToolRole(msg.Metadata); extensionRole != "" {
-				return extensionRole
-			}
-			if value, ok := msg.Metadata[MetadataRoleKey].(string); ok && value != "" {
-				return value
-			}
+		if role, ok := extractRoleHintFromParts(msg.Parts); ok {
+			return role
+		}
+		if _, ok := extractToolResultPayloadFromParts(msg.Parts); ok {
+			return RoleTool
 		}
 		return RoleAssistant
 	default:
@@ -44,80 +42,31 @@ func resolveA2AMessageRole(msg protocol.Message) string {
 	}
 }
 
-func convertA2AToolMessage(metadata map[string]interface{}, content string) openai.ChatCompletionMessageParamUnion {
-	toolCallID := ""
-	if extension, ok := parseA2ADelegatedToolExtension(metadata); ok && extension.ToolCallID != "" {
-		toolCallID = extension.ToolCallID
-	}
-	if metadata != nil {
-		if value, ok := metadata[MetadataToolCallIDKey].(string); ok && value != "" {
-			toolCallID = value
+func convertA2AToolMessage(parts []protocol.Part, fallbackContent string) openai.ChatCompletionMessageParamUnion {
+	payload, ok := extractToolResultPayloadFromParts(parts)
+	if !ok || payload.ToolCallID == "" {
+		content := payload.Content
+		if content == "" {
+			content = fallbackContent
 		}
-	}
-	if toolCallID == "" {
 		return openai.AssistantMessage(content)
 	}
-	return openai.ToolMessage(content, toolCallID)
+	content := payload.Content
+	if content == "" {
+		content = fallbackContent
+	}
+	return openai.ToolMessage(content, payload.ToolCallID)
 }
 
-func convertA2AAssistantMessage(metadata map[string]interface{}, content string) openai.ChatCompletionMessageParamUnion {
+func convertA2AAssistantMessage(parts []protocol.Part, content string) openai.ChatCompletionMessageParamUnion {
 	assistant := openai.AssistantMessage(content)
-	if assistant.OfAssistant != nil && metadata != nil {
-		if value, ok := metadata[MetadataToolCallsKey]; ok {
-			toolCalls := recoverToolCalls(value)
-			if len(toolCalls) > 0 {
-				assistant.OfAssistant.ToolCalls = toolCalls
-			}
+	if assistant.OfAssistant != nil {
+		toolCalls := extractToolCallsFromParts(parts)
+		if len(toolCalls) > 0 {
+			assistant.OfAssistant.ToolCalls = toolCalls
 		}
 	}
 	return assistant
-}
-
-func recoverToolCalls(value interface{}) []openai.ChatCompletionMessageToolCallParam {
-	switch calls := value.(type) {
-	case []openai.ChatCompletionMessageToolCallParam:
-		return rebuildToolCallParams(calls)
-	case []openai.ChatCompletionMessageToolCall:
-		params := make([]openai.ChatCompletionMessageToolCallParam, len(calls))
-		for i, call := range calls {
-			params[i] = openai.ChatCompletionMessageToolCallParam{
-				ID: call.ID,
-				Function: openai.ChatCompletionMessageToolCallFunctionParam{
-					Name:      call.Function.Name,
-					Arguments: call.Function.Arguments,
-				},
-			}
-		}
-		return params
-	default:
-		raw, err := json.Marshal(value)
-		if err != nil {
-			return nil
-		}
-		var params []openai.ChatCompletionMessageToolCallParam
-		if err := json.Unmarshal(raw, &params); err == nil && len(params) > 0 {
-			return rebuildToolCallParams(params)
-		}
-		return nil
-	}
-}
-
-func rebuildToolCallParams(params []openai.ChatCompletionMessageToolCallParam) []openai.ChatCompletionMessageToolCallParam {
-	result := make([]openai.ChatCompletionMessageToolCallParam, len(params))
-	for i, p := range params {
-		args := p.Function.Arguments
-		if args == "" {
-			args = "{}"
-		}
-		result[i] = openai.ChatCompletionMessageToolCallParam{
-			ID: p.ID,
-			Function: openai.ChatCompletionMessageToolCallFunctionParam{
-				Name:      p.Function.Name,
-				Arguments: args,
-			},
-		}
-	}
-	return result
 }
 
 func extractUserContent(msg *openai.ChatCompletionUserMessageParam) string {
@@ -145,38 +94,172 @@ func OpenAIToA2AMessage(msg openai.ChatCompletionMessageParamUnion) (protocol.Me
 		}), nil
 	case msg.OfAssistant != nil:
 		content := msg.OfAssistant.Content.OfString.Value
-		message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		parts := []protocol.Part{
 			protocol.NewTextPart(content),
-		})
-		if toolCalls := msg.GetToolCalls(); len(toolCalls) > 0 {
-			message.Metadata = map[string]interface{}{
-				MetadataToolCallsKey: toolCalls,
-			}
 		}
+		if toolCalls := msg.GetToolCalls(); len(toolCalls) > 0 {
+			payloadCalls := make([]ToolCallPayloadV1, 0, len(toolCalls))
+			for _, tc := range toolCalls {
+				args := tc.Function.Arguments
+				if args == "" {
+					args = "{}"
+				}
+				payloadCalls = append(payloadCalls, ToolCallPayloadV1{
+					ID:        tc.ID,
+					Name:      tc.Function.Name,
+					Arguments: args,
+				})
+			}
+			parts = appendPayloadPart(parts, ToolCallsPayloadV1{
+				Schema:    A2APayloadSchemaToolCallsV1,
+				ToolCalls: payloadCalls,
+			})
+		}
+		message := protocol.NewMessage(protocol.MessageRoleAgent, parts)
 		return message, nil
 	case msg.OfSystem != nil:
 		content := msg.OfSystem.Content.OfString.Value
 		message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
 			protocol.NewTextPart(content),
+			&protocol.DataPart{
+				Kind: protocol.KindData,
+				Data: RoleHintPayloadV1{
+					Schema: A2APayloadSchemaRoleHintV1,
+					Role:   RoleSystem,
+				},
+			},
 		})
-		message.Metadata = map[string]interface{}{
-			MetadataRoleKey: RoleSystem,
-		}
 		return message, nil
 	case msg.OfTool != nil:
 		content := msg.OfTool.Content.OfString.Value
 		message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
 			protocol.NewTextPart(content),
-		})
-		message.Metadata = map[string]interface{}{
-			MetadataRoleKey:       RoleTool,
-			MetadataToolCallIDKey: msg.OfTool.ToolCallID,
-		}
-		message.Metadata = withA2ADelegatedToolExtension(message.Metadata, A2ADelegatedToolExtension{
-			ToolCallID: msg.OfTool.ToolCallID,
+			&protocol.DataPart{
+				Kind: protocol.KindData,
+				Data: ToolResultPayloadV1{
+					Schema:     A2APayloadSchemaToolResultV1,
+					ToolCallID: msg.OfTool.ToolCallID,
+					Content:    content,
+				},
+			},
 		})
 		return message, nil
 	default:
 		return protocol.Message{}, fmt.Errorf("unsupported OpenAI message type")
 	}
+}
+
+func decodePartData(part protocol.Part) (map[string]interface{}, bool) {
+	switch typed := part.(type) {
+	case protocol.DataPart:
+		return decodeDataObject(typed.Data)
+	case *protocol.DataPart:
+		return decodeDataObject(typed.Data)
+	default:
+		return nil, false
+	}
+}
+
+func decodeDataObject(value interface{}) (map[string]interface{}, bool) {
+	if value == nil {
+		return nil, false
+	}
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil, false
+	}
+	var object map[string]interface{}
+	if err := json.Unmarshal(raw, &object); err != nil {
+		return nil, false
+	}
+	if len(object) == 0 {
+		return nil, false
+	}
+	return object, true
+}
+
+func extractRoleHintFromParts(parts []protocol.Part) (string, bool) {
+	for _, part := range parts {
+		data, ok := decodePartData(part)
+		if !ok {
+			continue
+		}
+		schema, _ := data["schema"].(string)
+		if schema != A2APayloadSchemaRoleHintV1 {
+			continue
+		}
+		role, ok := data["role"].(string)
+		if !ok || role == "" {
+			continue
+		}
+		return role, true
+	}
+	return "", false
+}
+
+func extractToolCallsFromParts(parts []protocol.Part) []openai.ChatCompletionMessageToolCallParam {
+	for _, part := range parts {
+		data, ok := decodePartData(part)
+		if !ok {
+			continue
+		}
+		schema, _ := data["schema"].(string)
+		if schema != A2APayloadSchemaToolCallsV1 {
+			continue
+		}
+		rawCalls, ok := data["toolCalls"]
+		if !ok {
+			return nil
+		}
+		raw, err := json.Marshal(rawCalls)
+		if err != nil {
+			return nil
+		}
+		var calls []ToolCallPayloadV1
+		if err := json.Unmarshal(raw, &calls); err != nil {
+			return nil
+		}
+		params := make([]openai.ChatCompletionMessageToolCallParam, 0, len(calls))
+		for _, call := range calls {
+			if call.ID == "" || call.Name == "" {
+				continue
+			}
+			args := call.Arguments
+			if args == "" {
+				args = "{}"
+			}
+			params = append(params, openai.ChatCompletionMessageToolCallParam{
+				ID: call.ID,
+				Function: openai.ChatCompletionMessageToolCallFunctionParam{
+					Name:      call.Name,
+					Arguments: args,
+				},
+			})
+		}
+		return params
+	}
+	return nil
+}
+
+func extractToolResultPayloadFromParts(parts []protocol.Part) (ToolResultPayloadV1, bool) {
+	for _, part := range parts {
+		data, ok := decodePartData(part)
+		if !ok {
+			continue
+		}
+		schema, _ := data["schema"].(string)
+		if schema != A2APayloadSchemaToolResultV1 {
+			continue
+		}
+		raw, err := json.Marshal(data)
+		if err != nil {
+			return ToolResultPayloadV1{}, false
+		}
+		var payload ToolResultPayloadV1
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			return ToolResultPayloadV1{}, false
+		}
+		return payload, true
+	}
+	return ToolResultPayloadV1{}, false
 }

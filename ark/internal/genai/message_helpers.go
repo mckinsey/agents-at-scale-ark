@@ -83,11 +83,8 @@ func shouldPersistA2AMessageForMemory(message protocol.Message) bool {
 	if message.Role != protocol.MessageRoleAgent {
 		return true
 	}
-	if message.Metadata == nil {
-		return true
-	}
-	_, hasToolCalls := message.Metadata[MetadataToolCallsKey]
-	return !hasToolCalls
+	toolCalls := extractToolCallsFromParts(message.Parts)
+	return len(toolCalls) == 0
 }
 
 func ExtractA2ATextFromMessage(message protocol.Message) string {

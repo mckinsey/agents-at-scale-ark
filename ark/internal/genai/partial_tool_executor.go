@@ -32,6 +32,9 @@ func (p *PartialToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolR
 	}
 
 	mergedParams := map[string]any{}
+	for k, v := range agentParams {
+		mergedParams[k] = v
+	}
 
 	if p.Partial != nil {
 		partialParams := map[string]any{}
@@ -63,13 +66,11 @@ func (p *PartialToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolR
 			partialParams[param.Name] = resolved
 		}
 
+		// Partial parameters are authoritative and must not be overridden by
+		// model-emitted arguments (e.g., workspaceId/cxaCommand in delegated tools).
 		for k, v := range partialParams {
 			mergedParams[k] = v
 		}
-	}
-
-	for k, v := range agentParams {
-		mergedParams[k] = v
 	}
 
 	invocationArgs := extractDelegationArgsFromMergedParams(mergedParams)

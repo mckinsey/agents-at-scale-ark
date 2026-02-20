@@ -40,3 +40,4 @@ type A2AToolDefinition struct {
 }
 
 var ErrA2AModelProviderNotSupported = fmt.Errorf("provider does not support A2A model interface")
+var ErrA2AExperimentalRequiresNativeProvider = fmt.Errorf("a2a experimental mode requires a native A2A turn provider")

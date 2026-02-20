@@ -11,6 +11,14 @@ func (a *Agent) executeLocallyA2ANative(ctx context.Context, userInput protocol.
 	if a.Model == nil {
 		return nil, fmt.Errorf("agent %s has no model configured", a.FullName())
 	}
+	if !a.Model.SupportsA2ANativeTurns() {
+		return nil, fmt.Errorf(
+			"agent %s model provider %T does not support native A2A turns: %w",
+			a.FullName(),
+			a.Model.Provider,
+			ErrA2AExperimentalRequiresNativeProvider,
+		)
+	}
 
 	a2aProvider := NewOpenAIA2AModelAdapter(a.Model, a.Name, a.Namespace)
 
@@ -31,10 +39,14 @@ func (a *Agent) prepareA2ANativeMessages(ctx context.Context, userInput protocol
 
 	systemMessage := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
 		protocol.NewTextPart(resolvedPrompt),
+		&protocol.DataPart{
+			Kind: protocol.KindData,
+			Data: RoleHintPayloadV1{
+				Schema: A2APayloadSchemaRoleHintV1,
+				Role:   RoleSystem,
+			},
+		},
 	})
-	systemMessage.Metadata = map[string]interface{}{
-		MetadataRoleKey: RoleSystem,
-	}
 
 	agentMessages := make([]protocol.Message, 0, len(history)+2)
 	agentMessages = append(agentMessages, systemMessage)

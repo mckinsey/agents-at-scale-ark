@@ -172,7 +172,7 @@ func (p *adapterTestChatProvider) ChatCompletionStream(_ context.Context, messag
 
 func (p *adapterTestChatProvider) SetOutputSchema(_ *runtime.RawExtension, _ string) {}
 
-func TestA2ATurnDoesNotForwardOpenAIChunksInExperimentalMode(t *testing.T) {
+func TestA2ATurnStreamsOpenAIChunksInCompatMode(t *testing.T) {
 	provider := &adapterTestChatProvider{
 		response: &openai.ChatCompletion{
 			Choices: []openai.ChatCompletionChoice{
@@ -198,11 +198,11 @@ func TestA2ATurnDoesNotForwardOpenAIChunksInExperimentalMode(t *testing.T) {
 		protocol.NewTextPart("hello"),
 	})
 
-	_, err := adapter.A2ATurn(WithA2AExperimentalEnabled(context.Background(), true), []protocol.Message{userMessage}, nil, nil, stream)
+	_, err := adapter.A2ATurn(WithA2AExperimentalEnabled(context.Background(), false), []protocol.Message{userMessage}, nil, nil, stream)
 	require.NoError(t, err)
-	assert.Equal(t, 1, provider.chatCalls)
-	assert.Equal(t, 0, provider.streamCalls)
-	require.Len(t, stream.chunks, 0)
+	assert.Equal(t, 0, provider.chatCalls)
+	assert.Equal(t, 1, provider.streamCalls)
+	require.Len(t, stream.chunks, 1)
 }
 
 func TestA2ATurnConvertsA2AImagePartToOpenAIImageURL(t *testing.T) {
@@ -231,7 +231,7 @@ func TestA2ATurnConvertsA2AImagePartToOpenAIImageURL(t *testing.T) {
 		protocol.NewFilePartWithURI("diagram.png", "image/png", "https://example.com/diagram.png"),
 	})
 
-	_, err := adapter.A2ATurn(WithA2AExperimentalEnabled(context.Background(), true), []protocol.Message{userMessage}, nil, nil, nil)
+	_, err := adapter.A2ATurn(WithA2AExperimentalEnabled(context.Background(), false), []protocol.Message{userMessage}, nil, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, provider.chatCalls)
 	require.Len(t, provider.lastMessages, 1)
@@ -241,5 +241,88 @@ func TestA2ATurnConvertsA2AImagePartToOpenAIImageURL(t *testing.T) {
 	assert.Equal(t, "describe", provider.lastMessages[0].OfUser.Content.OfArrayOfContentParts[0].OfText.Text)
 	require.NotNil(t, provider.lastMessages[0].OfUser.Content.OfArrayOfContentParts[1].OfImageURL)
 	assert.Equal(t, "https://example.com/diagram.png", provider.lastMessages[0].OfUser.Content.OfArrayOfContentParts[1].OfImageURL.ImageURL.URL)
+}
+
+func TestA2ATurnExperimentalWithoutNativeProviderFailsFast(t *testing.T) {
+	provider := &adapterTestChatProvider{
+		response: &openai.ChatCompletion{
+			Choices: []openai.ChatCompletionChoice{
+				{
+					Message: openai.ChatCompletionMessage{
+						Role:    "assistant",
+						Content: "should-not-run",
+					},
+				},
+			},
+		},
+	}
+	adapter := &openAIA2AModelAdapter{
+		provider:          provider,
+		modelName:         "test-model",
+		modelType:         "openai",
+		agentName:         "test-agent",
+		telemetryRecorder: telemetrynoop.NewModelRecorder(),
+		eventingRecorder:  eventingnoop.NewModelRecorder(),
+	}
+	userMessage := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("hello"),
+	})
+
+	result, err := adapter.A2ATurn(WithA2AExperimentalEnabled(context.Background(), true), []protocol.Message{userMessage}, nil, nil, nil)
+	require.ErrorIs(t, err, ErrA2AExperimentalRequiresNativeProvider)
+	assert.Nil(t, result)
+	assert.Equal(t, 0, provider.chatCalls)
+	assert.Equal(t, 0, provider.streamCalls)
+}
+
+type adapterTestNativeProvider struct {
+	adapterTestChatProvider
+	nativeCalls int
+}
+
+func (p *adapterTestNativeProvider) A2ATurnNative(_ context.Context, _ []protocol.Message, _ []A2AToolOutcome, _ []A2AToolDefinition, _ EventStreamInterface) (*A2ATurnResult, error) {
+	p.nativeCalls++
+	msg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("native-response"),
+	})
+	return &A2ATurnResult{
+		Message: msg,
+		Content: "native-response",
+	}, nil
+}
+
+func TestA2ATurnPrefersNativeProviderWhenAvailable(t *testing.T) {
+	provider := &adapterTestNativeProvider{
+		adapterTestChatProvider: adapterTestChatProvider{
+			response: &openai.ChatCompletion{
+				Choices: []openai.ChatCompletionChoice{
+					{
+						Message: openai.ChatCompletionMessage{
+							Role:    "assistant",
+							Content: "should-not-be-used",
+						},
+					},
+				},
+			},
+		},
+	}
+	model := &Model{
+		Model:             "test-model",
+		Type:              "native",
+		Provider:          provider,
+		telemetryRecorder: telemetrynoop.NewModelRecorder(),
+		eventingRecorder:  eventingnoop.NewModelRecorder(),
+	}
+	adapter := NewOpenAIA2AModelAdapter(model, "test-agent", "default")
+	userMessage := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("hello"),
+	})
+
+	result, err := adapter.A2ATurn(context.Background(), []protocol.Message{userMessage}, nil, nil, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "native-response", extractTextFromParts(result.Message.Parts))
+	assert.Equal(t, 1, provider.nativeCalls)
+	assert.Equal(t, 0, provider.chatCalls)
 }
 

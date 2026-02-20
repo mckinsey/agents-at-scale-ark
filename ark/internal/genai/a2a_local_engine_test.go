@@ -2,6 +2,7 @@ package genai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -210,15 +211,19 @@ func TestA2ALocalEngineToolResultBuildsA2AOutcome(t *testing.T) {
 
 	assert.Equal(t, "call-42", outcome.ToolCallID)
 	assert.Equal(t, "weather", outcome.ToolName)
-	assert.Equal(t, "sunny", outcome.Content)
 	assert.Equal(t, "ctx-1", outcome.ContextID)
 	assert.Equal(t, "task-1", outcome.TaskID)
-	require.NotNil(t, outcome.Metadata)
-	assert.Equal(t, "call-42", outcome.Metadata[MetadataToolCallIDKey])
-	assert.Equal(t, "weather", outcome.Metadata[MetadataToolNameKey])
-	assert.Equal(t, "tool-step:call-42", outcome.Metadata[MetadataStepIDKey])
-	assert.Equal(t, "done", outcome.Metadata[MetadataStepStateKey])
-	assert.Equal(t, "tool", outcome.Metadata[MetadataStepKindKey])
+	var payload map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(outcome.Content), &payload))
+	assert.Equal(t, A2APayloadSchemaToolResultV1, payload["schema"])
+	assert.Equal(t, "call-42", payload["toolCallId"])
+	assert.Equal(t, "weather", payload["toolName"])
+	assert.Equal(t, "sunny", payload["content"])
+	step, ok := payload["step"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "tool-step:call-42", step["stepId"])
+	assert.Equal(t, "done", step["stepState"])
+	assert.Equal(t, "tool", step["stepKind"])
 }
 
 func TestA2ALocalEngineToolResultPrefersCallIDOverResultID(t *testing.T) {
@@ -235,9 +240,12 @@ func TestA2ALocalEngineToolResultPrefersCallIDOverResultID(t *testing.T) {
 	outcome := buildA2AToolOutcome(call, result, nil, "ctx-1", "task-1")
 
 	assert.Equal(t, "call-canonical", outcome.ToolCallID)
-	require.NotNil(t, outcome.Metadata)
-	assert.Equal(t, "call-canonical", outcome.Metadata[MetadataToolCallIDKey])
-	assert.Equal(t, "tool-step:call-canonical", outcome.Metadata[MetadataStepIDKey])
+	var payload map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(outcome.Content), &payload))
+	assert.Equal(t, "call-canonical", payload["toolCallId"])
+	step, ok := payload["step"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "tool-step:call-canonical", step["stepId"])
 }
 
 func TestA2ALocalEngineToolResultOmitsStepMetadataWithoutToolCallID(t *testing.T) {
@@ -252,13 +260,16 @@ func TestA2ALocalEngineToolResultOmitsStepMetadataWithoutToolCallID(t *testing.T
 	outcome := buildA2AToolOutcome(call, result, nil, "ctx-1", "task-1")
 
 	assert.Equal(t, "", outcome.ToolCallID)
-	require.NotNil(t, outcome.Metadata)
-	_, hasToolCallID := outcome.Metadata[MetadataToolCallIDKey]
+	var payload map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(outcome.Content), &payload))
+	_, hasToolCallID := payload["toolCallId"]
 	assert.False(t, hasToolCallID)
-	_, hasStepID := outcome.Metadata[MetadataStepIDKey]
+	step, ok := payload["step"].(map[string]interface{})
+	require.True(t, ok)
+	_, hasStepID := step["stepId"]
 	assert.False(t, hasStepID)
-	assert.Equal(t, "done", outcome.Metadata[MetadataStepStateKey])
-	assert.Equal(t, "tool", outcome.Metadata[MetadataStepKindKey])
+	assert.Equal(t, "done", step["stepState"])
+	assert.Equal(t, "tool", step["stepKind"])
 }
 
 func TestA2ALocalEngineToolResultWithToolErrorSetsErrorState(t *testing.T) {
@@ -276,9 +287,12 @@ func TestA2ALocalEngineToolResultWithToolErrorSetsErrorState(t *testing.T) {
 	outcome := buildA2AToolOutcome(call, result, errors.New("tool boom"), "ctx-1", "task-1")
 
 	assert.Equal(t, "tool boom", outcome.Error)
-	require.NotNil(t, outcome.Metadata)
-	assert.Equal(t, "error", outcome.Metadata[MetadataStepStateKey])
-	assert.Equal(t, "tool", outcome.Metadata[MetadataStepKindKey])
+	var payload map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(outcome.Content), &payload))
+	step, ok := payload["step"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "error", step["stepState"])
+	assert.Equal(t, "tool", step["stepKind"])
 }
 
 func TestA2ALocalEngineStreamFailure(t *testing.T) {

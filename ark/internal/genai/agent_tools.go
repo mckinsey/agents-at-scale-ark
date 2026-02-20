@@ -335,6 +335,10 @@ func parseA2AHistoryArgument(rawValue any) ([]protocol.Message, error) {
 	return history, nil
 }
 
+func isA2AExtensionURI(value string) bool {
+	return strings.HasPrefix(value, "https://") || strings.HasPrefix(value, "http://")
+}
+
 func ensureMessageHasExtension(message *protocol.Message, extensionURI string) {
 	for _, extension := range message.Extensions {
 		if extension == extensionURI {
@@ -439,9 +443,16 @@ func parseNativeDelegationInput(arguments map[string]any, targetType, targetName
 	if err != nil {
 		return delegatedInvocation{}, "message parameter is invalid", err
 	}
-	if err := applyDelegatedInvocationExtension(&message, arguments); err != nil {
-		return delegatedInvocation{}, err.Error(), err
+	invocationArgs := extractDelegationInvocationArgs(arguments)
+	if len(invocationArgs) == 0 {
+		return delegatedInvocation{}, "delegation parameters are required", fmt.Errorf("delegation parameters are required for %s tool %s", targetType, targetName)
 	}
+	appendPayloadPartToMessage(&message, DelegatedInvocationPayloadV1{
+		Schema:     A2APayloadSchemaDelegatedInvocationV1,
+		Parameters: invocationArgs,
+		ContextID:  invocation.contextID,
+	})
+	ensureMessageHasExtension(&message, A2ADelegatedToolExtensionKey)
 	invocation.a2aUserInput = message
 	return invocation, "", nil
 }
@@ -542,6 +553,9 @@ func serializeA2AMessage(message *protocol.Message) map[string]interface{} {
 	if len(parts) > 0 {
 		result["parts"] = parts
 	}
+	if len(message.Extensions) > 0 {
+		result["extensions"] = message.Extensions
+	}
 	if len(message.Metadata) > 0 {
 		result["metadata"] = message.Metadata
 	}
@@ -575,64 +589,34 @@ func serializeA2AArtifacts(artifacts []protocol.Artifact) []map[string]interface
 	return serialized
 }
 
-func buildDelegatedToolResultMetadata(result *ExecutionResult, call ToolCall) map[string]interface{} {
-	if result == nil {
-		return nil
-	}
-	metadata := map[string]interface{}{}
-	extension := A2ADelegatedToolExtension{
+func buildDelegatedToolResultContent(content string, result *ExecutionResult, call ToolCall) (string, error) {
+	payload := ToolResultPayloadV1{
+		Schema:     A2APayloadSchemaToolResultV1,
 		ToolCallID: call.ID,
 		ToolName:   call.Function.Name,
-		StepID:     buildToolStepID(call.ID),
+		Content:    content,
 	}
-	if result.A2AResponse != nil {
-		if result.A2AResponse.ContextID != "" {
-			metadata["contextId"] = result.A2AResponse.ContextID
-			extension.DelegatedContextID = result.A2AResponse.ContextID
-		}
-		if result.A2AResponse.TaskID != "" {
-			metadata["taskId"] = result.A2AResponse.TaskID
-			extension.DelegatedTaskID = result.A2AResponse.TaskID
-		}
+	if result != nil && result.A2AResponse != nil {
+		payload.DelegatedContextID = result.A2AResponse.ContextID
+		payload.DelegatedTaskID = result.A2AResponse.TaskID
 		if result.A2AResponse.Message != nil {
-			metadata["message"] = serializeA2AMessage(result.A2AResponse.Message)
+			payload.Message = serializeA2AMessage(result.A2AResponse.Message)
 		}
 		if len(result.A2AResponse.Artifacts) > 0 {
-			metadata["artifacts"] = serializeA2AArtifacts(result.A2AResponse.Artifacts)
+			payload.Artifacts = serializeA2AArtifacts(result.A2AResponse.Artifacts)
 		}
 	}
-	if len(result.A2AMessages) > 0 {
+	if result != nil && len(result.A2AMessages) > 0 {
 		last := result.A2AMessages[len(result.A2AMessages)-1]
 		if last.ContextID != nil && *last.ContextID != "" {
-			metadata["contextId"] = *last.ContextID
-			extension.DelegatedContextID = *last.ContextID
+			payload.DelegatedContextID = *last.ContextID
 		}
 		if last.TaskID != nil && *last.TaskID != "" {
-			metadata["taskId"] = *last.TaskID
-			extension.DelegatedTaskID = *last.TaskID
+			payload.DelegatedTaskID = *last.TaskID
 		}
-		metadata["message"] = serializeA2AMessage(&last)
+		payload.Message = serializeA2AMessage(&last)
 	}
-	metadata = withA2ADelegatedToolExtension(metadata, extension)
-	if len(metadata) == 0 {
-		return nil
-	}
-	return metadata
-}
-
-func buildDelegatedToolResultContent(content string, metadata map[string]interface{}, experimentalNative bool) (string, error) {
-	_ = experimentalNative
-	if content != "" {
-		return content, nil
-	}
-	if len(metadata) == 0 {
-		return content, nil
-	}
-	raw, err := json.Marshal(metadata)
-	if err != nil {
-		return "", fmt.Errorf("failed to serialize delegated tool result metadata: %w", err)
-	}
-	return string(raw), nil
+	return buildToolResultPayloadContent(payload)
 }
 
 func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
@@ -688,12 +672,10 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolRes
 	} else {
 		content = ExtractLastAssistantMessageContent(result.Messages)
 	}
-	metadata := buildDelegatedToolResultMetadata(result, call)
 	if content == "" && result.A2AResponse != nil {
 		content = result.A2AResponse.Content
 	}
-	experimentalNative := payloadMode == A2APayloadModeNative && IsA2AExperimentalEnabledInContext(execCtx)
-	content, err = buildDelegatedToolResultContent(content, metadata, experimentalNative)
+	content, err = buildDelegatedToolResultContent(content, result, call)
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,
@@ -710,10 +692,9 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolRes
 	}
 
 	return ToolResult{
-		ID:       call.ID,
-		Name:     call.Function.Name,
-		Content:  content,
-		Metadata: metadata,
+		ID:      call.ID,
+		Name:    call.Function.Name,
+		Content: content,
 	}, nil
 }
 
@@ -788,12 +769,10 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResu
 	} else {
 		content = ExtractLastAssistantMessageContent(result.Messages)
 	}
-	metadata := buildDelegatedToolResultMetadata(result, call)
 	if content == "" && result.A2AResponse != nil {
 		content = result.A2AResponse.Content
 	}
-	experimentalNative := payloadMode == A2APayloadModeNative && IsA2AExperimentalEnabledInContext(execCtx)
-	content, err = buildDelegatedToolResultContent(content, metadata, experimentalNative)
+	content, err = buildDelegatedToolResultContent(content, result, call)
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,
@@ -810,9 +789,8 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResu
 	}
 
 	return ToolResult{
-		ID:       call.ID,
-		Name:     call.Function.Name,
-		Content:  content,
-		Metadata: metadata,
+		ID:      call.ID,
+		Name:    call.Function.Name,
+		Content: content,
 	}, nil
 }

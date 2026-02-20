@@ -99,9 +99,14 @@ func TestStreamA2AErrorNative(t *testing.T) {
 	assert.Equal(t, "ctx-err", event.ContextID)
 	assert.NotNil(t, event.Status.Message)
 	assert.Equal(t, "boom", extractTextFromParts(event.Status.Message.Parts))
-	assert.Equal(t, "task-error:query-err", event.Status.Message.Metadata[MetadataStepIDKey])
-	assert.Equal(t, "error", event.Status.Message.Metadata[MetadataStepStateKey])
-	assert.Equal(t, "status", event.Status.Message.Metadata[MetadataStepKindKey])
+	stepPayload, hasStepPayload := extractDataPayloadBySchema(
+		event.Status.Message.Parts,
+		A2APayloadSchemaStepEventV1,
+	)
+	assert.True(t, hasStepPayload)
+	assert.Equal(t, "task-error:query-err", stepPayload["stepId"])
+	assert.Equal(t, "error", stepPayload["stepState"])
+	assert.Equal(t, "status", stepPayload["stepKind"])
 }
 
 func TestConsumeA2AStreamEventsMessageCompat(t *testing.T) {

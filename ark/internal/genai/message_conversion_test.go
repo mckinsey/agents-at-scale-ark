@@ -70,8 +70,12 @@ func TestToolCallsSurviveJSONRoundTrip(t *testing.T) {
 
 	a2a, err := OpenAIToA2AMessage(assistant)
 	require.NoError(t, err)
-	require.NotNil(t, a2a.Metadata)
-	require.NotNil(t, a2a.Metadata[MetadataToolCallsKey])
+	toolCallsPayload, hasToolCallsPayload := extractDataPayloadBySchema(
+		a2a.Parts,
+		A2APayloadSchemaToolCallsV1,
+	)
+	require.True(t, hasToolCallsPayload)
+	require.NotNil(t, toolCallsPayload["toolCalls"])
 
 	raw, err := json.Marshal(a2a)
 	require.NoError(t, err)
@@ -209,12 +213,16 @@ func TestToolCallRoundTripViaSerialization(t *testing.T) {
 	assert.Equal(t, `{"path":"/tmp/test.txt"}`, recovered.OfAssistant.ToolCalls[0].Function.Arguments)
 }
 
-func TestA2AToOpenAIMessageUsesDelegatedToolExtensionRole(t *testing.T) {
+func TestA2AToOpenAIMessageUsesToolResultPayloadRole(t *testing.T) {
 	message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
 		protocol.NewTextPart("tool output"),
-	})
-	message.Metadata = withA2ADelegatedToolExtension(nil, A2ADelegatedToolExtension{
-		ToolCallID: "call-ext-1",
+		&protocol.DataPart{
+			Data: ToolResultPayloadV1{
+				Schema:     A2APayloadSchemaToolResultV1,
+				ToolCallID: "call-ext-1",
+				Content:    "tool output",
+			},
+		},
 	})
 
 	recovered, err := A2AToOpenAIMessage(message)
@@ -224,20 +232,21 @@ func TestA2AToOpenAIMessageUsesDelegatedToolExtensionRole(t *testing.T) {
 	assert.Equal(t, "call-ext-1", recovered.OfTool.ToolCallID)
 }
 
-func TestA2AToOpenAIMessageFallsBackToLegacyRoleMetadata(t *testing.T) {
+func TestA2AToOpenAIMessageUsesRoleHintPayload(t *testing.T) {
 	message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
 		protocol.NewTextPart("legacy tool output"),
+		&protocol.DataPart{
+			Data: RoleHintPayloadV1{
+				Schema: A2APayloadSchemaRoleHintV1,
+				Role:   RoleSystem,
+			},
+		},
 	})
-	message.Metadata = map[string]interface{}{
-		MetadataRoleKey:       RoleTool,
-		MetadataToolCallIDKey: "call-legacy-1",
-	}
 
 	recovered, err := A2AToOpenAIMessage(message)
 	require.NoError(t, err)
-	require.NotNil(t, recovered.OfTool)
-	assert.Equal(t, "legacy tool output", recovered.OfTool.Content.OfString.Value)
-	assert.Equal(t, "call-legacy-1", recovered.OfTool.ToolCallID)
+	require.NotNil(t, recovered.OfSystem)
+	assert.Equal(t, "legacy tool output", recovered.OfSystem.Content.OfString.Value)
 }
 
 func TestA2AToOpenAIMessageExperimentalPreservesImageFileParts(t *testing.T) {
@@ -267,6 +276,19 @@ func TestA2AToOpenAIMessageExperimentalConvertsImageBytesToDataURL(t *testing.T)
 	require.Len(t, recovered.OfUser.Content.OfArrayOfContentParts, 1)
 	require.NotNil(t, recovered.OfUser.Content.OfArrayOfContentParts[0].OfImageURL)
 	assert.Equal(t, "data:image/png;base64,YWJj", recovered.OfUser.Content.OfArrayOfContentParts[0].OfImageURL.ImageURL.URL)
+}
+
+func TestDefaultA2AToOpenAIMessageRemainsTextOnlyForImageFilePart(t *testing.T) {
+	message := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("keep text"),
+		protocol.NewFilePartWithURI("keep.png", "image/png", "https://example.com/keep.png"),
+	})
+
+	recovered, err := A2AToOpenAIMessage(message)
+	require.NoError(t, err)
+	require.NotNil(t, recovered.OfUser)
+	assert.Equal(t, extractTextFromParts(message.Parts), recovered.OfUser.Content.OfString.Value)
+	assert.Len(t, recovered.OfUser.Content.OfArrayOfContentParts, 0)
 }
 
 func TestOpenAIToA2AMessageExperimentalPreservesImageURLParts(t *testing.T) {

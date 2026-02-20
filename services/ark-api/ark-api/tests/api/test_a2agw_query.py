@@ -63,6 +63,21 @@ class TestA2AGatewayQuery(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.content, "done")
         self.assertEqual(result.context_id, "ctx-new")
 
+    @patch("ark_api.api.v1.a2agw.query.with_ark_client")
+    async def test_wait_for_query_accepts_session_id_alias(self, mock_with_ark_client):
+        response = SimpleNamespace(content="done", a2a={"sessionId": "ctx-from-session"})
+        status = SimpleNamespace(phase="done", response=response)
+        query_status = SimpleNamespace(status=status)
+
+        mock_client = AsyncMock()
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        mock_client.queries.a_get = AsyncMock(return_value=query_status)
+
+        result = await wait_for_query("default", "query-1", timeout=1)
+
+        self.assertEqual(result.content, "done")
+        self.assertEqual(result.context_id, "ctx-from-session")
+
     @patch("ark_api.api.v1.a2agw.query.wait_for_query", new_callable=AsyncMock)
     @patch("ark_api.api.v1.a2agw.query.post_query", new_callable=AsyncMock)
     async def test_post_query_and_wait_passes_context(self, mock_post_query, mock_wait_for_query):

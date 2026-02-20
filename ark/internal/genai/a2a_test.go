@@ -255,7 +255,7 @@ func TestExtractTextFromParts(t *testing.T) {
 					File: &protocol.FileWithURI{URI: "https://example.com/result.txt"},
 				},
 			},
-			expected: `{"key":"value"}https://example.com/result.txt`,
+			expected: "https://example.com/result.txt",
 		},
 		{
 			name: "file bytes part",
@@ -377,7 +377,8 @@ func TestBuildA2ASendMessageParamsAssignsMessageIDWhenMissing(t *testing.T) {
 		},
 	}
 
-	params := buildA2ASendMessageParams(userInput, "ctx-123", nil, false)
+	params, err := buildA2ASendMessageParams(userInput, "ctx-123", nil, false)
+	assert.NoError(t, err)
 
 	assert.NotEmpty(t, params.Message.MessageID)
 	assert.Equal(t, protocol.MessageRoleUser, params.Message.Role)
@@ -395,7 +396,27 @@ func TestBuildA2ASendMessageParamsPreservesExistingMessageID(t *testing.T) {
 		},
 	}
 
-	params := buildA2ASendMessageParams(userInput, "", nil, true)
+	params, err := buildA2ASendMessageParams(userInput, "", nil, true)
+	assert.NoError(t, err)
 
 	assert.Equal(t, "msg-existing", params.Message.MessageID)
+}
+
+func TestBuildA2ASendMessageParamsPreservesNonURIMetadataWithoutRejecting(t *testing.T) {
+	userInput := protocol.Message{
+		Role: protocol.MessageRoleUser,
+		Parts: []protocol.Part{
+			protocol.NewTextPart("hello"),
+		},
+	}
+
+	params, err := buildA2ASendMessageParams(userInput, "", map[string]interface{}{
+		"ark.mckinsey.com/tool-call-id": "call-1",
+	}, true)
+
+	assert.NoError(t, err)
+	if assert.NotNil(t, params.Metadata) {
+		assert.Equal(t, "call-1", params.Metadata["ark.mckinsey.com/tool-call-id"])
+	}
+	assert.Empty(t, params.Message.Extensions)
 }

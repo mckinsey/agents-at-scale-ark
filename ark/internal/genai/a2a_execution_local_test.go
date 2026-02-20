@@ -40,6 +40,30 @@ func (p *testChatCompletionProvider) ChatCompletionStream(ctx context.Context, m
 
 func (p *testChatCompletionProvider) SetOutputSchema(_ *runtime.RawExtension, _ string) {}
 
+func (p *testChatCompletionProvider) A2ATurnNative(_ context.Context, messages []protocol.Message, outcomes []A2AToolOutcome, _ []A2AToolDefinition, _ EventStreamInterface) (*A2ATurnResult, error) {
+	compatMessages, err := convertA2AMessagesToCompatExperimental(messages)
+	if err != nil {
+		return nil, err
+	}
+	outcomeMessages := a2aToolOutcomesToOpenAI(outcomes)
+	if len(outcomeMessages) > 0 {
+		compatMessages = append(compatMessages, outcomeMessages...)
+	}
+	p.calls = append(p.calls, append([]openai.ChatCompletionMessageParamUnion(nil), compatMessages...))
+	callIndex := len(p.calls) - 1
+	if callIndex < len(p.errs) && p.errs[callIndex] != nil {
+		return nil, p.errs[callIndex]
+	}
+	if callIndex >= len(p.responses) {
+		return nil, fmt.Errorf("unexpected model call index %d", callIndex)
+	}
+	choiceSet := p.responses[callIndex].Choices
+	if len(choiceSet) == 0 {
+		return nil, fmt.Errorf("missing model choices for call index %d", callIndex)
+	}
+	return buildA2ATurnResultFromChatChoice(choiceSet[0], "")
+}
+
 type testToolExecutor struct {
 	result ToolResult
 	err    error
@@ -199,7 +223,8 @@ func TestExecuteLocallyA2ANativeWithToolCalls(t *testing.T) {
 	lastModelMessage := provider.calls[1][len(provider.calls[1])-1]
 	require.NotNil(t, lastModelMessage.OfTool)
 	assert.Equal(t, "call-1", lastModelMessage.OfTool.ToolCallID)
-	assert.Equal(t, "tool result", lastModelMessage.OfTool.Content.OfString.Value)
+	assert.Contains(t, lastModelMessage.OfTool.Content.OfString.Value, `"schema":"https://ark.mckinsey.com/payloads/tool-result/v1"`)
+	assert.Contains(t, lastModelMessage.OfTool.Content.OfString.Value, `"content":"tool result"`)
 }
 
 func TestExecuteLocallyA2ANativeContextAndTaskIDPropagation(t *testing.T) {

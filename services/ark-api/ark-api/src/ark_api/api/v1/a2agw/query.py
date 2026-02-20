@@ -35,10 +35,20 @@ def _extract_context_id(response: Any) -> str | None:
     if a2a is None:
         return None
     if _is_dict(a2a):
-        context_id = a2a.get("contextId") or a2a.get("context_id")
+        context_id = (
+            a2a.get("contextId")
+            or a2a.get("context_id")
+            or a2a.get("sessionId")
+            or a2a.get("session_id")
+        )
         return context_id if isinstance(context_id, str) and context_id else None
 
-    context_id = getattr(a2a, "context_id", None) or getattr(a2a, "contextId", None)
+    context_id = (
+        getattr(a2a, "context_id", None)
+        or getattr(a2a, "contextId", None)
+        or getattr(a2a, "session_id", None)
+        or getattr(a2a, "sessionId", None)
+    )
     return context_id if isinstance(context_id, str) and context_id else None
 
 

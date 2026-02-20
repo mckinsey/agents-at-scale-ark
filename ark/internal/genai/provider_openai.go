@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"mckinsey.com/ark/internal/common"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
 type OpenAIProvider struct {
@@ -23,9 +24,37 @@ type OpenAIProvider struct {
 	schemaName   string
 }
 
+var _ A2ANativeTurnProvider = (*OpenAIProvider)(nil)
+
 func (op *OpenAIProvider) SetOutputSchema(schema *runtime.RawExtension, schemaName string) {
 	op.outputSchema = schema
 	op.schemaName = schemaName
+}
+
+func (op *OpenAIProvider) A2ATurnNative(
+	ctx context.Context,
+	messages []protocol.Message,
+	toolOutcomes []A2AToolOutcome,
+	tools []A2AToolDefinition,
+	_ EventStreamInterface,
+) (*A2ATurnResult, error) {
+	compatMessages, err := convertA2AMessagesToCompatExperimental(messages)
+	if err != nil {
+		return nil, fmt.Errorf("openai native turn: failed to convert A2A messages: %w", err)
+	}
+	outcomeMessages := a2aToolOutcomesToOpenAI(toolOutcomes)
+	if len(outcomeMessages) > 0 {
+		compatMessages = append(compatMessages, outcomeMessages...)
+	}
+	openAITools := a2aToolDefsToOpenAI(tools)
+	response, err := op.ChatCompletion(ctx, compatMessages, 1, openAITools)
+	if err != nil {
+		return nil, err
+	}
+	if len(response.Choices) == 0 {
+		return nil, fmt.Errorf("openai native turn: model returned empty response")
+	}
+	return buildA2ATurnResultFromChatChoice(response.Choices[0], "")
 }
 
 func (op *OpenAIProvider) HealthCheck(ctx context.Context) error {

@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/openai/openai-go"
-	"github.com/openai/openai-go/packages/param"
 	"k8s.io/apimachinery/pkg/runtime"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
@@ -17,6 +16,7 @@ import (
 
 type openAIA2AModelAdapter struct {
 	provider          ChatCompletionProvider
+	nativeProvider    A2ANativeTurnProvider
 	modelName         string
 	modelType         string
 	agentName         string
@@ -28,9 +28,28 @@ type openAIA2AModelAdapter struct {
 	toolOutcomeByID   map[string]string
 }
 
+// A2ANativeTurnProvider is an optional provider capability for native A2A turns.
+// When available, A2A experimental execution can avoid ChatCompletions transport.
+type A2ANativeTurnProvider interface {
+	A2ATurnNative(
+		ctx context.Context,
+		messages []protocol.Message,
+		toolOutcomes []A2AToolOutcome,
+		tools []A2AToolDefinition,
+		eventStream EventStreamInterface,
+	) (*A2ATurnResult, error)
+}
+
 func NewOpenAIA2AModelAdapter(model *Model, agentName, agentNamespace string) A2AModelProvider {
+	var nativeProvider A2ANativeTurnProvider
+	if model != nil && model.Provider != nil {
+		if provider, ok := any(model.Provider).(A2ANativeTurnProvider); ok {
+			nativeProvider = provider
+		}
+	}
 	return &openAIA2AModelAdapter{
 		provider:          model.Provider,
+		nativeProvider:    nativeProvider,
 		modelName:         model.Model,
 		modelType:         model.Type,
 		agentName:         agentName,
@@ -44,6 +63,16 @@ func NewOpenAIA2AModelAdapter(model *Model, agentName, agentNamespace string) A2
 }
 
 func (a *openAIA2AModelAdapter) A2ATurn(ctx context.Context, messages []protocol.Message, toolOutcomes []A2AToolOutcome, tools []A2AToolDefinition, eventStream EventStreamInterface) (*A2ATurnResult, error) {
+	if a.nativeProvider != nil {
+		return a.nativeProvider.A2ATurnNative(ctx, messages, toolOutcomes, tools, eventStream)
+	}
+	if IsA2AExperimentalEnabledInContext(ctx) {
+		return nil, ErrA2AExperimentalRequiresNativeProvider
+	}
+	return a.a2aTurnViaChatCompletionsEdge(ctx, messages, toolOutcomes, tools, eventStream)
+}
+
+func (a *openAIA2AModelAdapter) a2aTurnViaChatCompletionsEdge(ctx context.Context, messages []protocol.Message, toolOutcomes []A2AToolOutcome, tools []A2AToolDefinition, eventStream EventStreamInterface) (*A2ATurnResult, error) {
 	compatMessages, err := convertA2AMessagesToCompatExperimental(messages)
 	if err != nil {
 		return nil, fmt.Errorf("adapter: failed to convert A2A messages to compat: %w", err)
@@ -235,50 +264,11 @@ func (a *openAIA2AModelAdapter) callProvider(ctx context.Context, messages []Mes
 }
 
 func (a *openAIA2AModelAdapter) buildA2ATurnResult(choice openai.ChatCompletionChoice) (*A2ATurnResult, error) {
-	content := choice.Message.Content
-
-	assistantMsg := openai.AssistantMessage(content)
-	if assistantMsg.OfAssistant != nil {
-		assistantMsg.OfAssistant.Name = param.Opt[string]{Value: a.agentName}
-	}
-
-	if len(choice.Message.ToolCalls) > 0 {
-		toolCallParams := make([]openai.ChatCompletionMessageToolCallParam, len(choice.Message.ToolCalls))
-		for i, call := range choice.Message.ToolCalls {
-			args := call.Function.Arguments
-			if args == "" {
-				args = "{}"
-			}
-			toolCallParams[i] = openai.ChatCompletionMessageToolCallParam{
-				ID: call.ID,
-				Function: openai.ChatCompletionMessageToolCallFunctionParam{
-					Name:      call.Function.Name,
-					Arguments: args,
-				},
-			}
-		}
-		assistantMsg.OfAssistant.ToolCalls = toolCallParams
-	}
-
-	a2aMsg, err := OpenAIToA2AMessageExperimental(assistantMsg)
+	result, err := buildA2ATurnResultFromChatChoice(choice, a.agentName)
 	if err != nil {
-		return nil, fmt.Errorf("adapter: failed to convert assistant message to A2A: %w", err)
+		return nil, fmt.Errorf("adapter: %w", err)
 	}
-
-	var a2aToolCalls []A2AToolCall
-	for _, tc := range choice.Message.ToolCalls {
-		a2aToolCalls = append(a2aToolCalls, A2AToolCall{
-			ID:        tc.ID,
-			Name:      tc.Function.Name,
-			Arguments: tc.Function.Arguments,
-		})
-	}
-
-	return &A2ATurnResult{
-		Message:   a2aMsg,
-		ToolCalls: a2aToolCalls,
-		Content:   content,
-	}, nil
+	return result, nil
 }
 
 func a2aToolDefsToOpenAI(defs []A2AToolDefinition) []openai.ChatCompletionToolParam {

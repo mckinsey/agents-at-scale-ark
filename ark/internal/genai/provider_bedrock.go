@@ -28,6 +28,8 @@ type BedrockModel struct {
 	schemaName      string
 }
 
+var _ A2ANativeTurnProvider = (*BedrockModel)(nil)
+
 type bedrockMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`

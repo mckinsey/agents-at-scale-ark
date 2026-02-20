@@ -141,22 +141,14 @@ func buildA2AToolOutcome(call A2AToolCall, result ToolResult, toolErr error, con
 		toolName = result.Name
 	}
 
-	metadata := map[string]interface{}{
-		MetadataStepKindKey: "tool",
-	}
-	if toolCallID != "" {
-		metadata[MetadataToolCallIDKey] = toolCallID
+	stepPayload := &StepEventPayloadV1{
+		Schema:     A2APayloadSchemaStepEventV1,
+		StepKind:   A2ADelegatedToolKindTool,
+		ToolCallID: toolCallID,
+		ToolName:   toolName,
 	}
 	if stepID := buildToolStepID(toolCallID); stepID != "" {
-		metadata[MetadataStepIDKey] = stepID
-	}
-	if toolName != "" {
-		metadata[MetadataToolNameKey] = toolName
-	}
-	if len(result.Metadata) > 0 {
-		for key, value := range result.Metadata {
-			metadata[key] = value
-		}
+		stepPayload.StepID = stepID
 	}
 
 	outcome := A2AToolOutcome{
@@ -165,16 +157,28 @@ func buildA2AToolOutcome(call A2AToolCall, result ToolResult, toolErr error, con
 		Content:    result.Content,
 		TaskID:     taskID,
 		ContextID:  contextID,
-		Metadata:   metadata,
 	}
 	if toolErr != nil {
 		outcome.Error = toolErr.Error()
-		metadata[MetadataStepStateKey] = "error"
+		stepPayload.StepState = "error"
 	} else {
-		metadata[MetadataStepStateKey] = "done"
+		stepPayload.StepState = "done"
 		if result.Error != "" {
 			outcome.Error = result.Error
 		}
+	}
+	payloadContent, err := buildToolResultPayloadContent(ToolResultPayloadV1{
+		Schema:             A2APayloadSchemaToolResultV1,
+		ToolCallID:         toolCallID,
+		ToolName:           toolName,
+		Content:            result.Content,
+		Error:              outcome.Error,
+		Step:               stepPayload,
+		DelegatedTaskID:    taskID,
+		DelegatedContextID: contextID,
+	})
+	if err == nil {
+		outcome.Content = payloadContent
 	}
 	return outcome
 }

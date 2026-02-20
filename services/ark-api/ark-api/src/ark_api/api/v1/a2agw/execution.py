@@ -14,7 +14,7 @@ from a2a.types import TaskState, TaskStatus, TaskStatusUpdateEvent
 from a2a.utils import new_agent_text_message
 from ark_sdk.client import V1_ALPHA1, with_ark_client
 
-from .message_conversion import build_query_payload
+from .message_conversion import build_query_payload, normalize_a2a_wire_version
 from .query import QueryExecutionResult, post_query_and_wait
 from .registry import _safe_metadata
 from ark_api.constants.annotations import (
@@ -47,6 +47,26 @@ class ARKAgentExecutor(AgentExecutor):
         if isinstance(context_id, str) and context_id.strip():
             return context_id.strip()
         return str(uuid4())
+
+    def _extract_request_task_id(self, context: RequestContext) -> object:
+        return getattr(context, "task_id", None) or getattr(context, "taskId", None)
+
+    def _extract_request_context_id(self, context: RequestContext) -> object:
+        return (
+            getattr(context, "context_id", None)
+            or getattr(context, "contextId", None)
+            or getattr(context, "session_id", None)
+            or getattr(context, "sessionId", None)
+        )
+
+    def _resolve_wire_version(self, context: RequestContext) -> str:
+        raw_version = (
+            getattr(context, "a2a_version", None)
+            or getattr(context, "a2aVersion", None)
+            or getattr(context, "protocol_version", None)
+            or getattr(context, "protocolVersion", None)
+        )
+        return normalize_a2a_wire_version(raw_version if isinstance(raw_version, str) else None)
 
     def _create_status_event(
         self,
@@ -126,12 +146,17 @@ class ARKAgentExecutor(AgentExecutor):
     async def execute(
             self, context: RequestContext, event_queue: EventQueue
     ) -> None:
-        task_id = self._resolve_task_id(getattr(context, 'task_id', None))
-        context_id = self._resolve_context_id(getattr(context, 'context_id', None))
+        task_id = self._resolve_task_id(self._extract_request_task_id(context))
+        context_id = self._resolve_context_id(self._extract_request_context_id(context))
 
         try:
             experimental_enabled = await self._resolve_experimental_enabled()
-            query_payload = build_query_payload(context, experimental_enabled=experimental_enabled)
+            wire_version = self._resolve_wire_version(context)
+            query_payload = build_query_payload(
+                context,
+                experimental_enabled=experimental_enabled,
+                native_wire_version=wire_version,
+            )
             logger.info("Task %s Context %s - Processing query: %s", task_id, context_id, query_payload.preview_text)
             logger.info("Task %s - Using timeout: %s seconds", task_id, self.timeout)
 
@@ -216,8 +241,8 @@ class ARKAgentExecutor(AgentExecutor):
     async def cancel(
             self, context: RequestContext, event_queue: EventQueue
     ) -> None:
-        task_id_raw = getattr(context, 'task_id', "unknown")
-        context_id_raw = getattr(context, 'context_id', None)
+        task_id_raw = self._extract_request_task_id(context)
+        context_id_raw = self._extract_request_context_id(context)
         task_id = self._resolve_task_id(task_id_raw)
         context_id = self._resolve_context_id(context_id_raw)
 

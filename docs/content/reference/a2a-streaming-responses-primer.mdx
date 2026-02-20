@@ -12,6 +12,12 @@ It describes conversion at **edge adapters** only:
 - Convert between A2A and OpenAI Responses API at the boundary.
 - Preserve identifiers and task/message semantics to avoid lossy behavior.
 
+## Version Assumptions
+
+- Runtime interoperability baseline is **A2A v0.3**.
+- V1 RC support is adapter-scoped and migration-oriented.
+- Streaming/event parsers may read both v0.3 and V1-style shapes, but serializers should emit an explicit configured shape.
+
 ## A2A Streaming Essentials
 
 Per the A2A spec, `SendStreamingMessage` returns a `StreamResponse` envelope and follows one of two patterns:
@@ -32,6 +38,11 @@ For Ark query streaming, treat the task lifecycle stream as canonical. Message-o
 - `statusUpdate`
 - `artifactUpdate`
 - `message`
+
+For versioning, treat stream decode as dual-shape:
+
+- v0.3-style payloads may include discriminator fields such as `kind` and optional `final`.
+- V1-style payloads rely on wrapper member presence and stream closure for completion.
 
 For compatibility adapters, preserve the original event order and terminal closure semantics.
 
@@ -84,6 +95,7 @@ flowchart LR
 | --- | --- |
 | Native A2A task streaming path | Implemented in experimental A2A mode |
 | Task-first delegated streaming + correlation extension | Implemented |
+| Experimental V1 implementation and rollout docs | Published |
 | OpenAI Responses API adapter | Planned (tracked in issue #965) |
 | Default non-experimental compat path | Unchanged |
 
@@ -94,5 +106,7 @@ This means current behavior remains:
 ## References
 
 - [A2A Native Execution](/reference/a2a-native-execution)
+- [A2A Experimental V1 Implementation](/reference/a2a-v1-implementation)
+- [A2A V1 Next Actions](/reference/a2a-v1-next-actions)
 - [A2A Protocol Specification](https://raw.githubusercontent.com/a2aproject/A2A/main/docs/specification.md)
 - [Issue #965: Response API adapter](https://github.com/mckinsey/agents-at-scale-ark/issues/965)

@@ -32,6 +32,14 @@ type Model struct {
 	eventingRecorder  eventing.ModelRecorder
 }
 
+func (m *Model) SupportsA2ANativeTurns() bool {
+	if m == nil || m.Provider == nil {
+		return false
+	}
+	_, ok := any(m.Provider).(A2ANativeTurnProvider)
+	return ok
+}
+
 func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStream EventStreamInterface, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
 	if m.Provider == nil {
 		return nil, nil

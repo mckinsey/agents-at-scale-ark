@@ -102,8 +102,40 @@ class TestA2AGatewayExecution(unittest.IsolatedAsyncioTestCase):
         ):
             await executor.execute(context, event_queue)
 
-        mock_build_query_payload.assert_called_once_with(context, experimental_enabled=True)
+        mock_build_query_payload.assert_called_once_with(
+            context,
+            experimental_enabled=True,
+            native_wire_version="v0.3",
+        )
         self.assertTrue(mock_post_query.await_args.kwargs["experimental_enabled"])
+
+    async def test_execute_forwards_normalized_wire_version(self):
+        executor = ARKAgentExecutor("test-agent", "default", timeout=1)
+        event_queue = SimpleNamespace(enqueue_event=AsyncMock())
+        context = SimpleNamespace(taskId="task-1", contextId="ctx-old", a2aVersion="v1.0-rc", message=SimpleNamespace(parts=[]))
+
+        with patch(
+            "ark_api.api.v1.a2agw.execution.ARKAgentExecutor._resolve_experimental_enabled",
+            new_callable=AsyncMock,
+            return_value=True,
+        ), patch(
+            "ark_api.api.v1.a2agw.execution.build_query_payload",
+            return_value=QueryPayload(query_type="messages", input_data=[{"role": "user", "parts": []}], preview_text="hello"),
+        ) as mock_build_query_payload, patch(
+            "ark_api.api.v1.a2agw.execution.post_query_and_wait",
+            new_callable=AsyncMock,
+            return_value=QueryExecutionResult(content="done", context_id="ctx-new"),
+        ), patch(
+            "ark_api.api.v1.a2agw.execution.new_agent_text_message",
+            side_effect=lambda text, context_id=None, task_id=None: {
+                "text": text,
+                "context_id": context_id,
+                "task_id": task_id,
+            },
+        ):
+            await executor.execute(context, event_queue)
+
+        self.assertEqual(mock_build_query_payload.call_args.kwargs["native_wire_version"], "v1rc")
 
     async def test_cancel_cancels_active_task(self):
         executor = ARKAgentExecutor("test-agent", "default", timeout=1)
@@ -137,6 +169,22 @@ class TestA2AGatewayExecution(unittest.IsolatedAsyncioTestCase):
         status_event = event_queue.enqueue_event.await_args_list[-1].args[0]
         self.assertEqual(status_event.status.state, TaskState.canceled)
         self.assertTrue(status_event.final)
+
+    async def test_cancel_accepts_session_and_task_aliases(self):
+        executor = ARKAgentExecutor("test-agent", "default", timeout=1)
+        event_queue = SimpleNamespace(enqueue_event=AsyncMock())
+
+        async def long_task():
+            await asyncio.sleep(10)
+
+        task = asyncio.create_task(long_task())
+        executor.active_tasks["task-alias"] = task
+        context = SimpleNamespace(taskId="task-alias", sessionId="ctx-alias")
+
+        await executor.cancel(context, event_queue)
+        status_event = event_queue.enqueue_event.await_args_list[-1].args[0]
+        self.assertEqual(status_event.context_id, "ctx-alias")
+        self.assertEqual(status_event.task_id, "task-alias")
 
     async def test_cancel_all_tasks_clears_registry(self):
         executor = ARKAgentExecutor("test-agent", "default", timeout=1)

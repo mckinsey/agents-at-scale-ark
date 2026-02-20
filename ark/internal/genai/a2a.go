@@ -324,7 +324,7 @@ func ensureA2AMetadata(metadata map[string]interface{}) map[string]interface{} {
 	return map[string]interface{}{}
 }
 
-func buildA2ASendMessageParams(userInput protocol.Message, contextID string, metadata map[string]interface{}, blocking bool) protocol.SendMessageParams {
+func buildA2ASendMessageParams(userInput protocol.Message, contextID string, metadata map[string]interface{}, blocking bool) (protocol.SendMessageParams, error) {
 	message := userInput
 	message.Role = protocol.MessageRoleUser
 	// A2A requires message.messageId on Message payloads.
@@ -342,23 +342,37 @@ func buildA2ASendMessageParams(userInput protocol.Message, contextID string, met
 			Blocking: &blocking,
 		},
 	}
-	if len(metadata) > 0 {
-		params.Metadata = metadata
-		extensions := make([]string, 0, len(metadata))
-		seen := make(map[string]struct{}, len(metadata))
-		for key := range metadata {
-			if strings.HasPrefix(key, "http://") || strings.HasPrefix(key, "https://") {
-				if _, ok := seen[key]; !ok {
-					extensions = append(extensions, key)
-					seen[key] = struct{}{}
-				}
-			}
+	seen := make(map[string]struct{})
+	extensions := make([]string, 0, len(message.Extensions)+len(metadata))
+	for _, extension := range message.Extensions {
+		trimmed := strings.TrimSpace(extension)
+		if trimmed == "" {
+			continue
 		}
-		if len(extensions) > 0 {
-			params.Message.Extensions = extensions
+		if _, exists := seen[trimmed]; exists {
+			continue
 		}
+		extensions = append(extensions, trimmed)
+		seen[trimmed] = struct{}{}
 	}
-	return params
+	if len(metadata) > 0 {
+		for key := range metadata {
+			if !isA2AExtensionURI(key) {
+				continue
+			}
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			extensions = append(extensions, key)
+			seen[key] = struct{}{}
+		}
+		params.Metadata = metadata
+	}
+	if len(extensions) > 0 {
+		sort.Strings(extensions)
+		params.Message.Extensions = extensions
+	}
+	return params, nil
 }
 
 // DiscoverA2AAgents discovers agents from an A2A server using simplified HTTP approach
@@ -420,7 +434,10 @@ func StreamA2AAgent(ctx context.Context, k8sClient client.Client, address string
 	if err != nil {
 		return nil, err
 	}
-	params := buildA2ASendMessageParams(userInput, contextID, metadata, false)
+	params, err := buildA2ASendMessageParams(userInput, contextID, metadata, false)
+	if err != nil {
+		return nil, err
+	}
 	events, streamErr := a2aClient.StreamMessage(ctx, params)
 	if streamErr == nil {
 		return events, nil
@@ -512,7 +529,10 @@ func CreateA2AClient(ctx context.Context, k8sClient client.Client, rpcURL string
 
 // executeA2AAgentMessage sends message to A2A agent and processes response
 func executeA2AAgentMessage(ctx context.Context, k8sClient client.Client, a2aClient *a2aclient.A2AClient, userInput protocol.Message, metadata map[string]interface{}, agentName, namespace, queryName, contextID string, obj client.Object, a2aRecorder eventing.A2aRecorder, blocking bool) (*A2AResponse, error) {
-	params := buildA2ASendMessageParams(userInput, contextID, metadata, blocking)
+	params, err := buildA2ASendMessageParams(userInput, contextID, metadata, blocking)
+	if err != nil {
+		return nil, err
+	}
 	result, err := a2aClient.SendMessage(ctx, params)
 	if err != nil {
 		if a2aRecorder != nil {
@@ -741,17 +761,11 @@ func extractTextFromParts(parts []protocol.Part) string {
 		case *protocol.TextPart:
 			text.WriteString(p.Text)
 		case protocol.DataPart:
-			if p.Data != nil {
-				if raw, err := json.Marshal(p.Data); err == nil {
-					text.WriteString(string(raw))
-				}
-			}
+			// Data parts carry structured payloads and should not be concatenated into user-facing text.
+			continue
 		case *protocol.DataPart:
-			if p.Data != nil {
-				if raw, err := json.Marshal(p.Data); err == nil {
-					text.WriteString(string(raw))
-				}
-			}
+			// Data parts carry structured payloads and should not be concatenated into user-facing text.
+			continue
 		case protocol.FilePart:
 			text.WriteString(extractFilePartText(p.File))
 		case *protocol.FilePart:

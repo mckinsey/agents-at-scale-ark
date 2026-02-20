@@ -2,6 +2,7 @@ package genai
 
 import (
 	"context"
+	"fmt"
 
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
@@ -27,45 +28,40 @@ func (b *delegatedToolStreamBridge) StreamChunk(ctx context.Context, chunk inter
 	switch value := chunk.(type) {
 	case *protocol.TaskStatusUpdateEvent:
 		update := *value
-		extension := b.nextExtension()
-		extension.DelegatedTaskID = value.TaskID
-		extension.DelegatedContextID = value.ContextID
-		update.Metadata = withA2ADelegatedToolExtension(copyA2AMetadata(value.Metadata), extension)
+		payload := b.nextStepPayload()
+		payload.DelegatedTaskID = value.TaskID
+		payload.DelegatedContextID = value.ContextID
 		if value.Status.Message != nil {
 			message := *value.Status.Message
-			message.Metadata = withA2ADelegatedToolExtension(copyA2AMetadata(message.Metadata), extension)
+			appendPayloadPartToMessage(&message, payload)
 			update.Status.Message = &message
 		}
 		return b.base.StreamChunk(ctx, &update)
 	case *protocol.TaskArtifactUpdateEvent:
 		update := *value
-		extension := b.nextExtension()
-		extension.DelegatedTaskID = value.TaskID
-		extension.DelegatedContextID = value.ContextID
-		update.Metadata = withA2ADelegatedToolExtension(copyA2AMetadata(value.Metadata), extension)
+		payload := b.nextStepPayload()
+		payload.DelegatedTaskID = value.TaskID
+		payload.DelegatedContextID = value.ContextID
 		artifact := value.Artifact
-		artifact.Metadata = withA2ADelegatedToolExtension(copyA2AMetadata(artifact.Metadata), extension)
+		artifact.Parts = appendPayloadPart(artifact.Parts, payload)
 		update.Artifact = artifact
 		return b.base.StreamChunk(ctx, &update)
 	case *protocol.Message:
 		message := *value
-		extension := b.nextExtension()
-		message.Metadata = withA2ADelegatedToolExtension(copyA2AMetadata(value.Metadata), extension)
+		appendPayloadPartToMessage(&message, b.nextStepPayload())
 		return b.base.StreamChunk(ctx, &message)
 	case protocol.Message:
 		message := value
-		extension := b.nextExtension()
-		message.Metadata = withA2ADelegatedToolExtension(copyA2AMetadata(value.Metadata), extension)
+		appendPayloadPartToMessage(&message, b.nextStepPayload())
 		return b.base.StreamChunk(ctx, message)
 	case *protocol.Task:
 		task := *value
-		extension := b.nextExtension()
-		extension.DelegatedTaskID = value.ID
-		extension.DelegatedContextID = value.ContextID
-		task.Metadata = withA2ADelegatedToolExtension(copyA2AMetadata(value.Metadata), extension)
+		payload := b.nextStepPayload()
+		payload.DelegatedTaskID = value.ID
+		payload.DelegatedContextID = value.ContextID
 		if value.Status.Message != nil {
 			message := *value.Status.Message
-			message.Metadata = withA2ADelegatedToolExtension(copyA2AMetadata(message.Metadata), extension)
+			appendPayloadPartToMessage(&message, payload)
 			task.Status.Message = &message
 		}
 		return b.base.StreamChunk(ctx, &task)
@@ -82,10 +78,28 @@ func (b *delegatedToolStreamBridge) Close() error {
 	return b.base.Close()
 }
 
-func (b *delegatedToolStreamBridge) nextExtension() A2ADelegatedToolExtension {
+func (b *delegatedToolStreamBridge) nextStepPayload() StepEventPayloadV1 {
 	b.sequence++
 	extension := b.extension
 	sequence := b.sequence
 	extension.Sequence = &sequence
-	return extension
+	payload := StepEventPayloadV1{
+		Schema:             A2APayloadSchemaStepEventV1,
+		StepID:             extension.StepID,
+		StepState:          "",
+		StepKind:           A2ADelegatedToolKindTool,
+		ToolCallID:         extension.ToolCallID,
+		ToolName:           extension.ToolName,
+		ParentStepID:       extension.ParentStepID,
+		DelegatedTaskID:    extension.DelegatedTaskID,
+		DelegatedContextID: extension.DelegatedContextID,
+		Sequence:           extension.Sequence,
+	}
+	if extension.ToolCallID != "" && extension.Sequence != nil {
+		payload.StepEventID = extension.ToolCallID + ":" + fmt.Sprintf("%d", *extension.Sequence)
+	}
+	if payload.StepID == "" && extension.ToolCallID != "" {
+		payload.StepID = buildToolStepID(extension.ToolCallID)
+	}
+	return payload
 }

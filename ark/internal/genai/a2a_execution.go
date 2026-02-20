@@ -491,14 +491,16 @@ func streamA2AError(ctx context.Context, eventStream EventStreamInterface, paylo
 	if payloadMode == A2APayloadModeNative {
 		taskID := getQueryID(ctx)
 		contextID := GetA2AContextID(ctx)
+		stepPayload := StepEventPayloadV1{
+			Schema:    A2APayloadSchemaStepEventV1,
+			StepID:    fmt.Sprintf("task-error:%s", taskID),
+			StepState: "error",
+			StepKind:  A2ADelegatedToolKindStatus,
+		}
 		statusMessage := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
 			protocol.NewTextPart(err.Error()),
+			&protocol.DataPart{Kind: protocol.KindData, Data: stepPayload},
 		})
-		statusMessage.Metadata = map[string]interface{}{
-			MetadataStepIDKey:    fmt.Sprintf("task-error:%s", taskID),
-			MetadataStepStateKey: "error",
-			MetadataStepKindKey:  "status",
-		}
 		failedEvent := &protocol.TaskStatusUpdateEvent{
 			TaskID:    taskID,
 			ContextID: contextID,
