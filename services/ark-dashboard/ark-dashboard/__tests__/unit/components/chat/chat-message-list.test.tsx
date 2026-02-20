@@ -112,8 +112,11 @@ describe('ChatMessageList', () => {
 
       renderChatMessageList({ messages });
 
-      expect(screen.getByText('First')).toBeInTheDocument();
-      expect(screen.getByText('Second')).toBeInTheDocument();
+      const first = screen.getByText('First');
+      const second = screen.getByText('Second');
+      expect(first.compareDocumentPosition(second)).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
     });
   });
 
