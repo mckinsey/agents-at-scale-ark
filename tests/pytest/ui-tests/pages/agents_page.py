@@ -48,7 +48,6 @@ class AgentsPage(BasePage):
             logger.warning(f"Click failed, trying with force: {e}")
             self.page.locator(dashboard.AGENTS_TAB).first.click(force=True)
         
-        self.wait_for_load_state("domcontentloaded")
         self.wait_for_load_state("networkidle")
     
     def generate_agent_name(self, prefix: str = "agent") -> str:
@@ -272,7 +271,6 @@ class AgentsPage(BasePage):
         
         if not in_table:
             self.page.reload()
-            self.wait_for_load_state("domcontentloaded")
             self.wait_for_load_state("networkidle")
             in_table = self.is_agent_in_table(agent_name)
         
@@ -305,7 +303,6 @@ class AgentsPage(BasePage):
         if confirm_button_visible:
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
-        self.wait_for_load_state("domcontentloaded")
         popup_visible = self._check_success_popup()
         self.wait_for_load_state("networkidle")
         deleted_from_table = not self.is_agent_in_table(agent_name)

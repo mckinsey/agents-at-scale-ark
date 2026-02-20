@@ -37,7 +37,6 @@ class TeamsPage(BasePage):
             pytest.skip("Teams tab not visible")
         
         self.page.locator(dashboard.TEAMS_TAB).first.click()
-        self.wait_for_load_state("domcontentloaded")
         self.wait_for_load_state("networkidle")
     
     def generate_team_name(self, prefix: str = "team") -> str:
@@ -145,7 +144,6 @@ class TeamsPage(BasePage):
         if confirm_button_visible:
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
-        self.wait_for_load_state("domcontentloaded")
         popup_visible = self._check_success_popup()
         self.wait_for_load_state("networkidle")
         deleted_from_table = not self.is_team_in_table(team_name)

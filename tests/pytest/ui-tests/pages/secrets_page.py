@@ -57,7 +57,6 @@ class SecretsPage(BasePage):
             logger.warning(f"Click failed, trying with force: {e}")
             self.page.locator(dashboard.SECRETS_TAB).first.click(force=True)
         
-        self.wait_for_load_state("domcontentloaded")
         self.wait_for_load_state("networkidle")
     
     def _close_dialog_if_open(self) -> None:
@@ -114,8 +113,6 @@ class SecretsPage(BasePage):
         save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
         save_button.evaluate("el => el.click()")
         
-        self.wait_for_load_state("domcontentloaded")
-        
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
             popup_visible = True
@@ -163,7 +160,6 @@ class SecretsPage(BasePage):
         if confirm_button_visible:
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
-        self.wait_for_load_state("domcontentloaded")
         popup_visible = self._check_success_popup()
         self.wait_for_load_state("networkidle")
         deleted_from_table = not self.is_secret_in_table(secret_name)

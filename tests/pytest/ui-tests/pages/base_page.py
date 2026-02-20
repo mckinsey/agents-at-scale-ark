@@ -24,7 +24,6 @@ class BasePage:
         self.page.wait_for_load_state(state)
     
     def wait_for_navigation_complete(self, timeout: int = 30000) -> None:
-        self.page.wait_for_load_state("domcontentloaded", timeout=timeout)
         self.page.wait_for_load_state("networkidle", timeout=timeout)
     
     def wait_for_form_ready(self, timeout: int = 10000) -> None:
