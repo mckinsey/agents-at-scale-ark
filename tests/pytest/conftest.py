@@ -113,97 +113,64 @@ def wait_for_dashboard():
 
 def cleanup_port_forwarding():
     """Clean up port forwarding with graceful shutdown first"""
-    # Try graceful shutdown first (SIGTERM)
-    subprocess.run(['bash', '-c', 'lsof -ti :3274 | xargs kill -15 2>/dev/null || true'], 
+    subprocess.run(['bash', '-c', 'lsof -ti :3274 | xargs kill -15 2>/dev/null || true'],
                   capture_output=True)
     time.sleep(2)
-    # Force kill if still running (SIGKILL)
-    subprocess.run(['bash', '-c', 'lsof -ti :3274 | xargs kill -9 2>/dev/null || true'], 
+    subprocess.run(['bash', '-c', 'lsof -ti :3274 | xargs kill -9 2>/dev/null || true'],
                   capture_output=True)
     time.sleep(1)
 
 
+def _is_port_forwarding_active() -> bool:
+    """Returns True if the dashboard port-forward (3274) is already serving."""
+    try:
+        urllib.request.urlopen('http://localhost:3274', timeout=2)
+        return True
+    except Exception:
+        return False
+
+
 @pytest.fixture(scope="session")
 def ark_setup(request, tmp_path_factory):
-    """Session-scoped fixture that runs once per xdist session (not per worker)"""
+    """Session-scoped fixture. With xdist (-n N), only the controller process
+    (workerid == "master") does setup; workers just yield immediately because
+    the CI workflow already started the port-forward and the cluster is ready."""
     skip_install = request.config.getoption("--skip-install")
     port_forward = None
-    
-    # Check if running with xdist
+
     worker_id = getattr(request.config, "workerinput", {}).get("workerid", "master")
-    
-    if worker_id == "master":
-        # Not running with xdist, run setup normally
-        try:
-            if not skip_install and not is_ark_running():
-                install_ark()
-                time.sleep(30)
-            
-            wait_for_pods_ready()
+
+    # xdist workers: the CI already deployed ark and port-forwarded.
+    # Workers must NOT touch the port-forward — doing so kills it for siblings.
+    if worker_id != "master":
+        yield
+        return
+
+    # Single-process run (no xdist): manage everything ourselves.
+    try:
+        if not skip_install and not is_ark_running():
+            install_ark()
+            time.sleep(30)
+
+        wait_for_pods_ready()
+
+        # Only start our own port-forward if one isn't already serving.
+        if not _is_port_forwarding_active():
             cleanup_port_forwarding()
-            
             port_forward = subprocess.Popen(
                 ['kubectl', 'port-forward', '-n', 'default', 'service/ark-dashboard', '3274:3000'],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE
             )
             time.sleep(5)
-            
             if port_forward.poll() is not None:
                 pytest.exit("Port forwarding failed", returncode=1)
-            
-            wait_for_dashboard()
-            
-            yield
-        finally:
-            if port_forward:
-                port_forward.terminate()
-                port_forward.wait(timeout=5)
-    else:
-        # Running with xdist - use file-based lock to ensure setup runs once
-        root_tmp_dir = tmp_path_factory.getbasetemp().parent
-        ark_setup_lock = root_tmp_dir / "ark_setup.lock"
-        
-        if worker_id == "gw0":
-            # First worker does the setup
-            try:
-                if not skip_install and not is_ark_running():
-                    install_ark()
-                    time.sleep(30)
-                
-                wait_for_pods_ready()
-                cleanup_port_forwarding()
-                
-                port_forward = subprocess.Popen(
-                    ['kubectl', 'port-forward', '-n', 'default', 'service/ark-dashboard', '3274:3000'],
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE
-                )
-                time.sleep(5)
-                
-                if port_forward.poll() is not None:
-                    pytest.exit("Port forwarding failed", returncode=1)
-                
-                wait_for_dashboard()
-                
-                # Signal other workers that setup is complete
-                ark_setup_lock.write_text("ready")
-                
-                yield
-            finally:
-                if port_forward:
-                    port_forward.terminate()
-                    port_forward.wait(timeout=5)
-                if ark_setup_lock.exists():
-                    ark_setup_lock.unlink()
-        else:
-            # Other workers wait for setup to complete
-            for _ in range(60):
-                if ark_setup_lock.exists() and ark_setup_lock.read_text() == "ready":
-                    break
-                time.sleep(1)
-            else:
-                pytest.exit("Timed out waiting for ark_setup", returncode=1)
-            
-            yield
+
+        wait_for_dashboard()
+        yield
+    finally:
+        if port_forward:
+            port_forward.terminate()
+            port_forward.wait(timeout=5)
 
 
 @pytest.fixture(scope="session")
