@@ -126,7 +126,6 @@ class ModelsPage(BasePage):
         
         logger.info(f"Navigating back to models list...")
         self.navigate_to_models_tab()
-        self.wait_for_table_content()
         
         in_table = self.is_model_in_table(model_name)
         
@@ -144,7 +143,6 @@ class ModelsPage(BasePage):
             logger.warning(f"Model not yet available, retry {retry + 1}/2...")
             self.reload()
             self.wait_for_navigation_complete()
-            self.wait_for_table_content()
             is_available = self.is_model_available(model_name)
         
         return {
@@ -182,7 +180,6 @@ class ModelsPage(BasePage):
         popup_visible = self._check_success_popup()
         
         # Wait for table to refresh
-        self.wait_for_table_content()
         deleted_from_table = not self.is_model_in_table(model_name)
         
         return {
@@ -213,8 +210,6 @@ class ModelsPage(BasePage):
             return False
     
     def create_model_for_test(self, prefix: str, secret_name: str, secrets_page):
-        import pytest
-
         model_data = self.TEST_DATA["openai"]
         model_display_name = self.generate_model_name(prefix)
         base_url = secrets_page.get_password_from_env(model_data["base_url_key"])

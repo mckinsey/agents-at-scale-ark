@@ -1,4 +1,6 @@
 import logging
+import pytest
+
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
 from datetime import datetime
@@ -49,7 +51,6 @@ class SecretsPage(BasePage):
         try:
             secrets_tab = self.page.locator(dashboard.SECRETS_TAB).first
             if not secrets_tab.is_visible(timeout=5000):
-                import pytest
                 pytest.skip("Secrets tab not visible")
             
             secrets_tab.click(force=True)
@@ -122,14 +123,12 @@ class SecretsPage(BasePage):
         
         self.wait_for_modal_close(timeout=10000)
         self.wait_for_load_state("networkidle")
-        self.wait_for_table_content(timeout=10000)
         in_table = self.is_secret_in_table(secret_name)
         
         if not in_table:
             logger.warning("Secret not found in table after create, reloading page")
             self.page.reload()
             self.wait_for_load_state("networkidle")
-            self.wait_for_table_content(timeout=10000)
             in_table = self.is_secret_in_table(secret_name)
         
         return {
@@ -192,9 +191,7 @@ class SecretsPage(BasePage):
             return False
     
     def create_secret_for_test(self, prefix: str, env_key: str):
-        """Complete flow to create a secret for testing - navigate, check, and create"""
-        import pytest
-        
+        """Complete flow to create a secret for testing - navigate, check, and create"""        
         self.navigate_to_secrets_tab()
         
         if not self.is_visible(self.ADD_SECRET_BUTTON):

@@ -1,4 +1,6 @@
 import logging
+import pytest
+
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
 from datetime import datetime
@@ -33,7 +35,6 @@ class TeamsPage(BasePage):
         dashboard.navigate_to_dashboard()
         
         if not self.page.locator(dashboard.TEAMS_TAB).first.is_visible():
-            import pytest
             pytest.skip("Teams tab not visible")
         
         self.page.locator(dashboard.TEAMS_TAB).first.click()

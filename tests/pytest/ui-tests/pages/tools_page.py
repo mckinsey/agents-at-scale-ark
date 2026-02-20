@@ -1,4 +1,5 @@
 import logging
+import pytest
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
 from datetime import datetime
@@ -33,7 +34,6 @@ class ToolsPage(BasePage):
         
         tools_tab = self.page.locator(dashboard.TOOLS_TAB).first
         if not tools_tab.is_visible(timeout=5000):
-            import pytest
             pytest.skip("Tools tab not visible")
         
         tools_tab.click()
@@ -220,7 +220,6 @@ class ToolsPage(BasePage):
             return False
     
     def create_tool_for_test(self, prefix: str, test_data_key: str = "get_coordinates"):
-        import pytest
         
         tool_data = self.TEST_DATA[test_data_key]
         

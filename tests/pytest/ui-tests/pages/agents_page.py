@@ -1,4 +1,6 @@
 import logging
+import pytest
+
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
 from datetime import datetime
@@ -382,7 +384,6 @@ class AgentsPage(BasePage):
     
     def create_agent_for_test(self, prefix: str, model_name: str, test_data_key: str = "default", tools: list = None):
         """Complete flow to create an agent for testing - navigate, check, and create"""
-        import pytest
         
         agent_data = self.TEST_DATA[test_data_key]
         
