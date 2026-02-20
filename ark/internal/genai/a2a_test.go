@@ -420,3 +420,33 @@ func TestBuildA2ASendMessageParamsPreservesNonURIMetadataWithoutRejecting(t *tes
 	}
 	assert.Empty(t, params.Message.Extensions)
 }
+
+func TestBuildA2ASendMessageParamsMergesURIExtensionsAndPreservesMetadata(t *testing.T) {
+	userInput := protocol.Message{
+		Role: protocol.MessageRoleUser,
+		Parts: []protocol.Part{
+			protocol.NewTextPart("hello"),
+		},
+		Extensions: []string{
+			"https://example.com/ext/base/v1",
+		},
+	}
+
+	params, err := buildA2ASendMessageParams(userInput, "", map[string]interface{}{
+		"https://example.com/ext/custom/v1": map[string]interface{}{
+			"enabled": true,
+		},
+		"ark.mckinsey.com/tool-call-id": "call-1",
+	}, true)
+
+	assert.NoError(t, err)
+	if assert.NotNil(t, params.Metadata) {
+		assert.Equal(t, "call-1", params.Metadata["ark.mckinsey.com/tool-call-id"])
+		_, hasCustomExtension := params.Metadata["https://example.com/ext/custom/v1"]
+		assert.True(t, hasCustomExtension)
+	}
+	assert.ElementsMatch(t, []string{
+		"https://example.com/ext/base/v1",
+		"https://example.com/ext/custom/v1",
+	}, params.Message.Extensions)
+}

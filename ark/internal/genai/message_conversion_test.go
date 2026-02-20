@@ -249,6 +249,36 @@ func TestA2AToOpenAIMessageUsesRoleHintPayload(t *testing.T) {
 	assert.Equal(t, "legacy tool output", recovered.OfSystem.Content.OfString.Value)
 }
 
+func TestA2AToOpenAIMessageFallsBackToLegacyRoleMetadataSystem(t *testing.T) {
+	message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("legacy system output"),
+	})
+	message.Metadata = map[string]interface{}{
+		MetadataRoleKey: RoleSystem,
+	}
+
+	recovered, err := A2AToOpenAIMessage(message)
+	require.NoError(t, err)
+	require.NotNil(t, recovered.OfSystem)
+	assert.Equal(t, "legacy system output", recovered.OfSystem.Content.OfString.Value)
+}
+
+func TestA2AToOpenAIMessageFallsBackToLegacyRoleMetadataTool(t *testing.T) {
+	message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("legacy tool output"),
+	})
+	message.Metadata = map[string]interface{}{
+		MetadataRoleKey:       RoleTool,
+		MetadataToolCallIDKey: "call-legacy-2",
+	}
+
+	recovered, err := A2AToOpenAIMessage(message)
+	require.NoError(t, err)
+	require.NotNil(t, recovered.OfTool)
+	assert.Equal(t, "legacy tool output", recovered.OfTool.Content.OfString.Value)
+	assert.Equal(t, "call-legacy-2", recovered.OfTool.ToolCallID)
+}
+
 func TestA2AToOpenAIMessageExperimentalPreservesImageFileParts(t *testing.T) {
 	message := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
 		protocol.NewTextPart("describe image"),

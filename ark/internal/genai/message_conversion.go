@@ -17,7 +17,7 @@ func A2AToOpenAIMessage(msg protocol.Message) (openai.ChatCompletionMessageParam
 	case RoleSystem:
 		return openai.SystemMessage(content), nil
 	case RoleTool:
-		return convertA2AToolMessage(msg.Parts, content), nil
+		return convertA2AToolMessage(msg.Parts, msg.Metadata, content), nil
 	case RoleAssistant:
 		return convertA2AAssistantMessage(msg.Parts, content), nil
 	default:
@@ -36,26 +36,33 @@ func resolveA2AMessageRole(msg protocol.Message) string {
 		if _, ok := extractToolResultPayloadFromParts(msg.Parts); ok {
 			return RoleTool
 		}
+		if msg.Metadata != nil {
+			if role, ok := msg.Metadata[MetadataRoleKey].(string); ok && role != "" {
+				return role
+			}
+		}
 		return RoleAssistant
 	default:
 		return RoleAssistant
 	}
 }
 
-func convertA2AToolMessage(parts []protocol.Part, fallbackContent string) openai.ChatCompletionMessageParamUnion {
-	payload, ok := extractToolResultPayloadFromParts(parts)
-	if !ok || payload.ToolCallID == "" {
-		content := payload.Content
-		if content == "" {
-			content = fallbackContent
-		}
-		return openai.AssistantMessage(content)
-	}
+func convertA2AToolMessage(parts []protocol.Part, metadata map[string]interface{}, fallbackContent string) openai.ChatCompletionMessageParamUnion {
+	payload, _ := extractToolResultPayloadFromParts(parts)
 	content := payload.Content
 	if content == "" {
 		content = fallbackContent
 	}
-	return openai.ToolMessage(content, payload.ToolCallID)
+	toolCallID := payload.ToolCallID
+	if toolCallID == "" && metadata != nil {
+		if legacyID, ok := metadata[MetadataToolCallIDKey].(string); ok && legacyID != "" {
+			toolCallID = legacyID
+		}
+	}
+	if toolCallID == "" {
+		return openai.AssistantMessage(content)
+	}
+	return openai.ToolMessage(content, toolCallID)
 }
 
 func convertA2AAssistantMessage(parts []protocol.Part, content string) openai.ChatCompletionMessageParamUnion {

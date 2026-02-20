@@ -982,6 +982,53 @@ func TestBuildDelegatedToolResultContentPreservesMessageExtensionsAndMetadata(t 
 	require.True(t, hasCustom)
 }
 
+func TestBuildDelegatedToolResultContentPrefersA2AResponseOverA2AMessages(t *testing.T) {
+	responseContextID := "ctx-response"
+	responseTaskID := "task-response"
+	responseMessage := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("from-response"),
+	})
+	responseMessage.ContextID = &responseContextID
+	responseMessage.TaskID = &responseTaskID
+
+	lastContextID := "ctx-history"
+	lastTaskID := "task-history"
+	lastMessage := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("from-history"),
+	})
+	lastMessage.ContextID = &lastContextID
+	lastMessage.TaskID = &lastTaskID
+
+	content, err := buildDelegatedToolResultContent("assistant summary", &ExecutionResult{
+		A2AResponse: &A2AResponse{
+			ContextID: responseContextID,
+			TaskID:    responseTaskID,
+			Message:   &responseMessage,
+		},
+		A2AMessages: []protocol.Message{lastMessage},
+	}, ToolCall{
+		ID: "call-1",
+		Function: openai.ChatCompletionMessageToolCallFunction{
+			Name: "delegate-agent",
+		},
+	})
+	require.NoError(t, err)
+
+	var payload map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(content), &payload))
+	require.Equal(t, responseContextID, payload["delegatedContextId"])
+	require.Equal(t, responseTaskID, payload["delegatedTaskId"])
+
+	rawMessage, ok := payload["message"].(map[string]interface{})
+	require.True(t, ok)
+	rawParts, ok := rawMessage["parts"].([]interface{})
+	require.True(t, ok)
+	require.NotEmpty(t, rawParts)
+	firstPart, ok := rawParts[0].(map[string]interface{})
+	require.True(t, ok)
+	require.Equal(t, "from-response", firstPart["text"])
+}
+
 func TestDelegatedStreamBridgeAnnotatesDownstreamEvents(t *testing.T) {
 	baseStream := &fakeEventStream{}
 	ctx := WithToolEventStream(context.Background(), baseStream)

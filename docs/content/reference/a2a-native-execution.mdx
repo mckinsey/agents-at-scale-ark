@@ -29,7 +29,7 @@ As of the payload-only cutover, Ark treats A2A `parts` as the only transport for
 - Tool lifecycle semantics use `data` parts with schema `https://ark.mckinsey.com/payloads/step-event/v1`.
 - Tool outcomes use `data` parts with schema `https://ark.mckinsey.com/payloads/tool-result/v1`.
 - Extension metadata is still valid, but only under URI-attributed keys declared in `message.extensions` and negotiated via `A2A-Extensions`.
-- Unattributed metadata keys are rejected in strict native ingress.
+- Non-extension metadata keys are preserved for passthrough between A2A agents.
 
 ## Executive Summary
 

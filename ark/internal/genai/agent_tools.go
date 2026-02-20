@@ -608,13 +608,15 @@ func buildDelegatedToolResultContent(content string, result *ExecutionResult, ca
 	}
 	if result != nil && len(result.A2AMessages) > 0 {
 		last := result.A2AMessages[len(result.A2AMessages)-1]
-		if last.ContextID != nil && *last.ContextID != "" {
+		if payload.DelegatedContextID == "" && last.ContextID != nil && *last.ContextID != "" {
 			payload.DelegatedContextID = *last.ContextID
 		}
-		if last.TaskID != nil && *last.TaskID != "" {
+		if payload.DelegatedTaskID == "" && last.TaskID != nil && *last.TaskID != "" {
 			payload.DelegatedTaskID = *last.TaskID
 		}
-		payload.Message = serializeA2AMessage(&last)
+		if payload.Message == nil {
+			payload.Message = serializeA2AMessage(&last)
+		}
 	}
 	return buildToolResultPayloadContent(payload)
 }
