@@ -78,5 +78,11 @@ class BasePage:
     def get_page_title(self) -> str:
         return self.page.title()
     
+    def wait_for_table_content(self, timeout: int = 10000) -> None:
+        try:
+            self.page.locator("table tr, [role='row'], [role='table'] tr, tbody tr").first.wait_for(state="visible", timeout=timeout)
+        except PlaywrightTimeoutError:
+            logger.debug("Table content not visible within %dms", timeout)
+
     def click(self, selector: str) -> None:
         self.page.locator(selector).first.click()
