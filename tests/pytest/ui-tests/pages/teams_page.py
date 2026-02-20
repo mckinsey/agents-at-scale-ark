@@ -55,7 +55,7 @@ class TeamsPage(BasePage):
 
         self.page.locator(self.ADD_TEAM_BUTTON).first.click()
         self.wait_for_load_state("domcontentloaded")
-        self.wait_for_timeout(2000)
+        self.page.locator("input").first.wait_for(state="visible", timeout=10000)
 
         is_full_page = "/teams/new" in self.page.url
 
