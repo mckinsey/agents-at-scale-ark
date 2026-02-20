@@ -69,9 +69,6 @@ class BasePage:
     def reload(self) -> None:
         self.page.reload()
     
-    def wait_for_timeout(self, milliseconds: int) -> None:
-        self.page.wait_for_timeout(milliseconds)
-    
     def get_url(self) -> str:
         return self.page.url
     

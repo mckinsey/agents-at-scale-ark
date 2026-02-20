@@ -165,8 +165,7 @@ class TestWorkflowIntegration:
             workflows_page.close_modal_if_present()
             logger.info("Opened workflow details in Argo")
 
-            page.wait_for_timeout(2000)
-            
+            page.wait_for_load_state("networkidle")
             argo_status = workflows_page.get_workflow_status()
             logger.info(f"Workflow status in Argo UI: {argo_status}")
             
