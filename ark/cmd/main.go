@@ -92,11 +92,11 @@ func main() {
 		directClient = nil
 	}
 	telemetryProvider := telemetryconfig.NewProvider(ctx, directClient)
-	defer func() {
+	shutdownTelemetry := func() {
 		if err := telemetryProvider.Shutdown(); err != nil {
 			setupLog.Error(err, "failed to shutdown telemetry provider")
 		}
-	}()
+	}
 
 	// Initialize eventing provider with direct client for broker discovery
 	eventingProvider := eventingconfig.NewProvider(mgr, directClient)
@@ -104,24 +104,17 @@ func main() {
 	queryWorkersEnabled := isQueryWorkersEnabled()
 	queryReconciler := setupControllers(mgr, telemetryProvider, eventingProvider, queryWorkersEnabled)
 
-	var riverClient *queryworker.RiverClient
-	if queryWorkersEnabled {
-		riverResult, err := queryworker.Setup(ctx, queryReconciler)
-		if err != nil {
-			setupLog.Error(err, "failed to setup River query workers")
-			os.Exit(1)
-		}
-		riverClient = riverResult.Client
-		if err := mgr.Add(&riverRunnable{client: riverClient, pool: riverResult.Pool}); err != nil {
-			setupLog.Error(err, "unable to add River workers to manager")
-			os.Exit(1)
-		}
-		setupLog.Info("River query workers configured")
+	riverClient, err := setupRiverWorkers(ctx, mgr, queryReconciler, queryWorkersEnabled)
+	if err != nil {
+		shutdownTelemetry()
+		setupLog.Error(err, "failed to setup River query workers")
+		os.Exit(1)
 	}
 
 	setupWebhooks(mgr)
 	setupEmbeddedApiserver(mgr, riverClient)
 	startManager(mgr, metricsCertWatcher, webhookCertWatcher)
+	shutdownTelemetry()
 }
 
 func parseFlags() struct {
@@ -264,10 +257,10 @@ func setupMetricsServer(cfg config, baseTLSOpts []func(*tls.Config)) (metricsser
 
 func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provider, eventingProvider *eventingconfig.Provider, queryWorkersEnabled bool) *controller.QueryReconciler {
 	queryReconciler := &controller.QueryReconciler{
-		Client:       mgr.GetClient(),
-		Scheme:       mgr.GetScheme(),
-		Telemetry:    telemetryProvider,
-		Eventing:     eventingProvider,
+		Client:              mgr.GetClient(),
+		Scheme:              mgr.GetScheme(),
+		Telemetry:           telemetryProvider,
+		Eventing:            eventingProvider,
 		QueryWorkersEnabled: queryWorkersEnabled,
 	}
 
@@ -322,6 +315,21 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 	}
 
 	return queryReconciler
+}
+
+func setupRiverWorkers(ctx context.Context, mgr ctrl.Manager, queryReconciler *controller.QueryReconciler, enabled bool) (*queryworker.RiverClient, error) {
+	if !enabled {
+		return nil, nil
+	}
+	riverResult, err := queryworker.Setup(ctx, queryReconciler)
+	if err != nil {
+		return nil, fmt.Errorf("setup River query workers: %w", err)
+	}
+	if err := mgr.Add(&riverRunnable{client: riverResult.Client, pool: riverResult.Pool}); err != nil {
+		return nil, fmt.Errorf("add River workers to manager: %w", err)
+	}
+	setupLog.Info("River query workers configured")
+	return riverResult.Client, nil
 }
 
 func setupWebhooks(mgr ctrl.Manager) {

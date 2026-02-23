@@ -44,11 +44,11 @@ const (
 // - Never import OTEL packages directly - use the abstraction layer
 type QueryReconciler struct {
 	client.Client
-	Scheme       *runtime.Scheme
-	Telemetry    *telemetryconfig.Provider
-	Eventing     *eventingconfig.Provider
+	Scheme              *runtime.Scheme
+	Telemetry           *telemetryconfig.Provider
+	Eventing            *eventingconfig.Provider
 	QueryWorkersEnabled bool
-	operations   sync.Map
+	operations          sync.Map
 }
 
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=queries,verbs=get;list;watch;create;update;patch;delete
