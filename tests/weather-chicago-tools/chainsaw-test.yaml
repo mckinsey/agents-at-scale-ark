@@ -177,7 +177,7 @@ spec:
             name: Completed
             value: 'True'
     - apply:
-       file: manifests/weather-tools-event-evaluation.yaml
+        file: manifests/weather-tools-event-evaluation.yaml
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
