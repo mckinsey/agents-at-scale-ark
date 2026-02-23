@@ -435,7 +435,7 @@ describe('ChatMessageList', () => {
         isProcessing: false,
       });
 
-      expect(screen.getByText('Conversation ended')).toBeInTheDocument();
+      expect(screen.getByText('Conversation ended because agent graph has no outgoing edges')).toBeInTheDocument();
     });
 
     it('should not render end of graph while processing', () => {
