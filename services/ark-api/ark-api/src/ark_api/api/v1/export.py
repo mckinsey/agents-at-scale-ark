@@ -1,4 +1,5 @@
 """Export API endpoints for Ark resources."""
+import asyncio
 import logging
 import yaml
 import zipfile
@@ -129,40 +130,47 @@ async def _collect_workflows(
 ) -> List[Dict[str, Any]]:
     """Collect Argo WorkflowTemplates."""
     from kubernetes.client import CustomObjectsApi
-    items = []
 
-    custom_api = CustomObjectsApi()
-    try:
-        # Determine namespace
-        if not namespace:
-            try:
-                with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace", "r") as f:
-                    namespace = f.read().strip()
-            except:
-                namespace = "default"
+    def _fetch_workflows_sync():
+        """Synchronous helper to fetch workflow templates."""
+        items = []
+        custom_api = CustomObjectsApi()
 
-        # Fetch WorkflowTemplates
-        workflow_templates = custom_api.list_namespaced_custom_object(
-            group="argoproj.io",
-            version="v1alpha1",
-            namespace=namespace,
-            plural="workflowtemplates"
-        )
+        try:
+            # Determine namespace
+            nonlocal namespace
+            if not namespace:
+                try:
+                    with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace", "r") as f:
+                        namespace = f.read().strip()
+                except:
+                    namespace = "default"
 
-        for template in workflow_templates.get("items", []):
-            template_name = template["metadata"]["name"]
-            if not resource_ids or template_name in resource_ids.get("workflows", []):
-                items.append(template)
+            # Fetch WorkflowTemplates
+            workflow_templates = custom_api.list_namespaced_custom_object(
+                group="argoproj.io",
+                version="v1alpha1",
+                namespace=namespace,
+                plural="workflowtemplates"
+            )
 
-    except ApiException as e:
-        if e.status == 404:
-            logger.warning("WorkflowTemplates CRD not found - Argo Workflows may not be installed")
-        else:
-            logger.error(f"Failed to fetch WorkflowTemplates: {e}")
-    except Exception as e:
-        logger.error(f"Unexpected error fetching WorkflowTemplates: {e}")
+            for template in workflow_templates.get("items", []):
+                template_name = template["metadata"]["name"]
+                if not resource_ids or template_name in resource_ids.get("workflows", []):
+                    items.append(template)
 
-    return items
+        except ApiException as e:
+            if e.status == 404:
+                logger.warning("WorkflowTemplates CRD not found - Argo Workflows may not be installed")
+            else:
+                logger.error(f"Failed to fetch WorkflowTemplates: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error fetching WorkflowTemplates: {e}")
+
+        return items
+
+    # Run synchronous code in thread pool to avoid blocking the event loop
+    return await asyncio.to_thread(_fetch_workflows_sync)
 
 
 # Resource collection mapping
