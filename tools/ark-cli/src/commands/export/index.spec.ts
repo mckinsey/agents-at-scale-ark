@@ -1,37 +1,37 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 import {Command} from 'commander';
 
-const mockExeca = jest.fn() as any;
-jest.unstable_mockModule('execa', () => ({
+const mockExeca = vi.fn() as any;
+vi.mock('execa', () => ({
   execa: mockExeca,
 }));
 
-const mockWriteFile = jest.fn() as any;
-jest.unstable_mockModule('fs/promises', () => ({
+const mockWriteFile = vi.fn() as any;
+vi.mock('fs/promises', () => ({
   writeFile: mockWriteFile,
 }));
 
 const mockOutput = {
-  info: jest.fn(),
-  success: jest.fn(),
-  warning: jest.fn(),
-  error: jest.fn(),
+  info: vi.fn(),
+  success: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
 };
-jest.unstable_mockModule('../../lib/output.js', () => ({
+vi.mock('../../lib/output.js', () => ({
   default: mockOutput,
 }));
 
-const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+const _mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {
   throw new Error('process.exit called');
 }) as any);
 
 const mockKubectlGetResponse = {
-    "apiVersion": "v1",
-    "items": [{"spec": "foo"}],
-    "kind": "List",
-    "metadata": {
-        "resourceVersion": ""
-    }
+  apiVersion: 'v1',
+  items: [{spec: 'foo'}],
+  kind: 'List',
+  metadata: {
+    resourceVersion: '',
+  },
 };
 
 const {createExportCommand} = await import('./index.js');
@@ -41,7 +41,7 @@ describe('export command', () => {
   const mockConfig: ArkConfig = {};
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should create export command with correct description', () => {
@@ -82,7 +82,7 @@ describe('export command', () => {
         expect.any(Object)
       );
       expect(mockOutput.success).toHaveBeenCalledWith(
-          `found 1 ${resourceType}`,
+        `found 1 ${resourceType}`
       );
     }
 
@@ -103,9 +103,13 @@ describe('export command', () => {
     await command.parseAsync(['node', 'test', '-o', 'test.yaml']);
 
     expect(mockExeca.mock.calls).toEqual([
-      ['kubectl', expect.arrayContaining(['get', 'agents']), expect.any(Object)],
+      [
+        'kubectl',
+        expect.arrayContaining(['get', 'agents']),
+        expect.any(Object),
+      ],
       ['kubectl', expect.arrayContaining(['get', 'teams']), expect.any(Object)],
-    ])
+    ]);
 
     expect(mockWriteFile).toHaveBeenCalledTimes(1);
   });
@@ -128,8 +132,16 @@ describe('export command', () => {
     ]);
 
     expect(mockExeca.mock.calls).toEqual([
-      ['kubectl', expect.arrayContaining(['get', 'models']), expect.any(Object)],
-      ['kubectl', expect.arrayContaining(['get', 'agents']), expect.any(Object)],
+      [
+        'kubectl',
+        expect.arrayContaining(['get', 'models']),
+        expect.any(Object),
+      ],
+      [
+        'kubectl',
+        expect.arrayContaining(['get', 'agents']),
+        expect.any(Object),
+      ],
     ]);
   });
 
@@ -199,6 +211,5 @@ describe('export command', () => {
       'export failed:',
       'Export broke'
     );
-
   });
 });

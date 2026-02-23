@@ -1,15 +1,15 @@
-import {describe, it, expect, jest, beforeEach} from '@jest/globals';
+import {describe, it, expect, vi, beforeEach} from 'vitest';
 
 // Mock chalk to avoid ANSI codes in tests
-jest.unstable_mockModule('chalk', () => ({
+vi.mock('chalk', () => ({
   default: {
     gray: (str: string) => str,
   },
 }));
 
 // Mock execa using unstable_mockModule
-jest.unstable_mockModule('execa', () => ({
-  execa: jest.fn(),
+vi.mock('execa', () => ({
+  execa: vi.fn(),
 }));
 
 // Dynamic imports after mock
@@ -22,7 +22,7 @@ const mockExeca = execa as any;
 describe('commands', () => {
   describe('checkCommandExists', () => {
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
     });
 
     it('returns true when command executes successfully', async () => {
@@ -94,11 +94,11 @@ describe('commands', () => {
   });
 
   describe('execute', () => {
-    let mockConsoleLog: jest.SpiedFunction<typeof console.log>;
+    let mockConsoleLog: vi.SpiedFunction<typeof console.log>;
 
     beforeEach(() => {
-      jest.clearAllMocks();
-      mockConsoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
+      vi.clearAllMocks();
+      mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
     });
 
     afterEach(() => {

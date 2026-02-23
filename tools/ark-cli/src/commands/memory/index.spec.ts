@@ -2,11 +2,11 @@ import {
   describe,
   it,
   expect,
-  jest,
+  vi,
   beforeEach,
   afterEach,
   beforeAll,
-} from '@jest/globals';
+} from 'vitest';
 
 // ESM-safe mocking: declare variables to hold dynamically imported modules
 let createMemoryCommand: any;
@@ -17,20 +17,20 @@ let ArkApiProxy: any;
 let output: any;
 
 // Mock dependencies
-jest.unstable_mockModule('../../lib/output.js', () => ({
+vi.mock('../../lib/output.js', () => ({
   default: {
-    info: jest.fn(),
-    success: jest.fn(),
-    error: jest.fn(),
+    info: vi.fn(),
+    success: vi.fn(),
+    error: vi.fn(),
   },
 }));
 
 // Mock ArkApiProxy with a simpler approach
-jest.unstable_mockModule('../../lib/arkApiProxy.js', () => ({
+vi.mock('../../lib/arkApiProxy.js', () => ({
   __esModule: true,
-  ArkApiProxy: jest.fn().mockImplementation(() => ({
-    start: jest.fn(),
-    stop: jest.fn(),
+  ArkApiProxy: vi.fn().mockImplementation(() => ({
+    start: vi.fn(),
+    stop: vi.fn(),
   })),
 }));
 
@@ -47,12 +47,12 @@ describe('Memory Command', () => {
   let mockConfig: any;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockConfig = {};
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe('Command Structure', () => {
@@ -107,7 +107,7 @@ describe('Memory Command', () => {
     let exitSpy: any;
 
     beforeEach(async () => {
-      exitSpy = jest
+      exitSpy = vi
         .spyOn(process as any, 'exit')
         .mockImplementation(
           ((..._args: unknown[]) => undefined) as unknown as any
@@ -121,49 +121,49 @@ describe('Memory Command', () => {
     it('deleteSession handles 500 error', async () => {
       const err = new Error('Internal Server Error');
       const fakeClient = {
-        deleteSession: (jest.fn() as any).mockRejectedValue(err),
+        deleteSession: (vi.fn() as any).mockRejectedValue(err),
       } as any;
-      (ArkApiProxy as unknown as jest.Mock).mockImplementation(() => ({
-        start: (jest.fn() as any).mockResolvedValue(fakeClient),
-        stop: jest.fn(),
+      (ArkApiProxy as unknown as vi.Mock).mockImplementation(() => ({
+        start: (vi.fn() as any).mockResolvedValue(fakeClient),
+        stop: vi.fn(),
       }));
 
       await deleteSession('sess-1', {output: 'text'}).catch(() => {});
 
       expect(output.error).toHaveBeenCalled();
-      expect(process.exit as unknown as jest.Mock).toHaveBeenCalledWith(1);
+      expect(process.exit as unknown as vi.Mock).toHaveBeenCalledWith(1);
     });
 
     it('deleteQuery handles network timeout', async () => {
       const err = new Error('Network timeout');
       const fakeClient = {
-        deleteQueryMessages: (jest.fn() as any).mockRejectedValue(err),
+        deleteQueryMessages: (vi.fn() as any).mockRejectedValue(err),
       } as any;
-      (ArkApiProxy as unknown as jest.Mock).mockImplementation(() => ({
-        start: (jest.fn() as any).mockResolvedValue(fakeClient),
-        stop: jest.fn(),
+      (ArkApiProxy as unknown as vi.Mock).mockImplementation(() => ({
+        start: (vi.fn() as any).mockResolvedValue(fakeClient),
+        stop: vi.fn(),
       }));
 
       await deleteQuery('sess-2', 'query-9', {output: 'text'}).catch(() => {});
 
       expect(output.error).toHaveBeenCalled();
-      expect(process.exit as unknown as jest.Mock).toHaveBeenCalledWith(1);
+      expect(process.exit as unknown as vi.Mock).toHaveBeenCalledWith(1);
     });
 
     it('deleteAll handles no memory services reachable', async () => {
       const err = new Error('No memory services reachable');
       const fakeClient = {
-        deleteAllSessions: (jest.fn() as any).mockRejectedValue(err),
+        deleteAllSessions: (vi.fn() as any).mockRejectedValue(err),
       } as any;
-      (ArkApiProxy as unknown as jest.Mock).mockImplementation(() => ({
-        start: (jest.fn() as any).mockResolvedValue(fakeClient),
-        stop: jest.fn(),
+      (ArkApiProxy as unknown as vi.Mock).mockImplementation(() => ({
+        start: (vi.fn() as any).mockResolvedValue(fakeClient),
+        stop: vi.fn(),
       }));
 
       await deleteAll({output: 'text'}).catch(() => {});
 
       expect(output.error).toHaveBeenCalled();
-      expect(process.exit as unknown as jest.Mock).toHaveBeenCalledWith(1);
+      expect(process.exit as unknown as vi.Mock).toHaveBeenCalledWith(1);
     });
   });
 });
