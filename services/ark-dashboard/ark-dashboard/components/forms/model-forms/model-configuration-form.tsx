@@ -265,9 +265,13 @@ function AzureSpecificFields({
   isSecretsPending,
   secrets,
 }: AzureSpecificFieldsProps) {
+  const { initialAzureAuthMethod } = useModelConfigurationForm();
+  const watchedAuthMethod = useWatch({
+    control,
+    name: 'azureAuthMethod',
+  });
   const azureAuthMethod =
-    useWatch({ control, name: 'azureAuthMethod', defaultValue: 'apiKey' }) ??
-    'apiKey';
+    watchedAuthMethod ?? initialAzureAuthMethod ?? 'apiKey';
   return (
     <>
       <FormField
@@ -302,7 +306,7 @@ function AzureSpecificFields({
           </FormItem>
         )}
       />
-      {azureAuthMethod === 'apiKey' && (
+      {azureAuthMethod === 'apiKey' ? (
         <FormField
           control={control}
           name="secret"
@@ -336,48 +340,48 @@ function AzureSpecificFields({
             </FormItem>
           )}
         />
-      )}
-      {(azureAuthMethod === 'managedIdentity' ||
-        azureAuthMethod === 'workloadIdentity') && (
-        <FormField
-          control={control}
-          name="azureClientId"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>
-                Client ID
-                {azureAuthMethod === 'managedIdentity' ? ' (optional)' : ''}
-              </FormLabel>
-              <FormControl>
-                <Input
-                  {...field}
-                  value={field.value ?? ''}
-                  placeholder="Azure Managed Identity client ID (GUID)"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
+      ) : (
+        <>
+          <FormField
+            control={control}
+            name="azureClientId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                  Client ID
+                  {azureAuthMethod === 'managedIdentity' ? ' (optional)' : ''}
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    value={field.value ?? ''}
+                    placeholder="Azure Managed Identity client ID (GUID)"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          {azureAuthMethod === 'workloadIdentity' && (
+            <FormField
+              control={control}
+              name="azureTenantId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tenant ID</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      value={field.value ?? ''}
+                      placeholder="Azure AD tenant ID (GUID)"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           )}
-        />
-      )}
-      {azureAuthMethod === 'workloadIdentity' && (
-        <FormField
-          control={control}
-          name="azureTenantId"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Tenant ID</FormLabel>
-              <FormControl>
-                <Input
-                  {...field}
-                  value={field.value ?? ''}
-                  placeholder="Azure AD tenant ID (GUID)"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        </>
       )}
       <FormField
         control={control}

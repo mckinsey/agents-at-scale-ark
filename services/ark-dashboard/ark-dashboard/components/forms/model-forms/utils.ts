@@ -125,6 +125,10 @@ export function getResetValues(currentFormValues: FormValues): FormValues {
   }
 }
 
+function camelToSnake(s: string): string {
+  return s.replace(/([A-Z])/g, '_$1').toLowerCase();
+}
+
 function getConfigValue<T = unknown>(
   config: unknown,
   keys: string[],
@@ -132,7 +136,6 @@ function getConfigValue<T = unknown>(
   let current = config;
 
   for (const key of keys) {
-    // Check if current is null, undefined, or not an object
     if (
       current === undefined ||
       current === null ||
@@ -140,12 +143,22 @@ function getConfigValue<T = unknown>(
     ) {
       return undefined;
     }
-
-    // Get the value for the current key
-    current = (current as Record<string, unknown>)[key];
+    const obj = current as Record<string, unknown>;
+    current = obj[key];
+    if (current === undefined) {
+      current = obj[camelToSnake(key)];
+    }
   }
 
   return current as T;
+}
+
+function getAuthSubKey(
+  auth: Record<string, unknown> | undefined,
+  camelKey: string,
+): unknown {
+  if (auth === undefined || auth === null) return undefined;
+  return auth[camelKey] ?? auth[camelToSnake(camelKey)];
 }
 
 export function getDefaultValuesForUpdate(model: Model): FormValues {
@@ -180,21 +193,23 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
       let secret = '';
       let azureClientId = '';
       let azureTenantId = '';
-      if (auth?.apiKey !== undefined && auth?.apiKey !== null) {
-        azureAuthMethod = 'apiKey';
-        secret =
-          getConfigValue<string>(model.config, [
-            'azure',
-            'auth',
-            'apiKey',
-            'valueFrom',
-            'secretKeyRef',
-            'name',
-          ]) || '';
-      } else if (
-        auth?.managedIdentity !== undefined &&
-        auth?.managedIdentity !== null
-      ) {
+      const hasManagedIdentity =
+        getAuthSubKey(auth, 'managedIdentity') !== undefined &&
+        getAuthSubKey(auth, 'managedIdentity') !== null;
+      const hasWorkloadIdentity =
+        getAuthSubKey(auth, 'workloadIdentity') !== undefined &&
+        getAuthSubKey(auth, 'workloadIdentity') !== null;
+      const hasAuthApiKey =
+        getAuthSubKey(auth, 'apiKey') !== undefined &&
+        getAuthSubKey(auth, 'apiKey') !== null;
+      const topLevelApiKeyValue = getConfigValue<string>(model.config, [
+        'azure',
+        'apiKey',
+        'value',
+      ]);
+      const isPlaceholderApiKey =
+        topLevelApiKeyValue === '' || topLevelApiKeyValue === undefined;
+      if (hasManagedIdentity) {
         azureAuthMethod = 'managedIdentity';
         azureClientId =
           getConfigValue<string>(model.config, [
@@ -204,10 +219,7 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
             'clientId',
             'value',
           ]) || '';
-      } else if (
-        auth?.workloadIdentity !== undefined &&
-        auth?.workloadIdentity !== null
-      ) {
+      } else if (hasWorkloadIdentity) {
         azureAuthMethod = 'workloadIdentity';
         azureClientId =
           getConfigValue<string>(model.config, [
@@ -225,6 +237,19 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
             'tenantId',
             'value',
           ]) || '';
+      } else if (hasAuthApiKey) {
+        azureAuthMethod = 'apiKey';
+        secret =
+          getConfigValue<string>(model.config, [
+            'azure',
+            'auth',
+            'apiKey',
+            'valueFrom',
+            'secretKeyRef',
+            'name',
+          ]) || '';
+      } else if (isPlaceholderApiKey) {
+        azureAuthMethod = 'managedIdentity';
       } else {
         secret =
           getConfigValue<string>(model.config, [
