@@ -1,41 +1,41 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 import {Command} from 'commander';
 
-const mockExeca = jest.fn() as any;
-jest.unstable_mockModule('execa', () => ({
+const mockExeca = vi.fn() as any;
+vi.mock('execa', () => ({
   execa: mockExeca,
 }));
 
 const mockOutput = {
-  info: jest.fn(),
-  error: jest.fn(),
+  info: vi.fn(),
+  error: vi.fn(),
 };
-jest.unstable_mockModule('../../lib/output.js', () => ({
+vi.mock('../../lib/output.js', () => ({
   default: mockOutput,
 }));
 
-const mockCreateModel = jest.fn();
-jest.unstable_mockModule('./create.js', () => ({
+const mockCreateModel = vi.fn();
+vi.mock('./create.js', () => ({
   createModel: mockCreateModel,
 }));
 
-const mockExecuteQuery = jest.fn();
-jest.unstable_mockModule('../../lib/executeQuery.js', () => ({
+const mockExecuteQuery = vi.fn();
+vi.mock('../../lib/executeQuery.js', () => ({
   executeQuery: mockExecuteQuery,
-  parseTarget: jest.fn(),
+  parseTarget: vi.fn(),
 }));
 
-const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+const mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {
   throw new Error('process.exit called');
 }) as any);
 
-const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
 
 const {createModelsCommand} = await import('./index.js');
 
 describe('models command', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('creates command with correct structure', () => {

@@ -36,7 +36,8 @@ export const getKubectlVersion = (): CommandVersionConfig => ({
       throw new Error('kubectl version output missing clientVersion field');
     } catch (e) {
       throw new Error(
-        `Failed to parse kubectl version JSON: ${e instanceof Error ? e.message : 'Unknown error'}`
+        `Failed to parse kubectl version JSON: ${e instanceof Error ? e.message : 'Unknown error'}`,
+        {cause: e}
       );
     }
   },
@@ -100,7 +101,8 @@ export class StatusChecker {
       return config.versionExtract(stdout);
     } catch (error) {
       throw new Error(
-        `Failed to get ${config.command} version: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to get ${config.command} version: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        {cause: error}
       );
     }
   }
@@ -450,7 +452,7 @@ export class StatusChecker {
       });
       clusterAccess = true;
     } catch {
-      clusterAccess = false;
+      // clusterAccess remains false
     }
 
     // Get cluster info if accessible

@@ -1,7 +1,7 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 
-const mockExeca = jest.fn() as any;
-jest.unstable_mockModule('execa', () => ({
+const mockExeca = vi.fn() as any;
+vi.mock('execa', () => ({
   execa: mockExeca,
 }));
 
@@ -9,7 +9,7 @@ const {getClusterInfo, detectClusterType} = await import('./cluster.js');
 
 describe('cluster', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('detectClusterType', () => {
