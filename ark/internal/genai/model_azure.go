@@ -20,6 +20,9 @@ func resolveAzureAuth(ctx context.Context, resolver *common.ValueSourceResolver,
 	result := &azureAuthResult{}
 
 	if config.Auth == nil {
+		if config.APIKey == nil {
+			return nil, fmt.Errorf("spec.config.azure.apiKey or spec.config.azure.auth is required")
+		}
 		log := logf.FromContext(ctx)
 		log.Info("DEPRECATION WARNING: spec.config.azure.apiKey is deprecated, use spec.config.azure.auth.apiKey instead")
 		apiKey, err := resolver.ResolveValueSource(ctx, *config.APIKey, namespace)
