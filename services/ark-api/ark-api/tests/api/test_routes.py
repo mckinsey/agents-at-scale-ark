@@ -1280,16 +1280,12 @@ class TestModelsEndpoint(unittest.TestCase):
         self.assertEqual(data["config"]["bedrock"]["maxTokens"]["value"], "1000")
         self.assertEqual(data["config"]["bedrock"]["temperature"]["value"], "0.7")
     
-    @patch('ark_api.api.v1.models.with_ark_client')
-    def test_get_model_success(self, mock_ark_client):
+    @patch('ark_api.api.v1.models.get_context', return_value={"namespace": "default"})
+    @patch('ark_api.api.v1.models.CustomObjectsApi')
+    @patch('ark_api.api.v1.models.ApiClient')
+    def test_get_model_success(self, mock_api_client_cls, mock_custom_api_cls, mock_get_context):
         """Test successfully retrieving a model."""
-        # Setup async context manager mock
-        mock_client = AsyncMock()
-        mock_ark_client.return_value.__aenter__.return_value = mock_client
-
-        # Mock the model response
-        mock_model = Mock()
-        mock_model.to_dict.return_value = {
+        model_cr = {
             "metadata": {"name": "gpt-4-model", "namespace": "default"},
             "spec": {
                 "type": "completions",
@@ -1309,13 +1305,14 @@ class TestModelsEndpoint(unittest.TestCase):
                 "resolvedAddress": "https://api.openai.com/v1"
             }
         }
+        mock_custom_api = Mock()
+        mock_custom_api.get_namespaced_custom_object = AsyncMock(return_value=model_cr)
+        mock_custom_api_cls.return_value = mock_custom_api
+        mock_api_client_cls.return_value.__aenter__ = AsyncMock(return_value=Mock())
+        mock_api_client_cls.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        mock_client.models.a_get = AsyncMock(return_value=mock_model)
-
-        # Make the request
         response = self.client.get("/v1/models/gpt-4-model?namespace=default")
 
-        # Assert response
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["name"], "gpt-4-model")
