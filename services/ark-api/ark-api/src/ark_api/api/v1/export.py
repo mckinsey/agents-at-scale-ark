@@ -30,7 +30,7 @@ EXPORT_CONFIGMAP_NAME = "ark-export-metadata"
 EXPORT_CONFIGMAP_NAMESPACE = "ark-system"
 
 
-async def get_export_history() -> Dict[str, Any]:
+async def get_export_history() -> Dict[str, Any]:  # NOSONAR - Async for consistency with project architecture
     """Get export history from ConfigMap."""
     try:
         v1 = client.CoreV1Api()

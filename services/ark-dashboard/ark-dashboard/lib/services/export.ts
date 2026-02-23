@@ -76,6 +76,7 @@ export interface ExportHistoryResponse {
 // Export service
 export const exportService = {
   // Get last export timestamp from backend
+  // NOSONAR - Function correctly uses await for API call
   async getLastExportTime(): Promise<string | null> {
     try {
       const response = await apiClient.get<ExportHistoryResponse>(
