@@ -10,7 +10,9 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -33,6 +35,7 @@ import (
 	"mckinsey.com/ark/internal/apiserver"
 	"mckinsey.com/ark/internal/controller"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
+	"mckinsey.com/ark/internal/queryworker"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 	webhookv1 "mckinsey.com/ark/internal/webhook/v1"
 	webhookv1prealpha1 "mckinsey.com/ark/internal/webhook/v1prealpha1"
@@ -98,9 +101,26 @@ func main() {
 	// Initialize eventing provider with direct client for broker discovery
 	eventingProvider := eventingconfig.NewProvider(mgr, directClient)
 
-	setupControllers(mgr, telemetryProvider, eventingProvider)
+	queryWorkersEnabled := isQueryWorkersEnabled()
+	queryReconciler := setupControllers(mgr, telemetryProvider, eventingProvider, queryWorkersEnabled)
+
+	var riverClient *queryworker.RiverClient
+	if queryWorkersEnabled {
+		riverResult, err := queryworker.Setup(ctx, queryReconciler)
+		if err != nil {
+			setupLog.Error(err, "failed to setup River query workers")
+			os.Exit(1)
+		}
+		riverClient = riverResult.Client
+		if err := mgr.Add(&riverRunnable{client: riverClient, pool: riverResult.Pool}); err != nil {
+			setupLog.Error(err, "unable to add River workers to manager")
+			os.Exit(1)
+		}
+		setupLog.Info("River query workers configured")
+	}
+
 	setupWebhooks(mgr)
-	setupEmbeddedApiserver(mgr)
+	setupEmbeddedApiserver(mgr, riverClient)
 	startManager(mgr, metricsCertWatcher, webhookCertWatcher)
 }
 
@@ -242,7 +262,15 @@ func setupMetricsServer(cfg config, baseTLSOpts []func(*tls.Config)) (metricsser
 	return metricsServerOptions, metricsCertWatcher
 }
 
-func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provider, eventingProvider *eventingconfig.Provider) {
+func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provider, eventingProvider *eventingconfig.Provider, queryWorkersEnabled bool) *controller.QueryReconciler {
+	queryReconciler := &controller.QueryReconciler{
+		Client:       mgr.GetClient(),
+		Scheme:       mgr.GetScheme(),
+		Telemetry:    telemetryProvider,
+		Eventing:     eventingProvider,
+		QueryWorkersEnabled: queryWorkersEnabled,
+	}
+
 	controllers := []struct {
 		name       string
 		reconciler interface{ SetupWithManager(ctrl.Manager) error }
@@ -252,12 +280,7 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 			Scheme:   mgr.GetScheme(),
 			Eventing: eventingProvider,
 		}},
-		{"Query", &controller.QueryReconciler{
-			Client:    mgr.GetClient(),
-			Scheme:    mgr.GetScheme(),
-			Telemetry: telemetryProvider,
-			Eventing:  eventingProvider,
-		}},
+		{"Query", queryReconciler},
 		{"Tool", &controller.ToolReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
 		{"Team", &controller.TeamReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("team-controller")}},
 		{"A2AServer", &controller.A2AServerReconciler{
@@ -297,6 +320,8 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 			os.Exit(1)
 		}
 	}
+
+	return queryReconciler
 }
 
 func setupWebhooks(mgr ctrl.Manager) {
@@ -328,13 +353,13 @@ func setupWebhooks(mgr ctrl.Manager) {
 	}
 }
 
-func setupEmbeddedApiserver(mgr ctrl.Manager) {
+func setupEmbeddedApiserver(mgr ctrl.Manager, riverClient *queryworker.RiverClient) {
 	backend := os.Getenv("ARK_STORAGE_BACKEND")
 	if backend == "" || backend == "etcd" {
 		return
 	}
 
-	cfg := apiserver.Config{}
+	cfg := apiserver.Config{RiverClient: riverClient}
 
 	if portStr := os.Getenv("ARK_APISERVER_PORT"); portStr != "" {
 		port, err := strconv.Atoi(portStr)
@@ -366,6 +391,30 @@ func setupEmbeddedApiserver(mgr ctrl.Manager) {
 	}
 	setupLog.Info("embedded apiserver configured", "backend", backend)
 }
+
+func isQueryWorkersEnabled() bool {
+	backend := os.Getenv("ARK_STORAGE_BACKEND")
+	return backend == "postgresql"
+}
+
+type riverRunnable struct {
+	client *queryworker.RiverClient
+	pool   *pgxpool.Pool
+}
+
+func (r *riverRunnable) Start(ctx context.Context) error {
+	if err := r.client.Start(ctx); err != nil {
+		return err
+	}
+	<-ctx.Done()
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	_ = r.client.Stop(shutdownCtx)
+	r.pool.Close()
+	return nil
+}
+
+func (r *riverRunnable) NeedLeaderElection() bool { return false }
 
 func startManager(mgr ctrl.Manager, metricsCertWatcher, webhookCertWatcher *certwatcher.CertWatcher) {
 	if metricsCertWatcher != nil {

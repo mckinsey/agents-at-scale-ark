@@ -44,10 +44,11 @@ const (
 // - Never import OTEL packages directly - use the abstraction layer
 type QueryReconciler struct {
 	client.Client
-	Scheme     *runtime.Scheme
-	Telemetry  *telemetryconfig.Provider
-	Eventing   *eventingconfig.Provider
-	operations sync.Map
+	Scheme       *runtime.Scheme
+	Telemetry    *telemetryconfig.Provider
+	Eventing     *eventingconfig.Provider
+	QueryWorkersEnabled bool
+	operations   sync.Map
 }
 
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=queries,verbs=get;list;watch;create;update;patch;delete
@@ -146,6 +147,9 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 	case statusRunning:
 		return r.handleRunningPhase(ctx, req, obj)
 	default:
+		if r.QueryWorkersEnabled {
+			return ctrl.Result{}, nil
+		}
 		if err := r.updateStatus(ctx, &obj, statusRunning); err != nil {
 			return ctrl.Result{
 				RequeueAfter: time.Until(expiry),
@@ -156,6 +160,10 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 }
 
 func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query) (ctrl.Result, error) {
+	if r.QueryWorkersEnabled {
+		return ctrl.Result{}, nil
+	}
+
 	log := logf.FromContext(ctx)
 
 	if _, exists := r.operations.Load(req.NamespacedName); exists {
@@ -173,7 +181,6 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alpha1.Query, namespacedName types.NamespacedName) {
 	log := logf.FromContext(opCtx)
 	cleanupCache := true
-	startTime := time.Now()
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -184,6 +191,30 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		}
 	}()
 
+	_ = r.executeQuery(opCtx, obj)
+}
+
+func (r *QueryReconciler) ExecuteQueryDirect(ctx context.Context, namespace, name string) error {
+	namespacedName := types.NamespacedName{Namespace: namespace, Name: name}
+	obj, err := r.fetchQuery(ctx, namespacedName)
+	if err != nil {
+		return fmt.Errorf("failed to fetch query %s/%s: %w", namespace, name, err)
+	}
+
+	if obj.Spec.Cancel {
+		return nil
+	}
+
+	if err := r.updateStatus(ctx, &obj, statusRunning); err != nil {
+		return fmt.Errorf("failed to set query running: %w", err)
+	}
+
+	return r.executeQuery(ctx, obj)
+}
+
+func (r *QueryReconciler) executeQuery(ctx context.Context, obj arkv1alpha1.Query) error {
+	startTime := time.Now()
+
 	sessionId := obj.Spec.SessionId
 	if sessionId == "" {
 		sessionId = string(obj.UID)
@@ -191,47 +222,45 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	conversationId := obj.Spec.ConversationId
 
-	opCtx, span := r.Telemetry.QueryRecorder().StartQuery(opCtx, &obj, "execute")
+	ctx, span := r.Telemetry.QueryRecorder().StartQuery(ctx, &obj, "execute")
 	r.Telemetry.QueryRecorder().RecordSessionID(span, sessionId)
 	defer span.End()
 
-	impersonatedClient, memory, err := r.setupQueryExecution(opCtx, obj, conversationId)
+	impersonatedClient, memory, err := r.setupQueryExecution(ctx, obj, conversationId)
 	if err != nil {
 		r.Telemetry.QueryRecorder().RecordError(span, err)
-		return
+		return err
 	}
 
-	// Get conversation ID from memory if attached
 	if memory != nil {
 		if httpMemory, ok := memory.(*genai.HTTPMemory); ok {
 			conversationId = httpMemory.GetConversationID()
 		}
 	}
 
-	// Set conversation ID in status if we have one (from memory or spec)
 	if conversationId != "" {
 		obj.Status.ConversationId = conversationId
-		_ = r.updateStatus(opCtx, &obj, obj.Status.Phase)
+		_ = r.updateStatus(ctx, &obj, obj.Status.Phase)
 		r.Telemetry.QueryRecorder().RecordConversationID(span, conversationId)
 	}
 
-	opCtx = r.Eventing.QueryRecorder().InitializeQueryContext(opCtx, &obj)
-	opCtx = r.Eventing.QueryRecorder().StartTokenCollection(opCtx)
-	opCtx = r.Eventing.QueryRecorder().Start(opCtx, "QueryExecution", fmt.Sprintf("Executing query %s", obj.Name), nil)
+	ctx = r.Eventing.QueryRecorder().InitializeQueryContext(ctx, &obj)
+	ctx = r.Eventing.QueryRecorder().StartTokenCollection(ctx)
+	ctx = r.Eventing.QueryRecorder().Start(ctx, "QueryExecution", fmt.Sprintf("Executing query %s", obj.Name), nil)
 
-	inputMessages, err := genai.GetQueryInputMessages(opCtx, obj, impersonatedClient)
+	inputMessages, err := genai.GetQueryInputMessages(ctx, obj, impersonatedClient)
 	if err == nil {
 		queryInput := genai.ExtractUserMessageContent(inputMessages)
 		r.Telemetry.QueryRecorder().RecordRootInput(span, queryInput)
 	}
 
-	response, eventStream, err := r.reconcileQueue(opCtx, obj, impersonatedClient, memory)
+	response, eventStream, err := r.reconcileQueue(ctx, obj, impersonatedClient, memory)
 	if err != nil {
-		genai.StreamError(opCtx, eventStream, err, "query_execution_failed", "query")
+		genai.StreamError(ctx, eventStream, err, "query_execution_failed", "query")
 		r.Telemetry.QueryRecorder().RecordError(span, err)
-		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Query execution failed: %v", err), err, nil)
-		_ = r.updateStatus(opCtx, &obj, statusError)
-		return
+		r.Eventing.QueryRecorder().Fail(ctx, "QueryExecution", fmt.Sprintf("Query execution failed: %v", err), err, nil)
+		_ = r.updateStatus(ctx, &obj, statusError)
+		return err
 	}
 
 	obj.Status.Response = response
@@ -240,7 +269,7 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		r.Telemetry.QueryRecorder().RecordRootOutput(span, response.Content)
 	}
 
-	tokenSummary := r.Eventing.QueryRecorder().GetTokenSummary(opCtx)
+	tokenSummary := r.Eventing.QueryRecorder().GetTokenSummary(ctx)
 	obj.Status.TokenUsage = tokenSummary
 
 	if tokenSummary.TotalTokens > 0 {
@@ -248,11 +277,11 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	}
 
 	queryStatus := r.determineQueryStatus(response)
-	_ = r.updateStatus(opCtx, &obj, queryStatus)
+	_ = r.updateStatus(ctx, &obj, queryStatus)
 
 	duration := &metav1.Duration{Duration: time.Since(startTime)}
-	r.finalizeEventStream(opCtx, eventStream, &obj)
-	_ = r.updateStatusWithDuration(opCtx, &obj, queryStatus, duration)
+	r.finalizeEventStream(ctx, eventStream, &obj)
+	_ = r.updateStatusWithDuration(ctx, &obj, queryStatus, duration)
 
 	r.Telemetry.QueryRecorder().RecordSuccess(span)
 	operationData := map[string]string{
@@ -260,7 +289,8 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		"completionTokens": fmt.Sprintf("%d", tokenSummary.CompletionTokens),
 		"totalTokens":      fmt.Sprintf("%d", tokenSummary.TotalTokens),
 	}
-	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", operationData)
+	r.Eventing.QueryRecorder().Complete(ctx, "QueryExecution", "Query execution completed", operationData)
+	return nil
 }
 
 // finalizeEventStream sends a final chunk with complete query status, then closes the stream

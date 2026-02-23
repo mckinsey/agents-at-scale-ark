@@ -3,11 +3,14 @@ package apiserver
 import (
 	"context"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apiserver/pkg/registry/rest"
+	"k8s.io/klog/v2"
 
 	"mckinsey.com/ark/internal/apiserver/registry"
+	"mckinsey.com/ark/internal/queryworker"
 	"mckinsey.com/ark/internal/validation"
 )
 
@@ -40,4 +43,40 @@ func (s *AdmissionStorage) Update(ctx context.Context, name string, objInfo rest
 		return err
 	}
 	return s.GenericStorage.Update(ctx, name, objInfo, admissionCreate, admissionUpdate, forceAllowCreate, options)
+}
+
+type QueryAdmissionStorage struct {
+	*AdmissionStorage
+	riverClient *queryworker.RiverClient
+}
+
+func NewQueryAdmissionStorage(inner *AdmissionStorage, riverClient *queryworker.RiverClient) *QueryAdmissionStorage {
+	return &QueryAdmissionStorage{AdmissionStorage: inner, riverClient: riverClient}
+}
+
+func (s *QueryAdmissionStorage) Create(ctx context.Context, obj runtime.Object, validateFunc rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
+	result, err := s.AdmissionStorage.Create(ctx, obj, validateFunc, options)
+	if err != nil {
+		return nil, err
+	}
+
+	accessor, accessErr := meta.Accessor(result)
+	if accessErr != nil {
+		return result, nil
+	}
+
+	// print logs always
+	klog.Infof("Creating query %s/%s", accessor.GetNamespace(), accessor.GetName())
+
+	_, insertErr := s.riverClient.Insert(ctx, queryworker.QueryJobArgs{
+		Namespace: accessor.GetNamespace(),
+		Name:      accessor.GetName(),
+	}, nil)
+	if insertErr != nil {
+		klog.Errorf("failed to insert River job for query %s/%s: %v", accessor.GetNamespace(), accessor.GetName(), insertErr)
+	} else {
+		klog.V(4).Infof("inserted River job for query %s/%s", accessor.GetNamespace(), accessor.GetName())
+	}
+
+	return result, nil
 }

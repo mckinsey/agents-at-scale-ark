@@ -23,6 +23,7 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark/internal/apiserver/registry"
+	"mckinsey.com/ark/internal/queryworker"
 	"mckinsey.com/ark/internal/storage"
 	"mckinsey.com/ark/internal/storage/postgresql"
 	"mckinsey.com/ark/internal/validation"
@@ -51,6 +52,7 @@ type Config struct {
 	PostgresSSL  string
 	BindPort     int
 	K8sClient    client.Client
+	RiverClient  *queryworker.RiverClient
 }
 
 type Server struct {
@@ -156,7 +158,12 @@ func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, con
 			NewListFunc:  res.NewListFunc,
 		}
 		inner := registry.NewGenericStorage(s.backend, converter, cfg, printerColumns)
-		v1alpha1Storage[res.Resource] = NewAdmissionStorage(inner, v)
+		admission := NewAdmissionStorage(inner, v)
+		if res.Resource == "queries" && s.config.RiverClient != nil {
+			v1alpha1Storage[res.Resource] = NewQueryAdmissionStorage(admission, s.config.RiverClient)
+		} else {
+			v1alpha1Storage[res.Resource] = admission
+		}
 		v1alpha1Storage[res.Resource+"/status"] = registry.NewStatusStorage(s.backend, converter, cfg)
 	}
 	apiGroupInfo.VersionedResourcesStorageMap[arkv1alpha1.GroupVersion.Version] = v1alpha1Storage
