@@ -1,6 +1,6 @@
 import logging
 import pytest
-
+from .dashboard_page import DashboardPage
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
 from datetime import datetime
@@ -42,7 +42,7 @@ class SecretsPage(BasePage):
     def navigate_to_secrets_tab(self) -> None:
         self._close_dialog_if_open()
         
-        from .dashboard_page import DashboardPage
+        
         dashboard = DashboardPage(self.page)
         dashboard.navigate_to_dashboard()
         
@@ -58,7 +58,7 @@ class SecretsPage(BasePage):
             logger.warning(f"Click failed, trying with force: {e}")
             self.page.locator(dashboard.SECRETS_TAB).first.click(force=True)
         
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
     
     def _close_dialog_if_open(self) -> None:
         try:
@@ -122,13 +122,13 @@ class SecretsPage(BasePage):
             popup_visible = False
         
         self.wait_for_modal_close(timeout=10000)
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
         in_table = self.is_secret_in_table(secret_name)
         
         if not in_table:
             logger.warning("Secret not found in table after create, reloading page")
             self.page.reload()
-            self.wait_for_load_state("networkidle")
+            self.wait_for_load_state("domcontentloaded")
             in_table = self.is_secret_in_table(secret_name)
         
         return {
@@ -160,7 +160,7 @@ class SecretsPage(BasePage):
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
         popup_visible = self._check_success_popup()
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
         deleted_from_table = not self.is_secret_in_table(secret_name)
         
         return {

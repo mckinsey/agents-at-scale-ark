@@ -3,6 +3,7 @@ import pytest
 
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
+from .dashboard_page import DashboardPage
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ class TeamsPage(BasePage):
     }
     
     def navigate_to_teams_tab(self) -> None:
-        from .dashboard_page import DashboardPage
+
         dashboard = DashboardPage(self.page)
         dashboard.navigate_to_dashboard()
         
@@ -38,7 +39,7 @@ class TeamsPage(BasePage):
             pytest.skip("Teams tab not visible")
         
         self.page.locator(dashboard.TEAMS_TAB).first.click()
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
     
     def generate_team_name(self, prefix: str = "team") -> str:
         date_str = datetime.now().strftime("%d%m%y%H%M%S")
@@ -146,7 +147,7 @@ class TeamsPage(BasePage):
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
         popup_visible = self._check_success_popup()
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
         deleted_from_table = not self.is_team_in_table(team_name)
         
         return {

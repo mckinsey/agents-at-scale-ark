@@ -1,4 +1,6 @@
 import logging
+import time
+
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
 
@@ -110,7 +112,6 @@ class WorkflowsPage(BasePage):
         return "Unknown"
     
     def wait_for_status(self, expected_status: str, timeout_seconds: int = 60) -> bool:
-        import time
         waited = 0
         
         while waited < timeout_seconds:

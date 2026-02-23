@@ -1,6 +1,8 @@
 import logging
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
+from .dashboard_page import DashboardPage
+
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -29,7 +31,6 @@ class ModelsPage(BasePage):
     }
     
     def navigate_to_models_tab(self) -> None:
-        from .dashboard_page import DashboardPage
         dashboard = DashboardPage(self.page)
 
         self.page.goto(f"{dashboard.base_url}/models")
@@ -86,8 +87,6 @@ class ModelsPage(BasePage):
 
     def create_model_with_verification(self, model_name: str, model_type: str, model: str, secret_name: str, base_url: str) -> dict:
         logger.info(f"Creating {model_type} model: {model_name}")
-
-        from .dashboard_page import DashboardPage
         dashboard = DashboardPage(self.page)
 
         # Navigate directly to /models/new to avoid SPA navigation timing issues.

@@ -3,6 +3,7 @@ import pytest
 
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
+from .dashboard_page import DashboardPage
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -33,7 +34,6 @@ class AgentsPage(BasePage):
     def navigate_to_agents_tab(self) -> None:
         self._close_dialog_if_open()
         
-        from .dashboard_page import DashboardPage
         dashboard = DashboardPage(self.page)
         dashboard.navigate_to_dashboard()
         
@@ -42,7 +42,6 @@ class AgentsPage(BasePage):
         try:
             agents_tab = self.page.locator(dashboard.AGENTS_TAB).first
             if not agents_tab.is_visible(timeout=5000):
-                import pytest
                 pytest.skip("Agents tab not visible")
             
             agents_tab.click(force=True)
@@ -50,7 +49,7 @@ class AgentsPage(BasePage):
             logger.warning(f"Click failed, trying with force: {e}")
             self.page.locator(dashboard.AGENTS_TAB).first.click(force=True)
         
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
     
     def generate_agent_name(self, prefix: str = "agent") -> str:
         date_str = datetime.now().strftime("%d%m%y%H%M%S")
@@ -273,7 +272,7 @@ class AgentsPage(BasePage):
         
         if not in_table:
             self.page.reload()
-            self.wait_for_load_state("networkidle")
+            self.wait_for_load_state("domcontentloaded")
             in_table = self.is_agent_in_table(agent_name)
         
         row_verification = self.verify_agent_in_table_row(agent_name, description, model_name)
@@ -306,7 +305,7 @@ class AgentsPage(BasePage):
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
         popup_visible = self._check_success_popup()
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
         deleted_from_table = not self.is_agent_in_table(agent_name)
         
         return {

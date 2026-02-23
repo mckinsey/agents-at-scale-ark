@@ -2,6 +2,7 @@ import logging
 import pytest
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
+from .dashboard_page import DashboardPage
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -26,7 +27,6 @@ class ToolsPage(BasePage):
     def navigate_to_tools_tab(self) -> None:
         self._close_any_dialog()
         
-        from .dashboard_page import DashboardPage
         dashboard = DashboardPage(self.page)
         dashboard.navigate_to_dashboard()
         

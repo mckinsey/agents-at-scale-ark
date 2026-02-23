@@ -32,7 +32,7 @@ class DashboardPage(BasePage):
     def navigate_to_dashboard(self) -> None:
         if self.base_url not in self.page.url:
             self.page.goto(self.base_url)
-        self.wait_for_load_state("networkidle")
+        self.wait_for_load_state("domcontentloaded")
     
     def is_dashboard_loaded(self) -> bool:
         try:
