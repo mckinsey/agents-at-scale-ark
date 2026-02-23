@@ -1,11 +1,9 @@
 import { Plus } from 'lucide-react';
 
+import { APIKeyDialogs } from '@/components/api-keys/api-keys-dialogs';
 import { APIKeysTable } from '@/components/api-keys/api-keys-table';
 import { useAPIKeysManagement } from '@/components/api-keys/use-api-keys-management';
 import { PageHeader } from '@/components/common/page-header';
-import { AddAPIKeyDialog } from '@/components/dialogs/add-api-key-dialog';
-import { APIKeyCreatedDialog } from '@/components/dialogs/api-key-created-dialog';
-import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { Button } from '@/components/ui/button';
 
 export function ApiKeysSection() {
@@ -79,33 +77,18 @@ export function ApiKeysSection() {
         </main>
       </div>
 
-      <AddAPIKeyDialog
-        open={addDialogOpen}
-        onOpenChange={setAddDialogOpen}
-        onSuccess={handleApiKeyCreated}
-      />
-
-      {createdApiKey && (
-        <APIKeyCreatedDialog
-          open={successDialogOpen}
-          onOpenChange={setSuccessDialogOpen}
-          apiKey={createdApiKey}
-        />
-      )}
-
-      <ConfirmationDialog
-        open={revokeDialogOpen}
-        onOpenChange={setRevokeDialogOpen}
-        title="Revoke API Key"
-        description={
-          apiKeyToRevoke
-            ? `Revoke API key "${apiKeyToRevoke.name}" (${apiKeyToRevoke.public_key})? This action cannot be undone and will immediately invalidate the key.`
-            : ''
-        }
-        confirmText={deleteAPIKeyMutation.isPending ? 'Revoking...' : 'Revoke'}
-        cancelText="Cancel"
-        onConfirm={confirmRevoke}
-        variant="destructive"
+      <APIKeyDialogs
+        addDialogOpen={addDialogOpen}
+        setAddDialogOpen={setAddDialogOpen}
+        successDialogOpen={successDialogOpen}
+        setSuccessDialogOpen={setSuccessDialogOpen}
+        revokeDialogOpen={revokeDialogOpen}
+        setRevokeDialogOpen={setRevokeDialogOpen}
+        createdApiKey={createdApiKey}
+        apiKeyToRevoke={apiKeyToRevoke}
+        handleApiKeyCreated={handleApiKeyCreated}
+        confirmRevoke={confirmRevoke}
+        isRevoking={deleteAPIKeyMutation.isPending}
       />
     </>
   );
