@@ -86,10 +86,11 @@ spec:
 # PATTERN 2: A2A-Native Message Input (Recommended)
 # ==============================================================================
 # Enhanced pattern using A2A message format for richer communication.
-# Requires ark.mckinsey.com/a2a-experimental-enabled: "true" annotation on:
+# Requires ark.mckinsey.com/execution-mode: "a2a" annotation on:
 # - The Tool resource
 # - The target Agent resource
 # - The coordinator Agent resource (or Query)
+# Legacy alternative remains supported: ark.mckinsey.com/a2a-experimental-enabled: "true"
 
 # 5. A2A-enabled Research Agent
 apiVersion: ark.mckinsey.com/v1alpha1
@@ -98,7 +99,7 @@ metadata:
   name: research-agent-a2a
   namespace: default
   annotations:
-    ark.mckinsey.com/a2a-experimental-enabled: "true"
+    ark.mckinsey.com/execution-mode: "a2a"
 spec:
   description: "A2A-enabled research agent with rich message support"
   prompt: |
@@ -119,7 +120,7 @@ metadata:
   name: analysis-agent-a2a
   namespace: default
   annotations:
-    ark.mckinsey.com/a2a-experimental-enabled: "true"
+    ark.mckinsey.com/execution-mode: "a2a"
 spec:
   description: "A2A-enabled analysis agent with rich message support"
   prompt: |
@@ -139,7 +140,7 @@ kind: Tool
 metadata:
   name: call-research-agent-a2a
   annotations:
-    ark.mckinsey.com/a2a-experimental-enabled: "true"
+    ark.mckinsey.com/execution-mode: "a2a"
 spec:
   type: agent
   description: "Delegate research tasks with rich A2A messages, history, and context"
@@ -184,7 +185,7 @@ kind: Tool
 metadata:
   name: call-analysis-agent-a2a
   annotations:
-    ark.mckinsey.com/a2a-experimental-enabled: "true"
+    ark.mckinsey.com/execution-mode: "a2a"
 spec:
   type: agent
   description: "Delegate analysis tasks with rich A2A messages, history, and context"
@@ -230,7 +231,7 @@ metadata:
   name: coordinator-agent-a2a
   namespace: default
   annotations:
-    ark.mckinsey.com/a2a-experimental-enabled: "true"
+    ark.mckinsey.com/execution-mode: "a2a"
 spec:
   description: "A2A-enabled coordinator that orchestrates research and analysis workflows"
   prompt: |

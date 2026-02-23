@@ -17,6 +17,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/config"
 	"mckinsey.com/ark/internal/genai"
 )
 
@@ -282,12 +283,22 @@ var _ = Describe("Query Controller Message Serialization", func() {
 
 			jsonStr, err := serializeMessages(nil, a2aMessages, genai.A2APayloadModeNative)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(jsonStr).To(ContainSubstring(`"structured":"payload"`))
 
 			var decoded []protocol.Message
 			Expect(json.Unmarshal([]byte(jsonStr), &decoded)).To(Succeed())
 			Expect(decoded).To(HaveLen(1))
 			Expect(decoded[0].Role).To(Equal(protocol.MessageRoleUser))
-			Expect(genai.ExtractA2ATextFromMessage(decoded[0])).To(ContainSubstring(`"structured":"payload"`))
+		})
+
+		It("should not flatten DataPart content into extracted text", func() {
+			message := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+				protocol.NewDataPart(map[string]any{
+					"structured": "payload",
+				}),
+			})
+
+			Expect(genai.ExtractA2ATextFromMessage(message)).To(BeEmpty())
 		})
 
 		It("should default to OpenAI format when payload mode is explicitly compat", func() {
@@ -405,5 +416,84 @@ var _ = Describe("Query Controller Delegated A2A Aggregation", func() {
 		Expect(response.A2A).NotTo(BeNil())
 		Expect(response.A2A.ContextID).To(Equal("ctx-fallback"))
 		Expect(response.A2A.TaskID).To(Equal("task-latest"))
+	})
+})
+
+var _ = Describe("Query Controller Execution Mode Routing", func() {
+	cfgWithExecutionMode := func(mode string) *config.Config {
+		cfg := config.Load()
+		cfg.SetDefaultExecutionMode(mode)
+		return cfg
+	}
+
+	It("uses query annotation for query mode selection", func() {
+		queryAnnotations := map[string]string{
+			"ark.mckinsey.com/execution-mode": "a2a",
+		}
+		Expect(resolveQueryA2AMode(queryAnnotations, cfgWithExecutionMode("chat-completions"))).To(BeTrue())
+	})
+
+	It("prefers query explicit override over agent annotations", func() {
+		queryAnnotations := map[string]string{
+			"ark.mckinsey.com/execution-mode": "chat-completions",
+		}
+		agentAnnotations := map[string]string{
+			"ark.mckinsey.com/a2a-experimental-enabled": "true",
+		}
+
+		Expect(resolveAgentA2AMode(queryAnnotations, agentAnnotations, cfgWithExecutionMode("a2a"))).To(BeFalse())
+	})
+
+	It("uses agent annotation when query has no explicit mode", func() {
+		queryAnnotations := map[string]string{}
+		agentAnnotations := map[string]string{
+			"ark.mckinsey.com/a2a-experimental-enabled": "yes",
+		}
+
+		Expect(resolveAgentA2AMode(queryAnnotations, agentAnnotations, cfgWithExecutionMode("chat-completions"))).To(BeTrue())
+	})
+
+	It("ignores invalid query execution-mode and falls back to agent annotation", func() {
+		queryAnnotations := map[string]string{
+			"ark.mckinsey.com/execution-mode": "invalid",
+		}
+		agentAnnotations := map[string]string{
+			"ark.mckinsey.com/a2a-experimental-enabled": "yes",
+		}
+
+		Expect(resolveAgentA2AMode(queryAnnotations, agentAnnotations, cfgWithExecutionMode("chat-completions"))).To(BeTrue())
+	})
+
+	It("ignores invalid query execution-mode and falls back to config", func() {
+		queryAnnotations := map[string]string{
+			"ark.mckinsey.com/execution-mode": "invalid",
+		}
+		agentAnnotations := map[string]string{}
+
+		Expect(resolveAgentA2AMode(queryAnnotations, agentAnnotations, cfgWithExecutionMode("a2a"))).To(BeTrue())
+	})
+
+	It("uses query override for team mode selection when explicit", func() {
+		queryAnnotations := map[string]string{
+			"ark.mckinsey.com/a2a-experimental-enabled": "false",
+		}
+
+		Expect(resolveTeamA2AMode(queryAnnotations, genai.A2APayloadModeNative, cfgWithExecutionMode("a2a"))).To(BeFalse())
+	})
+
+	It("uses team payload mode when query has no explicit mode", func() {
+		queryAnnotations := map[string]string{}
+
+		Expect(resolveTeamA2AMode(queryAnnotations, genai.A2APayloadModeNative, cfgWithExecutionMode("chat-completions"))).To(BeTrue())
+		Expect(resolveTeamA2AMode(queryAnnotations, genai.A2APayloadModeCompat, cfgWithExecutionMode("a2a"))).To(BeFalse())
+	})
+
+	It("ignores invalid query execution-mode and keeps team payload mode behavior", func() {
+		queryAnnotations := map[string]string{
+			"ark.mckinsey.com/execution-mode": "invalid",
+		}
+
+		Expect(resolveTeamA2AMode(queryAnnotations, genai.A2APayloadModeNative, cfgWithExecutionMode("chat-completions"))).To(BeTrue())
+		Expect(resolveTeamA2AMode(queryAnnotations, genai.A2APayloadModeCompat, cfgWithExecutionMode("a2a"))).To(BeFalse())
 	})
 })

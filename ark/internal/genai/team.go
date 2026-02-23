@@ -12,6 +12,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
+	"mckinsey.com/ark/internal/config"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
 )
@@ -329,7 +330,7 @@ func MakeTeam(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Tea
 		return nil, err
 	}
 
-	payloadMode := ResolvePayloadMode(crd.Annotations, nil, agentAnnotations)
+	payloadMode := ResolvePayloadMode(crd.Annotations, nil, agentAnnotations, config.Global())
 
 	return &Team{
 		Name:              crd.Name,

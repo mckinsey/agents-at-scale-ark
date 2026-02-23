@@ -32,4 +32,3 @@ func TestProcessAssistantMessagePreservesToolCallFunctionName(t *testing.T) {
 	require.Equal(t, "filesystem-list-directory", msg.OfAssistant.ToolCalls[0].Function.Name)
 	require.Equal(t, `{"path":"issues"}`, msg.OfAssistant.ToolCalls[0].Function.Arguments)
 }
-

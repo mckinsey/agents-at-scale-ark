@@ -1,10 +1,12 @@
 # A2A Experimental Features
 
-This directory contains experimental A2A (Agent-to-Agent) features that require the annotation:
+This directory contains experimental A2A (Agent-to-Agent) features that require A2A mode opt-in:
 
 ```yaml
 annotations:
-  ark.mckinsey.com/a2a-experimental-enabled: "true"
+  ark.mckinsey.com/execution-mode: "a2a"
+  # Legacy alternative:
+  # ark.mckinsey.com/a2a-experimental-enabled: "true"
 ```
 
 ## ⚠️ Experimental Status
@@ -22,11 +24,11 @@ All features in this directory are **experimental** and:
 
 ## Rollback Procedure
 
-If the `a2a-experimental-enabled` annotation feature needs to be rolled back:
+If A2A experimental mode opt-in needs to be rolled back:
 
 1. **Remove this directory**: `rm -rf samples/a2a-experimental/`
 2. **Remove experimental tests**: `rm -rf tests/a2a-experimental-*`
-3. **Revert controller changes** that check for the annotation
+3. **Revert controller changes** that check A2A mode annotations
 4. **Update documentation** to remove references to experimental features
 
 ## Testing

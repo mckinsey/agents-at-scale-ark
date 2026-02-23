@@ -14,6 +14,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
+	"mckinsey.com/ark/internal/config"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
 )
@@ -134,7 +135,7 @@ func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Messag
 
 func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Message, history []Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	if !HasA2AExperimentalEnabledInContext(ctx) {
-		ctx = WithA2AExperimentalEnabled(ctx, IsA2AExperimentalEnabled(a.Annotations))
+		ctx = WithA2AExperimentalEnabled(ctx, IsA2AEnabled(a.Annotations, config.Global()))
 	}
 	a2aEngine := NewA2AExecutionEngine(a.client, a.eventing.A2aRecorder())
 	contextID := GetA2AContextID(ctx)

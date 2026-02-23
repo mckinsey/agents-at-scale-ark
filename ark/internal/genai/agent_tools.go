@@ -13,6 +13,7 @@ import (
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/config"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
 )
@@ -290,7 +291,7 @@ type delegatedInvocation struct {
 }
 
 func resolveDelegationMode(ctx context.Context, targetAnnotations map[string]string) string {
-	return ResolveDelegationPayloadMode(ctx, targetAnnotations)
+	return ResolveDelegationPayloadMode(ctx, targetAnnotations, config.Global())
 }
 
 func parseLegacyDelegationInput(arguments map[string]any, targetType, targetName string) (delegatedInvocation, string, error) {

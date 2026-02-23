@@ -5,23 +5,30 @@ import (
 	"strings"
 
 	arkann "mckinsey.com/ark/internal/annotations"
+	"mckinsey.com/ark/internal/config"
 )
 
-func ResolvePayloadMode(teamAnnotations, queryAnnotations map[string]string, agentAnnotations []map[string]string) string {
-	if ResolveA2AExperimentalEnabled(teamAnnotations, queryAnnotations, agentAnnotations) {
+func ResolvePayloadMode(teamAnnotations, queryAnnotations map[string]string, agentAnnotations []map[string]string, cfg *config.Config) string {
+	if ResolveA2AExperimentalEnabled(teamAnnotations, queryAnnotations, agentAnnotations, cfg) {
 		return A2APayloadModeNative
 	}
 	return A2APayloadModeCompat
 }
 
-func ResolveA2AExperimentalEnabled(teamAnnotations, queryAnnotations map[string]string, agentAnnotations []map[string]string) bool {
-	if enabled, hasValue := GetA2AExperimentalEnabled(teamAnnotations); hasValue {
+func ResolveA2AExperimentalEnabled(teamAnnotations, queryAnnotations map[string]string, agentAnnotations []map[string]string, cfg *config.Config) bool {
+	if enabled, hasValue := getA2AEnabledFromAnnotations(teamAnnotations); hasValue {
 		return enabled
 	}
-	if enabled, hasValue := GetA2AExperimentalEnabled(queryAnnotations); hasValue {
+	if enabled, hasValue := getA2AEnabledFromAnnotations(queryAnnotations); hasValue {
 		return enabled
 	}
-	return scanAgentA2AExperimentalEnabled(agentAnnotations)
+	if enabled, hasValue := scanAgentA2AEnabled(agentAnnotations); hasValue {
+		return enabled
+	}
+	if cfg != nil {
+		return strings.TrimSpace(strings.ToLower(cfg.GetDefaultExecutionMode())) == "a2a"
+	}
+	return false
 }
 
 func IsA2AExperimentalEnabled(annotations map[string]string) bool {
@@ -51,26 +58,29 @@ func GetA2AExperimentalEnabled(annotations map[string]string) (bool, bool) {
 	}
 }
 
-func scanAgentA2AExperimentalEnabled(agentAnnotations []map[string]string) bool {
+func scanAgentA2AEnabled(agentAnnotations []map[string]string) (bool, bool) {
 	hasExplicitEnabled := false
 	for _, ann := range agentAnnotations {
-		enabled, hasValue := GetA2AExperimentalEnabled(ann)
+		enabled, hasValue := getA2AEnabledFromAnnotations(ann)
 		if !hasValue {
 			continue
 		}
 		if !enabled {
-			return false
+			return false, true
 		}
 		hasExplicitEnabled = true
 	}
-	return hasExplicitEnabled
+	if hasExplicitEnabled {
+		return true, true
+	}
+	return false, false
 }
 
-func ResolveDelegationPayloadMode(ctx context.Context, targetAnnotations map[string]string) string {
+func ResolveDelegationPayloadMode(ctx context.Context, targetAnnotations map[string]string, cfg *config.Config) string {
 	if HasA2APayloadModeInContext(ctx) {
 		return GetA2APayloadModeFromContext(ctx)
 	}
-	if IsA2AExperimentalEnabled(targetAnnotations) {
+	if IsA2AEnabled(targetAnnotations, cfg) {
 		return A2APayloadModeNative
 	}
 	return A2APayloadModeCompat

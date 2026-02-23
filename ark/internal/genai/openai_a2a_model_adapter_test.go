@@ -470,4 +470,3 @@ func TestConvertA2AMessagesToCompatExperimentalMatchesLegacyForTextOnlyTraffic(t
 	require.NoError(t, err)
 	assert.JSONEq(t, string(legacyJSON), string(experimentalJSON))
 }
-

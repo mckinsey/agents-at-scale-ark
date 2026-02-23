@@ -16,6 +16,7 @@ import (
 
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	arkann "mckinsey.com/ark/internal/annotations"
+	"mckinsey.com/ark/internal/config"
 	"mckinsey.com/ark/internal/eventing"
 )
 
@@ -220,7 +221,7 @@ func resolveA2AExperimentalExecutionEnabled(ctx context.Context, agentAnnotation
 	if HasA2AExperimentalEnabledInContext(ctx) {
 		return IsA2AExperimentalEnabledInContext(ctx)
 	}
-	return IsA2AExperimentalEnabled(agentAnnotations)
+	return IsA2AEnabled(agentAnnotations, config.Global())
 }
 
 func (e *A2AExecutionEngine) tryA2AStreamingExecution(ctx context.Context, address string, headers []arkv1prealpha1.Header, namespace string, agentAnnotations map[string]string, agentName, queryName, contextID string, userInput protocol.Message, metadata map[string]interface{}, eventStream EventStreamInterface, payloadMode string, a2aServer *arkv1prealpha1.A2AServer, includeOpenAIMessages bool) (*ExecutionResult, bool, error) {

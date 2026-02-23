@@ -24,6 +24,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
+	"mckinsey.com/ark/internal/config"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	"mckinsey.com/ark/internal/genai"
 	"mckinsey.com/ark/internal/telemetry"
@@ -222,7 +223,7 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	opCtx = r.Eventing.QueryRecorder().StartTokenCollection(opCtx)
 	opCtx = r.Eventing.QueryRecorder().Start(opCtx, "QueryExecution", fmt.Sprintf("Executing query %s", obj.Name), nil)
 
-	if genai.IsA2AExperimentalEnabled(obj.Annotations) {
+	if resolveQueryA2AMode(obj.Annotations, config.Global()) {
 		inputMessages, err := genai.GetQueryInputA2AMessages(opCtx, obj, impersonatedClient)
 		if err == nil {
 			queryInput := genai.ExtractA2AUserMessageContent(inputMessages)
@@ -812,11 +813,7 @@ func (r *QueryReconciler) dispatchAgent(ctx context.Context, query arkv1alpha1.Q
 		return nil, genai.A2APayloadModeCompat, fmt.Errorf("unable to get %v, error:%w", agentKey, err)
 	}
 
-	agentAnnotations := []map[string]string(nil)
-	if shouldIncludeAgentAnnotationsForA2A(agentCRD.Annotations) {
-		agentAnnotations = []map[string]string{agentCRD.Annotations}
-	}
-	useA2A := genai.ResolveA2AExperimentalEnabled(nil, query.Annotations, agentAnnotations)
+	useA2A := resolveAgentA2AMode(query.Annotations, agentCRD.Annotations, config.Global())
 	payloadMode := genai.A2APayloadModeCompat
 	if useA2A {
 		payloadMode = genai.A2APayloadModeNative
@@ -834,11 +831,36 @@ func (r *QueryReconciler) dispatchAgent(ctx context.Context, query arkv1alpha1.Q
 	return result, payloadMode, err
 }
 
-func shouldIncludeAgentAnnotationsForA2A(agentAnnotations map[string]string) bool {
-	if agentAnnotations == nil {
+func hasExplicitA2AModeAnnotation(resourceAnnotations map[string]string) bool {
+	if resourceAnnotations == nil {
 		return false
 	}
-	return agentAnnotations[annotations.A2AServerAddress] != "" || agentAnnotations[annotations.A2AExperimentalEnabled] != ""
+	if _, hasValue := genai.GetA2AEnabledFromExecutionMode(resourceAnnotations); hasValue {
+		return true
+	}
+	_, hasLegacyValue := genai.GetA2AExperimentalEnabled(resourceAnnotations)
+	return hasLegacyValue
+}
+
+func resolveQueryA2AMode(queryAnnotations map[string]string, cfg *config.Config) bool {
+	return genai.IsA2AEnabled(queryAnnotations, cfg)
+}
+
+func resolveAgentA2AMode(queryAnnotations, agentAnnotations map[string]string, cfg *config.Config) bool {
+	if hasExplicitA2AModeAnnotation(queryAnnotations) {
+		return genai.IsA2AEnabled(queryAnnotations, cfg)
+	}
+	if hasExplicitA2AModeAnnotation(agentAnnotations) {
+		return genai.IsA2AEnabled(agentAnnotations, cfg)
+	}
+	return genai.IsA2AEnabled(nil, cfg)
+}
+
+func resolveTeamA2AMode(queryAnnotations map[string]string, teamPayloadMode string, cfg *config.Config) bool {
+	if hasExplicitA2AModeAnnotation(queryAnnotations) {
+		return genai.IsA2AEnabled(queryAnnotations, cfg)
+	}
+	return teamPayloadMode == genai.A2APayloadModeNative
 }
 
 func (r *QueryReconciler) dispatchTeam(ctx context.Context, query arkv1alpha1.Query, teamName string, impersonatedClient client.Client, memory genai.MemoryInterface, eventStream genai.EventStreamInterface, span telemetry.Span) (*genai.ExecutionResult, string, error) {
@@ -853,10 +875,7 @@ func (r *QueryReconciler) dispatchTeam(ctx context.Context, query arkv1alpha1.Qu
 		return nil, genai.A2APayloadModeCompat, fmt.Errorf("unable to make team %v, error:%w", teamKey, err)
 	}
 
-	experimentalEnabled := team.PayloadMode == genai.A2APayloadModeNative
-	if queryExperimentalEnabled, hasValue := genai.GetA2AExperimentalEnabled(query.Annotations); hasValue {
-		experimentalEnabled = queryExperimentalEnabled
-	}
+	experimentalEnabled := resolveTeamA2AMode(query.Annotations, team.PayloadMode, config.Global())
 	payloadMode := genai.A2APayloadModeCompat
 	if experimentalEnabled {
 		payloadMode = genai.A2APayloadModeNative
