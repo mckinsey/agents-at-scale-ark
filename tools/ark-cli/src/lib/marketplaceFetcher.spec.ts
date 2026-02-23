@@ -1,14 +1,15 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 import type {AnthropicMarketplaceManifest} from '../types/marketplace.js';
 import type {AxiosResponse, AxiosRequestConfig} from 'axios';
 
-const mockAxiosGet = jest.fn<
-  (
-    url: string,
-    config?: AxiosRequestConfig
-  ) => Promise<AxiosResponse<AnthropicMarketplaceManifest>>
->();
-jest.unstable_mockModule('axios', () => ({
+const mockAxiosGet =
+  vi.fn<
+    (
+      url: string,
+      config?: AxiosRequestConfig
+    ) => Promise<AxiosResponse<AnthropicMarketplaceManifest>>
+  >();
+vi.mock('axios', () => ({
   default: {
     get: mockAxiosGet,
     isAxiosError: (error: unknown) => {
@@ -22,10 +23,10 @@ jest.unstable_mockModule('axios', () => ({
   },
 }));
 
-const mockGetMarketplaceRepoUrl = jest.fn();
-const mockGetMarketplaceRegistry = jest.fn();
+const mockGetMarketplaceRepoUrl = vi.fn();
+const mockGetMarketplaceRegistry = vi.fn();
 
-jest.unstable_mockModule('./config.js', () => ({
+vi.mock('./config.js', () => ({
   getMarketplaceRepoUrl: mockGetMarketplaceRepoUrl,
   getMarketplaceRegistry: mockGetMarketplaceRegistry,
 }));
@@ -38,7 +39,7 @@ const {
 
 describe('marketplaceFetcher', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockAxiosGet.mockClear();
     mockGetMarketplaceRepoUrl.mockReturnValue(
       'https://test-repo.example.com/marketplace'
@@ -109,7 +110,6 @@ describe('marketplaceFetcher', () => {
 
       expect(result).toBeNull();
     });
-
   });
 
   describe('mapMarketplaceItemToArkService', () => {
@@ -286,4 +286,3 @@ describe('marketplaceFetcher', () => {
     });
   });
 });
-
