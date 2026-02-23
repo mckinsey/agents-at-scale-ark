@@ -87,7 +87,7 @@ async def update_export_history(timestamp: datetime, resource_counts: Dict[str, 
 
 
 # Helper functions to reduce cognitive complexity
-async def _filter_resources(
+async def _filter_resources(  # NOSONAR - async for consistency with project guidelines
     resources_list: Any,
     resource_type_key: str,
     resource_ids: Optional[Dict[str, List[str]]]
