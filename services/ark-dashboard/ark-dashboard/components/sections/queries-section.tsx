@@ -310,7 +310,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(
           </div>
         ) : (
           <div className="flex h-full flex-col">
-            <main className="flex-1 space-y-4 overflow-auto p-4">
+            <main className="mt-4 flex-1 space-y-4 overflow-auto">
               <div className="ml-auto">
                 <Button
                   onClick={() => loadQueries()}

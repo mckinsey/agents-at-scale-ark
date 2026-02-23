@@ -1,24 +1,24 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 import {Command} from 'commander';
 
 // Mock execa to avoid real kubectl calls
-jest.unstable_mockModule('execa', () => ({
-  execa: jest.fn(),
+vi.mock('execa', () => ({
+  execa: vi.fn(),
 }));
 
 const mockOutput = {
-  warning: jest.fn(),
-  error: jest.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
 };
-jest.unstable_mockModule('../../lib/output.js', () => ({
+vi.mock('../../lib/output.js', () => ({
   default: mockOutput,
 }));
 
-const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+const mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {
   throw new Error('process.exit called');
 }) as any);
 
-const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
 
 const {execa} = await import('execa');
 const mockExeca = execa as any;
@@ -27,7 +27,7 @@ const {createTargetsCommand} = await import('./index.js');
 
 describe('targets command', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('creates command with correct structure', () => {
