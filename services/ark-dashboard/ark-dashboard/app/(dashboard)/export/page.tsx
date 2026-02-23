@@ -300,7 +300,7 @@ export default function ExportPage() {
                     handleSelectItem(section.type, item.id, !item.selected)
                   }>
                   <Checkbox
-                    checked={item.selected || false}
+                    checked={item.selected ?? false}
                     onCheckedChange={checked =>
                       handleSelectItem(section.type, item.id, !!checked)
                     }
@@ -353,7 +353,7 @@ export default function ExportPage() {
             <div className="flex flex-col gap-2 sm:ml-auto sm:flex-row">
               <Button
                 onClick={handleExportAll}
-                disabled={isExporting || totalCount === 0}
+                disabled={isExporting ?? totalCount === 0}
                 variant="outline"
                 className="w-full sm:w-auto">
                 {isExporting ? (
@@ -365,7 +365,7 @@ export default function ExportPage() {
               </Button>
               <Button
                 onClick={handleExportSelected}
-                disabled={isExporting || selectedCount === 0}
+                disabled={isExporting ?? selectedCount === 0}
                 variant="default"
                 className="w-full sm:w-auto">
                 {isExporting ? (
