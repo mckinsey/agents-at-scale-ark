@@ -1,5 +1,3 @@
-/* Copyright 2025. McKinsey & Company */
-
 package v1
 
 import (
@@ -10,35 +8,34 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
-	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/genai"
+	"mckinsey.com/ark/internal/validation"
 )
 
 var _ = Describe("Model Webhook", func() {
 	var (
-		ctx       context.Context
-		model     *arkv1alpha1.Model
-		validator *ModelValidator
+		ctx        context.Context
+		model      *arkv1alpha1.Model
+		validator  *validation.WebhookValidator
+		fakeClient client.Client
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
 
-		// Create a fake client with scheme
 		scheme := runtime.NewScheme()
 		Expect(arkv1alpha1.AddToScheme(scheme)).To(Succeed())
 		Expect(corev1.AddToScheme(scheme)).To(Succeed())
 
-		fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+		fakeClient = fake.NewClientBuilder().WithScheme(scheme).Build()
 
-		validator = &ModelValidator{
-			Client:    fakeClient,
-			Resolver:  common.NewValueSourceResolver(fakeClient),
-			Validator: &ResourceValidator{Client: fakeClient},
+		validator = &validation.WebhookValidator{
+			V: validation.NewValidator(&validation.WebhookLookup{Client: fakeClient}),
 		}
 
 		model = &arkv1alpha1.Model{
@@ -127,7 +124,6 @@ var _ = Describe("Model Webhook", func() {
 		})
 
 		It("Should fail when referenced Secret key does not exist", func() {
-			// Create a Secret without the expected key
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-secret",
@@ -137,7 +133,7 @@ var _ = Describe("Model Webhook", func() {
 					"wrong-key": []byte("test-value"),
 				},
 			}
-			Expect(validator.Client.Create(ctx, secret)).To(Succeed())
+			Expect(fakeClient.Create(ctx, secret)).To(Succeed())
 
 			model.Spec.Config.OpenAI.APIKey = arkv1alpha1.ValueSource{
 				ValueFrom: &arkv1alpha1.ValueFromSource{
@@ -158,7 +154,6 @@ var _ = Describe("Model Webhook", func() {
 		})
 
 		It("Should succeed when referenced Secret and key exist", func() {
-			// Create a Secret with the expected key
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-secret",
@@ -168,7 +163,7 @@ var _ = Describe("Model Webhook", func() {
 					"api-key": []byte("test-api-key"),
 				},
 			}
-			Expect(validator.Client.Create(ctx, secret)).To(Succeed())
+			Expect(fakeClient.Create(ctx, secret)).To(Succeed())
 
 			model.Spec.Config.OpenAI.APIKey = arkv1alpha1.ValueSource{
 				ValueFrom: &arkv1alpha1.ValueFromSource{
@@ -208,7 +203,6 @@ var _ = Describe("Model Webhook", func() {
 		})
 
 		It("Should fail when referenced ConfigMap key does not exist", func() {
-			// Create a ConfigMap without the expected key
 			configMap := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-configmap",
@@ -218,7 +212,7 @@ var _ = Describe("Model Webhook", func() {
 					"wrong-key": "test-value",
 				},
 			}
-			Expect(validator.Client.Create(ctx, configMap)).To(Succeed())
+			Expect(fakeClient.Create(ctx, configMap)).To(Succeed())
 
 			model.Spec.Config.OpenAI.BaseURL = arkv1alpha1.ValueSource{
 				ValueFrom: &arkv1alpha1.ValueFromSource{
@@ -239,7 +233,6 @@ var _ = Describe("Model Webhook", func() {
 		})
 
 		It("Should succeed when referenced ConfigMap and key exist", func() {
-			// Create a ConfigMap with the expected key
 			configMap := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-configmap",
@@ -249,7 +242,7 @@ var _ = Describe("Model Webhook", func() {
 					"base-url": "https://api.openai.com",
 				},
 			}
-			Expect(validator.Client.Create(ctx, configMap)).To(Succeed())
+			Expect(fakeClient.Create(ctx, configMap)).To(Succeed())
 
 			model.Spec.Config.OpenAI.BaseURL = arkv1alpha1.ValueSource{
 				ValueFrom: &arkv1alpha1.ValueFromSource{
@@ -270,7 +263,6 @@ var _ = Describe("Model Webhook", func() {
 
 	Context("When validating Bedrock models with multiple ValueSource fields", func() {
 		It("Should validate all Bedrock ValueSource fields", func() {
-			// Create necessary Secret and ConfigMap
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "aws-secret",
@@ -282,7 +274,7 @@ var _ = Describe("Model Webhook", func() {
 					"session-token": []byte("session-token-value"),
 				},
 			}
-			Expect(validator.Client.Create(ctx, secret)).To(Succeed())
+			Expect(fakeClient.Create(ctx, secret)).To(Succeed())
 
 			configMap := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
@@ -294,7 +286,7 @@ var _ = Describe("Model Webhook", func() {
 					"model-arn": "arn:aws:bedrock:us-west-2:123456789012:model/anthropic.claude-3-sonnet-20240229-v1:0",
 				},
 			}
-			Expect(validator.Client.Create(ctx, configMap)).To(Succeed())
+			Expect(fakeClient.Create(ctx, configMap)).To(Succeed())
 
 			model.Spec.Provider = genai.ProviderBedrock
 			model.Spec.Config = arkv1alpha1.ModelConfig{
@@ -302,50 +294,40 @@ var _ = Describe("Model Webhook", func() {
 					Region: &arkv1alpha1.ValueSource{
 						ValueFrom: &arkv1alpha1.ValueFromSource{
 							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "aws-config",
-								},
-								Key: "region",
+								LocalObjectReference: corev1.LocalObjectReference{Name: "aws-config"},
+								Key:                  "region",
 							},
 						},
 					},
 					AccessKeyID: &arkv1alpha1.ValueSource{
 						ValueFrom: &arkv1alpha1.ValueFromSource{
 							SecretKeyRef: &corev1.SecretKeySelector{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "aws-secret",
-								},
-								Key: "access-key",
+								LocalObjectReference: corev1.LocalObjectReference{Name: "aws-secret"},
+								Key:                  "access-key",
 							},
 						},
 					},
 					SecretAccessKey: &arkv1alpha1.ValueSource{
 						ValueFrom: &arkv1alpha1.ValueFromSource{
 							SecretKeyRef: &corev1.SecretKeySelector{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "aws-secret",
-								},
-								Key: "secret-key",
+								LocalObjectReference: corev1.LocalObjectReference{Name: "aws-secret"},
+								Key:                  "secret-key",
 							},
 						},
 					},
 					SessionToken: &arkv1alpha1.ValueSource{
 						ValueFrom: &arkv1alpha1.ValueFromSource{
 							SecretKeyRef: &corev1.SecretKeySelector{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "aws-secret",
-								},
-								Key: "session-token",
+								LocalObjectReference: corev1.LocalObjectReference{Name: "aws-secret"},
+								Key:                  "session-token",
 							},
 						},
 					},
 					ModelArn: &arkv1alpha1.ValueSource{
 						ValueFrom: &arkv1alpha1.ValueFromSource{
 							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "aws-config",
-								},
-								Key: "model-arn",
+								LocalObjectReference: corev1.LocalObjectReference{Name: "aws-config"},
+								Key:                  "model-arn",
 							},
 						},
 					},
@@ -369,15 +351,13 @@ var _ = Describe("Model Webhook", func() {
 					"model-name": []byte("gpt-4o"),
 				},
 			}
-			Expect(validator.Client.Create(ctx, secret)).To(Succeed())
+			Expect(fakeClient.Create(ctx, secret)).To(Succeed())
 
 			model.Spec.Model = arkv1alpha1.ValueSource{
 				ValueFrom: &arkv1alpha1.ValueFromSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: "model-secret",
-						},
-						Key: "model-name",
+						LocalObjectReference: corev1.LocalObjectReference{Name: "model-secret"},
+						Key:                  "model-name",
 					},
 				},
 			}
@@ -465,12 +445,12 @@ var _ = Describe("Model Webhook", func() {
 var _ = Describe("Model Defaulter", func() {
 	var (
 		ctx       context.Context
-		defaulter *ModelCustomDefaulter
+		defaulter *validation.WebhookDefaulter
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		defaulter = &ModelCustomDefaulter{}
+		defaulter = &validation.WebhookDefaulter{}
 	})
 
 	Context("When migrating old format models", func() {
@@ -550,11 +530,10 @@ var _ = Describe("Model Defaulter", func() {
 		})
 	})
 
-	Context("When handling invalid input", func() {
-		It("Should return error for non-Model object", func() {
+	Context("When handling non-Model input", func() {
+		It("Should be a no-op for non-Model object", func() {
 			err := defaulter.Default(ctx, &corev1.ConfigMap{})
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("expected a Model object"))
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 })
