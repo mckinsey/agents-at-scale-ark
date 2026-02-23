@@ -85,6 +85,98 @@ async def update_export_history(timestamp: datetime, resource_counts: Dict[str, 
         logger.error(f"Failed to update export history: {e}")
 
 
+# Helper functions to reduce cognitive complexity
+async def _filter_resources(
+    resources_list: Any,
+    resource_type_key: str,
+    resource_ids: Optional[Dict[str, List[str]]]
+) -> List[Dict[str, Any]]:
+    """Filter resources based on resource_ids if provided."""
+    items = []
+    for resource in resources_list:
+        resource_dict = resource.to_dict()
+        resource_name = resource_dict["metadata"]["name"]
+        if not resource_ids or resource_name in resource_ids.get(resource_type_key, []):
+            items.append(resource_dict)
+    return items
+
+
+async def _collect_standard_resource(
+    client: Any,
+    resource_attr: str,
+    resource_type_key: str,
+    resource_ids: Optional[Dict[str, List[str]]]
+) -> List[Dict[str, Any]]:
+    """Collect a standard resource type using the ark client."""
+    resource_client = getattr(client, resource_attr)
+    resources_list = await resource_client.a_list()
+    return await _filter_resources(resources_list, resource_type_key, resource_ids)
+
+
+async def _collect_a2a_servers(
+    namespace: Optional[str],
+    resource_ids: Optional[Dict[str, List[str]]]
+) -> List[Dict[str, Any]]:
+    """Collect A2A servers (uses different API version)."""
+    async with with_ark_client(namespace, "v1prealpha1") as a2a_client:
+        a2a_servers = await a2a_client.a2aservers.a_list()
+        return await _filter_resources(a2a_servers, "a2a", resource_ids)
+
+
+async def _collect_workflows(
+    namespace: Optional[str],
+    resource_ids: Optional[Dict[str, List[str]]]
+) -> List[Dict[str, Any]]:
+    """Collect Argo WorkflowTemplates."""
+    from kubernetes.client import CustomObjectsApi
+    items = []
+
+    custom_api = CustomObjectsApi()
+    try:
+        # Determine namespace
+        if not namespace:
+            try:
+                with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace", "r") as f:
+                    namespace = f.read().strip()
+            except:
+                namespace = "default"
+
+        # Fetch WorkflowTemplates
+        workflow_templates = custom_api.list_namespaced_custom_object(
+            group="argoproj.io",
+            version="v1alpha1",
+            namespace=namespace,
+            plural="workflowtemplates"
+        )
+
+        for template in workflow_templates.get("items", []):
+            template_name = template["metadata"]["name"]
+            if not resource_ids or template_name in resource_ids.get("workflows", []):
+                items.append(template)
+
+    except ApiException as e:
+        if e.status == 404:
+            logger.warning("WorkflowTemplates CRD not found - Argo Workflows may not be installed")
+        else:
+            logger.error(f"Failed to fetch WorkflowTemplates: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error fetching WorkflowTemplates: {e}")
+
+    return items
+
+
+# Resource collection mapping
+RESOURCE_COLLECTORS = {
+    ResourceType.AGENTS: ("agents", "agents"),
+    ResourceType.TEAMS: ("teams", "teams"),
+    ResourceType.MODELS: ("models", "models"),
+    ResourceType.QUERIES: ("queries", "queries"),
+    ResourceType.MCP: ("mcpservers", "mcp"),
+    ResourceType.EVALUATORS: ("evaluators", "evaluators"),
+    ResourceType.EVALUATIONS: ("evaluations", "evaluations"),
+}
+
+
 async def collect_resources(
     resource_types: List[ResourceType],
     namespace: Optional[str] = None,
@@ -95,106 +187,21 @@ async def collect_resources(
 
     async with with_ark_client(namespace, VERSION) as ark_client:
         for resource_type in resource_types:
-            items = []
-
             try:
-                if resource_type == ResourceType.AGENTS:
-                    agents = await ark_client.agents.a_list()
-                    for agent in agents:
-                        agent_dict = agent.to_dict()
-                        if not resource_ids or agent_dict["metadata"]["name"] in resource_ids.get("agents", []):
-                            items.append(agent_dict)
-
-                elif resource_type == ResourceType.TEAMS:
-                    teams = await ark_client.teams.a_list()
-                    for team in teams:
-                        team_dict = team.to_dict()
-                        if not resource_ids or team_dict["metadata"]["name"] in resource_ids.get("teams", []):
-                            items.append(team_dict)
-
-                elif resource_type == ResourceType.MODELS:
-                    models = await ark_client.models.a_list()
-                    for model in models:
-                        model_dict = model.to_dict()
-                        if not resource_ids or model_dict["metadata"]["name"] in resource_ids.get("models", []):
-                            items.append(model_dict)
-
-                elif resource_type == ResourceType.QUERIES:
-                    queries = await ark_client.queries.a_list()
-                    for query in queries:
-                        query_dict = query.to_dict()
-                        if not resource_ids or query_dict["metadata"]["name"] in resource_ids.get("queries", []):
-                            items.append(query_dict)
-
-                elif resource_type == ResourceType.A2A:
-                    # A2A servers use v1prealpha1 version
-                    async with with_ark_client(namespace, "v1prealpha1") as a2a_client:
-                        a2a_servers = await a2a_client.a2aservers.a_list()
-                        for server in a2a_servers:
-                            server_dict = server.to_dict()
-                            if not resource_ids or server_dict["metadata"]["name"] in resource_ids.get("a2a", []):
-                                items.append(server_dict)
-
-                elif resource_type == ResourceType.MCP:
-                    mcp_servers = await ark_client.mcpservers.a_list()
-                    for server in mcp_servers:
-                        server_dict = server.to_dict()
-                        if not resource_ids or server_dict["metadata"]["name"] in resource_ids.get("mcp", []):
-                            items.append(server_dict)
-
+                # Handle special cases
+                if resource_type == ResourceType.A2A:
+                    items = await _collect_a2a_servers(namespace, resource_ids)
                 elif resource_type == ResourceType.WORKFLOWS:
-                    # Export Argo WorkflowTemplates instead of workflow instances
-                    from kubernetes.client import CustomObjectsApi
-                    from kubernetes import config
-                    custom_api = CustomObjectsApi()
-                    try:
-                        # Fetch Argo WorkflowTemplates
-                        group = "argoproj.io"
-                        version = "v1alpha1"
-                        plural = "workflowtemplates"
-
-                        # Always use namespace-scoped listing since ark-api has Role (not ClusterRole)
-                        # Default to the namespace where ark-api is running if none provided
-                        if not namespace:
-                            try:
-                                # Get the namespace from in-cluster config
-                                with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace", "r") as f:
-                                    namespace = f.read().strip()
-                            except:
-                                # Fallback to default namespace
-                                namespace = "default"
-
-                        workflow_templates = custom_api.list_namespaced_custom_object(
-                            group=group,
-                            version=version,
-                            namespace=namespace,
-                            plural=plural
-                        )
-
-                        for template in workflow_templates.get("items", []):
-                            if not resource_ids or template["metadata"]["name"] in resource_ids.get("workflows", []):
-                                items.append(template)
-                    except ApiException as e:
-                        if e.status == 404:
-                            logger.warning("WorkflowTemplates CRD not found - Argo Workflows may not be installed")
-                        else:
-                            logger.error(f"Failed to fetch WorkflowTemplates: {e}")
-                    except Exception as e:
-                        logger.error(f"Unexpected error fetching WorkflowTemplates: {e}")
-
-                elif resource_type == ResourceType.EVALUATORS:
-                    evaluators = await ark_client.evaluators.a_list()
-                    for evaluator in evaluators:
-                        evaluator_dict = evaluator.to_dict()
-                        if not resource_ids or evaluator_dict["metadata"]["name"] in resource_ids.get("evaluators", []):
-                            items.append(evaluator_dict)
-
-                elif resource_type == ResourceType.EVALUATIONS:
-                    evaluations = await ark_client.evaluations.a_list()
-                    for evaluation in evaluations:
-                        evaluation_dict = evaluation.to_dict()
-                        if not resource_ids or evaluation_dict["metadata"]["name"] in resource_ids.get("evaluations", []):
-                            items.append(evaluation_dict)
+                    items = await _collect_workflows(namespace, resource_ids)
+                # Handle standard resources
+                elif resource_type in RESOURCE_COLLECTORS:
+                    client_attr, resource_key = RESOURCE_COLLECTORS[resource_type]
+                    items = await _collect_standard_resource(
+                        ark_client, client_attr, resource_key, resource_ids
+                    )
+                else:
+                    items = []
+                    logger.warning(f"Unknown resource type: {resource_type}")
 
                 resources[resource_type.value] = items
 
