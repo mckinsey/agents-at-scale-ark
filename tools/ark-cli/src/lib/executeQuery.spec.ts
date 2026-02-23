@@ -167,6 +167,75 @@ describe('executeQuery', () => {
       expect(mockStdoutWrite).toHaveBeenCalled();
     });
 
+    it('should pass conversationId to sendMessage when provided', async () => {
+      mockSendMessage.mockImplementation(
+        async (
+          targetId: string,
+          messages: any[],
+          options: any,
+          callback: (
+            chunk: string,
+            toolCalls?: any[],
+            arkMetadata?: any
+          ) => void
+        ) => {
+          callback('Hello', undefined, {agent: 'test-agent'});
+        }
+      );
+
+      await executeQuery({
+        targetType: 'model',
+        targetName: 'default',
+        message: 'Hello',
+        conversationId: 'test-conversation-789',
+      });
+
+      expect(mockSendMessage).toHaveBeenCalledWith(
+        'model/default',
+        [{role: 'user', content: 'Hello'}],
+        {streamingEnabled: true, conversationId: 'test-conversation-789'},
+        expect.any(Function)
+      );
+      expect(mockSpinner.stop).toHaveBeenCalled();
+      expect(mockArkApiProxyInstance.stop).toHaveBeenCalled();
+    });
+
+    it('should pass both sessionId and conversationId to sendMessage when provided', async () => {
+      mockSendMessage.mockImplementation(
+        async (
+          targetId: string,
+          messages: any[],
+          options: any,
+          callback: (
+            chunk: string,
+            toolCalls?: any[],
+            arkMetadata?: any
+          ) => void
+        ) => {
+          callback('Hello', undefined, {agent: 'test-agent'});
+        }
+      );
+
+      await executeQuery({
+        targetType: 'agent',
+        targetName: 'test-agent',
+        message: 'Hello',
+        sessionId: 'test-session-123',
+        conversationId: 'test-conversation-456',
+      });
+
+      expect(mockSendMessage).toHaveBeenCalledWith(
+        'agent/test-agent',
+        [{role: 'user', content: 'Hello'}],
+        {
+          streamingEnabled: true,
+          sessionId: 'test-session-123',
+          conversationId: 'test-conversation-456',
+        },
+        expect.any(Function)
+      );
+    });
+
     it('should display agent names with correct formatting', async () => {
       mockSendMessage.mockImplementation(
         async (
@@ -383,6 +452,88 @@ describe('executeQuery', () => {
         expect.arrayContaining(['apply', '-f', '-']),
         expect.any(Object)
       );
+    });
+
+    it('should include conversationId in query manifest when outputFormat is specified', async () => {
+      mockExeca.mockImplementation(async (command: string, args: string[]) => {
+        if (args.includes('apply')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        if (args.includes('wait')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        return {stdout: '', stderr: '', exitCode: 0};
+      });
+
+      await executeQuery({
+        targetType: 'model',
+        targetName: 'default',
+        message: 'Hello',
+        outputFormat: 'name',
+        conversationId: 'test-conversation-789',
+      });
+
+      const applyCall = mockExeca.mock.calls.find((call: any[]) =>
+        call[1]?.includes('apply')
+      );
+      expect(applyCall).toBeDefined();
+      const manifest = JSON.parse(applyCall![2].input);
+      expect(manifest.spec.conversationId).toBe('test-conversation-789');
+    });
+
+    it('should include both sessionId and conversationId in query manifest', async () => {
+      mockExeca.mockImplementation(async (command: string, args: string[]) => {
+        if (args.includes('apply')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        if (args.includes('wait')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        return {stdout: '', stderr: '', exitCode: 0};
+      });
+
+      await executeQuery({
+        targetType: 'agent',
+        targetName: 'test-agent',
+        message: 'Hello',
+        outputFormat: 'name',
+        sessionId: 'test-session-123',
+        conversationId: 'test-conversation-456',
+      });
+
+      const applyCall = mockExeca.mock.calls.find((call: any[]) =>
+        call[1]?.includes('apply')
+      );
+      expect(applyCall).toBeDefined();
+      const manifest = JSON.parse(applyCall![2].input);
+      expect(manifest.spec.sessionId).toBe('test-session-123');
+      expect(manifest.spec.conversationId).toBe('test-conversation-456');
+    });
+
+    it('should not include conversationId in manifest when not provided', async () => {
+      mockExeca.mockImplementation(async (command: string, args: string[]) => {
+        if (args.includes('apply')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        if (args.includes('wait')) {
+          return {stdout: '', stderr: '', exitCode: 0};
+        }
+        return {stdout: '', stderr: '', exitCode: 0};
+      });
+
+      await executeQuery({
+        targetType: 'model',
+        targetName: 'default',
+        message: 'Hello',
+        outputFormat: 'name',
+      });
+
+      const applyCall = mockExeca.mock.calls.find((call: any[]) =>
+        call[1]?.includes('apply')
+      );
+      expect(applyCall).toBeDefined();
+      const manifest = JSON.parse(applyCall![2].input);
+      expect(manifest.spec.conversationId).toBeUndefined();
     });
 
     it('should output json format', async () => {
