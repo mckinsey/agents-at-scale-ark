@@ -296,9 +296,17 @@ export default function ExportPage() {
                 <div
                   key={item.id}
                   className="hover:bg-muted/50 flex cursor-pointer items-center gap-2 rounded-lg border p-2 sm:gap-3 sm:p-3"
+                  role="button"
+                  tabIndex={0}
                   onClick={() =>
                     handleSelectItem(section.type, item.id, !item.selected)
-                  }>
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      handleSelectItem(section.type, item.id, !item.selected)
+                    }
+                  }}>
                   <Checkbox
                     checked={item.selected ?? false}
                     onCheckedChange={checked =>
