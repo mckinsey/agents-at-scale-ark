@@ -619,9 +619,7 @@ const ChatUI: React.FC<ChatUIProps> = ({
         (chunk: string, toolCalls?: ToolCall[], arkMetadata?: ArkMetadata) => {
           // Extract A2A context ID from response
           // Chat TUI always queries a single target, so contextId is in response
-          if (
-            arkMetadata?.completedQuery?.status?.response?.a2a?.contextId
-          ) {
+          if (arkMetadata?.completedQuery?.status?.response?.a2a?.contextId) {
             a2aContextIdRef.current =
               arkMetadata.completedQuery.status.response.a2a.contextId;
           }

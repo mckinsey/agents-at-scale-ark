@@ -278,8 +278,8 @@ func (m *HTTPMemory) GetMessages(ctx context.Context) ([]Message, error) {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	messages := make([]Message, 0, len(response.Messages))
-	for i, record := range response.Messages {
+	messages := make([]Message, 0, len(response.Items))
+	for i, record := range response.Items {
 		openaiMessage, err := unmarshalMessageRobust(record.Message)
 		if err != nil {
 			operationData := map[string]string{"result": fmt.Sprintf("Failed to unmarshal message at index %d: %v", i, err)}
