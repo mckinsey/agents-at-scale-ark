@@ -30,6 +30,8 @@ COPY --from=builder --chown=root:root --chmod=755 /workspace/proto ./proto
 
 USER nodejs
 
+ENV NODE_ENV=production
+
 EXPOSE 8080
 
 CMD ["node", "dist/main.js"]
