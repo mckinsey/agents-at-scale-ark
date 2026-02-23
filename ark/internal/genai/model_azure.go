@@ -16,59 +16,55 @@ type azureAuthResult struct {
 	workloadIdentity *AzureWorkloadIdentityConfig
 }
 
-func resolveAzureAuth(ctx context.Context, resolver *common.ValueSourceResolver, config *arkv1alpha1.AzureModelConfig, namespace string) (*azureAuthResult, error) {
-	result := &azureAuthResult{}
+func resolveAzureAuthDeprecated(ctx context.Context, resolver *common.ValueSourceResolver, config *arkv1alpha1.AzureModelConfig, namespace string) (*azureAuthResult, error) {
+	if config.APIKey == nil {
+		return nil, fmt.Errorf("spec.config.azure.apiKey or spec.config.azure.auth is required")
+	}
+	logf.FromContext(ctx).Info("DEPRECATION WARNING: spec.config.azure.apiKey is deprecated, use spec.config.azure.auth.apiKey instead")
+	apiKey, err := resolver.ResolveValueSource(ctx, *config.APIKey, namespace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve Azure apiKey: %w", err)
+	}
+	return &azureAuthResult{apiKey: apiKey}, nil
+}
 
-	if config.Auth == nil {
-		if config.APIKey == nil {
-			return nil, fmt.Errorf("spec.config.azure.apiKey or spec.config.azure.auth is required")
-		}
-		log := logf.FromContext(ctx)
-		log.Info("DEPRECATION WARNING: spec.config.azure.apiKey is deprecated, use spec.config.azure.auth.apiKey instead")
-		apiKey, err := resolver.ResolveValueSource(ctx, *config.APIKey, namespace)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve Azure apiKey: %w", err)
-		}
-		result.apiKey = apiKey
-		return result, nil
+func resolveAzureAuthFromAuth(ctx context.Context, resolver *common.ValueSourceResolver, auth *arkv1alpha1.AzureAuth, namespace string) (*azureAuthResult, error) {
+	n := 0
+	if auth.APIKey != nil {
+		n++
 	}
-
-	authMethodCount := 0
-	if config.Auth.APIKey != nil {
-		authMethodCount++
+	if auth.ManagedIdentity != nil {
+		n++
 	}
-	if config.Auth.ManagedIdentity != nil {
-		authMethodCount++
+	if auth.WorkloadIdentity != nil {
+		n++
 	}
-	if config.Auth.WorkloadIdentity != nil {
-		authMethodCount++
-	}
-	if authMethodCount != 1 {
+	if n != 1 {
 		return nil, fmt.Errorf("exactly one authentication method must be specified in auth (apiKey, managedIdentity, or workloadIdentity)")
 	}
-
+	result := &azureAuthResult{}
 	switch {
-	case config.Auth.APIKey != nil:
-		apiKey, err := resolver.ResolveValueSource(ctx, *config.Auth.APIKey, namespace)
+	case auth.APIKey != nil:
+		apiKey, err := resolver.ResolveValueSource(ctx, *auth.APIKey, namespace)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve Azure apiKey: %w", err)
 		}
 		result.apiKey = apiKey
-	case config.Auth.ManagedIdentity != nil:
+	case auth.ManagedIdentity != nil:
 		result.managedIdentity = &AzureManagedIdentityConfig{}
-		if config.Auth.ManagedIdentity.ClientID != nil {
-			clientID, err := resolver.ResolveValueSource(ctx, *config.Auth.ManagedIdentity.ClientID, namespace)
+		if auth.ManagedIdentity.ClientID != nil {
+			clientID, err := resolver.ResolveValueSource(ctx, *auth.ManagedIdentity.ClientID, namespace)
 			if err != nil {
 				return nil, fmt.Errorf("failed to resolve managed identity clientID: %w", err)
 			}
 			result.managedIdentity.ClientID = clientID
 		}
-	case config.Auth.WorkloadIdentity != nil:
-		clientID, err := resolver.ResolveValueSource(ctx, config.Auth.WorkloadIdentity.ClientID, namespace)
+	case auth.WorkloadIdentity != nil:
+		clientID, err := resolver.ResolveValueSource(ctx, auth.WorkloadIdentity.ClientID, namespace)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve workload identity clientID: %w", err)
 		}
-		tenantID, err := resolver.ResolveValueSource(ctx, config.Auth.WorkloadIdentity.TenantID, namespace)
+		tenantID, err := resolver.ResolveValueSource(ctx, auth.WorkloadIdentity.TenantID, namespace)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve workload identity tenantID: %w", err)
 		}
@@ -77,8 +73,14 @@ func resolveAzureAuth(ctx context.Context, resolver *common.ValueSourceResolver,
 			TenantID: tenantID,
 		}
 	}
-
 	return result, nil
+}
+
+func resolveAzureAuth(ctx context.Context, resolver *common.ValueSourceResolver, config *arkv1alpha1.AzureModelConfig, namespace string) (*azureAuthResult, error) {
+	if config.Auth == nil {
+		return resolveAzureAuthDeprecated(ctx, resolver, config, namespace)
+	}
+	return resolveAzureAuthFromAuth(ctx, resolver, config.Auth, namespace)
 }
 
 func loadAzureConfig(ctx context.Context, resolver *common.ValueSourceResolver, config *arkv1alpha1.AzureModelConfig, namespace string, model *Model, additionalHeaders map[string]string) error {

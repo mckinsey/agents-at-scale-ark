@@ -44,9 +44,8 @@ export function createConfig(
         };
       } else if (formValues.azureAuthMethod === 'managedIdentity') {
         azureConfig.auth = {
-          managedIdentity:
-            formValues.azureClientId ?
-              { clientId: { value: formValues.azureClientId } }
+          managedIdentity: formValues.azureClientId
+            ? { clientId: { value: formValues.azureClientId } }
             : {},
         };
       } else if (formValues.azureAuthMethod === 'workloadIdentity') {
@@ -106,8 +105,7 @@ export function getResetValues(currentFormValues: FormValues): FormValues {
         name: currentFormValues.name,
         provider: currentFormValues.provider,
         model: currentFormValues.model,
-        azureAuthMethod:
-          currentFormValues.azureAuthMethod ?? 'apiKey',
+        azureAuthMethod: currentFormValues.azureAuthMethod ?? 'apiKey',
         secret: currentFormValues.secret ?? '',
         baseUrl: currentFormValues.baseUrl ?? '',
         azureApiVersion: currentFormValues.azureApiVersion ?? '',
@@ -182,7 +180,7 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
       let secret = '';
       let azureClientId = '';
       let azureTenantId = '';
-      if (auth?.apiKey != null) {
+      if (auth?.apiKey !== undefined && auth?.apiKey !== null) {
         azureAuthMethod = 'apiKey';
         secret =
           getConfigValue<string>(model.config, [
@@ -193,7 +191,10 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
             'secretKeyRef',
             'name',
           ]) || '';
-      } else if (auth?.managedIdentity != null) {
+      } else if (
+        auth?.managedIdentity !== undefined &&
+        auth?.managedIdentity !== null
+      ) {
         azureAuthMethod = 'managedIdentity';
         azureClientId =
           getConfigValue<string>(model.config, [
@@ -203,7 +204,10 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
             'clientId',
             'value',
           ]) || '';
-      } else if (auth?.workloadIdentity != null) {
+      } else if (
+        auth?.workloadIdentity !== undefined &&
+        auth?.workloadIdentity !== null
+      ) {
         azureAuthMethod = 'workloadIdentity';
         azureClientId =
           getConfigValue<string>(model.config, [

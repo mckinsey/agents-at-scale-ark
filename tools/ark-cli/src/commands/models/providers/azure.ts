@@ -85,6 +85,9 @@ export class AzureConfigCollector implements ProviderConfigCollector {
     }
 
     let authMethod = azureOptions.authMethod;
+    if (!authMethod && azureOptions.apiKey) {
+      authMethod = 'apiKey';
+    }
     if (!authMethod) {
       const answer = await inquirer.prompt([
         {

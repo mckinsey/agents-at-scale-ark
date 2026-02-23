@@ -34,6 +34,7 @@ describe('AzureConfigCollector', () => {
         modelValue: 'gpt-4o-mini',
         secretName: '',
         baseUrl: 'https://my-resource.openai.azure.com',
+        authMethod: 'apiKey',
         apiKey: 'azure-key-12345',
         apiVersion: '2024-12-01-preview',
       });
@@ -43,6 +44,7 @@ describe('AzureConfigCollector', () => {
       mockInquirer.prompt.mockResolvedValueOnce({
         apiVersion: '2024-12-01-preview',
       });
+      mockInquirer.prompt.mockResolvedValueOnce({authMethod: 'apiKey'});
       mockInquirer.prompt.mockResolvedValueOnce({apiKey: 'azure-key'});
 
       const options = {
@@ -68,6 +70,7 @@ describe('AzureConfigCollector', () => {
         baseUrl: 'https://contoso.openai.azure.com',
       });
       mockInquirer.prompt.mockResolvedValueOnce({apiVersion: '2024-10-01'});
+      mockInquirer.prompt.mockResolvedValueOnce({authMethod: 'apiKey'});
       mockInquirer.prompt.mockResolvedValueOnce({apiKey: 'azure-key'});
 
       const options = {
@@ -123,6 +126,7 @@ describe('AzureConfigCollector', () => {
       mockInquirer.prompt.mockResolvedValueOnce({
         apiVersion: '2024-12-01-preview',
       });
+      mockInquirer.prompt.mockResolvedValueOnce({authMethod: 'apiKey'});
       mockInquirer.prompt.mockResolvedValueOnce({apiKey: 'azure-key'});
 
       await collector.collectConfig(options);
@@ -142,6 +146,9 @@ describe('AzureConfigCollector', () => {
     });
 
     it('prompts for missing apiKey as password field', async () => {
+      mockInquirer.prompt.mockResolvedValueOnce({
+        authMethod: 'apiKey',
+      });
       mockInquirer.prompt.mockResolvedValueOnce({
         apiKey: 'azure-secret-key',
       });
@@ -167,6 +174,7 @@ describe('AzureConfigCollector', () => {
     });
 
     it('validates apiKey is required', async () => {
+      mockInquirer.prompt.mockResolvedValueOnce({authMethod: 'apiKey'});
       mockInquirer.prompt.mockResolvedValueOnce({apiKey: ''});
 
       const options = {
@@ -187,14 +195,11 @@ describe('AzureConfigCollector', () => {
         apiVersion: '2024-12-01-preview',
       };
 
-      // Get the validate function from the prompt call
+      mockInquirer.prompt.mockResolvedValueOnce({authMethod: 'apiKey'});
       mockInquirer.prompt.mockImplementationOnce(async (questions: any) => {
         const validate = questions[0].validate;
 
-        // Test empty string
         expect(validate('')).toBe('API key is required');
-
-        // Test valid key
         expect(validate('valid-azure-key')).toBe(true);
 
         return {apiKey: 'valid-azure-key'};
@@ -211,6 +216,9 @@ describe('AzureConfigCollector', () => {
         apiVersion: '2024-08-01-preview',
       });
       mockInquirer.prompt.mockResolvedValueOnce({
+        authMethod: 'apiKey',
+      });
+      mockInquirer.prompt.mockResolvedValueOnce({
         apiKey: 'abc123def456',
       });
 
@@ -225,12 +233,16 @@ describe('AzureConfigCollector', () => {
         modelValue: 'gpt-4o',
         secretName: '',
         baseUrl: 'https://eastus.openai.azure.com',
+        authMethod: 'apiKey',
         apiKey: 'abc123def456',
         apiVersion: '2024-08-01-preview',
       });
     });
 
     it('mixes CLI options and interactive prompts', async () => {
+      mockInquirer.prompt.mockResolvedValueOnce({
+        authMethod: 'apiKey',
+      });
       mockInquirer.prompt.mockResolvedValueOnce({
         apiKey: 'prompted-key',
       });
@@ -248,6 +260,7 @@ describe('AzureConfigCollector', () => {
         modelValue: 'gpt-35-turbo',
         secretName: '',
         baseUrl: 'https://westeurope.openai.azure.com',
+        authMethod: 'apiKey',
         apiKey: 'prompted-key',
         apiVersion: '2024-06-01',
       });
@@ -270,6 +283,7 @@ describe('AzureConfigCollector', () => {
       mockInquirer.prompt.mockResolvedValueOnce({
         apiVersion: '2024-12-01-preview',
       });
+      mockInquirer.prompt.mockResolvedValueOnce({authMethod: 'apiKey'});
       mockInquirer.prompt.mockResolvedValueOnce({apiKey: 'azure-key'});
 
       const options = {
