@@ -181,7 +181,7 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
     return (
       <>
         <div className="flex h-full flex-col">
-          <main className="flex-1 overflow-auto p-6">
+          <main className="mt-4 flex-1 overflow-auto">
             <div className="grid gap-6 pb-6 md:grid-cols-2 lg:grid-cols-3">
               {teams.map(team => (
                 <TeamCard
