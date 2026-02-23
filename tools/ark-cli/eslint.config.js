@@ -33,6 +33,7 @@ export default [
         'error',
         {
           argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
           caughtErrorsIgnorePattern: '^_',
         },
       ],
@@ -51,7 +52,7 @@ export default [
     files: ['**/*.spec.{ts,tsx}', '**/*.test.{ts,tsx}'],
     languageOptions: {
       globals: {
-        ...globals.jest,
+        ...globals.vitest,
         console: 'readonly',
         process: 'readonly',
       },
