@@ -626,13 +626,13 @@ class EventEvaluationProvider(EvaluationProvider):
             if session_id:
                 try:
                     msg_data = json.loads(event_dict['message'])
-                    # Only include events from this session
+                    # If message is JSON, only include events from this session if the sessionId matches
                     if msg_data.get('Metadata', {}).get('sessionId') != session_id:
                         continue
                 except (json.JSONDecodeError, KeyError, TypeError):
-                    # Skip events without proper JSON or sessionId
-                    continue
-                    
+                    # If message is not JSON or doesn't have sessionId, include the event anyway
+                    # Most query controller events use plain text messages without sessionId
+                    pass
             event_list.append(event_dict)
         
         logger.info(f"Filtered to {len(event_list)} events for session {session_id}")

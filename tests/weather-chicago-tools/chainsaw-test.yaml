@@ -147,8 +147,6 @@ spec:
     - script:
         content: |
           echo "Waiting for mock server to initialize..."
-          # Give MockServer time to load expectations
-          sleep 10
           
           MOCK_URL="http://mock-weather-api.$NAMESPACE.svc.cluster.local"
           echo "Testing mock server at: $MOCK_URL"
