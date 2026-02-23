@@ -97,6 +97,20 @@ const resourceSections: ResourceSection[] = [
   },
 ];
 
+// Helper function to get abbreviated title for mobile view
+const getAbbreviatedTitle = (type: ResourceType, title: string): string => {
+  switch (type) {
+    case 'evaluations':
+      return 'Evals';
+    case 'evaluators':
+      return 'Eval.';
+    case 'workflows':
+      return 'Flows';
+    default:
+      return title.slice(0, 5);
+  }
+};
+
 export default function ExportPage() {
   const [resources, setResources] = useState<ResourceExportData>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -239,7 +253,7 @@ export default function ExportPage() {
   };
 
   const renderResourceSection = (section: ResourceSection) => {
-    const allItems = resources[section.type] || [];
+    const allItems = resources[section.type] ?? [];
 
     // Filter items based on search query
     const items = searchQuery
@@ -385,7 +399,7 @@ export default function ExportPage() {
               onValueChange={value => setActiveTab(value as ResourceType)}>
               <TabsList className="h-auto w-full flex-wrap justify-start gap-1 p-1">
                 {resourceSections.map(section => {
-                  const allItems = resources[section.type] || [];
+                  const allItems = resources[section.type] ?? [];
                   // Filter items based on search query
                   const filteredItems = searchQuery
                     ? allItems.filter(item =>
@@ -403,13 +417,7 @@ export default function ExportPage() {
                       <Icon className="h-3 w-3 sm:h-4 sm:w-4" />
                       <span className="hidden sm:inline">{section.title}</span>
                       <span className="sm:hidden">
-                        {section.type === 'evaluations'
-                          ? 'Evals'
-                          : section.type === 'evaluators'
-                            ? 'Eval.'
-                            : section.type === 'workflows'
-                              ? 'Flows'
-                              : section.title.slice(0, 5)}
+                        {getAbbreviatedTitle(section.type, section.title)}
                       </span>
                       <span className="text-[10px] opacity-70 sm:text-xs">
                         ({filteredItems.length})
