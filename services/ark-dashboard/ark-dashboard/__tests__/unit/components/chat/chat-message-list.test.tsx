@@ -435,7 +435,7 @@ describe('ChatMessageList', () => {
         isProcessing: false,
       });
 
-      expect(screen.getByText('End of graph')).toBeInTheDocument();
+      expect(screen.getByText('Conversation ended')).toBeInTheDocument();
     });
 
     it('should not render end of graph while processing', () => {
@@ -455,7 +455,7 @@ describe('ChatMessageList', () => {
         isProcessing: true,
       });
 
-      expect(screen.queryByText('End of graph')).not.toBeInTheDocument();
+      expect(screen.queryByText('Conversation ended')).not.toBeInTheDocument();
     });
 
     it('should not render transitions for non-graph strategy', () => {
@@ -479,7 +479,7 @@ describe('ChatMessageList', () => {
         graphEdges,
       });
 
-      expect(screen.queryByText('End of graph')).not.toBeInTheDocument();
+      expect(screen.queryByText('Conversation ended')).not.toBeInTheDocument();
     });
 
     it('should not render graph end when termination event exists', () => {
@@ -509,7 +509,7 @@ describe('ChatMessageList', () => {
         isProcessing: false,
       });
 
-      expect(screen.queryByText('End of graph')).not.toBeInTheDocument();
+      expect(screen.queryByText('Conversation ended')).not.toBeInTheDocument();
     });
 
     it('should render graph strategy indicator', () => {

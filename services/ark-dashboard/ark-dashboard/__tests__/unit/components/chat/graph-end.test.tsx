@@ -4,10 +4,10 @@ import { describe, expect, it } from 'vitest';
 import { GraphEnd } from '@/components/chat/graph-end';
 
 describe('GraphEnd', () => {
-  it('should render "End of graph"', () => {
+  it('should render "Conversation ended because agent graph has no outgoing edges"', () => {
     render(<GraphEnd />);
 
-    expect(screen.getByText('End of graph')).toBeInTheDocument();
+    expect(screen.getByText('Conversation ended because agent graph has no outgoing edges')).toBeInTheDocument();
   });
 
   it('should apply custom className', () => {
