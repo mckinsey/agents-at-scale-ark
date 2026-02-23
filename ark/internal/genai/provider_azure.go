@@ -75,10 +75,7 @@ func (ap *AzureProvider) A2ATurnNative(
 	if err != nil {
 		return nil, fmt.Errorf("azure native turn: failed to convert A2A messages: %w", err)
 	}
-	outcomeMessages := a2aToolOutcomesToOpenAI(toolOutcomes)
-	if len(outcomeMessages) > 0 {
-		compatMessages = append(compatMessages, outcomeMessages...)
-	}
+	compatMessages = normalizeAssistantToolCallMessages(compatMessages, buildToolOutcomeContentByID(toolOutcomes))
 	openAITools := a2aToolDefsToOpenAI(tools)
 	response, err := ap.ChatCompletion(ctx, compatMessages, 1, openAITools)
 	if err != nil {
