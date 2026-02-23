@@ -78,10 +78,10 @@ class TeamsPage(BasePage):
         try:
             trigger = self.page.locator("[role='combobox'], button:has-text('Select a strategy')").first
             trigger.click()
-            self.wait_for_timeout(500)
+            self.page.locator("[role='option']").first.wait_for(state="visible", timeout=5000)
             option = self.page.locator(f"[role='option']:has-text('{strategy}')").first
             option.click()
-            self.wait_for_timeout(500)
+            self.page.locator("[role='option']").first.wait_for(state="hidden", timeout=5000)
         except Exception as e:
             logger.warning(f"Could not select strategy: {e}")
 
@@ -90,10 +90,10 @@ class TeamsPage(BasePage):
             max_turns_field.first.fill(max_turns)
 
         logger.info(f"Selecting member: {member_name}")
-        self.wait_for_timeout(1000)
 
         try:
             member_checkbox = self.page.locator(f"label:has-text('{member_name}') >> xpath=../preceding-sibling::button[@role='checkbox'], div:has-text('{member_name}') button[role='checkbox']").first
+            member_checkbox.wait_for(state="visible", timeout=10000)
             if member_checkbox.is_visible():
                 member_checkbox.click()
             else:
@@ -109,14 +109,11 @@ class TeamsPage(BasePage):
             except:
                 pass
 
-        self.wait_for_timeout(1000)
-
         logger.info("Clicking Create Team button")
         save_button = self.page.locator("button:has-text('Create Team')").first
         save_button.click()
 
-        self.wait_for_load_state("domcontentloaded")
-        self.wait_for_timeout(2000)
+        self.wait_for_load_state("networkidle")
 
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=10000)
@@ -124,9 +121,7 @@ class TeamsPage(BasePage):
         except:
             popup_visible = False
 
-        self.wait_for_timeout(2000)
         self.navigate_to_teams_tab()
-        self.wait_for_timeout(2000)
 
         in_table = self.is_team_in_table(team_name)
 
@@ -158,10 +153,10 @@ class TeamsPage(BasePage):
             max_turns_fields.first.fill(max_turns)
 
         logger.info(f"Selecting member: {member_name}")
-        self.wait_for_timeout(1000)
 
         try:
             checkbox = self.page.locator(f"tr:has-text('{member_name}') input[type='checkbox'], div:has-text('{member_name}') input[type='checkbox'], label:has-text('{member_name}') input[type='checkbox']").first
+            checkbox.wait_for(state="visible", timeout=10000)
             if checkbox.is_visible():
                 checkbox.check()
             else:
@@ -171,8 +166,6 @@ class TeamsPage(BasePage):
         except Exception as e:
             logger.warning(f"Could not select member checkbox: {e}")
 
-        self.wait_for_timeout(1000)
-
         save_button = self.page.locator("[role='dialog'] button:has-text('Create'), [data-slot='dialog-content'] button:has-text('Create')").first
         if not save_button.is_visible():
             save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
@@ -181,8 +174,7 @@ class TeamsPage(BasePage):
         save_button.scroll_into_view_if_needed()
         save_button.evaluate("el => el.click()")
 
-        self.wait_for_load_state("domcontentloaded")
-        self.wait_for_timeout(2000)
+        self.wait_for_load_state("networkidle")
 
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
@@ -195,11 +187,9 @@ class TeamsPage(BasePage):
         except:
             logger.info("Dialog may still be open, pressing Escape")
             self.page.keyboard.press("Escape")
-            self.wait_for_timeout(1000)
+            self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=5000)
 
-        self.wait_for_timeout(1000)
         self.navigate_to_teams_tab()
-        self.wait_for_timeout(2000)
 
         in_table = self.is_team_in_table(team_name)
 
