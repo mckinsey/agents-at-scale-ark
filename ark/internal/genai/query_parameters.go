@@ -181,9 +181,21 @@ func GetQueryInputA2AMessages(ctx context.Context, query arkv1alpha1.Query, k8sC
 	}
 
 	if queryType != RoleUser {
+		openAIMessages, openAIParseErr := query.Spec.GetInputMessages()
+		if openAIParseErr == nil {
+			messages, convErr := convertOpenAIInputToA2AMessages(openAIMessages)
+			if convErr == nil {
+				return messages, nil
+			}
+			openAIParseErr = fmt.Errorf("failed to convert OpenAI messages to A2A: %w", convErr)
+		}
+
 		var messages []protocol.Message
 		if err := json.Unmarshal(query.Spec.Input.Raw, &messages); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal input as A2A messages: %w", err)
+			return nil, fmt.Errorf("failed to parse input messages as OpenAI (%v) or A2A (%w)", openAIParseErr, err)
+		}
+		if err := validateA2AInputMessages(messages); err != nil {
+			return nil, fmt.Errorf("failed to parse input messages as OpenAI (%v) or valid A2A (%w)", openAIParseErr, err)
 		}
 		return messages, nil
 	}
@@ -203,6 +215,30 @@ func GetQueryInputA2AMessages(ctx context.Context, query arkv1alpha1.Query, k8sC
 			protocol.NewTextPart(resolvedInput),
 		}),
 	}, nil
+}
+
+func convertOpenAIInputToA2AMessages(messages []Message) ([]protocol.Message, error) {
+	converted := make([]protocol.Message, 0, len(messages))
+	for i := range messages {
+		msg, err := OpenAIToA2AMessage(messages[i])
+		if err != nil {
+			return nil, fmt.Errorf("message %d: %w", i, err)
+		}
+		converted = append(converted, msg)
+	}
+	return converted, nil
+}
+
+func validateA2AInputMessages(messages []protocol.Message) error {
+	for i := range messages {
+		if messages[i].Role == "" {
+			return fmt.Errorf("message %d missing role", i)
+		}
+		if len(messages[i].Parts) == 0 {
+			return fmt.Errorf("message %d missing parts", i)
+		}
+	}
+	return nil
 }
 
 // toAnyMap converts map[string]string to map[string]any

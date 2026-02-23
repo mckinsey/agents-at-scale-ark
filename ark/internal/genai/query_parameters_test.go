@@ -346,7 +346,61 @@ func TestGetQueryInputA2AMessages(t *testing.T) {
 	require.NoError(t, corev1.AddToScheme(scheme))
 	require.NoError(t, arkv1alpha1.AddToScheme(scheme))
 
-	t.Run("messages type uses A2A input directly", func(t *testing.T) {
+	t.Run("messages type converts OpenAI input into A2A messages", func(t *testing.T) {
+		k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+		assistant := openai.AssistantMessage("let me check")
+		assistant.OfAssistant.ToolCalls = []openai.ChatCompletionMessageToolCallParam{
+			{
+				ID:   "call_123",
+				Type: "function",
+				Function: openai.ChatCompletionMessageToolCallFunctionParam{
+					Name:      "lookup_weather",
+					Arguments: `{"city":"Berlin"}`,
+				},
+			},
+		}
+
+		input := []openai.ChatCompletionMessageParamUnion{
+			openai.UserMessage("hello"),
+			assistant,
+			openai.ToolMessage(`{"temperature":21}`, "call_123"),
+		}
+
+		query := arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-query",
+				Namespace: "test-ns",
+			},
+			Spec: arkv1alpha1.QuerySpec{
+				Type: "messages",
+			},
+		}
+		err := query.Spec.SetInputMessages(input)
+		require.NoError(t, err)
+
+		messages, err := GetQueryInputA2AMessages(ctx, query, k8sClient)
+		require.NoError(t, err)
+		require.Len(t, messages, 3)
+		assert.Equal(t, protocol.MessageRoleUser, messages[0].Role)
+		assert.Equal(t, "hello", ExtractA2ATextFromMessage(messages[0]))
+
+		assert.Equal(t, protocol.MessageRoleAgent, messages[1].Role)
+		assert.Equal(t, "let me check", ExtractA2ATextFromMessage(messages[1]))
+		toolCalls := extractToolCallsFromParts(messages[1].Parts)
+		require.Len(t, toolCalls, 1)
+		assert.Equal(t, "call_123", toolCalls[0].ID)
+		assert.Equal(t, "lookup_weather", toolCalls[0].Function.Name)
+		assert.Equal(t, `{"city":"Berlin"}`, toolCalls[0].Function.Arguments)
+
+		assert.Equal(t, protocol.MessageRoleAgent, messages[2].Role)
+		toolResult, ok := extractToolResultPayloadFromParts(messages[2].Parts)
+		require.True(t, ok)
+		assert.Equal(t, "call_123", toolResult.ToolCallID)
+		assert.Equal(t, `{"temperature":21}`, toolResult.Content)
+	})
+
+	t.Run("messages type uses A2A input directly when valid", func(t *testing.T) {
 		k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 		input := []protocol.Message{
@@ -376,6 +430,27 @@ func TestGetQueryInputA2AMessages(t *testing.T) {
 		assert.Equal(t, "hello", ExtractA2ATextFromMessage(messages[0]))
 		assert.Equal(t, protocol.MessageRoleAgent, messages[1].Role)
 		assert.Equal(t, "world", ExtractA2ATextFromMessage(messages[1]))
+	})
+
+	t.Run("messages type fails for malformed payloads", func(t *testing.T) {
+		k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+		query := arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-query",
+				Namespace: "test-ns",
+			},
+			Spec: arkv1alpha1.QuerySpec{
+				Type: "messages",
+				Input: runtime.RawExtension{
+					Raw: []byte(`[{"parts":[{"kind":"text","text":"hello"}]}]`),
+				},
+			},
+		}
+
+		_, err := GetQueryInputA2AMessages(ctx, query, k8sClient)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to parse input messages")
 	})
 
 	t.Run("user type resolves text input into a user message", func(t *testing.T) {

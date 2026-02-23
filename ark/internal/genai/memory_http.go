@@ -413,7 +413,7 @@ func (m *HTTPMemory) Close() error {
 	return nil
 }
 
-// unmarshalMessageRobust tries discriminated union first, then falls back to simple role/content extraction
+// unmarshalMessageRobust prefers native A2A payloads, then OpenAI payloads, then simple role/content fallback.
 func unmarshalMessageRobust(rawJSON json.RawMessage) (protocol.Message, error) {
 	if len(rawJSON) == 0 {
 		return protocol.Message{}, fmt.Errorf("empty message payload")
@@ -425,6 +425,14 @@ func unmarshalMessageRobust(rawJSON json.RawMessage) (protocol.Message, error) {
 	var message protocol.Message
 	if err := json.Unmarshal(rawJSON, &message); err == nil && message.Role != "" && len(message.Parts) > 0 {
 		return message, nil
+	}
+
+	var openAIMessage Message
+	if err := json.Unmarshal(rawJSON, &openAIMessage); err == nil {
+		converted, convErr := OpenAIToA2AMessage(openAIMessage)
+		if convErr == nil && converted.Role != "" && len(converted.Parts) > 0 {
+			return converted, nil
+		}
 	}
 
 	var simple simpleMessage

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -140,6 +141,40 @@ func TestUnmarshalMessageRobust(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUnmarshalMessageRobustPreservesOpenAIToolCalls(t *testing.T) {
+	rawJSON := json.RawMessage(`{"role":"assistant","content":"let me check","tool_calls":[{"id":"call_123","type":"function","function":{"name":"lookup_weather","arguments":"{\"city\":\"Berlin\"}"}}]}`)
+
+	result, err := unmarshalMessageRobust(rawJSON)
+	require.NoError(t, err)
+	assert.Equal(t, protocol.MessageRoleAgent, result.Role)
+	assert.Equal(t, "let me check", extractTextFromParts(result.Parts))
+
+	toolCalls := extractToolCallsFromParts(result.Parts)
+	require.Len(t, toolCalls, 1)
+	assert.Equal(t, "call_123", toolCalls[0].ID)
+	assert.Equal(t, "lookup_weather", toolCalls[0].Function.Name)
+	assert.Equal(t, `{"city":"Berlin"}`, toolCalls[0].Function.Arguments)
+}
+
+func TestUnmarshalMessageRobustPreservesOpenAIToolCallID(t *testing.T) {
+	rawJSON := json.RawMessage(`{"role":"tool","tool_call_id":"call_123","content":"{\"temperature\":21}"}`)
+
+	result, err := unmarshalMessageRobust(rawJSON)
+	require.NoError(t, err)
+	assert.Equal(t, protocol.MessageRoleAgent, result.Role)
+
+	toolResult, ok := extractToolResultPayloadFromParts(result.Parts)
+	require.True(t, ok)
+	assert.Equal(t, "call_123", toolResult.ToolCallID)
+	assert.Equal(t, `{"temperature":21}`, toolResult.Content)
+
+	recovered, err := A2AToOpenAIMessage(result)
+	require.NoError(t, err)
+	require.NotNil(t, recovered.OfTool)
+	assert.Equal(t, "call_123", recovered.OfTool.ToolCallID)
+	assert.Equal(t, `{"temperature":21}`, recovered.OfTool.Content.OfString.Value)
 }
 
 func TestUnmarshalMessageRobustFutureRoles(t *testing.T) {
