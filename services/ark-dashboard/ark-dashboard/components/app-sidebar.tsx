@@ -23,6 +23,7 @@ import {
   Settings,
   Sun,
   Workflow,
+  Wrench,
   Zap,
 } from 'lucide-react';
 import Image from 'next/image';
@@ -357,6 +358,15 @@ export function AppSidebar() {
                 isActive={getCurrentSection() === 'mcp'}>
                 <Server />
                 <span>MCPs</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={() => navigateToSection('tools')}
+                isActive={getCurrentSection() === 'tools'}>
+                <Wrench />
+                <span>Tools</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
 

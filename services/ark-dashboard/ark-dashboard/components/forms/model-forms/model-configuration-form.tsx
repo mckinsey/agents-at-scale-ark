@@ -10,7 +10,7 @@ import {
   useState,
 } from 'react';
 import type { Control, UseFormReturn, UseFormSetValue } from 'react-hook-form';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
@@ -265,41 +265,124 @@ function AzureSpecificFields({
   isSecretsPending,
   secrets,
 }: AzureSpecificFieldsProps) {
+  const { initialAzureAuthMethod } = useModelConfigurationForm();
+  const watchedAuthMethod = useWatch({
+    control,
+    name: 'azureAuthMethod',
+  });
+  const azureAuthMethod =
+    watchedAuthMethod ?? initialAzureAuthMethod ?? 'apiKey';
   return (
     <>
       <FormField
         control={control}
-        name="secret"
+        name="azureAuthMethod"
         render={({ field }) => (
           <FormItem>
-            <FormLabel>API Key</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value}>
+            <FormLabel>Authentication</FormLabel>
+            <Select
+              onValueChange={field.onChange}
+              value={field.value ?? 'apiKey'}>
               <FormControl>
-                <div className="flex gap-4">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a secret" />
-                  </SelectTrigger>
-                  <CreateNewSecretButton fieldName="secret" />
-                </div>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select auth method" />
+                </SelectTrigger>
               </FormControl>
               <SelectContent>
-                {isSecretsPending ? (
-                  <Spinner size="sm" className="mx-auto my-2" />
-                ) : (
-                  <>
-                    {secrets?.map(secret => (
-                      <SelectItem key={secret.name} value={secret.name}>
-                        {secret.name}
-                      </SelectItem>
-                    ))}
-                  </>
-                )}
+                <SelectItem value="apiKey">API Key</SelectItem>
+                <SelectItem value="managedIdentity">
+                  Managed Identity
+                </SelectItem>
+                <SelectItem value="workloadIdentity">
+                  Workload Identity
+                </SelectItem>
               </SelectContent>
             </Select>
+            <FormDescription>
+              API Key: use a secret. Managed Identity: AKS node identity.
+              Workload Identity: K8s ServiceAccount federated to Azure.
+            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
       />
+      {azureAuthMethod === 'apiKey' ? (
+        <FormField
+          control={control}
+          name="secret"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>API Key</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <div className="flex gap-4">
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a secret" />
+                    </SelectTrigger>
+                    <CreateNewSecretButton fieldName="secret" />
+                  </div>
+                </FormControl>
+                <SelectContent>
+                  {isSecretsPending ? (
+                    <Spinner size="sm" className="mx-auto my-2" />
+                  ) : (
+                    <>
+                      {secrets?.map(secret => (
+                        <SelectItem key={secret.name} value={secret.name}>
+                          {secret.name}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      ) : (
+        <>
+          <FormField
+            control={control}
+            name="azureClientId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                  Client ID
+                  {azureAuthMethod === 'managedIdentity' ? ' (optional)' : ''}
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    value={field.value ?? ''}
+                    placeholder="Azure Managed Identity client ID (GUID)"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          {azureAuthMethod === 'workloadIdentity' && (
+            <FormField
+              control={control}
+              name="azureTenantId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tenant ID</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      value={field.value ?? ''}
+                      placeholder="Azure AD tenant ID (GUID)"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+        </>
+      )}
       <FormField
         control={control}
         name="baseUrl"

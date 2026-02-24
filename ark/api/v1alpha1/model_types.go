@@ -16,12 +16,39 @@ type ModelConfig struct {
 	Bedrock *BedrockModelConfig `json:"bedrock,omitempty"`
 }
 
+// AzureAuth represents authentication configuration for Azure OpenAI
+type AzureAuth struct {
+	// +kubebuilder:validation:Optional
+	APIKey *ValueSource `json:"apiKey,omitempty"`
+	// +kubebuilder:validation:Optional
+	ManagedIdentity *AzureManagedIdentity `json:"managedIdentity,omitempty"`
+	// +kubebuilder:validation:Optional
+	WorkloadIdentity *AzureWorkloadIdentity `json:"workloadIdentity,omitempty"`
+}
+
+// AzureManagedIdentity configures Azure Managed Identity authentication
+type AzureManagedIdentity struct {
+	// +kubebuilder:validation:Optional
+	ClientID *ValueSource `json:"clientId,omitempty"`
+}
+
+// AzureWorkloadIdentity configures Azure Workload Identity authentication
+type AzureWorkloadIdentity struct {
+	// +kubebuilder:validation:Required
+	ClientID ValueSource `json:"clientId"`
+	// +kubebuilder:validation:Required
+	TenantID ValueSource `json:"tenantId"`
+}
+
 // AzureModelConfig contains Azure OpenAI specific parameters
 type AzureModelConfig struct {
 	// +kubebuilder:validation:Required
 	BaseURL ValueSource `json:"baseUrl"`
-	// +kubebuilder:validation:Required
-	APIKey ValueSource `json:"apiKey"`
+	// +kubebuilder:validation:Optional
+	Auth *AzureAuth `json:"auth,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Deprecated: Use auth.apiKey instead
+	APIKey *ValueSource `json:"apiKey,omitempty"`
 	// +kubebuilder:validation:Optional
 	APIVersion *ValueSource `json:"apiVersion,omitempty"`
 	// +kubebuilder:validation:Optional

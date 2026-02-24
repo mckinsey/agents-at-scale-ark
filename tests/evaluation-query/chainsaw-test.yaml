@@ -23,6 +23,8 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
+    - script:
+        content: bash ../helpers/wait-for-evaluator.sh
     - apply:
         file: manifests/a00-evaluator-llm-rbac.yaml
     - apply:
@@ -37,24 +39,24 @@ spec:
         file: manifests/a05-agent.yaml
     - apply:
         file: manifests/a06-query.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          metadata:
-            name: test-query-model
-          status:
-            conditions:
-            - type: ModelAvailable
-              status: "True"
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Evaluator
-          metadata:
-            name: test-query-evaluator
-          status:
-            phase: ready
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-query-model
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Evaluator
+        timeout: 3m
+        name: test-query-evaluator
+        for:
+          jsonPath:
+            path: '{.status.phase}'
+            value: 'ready'
     - assert:
         resource:
           apiVersion: v1
@@ -93,9 +95,9 @@ spec:
         timeout: 5m
         name: test-query-ref-evaluation
         for:
-          jsonPath:
-            path: '{.status.phase}'
-            value: 'done'
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
