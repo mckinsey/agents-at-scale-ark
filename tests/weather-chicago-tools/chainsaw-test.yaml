@@ -31,16 +31,15 @@ spec:
         file: manifests/a01-secret.yaml
     - apply:
         file: manifests/a02-model.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          metadata:
-            name: weather-default-model
-          status:
-            conditions:
-            - type: ModelAvailable
-              status: "True"
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: weather-default-model
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True' 
     - assert:
         resource:
           apiVersion: apps/v1
@@ -57,12 +56,14 @@ spec:
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluator
-        timeout: 5m
+        timeout: 3m
         name: evaluator-llm
         for:
           jsonPath:
             path: '{.status.phase}'
             value: 'ready'
+    - script:
+        content: bash ../helpers/wait-for-evaluator.sh
     # Create tools using kubectl with template substitution
     - script:
         content: |
@@ -146,8 +147,6 @@ spec:
     - script:
         content: |
           echo "Waiting for mock server to initialize..."
-          # Give MockServer time to load expectations
-          sleep 10
           
           MOCK_URL="http://mock-weather-api.$NAMESPACE.svc.cluster.local"
           echo "Testing mock server at: $MOCK_URL"
@@ -166,36 +165,26 @@ spec:
           kind: Agent
           metadata:
             name: chicago-weather-agent
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: chicago-weather-query
-          status:
-            phase: done
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        timeout: 5m
+        name: chicago-weather-query
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     - apply:
-       file: manifests/weather-tools-event-evaluation.yaml
+        file: manifests/weather-tools-event-evaluation.yaml
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
-        timeout: 10m
+        timeout: 2m
         name: weather-tools-event-evaluation
         for:
-          jsonPath:
-            path: '{.status.phase}'
-            value: 'done'
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Evaluation
-          metadata:
-            name: weather-tools-event-evaluation
-          status:
-            phase: done
-            (type(score) == 'string'): true
-            (to_number(score) >= `0.0` && to_number(score) <= `1.0`): true
-            (type(passed) == 'boolean'): true
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -204,9 +193,13 @@ spec:
             name: weather-tools-event-evaluation
             # Verify enhanced evaluation has more rules and higher expectations
             (to_number(annotations."evaluation.metadata/total_rules") == `8`): true
-            (to_number(annotations."evaluation.metadata/events_analyzed") > `0`): true  
-            (to_number(annotations."evaluation.metadata/passed_rules") > `0` ): true   
+            (to_number(annotations."evaluation.metadata/events_analyzed") > `0`): true
+            (to_number(annotations."evaluation.metadata/passed_rules") > `0` ): true
           status:
+            phase: done
+            (type(score) == 'string'): true
+            (to_number(score) >= `0.0` && to_number(score) <= `1.0`): true
+            (type(passed) == 'boolean'): true
             passed: true
     catch:
     - events: {}

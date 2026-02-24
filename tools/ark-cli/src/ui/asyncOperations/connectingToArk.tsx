@@ -23,8 +23,8 @@ export function createConnectingToArkOperation(
       const client = new ChatClient(params.arkApiClient);
       const targets = await client.getQueryTargets();
 
-      let selectedTarget: QueryTarget | null = null;
-      let selectedIndex = 0;
+      let selectedTarget: QueryTarget | null;
+      let selectedIndex: number;
 
       if (params.initialTargetId) {
         const matchedTarget = targets.find(

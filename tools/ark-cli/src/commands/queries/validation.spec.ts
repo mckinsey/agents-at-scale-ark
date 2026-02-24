@@ -1,4 +1,4 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 import {InvalidArgumentError} from 'commander';
 
 import {
@@ -6,7 +6,7 @@ import {
   UNSUPPORTED_OUTPUT_FORMAT_MESSAGE,
 } from './validation.js';
 
-jest.spyOn(console, 'error').mockImplementation(() => {});
+vi.spyOn(console, 'error').mockImplementation(() => {});
 
 describe('queries validation', () => {
   describe('assertSupportedOutputFormat', () => {
