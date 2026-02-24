@@ -2,7 +2,6 @@ import logging
 from datetime import datetime
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from datetime import datetime
-from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
 from .dashboard_page import DashboardPage
 from .dashboard_page import DashboardPage
