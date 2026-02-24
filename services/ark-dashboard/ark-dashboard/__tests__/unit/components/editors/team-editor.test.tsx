@@ -1,8 +1,11 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { TeamEditor } from '@/components/editors/team-editor';
+import {
+  DEFAULT_SELECTOR_PROMPT,
+  TeamEditor,
+} from '@/components/editors/team-editor';
 import type { Agent } from '@/lib/services';
 
 vi.mock('@/lib/api/client', () => ({
@@ -12,10 +15,6 @@ vi.mock('@/lib/api/client', () => ({
     put: vi.fn(),
     delete: vi.fn(),
   },
-}));
-
-vi.mock('./member-editor', () => ({
-  TeamMemberSelectionSection: () => null,
 }));
 
 describe('TeamEditor', () => {
@@ -206,6 +205,69 @@ describe('TeamEditor', () => {
     });
   });
 
+  describe('selector strategy defaults', () => {
+    it('should populate default selector prompt when switching to selector strategy', async () => {
+      const user = userEvent.setup();
+      render(<TeamEditor {...defaultProps} />);
+
+      const combobox = screen.getByRole('combobox');
+      await user.click(combobox);
+
+      const selectorOption = screen.getByRole('option', { name: /selector/i });
+      await user.click(selectorOption);
+
+      await waitFor(() => {
+        const textarea = screen.getByPlaceholderText(
+          'Enter the selector prompt...',
+        );
+        expect(textarea).toHaveValue(DEFAULT_SELECTOR_PROMPT);
+      });
+    });
+
+    it('should populate default selector prompt when editing a team with selector strategy and no prompt', async () => {
+      const selectorTeam = {
+        id: 'team-selector',
+        name: 'selector-team',
+        namespace: 'default',
+        description: 'Selector team',
+        strategy: 'selector',
+        members: [{ name: 'test-agent-1', type: 'agent' as const }],
+        selector: { agent: 'test-agent-1' },
+      };
+
+      render(<TeamEditor {...defaultProps} team={selectorTeam} />);
+
+      await waitFor(() => {
+        const textarea = screen.getByPlaceholderText(
+          'Enter the selector prompt...',
+        );
+        expect(textarea).toHaveValue(DEFAULT_SELECTOR_PROMPT);
+      });
+    });
+
+    it('should preserve existing selector prompt when editing', async () => {
+      const customPrompt = 'Custom selector prompt';
+      const selectorTeam = {
+        id: 'team-selector',
+        name: 'selector-team',
+        namespace: 'default',
+        description: 'Selector team',
+        strategy: 'selector',
+        members: [{ name: 'test-agent-1', type: 'agent' as const }],
+        selector: { agent: 'test-agent-1', selectorPrompt: customPrompt },
+      };
+
+      render(<TeamEditor {...defaultProps} team={selectorTeam} />);
+
+      await waitFor(() => {
+        const textarea = screen.getByPlaceholderText(
+          'Enter the selector prompt...',
+        );
+        expect(textarea).toHaveValue(customPrompt);
+      });
+    });
+  });
+
   describe('edit mode', () => {
     const existingTeam = {
       id: 'team-1',
@@ -258,4 +320,3 @@ describe('TeamEditor', () => {
     });
   });
 });
-
