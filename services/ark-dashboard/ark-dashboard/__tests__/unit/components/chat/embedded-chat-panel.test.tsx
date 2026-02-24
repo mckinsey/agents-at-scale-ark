@@ -20,6 +20,12 @@ vi.mock('@/lib/analytics/singleton', () => ({
   trackEvent: vi.fn(),
 }));
 
+vi.mock('@/lib/services/proxy', () => ({
+  proxyService: {
+    checkBrokerHealth: vi.fn(() => Promise.resolve('available')),
+  },
+}));
+
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
     push: vi.fn(),
