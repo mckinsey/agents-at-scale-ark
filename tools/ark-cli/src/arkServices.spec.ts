@@ -1,9 +1,9 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 
-const mockLoadConfig = jest.fn();
-const mockGetMarketplaceRegistry = jest.fn();
+const mockLoadConfig = vi.fn();
+const mockGetMarketplaceRegistry = vi.fn();
 
-jest.unstable_mockModule('./lib/config.js', () => ({
+vi.mock('./lib/config.js', () => ({
   loadConfig: mockLoadConfig,
   getMarketplaceRegistry: mockGetMarketplaceRegistry,
 }));
@@ -19,7 +19,7 @@ const {
 
 describe('arkServices', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockLoadConfig.mockReturnValue({});
     mockGetMarketplaceRegistry.mockReturnValue('oci://test-registry/charts');
   });
@@ -53,7 +53,7 @@ describe('arkServices', () => {
     it('applies no overrides when config has no services section', async () => {
       mockLoadConfig.mockReturnValue({});
 
-      jest.resetModules();
+      vi.resetModules();
       const {arkServices} = await import('./arkServices.js');
 
       expect(arkServices['ark-controller'].enabled).toBe(true);
@@ -67,7 +67,7 @@ describe('arkServices', () => {
         },
       });
 
-      jest.resetModules();
+      vi.resetModules();
       const {arkServices} = await import('./arkServices.js');
 
       expect(arkServices['localhost-gateway'].enabled).toBe(true);
@@ -80,7 +80,7 @@ describe('arkServices', () => {
         },
       });
 
-      jest.resetModules();
+      vi.resetModules();
       const {arkServices} = await import('./arkServices.js');
 
       expect(arkServices['ark-controller'].enabled).toBe(false);
@@ -95,7 +95,7 @@ describe('arkServices', () => {
         },
       });
 
-      jest.resetModules();
+      vi.resetModules();
       const {arkServices} = await import('./arkServices.js');
 
       expect(arkServices['ark-controller'].enabled).toBe(false);
@@ -110,7 +110,7 @@ describe('arkServices', () => {
         },
       });
 
-      jest.resetModules();
+      vi.resetModules();
       const {arkServices} = await import('./arkServices.js');
 
       expect(arkServices['ark-api'].namespace).toBe('custom-namespace');
@@ -125,7 +125,7 @@ describe('arkServices', () => {
         },
       });
 
-      jest.resetModules();
+      vi.resetModules();
       const {arkServices} = await import('./arkServices.js');
 
       expect(arkServices['ark-controller'].chartPath).toBe(
@@ -140,7 +140,7 @@ describe('arkServices', () => {
         },
       });
 
-      jest.resetModules();
+      vi.resetModules();
       const {arkServices} = await import('./arkServices.js');
 
       expect(arkServices['ark-controller'].enabled).toBe(false);
@@ -158,7 +158,7 @@ describe('arkServices', () => {
         },
       });
 
-      jest.resetModules();
+      vi.resetModules();
       const {arkServices} = await import('./arkServices.js');
 
       expect(arkServices['ark-controller'].installArgs).toEqual([
@@ -174,7 +174,7 @@ describe('arkServices', () => {
         },
       });
 
-      jest.resetModules();
+      vi.resetModules();
       const {arkServices} = await import('./arkServices.js');
 
       expect(arkServices['ark-api'].enabled).toBe(true);

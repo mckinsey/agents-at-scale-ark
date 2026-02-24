@@ -3,20 +3,17 @@ import {execa} from 'execa';
 import type {ArkConfig} from '../../lib/config.js';
 import output from '../../lib/output.js';
 
-
 async function importResources(filepath: string) {
   try {
     output.info(`importing ark resources from ${filepath}...`);
 
     const args = ['create', '-f', filepath];
 
-    const result = await execa('kubectl', args, {
+    await execa('kubectl', args, {
       stdio: 'pipe',
     });
 
-    output.success(
-      `imported resources from ${filepath}`
-    );
+    output.success(`imported resources from ${filepath}`);
   } catch (error) {
     output.error(
       'import failed:',

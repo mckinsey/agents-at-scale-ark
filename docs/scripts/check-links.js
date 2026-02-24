@@ -10,16 +10,20 @@
 
 const { spawn } = require('child_process');
 const net = require('net');
+const path = require('path');
 
 const includeExternal = process.argv.includes('--include-external');
+
+// Use absolute path to npx (located alongside node binary)
+const npxPath = path.join(path.dirname(process.execPath), 'npx');
 
 // Get available port from system
 const server = net.createServer();
 server.listen(0, () => {
   const port = server.address().port;
   server.close(() => {
-    // Start serve on the available port
-    const serve = spawn('npx', ['serve', 'out', '-l', port], {
+    // Start http-server on the available port
+    const serve = spawn(npxPath, ['http-server', 'out', '-p', port], {
       stdio: 'pipe'
     });
 
@@ -30,7 +34,7 @@ server.listen(0, () => {
         args.push('--exclude-external');
       }
 
-      const blc = spawn('npx', args, {
+      const blc = spawn(npxPath, args, {
         stdio: 'inherit'
       });
 

@@ -236,7 +236,7 @@ export function AgentForm({
   const pageTitle = isViewing
     ? agent?.name || ''
     : isEditing
-      ? `Edit ${agent?.name}`
+      ? 'Edit Agent'
       : 'Create Agent';
   const submitButtonText = isEditing ? 'Save Changes' : 'Create Agent';
   const cancelHref = onCancel ? undefined : '/agents';

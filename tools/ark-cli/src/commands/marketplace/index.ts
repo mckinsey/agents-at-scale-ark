@@ -52,30 +52,18 @@ ${chalk.cyan('Examples:')}
       console.log(chalk.blue('\n🏪 ARK Marketplace\n'));
 
       if (!manifest) {
-        console.log(
-          chalk.yellow('⚠️  Marketplace unavailable\n')
-        );
+        console.log(chalk.yellow('⚠️  Marketplace unavailable\n'));
         console.log(
           chalk.gray('Could not fetch marketplace.json from repository.\n')
         );
-        console.log(
-          chalk.cyan(
-            `Repository: ${repoUrl}`
-          )
-        );
-        console.log(
-          chalk.cyan(
-            `Registry: ${registry}`
-          )
-        );
+        console.log(chalk.cyan(`Repository: ${repoUrl}`));
+        console.log(chalk.cyan(`Registry: ${registry}`));
         console.log();
         return;
       }
 
       console.log(
-        chalk.dim(
-          `Using marketplace.json (version: ${manifest.version})\n`
-        )
+        chalk.dim(`Using marketplace.json (version: ${manifest.version})\n`)
       );
 
       if (services && Object.keys(services).length > 0) {
@@ -116,16 +104,8 @@ ${chalk.cyan('Examples:')}
         }
       }
 
-      console.log(
-        chalk.cyan(
-          `Repository: ${repoUrl}`
-        )
-      );
-      console.log(
-        chalk.cyan(
-          `Registry: ${registry}`
-        )
-      );
+      console.log(chalk.cyan(`Repository: ${repoUrl}`));
+      console.log(chalk.cyan(`Registry: ${registry}`));
       console.log();
     });
 

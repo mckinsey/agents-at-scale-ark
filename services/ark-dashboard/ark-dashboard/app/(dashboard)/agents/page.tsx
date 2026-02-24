@@ -4,15 +4,12 @@ import { Code, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useRef } from 'react';
 
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { AgentsSection } from '@/components/sections/agents-section';
 import { Button } from '@/components/ui/button';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
+import { useGetAllAgents } from '@/lib/services/agents-hooks';
 import { useNamespace } from '@/providers/NamespaceProvider';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-];
 
 interface AgentsSectionHandle {
   openAddEditor: () => void;
@@ -22,11 +19,14 @@ interface AgentsSectionHandle {
 export default function AgentsPage() {
   const agentsSectionRef = useRef<AgentsSectionHandle>(null);
   const { readOnlyMode } = useNamespace();
+  const { data: agents } = useGetAllAgents();
+
+  const pageTitle = agents ? `Agents (${agents.length})` : 'Agents';
 
   return (
     <>
       <PageHeader
-        breadcrumbs={breadcrumbs}
+        breadcrumbs={BASE_BREADCRUMBS}
         currentPage="Agents"
         actions={
           <div className="flex items-center gap-2">
@@ -53,6 +53,9 @@ export default function AgentsPage() {
         }
       />
       <div className="flex flex-1 flex-col">
+        <div>
+          <h1 className="text-xl">{pageTitle}</h1>
+        </div>
         <AgentsSection ref={agentsSectionRef} />
       </div>
     </>
