@@ -88,17 +88,24 @@ async def update_export_history(timestamp: datetime, resource_counts: Dict[str, 
 
 
 # Helper functions to reduce cognitive complexity
-async def _filter_resources(  # NOSONAR - async for consistency with project guidelines
-    resources_list: Any,
-    resource_type_key: str,
-    resource_ids: Optional[Dict[str, List[str]]]
+async def _convert_and_filter_resources(  # NOSONAR - async for consistency with project guidelines
+    resources_list: List[Any],  # List of K8s resource objects with to_dict() method
+    filter_names: Optional[List[str]] = None
 ) -> List[Dict[str, Any]]:
-    """Filter resources based on resource_ids if provided."""
+    """Convert resources to dicts and optionally filter by name.
+
+    Args:
+        resources_list: List of K8s resource objects with to_dict() method
+        filter_names: Optional list of resource names to include. If None, all resources are included.
+
+    Returns:
+        List of resource dictionaries, optionally filtered by name
+    """
     items = []
     for resource in resources_list:
         resource_dict = resource.to_dict()
         resource_name = resource_dict["metadata"]["name"]
-        if not resource_ids or resource_name in resource_ids.get(resource_type_key, []):
+        if filter_names is None or resource_name in filter_names:
             items.append(resource_dict)
     return items
 
@@ -112,7 +119,8 @@ async def _collect_standard_resource(
     """Collect a standard resource type using the ark client."""
     resource_client = getattr(client, resource_attr)
     resources_list = await resource_client.a_list()
-    return await _filter_resources(resources_list, resource_type_key, resource_ids)
+    filter_names = resource_ids.get(resource_type_key) if resource_ids else None
+    return await _convert_and_filter_resources(resources_list, filter_names)
 
 
 async def _collect_a2a_servers(
@@ -122,7 +130,8 @@ async def _collect_a2a_servers(
     """Collect A2A servers (uses different API version)."""
     async with with_ark_client(namespace, "v1prealpha1") as a2a_client:
         a2a_servers = await a2a_client.a2aservers.a_list()
-        return await _filter_resources(a2a_servers, "a2a", resource_ids)
+        filter_names = resource_ids.get("a2a") if resource_ids else None
+        return await _convert_and_filter_resources(a2a_servers, filter_names)
 
 
 async def _collect_workflows(
@@ -153,9 +162,12 @@ async def _collect_workflows(
                 plural="workflowtemplates"
             )
 
+            # Pre-calculate filter list to avoid repeated dict lookups
+            filter_names = resource_ids.get("workflows") if resource_ids else None
+
             for template in workflow_templates.get("items", []):
                 template_name = template["metadata"]["name"]
-                if not resource_ids or template_name in resource_ids.get("workflows", []):
+                if filter_names is None or template_name in filter_names:
                     items.append(template)
 
         except ApiException as e:
