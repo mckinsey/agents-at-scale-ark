@@ -1,7 +1,10 @@
 import logging
 from datetime import datetime
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
+from datetime import datetime
+from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
+from .dashboard_page import DashboardPage
 from .dashboard_page import DashboardPage
 
 logger = logging.getLogger(__name__)
@@ -39,7 +42,8 @@ class TeamsPage(BasePage):
     def is_team_in_table(self, team_name: str) -> bool:
         try:
             return self.page.get_by_text(team_name, exact=False).count() > 0
-        except Exception:
+        except Exception as e:
+            logger.debug("Error checking team in table: %s", e)
             return False
 
     def create_team_with_verification(self, team_name: str, description: str, strategy: str, max_turns: str, member_name: str) -> dict:
@@ -104,6 +108,7 @@ class TeamsPage(BasePage):
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=10000)
             popup_visible = True
         except PlaywrightTimeoutError:
+        except PlaywrightTimeoutError:
             popup_visible = False
 
         self.navigate_to_teams_tab()
@@ -157,13 +162,19 @@ class TeamsPage(BasePage):
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
             popup_visible = True
         except PlaywrightTimeoutError:
+            logger.debug("Success popup not visible")
             popup_visible = False
 
         try:
             self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=10000)
         except PlaywrightTimeoutError:
+        except PlaywrightTimeoutError:
             logger.info("Dialog may still be open, pressing Escape")
             self.page.keyboard.press("Escape")
+            try:
+                self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=3000)
+            except PlaywrightTimeoutError:
+                logger.warning("Dialog still visible after Escape")
             try:
                 self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=3000)
             except PlaywrightTimeoutError:
@@ -183,8 +194,10 @@ class TeamsPage(BasePage):
             if len(buttons) < 2:
                 return self._delete_not_available(team_name)
             buttons[-2].click()
-        except Exception:
+        except Exception as e:
+            logger.warning("Delete button not found for team %s: %s", team_name, e)
             return self._delete_not_available(team_name)
+
 
         self.wait_for_modal_open()
         confirm_dialog_visible = self.page.locator(self.CONFIRM_DELETE_DIALOG).first.is_visible()
@@ -221,4 +234,5 @@ class TeamsPage(BasePage):
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
             return True
         except PlaywrightTimeoutError:
+            logger.debug("Success popup not visible")
             return False

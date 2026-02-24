@@ -1,5 +1,8 @@
-from playwright.sync_api import Page
+from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class DashboardPage(BasePage):
@@ -12,7 +15,7 @@ class DashboardPage(BasePage):
     TOOLS_TAB = "a[href='/tools']"
     TEAMS_TAB = "a[href='/teams']"
     SECRETS_TAB = "a[href='/secrets']"
-    MAIN_CONTENT = "main[data-slot='sidebar-inset'], main.sidebar-inset, main"
+    MAIN_CONTENT = "main[data-slot='sidebar-inset']"
     SIDEBAR = "[data-testid='sidebar'], aside, nav"
     AGENT_BUILDER_TOGGLE = "button:has-text('Agent Builder')"
     
@@ -58,5 +61,6 @@ class DashboardPage(BasePage):
     def get_dashboard_title(self) -> str:
         try:
             return self.page.locator(self.DASHBOARD_TITLE).first.inner_text()
-        except Exception:
+        except Exception as e:
+            logger.debug("Could not get dashboard title: %s", e)
             return ""
