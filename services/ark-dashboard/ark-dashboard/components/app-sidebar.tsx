@@ -5,11 +5,13 @@ import {
   Activity,
   AlertCircle,
   Bot,
+  Calendar,
   Check,
   ChevronsLeft,
   ChevronsRight,
   ChevronsUpDown,
   ChevronsUpDownIcon,
+  Database,
   File,
   HelpCircle,
   Home,
@@ -394,6 +396,24 @@ export function AppSidebar() {
               isNamespaceResolved={isNamespaceResolved}
               loading={loading}
             />
+
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={() => navigateToSection('events')}
+                isActive={getCurrentSection() === 'events'}>
+                <Calendar />
+                <span>Events</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={() => navigateToSection('memory')}
+                isActive={getCurrentSection() === 'memory'}>
+                <Database />
+                <span>Memory</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
 
             <SidebarMenuItem>
               <Popover open={morePopoverOpen} onOpenChange={setMorePopoverOpen}>
