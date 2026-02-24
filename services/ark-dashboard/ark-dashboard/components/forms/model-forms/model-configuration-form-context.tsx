@@ -16,6 +16,7 @@ interface ModelConfigurationFormContext {
   onSubmit: (formValues: FormValues) => void;
   isSubmitPending: boolean;
   disabledFields?: DisabledFields;
+  initialAzureAuthMethod?: 'apiKey' | 'managedIdentity' | 'workloadIdentity';
 }
 
 const ModelConfigurationFormContext = createContext<

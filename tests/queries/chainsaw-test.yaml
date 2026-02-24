@@ -36,16 +36,15 @@ spec:
           file: manifests/a03-agent.yaml
       - apply:
           file: manifests/a04-query.yaml
-      - assert:
-          resource:
-            apiVersion: ark.mckinsey.com/v1alpha1
-            kind: Model
-            metadata:
-              name: default
-            status:
-              conditions:
-              - type: ModelAvailable
-                status: "True"
+      - wait:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          name: default
+          timeout: 3m
+          for:
+            condition:
+              name: ModelAvailable
+              value: 'True' 
       - assert:
           resource:
             apiVersion: ark.mckinsey.com/v1alpha1
