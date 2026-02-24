@@ -1157,14 +1157,14 @@ export function SessionsSection() {
 
   return (
     <ErrorBoundary>
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden sm:p-4">
+      <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
         <div className="bg-muted/20 flex flex-col gap-1.5 rounded-md py-3">
           <div className="flex flex-col gap-2 md:flex-row md:items-center">
             <div className="relative min-w-0 flex-1">
               <Search className="text-muted-foreground absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2" />
               <Input
                 type="text"
-                placeholder="Search workflow..."
+                placeholder="Search workflows..."
                 value={workflowNameInput}
                 onChange={e => setWorkflowNameInput(e.target.value)}
                 className="bg-background h-8 border-0 pl-8 text-sm shadow-sm"
@@ -1340,7 +1340,7 @@ export function SessionsSection() {
                 <>
                   <Search className="h-16 w-16 opacity-20" />
                   <span className="text-center text-base font-medium">
-                    No sessions found matching your filters
+                    No workflow runs found matching your filters
                   </span>
                   <Button variant="outline" onClick={clearFilters}>
                     Clear filters
@@ -1350,8 +1350,8 @@ export function SessionsSection() {
                 <>
                   <Workflow className="h-16 w-16 opacity-20" />
                   <span className="text-center text-base font-medium">
-                    No {sourceFilter === 'all' ? '' : sourceFilter} sessions to
-                    display
+                    No {sourceFilter === 'all' ? '' : sourceFilter} workflow
+                    runs to display
                   </span>
                 </>
               )}

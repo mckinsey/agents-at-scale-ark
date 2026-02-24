@@ -3,24 +3,24 @@
 import { Plus } from 'lucide-react';
 import { useRef } from 'react';
 
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { TeamsSection } from '@/components/sections/teams-section';
 import { Button } from '@/components/ui/button';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
+import { useGetAllTeams } from '@/lib/services/teams-hooks';
 import { useNamespace } from '@/providers/NamespaceProvider';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-];
 
 export default function TeamsPage() {
   const teamsSectionRef = useRef<{ openAddEditor: () => void }>(null);
   const { readOnlyMode } = useNamespace();
+  const { data: teams } = useGetAllTeams();
+
+  const pageTitle = teams ? `Teams (${teams.length})` : 'Teams';
 
   return (
     <>
       <PageHeader
-        breadcrumbs={breadcrumbs}
+        breadcrumbs={BASE_BREADCRUMBS}
         currentPage="Teams"
         actions={
           <Button
@@ -32,6 +32,9 @@ export default function TeamsPage() {
         }
       />
       <div className="flex flex-1 flex-col">
+        <div>
+          <h1 className="text-xl">{pageTitle}</h1>
+        </div>
         <TeamsSection ref={teamsSectionRef} />
       </div>
     </>

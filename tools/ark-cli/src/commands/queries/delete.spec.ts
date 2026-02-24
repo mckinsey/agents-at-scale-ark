@@ -1,9 +1,9 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 
 import output from '../../lib/output.js';
 
-const mockExeca = jest.fn() as any;
-jest.unstable_mockModule('execa', () => ({
+const mockExeca = vi.fn() as any;
+vi.mock('execa', () => ({
   execa: mockExeca,
 }));
 
@@ -13,11 +13,11 @@ const {deleteQuery, BOTH_NAME_AND_ALL_ERROR, MISSING_NAME_OR_ALL_ERROR} =
 
 describe('queries delete command', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    console.log = jest.fn();
-    jest.spyOn(output, 'warning').mockImplementation(() => {});
-    jest.spyOn(output, 'error').mockImplementation(() => {});
-    jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    vi.clearAllMocks();
+    console.log = vi.fn();
+    vi.spyOn(output, 'warning').mockImplementation(() => {});
+    vi.spyOn(output, 'error').mockImplementation(() => {});
+    vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
   });
 
   it('should delete a query by name', async () => {
@@ -57,9 +57,9 @@ describe('queries delete command', () => {
 
 describe('deleteQuery function', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.spyOn(output, 'error').mockImplementation(() => {});
-    jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    vi.clearAllMocks();
+    vi.spyOn(output, 'error').mockImplementation(() => {});
+    vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
   });
 
   it('should throw error when neither name nor --all flag is provided', async () => {

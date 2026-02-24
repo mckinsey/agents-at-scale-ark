@@ -1,19 +1,19 @@
-import {describe, it, expect, jest, beforeEach} from '@jest/globals';
+import {describe, it, expect, vi, beforeEach} from 'vitest';
 import type {ArkService} from '../types/arkService.js';
 
-jest.unstable_mockModule('execa', () => ({
-  execa: jest.fn(),
+vi.mock('execa', () => ({
+  execa: vi.fn(),
 }));
 
 const {execa} = await import('execa');
 const {waitForDeploymentReady, waitForServicesReady} = await import(
   './waitForReady.js'
 );
-const mockedExeca = execa as jest.MockedFunction<typeof execa>;
+const mockedExeca = execa as vi.MockedFunction<typeof execa>;
 
 describe('waitForDeploymentReady', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('returns true when deployment is ready', async () => {
@@ -55,7 +55,7 @@ describe('waitForDeploymentReady', () => {
 
 describe('waitForServicesReady', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   const service1: ArkService = {
@@ -108,7 +108,7 @@ describe('waitForServicesReady', () => {
       exitCode: 0,
     } as any);
 
-    const onProgress = jest.fn();
+    const onProgress = vi.fn();
     await waitForServicesReady([service1], 30, onProgress);
 
     expect(onProgress).toHaveBeenCalledWith({

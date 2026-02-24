@@ -1,56 +1,56 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 
-const mockExeca = jest.fn() as any;
-jest.unstable_mockModule('execa', () => ({
+const mockExeca = vi.fn() as any;
+vi.mock('execa', () => ({
   execa: mockExeca,
 }));
 
 const mockSpinner = {
-  start: jest.fn(),
-  succeed: jest.fn(),
-  fail: jest.fn(),
-  warn: jest.fn(),
-  stop: jest.fn(),
+  start: vi.fn(),
+  succeed: vi.fn(),
+  fail: vi.fn(),
+  warn: vi.fn(),
+  stop: vi.fn(),
   text: '',
   isSpinning: false,
 };
 
-const mockOra = jest.fn(() => mockSpinner);
-jest.unstable_mockModule('ora', () => ({
+const mockOra = vi.fn(() => mockSpinner);
+vi.mock('ora', () => ({
   default: mockOra,
 }));
 
-let mockSendMessage = jest.fn() as any;
+let mockSendMessage = vi.fn() as any;
 
-const mockChatClient = jest.fn(() => ({
+const mockChatClient = vi.fn(() => ({
   sendMessage: mockSendMessage,
 })) as any;
 
 let mockArkApiProxyInstance: any = {
-  start: jest.fn(),
-  stop: jest.fn(),
+  start: vi.fn(),
+  stop: vi.fn(),
 };
 
-const mockArkApiProxy = jest.fn(() => mockArkApiProxyInstance) as any;
+const mockArkApiProxy = vi.fn(() => mockArkApiProxyInstance) as any;
 
-jest.unstable_mockModule('./arkApiProxy.js', () => ({
+vi.mock('./arkApiProxy.js', () => ({
   ArkApiProxy: mockArkApiProxy,
 }));
 
-jest.unstable_mockModule('./chatClient.js', () => ({
+vi.mock('./chatClient.js', () => ({
   ChatClient: mockChatClient,
 }));
 
-const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+const mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {
   throw new Error('process.exit called');
 }) as any);
 
-const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
-const mockConsoleError = jest
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
+const mockConsoleError = vi
   .spyOn(console, 'error')
   .mockImplementation(() => {});
 
-const mockStdoutWrite = jest
+const mockStdoutWrite = vi
   .spyOn(process.stdout, 'write')
   .mockImplementation(() => true);
 
@@ -59,16 +59,16 @@ const {ExitCodes} = await import('./errors.js');
 
 describe('executeQuery', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockSpinner.start.mockReturnValue(mockSpinner);
     mockSpinner.isSpinning = false;
-    mockSendMessage = jest.fn() as any;
+    mockSendMessage = vi.fn() as any;
     mockChatClient.mockReturnValue({sendMessage: mockSendMessage});
-    const startMock = jest.fn() as any;
+    const startMock = vi.fn() as any;
     startMock.mockResolvedValue({});
     mockArkApiProxyInstance = {
       start: startMock,
-      stop: jest.fn(),
+      stop: vi.fn(),
     };
     mockArkApiProxy.mockReturnValue(mockArkApiProxyInstance);
   });
@@ -259,7 +259,7 @@ describe('executeQuery', () => {
 
     it('should handle errors and exit with CliError', async () => {
       mockSpinner.isSpinning = true;
-      const startMock = jest.fn() as any;
+      const startMock = vi.fn() as any;
       startMock.mockRejectedValue(new Error('Connection failed'));
       mockArkApiProxyInstance.start = startMock;
 

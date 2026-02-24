@@ -95,7 +95,7 @@ function HeaderTooltip() {
 
 type PageHeaderProps = {
   breadcrumbs?: BreadcrumbElement[];
-  currentPage: string;
+  currentPage?: string;
   actions?: ReactNode;
 };
 
@@ -119,48 +119,52 @@ export function PageHeader({
         className="mr-2 data-[orientation=vertical]:h-4"
       />
       {/* Mobile */}
-      <Breadcrumb className="block md:hidden">
-        <BreadcrumbList>
-          {breadcrumbs?.length ? (
-            <>
-              <BreadcrumbItem>
-                <BreadcrumbsDropdown elements={breadcrumbs} />
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-            </>
-          ) : null}
-          <BreadcrumbItem>
-            <BreadcrumbPage>{currentPage}</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
+      {currentPage && (
+        <Breadcrumb className="block md:hidden">
+          <BreadcrumbList>
+            {breadcrumbs?.length ? (
+              <>
+                <BreadcrumbItem>
+                  <BreadcrumbsDropdown elements={breadcrumbs} />
+                </BreadcrumbItem>
+                <BreadcrumbSeparator />
+              </>
+            ) : null}
+            <BreadcrumbItem>
+              <BreadcrumbPage>{currentPage}</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+      )}
       {/* Desktop */}
-      <Breadcrumb className="hidden md:block">
-        <BreadcrumbList>
-          {firstCrumb && (
-            <>
-              <BreadcrumbItem>
-                <BreadcrumbLink asChild>
-                  <Link href={firstCrumb.href}>{firstCrumb.label}</Link>
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-            </>
-          )}
-          {crumbsInDropdown ? (
-            <>
-              <BreadcrumbItem>
-                <BreadcrumbsDropdown elements={crumbsInDropdown} />
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-            </>
-          ) : null}
-          <BreadcrumbsLinks elements={visibleCrumbs} />
-          <BreadcrumbItem>
-            <BreadcrumbPage>{currentPage}</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
+      {currentPage && (
+        <Breadcrumb className="hidden md:block">
+          <BreadcrumbList>
+            {firstCrumb && (
+              <>
+                <BreadcrumbItem>
+                  <BreadcrumbLink asChild>
+                    <Link href={firstCrumb.href}>{firstCrumb.label}</Link>
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator />
+              </>
+            )}
+            {crumbsInDropdown ? (
+              <>
+                <BreadcrumbItem>
+                  <BreadcrumbsDropdown elements={crumbsInDropdown} />
+                </BreadcrumbItem>
+                <BreadcrumbSeparator />
+              </>
+            ) : null}
+            <BreadcrumbsLinks elements={visibleCrumbs} />
+            <BreadcrumbItem>
+              <BreadcrumbPage>{currentPage}</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+      )}
       <div className="ml-auto flex items-center space-x-2">
         {actions && actions}
         <HeaderTooltip />

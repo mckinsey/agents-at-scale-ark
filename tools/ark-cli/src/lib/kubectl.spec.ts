@@ -1,7 +1,7 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 
-const mockExeca = jest.fn() as any;
-jest.unstable_mockModule('execa', () => ({
+const mockExeca = vi.fn() as any;
+vi.mock('execa', () => ({
   execa: mockExeca,
 }));
 
@@ -21,7 +21,7 @@ interface TestResource {
 
 describe('kubectl', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('getResource', () => {
@@ -224,23 +224,14 @@ describe('kubectl', () => {
     });
 
     it('should pass namespace and label filters', async () => {
-      const result = await listResources<TestResource>('queries', {
+      await listResources<TestResource>('queries', {
         labels: 'app=test',
-        namespace: 'foo'
+        namespace: 'foo',
       });
 
       expect(mockExeca).toHaveBeenCalledWith(
         'kubectl',
-        [
-          'get',
-          'queries',
-          '-n',
-          'foo',
-          '-l',
-          'app=test',
-          '-o',
-          'json',
-        ],
+        ['get', 'queries', '-n', 'foo', '-l', 'app=test', '-o', 'json'],
         {stdio: 'pipe'}
       );
     });

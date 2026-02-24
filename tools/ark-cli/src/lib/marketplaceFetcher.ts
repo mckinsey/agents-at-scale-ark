@@ -11,12 +11,15 @@ export async function fetchMarketplaceManifest(): Promise<AnthropicMarketplaceMa
   const manifestUrl = `${repoUrl}/raw/main/marketplace.json`;
 
   try {
-    const response = await axios.get<AnthropicMarketplaceManifest>(manifestUrl, {
-      timeout: 10000,
-      headers: {
-        Accept: 'application/json',
-      },
-    });
+    const response = await axios.get<AnthropicMarketplaceManifest>(
+      manifestUrl,
+      {
+        timeout: 10000,
+        headers: {
+          Accept: 'application/json',
+        },
+      }
+    );
 
     return response.data;
   } catch (error) {
@@ -97,4 +100,3 @@ export async function getMarketplaceAgentsFromManifest(): Promise<ServiceCollect
 
   return Object.keys(agents).length > 0 ? agents : null;
 }
-

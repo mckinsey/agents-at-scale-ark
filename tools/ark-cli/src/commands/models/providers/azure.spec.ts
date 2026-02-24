@@ -1,9 +1,9 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 
 const mockInquirer = {
-  prompt: jest.fn() as any,
+  prompt: vi.fn() as any,
 };
-jest.unstable_mockModule('inquirer', () => ({
+vi.mock('inquirer', () => ({
   default: mockInquirer,
 }));
 
@@ -14,7 +14,7 @@ describe('AzureConfigCollector', () => {
 
   beforeEach(() => {
     collector = new AzureConfigCollector();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('collectConfig', () => {

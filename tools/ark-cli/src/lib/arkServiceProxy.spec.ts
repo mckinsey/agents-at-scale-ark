@@ -1,21 +1,21 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 import {Buffer} from 'buffer';
 import type {ArkService} from '../types/arkService.js';
 
-type MockFn = ReturnType<typeof jest.fn>;
+type MockFn = ReturnType<typeof vi.fn>;
 
-const mockFind = jest.fn() as MockFn;
+const mockFind = vi.fn() as MockFn;
 
-jest.unstable_mockModule('find-process', () => ({
+vi.mock('find-process', () => ({
   default: mockFind,
 }));
 
-const mockSpawn = jest.fn() as MockFn;
+const mockSpawn = vi.fn() as MockFn;
 const mockChildProcess = {
   spawn: mockSpawn,
 };
 
-jest.unstable_mockModule('child_process', () => ({
+vi.mock('child_process', () => ({
   ...mockChildProcess,
   spawn: mockSpawn,
 }));
@@ -35,7 +35,7 @@ describe('ArkServiceProxy', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('port-forward reuse', () => {
@@ -43,10 +43,10 @@ describe('ArkServiceProxy', () => {
       const proxy = new ArkServiceProxy(mockService, 3000, false);
 
       const mockProcess = {
-        stdout: {on: jest.fn() as MockFn},
-        stderr: {on: jest.fn() as MockFn},
-        on: jest.fn() as MockFn,
-        kill: jest.fn() as MockFn,
+        stdout: {on: vi.fn() as MockFn},
+        stderr: {on: vi.fn() as MockFn},
+        on: vi.fn() as MockFn,
+        kill: vi.fn() as MockFn,
       };
 
       mockSpawn.mockReturnValue(mockProcess);
@@ -66,7 +66,13 @@ describe('ArkServiceProxy', () => {
       expect(mockFind).not.toHaveBeenCalled();
       expect(mockSpawn).toHaveBeenCalledWith(
         'kubectl',
-        ['port-forward', 'service/test-service-k8s', '3000:8080', '--namespace', 'default'],
+        [
+          'port-forward',
+          'service/test-service-k8s',
+          '3000:8080',
+          '--namespace',
+          'default',
+        ],
         expect.any(Object)
       );
     });
@@ -94,10 +100,10 @@ describe('ArkServiceProxy', () => {
       const proxy = new ArkServiceProxy(mockService, 3000, true);
 
       const mockProcess = {
-        stdout: {on: jest.fn() as MockFn},
-        stderr: {on: jest.fn() as MockFn},
-        on: jest.fn() as MockFn,
-        kill: jest.fn() as MockFn,
+        stdout: {on: vi.fn() as MockFn},
+        stderr: {on: vi.fn() as MockFn},
+        on: vi.fn() as MockFn,
+        kill: vi.fn() as MockFn,
       };
 
       mockSpawn.mockReturnValue(mockProcess);

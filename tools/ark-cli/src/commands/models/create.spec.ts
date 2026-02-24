@@ -1,35 +1,35 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 
-const mockExeca = jest.fn() as any;
-jest.unstable_mockModule('execa', () => ({
+const mockExeca = vi.fn() as any;
+vi.mock('execa', () => ({
   execa: mockExeca,
 }));
 
 const mockInquirer = {
-  prompt: jest.fn() as any,
+  prompt: vi.fn() as any,
 };
-jest.unstable_mockModule('inquirer', () => ({
+vi.mock('inquirer', () => ({
   default: mockInquirer,
 }));
 
 const mockOutput = {
-  info: jest.fn(),
-  warning: jest.fn(),
-  error: jest.fn(),
-  success: jest.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
+  success: vi.fn(),
 };
-jest.unstable_mockModule('../../lib/output.js', () => ({
+vi.mock('../../lib/output.js', () => ({
   default: mockOutput,
 }));
 
-jest.spyOn(console, 'log').mockImplementation(() => {});
-jest.spyOn(console, 'error').mockImplementation(() => {});
+vi.spyOn(console, 'log').mockImplementation(() => {});
+vi.spyOn(console, 'error').mockImplementation(() => {});
 
 const {createModel} = await import('./create.js');
 
 describe('createModel', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('creates new model for type aws bedrock', async () => {
@@ -174,8 +174,7 @@ describe('createModel', () => {
   });
 
   it('handles secret creation failure', async () => {
-    mockExeca
-      .mockRejectedValueOnce(new Error('not found')); // model doesn't exist
+    mockExeca.mockRejectedValueOnce(new Error('not found')); // model doesn't exist
 
     mockInquirer.prompt
       .mockResolvedValueOnce({modelType: 'openai'})
@@ -183,8 +182,7 @@ describe('createModel', () => {
       .mockResolvedValueOnce({baseUrl: 'https://api.openai.com'})
       .mockResolvedValueOnce({apiKey: 'secret'});
 
-    mockExeca
-      .mockRejectedValueOnce(new Error('not found')); // secret doesn't exist check
+    mockExeca.mockRejectedValueOnce(new Error('not found')); // secret doesn't exist check
     mockExeca.mockRejectedValueOnce(new Error('secret creation failed')); // create secret fails
 
     const result = await createModel('test-model');

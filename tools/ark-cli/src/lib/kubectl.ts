@@ -49,8 +49,8 @@ export async function getResource<T extends K8sResource>(
 export async function listResources<T extends K8sResource>(
   resourceType: string,
   options?: {
-    namespace?: string,
-    labels?: string,
+    namespace?: string;
+    labels?: string;
     sortBy?: string;
   }
 ): Promise<T[]> {

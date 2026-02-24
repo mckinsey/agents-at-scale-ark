@@ -1,13 +1,13 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 import {printNextSteps} from './nextSteps.js';
 
 describe('printNextSteps', () => {
-  let consoleLogSpy: jest.SpiedFunction<typeof console.log>;
+  let consoleLogSpy: vi.SpiedFunction<typeof console.log>;
   let output: string[] = [];
 
   beforeEach(() => {
     output = [];
-    consoleLogSpy = jest.spyOn(console, 'log').mockImplementation((...args) => {
+    consoleLogSpy = vi.spyOn(console, 'log').mockImplementation((...args) => {
       output.push(args.join(' '));
     });
   });

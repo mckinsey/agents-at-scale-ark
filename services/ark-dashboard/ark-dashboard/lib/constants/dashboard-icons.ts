@@ -29,7 +29,14 @@ export interface DashboardSection {
   key: string;
   title: string;
   icon: LucideIcon;
-  group: 'configurations' | 'operations' | 'runtime' | 'service';
+  group:
+    | 'configurations'
+    | 'operations'
+    | 'runtime'
+    | 'service'
+    | 'agent-builder'
+    | 'workflow-templates'
+    | 'monitoring';
   enablerFeature?: string;
 }
 
@@ -39,25 +46,70 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     key: 'agents',
     title: 'Agents',
     icon: Bot,
-    group: 'configurations',
+    group: 'agent-builder',
   },
   teams: {
     key: 'teams',
     title: 'Teams',
     icon: Users,
-    group: 'configurations',
+    group: 'agent-builder',
   },
+  queries: {
+    key: 'queries',
+    title: 'Queries',
+    icon: Search,
+    group: 'agent-builder',
+  },
+
+  // Workflow Templates
+  'workflow-templates': {
+    key: 'workflow-templates',
+    title: 'Workflows',
+    icon: Workflow,
+    group: 'workflow-templates',
+  },
+
+  // Models
   models: {
     key: 'models',
     title: 'Models',
     icon: Zap,
     group: 'configurations',
   },
+
+  // Secrets
   secrets: {
     key: 'secrets',
     title: 'Secrets',
     icon: Lock,
     group: 'configurations',
+  },
+
+  // Monitoring
+  sessions: {
+    key: 'sessions',
+    title: 'Workflow Runs',
+    icon: Play,
+    group: 'monitoring',
+  },
+  events: {
+    key: 'events',
+    title: 'Query Logs',
+    icon: Calendar,
+    group: 'monitoring',
+  },
+  broker: {
+    key: 'broker',
+    title: 'Broker',
+    icon: Activity,
+    group: 'monitoring',
+    enablerFeature: BROKER_FEATURE_KEY,
+  },
+  evals: {
+    key: 'evals',
+    title: 'Evals',
+    icon: BarChart,
+    group: 'monitoring',
   },
   evaluators: {
     key: 'evaluators',
@@ -65,37 +117,14 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     icon: CheckCircle,
     group: 'configurations',
   },
-  'workflow-templates': {
-    key: 'workflow-templates',
-    title: 'Workflow Templates',
-    icon: Workflow,
-    group: 'configurations',
-  },
-
-  sessions: {
-    key: 'sessions',
-    title: 'Sessions',
-    icon: Play,
-    group: 'operations',
-  },
-  queries: {
-    key: 'queries',
-    title: 'Queries',
-    icon: Search,
-    group: 'operations',
-  },
   evaluations: {
     key: 'evaluations',
     title: 'Evaluations',
     icon: BarChart,
-    group: 'operations',
+    group: 'monitoring',
   },
-  events: {
-    key: 'events',
-    title: 'Events',
-    icon: Calendar,
-    group: 'operations',
-  },
+
+  // Operations
   memory: {
     key: 'memory',
     title: 'Memory',
@@ -114,13 +143,6 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     title: 'A2A Tasks',
     icon: ClipboardList,
     group: 'operations',
-  },
-  broker: {
-    key: 'broker',
-    title: 'Broker',
-    icon: Activity,
-    group: 'operations',
-    enablerFeature: BROKER_FEATURE_KEY,
   },
 
   // Runtime
@@ -161,24 +183,11 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
 // Type-safe keys
 export type DashboardSectionKey = keyof typeof DASHBOARD_SECTIONS;
 
-// Helper function to get icon by section key
-export function getDashboardIcon(sectionKey: DashboardSectionKey): LucideIcon {
-  return DASHBOARD_SECTIONS[sectionKey]?.icon || Bot;
-}
-
-// Export individual section groups for convenience
-export const CONFIGURATION_SECTIONS = Object.values(DASHBOARD_SECTIONS).filter(
-  section => section.group === 'configurations',
+// Section groups used in the app
+export const AGENT_BUILDER_SECTIONS = Object.values(DASHBOARD_SECTIONS).filter(
+  section => section.group === 'agent-builder',
 );
 
-export const OPERATION_SECTIONS = Object.values(DASHBOARD_SECTIONS).filter(
-  section => section.group === 'operations',
-);
-
-export const RUNTIME_SECTIONS = Object.values(DASHBOARD_SECTIONS).filter(
-  section => section.group === 'runtime',
-);
-
-export const SERVICE_SECTIONS = Object.values(DASHBOARD_SECTIONS).filter(
-  section => section.group === 'service',
+export const MONITORING_SECTIONS = Object.values(DASHBOARD_SECTIONS).filter(
+  section => section.group === 'monitoring',
 );

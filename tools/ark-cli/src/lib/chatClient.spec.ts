@@ -1,19 +1,19 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 import {QUERY_ANNOTATIONS} from './constants.js';
 
-const mockCreateChatCompletion = jest.fn() as any;
+const mockCreateChatCompletion = vi.fn() as any;
 
 const mockArkApiClient = {
   createChatCompletion: mockCreateChatCompletion,
-  createChatCompletionStream: jest.fn() as any,
-  getQueryTargets: jest.fn() as any,
+  createChatCompletionStream: vi.fn() as any,
+  getQueryTargets: vi.fn() as any,
 } as any;
 
 const {ChatClient} = await import('./chatClient.js');
 
 describe('ChatClient', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('sendMessage', () => {
