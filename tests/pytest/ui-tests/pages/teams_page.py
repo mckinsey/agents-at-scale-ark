@@ -108,7 +108,6 @@ class TeamsPage(BasePage):
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=10000)
             popup_visible = True
         except PlaywrightTimeoutError:
-        except PlaywrightTimeoutError:
             popup_visible = False
 
         self.navigate_to_teams_tab()
@@ -167,7 +166,6 @@ class TeamsPage(BasePage):
 
         try:
             self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=10000)
-        except PlaywrightTimeoutError:
         except PlaywrightTimeoutError:
             logger.info("Dialog may still be open, pressing Escape")
             self.page.keyboard.press("Escape")
