@@ -3,15 +3,11 @@
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
+import type { BreadcrumbElement } from '@/components/common/page-header';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { toolsService } from '@/lib/services';
 import type { ToolDetail } from '@/lib/services/tools';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-  { href: '/tools', label: 'Tools' },
-];
 
 const FIELD_HEADING_STYLES =
   'px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 w-1/3 text-left';
@@ -22,13 +18,18 @@ export default function ToolDetailsPage() {
   const [tool, setTool] = useState<ToolDetail | null>(null);
   const toolName = params.name as string;
 
+  const breadcrumbs: BreadcrumbElement[] = [
+    ...BASE_BREADCRUMBS,
+    { href: '/tools', label: 'Tools' },
+  ];
+
   useEffect(() => {
     const fetchTool = async () => {
       if (!toolName) return;
 
       setLoading(true);
       try {
-        const toolData = await toolsService.getDetail(toolName); // Fetch tool details
+        const toolData = await toolsService.getDetail(toolName);
         setTool(toolData);
       } catch (error) {
         console.error('Failed to fetch tool details:', error);
@@ -41,7 +42,12 @@ export default function ToolDetailsPage() {
   }, [toolName]);
 
   if (loading) {
-    return <div className="py-8 text-center">Loading...</div>;
+    return (
+      <>
+        <PageHeader breadcrumbs={breadcrumbs} />
+        <div className="py-8 text-center">Loading...</div>
+      </>
+    );
   }
 
   return (

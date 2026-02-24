@@ -81,7 +81,8 @@ export class ArkApiClient {
       return targets;
     } catch (error) {
       throw new Error(
-        `Failed to get query targets: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to get query targets: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        {cause: error}
       );
     }
   }
@@ -96,7 +97,8 @@ export class ArkApiClient {
       return data.items || [];
     } catch (error) {
       throw new Error(
-        `Failed to get agents: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to get agents: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        {cause: error}
       );
     }
   }
@@ -111,7 +113,8 @@ export class ArkApiClient {
       return data.items || [];
     } catch (error) {
       throw new Error(
-        `Failed to get models: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to get models: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        {cause: error}
       );
     }
   }
@@ -126,7 +129,8 @@ export class ArkApiClient {
       return data.items || [];
     } catch (error) {
       throw new Error(
-        `Failed to get tools: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to get tools: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        {cause: error}
       );
     }
   }
@@ -141,7 +145,8 @@ export class ArkApiClient {
       return data.items || [];
     } catch (error) {
       throw new Error(
-        `Failed to get teams: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to get teams: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        {cause: error}
       );
     }
   }
@@ -156,7 +161,8 @@ export class ArkApiClient {
       return data.items || [];
     } catch (error) {
       throw new Error(
-        `Failed to get sessions: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to get sessions: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        {cause: error}
       );
     }
   }
@@ -172,7 +178,8 @@ export class ArkApiClient {
       return await response.json();
     } catch (error) {
       throw new Error(
-        `Failed to delete session: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to delete session: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        {cause: error}
       );
     }
   }
@@ -191,7 +198,8 @@ export class ArkApiClient {
       return await response.json();
     } catch (error) {
       throw new Error(
-        `Failed to delete query messages: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to delete query messages: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        {cause: error}
       );
     }
   }
@@ -207,7 +215,8 @@ export class ArkApiClient {
       return await response.json();
     } catch (error) {
       throw new Error(
-        `Failed to delete all sessions: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to delete all sessions: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        {cause: error}
       );
     }
   }

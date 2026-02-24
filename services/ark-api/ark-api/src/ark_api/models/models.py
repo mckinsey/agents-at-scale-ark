@@ -36,11 +36,30 @@ class OpenAIConfig(BaseModel):
     headers: Optional[List[AgentHeader]] = None
 
 
+class AzureManagedIdentityConfig(BaseModel):
+    """Azure Managed Identity auth."""
+    client_id: Optional[Union[str, ModelValueSource]] = Field(None, alias="clientId")
+
+
+class AzureWorkloadIdentityConfig(BaseModel):
+    """Azure Workload Identity auth."""
+    client_id: Union[str, ModelValueSource] = Field(..., alias="clientId")
+    tenant_id: Union[str, ModelValueSource] = Field(..., alias="tenantId")
+
+
+class AzureAuthConfig(BaseModel):
+    """Azure auth (exactly one of apiKey, managedIdentity, workloadIdentity)."""
+    api_key: Optional[Union[str, ModelValueSource]] = Field(None, alias="apiKey")
+    managed_identity: Optional[AzureManagedIdentityConfig] = Field(None, alias="managedIdentity")
+    workload_identity: Optional[AzureWorkloadIdentityConfig] = Field(None, alias="workloadIdentity")
+
+
 class AzureConfig(BaseModel):
     """Azure model configuration."""
-    api_key: Union[str, ModelValueSource] = Field(..., alias="apiKey")
     base_url: Union[str, ModelValueSource] = Field(..., alias="baseUrl")
+    api_key: Optional[Union[str, ModelValueSource]] = Field(None, alias="apiKey")
     api_version: Optional[Union[str, ModelValueSource]] = Field(None, alias="apiVersion")
+    auth: Optional[AzureAuthConfig] = None
     headers: Optional[List[AgentHeader]] = None
 
 

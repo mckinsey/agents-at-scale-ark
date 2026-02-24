@@ -41,6 +41,33 @@ vi.mock('@/lib/services/system-info', () => ({
   },
 }));
 
+vi.mock('@/lib/services/proxy', () => ({
+  proxyService: {
+    getSystemInfo: vi.fn(() => Promise.resolve({})),
+  },
+}));
+
+vi.mock('@/lib/services/files-count-hooks', () => ({
+  useGetFilesCount: vi.fn(() => ({
+    data: 0,
+    isPending: false,
+  })),
+}));
+
+vi.mock('@/lib/services/events-hooks', () => ({
+  useGetEventsCount: vi.fn(() => ({
+    data: 0,
+    isPending: false,
+  })),
+}));
+
+vi.mock('@/lib/services/workflow-templates-hooks', () => ({
+  useGetAllWorkflowTemplates: vi.fn(() => ({
+    data: [],
+    isPending: false,
+  })),
+}));
+
 describe('AppSidebar - A2A Tasks Menu Item', () => {
   const mockPush = vi.fn();
 
@@ -52,41 +79,7 @@ describe('AppSidebar - A2A Tasks Menu Item', () => {
     });
   });
 
-  it('should always show A2A Tasks menu item', async () => {
-    render(
-      <JotaiProvider>
-        <SidebarProvider>
-          <AppSidebar />
-        </SidebarProvider>
-      </JotaiProvider>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText('A2A Tasks')).toBeInTheDocument();
-    });
-  });
-
-  it('should be in the Operations section', async () => {
-    render(
-      <JotaiProvider>
-        <SidebarProvider>
-          <AppSidebar />
-        </SidebarProvider>
-      </JotaiProvider>,
-    );
-
-    await waitFor(() => {
-      const operationsSection = screen
-        .getByText('Operations')
-        .closest('[data-sidebar="group"]');
-      expect(operationsSection).toBeInTheDocument();
-
-      const tasksButton = screen.getByText('A2A Tasks');
-      expect(operationsSection).toContainElement(tasksButton);
-    });
-  });
-
-  it('should navigate to /tasks when clicked', async () => {
+  it('should show A2A Tasks in More menu', async () => {
     const user = userEvent.setup();
 
     render(
@@ -97,6 +90,28 @@ describe('AppSidebar - A2A Tasks Menu Item', () => {
       </JotaiProvider>,
     );
 
+    const moreButton = await screen.findByRole('button', { name: /more/i });
+    await user.click(moreButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('A2A Tasks')).toBeInTheDocument();
+    });
+  });
+
+  it('should navigate to /tasks when A2A Tasks is clicked', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <JotaiProvider>
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>
+      </JotaiProvider>,
+    );
+
+    const moreButton = await screen.findByRole('button', { name: /more/i });
+    await user.click(moreButton);
+
     await waitFor(() => {
       expect(screen.getByText('A2A Tasks')).toBeInTheDocument();
     });
@@ -105,5 +120,19 @@ describe('AppSidebar - A2A Tasks Menu Item', () => {
     await user.click(tasksButton);
 
     expect(mockPush).toHaveBeenCalledWith('/tasks');
+  });
+
+  it('should render sidebar without errors', async () => {
+    render(
+      <JotaiProvider>
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>
+      </JotaiProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('ARK Dashboard')).toBeInTheDocument();
+    });
   });
 });

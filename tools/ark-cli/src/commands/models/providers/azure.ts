@@ -5,14 +5,22 @@ import {
   ProviderConfigCollector,
 } from './types.js';
 
+export type AzureAuthMethod =
+  | 'apiKey'
+  | 'managedIdentity'
+  | 'workloadIdentity';
+
 /**
  * Configuration for Azure OpenAI models.
  */
 export interface AzureConfig extends BaseProviderConfig {
   type: 'azure';
   baseUrl: string;
-  apiKey: string;
   apiVersion: string;
+  authMethod?: AzureAuthMethod;
+  apiKey?: string;
+  clientId?: string;
+  tenantId?: string;
 }
 
 /**
@@ -22,17 +30,16 @@ export interface AzureCollectorOptions extends BaseCollectorOptions {
   baseUrl?: string;
   apiKey?: string;
   apiVersion?: string;
+  authMethod?: AzureAuthMethod;
+  clientId?: string;
+  tenantId?: string;
 }
 
 /**
  * Configuration collector for Azure OpenAI models.
  *
- * Collects the necessary configuration to connect to Azure OpenAI Service:
- * - baseUrl: The Azure OpenAI endpoint URL (e.g., https://<resource>.openai.azure.com)
- * - apiVersion: The API version to use (defaults to 2024-12-01-preview)
- * - apiKey: The authentication key for the Azure OpenAI resource
- *
- * Values can be provided via command-line options or will be prompted interactively.
+ * Supports API Key, Managed Identity (AKS), and Workload Identity auth.
+ * Values can be provided via command-line options or prompted interactively.
  */
 export class AzureConfigCollector implements ProviderConfigCollector {
   async collectConfig(options: BaseCollectorOptions): Promise<AzureConfig> {
@@ -77,25 +84,89 @@ export class AzureConfigCollector implements ProviderConfigCollector {
       apiVersion = answer.apiVersion;
     }
 
-    let apiKey = azureOptions.apiKey;
-    if (!apiKey) {
+    let authMethod = azureOptions.authMethod;
+    if (!authMethod && azureOptions.apiKey) {
+      authMethod = 'apiKey';
+    }
+    if (!authMethod) {
       const answer = await inquirer.prompt([
         {
-          type: 'password',
-          name: 'apiKey',
-          message: 'API key:',
-          mask: '*',
-          validate: (input) => {
-            if (!input) return 'API key is required';
-            return true;
-          },
+          type: 'list',
+          name: 'authMethod',
+          message: 'Authentication:',
+          choices: [
+            { name: 'API Key', value: 'apiKey' },
+            { name: 'Managed Identity (AKS)', value: 'managedIdentity' },
+            { name: 'Workload Identity', value: 'workloadIdentity' },
+          ],
         },
       ]);
-      apiKey = answer.apiKey;
+      authMethod = answer.authMethod;
     }
 
-    if (!apiKey) {
-      throw new Error('API key is required');
+    let apiKey: string | undefined;
+    let clientId: string | undefined;
+    let tenantId: string | undefined;
+
+    if (authMethod === 'apiKey') {
+      apiKey = azureOptions.apiKey;
+      if (!apiKey) {
+        const answer = await inquirer.prompt([
+          {
+            type: 'password',
+            name: 'apiKey',
+            message: 'API key:',
+            mask: '*',
+            validate: (input) => {
+              if (!input) return 'API key is required';
+              return true;
+            },
+          },
+        ]);
+        apiKey = answer.apiKey;
+      }
+      if (!apiKey) {
+        throw new Error('API key is required');
+      }
+    } else if (authMethod === 'managedIdentity') {
+      clientId = azureOptions.clientId;
+      if (!clientId) {
+        const answer = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'clientId',
+            message: 'Managed Identity Client ID (optional for system-assigned):',
+          },
+        ]);
+        clientId = answer.clientId || undefined;
+      }
+    } else if (authMethod === 'workloadIdentity') {
+      clientId = azureOptions.clientId;
+      tenantId = azureOptions.tenantId;
+      if (!clientId) {
+        const answer = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'clientId',
+            message: 'Workload Identity Client ID:',
+            validate: (input) =>
+              input ? true : 'Client ID is required for Workload Identity',
+          },
+        ]);
+        clientId = answer.clientId;
+      }
+      if (!tenantId) {
+        const answer = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'tenantId',
+            message: 'Azure Tenant ID:',
+            validate: (input) =>
+              input ? true : 'Tenant ID is required for Workload Identity',
+          },
+        ]);
+        tenantId = answer.tenantId;
+      }
     }
 
     return {
@@ -103,8 +174,11 @@ export class AzureConfigCollector implements ProviderConfigCollector {
       modelValue: options.model!,
       secretName: '',
       baseUrl,
-      apiKey,
       apiVersion,
+      authMethod,
+      apiKey,
+      clientId,
+      tenantId,
     };
   }
 }

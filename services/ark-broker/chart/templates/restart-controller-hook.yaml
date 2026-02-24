@@ -24,8 +24,15 @@ spec:
       serviceAccountName: {{ include "ark-broker.fullname" . }}-restart-hook
       containers:
       - name: restart-controller
-        image: bitnami/kubectl:latest
+        image: alpine/k8s:1.28.3
         imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
         command:
         - /bin/bash
         - -c
