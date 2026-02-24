@@ -14,6 +14,7 @@ interface ChatMessageProps {
   className?: string;
   viewMode?: 'text' | 'markdown';
   toolCalls?: ToolCallData[];
+  sender?: string;
 }
 
 export function ChatMessage({
@@ -24,6 +25,7 @@ export function ChatMessage({
   viewMode = 'text',
   queryName,
   toolCalls,
+  sender,
 }: Readonly<ChatMessageProps>) {
   const isUser = role === 'user';
   const isFailed = status === 'failed';
@@ -164,24 +166,31 @@ export function ChatMessage({
               ? { minWidth: `${expandedWidth}px` }
               : undefined
           }>
-          <div className="flex items-center gap-2">
-            <div ref={contentRef} className="min-w-0 flex-1 overflow-x-auto">
-              {viewMode === 'markdown' ? (
-                <div className="text-sm break-words">{markdownContent}</div>
-              ) : (
-                <pre className="m-0 border-0 bg-transparent p-0 font-mono text-sm whitespace-pre-wrap">
-                  {content}
-                </pre>
+          <div className="flex flex-col gap-2">
+            {sender && !isUser && (
+              <div className="text-muted-foreground text-xs font-medium">
+                {sender}
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <div ref={contentRef} className="min-w-0 flex-1 overflow-x-auto">
+                {viewMode === 'markdown' ? (
+                  <div className="text-sm break-words">{markdownContent}</div>
+                ) : (
+                  <pre className="m-0 border-0 bg-transparent p-0 font-mono text-sm whitespace-pre-wrap">
+                    {content}
+                  </pre>
+                )}
+              </div>
+              {showErrorIcon && (
+                <button
+                  onClick={handleErrorIconClick}
+                  className="hover:bg-destructive/20 flex-shrink-0 rounded p-1 transition-colors"
+                  title="View events for this query">
+                  <AlertCircle className="h-4 w-4" />
+                </button>
               )}
             </div>
-            {showErrorIcon && (
-              <button
-                onClick={handleErrorIconClick}
-                className="hover:bg-destructive/20 flex-shrink-0 rounded p-1 transition-colors"
-                title="View events for this query">
-                <AlertCircle className="h-4 w-4" />
-              </button>
-            )}
           </div>
         </div>
       )}

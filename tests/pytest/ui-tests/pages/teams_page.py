@@ -52,32 +52,111 @@ class TeamsPage(BasePage):
     
     def create_team_with_verification(self, team_name: str, description: str, strategy: str, max_turns: str, member_name: str) -> dict:
         logger.info(f"Creating team: {team_name}")
-        
+
         self.page.locator(self.ADD_TEAM_BUTTON).first.click()
         self.wait_for_load_state("domcontentloaded")
-        
+        self.page.locator("input").first.wait_for(state="visible", timeout=10000)
+
+        is_full_page = "/teams/new" in self.page.url
+
+        if is_full_page:
+            return self._create_team_full_page(team_name, description, strategy, max_turns, member_name)
+        else:
+            return self._create_team_dialog(team_name, description, strategy, max_turns, member_name)
+
+    def _create_team_full_page(self, team_name: str, description: str, strategy: str, max_turns: str, member_name: str) -> dict:
+        logger.info("Using full-page team creation form")
+
+        name_input = self.page.locator("input[name='name']")
+        name_input.wait_for(state="visible", timeout=10000)
+        name_input.fill(team_name)
+
+        desc_input = self.page.locator("input[name='description']")
+        if desc_input.count() > 0 and desc_input.first.is_visible():
+            desc_input.first.fill(description)
+
+        try:
+            trigger = self.page.locator("[role='combobox'], button:has-text('Select a strategy')").first
+            trigger.click()
+            self.page.locator("[role='option']").first.wait_for(state="visible", timeout=5000)
+            option = self.page.locator(f"[role='option']:has-text('{strategy}')").first
+            option.click()
+            self.page.locator("[role='option']").first.wait_for(state="hidden", timeout=5000)
+        except Exception as e:
+            logger.warning(f"Could not select strategy: {e}")
+
+        max_turns_field = self.page.locator("input[name='maxTurns'], input[type='number']")
+        if max_turns_field.count() > 0:
+            max_turns_field.first.fill(max_turns)
+
+        logger.info(f"Selecting member: {member_name}")
+
+        try:
+            member_checkbox = self.page.locator(f"label:has-text('{member_name}') >> xpath=../preceding-sibling::button[@role='checkbox'], div:has-text('{member_name}') button[role='checkbox']").first
+            member_checkbox.wait_for(state="visible", timeout=10000)
+            if member_checkbox.is_visible():
+                member_checkbox.click()
+            else:
+                all_checkboxes = self.page.locator("button[role='checkbox']")
+                if all_checkboxes.count() > 0:
+                    all_checkboxes.first.click()
+        except Exception as e:
+            logger.warning(f"Could not select member checkbox: {e}")
+            try:
+                all_checkboxes = self.page.locator("button[role='checkbox']")
+                if all_checkboxes.count() > 0:
+                    all_checkboxes.first.click()
+            except:
+                pass
+
+        logger.info("Clicking Create Team button")
+        save_button = self.page.locator("button:has-text('Create Team')").first
+        save_button.click()
+
+        self.wait_for_load_state("networkidle")
+
+        try:
+            self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=10000)
+            popup_visible = True
+        except:
+            popup_visible = False
+
+        self.navigate_to_teams_tab()
+
+        in_table = self.is_team_in_table(team_name)
+
+        return {
+            "name": team_name,
+            "popup_visible": popup_visible,
+            "in_table": in_table,
+            "strategy": strategy
+        }
+
+    def _create_team_dialog(self, team_name: str, description: str, strategy: str, max_turns: str, member_name: str) -> dict:
+        logger.info("Using dialog-based team creation")
+
         self.page.locator("input").first.wait_for(state="visible", timeout=10000)
         self.page.locator("input").first.fill(team_name)
-        
+
         description_field = self.page.locator("textarea")
         if description_field.count() > 0:
             description_field.first.fill(description)
         else:
             self.page.locator("input").nth(1).fill(description)
-        
+
         select_dropdown = self.page.locator("select")
         if select_dropdown.count() > 0:
             select_dropdown.first.select_option(label=strategy)
-        
+
         max_turns_fields = self.page.locator("input[type='number']")
         if max_turns_fields.count() > 0:
             max_turns_fields.first.fill(max_turns)
-        
+
         logger.info(f"Selecting member: {member_name}")
-        self.wait_for_timeout(1000)
-        
+
         try:
             checkbox = self.page.locator(f"tr:has-text('{member_name}') input[type='checkbox'], div:has-text('{member_name}') input[type='checkbox'], label:has-text('{member_name}') input[type='checkbox']").first
+            checkbox.wait_for(state="visible", timeout=10000)
             if checkbox.is_visible():
                 checkbox.check()
             else:
@@ -86,39 +165,34 @@ class TeamsPage(BasePage):
                     all_checkboxes.first.check()
         except Exception as e:
             logger.warning(f"Could not select member checkbox: {e}")
-        
-        self.wait_for_timeout(1000)
-        
+
         save_button = self.page.locator("[role='dialog'] button:has-text('Create'), [data-slot='dialog-content'] button:has-text('Create')").first
         if not save_button.is_visible():
             save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
-        
+
         logger.info("Clicking Create button in team dialog")
         save_button.scroll_into_view_if_needed()
         save_button.evaluate("el => el.click()")
-        
-        self.wait_for_load_state("domcontentloaded")
-        self.wait_for_timeout(2000)
-        
+
+        self.wait_for_load_state("networkidle")
+
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
             popup_visible = True
         except:
             popup_visible = False
-        
+
         try:
             self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=10000)
         except:
             logger.info("Dialog may still be open, pressing Escape")
             self.page.keyboard.press("Escape")
-            self.wait_for_timeout(1000)
-        
-        self.wait_for_timeout(1000)
+            self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=5000)
+
         self.navigate_to_teams_tab()
-        self.wait_for_timeout(2000)
-        
+
         in_table = self.is_team_in_table(team_name)
-        
+
         return {
             "name": team_name,
             "popup_visible": popup_visible,

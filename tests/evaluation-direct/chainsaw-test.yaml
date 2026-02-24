@@ -23,22 +23,23 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
+    - script:
+        content: bash ../helpers/wait-for-evaluator.sh
     - apply:
         file: manifests/*.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          metadata:
-            name: direct-evaluation-model
-          status:
-            conditions:
-            - type: ModelAvailable
-              status: "True"
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: direct-evaluation-model
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True' 
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluator
-        timeout: 1m
+        timeout: 3m
         name: test-evaluator-llm
         for:
           jsonPath:
@@ -56,9 +57,9 @@ spec:
         timeout: 10m
         name: test-direct-evaluation
         for:
-          jsonPath:
-            path: '{.status.phase}'
-            value: 'done'
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
