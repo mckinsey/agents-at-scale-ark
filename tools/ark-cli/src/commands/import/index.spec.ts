@@ -1,22 +1,22 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 import {Command} from 'commander';
 
-const mockExeca = jest.fn() as any;
-jest.unstable_mockModule('execa', () => ({
+const mockExeca = vi.fn() as any;
+vi.mock('execa', () => ({
   execa: mockExeca,
 }));
 
 const mockOutput = {
-  info: jest.fn(),
-  success: jest.fn(),
-  warning: jest.fn(),
-  error: jest.fn(),
+  info: vi.fn(),
+  success: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
 };
-jest.unstable_mockModule('../../lib/output.js', () => ({
+vi.mock('../../lib/output.js', () => ({
   default: mockOutput,
 }));
 
-const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+const mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {
   throw new Error('process.exit called');
 }) as any);
 
@@ -27,7 +27,7 @@ describe('import command', () => {
   const mockConfig: ArkConfig = {};
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should create import command with correct description', () => {
@@ -58,9 +58,9 @@ describe('import command', () => {
 
     const command = createImportCommand(mockConfig);
 
-    await expect(command.parseAsync(['node', 'test', 'test.yaml'])).rejects.toThrow(
-      'process.exit called'
-    );
+    await expect(
+      command.parseAsync(['node', 'test', 'test.yaml'])
+    ).rejects.toThrow('process.exit called');
     expect(mockOutput.error).toHaveBeenCalledWith(
       'import failed:',
       'Import broke'

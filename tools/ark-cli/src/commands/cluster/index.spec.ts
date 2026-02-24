@@ -1,8 +1,8 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 import {Command} from 'commander';
 
-const mockCreateGetCommand = jest.fn();
-jest.unstable_mockModule('./get.js', () => ({
+const mockCreateGetCommand = vi.fn();
+vi.mock('./get.js', () => ({
   createGetCommand: mockCreateGetCommand,
 }));
 
@@ -10,7 +10,7 @@ const {createClusterCommand} = await import('./index.js');
 
 describe('cluster command', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockCreateGetCommand.mockReturnValue(new Command('get'));
   });
 

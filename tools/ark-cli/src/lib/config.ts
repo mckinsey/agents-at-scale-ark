@@ -59,7 +59,9 @@ export function loadConfig(): ArkConfig {
       mergeConfig(config, userConfig);
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Unknown error';
-      throw new Error(`Invalid YAML in ${userConfigPath}: ${message}`);
+      throw new Error(`Invalid YAML in ${userConfigPath}: ${message}`, {
+        cause: e,
+      });
     }
   }
 
@@ -73,7 +75,9 @@ export function loadConfig(): ArkConfig {
       mergeConfig(config, projectConfig);
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Unknown error';
-      throw new Error(`Invalid YAML in ${projectConfigPath}: ${message}`);
+      throw new Error(`Invalid YAML in ${projectConfigPath}: ${message}`, {
+        cause: e,
+      });
     }
   }
 
@@ -144,7 +148,10 @@ function mergeConfig(target: ArkConfig, source: ArkConfig): void {
       target.services.reusePortForwards = source.services.reusePortForwards;
     }
     for (const [serviceName, overrides] of Object.entries(source.services)) {
-      if (serviceName !== 'reusePortForwards' && typeof overrides === 'object') {
+      if (
+        serviceName !== 'reusePortForwards' &&
+        typeof overrides === 'object'
+      ) {
         target.services[serviceName] = {
           ...(target.services[serviceName] as Partial<ArkService>),
           ...overrides,
@@ -158,7 +165,7 @@ function mergeConfig(target: ArkConfig, source: ArkConfig): void {
   }
 
   if (source.defaultExportTypes) {
-    target.defaultExportTypes = source.defaultExportTypes
+    target.defaultExportTypes = source.defaultExportTypes;
   }
 }
 

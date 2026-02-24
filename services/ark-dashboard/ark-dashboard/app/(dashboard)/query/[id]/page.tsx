@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/tooltip';
 import type { components } from '@/lib/api/generated/types';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { useMarkdownProcessor } from '@/lib/hooks/use-markdown-processor';
 import {
   agentsService,
@@ -50,11 +51,6 @@ import {
   transformQueryParametersToApi,
 } from '@/lib/utils/query-parameters';
 import { simplifyDuration } from '@/lib/utils/time';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-  { href: '/queries', label: 'Queries' },
-];
 
 // Component for rendering response content
 function ResponseContent({
@@ -686,11 +682,18 @@ function QueryDetailContent() {
     );
   }
 
+  const breadcrumbs: BreadcrumbElement[] = [
+    ...BASE_BREADCRUMBS,
+    { href: '/queries', label: 'Queries' },
+  ];
+
+  const pageTitle = isNew ? 'New Query' : query?.name || queryId;
+
   return (
     <>
       <PageHeader
         breadcrumbs={breadcrumbs}
-        currentPage={isNew ? 'New Query' : query.name}
+        currentPage={pageTitle}
         actions={
           <>
             {!isNew && <QueryEvaluationActions queryName={queryId} />}

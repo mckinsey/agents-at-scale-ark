@@ -259,7 +259,7 @@ export function EventsSection({
   }
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="mt-4">
       <div className="flex flex-wrap items-center gap-2 border-b pb-4">
         <Select
           value={type || 'all'}

@@ -64,8 +64,7 @@ describe('TasksPage', () => {
       </QueryClientProvider>,
     );
 
-    const titles = screen.getAllByText('A2A Tasks');
-    expect(titles.length).toBeGreaterThan(0);
+    expect(screen.getByText('A2A Tasks (0)')).toBeInTheDocument();
   });
 
   it('should render the A2ATasksSection component', () => {
