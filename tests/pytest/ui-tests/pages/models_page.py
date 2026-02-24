@@ -1,7 +1,9 @@
 import logging
+import pytest
+from datetime import datetime
 from playwright.sync_api import Page
 from .base_page import BasePage
-from datetime import datetime
+from .dashboard_page import DashboardPage
 
 logger = logging.getLogger(__name__)
 
@@ -29,14 +31,9 @@ class ModelsPage(BasePage):
     }
     
     def navigate_to_models_tab(self) -> None:
-        from .dashboard_page import DashboardPage
         dashboard = DashboardPage(self.page)
-        
-        # Navigate directly to /models URL instead of clicking tabs
         self.page.goto(f"{dashboard.base_url}/models")
         self.wait_for_navigation_complete()
-        
-        # Wait for Add Model button to appear
         self.wait_for_element(self.ADD_MODEL_BUTTON, timeout=10000)
     
     def generate_model_name(self, prefix: str = "model") -> str:
@@ -44,7 +41,6 @@ class ModelsPage(BasePage):
         return f"{prefix}-{date_str}"
     
     def is_model_in_table(self, model_name: str, retries: int = 3) -> bool:
-        """Check if model is in table with retry logic"""
         for attempt in range(retries):
             try:
                 if self.page.get_by_text(model_name, exact=False).count() > 0:
@@ -86,6 +82,7 @@ class ModelsPage(BasePage):
         self.page.locator(self.SAVE_BUTTON).first.wait_for(state="visible")
         self.page.locator(self.SAVE_BUTTON).first.click()
         
+        self.wait_for_modal_close()
         self.wait_for_navigation_complete()
         
         try:
@@ -137,7 +134,6 @@ class ModelsPage(BasePage):
         except:
             return self._delete_not_available(model_name)
         
-        # Wait for confirmation dialog to appear
         self.wait_for_modal_open()
         confirm_dialog_visible = self.page.locator(self.CONFIRM_DELETE_DIALOG).first.is_visible()
         confirm_button_visible = self.page.locator(self.CONFIRM_DELETE_BUTTON).first.is_visible()
@@ -176,8 +172,6 @@ class ModelsPage(BasePage):
             return False
     
     def create_model_for_test(self, prefix: str, secret_name: str, secrets_page):
-        import pytest
-        
         model_data = self.TEST_DATA["openai"]
         
         self.navigate_to_models_tab()

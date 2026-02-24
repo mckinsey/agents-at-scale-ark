@@ -1,7 +1,9 @@
 import logging
+import pytest
+from datetime import datetime
 from playwright.sync_api import Page
 from .base_page import BasePage
-from datetime import datetime
+from .dashboard_page import DashboardPage
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +33,6 @@ class AgentsPage(BasePage):
     def navigate_to_agents_tab(self) -> None:
         self._close_dialog_if_open()
         
-        from .dashboard_page import DashboardPage
         dashboard = DashboardPage(self.page)
         dashboard.navigate_to_section("agents")
         
@@ -360,7 +361,6 @@ class AgentsPage(BasePage):
             logger.error(f"Error selecting tool {tool_name}: {str(e)}")
     
     def create_agent_for_test(self, prefix: str, model_name: str, test_data_key: str = "default", tools: list = None):
-        import pytest
         
         agent_data = self.TEST_DATA[test_data_key]
         

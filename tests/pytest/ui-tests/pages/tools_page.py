@@ -1,7 +1,9 @@
 import logging
+import pytest
+from datetime import datetime
 from playwright.sync_api import Page
 from .base_page import BasePage
-from datetime import datetime
+from .dashboard_page import DashboardPage
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,6 @@ class ToolsPage(BasePage):
     def navigate_to_tools_tab(self) -> None:
         self._close_any_dialog()
         
-        from .dashboard_page import DashboardPage
         dashboard = DashboardPage(self.page)
         dashboard.navigate_to_section("tools")
         
@@ -203,8 +204,6 @@ class ToolsPage(BasePage):
             return False
     
     def create_tool_for_test(self, prefix: str, test_data_key: str = "get_coordinates"):
-        import pytest
-        
         tool_data = self.TEST_DATA[test_data_key]
         
         self.navigate_to_tools_tab()

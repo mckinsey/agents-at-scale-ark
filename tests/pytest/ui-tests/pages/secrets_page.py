@@ -1,10 +1,12 @@
 import logging
-from playwright.sync_api import Page
-from .base_page import BasePage
-from datetime import datetime
 import os
+import pytest
+from datetime import datetime
 from pathlib import Path
+from playwright.sync_api import Page
 from dotenv import load_dotenv
+from .base_page import BasePage
+from .dashboard_page import DashboardPage
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +41,8 @@ class SecretsPage(BasePage):
     
     def navigate_to_secrets_tab(self) -> None:
         self._close_dialog_if_open()
-        
-        from .dashboard_page import DashboardPage
         dashboard = DashboardPage(self.page)
         dashboard.navigate_to_section("secrets")
-        
         self._close_dialog_if_open()
     
     def _close_dialog_if_open(self) -> None:
@@ -60,11 +59,19 @@ class SecretsPage(BasePage):
                 pass
         self.page.keyboard.press("Escape")
     
-    def is_secret_in_table(self, secret_name: str) -> bool:
-        try:
-            return self.page.get_by_text(secret_name, exact=False).count() > 0
-        except:
-            return False
+    def is_secret_in_table(self, secret_name: str, retries: int = 3) -> bool:
+        for attempt in range(retries):
+            try:
+                if self.page.get_by_text(secret_name, exact=False).count() > 0:
+                    return True
+                if attempt < retries - 1:
+                    logger.info(f"Secret {secret_name} not found, retrying... ({attempt + 1}/{retries})")
+                    self.page.reload()
+                    self.wait_for_navigation_complete()
+                    self.wait_for_element(self.ADD_SECRET_BUTTON, timeout=10000)
+            except Exception as e:
+                logger.warning(f"Error checking secret in table: {e}")
+        return False
     
     def create_secret_with_verification(self, prefix: str, env_key: str) -> dict:
         secret_name = self.generate_secret_name(prefix)
@@ -94,6 +101,7 @@ class SecretsPage(BasePage):
         save_button.wait_for(state="visible", timeout=5000)
         save_button.evaluate("el => el.click()")
         
+        self.wait_for_modal_close()
         self.wait_for_load_state("domcontentloaded")
         
         try:
@@ -102,6 +110,7 @@ class SecretsPage(BasePage):
         except:
             popup_visible = False
         
+        self.navigate_to_secrets_tab()
         in_table = self.is_secret_in_table(secret_name)
         
         return {
@@ -164,9 +173,6 @@ class SecretsPage(BasePage):
             return False
     
     def create_secret_for_test(self, prefix: str, env_key: str):
-        """Complete flow to create a secret for testing - navigate, check, and create"""
-        import pytest
-        
         self.navigate_to_secrets_tab()
         
         if not self.is_visible(self.ADD_SECRET_BUTTON):
