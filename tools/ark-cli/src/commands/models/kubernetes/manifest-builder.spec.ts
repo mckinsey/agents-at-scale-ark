@@ -1,4 +1,3 @@
-import {describe, it, expect} from '@jest/globals';
 import {KubernetesModelManifestBuilder} from './manifest-builder.js';
 import type {AzureConfig} from '../providers/azure.js';
 
