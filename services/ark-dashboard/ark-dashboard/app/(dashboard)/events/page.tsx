@@ -27,11 +27,11 @@ export default function EventsPage() {
   };
 
   const pageTitle =
-    eventsCount !== undefined ? `Query Logs (${eventsCount})` : 'Query Logs';
+    eventsCount !== undefined ? `Events (${eventsCount})` : 'Events';
 
   return (
     <>
-      <PageHeader breadcrumbs={BASE_BREADCRUMBS} currentPage="Query Logs" />
+      <PageHeader breadcrumbs={BASE_BREADCRUMBS} currentPage="Events" />
       <div className="flex flex-1 flex-col">
         <div>
           <h1 className="text-xl">{pageTitle}</h1>
