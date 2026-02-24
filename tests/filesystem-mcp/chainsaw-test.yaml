@@ -56,16 +56,15 @@ spec:
             name: mcp-filesystem
           status:
             readyReplicas: 1
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          metadata:
-            name: test-model
-          status:
-            conditions:
-            - type: ModelAvailable
-              status: "True"
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True' 
     - assert:
         timeout: 2m
         resource:

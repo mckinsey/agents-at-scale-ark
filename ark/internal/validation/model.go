@@ -39,35 +39,72 @@ func (v *Validator) validateProviderConfig(ctx context.Context, model *arkv1alph
 	}
 }
 
+func (v *Validator) validateAzureAuth(ctx context.Context, azure *arkv1alpha1.AzureModelConfig, ns string) error {
+	if azure.Auth == nil {
+		if azure.APIKey == nil {
+			return fmt.Errorf("spec.config.azure.apiKey or spec.config.azure.auth is required")
+		}
+		return v.ValidateValueSource(ctx, azure.APIKey, ns, "spec.config.azure.apiKey")
+	}
+	auth := azure.Auth
+	n := 0
+	if auth.APIKey != nil {
+		n++
+	}
+	if auth.ManagedIdentity != nil {
+		n++
+	}
+	if auth.WorkloadIdentity != nil {
+		n++
+	}
+	if n != 1 {
+		return fmt.Errorf("spec.config.azure.auth must have exactly one of apiKey, managedIdentity, or workloadIdentity")
+	}
+	if auth.APIKey != nil {
+		return v.ValidateValueSource(ctx, auth.APIKey, ns, "spec.config.azure.auth.apiKey")
+	}
+	if auth.ManagedIdentity != nil && auth.ManagedIdentity.ClientID != nil {
+		if err := v.ValidateValueSource(ctx, auth.ManagedIdentity.ClientID, ns, "spec.config.azure.auth.managedIdentity.clientId"); err != nil {
+			return err
+		}
+	}
+	if auth.WorkloadIdentity != nil {
+		if err := v.ValidateValueSource(ctx, &auth.WorkloadIdentity.ClientID, ns, "spec.config.azure.auth.workloadIdentity.clientId"); err != nil {
+			return err
+		}
+		if err := v.ValidateValueSource(ctx, &auth.WorkloadIdentity.TenantID, ns, "spec.config.azure.auth.workloadIdentity.tenantId"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (v *Validator) validateAzureConfig(ctx context.Context, model *arkv1alpha1.Model) error {
 	if model.Spec.Config.Azure == nil {
 		return fmt.Errorf("azure configuration is required for azure model type")
 	}
-
+	azure := model.Spec.Config.Azure
 	ns := model.GetNamespace()
-	if err := v.ValidateValueSource(ctx, &model.Spec.Config.Azure.BaseURL, ns, "spec.config.azure.baseUrl"); err != nil {
+	if err := v.ValidateValueSource(ctx, &azure.BaseURL, ns, "spec.config.azure.baseUrl"); err != nil {
 		return err
 	}
-	if err := v.ValidateValueSource(ctx, &model.Spec.Config.Azure.APIKey, ns, "spec.config.azure.apiKey"); err != nil {
-		return err
-	}
-	if model.Spec.Config.Azure.APIVersion != nil {
-		if err := v.ValidateValueSource(ctx, model.Spec.Config.Azure.APIVersion, ns, "spec.config.azure.apiVersion"); err != nil {
+	if azure.APIVersion != nil {
+		if err := v.ValidateValueSource(ctx, azure.APIVersion, ns, "spec.config.azure.apiVersion"); err != nil {
 			return err
 		}
 	}
-
-	if _, err := v.ResolveValueSource(ctx, model.Spec.Config.Azure.BaseURL, ns); err != nil {
+	if err := v.validateAzureAuth(ctx, azure, ns); err != nil {
+		return err
+	}
+	if _, err := v.ResolveValueSource(ctx, azure.BaseURL, ns); err != nil {
 		return fmt.Errorf("failed to resolve Azure BaseURL: %w", err)
 	}
-
-	for i, header := range model.Spec.Config.Azure.Headers {
+	for i, header := range azure.Headers {
 		contextPrefix := fmt.Sprintf("spec.config.azure.headers[%d]", i)
 		if err := ValidateHeader(header, contextPrefix); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
