@@ -2,6 +2,8 @@ package apiserver
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -9,6 +11,7 @@ import (
 	"k8s.io/apiserver/pkg/registry/rest"
 	"k8s.io/klog/v2"
 
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/apiserver/registry"
 	"mckinsey.com/ark/internal/queryworker"
 	"mckinsey.com/ark/internal/validation"
@@ -65,17 +68,28 @@ func (s *QueryAdmissionStorage) Create(ctx context.Context, obj runtime.Object, 
 		return result, nil
 	}
 
-	// print logs always
 	klog.Infof("Creating query %s/%s", accessor.GetNamespace(), accessor.GetName())
 
-	_, insertErr := s.riverClient.Insert(ctx, queryworker.QueryJobArgs{
-		Namespace: accessor.GetNamespace(),
-		Name:      accessor.GetName(),
+	timeoutSeconds := queryworker.TimeoutSecondsFromObject(result)
+
+	insertRes, insertErr := s.riverClient.Insert(ctx, queryworker.QueryJobArgs{
+		Namespace:      accessor.GetNamespace(),
+		Name:           accessor.GetName(),
+		TimeoutSeconds: timeoutSeconds,
 	}, nil)
 	if insertErr != nil {
-		klog.Errorf("failed to insert River job for query %s/%s: %v", accessor.GetNamespace(), accessor.GetName(), insertErr)
-	} else {
-		klog.V(4).Infof("inserted River job for query %s/%s", accessor.GetNamespace(), accessor.GetName())
+		return nil, fmt.Errorf("failed to insert River job for query %s/%s: %w", accessor.GetNamespace(), accessor.GetName(), insertErr)
+	}
+	klog.V(4).Infof("inserted River job for query %s/%s (jobId=%d)", accessor.GetNamespace(), accessor.GetName(), insertRes.Job.ID)
+
+	if query, ok := result.(*arkv1alpha1.Query); ok {
+		query.Status.JobId = strconv.FormatInt(insertRes.Job.ID, 10)
+		updated, _, updateErr := s.GenericStorage.Update(ctx, accessor.GetName(), rest.DefaultUpdatedObjectInfo(query), nil, nil, false, &metav1.UpdateOptions{})
+		if updateErr != nil {
+			klog.Warningf("failed to persist jobId for query %s/%s: %v", accessor.GetNamespace(), accessor.GetName(), updateErr)
+			return result, nil
+		}
+		return updated, nil
 	}
 
 	return result, nil

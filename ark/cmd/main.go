@@ -110,6 +110,7 @@ func main() {
 		setupLog.Error(err, "failed to setup River query workers")
 		os.Exit(1)
 	}
+	queryReconciler.RiverClient = riverClient
 
 	setupWebhooks(mgr)
 	setupEmbeddedApiserver(mgr, riverClient)

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 	"mckinsey.com/ark/internal/annotations"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	"mckinsey.com/ark/internal/genai"
+	"mckinsey.com/ark/internal/queryworker"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 )
 
@@ -48,6 +50,7 @@ type QueryReconciler struct {
 	Telemetry           *telemetryconfig.Provider
 	Eventing            *eventingconfig.Provider
 	QueryWorkersEnabled bool
+	RiverClient         *queryworker.RiverClient
 	operations          sync.Map
 }
 
@@ -84,11 +87,16 @@ func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		}
 	}
 
-	if result, err := r.handleFinalizer(ctx, &obj); result != nil {
-		return *result, err
+	if !r.QueryWorkersEnabled {
+		if result, err := r.handleFinalizer(ctx, &obj); result != nil {
+			return *result, err
+		}
 	}
 
 	if len(obj.Status.Conditions) == 0 {
+		if r.QueryWorkersEnabled {
+			return ctrl.Result{}, nil
+		}
 		r.setConditionCompleted(&obj, metav1.ConditionFalse, "QueryNotStarted", "The query has not been started yet")
 		return ctrl.Result{}, r.Status().Update(ctx, &obj)
 	}
@@ -130,7 +138,11 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 	expiry := obj.CreationTimestamp.Add(ttl)
 
 	if obj.Spec.Cancel && obj.Status.Phase != statusCanceled {
-		r.cleanupExistingOperation(req.NamespacedName)
+		if r.QueryWorkersEnabled {
+			r.cancelRiverJob(ctx, &obj)
+		} else {
+			r.cleanupExistingOperation(req.NamespacedName)
+		}
 		if err := r.updateStatus(ctx, &obj, statusCanceled); err != nil {
 			return ctrl.Result{
 				RequeueAfter: time.Until(expiry),
@@ -209,7 +221,14 @@ func (r *QueryReconciler) ExecuteQueryDirect(ctx context.Context, namespace, nam
 		return fmt.Errorf("failed to set query running: %w", err)
 	}
 
-	return r.executeQuery(ctx, obj)
+	if err := r.executeQuery(ctx, obj); err != nil {
+		return err
+	}
+
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return nil
 }
 
 func (r *QueryReconciler) executeQuery(ctx context.Context, obj arkv1alpha1.Query) error {
@@ -638,6 +657,10 @@ func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query
 	log := logf.FromContext(ctx)
 	log.Info("finalizing query", "name", query.Name, "namespace", query.Namespace)
 
+	if r.QueryWorkersEnabled {
+		r.cancelRiverJob(ctx, query)
+	}
+
 	nsName := types.NamespacedName{Name: query.Name, Namespace: query.Namespace}
 	if cancel, exists := r.operations.Load(nsName); exists {
 		if cancelFunc, ok := cancel.(context.CancelFunc); ok {
@@ -1003,6 +1026,22 @@ func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Cli
 	}
 
 	return impersonatedClient, nil
+}
+
+func (r *QueryReconciler) cancelRiverJob(ctx context.Context, query *arkv1alpha1.Query) {
+	log := logf.FromContext(ctx)
+	if query.Status.JobId == "" {
+		log.V(4).Info("no jobId on query, skipping River cancel", "query", query.Name)
+		return
+	}
+	jobID, err := strconv.ParseInt(query.Status.JobId, 10, 64)
+	if err != nil {
+		log.Error(err, "failed to parse jobId", "jobId", query.Status.JobId)
+		return
+	}
+	if _, err := r.RiverClient.JobCancel(ctx, jobID); err != nil {
+		log.Error(err, "failed to cancel River job", "jobId", jobID)
+	}
 }
 
 func (r *QueryReconciler) cleanupExistingOperation(namespacedName types.NamespacedName) {

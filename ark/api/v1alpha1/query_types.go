@@ -139,6 +139,9 @@ type QueryStatus struct {
 	// +kubebuilder:validation:MinLength=1
 	ConversationId string `json:"conversationId,omitempty"`
 	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MinLength=1
+	JobId string `json:"jobId,omitempty"`
+	// +kubebuilder:validation:Optional
 	Duration *metav1.Duration `json:"duration,omitempty"`
 }
 
