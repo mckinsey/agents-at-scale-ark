@@ -84,11 +84,16 @@ func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		}
 	}
 
-	if result, err := r.handleFinalizer(ctx, &obj); result != nil {
-		return *result, err
+	if !r.QueryWorkersEnabled {
+		if result, err := r.handleFinalizer(ctx, &obj); result != nil {
+			return *result, err
+		}
 	}
 
 	if len(obj.Status.Conditions) == 0 {
+		if r.QueryWorkersEnabled {
+			return ctrl.Result{}, nil
+		}
 		r.setConditionCompleted(&obj, metav1.ConditionFalse, "QueryNotStarted", "The query has not been started yet")
 		return ctrl.Result{}, r.Status().Update(ctx, &obj)
 	}

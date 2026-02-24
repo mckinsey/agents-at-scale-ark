@@ -3,6 +3,8 @@ package queryworker
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strconv"
 
@@ -70,7 +72,14 @@ func buildConnString() string {
 	pass := os.Getenv("ARK_POSTGRES_PASSWORD")
 	sslMode := envOrDefault("ARK_POSTGRES_SSL_MODE", "disable")
 
-	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", user, pass, host, port, db, sslMode)
+	u := &url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(user, pass),
+		Host:     net.JoinHostPort(host, port),
+		Path:     db,
+		RawQuery: "sslmode=" + sslMode,
+	}
+	return u.String()
 }
 
 func envOrDefault(key, fallback string) string {

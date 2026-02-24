@@ -65,7 +65,6 @@ func (s *QueryAdmissionStorage) Create(ctx context.Context, obj runtime.Object, 
 		return result, nil
 	}
 
-	// print logs always
 	klog.Infof("Creating query %s/%s", accessor.GetNamespace(), accessor.GetName())
 
 	_, insertErr := s.riverClient.Insert(ctx, queryworker.QueryJobArgs{
