@@ -1059,6 +1059,9 @@ export interface paths {
          * Create Model
          * @description Create a new Model CR.
          *
+         *     Uses CustomObjectsApi so the full spec (e.g. config.azure.auth for
+         *     managed/workload identity) is stored in the cluster.
+         *
          *     Args:
          *         namespace: The namespace to create the model in
          *         body: The model creation request
@@ -1084,6 +1087,9 @@ export interface paths {
          * Get Model
          * @description Get a specific Model CR by name.
          *
+         *     Uses the raw Kubernetes CustomObjectsApi so the response includes the full
+         *     spec (e.g. config.azure.auth for managed/workload identity).
+         *
          *     Args:
          *         namespace: The namespace to get the model from
          *         model_name: The name of the model
@@ -1096,13 +1102,8 @@ export interface paths {
          * Update Model
          * @description Update a Model CR by name.
          *
-         *     Args:
-         *         namespace: The namespace containing the model
-         *         model_name: The name of the model
-         *         body: The model update request
-         *
-         *     Returns:
-         *         ModelDetailResponse: The updated model details
+         *     Uses CustomObjectsApi so the full spec (e.g. auth.managedIdentity.clientId)
+         *     is persisted without being dropped by the SDK.
          */
         put: operations["update_model_v1_models__model_name__put"];
         post?: never;
@@ -2600,18 +2601,47 @@ export interface components {
          */
         AvailabilityStatus: "True" | "False" | "Unknown";
         /**
+         * AzureAuthConfig
+         * @description Azure auth (exactly one of apiKey, managedIdentity, workloadIdentity).
+         */
+        AzureAuthConfig: {
+            /** Apikey */
+            apiKey?: string | components["schemas"]["ModelValueSource"] | null;
+            managedIdentity?: components["schemas"]["AzureManagedIdentityConfig"] | null;
+            workloadIdentity?: components["schemas"]["AzureWorkloadIdentityConfig"] | null;
+        };
+        /**
          * AzureConfig
          * @description Azure model configuration.
          */
         AzureConfig: {
             /** Apikey */
-            apiKey: string | components["schemas"]["ModelValueSource"];
+            apiKey?: string | components["schemas"]["ModelValueSource"] | null;
             /** Apiversion */
             apiVersion?: string | components["schemas"]["ModelValueSource"] | null;
+            auth?: components["schemas"]["AzureAuthConfig"] | null;
             /** Baseurl */
             baseUrl: string | components["schemas"]["ModelValueSource"];
             /** Headers */
             headers?: components["schemas"]["AgentHeader-Input"][] | null;
+        };
+        /**
+         * AzureManagedIdentityConfig
+         * @description Azure Managed Identity auth.
+         */
+        AzureManagedIdentityConfig: {
+            /** Clientid */
+            clientId?: string | components["schemas"]["ModelValueSource"] | null;
+        };
+        /**
+         * AzureWorkloadIdentityConfig
+         * @description Azure Workload Identity auth.
+         */
+        AzureWorkloadIdentityConfig: {
+            /** Clientid */
+            clientId: string | components["schemas"]["ModelValueSource"];
+            /** Tenantid */
+            tenantId: string | components["schemas"]["ModelValueSource"];
         };
         /**
          * BaselineEvaluationMetadata

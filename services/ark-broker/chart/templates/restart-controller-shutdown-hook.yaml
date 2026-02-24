@@ -1,0 +1,69 @@
+{{- if .Values.restartController.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "ark-broker.fullname" . }}-restart-controller-shutdown
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: post-delete
+    helm.sh/hook-weight: "10"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+  labels:
+    {{- include "ark-broker.labels" . | nindent 4 }}
+    app.kubernetes.io/component: restart-shutdown-hook
+spec:
+  ttlSecondsAfterFinished: 60
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        {{- include "ark-broker.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: restart-shutdown-hook
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "ark-broker.fullname" . }}-restart-hook
+      containers:
+      - name: restart-controller-shutdown
+        image: alpine/k8s:1.28.3
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          echo "ark-broker is being deleted. Restarting ark-controller to remove broker OTEL configuration..."
+
+          # Check if ark-controller-devspace exists first (DevSpace deployment)
+          if kubectl get deployment ark-controller-devspace -n {{ .Values.restartController.namespace }} >/dev/null 2>&1; then
+            echo "Found ark-controller-devspace, restarting..."
+            kubectl rollout restart deployment/ark-controller-devspace -n {{ .Values.restartController.namespace }}
+            kubectl rollout status deployment/ark-controller-devspace -n {{ .Values.restartController.namespace }} --timeout=120s
+          # Otherwise check for regular ark-controller deployment
+          elif kubectl get deployment ark-controller -n {{ .Values.restartController.namespace }} >/dev/null 2>&1; then
+            echo "Found ark-controller, restarting..."
+            kubectl rollout restart deployment/ark-controller -n {{ .Values.restartController.namespace }}
+            kubectl rollout status deployment/ark-controller -n {{ .Values.restartController.namespace }} --timeout=120s
+          else
+            echo "Warning: No ark-controller deployment found in {{ .Values.restartController.namespace }} namespace"
+            exit 0
+          fi
+
+          echo "Successfully restarted ark-controller"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+{{- end }}

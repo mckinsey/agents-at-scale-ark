@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import re
@@ -69,7 +70,7 @@ class EventEvaluationProvider(EvaluationProvider):
         Execute event-based evaluation using basic pattern matching against Kubernetes events.
         """
         logger.info(f"Processing event evaluation with evaluator: {request.evaluatorName}")
-        
+
         # Extract rules from config
         rules = request.config.rules or []
         if not rules:
@@ -79,14 +80,14 @@ class EventEvaluationProvider(EvaluationProvider):
                 reasoning="Event evaluation requires rules in config",
                 metadata={"error": "no_rules_provided"}
             )
-        
+
         logger.info(f"Found {len(rules)} expression rules for event evaluation")
-        
+
         # Extract query context for event filtering
         query_name = request.parameters.get("query.name")
-        query_namespace = request.parameters.get("query.namespace") 
+        query_namespace = request.parameters.get("query.namespace")
         session_id = request.parameters.get("sessionId")
-        
+
         if not query_name or not query_namespace:
             return EvaluationResponse(
                 score="0.0",
@@ -94,12 +95,12 @@ class EventEvaluationProvider(EvaluationProvider):
                 reasoning="Event evaluation requires query.name and query.namespace parameters",
                 metadata={"error": "missing_query_context"}
             )
-        
+
         # Initialize helper classes with context
         self._initialize_helpers(query_namespace, query_name, session_id)
-        
-        # Fetch events filtered by query and session for backward compatibility
-        events = await self._fetch_k8s_events(query_namespace, query_name, session_id)
+
+        # Fetch events with retry logic for eventual consistency
+        events = await self._fetch_k8s_events_with_retry(query_namespace, query_name, session_id)
         logger.info(f"Fetched {len(events)} events for evaluation")
         
         # Evaluate rules using semantic helpers and basic pattern matching
@@ -551,12 +552,54 @@ class EventEvaluationProvider(EvaluationProvider):
             # Default: just check if we have any events
             return len(events) > 0
     
+    async def _fetch_k8s_events_with_retry(self, namespace: str, query_name: str, session_id: str = None, max_retries: int = 5, initial_delay: float = 0.5) -> List[Dict[str, Any]]:
+        """
+        Fetch Kubernetes events with retry logic to handle eventual consistency.
+
+        Kubernetes EventRecorder queues events asynchronously, so events may not be
+        immediately visible after query completion. This method retries with exponential
+        backoff if no events are found initially.
+
+        Args:
+            namespace: Kubernetes namespace
+            query_name: Name of the query
+            session_id: Optional session ID for filtering
+            max_retries: Maximum number of retry attempts (default: 5)
+            initial_delay: Initial delay in seconds before first retry (default: 0.5s)
+
+        Returns:
+            List of event dictionaries
+        """
+        events = await self._fetch_k8s_events(namespace, query_name, session_id)
+
+        if len(events) > 0:
+            logger.info(f"Found {len(events)} events on first attempt")
+            return events
+
+        logger.info(f"No events found on first attempt, will retry up to {max_retries} times")
+
+        delay = initial_delay
+        for attempt in range(1, max_retries + 1):
+            logger.info(f"Retry attempt {attempt}/{max_retries} after {delay:.2f}s delay for event propagation")
+            await asyncio.sleep(delay)
+
+            events = await self._fetch_k8s_events(namespace, query_name, session_id)
+
+            if len(events) > 0:
+                logger.info(f"Found {len(events)} events on retry attempt {attempt}")
+                return events
+
+            delay *= 2
+
+        logger.warning(f"No events found after {max_retries} retries - query may have completed without generating events")
+        return []
+
     async def _fetch_k8s_events(self, namespace: str, query_name: str, session_id: str = None) -> List[Dict[str, Any]]:
         """Fetch Kubernetes events related to the query and session"""
         if not self.k8s_client:
             logger.warning("Kubernetes client not available, returning empty events")
             return []
-            
+
         logger.info(f"Fetching events for query {query_name} in namespace {namespace}")
         
         # Get events where involvedObject is the query
@@ -583,13 +626,13 @@ class EventEvaluationProvider(EvaluationProvider):
             if session_id:
                 try:
                     msg_data = json.loads(event_dict['message'])
-                    # Only include events from this session
+                    # If message is JSON, only include events from this session if the sessionId matches
                     if msg_data.get('Metadata', {}).get('sessionId') != session_id:
                         continue
                 except (json.JSONDecodeError, KeyError, TypeError):
-                    # Skip events without proper JSON or sessionId
-                    continue
-                    
+                    # If message is not JSON or doesn't have sessionId, include the event anyway
+                    # Most query controller events use plain text messages without sessionId
+                    pass
             event_list.append(event_dict)
         
         logger.info(f"Filtered to {len(event_list)} events for session {session_id}")
