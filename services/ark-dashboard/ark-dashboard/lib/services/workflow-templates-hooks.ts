@@ -8,6 +8,6 @@ export const GET_ALL_WORKFLOW_TEMPLATES_QUERY_KEY =
 export const useGetAllWorkflowTemplates = () => {
   return useQuery({
     queryKey: [GET_ALL_WORKFLOW_TEMPLATES_QUERY_KEY],
-    queryFn: () => workflowTemplatesService.list(),
+    queryFn: workflowTemplatesService.list,
   });
 };

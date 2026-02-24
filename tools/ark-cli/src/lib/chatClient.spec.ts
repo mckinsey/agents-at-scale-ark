@@ -1,19 +1,19 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 import {QUERY_ANNOTATIONS} from './constants.js';
 
-const mockCreateChatCompletion = jest.fn() as any;
+const mockCreateChatCompletion = vi.fn() as any;
 
 const mockArkApiClient = {
   createChatCompletion: mockCreateChatCompletion,
-  createChatCompletionStream: jest.fn() as any,
-  getQueryTargets: jest.fn() as any,
+  createChatCompletionStream: vi.fn() as any,
+  getQueryTargets: vi.fn() as any,
 } as any;
 
 const {ChatClient} = await import('./chatClient.js');
 
 describe('ChatClient', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('sendMessage', () => {
@@ -97,6 +97,93 @@ describe('ChatClient', () => {
       expect(queryAnnotations[QUERY_ANNOTATIONS.A2A_CONTEXT_ID]).toBe(
         'a2a-context-456'
       );
+    });
+
+    it('should emit completedQuery response content when no content was streamed', async () => {
+      const client = new ChatClient(mockArkApiClient);
+      const chunks: Array<{
+        chunk: string;
+        toolCalls?: any[];
+        arkMetadata?: any;
+      }> = [];
+
+      const mockStream = (async function* () {
+        yield {
+          choices: [{delta: {content: ''}}],
+          ark: {
+            completedQuery: {
+              status: {
+                response: {
+                  content: 'Tool result content',
+                },
+              },
+            },
+          },
+        };
+      })();
+
+      (mockArkApiClient.createChatCompletionStream as any).mockReturnValue(
+        mockStream
+      );
+
+      const result = await client.sendMessage(
+        'tool/my-tool',
+        [{role: 'user', content: '{"input": "test"}'}],
+        {streamingEnabled: true},
+        (chunk: string, toolCalls?: any[], arkMetadata?: any) => {
+          chunks.push({chunk, toolCalls, arkMetadata});
+        }
+      );
+
+      expect(result).toBe('Tool result content');
+      const contentChunks = chunks.filter((c) => c.chunk !== '');
+      expect(contentChunks).toHaveLength(1);
+      expect(contentChunks[0].chunk).toBe('Tool result content');
+    });
+
+    it('should not emit completedQuery content when content was already streamed', async () => {
+      const client = new ChatClient(mockArkApiClient);
+      const chunks: Array<{
+        chunk: string;
+        toolCalls?: any[];
+        arkMetadata?: any;
+      }> = [];
+
+      const mockStream = (async function* () {
+        yield {
+          choices: [{delta: {content: 'Streamed content'}}],
+        };
+        yield {
+          choices: [{delta: {content: ''}}],
+          ark: {
+            completedQuery: {
+              status: {
+                response: {
+                  content: 'Streamed content',
+                },
+              },
+            },
+          },
+        };
+      })();
+
+      (mockArkApiClient.createChatCompletionStream as any).mockReturnValue(
+        mockStream
+      );
+
+      const result = await client.sendMessage(
+        'agent/my-agent',
+        [{role: 'user', content: 'Hello'}],
+        {streamingEnabled: true},
+        (chunk: string, toolCalls?: any[], arkMetadata?: any) => {
+          chunks.push({chunk, toolCalls, arkMetadata});
+        }
+      );
+
+      expect(result).toBe('Streamed content');
+      const contentChunks = chunks.filter((c) => c.chunk !== '');
+      expect(contentChunks).toHaveLength(1);
+      expect(contentChunks[0].chunk).toBe('Streamed content');
     });
 
     it('should not include metadata when neither sessionId nor a2aContextId is provided', async () => {

@@ -4,15 +4,11 @@ import { Plus } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useRef } from 'react';
 
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { SecretsSection } from '@/components/sections/secrets-section';
 import { Button } from '@/components/ui/button';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { useNamespace } from '@/providers/NamespaceProvider';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-];
 
 export default function SecretsPage() {
   const searchParams = useSearchParams();
@@ -23,7 +19,7 @@ export default function SecretsPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={breadcrumbs}
+        breadcrumbs={BASE_BREADCRUMBS}
         currentPage="Secrets"
         actions={
           <Button
@@ -35,6 +31,9 @@ export default function SecretsPage() {
         }
       />
       <div className="flex flex-1 flex-col">
+        <div className="px-6 pt-6">
+          <h1 className="text-3xl font-bold">Secrets</h1>
+        </div>
         <SecretsSection ref={secretsSectionRef} namespace={namespace} />
       </div>
     </>

@@ -7,7 +7,7 @@ rules:
   resources: ["models", "queries", "evaluations", "evaluators"]
   verbs: ["get", "list", "watch"]
 - apiGroups: [""]
-  resources: ["secrets", "configmaps"]
+  resources: ["secrets", "configmaps", "events"]
   verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

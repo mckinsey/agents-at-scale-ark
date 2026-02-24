@@ -1,10 +1,10 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 
 import {UNSUPPORTED_OUTPUT_FORMAT_MESSAGE} from './validation.js';
 import output from '../../lib/output.js';
 
-const mockExeca = jest.fn() as any;
-jest.unstable_mockModule('execa', () => ({
+const mockExeca = vi.fn() as any;
+vi.mock('execa', () => ({
   execa: mockExeca,
 }));
 
@@ -12,11 +12,11 @@ const {createQueriesCommand} = await import('./index.js');
 
 describe('queries list command', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    console.log = jest.fn();
-    jest.spyOn(output, 'warning').mockImplementation(() => {});
-    jest.spyOn(output, 'error').mockImplementation(() => {});
-    jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    vi.clearAllMocks();
+    console.log = vi.fn();
+    vi.spyOn(output, 'warning').mockImplementation(() => {});
+    vi.spyOn(output, 'error').mockImplementation(() => {});
+    vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
   });
 
   it('should list all queries in text format by default', async () => {

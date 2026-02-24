@@ -68,6 +68,9 @@ ark models query default "What is 2+2?"
 # Shorthand verb syntax, more natural for some of the more essential commands.
 ark query model/default "What is 2+2?"
 
+# Query a tool directly
+ark query tool/get_weather '{"location": "New York"}'
+
 # Sorthand for calling evaluation
 ark evaluation ark-evaluator --input "What is 2+2?" --output "5"
 
