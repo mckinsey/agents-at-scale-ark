@@ -1,9 +1,6 @@
 import logging
-import pytest
-
-from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import Page
 from .base_page import BasePage
-from .dashboard_page import DashboardPage
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -34,22 +31,11 @@ class AgentsPage(BasePage):
     def navigate_to_agents_tab(self) -> None:
         self._close_dialog_if_open()
         
+        from .dashboard_page import DashboardPage
         dashboard = DashboardPage(self.page)
-        dashboard.navigate_to_dashboard()
+        dashboard.navigate_to_section("agents")
         
         self._close_dialog_if_open()
-        
-        try:
-            agents_tab = self.page.locator(dashboard.AGENTS_TAB).first
-            if not agents_tab.is_visible(timeout=5000):
-                pytest.skip("Agents tab not visible")
-            
-            agents_tab.click(force=True)
-        except Exception as e:
-            logger.warning(f"Click failed, trying with force: {e}")
-            self.page.locator(dashboard.AGENTS_TAB).first.click(force=True)
-        
-        self.wait_for_load_state("domcontentloaded")
     
     def generate_agent_name(self, prefix: str = "agent") -> str:
         date_str = datetime.now().strftime("%d%m%y%H%M%S")
@@ -58,12 +44,10 @@ class AgentsPage(BasePage):
     def is_agent_in_table(self, agent_name: str) -> bool:
         try:
             return self.page.get_by_text(agent_name, exact=False).count() > 0
-        except Exception as e:
-            logger.debug("Error checking agent in table: %s", e)
+        except:
             return False
     
     def check_for_error_banner(self) -> dict:
-        """Check for error banners (500 or other errors) after agent creation"""
         logger.info("Checking for error banners...")
         
         result = {
@@ -97,8 +81,7 @@ class AgentsPage(BasePage):
                                 result["message"] = error_text
                                 logger.error(f"Found error banner: {error_text}")
                                 return result
-            except Exception as e:
-                logger.debug("Error checking selector %s: %s", selector, e)
+            except:
                 continue
         
         logger.info("No error banners found")
@@ -187,7 +170,7 @@ class AgentsPage(BasePage):
                     model_trigger = loc
                     logger.info(f"Found model selector with: {selector}")
                     break
-            except PlaywrightTimeoutError:
+            except:
                 continue
         
         if not model_trigger:
@@ -195,7 +178,6 @@ class AgentsPage(BasePage):
             model_label = self.page.get_by_text("Model", exact=True).first
             model_trigger = model_label.locator("..").locator("button, [role='combobox']").first
         
-        model_trigger.focus()
         model_trigger.click(force=True)
         
         options_visible = False
@@ -204,9 +186,10 @@ class AgentsPage(BasePage):
                 self.page.locator("[role='option']").first.wait_for(state="visible", timeout=2000)
                 options_visible = True
                 break
-            except PlaywrightTimeoutError:
+            except:
                 logger.info(f"Options not visible (attempt {attempt + 1}), retrying")
                 model_trigger.click(force=True)
+                self.wait_for_timeout(500)
         
         if not options_visible:
             logger.warning("Could not open model dropdown")
@@ -260,8 +243,7 @@ class AgentsPage(BasePage):
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
             popup_visible = True
-        except PlaywrightTimeoutError:
-            logger.debug("Success popup not visible")
+        except:
             popup_visible = False
         
         self._close_dialog_if_open()
@@ -295,17 +277,18 @@ class AgentsPage(BasePage):
                 return self._delete_not_available(agent_name)
             
             buttons[-2].click()
-        except Exception as e:
-            logger.warning("Delete button not found for agent %s: %s", agent_name, e)
+        except:
             return self._delete_not_available(agent_name)
+        
+        self.wait_for_modal_open()
         confirm_dialog_visible = self.page.locator(self.CONFIRM_DELETE_DIALOG).first.is_visible()
         confirm_button_visible = self.page.locator(self.CONFIRM_DELETE_BUTTON).first.is_visible()
         
         if confirm_button_visible:
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
-        popup_visible = self._check_success_popup()
         self.wait_for_load_state("domcontentloaded")
+        popup_visible = self._check_success_popup()
         deleted_from_table = not self.is_agent_in_table(agent_name)
         
         return {
@@ -331,8 +314,7 @@ class AgentsPage(BasePage):
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
             return True
-        except PlaywrightTimeoutError:
-            logger.debug("Success popup not visible")
+        except:
             return False
     
     def _close_dialog_if_open(self) -> None:
@@ -342,22 +324,18 @@ class AgentsPage(BasePage):
                 if dialog_overlay.is_visible(timeout=1000):
                     logger.info(f"Dialog still open, attempting to close (attempt {attempt + 1})")
                     self.page.keyboard.press("Escape")
-                    dialog_overlay.wait_for(state="hidden", timeout=2000)
-                    logger.info("Dialog closed after Escape")
-                    return
-            except PlaywrightTimeoutError:
-                logger.debug("Dialog close attempt %d timed out", attempt + 1)
-                try:
+                    self.wait_for_element_hidden("[data-slot='dialog-overlay'], [role='dialog']", timeout=3000)
+                    
                     close_button = self.page.locator("button:has-text('Close'), button:has-text('Cancel'), [aria-label='Close']").first
                     if close_button.is_visible(timeout=500):
                         close_button.click()
-                        self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=2000)
-                        logger.info("Dialog closed with close button")
-                        return
-                except PlaywrightTimeoutError:
-                    continue
+                        self.wait_for_element_hidden("[data-slot='dialog-overlay'], [role='dialog']", timeout=3000)
+                else:
+                    logger.info("Dialog closed successfully")
+                    return
+            except:
+                pass
         
-        logger.warning("Could not close dialog after 3 attempts, forcing Escape")
         self.page.keyboard.press("Escape")
     
     def _select_tool(self, tool_name: str) -> None:
@@ -382,7 +360,7 @@ class AgentsPage(BasePage):
             logger.error(f"Error selecting tool {tool_name}: {str(e)}")
     
     def create_agent_for_test(self, prefix: str, model_name: str, test_data_key: str = "default", tools: list = None):
-        """Complete flow to create an agent for testing - navigate, check, and create"""
+        import pytest
         
         agent_data = self.TEST_DATA[test_data_key]
         
@@ -404,4 +382,3 @@ class AgentsPage(BasePage):
         logger.info(f"Agent created successfully: {result['name']}")
         
         return result
-

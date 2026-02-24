@@ -1,7 +1,4 @@
-import logging
-from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
-
-logger = logging.getLogger(__name__)
+from playwright.sync_api import Page
 
 
 class BasePage:
@@ -16,8 +13,7 @@ class BasePage:
         try:
             self.page.locator(selector).first.wait_for(state="visible", timeout=timeout)
             return True
-        except PlaywrightTimeoutError:
-            logger.debug("Element not visible within %dms: %s", timeout, selector)
+        except:
             return False
     
     def wait_for_load_state(self, state: str = "load") -> None:
@@ -27,10 +23,8 @@ class BasePage:
         self.page.wait_for_load_state("domcontentloaded", timeout=timeout)
     
     def wait_for_form_ready(self, timeout: int = 10000) -> None:
-        try:
-            self.page.locator("[role='dialog'] input:visible, [data-slot='dialog-content'] input:visible, form input:visible, input:visible").first.wait_for(state="visible", timeout=timeout)
-        except PlaywrightTimeoutError:
-            logger.warning("Form inputs not found within %dms, form may not be ready", timeout)    
+        self.page.locator("[role='dialog'] input:visible, [data-slot='dialog-content'] input:visible, form input:visible, input:visible").first.wait_for(state="visible", timeout=timeout)
+    
     def wait_for_element(self, selector: str, state: str = "visible", timeout: int = 10000):
         locator = self.page.locator(selector).first
         locator.wait_for(state=state, timeout=timeout)
@@ -39,34 +33,27 @@ class BasePage:
     def wait_for_element_hidden(self, selector: str, timeout: int = 10000) -> None:
         try:
             self.page.locator(selector).first.wait_for(state="hidden", timeout=timeout)
-        except PlaywrightTimeoutError:
-            logger.debug("Element not hidden within %dms (may already be hidden): %s", timeout, selector)
+        except:
+            pass
     
     def wait_for_dropdown_options(self, timeout: int = 5000) -> None:
-        try:
-            self.page.locator("[role='option'], [role='listbox'], [data-slot='select-content']").first.wait_for(state="visible", timeout=timeout)
-        except PlaywrightTimeoutError:
-            logger.warning("Dropdown options not visible within %dms, dropdown may not have opened", timeout)
+        self.page.locator("[role='option'], [role='listbox'], [data-slot='select-content']").first.wait_for(state="visible", timeout=timeout)
     
     def wait_for_modal_open(self, timeout: int = 10000) -> None:
-        try:
-            self.page.locator("[data-slot='dialog-overlay'], [role='dialog'], [data-slot='dialog-content']").first.wait_for(state="visible", timeout=timeout)
-        except PlaywrightTimeoutError:
-            logger.warning("Modal not visible within %dms, modal may not have opened", timeout)
+        self.page.locator("[data-slot='dialog-overlay'], [role='dialog'], [data-slot='dialog-content']").first.wait_for(state="visible", timeout=timeout)
     
     def wait_for_modal_close(self, timeout: int = 10000) -> None:
         try:
             self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=timeout)
-        except PlaywrightTimeoutError:
-            logger.warning("Modal not closed within %dms, attempting Escape key", timeout)
-            try:
-                self.page.keyboard.press("Escape")
-                self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=3000)
-            except PlaywrightTimeoutError:
-                logger.error("Modal still visible after Escape key, manual intervention may be needed")
+        except:
+            self.page.keyboard.press("Escape")
+            self.wait_for_element_hidden("[data-slot='dialog-overlay'], [role='dialog']")
     
     def reload(self) -> None:
         self.page.reload()
+    
+    def wait_for_timeout(self, milliseconds: int) -> None:
+        self.page.wait_for_timeout(milliseconds)
     
     def get_url(self) -> str:
         return self.page.url

@@ -1,7 +1,5 @@
 import logging
-import pytest
-from .dashboard_page import DashboardPage
-from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import Page
 from .base_page import BasePage
 from datetime import datetime
 import os
@@ -42,48 +40,30 @@ class SecretsPage(BasePage):
     def navigate_to_secrets_tab(self) -> None:
         self._close_dialog_if_open()
         
-        
+        from .dashboard_page import DashboardPage
         dashboard = DashboardPage(self.page)
-        dashboard.navigate_to_dashboard()
+        dashboard.navigate_to_section("secrets")
         
         self._close_dialog_if_open()
-        
-        try:
-            secrets_tab = self.page.locator(dashboard.SECRETS_TAB).first
-            if not secrets_tab.is_visible(timeout=5000):
-                pytest.skip("Secrets tab not visible")
-            
-            secrets_tab.click(force=True)
-        except Exception as e:
-            logger.warning(f"Click failed, trying with force: {e}")
-            self.page.locator(dashboard.SECRETS_TAB).first.click(force=True)
-        
-        self.wait_for_load_state("domcontentloaded")
     
     def _close_dialog_if_open(self) -> None:
-        try:
-            dialog_overlay = self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first
-            if not dialog_overlay.is_visible(timeout=1000):
-                return
-        except PlaywrightTimeoutError:
-            return
-
         for attempt in range(3):
             try:
-                logger.info("Dialog open, closing (attempt %d)", attempt + 1)
-                self.page.keyboard.press("Escape")
-                dialog_overlay.wait_for(state="hidden", timeout=2000)
-                return
-            except PlaywrightTimeoutError:
-                logger.debug("Dialog close attempt %d timed out", attempt + 1)
-
-        logger.warning("Could not close dialog after 3 attempts")
+                dialog_overlay = self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first
+                if dialog_overlay.is_visible(timeout=1000):
+                    logger.info(f"Dialog still open, attempting to close (attempt {attempt + 1})")
+                    self.page.keyboard.press("Escape")
+                    self.wait_for_element_hidden("[data-slot='dialog-overlay'], [role='dialog']", timeout=3000)
+                else:
+                    return
+            except:
+                pass
+        self.page.keyboard.press("Escape")
     
     def is_secret_in_table(self, secret_name: str) -> bool:
         try:
             return self.page.get_by_text(secret_name, exact=False).count() > 0
-        except Exception as e:
-            logger.debug("Error checking secret in table: %s", e)
+        except:
             return False
     
     def create_secret_with_verification(self, prefix: str, env_key: str) -> dict:
@@ -94,7 +74,6 @@ class SecretsPage(BasePage):
         logger.info(f"Secret value length: {len(secret_value)}")
         
         self.page.locator(self.ADD_SECRET_BUTTON).first.click()
-        self.wait_for_load_state("domcontentloaded")
         
         inputs = self.page.locator("[role='dialog'] input:visible, [data-slot='dialog-content'] input:visible")
         inputs.first.wait_for(state="visible", timeout=10000)
@@ -112,24 +91,18 @@ class SecretsPage(BasePage):
                 textarea.fill(secret_value)
         
         save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
+        save_button.wait_for(state="visible", timeout=5000)
         save_button.evaluate("el => el.click()")
+        
+        self.wait_for_load_state("domcontentloaded")
         
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
             popup_visible = True
-        except PlaywrightTimeoutError:
-            logger.debug("Success popup not visible")
+        except:
             popup_visible = False
         
-        self.wait_for_modal_close(timeout=10000)
-        self.wait_for_load_state("domcontentloaded")
         in_table = self.is_secret_in_table(secret_name)
-        
-        if not in_table:
-            logger.warning("Secret not found in table after create, reloading page")
-            self.page.reload()
-            self.wait_for_load_state("domcontentloaded")
-            in_table = self.is_secret_in_table(secret_name)
         
         return {
             "name": secret_name,
@@ -150,17 +123,18 @@ class SecretsPage(BasePage):
                 return self._delete_not_available(secret_name)
             
             buttons[-1].click()
-        except Exception as e:
-            logger.warning("Delete button not found for secret %s: %s", secret_name, e)
+        except:
             return self._delete_not_available(secret_name)
+        
+        self.wait_for_modal_open()
         confirm_dialog_visible = self.page.locator(self.CONFIRM_DELETE_DIALOG).first.is_visible()
         confirm_button_visible = self.page.locator(self.CONFIRM_DELETE_BUTTON).first.is_visible()
         
         if confirm_button_visible:
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
-        popup_visible = self._check_success_popup()
         self.wait_for_load_state("domcontentloaded")
+        popup_visible = self._check_success_popup()
         deleted_from_table = not self.is_secret_in_table(secret_name)
         
         return {
@@ -186,12 +160,13 @@ class SecretsPage(BasePage):
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
             return True
-        except PlaywrightTimeoutError:
-            logger.debug("Success popup not visible")
+        except:
             return False
     
     def create_secret_for_test(self, prefix: str, env_key: str):
-        """Complete flow to create a secret for testing - navigate, check, and create"""        
+        """Complete flow to create a secret for testing - navigate, check, and create"""
+        import pytest
+        
         self.navigate_to_secrets_tab()
         
         if not self.is_visible(self.ADD_SECRET_BUTTON):

@@ -1,10 +1,8 @@
 import logging
-import pytest
-
+from datetime import datetime
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
 from .dashboard_page import DashboardPage
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +19,7 @@ class TeamsPage(BasePage):
     SUCCESS_POPUP = "[role='alert'], [role='status'], .notification, .toast, div:has-text('success'), div:has-text('Success'), div:has-text('created'), div:has-text('Created'), div:has-text('deleted'), div:has-text('Deleted')"
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
     CONFIRM_DELETE_BUTTON = "button:has-text('Delete'), button:has-text('Confirm'), button:has-text('Yes')"
-    
+
     TEST_DATA = {
         "default": {
             "description": "Resolve customer queries",
@@ -29,29 +27,21 @@ class TeamsPage(BasePage):
             "max_turns": "5"
         }
     }
-    
-    def navigate_to_teams_tab(self) -> None:
 
+    def navigate_to_teams_tab(self) -> None:
         dashboard = DashboardPage(self.page)
-        dashboard.navigate_to_dashboard()
-        
-        if not self.page.locator(dashboard.TEAMS_TAB).first.is_visible():
-            pytest.skip("Teams tab not visible")
-        
-        self.page.locator(dashboard.TEAMS_TAB).first.click()
-        self.wait_for_load_state("domcontentloaded")
-    
+        dashboard.navigate_to_section("teams")
+
     def generate_team_name(self, prefix: str = "team") -> str:
         date_str = datetime.now().strftime("%d%m%y%H%M%S")
         return f"{prefix}-{date_str}"
-    
+
     def is_team_in_table(self, team_name: str) -> bool:
         try:
             return self.page.get_by_text(team_name, exact=False).count() > 0
-        except Exception as e:
-            logger.debug("Error checking team in table: %s", e)
+        except Exception:
             return False
-    
+
     def create_team_with_verification(self, team_name: str, description: str, strategy: str, max_turns: str, member_name: str) -> dict:
         logger.info(f"Creating team: {team_name}")
 
@@ -59,12 +49,9 @@ class TeamsPage(BasePage):
         self.wait_for_load_state("domcontentloaded")
         self.page.locator("input").first.wait_for(state="visible", timeout=10000)
 
-        is_full_page = "/teams/new" in self.page.url
-
-        if is_full_page:
+        if "/teams/new" in self.page.url:
             return self._create_team_full_page(team_name, description, strategy, max_turns, member_name)
-        else:
-            return self._create_team_dialog(team_name, description, strategy, max_turns, member_name)
+        return self._create_team_dialog(team_name, description, strategy, max_turns, member_name)
 
     def _create_team_full_page(self, team_name: str, description: str, strategy: str, max_turns: str, member_name: str) -> dict:
         logger.info("Using full-page team creation form")
@@ -81,8 +68,7 @@ class TeamsPage(BasePage):
             trigger = self.page.locator("[role='combobox'], button:has-text('Select a strategy')").first
             trigger.click()
             self.page.locator("[role='option']").first.wait_for(state="visible", timeout=5000)
-            option = self.page.locator(f"[role='option']:has-text('{strategy}')").first
-            option.click()
+            self.page.locator(f"[role='option']:has-text('{strategy}')").first.click()
             self.page.locator("[role='option']").first.wait_for(state="hidden", timeout=5000)
         except Exception as e:
             logger.warning(f"Could not select strategy: {e}")
@@ -92,7 +78,6 @@ class TeamsPage(BasePage):
             max_turns_field.first.fill(max_turns)
 
         logger.info(f"Selecting member: {member_name}")
-
         try:
             member_checkbox = self.page.locator(f"label:has-text('{member_name}') >> xpath=../preceding-sibling::button[@role='checkbox'], div:has-text('{member_name}') button[role='checkbox']").first
             member_checkbox.wait_for(state="visible", timeout=10000)
@@ -108,31 +93,23 @@ class TeamsPage(BasePage):
                 all_checkboxes = self.page.locator("button[role='checkbox']")
                 if all_checkboxes.count() > 0:
                     all_checkboxes.first.click()
-            except:
+            except Exception:
                 pass
 
         logger.info("Clicking Create Team button")
-        save_button = self.page.locator("button:has-text('Create Team')").first
-        save_button.click()
-
-        self.wait_for_load_state("networkidle")
+        self.page.locator("button:has-text('Create Team')").first.click()
+        self.wait_for_load_state("domcontentloaded")
 
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=10000)
             popup_visible = True
-        except:
+        except PlaywrightTimeoutError:
             popup_visible = False
 
         self.navigate_to_teams_tab()
-
         in_table = self.is_team_in_table(team_name)
 
-        return {
-            "name": team_name,
-            "popup_visible": popup_visible,
-            "in_table": in_table,
-            "strategy": strategy
-        }
+        return {"name": team_name, "popup_visible": popup_visible, "in_table": in_table, "strategy": strategy}
 
     def _create_team_dialog(self, team_name: str, description: str, strategy: str, max_turns: str, member_name: str) -> dict:
         logger.info("Using dialog-based team creation")
@@ -155,11 +132,6 @@ class TeamsPage(BasePage):
             max_turns_fields.first.fill(max_turns)
 
         logger.info(f"Selecting member: {member_name}")
-<<<<<<< uitests/improvements
-        
-=======
-
->>>>>>> main
         try:
             checkbox = self.page.locator(f"tr:has-text('{member_name}') input[type='checkbox'], div:has-text('{member_name}') input[type='checkbox'], label:has-text('{member_name}') input[type='checkbox']").first
             checkbox.wait_for(state="visible", timeout=10000)
@@ -171,11 +143,7 @@ class TeamsPage(BasePage):
                     all_checkboxes.first.check()
         except Exception as e:
             logger.warning(f"Could not select member checkbox: {e}")
-<<<<<<< uitests/improvements
-        
-=======
 
->>>>>>> main
         save_button = self.page.locator("[role='dialog'] button:has-text('Create'), [data-slot='dialog-content'] button:has-text('Create')").first
         if not save_button.is_visible():
             save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
@@ -183,20 +151,12 @@ class TeamsPage(BasePage):
         logger.info("Clicking Create button in team dialog")
         save_button.scroll_into_view_if_needed()
         save_button.evaluate("el => el.click()")
-<<<<<<< uitests/improvements
-        
         self.wait_for_load_state("domcontentloaded")
-        
-=======
 
-        self.wait_for_load_state("networkidle")
-
->>>>>>> main
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
             popup_visible = True
         except PlaywrightTimeoutError:
-            logger.debug("Success popup not visible")
             popup_visible = False
 
         try:
@@ -204,53 +164,39 @@ class TeamsPage(BasePage):
         except PlaywrightTimeoutError:
             logger.info("Dialog may still be open, pressing Escape")
             self.page.keyboard.press("Escape")
-<<<<<<< uitests/improvements
             try:
                 self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=3000)
             except PlaywrightTimeoutError:
                 logger.warning("Dialog still visible after Escape")
-        
-        self.navigate_to_teams_tab()
-        
-=======
-            self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=5000)
 
         self.navigate_to_teams_tab()
-
->>>>>>> main
         in_table = self.is_team_in_table(team_name)
 
-        return {
-            "name": team_name,
-            "popup_visible": popup_visible,
-            "in_table": in_table,
-            "strategy": strategy
-        }
-    
-    def delete_team_with_verification(self, team_name: str) -> dict:        
+        return {"name": team_name, "popup_visible": popup_visible, "in_table": in_table, "strategy": strategy}
+
+    def delete_team_with_verification(self, team_name: str) -> dict:
         try:
             name_element = self.page.get_by_text(team_name, exact=True).first
             name_element.scroll_into_view_if_needed()
             row_container = name_element.locator("../../..").first
             buttons = row_container.locator("button").all()
-            
             if len(buttons) < 2:
                 return self._delete_not_available(team_name)
-            
             buttons[-2].click()
-        except Exception as e:
-            logger.warning("Delete button not found for team %s: %s", team_name, e)
+        except Exception:
             return self._delete_not_available(team_name)
+
+        self.wait_for_modal_open()
         confirm_dialog_visible = self.page.locator(self.CONFIRM_DELETE_DIALOG).first.is_visible()
         confirm_button_visible = self.page.locator(self.CONFIRM_DELETE_BUTTON).first.is_visible()
-        
+
         if confirm_button_visible:
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
-        
-        popup_visible = self._check_success_popup()
+
         self.wait_for_load_state("domcontentloaded")
+        popup_visible = self._check_success_popup()
         deleted_from_table = not self.is_team_in_table(team_name)
-        
+
         return {
             "team_name": team_name,
             "delete_available": True,
@@ -259,7 +205,7 @@ class TeamsPage(BasePage):
             "popup_visible": popup_visible,
             "deleted_from_table": deleted_from_table
         }
-    
+
     def _delete_not_available(self, team_name: str) -> dict:
         return {
             "team_name": team_name,
@@ -269,12 +215,10 @@ class TeamsPage(BasePage):
             "popup_visible": False,
             "deleted_from_table": False
         }
-    
+
     def _check_success_popup(self) -> bool:
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
             return True
         except PlaywrightTimeoutError:
-            logger.debug("Success popup not visible")
             return False
-
