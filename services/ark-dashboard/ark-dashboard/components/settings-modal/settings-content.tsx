@@ -5,6 +5,7 @@ import { Suspense, useMemo } from 'react';
 import type { SettingPage } from '@/atoms/settings-modal';
 import { MemorySection } from '@/components/sections';
 import { A2AServersSection } from '@/components/sections/a2a-servers-section';
+import { EventsSection } from '@/components/sections/events-section';
 import { SecretsSection } from '@/components/sections/secrets-section';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -33,6 +34,10 @@ export function SettingsContent({ activePage }: SettingsContentProps) {
       'ark-services': {
         title: 'Ark Services',
         component: <ArkServicesSettings />,
+      },
+      events: {
+        title: 'Events',
+        component: <EventsSection page={1} limit={10} />,
       },
       memory: {
         title: 'Memory',

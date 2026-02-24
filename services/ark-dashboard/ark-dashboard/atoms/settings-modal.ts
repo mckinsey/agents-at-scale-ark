@@ -5,6 +5,7 @@ export const settingsModalOpenAtom = atom<boolean>(false);
 export type SettingPage =
   | 'a2a-servers'
   | 'ark-services'
+  | 'events'
   | 'memory'
   | 'service-api-keys'
   | 'secrets'

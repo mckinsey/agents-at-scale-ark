@@ -1,4 +1,4 @@
-import { Database, Key, Lock, Server, Zap } from 'lucide-react';
+import { Calendar, Database, Key, Lock, Server, Zap } from 'lucide-react';
 
 import type { SettingPage } from '@/atoms/settings-modal';
 
@@ -28,6 +28,11 @@ export const settingsSections: SettingsSection[] = [
         key: 'ark-services',
         label: 'Ark Services',
         icon: Server,
+      },
+      {
+        key: 'events',
+        label: 'Events',
+        icon: Calendar,
       },
       {
         key: 'memory',
