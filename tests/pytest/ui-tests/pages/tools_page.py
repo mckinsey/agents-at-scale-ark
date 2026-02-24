@@ -46,11 +46,18 @@ class ToolsPage(BasePage):
         date_str = datetime.now().strftime("%d%m%y%H%M%S")
         return f"{prefix}-{date_str}"
     
-    def is_tool_in_table(self, tool_name: str) -> bool:
-        try:
-            return self.page.get_by_text(tool_name, exact=False).count() > 0
-        except:
-            return False
+    def is_tool_in_table(self, tool_name: str, retries: int = 3) -> bool:
+        for attempt in range(retries):
+            try:
+                self.page.get_by_text(tool_name, exact=False).first.wait_for(state="visible", timeout=10000)
+                return True
+            except Exception:
+                if attempt < retries - 1:
+                    logger.info(f"Tool {tool_name} not found, retrying ({attempt + 1}/{retries})...")
+                    self.page.reload()
+                    self.wait_for_navigation_complete()
+                    self.wait_for_element(self.ADD_TOOL_BUTTON, timeout=10000)
+        return False
     
     def create_http_tool_with_verification(self, tool_name: str, description: str, url: str) -> dict:
         

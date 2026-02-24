@@ -43,6 +43,7 @@ class SecretsPage(BasePage):
         self._close_dialog_if_open()
         dashboard = DashboardPage(self.page)
         dashboard.navigate_to_section("secrets")
+        self.wait_for_element(self.ADD_SECRET_BUTTON, timeout=10000)
         self._close_dialog_if_open()
     
     def _close_dialog_if_open(self) -> None:
@@ -62,15 +63,14 @@ class SecretsPage(BasePage):
     def is_secret_in_table(self, secret_name: str, retries: int = 3) -> bool:
         for attempt in range(retries):
             try:
-                if self.page.get_by_text(secret_name, exact=False).count() > 0:
-                    return True
+                self.page.get_by_text(secret_name, exact=False).first.wait_for(state="visible", timeout=10000)
+                return True
+            except Exception:
                 if attempt < retries - 1:
-                    logger.info(f"Secret {secret_name} not found, retrying... ({attempt + 1}/{retries})")
+                    logger.info(f"Secret {secret_name} not found, retrying ({attempt + 1}/{retries})...")
                     self.page.reload()
                     self.wait_for_navigation_complete()
                     self.wait_for_element(self.ADD_SECRET_BUTTON, timeout=10000)
-            except Exception as e:
-                logger.warning(f"Error checking secret in table: {e}")
         return False
     
     def create_secret_with_verification(self, prefix: str, env_key: str) -> dict:

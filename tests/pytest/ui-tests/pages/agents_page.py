@@ -32,21 +32,27 @@ class AgentsPage(BasePage):
     
     def navigate_to_agents_tab(self) -> None:
         self._close_dialog_if_open()
-        
         dashboard = DashboardPage(self.page)
         dashboard.navigate_to_section("agents")
-        
+        self.wait_for_element(self.ADD_AGENT_BUTTON, timeout=10000)
         self._close_dialog_if_open()
     
     def generate_agent_name(self, prefix: str = "agent") -> str:
         date_str = datetime.now().strftime("%d%m%y%H%M%S")
         return f"{prefix}-{date_str}"
     
-    def is_agent_in_table(self, agent_name: str) -> bool:
-        try:
-            return self.page.get_by_text(agent_name, exact=False).count() > 0
-        except:
-            return False
+    def is_agent_in_table(self, agent_name: str, retries: int = 3) -> bool:
+        for attempt in range(retries):
+            try:
+                self.page.get_by_text(agent_name, exact=False).first.wait_for(state="visible", timeout=10000)
+                return True
+            except Exception:
+                if attempt < retries - 1:
+                    logger.info(f"Agent {agent_name} not found, retrying ({attempt + 1}/{retries})...")
+                    self.page.reload()
+                    self.wait_for_navigation_complete()
+                    self.wait_for_element(self.ADD_AGENT_BUTTON, timeout=10000)
+        return False
     
     def check_for_error_banner(self) -> dict:
         logger.info("Checking for error banners...")
@@ -184,30 +190,38 @@ class AgentsPage(BasePage):
         options_visible = False
         for attempt in range(3):
             try:
-                self.page.locator("[role='option']").first.wait_for(state="visible", timeout=2000)
+                self.page.locator("[role='option']").first.wait_for(state="visible", timeout=3000)
                 options_visible = True
                 break
             except:
                 logger.info(f"Options not visible (attempt {attempt + 1}), retrying")
                 model_trigger.click(force=True)
-                self.wait_for_timeout(500)
         
         if not options_visible:
             logger.warning("Could not open model dropdown")
         
         model_selected = False
-        model_option = self.page.get_by_role("option", name=model_name, exact=True)
-        if model_option.count() > 0:
-            logger.info(f"Found exact match for model: {model_name}")
-            model_option.first.click(force=True)
-            model_selected = True
-        
-        if not model_selected:
-            logger.info(f"Trying partial match for model: {model_name}")
+        for attempt in range(3):
+            model_option = self.page.get_by_role("option", name=model_name, exact=True)
+            if model_option.count() > 0:
+                logger.info(f"Found exact match for model: {model_name}")
+                model_option.first.click(force=True)
+                model_selected = True
+                break
+            
             model_option_alt = self.page.locator(f"[role='option']:has-text('{model_name}')").first
             if model_option_alt.count() > 0:
+                logger.info(f"Found partial match for model: {model_name}")
                 model_option_alt.click(force=True)
                 model_selected = True
+                break
+            
+            if attempt < 2:
+                logger.info(f"Model {model_name} not in dropdown yet, retrying ({attempt + 1}/3)...")
+                self.page.keyboard.press("Escape")
+                self.wait_for_element_hidden("[role='option']", timeout=3000)
+                model_trigger.click(force=True)
+                self.page.locator("[role='option']").first.wait_for(state="visible", timeout=3000)
         
         if not model_selected:
             first_option = self.page.locator("[role='option']").first
@@ -252,11 +266,6 @@ class AgentsPage(BasePage):
         self.navigate_to_agents_tab()
         
         in_table = self.is_agent_in_table(agent_name)
-        
-        if not in_table:
-            self.page.reload()
-            self.wait_for_load_state("domcontentloaded")
-            in_table = self.is_agent_in_table(agent_name)
         
         row_verification = self.verify_agent_in_table_row(agent_name, description, model_name)
         

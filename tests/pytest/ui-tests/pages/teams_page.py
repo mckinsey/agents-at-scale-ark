@@ -31,17 +31,24 @@ class TeamsPage(BasePage):
     def navigate_to_teams_tab(self) -> None:
         dashboard = DashboardPage(self.page)
         dashboard.navigate_to_section("teams")
+        self.wait_for_element(self.ADD_TEAM_BUTTON, timeout=10000)
 
     def generate_team_name(self, prefix: str = "team") -> str:
         date_str = datetime.now().strftime("%d%m%y%H%M%S")
         return f"{prefix}-{date_str}"
 
-    def is_team_in_table(self, team_name: str) -> bool:
-        try:
-            return self.page.get_by_text(team_name, exact=False).count() > 0
-        except Exception as e:
-            logger.debug("Error checking team in table: %s", e)
-            return False
+    def is_team_in_table(self, team_name: str, retries: int = 3) -> bool:
+        for attempt in range(retries):
+            try:
+                self.page.get_by_text(team_name, exact=False).first.wait_for(state="visible", timeout=10000)
+                return True
+            except Exception:
+                if attempt < retries - 1:
+                    logger.info(f"Team {team_name} not found, retrying ({attempt + 1}/{retries})...")
+                    self.page.reload()
+                    self.wait_for_navigation_complete()
+                    self.wait_for_element(self.ADD_TEAM_BUTTON, timeout=10000)
+        return False
 
     def create_team_with_verification(self, team_name: str, description: str, strategy: str, max_turns: str, member_name: str) -> dict:
         logger.info(f"Creating team: {team_name}")

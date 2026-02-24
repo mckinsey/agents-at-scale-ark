@@ -43,15 +43,14 @@ class ModelsPage(BasePage):
     def is_model_in_table(self, model_name: str, retries: int = 3) -> bool:
         for attempt in range(retries):
             try:
-                if self.page.get_by_text(model_name, exact=False).count() > 0:
-                    return True
+                self.page.get_by_text(model_name, exact=False).first.wait_for(state="visible", timeout=10000)
+                return True
+            except Exception:
                 if attempt < retries - 1:
-                    logger.info(f"Model {model_name} not found, retrying... ({attempt + 1}/{retries})")
+                    logger.info(f"Model {model_name} not found, retrying ({attempt + 1}/{retries})...")
                     self.page.reload()
                     self.wait_for_navigation_complete()
                     self.wait_for_element(self.ADD_MODEL_BUTTON, timeout=10000)
-            except Exception as e:
-                logger.warning(f"Error checking model in table: {e}")
         return False
     
     def is_model_available(self, model_name: str) -> bool:
