@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/openai/openai-go"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -131,6 +132,8 @@ func (t *Team) executeRoundRobin(ctx context.Context, userInput Message, history
 
 		// Check maxTurns before executing
 		if t.MaxTurns != nil && messageCount >= *t.MaxTurns {
+			maxTurnsMessage := NewSystemMessage(fmt.Sprintf("Team conversation reached maximum turns limit (%d)", *t.MaxTurns))
+			newMessages = append(newMessages, maxTurnsMessage)
 			return newMessages, nil
 		}
 
@@ -281,15 +284,17 @@ func (t *Team) executeMemberAndAccumulate(ctx context.Context, member TeamMember
 	if err != nil {
 		// Still accumulate messages even on error if result is not nil
 		if result != nil {
-			*messages = append(*messages, result.Messages...)
-			*newMessages = append(*newMessages, result.Messages...)
+			messagesWithName := addAgentNameToMessages(result.Messages, member.GetName())
+			*messages = append(*messages, messagesWithName...)
+			*newMessages = append(*newMessages, messagesWithName...)
 		}
 		t.eventingRecorder.Fail(ctx, "TeamMember", fmt.Sprintf("Team member execution failed: %v", err), err, operationData)
 		return err
 	}
 
-	*messages = append(*messages, result.Messages...)
-	*newMessages = append(*newMessages, result.Messages...)
+	messagesWithName := addAgentNameToMessages(result.Messages, member.GetName())
+	*messages = append(*messages, messagesWithName...)
+	*newMessages = append(*newMessages, messagesWithName...)
 	t.eventingRecorder.Complete(ctx, "TeamMember", "Team member execution completed successfully", operationData)
 	return nil
 }
@@ -315,4 +320,15 @@ func loadTeamMember(ctx context.Context, k8sClient client.Client, memberSpec ark
 	default:
 		return nil, fmt.Errorf("unsupported member type %s for member %s in team %s", memberSpec.Type, memberSpec.Name, teamName)
 	}
+}
+
+func addAgentNameToMessages(messages []Message, agentName string) []Message {
+	result := make([]Message, len(messages))
+	copy(result, messages)
+	for i := range result {
+		if result[i].OfAssistant != nil {
+			result[i].OfAssistant.Name = openai.String(agentName)
+		}
+	}
+	return result
 }
