@@ -95,7 +95,7 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
   },
   events: {
     key: 'events',
-    title: 'Query Logs',
+    title: 'Events',
     icon: Calendar,
     group: 'monitoring',
   },
