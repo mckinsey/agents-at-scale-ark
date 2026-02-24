@@ -5,10 +5,8 @@ import {
   Activity,
   AlertCircle,
   Bot,
-  Check,
   ChevronsLeft,
   ChevronsRight,
-  ChevronsUpDown,
   ChevronsUpDownIcon,
   File,
   HelpCircle,
@@ -17,7 +15,6 @@ import {
   LogOut,
   Moon,
   MoreHorizontal,
-  Plus,
   Server,
   Settings,
   Sun,
@@ -239,37 +236,35 @@ export function AppSidebar() {
         <SidebarHeader>
           <SidebarMenu>
             <SidebarMenuItem>
-                  <SidebarMenuButton
-                    size="lg"
-                    className="!p-0 group-data-[collapsible=icon]:!h-12">
-                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
-                      <Image
-                        src={
-                          isExperimentalDarkModeEnabled
-                            ? qbLogoDark
-                            : qbLogoLight
-                        }
-                        alt="QB Logo"
-                        width={32}
-                        height={32}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-0.5 leading-none">
-                      <span className="text-sidebar-accent-foreground font-medium">
-                        ARK Dashboard
-                      </span>
-                      <span className="text-xs">
-                        {isPending
-                          ? 'Loading...'
-                          : availableNamespaces.length === 0
-                            ? 'No namespaces'
-                            : namespace}
-                      </span>
-                    </div>
-                    {availableNamespaces.length === 0 && !loading && (
-                      <AlertCircle className="h-4 w-4 text-red-500" />
-                    )}
-                  </SidebarMenuButton>
+              <SidebarMenuButton
+                size="lg"
+                className="!p-0 group-data-[collapsible=icon]:!h-12">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
+                  <Image
+                    src={
+                      isExperimentalDarkModeEnabled ? qbLogoDark : qbLogoLight
+                    }
+                    alt="QB Logo"
+                    width={32}
+                    height={32}
+                  />
+                </div>
+                <div className="flex flex-col gap-0.5 leading-none">
+                  <span className="text-sidebar-accent-foreground font-medium">
+                    ARK Dashboard
+                  </span>
+                  <span className="text-xs">
+                    {isPending
+                      ? 'Loading...'
+                      : availableNamespaces.length === 0
+                        ? 'No namespaces'
+                        : namespace}
+                  </span>
+                </div>
+                {availableNamespaces.length === 0 && !loading && (
+                  <AlertCircle className="h-4 w-4 text-red-500" />
+                )}
+              </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>
