@@ -2,14 +2,9 @@
 
 import {
   ArrowLeft,
-  Check,
   CircleAlert,
   Code,
-  Copy,
-  Download,
   FileText,
-  PanelLeftClose,
-  PanelLeftOpen,
   Save,
   Settings,
 } from 'lucide-react';
@@ -20,6 +15,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
 import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
+import { PanelToggleButton } from '@/components/common/panel-toggle-button';
+import { YamlViewer } from '@/components/common/yaml-viewer';
 import { Button } from '@/components/ui/button';
 import {
   Form,
@@ -67,7 +64,6 @@ export function AgentForm({
   const [allAgents, setAllAgents] = useState<Agent[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
   const [showYaml, setShowYaml] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   const isViewing = mode === AgentFormMode.VIEW;
 
@@ -184,38 +180,6 @@ export function AgentForm({
     unavailableTools,
     state.selectedTools,
   ]);
-
-  const handleCopyYaml = () => {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(agentYaml).then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      });
-    } else {
-      const textArea = document.createElement('textarea');
-      textArea.value = agentYaml;
-      textArea.style.position = 'fixed';
-      textArea.style.left = '-9999px';
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const handleDownloadYaml = () => {
-    const blob = new Blob([agentYaml], { type: 'text/yaml' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${agent?.name || 'agent'}.yaml`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
 
   if (loading) {
     return (
@@ -340,33 +304,10 @@ export function AgentForm({
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto">
                   {showYaml ? (
-                    <div className="relative h-full">
-                      <div className="absolute top-2 right-4 z-10 flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleCopyYaml}
-                          className="h-7 gap-1 px-2 text-xs">
-                          {copied ? (
-                            <Check className="h-3 w-3" />
-                          ) : (
-                            <Copy className="h-3 w-3" />
-                          )}
-                          {copied ? 'Copied' : 'Copy'}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleDownloadYaml}
-                          className="h-7 gap-1 px-2 text-xs">
-                          <Download className="h-3 w-3" />
-                          Download
-                        </Button>
-                      </div>
-                      <pre className="bg-muted/30 h-full overflow-auto p-4 pt-10 font-mono text-xs">
-                        {agentYaml}
-                      </pre>
-                    </div>
+                    <YamlViewer
+                      yaml={agentYaml}
+                      fileName={agent?.name || 'agent'}
+                    />
                   ) : (
                     <div className="space-y-4 p-4">
                       <Form {...form}>
@@ -452,23 +393,10 @@ export function AgentForm({
             )}
           </div>
 
-          {/* Toggle button */}
-          <Button
-            variant="outline"
-            size="sm"
-            className={`absolute top-1/2 z-10 h-12 w-6 -translate-y-1/2 rounded-l-none rounded-r-md border-l-0 px-0 transition-all duration-300 ${
-              isLeftPanelCollapsed ? 'left-0' : 'left-1/2 -translate-x-px'
-            }`}
-            onClick={() => setIsLeftPanelCollapsed(!isLeftPanelCollapsed)}
-            title={
-              isLeftPanelCollapsed ? 'Show configuration' : 'Hide configuration'
-            }>
-            {isLeftPanelCollapsed ? (
-              <PanelLeftOpen className="h-4 w-4" />
-            ) : (
-              <PanelLeftClose className="h-4 w-4" />
-            )}
-          </Button>
+          <PanelToggleButton
+            isCollapsed={isLeftPanelCollapsed}
+            onToggle={() => setIsLeftPanelCollapsed(!isLeftPanelCollapsed)}
+          />
 
           {/* Right Panel - Chat */}
           <div

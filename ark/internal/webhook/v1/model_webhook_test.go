@@ -76,7 +76,7 @@ var _ = Describe("Model Webhook", func() {
 					BaseURL: arkv1alpha1.ValueSource{
 						Value: "https://myazure.openai.azure.com",
 					},
-					APIKey: arkv1alpha1.ValueSource{
+					APIKey: &arkv1alpha1.ValueSource{
 						Value: "azure-key",
 					},
 				},

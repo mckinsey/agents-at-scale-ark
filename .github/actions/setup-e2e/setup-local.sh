@@ -66,15 +66,6 @@ else
   echo "cert-manager already installed"
 fi
 
-# Install Postgres operator if not present
-echo "=== Installing Postgres Operator ==="
-if ! kubectl get deployment pgo -n default >/dev/null 2>&1; then
-  helm install pgo oci://registry.developers.crunchydata.com/crunchydata/pgo
-  kubectl wait --for=condition=available --timeout=120s deployment/pgo
-else
-  echo "Postgres operator already installed"
-fi
-
 echo "=== Installing Gateway API CRDs ==="
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
 

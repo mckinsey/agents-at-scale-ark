@@ -28,16 +28,15 @@ spec:
     - apply:
         file: manifests/a0[1-2]-*.yaml
     # Wait for Model to be available
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          metadata:
-            name: test-model-custom-headers
-          status:
-            conditions:
-            - type: ModelAvailable
-              status: "True"
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-custom-headers
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True' 
     # Apply Agent and Query
     - apply:
         file: manifests/a0[5-6]-*.yaml
