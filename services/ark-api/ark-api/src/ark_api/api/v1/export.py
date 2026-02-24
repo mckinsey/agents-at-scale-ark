@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Any
 from fastapi import APIRouter, Query, Response, HTTPException
 from fastapi.responses import StreamingResponse
 from kubernetes import client
+from kubernetes.client import CustomObjectsApi
 from kubernetes.client.rest import ApiException
 
 from ark_sdk.client import with_ark_client
@@ -129,8 +130,6 @@ async def _collect_workflows(
     resource_ids: Optional[Dict[str, List[str]]]
 ) -> List[Dict[str, Any]]:
     """Collect Argo WorkflowTemplates."""
-    from kubernetes.client import CustomObjectsApi
-
     def _fetch_workflows_sync():
         """Synchronous helper to fetch workflow templates."""
         items = []
