@@ -1,4 +1,4 @@
-import {describe, it, expect, beforeEach, afterEach, jest} from '@jest/globals';
+import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {readStdin} from './stdin.js';
 import {Readable} from 'stream';
 
@@ -24,7 +24,7 @@ describe('readStdin', () => {
       writable: true,
       configurable: true,
     });
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should return empty string when stdin is TTY', async () => {

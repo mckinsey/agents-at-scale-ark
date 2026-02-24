@@ -3,14 +3,10 @@
 import { useParams, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
+import type { BreadcrumbElement } from '@/components/common/page-header';
 import { EvaluationDetailView } from '@/components/evaluation';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-  { href: '/evaluations', label: 'Evaluations' },
-];
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 
 function EvaluationDetailContent() {
   const params = useParams();
@@ -18,6 +14,11 @@ function EvaluationDetailContent() {
   const evaluationId = params.id as string;
   const namespace = searchParams.get('namespace') || 'default';
   const enhanced = searchParams.get('enhanced') === 'true';
+
+  const breadcrumbs: BreadcrumbElement[] = [
+    ...BASE_BREADCRUMBS,
+    { href: '/evaluations', label: 'Evaluations' },
+  ];
 
   return (
     <>

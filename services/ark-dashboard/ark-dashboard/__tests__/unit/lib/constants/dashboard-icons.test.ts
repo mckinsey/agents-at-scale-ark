@@ -1,12 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  CONFIGURATION_SECTIONS,
+  AGENT_BUILDER_SECTIONS,
   DASHBOARD_SECTIONS,
-  OPERATION_SECTIONS,
-  RUNTIME_SECTIONS,
-  SERVICE_SECTIONS,
-  getDashboardIcon,
+  MONITORING_SECTIONS,
 } from '@/lib/constants/dashboard-icons';
 
 describe('dashboard-icons', () => {
@@ -30,73 +27,57 @@ describe('dashboard-icons', () => {
       expect(DASHBOARD_SECTIONS.a2a).toBeDefined();
       expect(DASHBOARD_SECTIONS.services).toBeDefined();
       expect(DASHBOARD_SECTIONS['api-keys']).toBeDefined();
+      expect(DASHBOARD_SECTIONS.sessions).toBeDefined();
+      expect(DASHBOARD_SECTIONS.evals).toBeDefined();
     });
 
     it('should have correct structure for each section', () => {
       expect(DASHBOARD_SECTIONS['workflow-templates']).toEqual({
         key: 'workflow-templates',
-        title: 'Workflow Templates',
+        title: 'Workflows',
         icon: expect.any(Object),
-        group: 'configurations',
+        group: 'workflow-templates',
       });
     });
-  });
 
-  describe('getDashboardIcon', () => {
-    it('should return icon for valid section key', () => {
-      const icon = getDashboardIcon('agents');
-      expect(icon).toBeDefined();
-    });
-
-    it('should return icon for workflow-templates', () => {
-      const icon = getDashboardIcon('workflow-templates');
-      expect(icon).toBeDefined();
-    });
-
-    it('should return icon for all section keys', () => {
-      Object.keys(DASHBOARD_SECTIONS).forEach(key => {
-        const icon = getDashboardIcon(key as keyof typeof DASHBOARD_SECTIONS);
-        expect(icon).toBeDefined();
+    it('should have icons for all sections', () => {
+      Object.values(DASHBOARD_SECTIONS).forEach(section => {
+        expect(section.icon).toBeDefined();
+        expect(section.key).toBeDefined();
+        expect(section.title).toBeDefined();
+        expect(section.group).toBeDefined();
       });
     });
   });
 
   describe('Section groups', () => {
-    it('should filter configuration sections correctly', () => {
-      expect(CONFIGURATION_SECTIONS).toBeDefined();
-      expect(CONFIGURATION_SECTIONS.length).toBeGreaterThan(0);
+    it('should filter agent builder sections correctly', () => {
+      expect(AGENT_BUILDER_SECTIONS).toBeDefined();
+      expect(AGENT_BUILDER_SECTIONS.length).toBeGreaterThan(0);
       expect(
-        CONFIGURATION_SECTIONS.every(s => s.group === 'configurations'),
+        AGENT_BUILDER_SECTIONS.every(s => s.group === 'agent-builder'),
       ).toBe(true);
       expect(
-        CONFIGURATION_SECTIONS.find(s => s.key === 'agents'),
+        AGENT_BUILDER_SECTIONS.find(s => s.key === 'agents'),
       ).toBeDefined();
       expect(
-        CONFIGURATION_SECTIONS.find(s => s.key === 'workflow-templates'),
+        AGENT_BUILDER_SECTIONS.find(s => s.key === 'teams'),
+      ).toBeDefined();
+      expect(
+        AGENT_BUILDER_SECTIONS.find(s => s.key === 'queries'),
       ).toBeDefined();
     });
 
-    it('should filter operation sections correctly', () => {
-      expect(OPERATION_SECTIONS).toBeDefined();
-      expect(OPERATION_SECTIONS.length).toBeGreaterThan(0);
-      expect(OPERATION_SECTIONS.every(s => s.group === 'operations')).toBe(
+    it('should filter monitoring sections correctly', () => {
+      expect(MONITORING_SECTIONS).toBeDefined();
+      expect(MONITORING_SECTIONS.length).toBeGreaterThan(0);
+      expect(MONITORING_SECTIONS.every(s => s.group === 'monitoring')).toBe(
         true,
       );
-      expect(OPERATION_SECTIONS.find(s => s.key === 'queries')).toBeDefined();
-    });
-
-    it('should filter runtime sections correctly', () => {
-      expect(RUNTIME_SECTIONS).toBeDefined();
-      expect(RUNTIME_SECTIONS.length).toBeGreaterThan(0);
-      expect(RUNTIME_SECTIONS.every(s => s.group === 'runtime')).toBe(true);
-      expect(RUNTIME_SECTIONS.find(s => s.key === 'tools')).toBeDefined();
-    });
-
-    it('should filter service sections correctly', () => {
-      expect(SERVICE_SECTIONS).toBeDefined();
-      expect(SERVICE_SECTIONS.length).toBeGreaterThan(0);
-      expect(SERVICE_SECTIONS.every(s => s.group === 'service')).toBe(true);
-      expect(SERVICE_SECTIONS.find(s => s.key === 'api-keys')).toBeDefined();
+      expect(
+        MONITORING_SECTIONS.find(s => s.key === 'sessions'),
+      ).toBeDefined();
+      expect(MONITORING_SECTIONS.find(s => s.key === 'events')).toBeDefined();
     });
   });
 
