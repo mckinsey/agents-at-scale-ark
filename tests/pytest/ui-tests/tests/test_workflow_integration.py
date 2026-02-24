@@ -116,7 +116,7 @@ class TestWorkflowIntegration:
                 logger.info("Workflow is ready")
 
             page.goto(f"{dashboard.base_url}/workflow-templates")
-            page.wait_for_load_state("networkidle", timeout=15000)
+            page.wait_for_load_state("domcontentloaded")
             assert "/workflow-templates" in page.url, f"Expected /workflow-templates in URL, got: {page.url}"
             logger.info("Viewing Workflow Templates page in ARK")
 

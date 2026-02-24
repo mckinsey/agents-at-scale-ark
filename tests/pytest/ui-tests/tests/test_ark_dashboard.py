@@ -70,5 +70,5 @@ class TestArkDashboard:
         assert dashboard.is_dashboard_loaded(), "Dashboard should load initially"
         
         dashboard.reload()
-        dashboard.wait_for_load_state("networkidle")
+        dashboard.wait_for_load_state("domcontentloaded")
         assert dashboard.is_dashboard_loaded(), "Dashboard should still be loaded after reload"
