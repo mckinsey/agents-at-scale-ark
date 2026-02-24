@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.workflows
+@pytest.mark.xdist_group("ark_workflows")
 class TestWorkflowIntegration:
     
     def test_engineering_workflow_full_cycle(self, page: Page):

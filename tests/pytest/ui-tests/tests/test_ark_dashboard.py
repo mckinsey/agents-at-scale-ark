@@ -4,6 +4,7 @@ from pages.dashboard_page import DashboardPage
 
 
 @pytest.mark.dashboard
+@pytest.mark.xdist_group("ark_dashboard")
 class TestArkDashboard:
     
     def test_ark_dashboard_loads(self, page: Page):

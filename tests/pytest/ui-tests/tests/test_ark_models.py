@@ -13,6 +13,7 @@ def model_test_resources():
 
 
 @pytest.mark.models
+@pytest.mark.xdist_group("ark_models")
 class TestArkModels:
     
     @pytest.mark.parametrize("prefix,env_key,model_type,model_name,base_url_key", [

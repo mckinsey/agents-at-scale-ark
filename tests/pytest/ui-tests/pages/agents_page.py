@@ -1,4 +1,5 @@
 import logging
+import random
 import pytest
 from datetime import datetime
 from playwright.sync_api import Page
@@ -39,7 +40,8 @@ class AgentsPage(BasePage):
     
     def generate_agent_name(self, prefix: str = "agent") -> str:
         date_str = datetime.now().strftime("%d%m%y%H%M%S")
-        return f"{prefix}-{date_str}"
+        rand = random.randint(100, 999)
+        return f"{prefix}-{date_str}{rand}"
     
     def is_agent_in_table(self, agent_name: str, retries: int = 3) -> bool:
         for attempt in range(retries):
@@ -276,17 +278,14 @@ class AgentsPage(BasePage):
             "row_verification": row_verification
         }
     
-    def delete_agent_with_verification(self, agent_name: str) -> dict:        
+    def delete_agent_with_verification(self, agent_name: str) -> dict:
         try:
             name_element = self.page.get_by_text(agent_name, exact=True).first
             name_element.scroll_into_view_if_needed()
-            row_container = name_element.locator("../../..").first
-            buttons = row_container.locator("button").all()
-            
-            if len(buttons) < 2:
-                return self._delete_not_available(agent_name)
-            
-            buttons[-2].click()
+            card = name_element.locator("../../..").first
+            delete_btn = card.locator("button[aria-label='Delete agent']").first
+            delete_btn.wait_for(state="visible", timeout=5000)
+            delete_btn.click()
         except:
             return self._delete_not_available(agent_name)
         

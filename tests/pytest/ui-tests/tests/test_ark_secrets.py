@@ -10,6 +10,7 @@ def secret_test_resources():
 
 
 @pytest.mark.secrets
+@pytest.mark.xdist_group("ark_secrets")
 class TestArkSecrets:
     
     @pytest.mark.parametrize("prefix,env_key", [

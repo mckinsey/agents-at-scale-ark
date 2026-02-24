@@ -1,4 +1,5 @@
 import logging
+import random
 from datetime import datetime
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
@@ -35,7 +36,8 @@ class TeamsPage(BasePage):
 
     def generate_team_name(self, prefix: str = "team") -> str:
         date_str = datetime.now().strftime("%d%m%y%H%M%S")
-        return f"{prefix}-{date_str}"
+        rand = random.randint(100, 999)
+        return f"{prefix}-{date_str}{rand}"
 
     def is_team_in_table(self, team_name: str, retries: int = 3) -> bool:
         for attempt in range(retries):
@@ -191,15 +193,13 @@ class TeamsPage(BasePage):
         try:
             name_element = self.page.get_by_text(team_name, exact=True).first
             name_element.scroll_into_view_if_needed()
-            row_container = name_element.locator("../../..").first
-            buttons = row_container.locator("button").all()
-            if len(buttons) < 2:
-                return self._delete_not_available(team_name)
-            buttons[-2].click()
+            card = name_element.locator("../../..").first
+            delete_btn = card.locator("button[aria-label='Delete team']").first
+            delete_btn.wait_for(state="visible", timeout=5000)
+            delete_btn.click()
         except Exception as e:
             logger.warning("Delete button not found for team %s: %s", team_name, e)
             return self._delete_not_available(team_name)
-
 
         self.wait_for_modal_open()
         confirm_dialog_visible = self.page.locator(self.CONFIRM_DELETE_DIALOG).first.is_visible()

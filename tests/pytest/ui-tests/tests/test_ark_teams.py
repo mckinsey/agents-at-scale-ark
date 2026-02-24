@@ -17,6 +17,7 @@ def team_test_resources():
 
 
 @pytest.mark.teams
+@pytest.mark.xdist_group("ark_teams")
 class TestArkTeams:
     
     @pytest.mark.parametrize("prefix", [

@@ -1,4 +1,5 @@
 import logging
+import random
 import pytest
 from datetime import datetime
 from playwright.sync_api import Page
@@ -38,7 +39,8 @@ class ModelsPage(BasePage):
     
     def generate_model_name(self, prefix: str = "model") -> str:
         date_str = datetime.now().strftime("%d%m%y%H%M%S")
-        return f"{prefix}-{date_str}"
+        rand = random.randint(100, 999)
+        return f"{prefix}-{date_str}{rand}"
     
     def is_model_in_table(self, model_name: str, retries: int = 3) -> bool:
         for attempt in range(retries):
@@ -119,17 +121,14 @@ class ModelsPage(BasePage):
             "model_type": model_type
         }
     
-    def delete_model_with_verification(self, model_name: str) -> dict:        
+    def delete_model_with_verification(self, model_name: str) -> dict:
         try:
             name_element = self.page.get_by_text(model_name, exact=True).first
             name_element.scroll_into_view_if_needed()
-            row_container = name_element.locator("../../..").first
-            buttons = row_container.locator("button").all()
-            
-            if len(buttons) < 2:
-                return self._delete_not_available(model_name)
-            
-            buttons[-1].click()
+            card = name_element.locator("../../..").first
+            delete_btn = card.locator("button[aria-label='Delete model']").first
+            delete_btn.wait_for(state="visible", timeout=5000)
+            delete_btn.click()
         except:
             return self._delete_not_available(model_name)
         

@@ -17,6 +17,7 @@ def agent_test_resources():
 
 
 @pytest.mark.agents
+@pytest.mark.xdist_group("ark_agents")
 class TestArkAgents:
     
     @pytest.mark.parametrize("prefix", [

@@ -1,4 +1,5 @@
 import logging
+import random
 import pytest
 from datetime import datetime
 from playwright.sync_api import Page
@@ -44,7 +45,8 @@ class ToolsPage(BasePage):
     
     def generate_tool_name(self, prefix: str = "tool") -> str:
         date_str = datetime.now().strftime("%d%m%y%H%M%S")
-        return f"{prefix}-{date_str}"
+        rand = random.randint(100, 999)
+        return f"{prefix}-{date_str}{rand}"
     
     def is_tool_in_table(self, tool_name: str, retries: int = 3) -> bool:
         for attempt in range(retries):
@@ -158,17 +160,13 @@ class ToolsPage(BasePage):
     
     def delete_tool_with_verification(self, tool_name: str) -> dict:
         logger.info(f"Deleting tool: {tool_name}")
-        
         try:
             name_element = self.page.get_by_text(tool_name, exact=True).first
             name_element.scroll_into_view_if_needed()
-            row_container = name_element.locator("../../..").first
-            buttons = row_container.locator("button").all()
-            
-            if len(buttons) < 2:
-                return self._delete_not_available(tool_name)
-            
-            buttons[-1].click()
+            card = name_element.locator("../../..").first
+            delete_btn = card.locator("button[aria-label='Delete tool']").first
+            delete_btn.wait_for(state="visible", timeout=5000)
+            delete_btn.click()
         except:
             return self._delete_not_available(tool_name)
         
