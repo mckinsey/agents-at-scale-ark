@@ -72,7 +72,7 @@ const resourceSections: ResourceSection[] = [
     icon: Server,
   },
   {
-    type: 'mcpservers',
+    type: 'mcp',
     title: 'MCP Servers',
     description: 'Model Context Protocol server configs',
     icon: Server,

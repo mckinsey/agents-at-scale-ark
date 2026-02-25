@@ -44,7 +44,7 @@ export interface ResourceExportData {
   models?: ExportItem[];
   queries?: ExportItem[];
   a2a?: ExportItem[];
-  mcpservers?: ExportItem[];
+  mcp?: ExportItem[];
   workflows?: ExportItem[];
   evaluators?: ExportItem[];
   evaluations?: ExportItem[];
@@ -56,7 +56,7 @@ export type ResourceType =
   | 'models'
   | 'queries'
   | 'a2a'
-  | 'mcpservers'
+  | 'mcp'
   | 'workflows'
   | 'evaluators'
   | 'evaluations';
@@ -155,10 +155,10 @@ export const exportService = {
     }
 
     if (mcpServers.status === 'fulfilled' && mcpServers.value?.items) {
-      data.mcpservers = mcpServers.value.items.map(server => ({
+      data.mcp = mcpServers.value.items.map(server => ({
         id: server.name || '',
         name: server.name || '',
-        type: 'mcpservers',
+        type: 'mcp',
       }));
     }
 
