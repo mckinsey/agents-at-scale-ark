@@ -64,16 +64,13 @@ type AgentModelRef struct {
 	Namespace string `json:"namespace,omitempty"`
 }
 
-// ExecutionEngineRef references an external or internal engine that can execute agent workloads.
-// This allows agents to be run using different frameworks such as LangChain, AutoGen, or other
-// agent execution systems, rather than the built-in OpenAI-compatible engine.
+// ExecutionEngineRef is reserved for A2A (Agent-to-Agent) execution.
+// The only supported value for Name is "a2a", which is managed internally by A2AServer resources.
 type ExecutionEngineRef struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
-	// Name of the ExecutionEngine resource to use for this agent
 	Name string `json:"name"`
 	// +kubebuilder:validation:Optional
-	// Namespace of the ExecutionEngine resource. Defaults to the agent's namespace if not specified
 	Namespace string `json:"namespace,omitempty"`
 }
 type AgentSpec struct {
@@ -82,7 +79,7 @@ type AgentSpec struct {
 	// +kubebuilder:validation:Optional
 	ModelRef *AgentModelRef `json:"modelRef,omitempty"`
 	// +kubebuilder:validation:Optional
-	// ExecutionEngine to use for running this agent. If not specified, uses the built-in OpenAI-compatible engine
+	// ExecutionEngine is reserved for A2A execution. Only "a2a" is supported as a value.
 	ExecutionEngine *ExecutionEngineRef `json:"executionEngine,omitempty"`
 	Tools           []AgentTool         `json:"tools,omitempty"`
 	// +kubebuilder:validation:Optional

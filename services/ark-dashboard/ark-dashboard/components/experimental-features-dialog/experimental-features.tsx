@@ -2,7 +2,6 @@ import {
   storedIsBrokerEnabledAtom,
   storedIsChatStreamingEnabledAtom,
   storedIsExperimentalDarkModeEnabledAtom,
-  storedIsExperimentalExecutionEngineEnabledAtom,
   storedQueryTimeoutSettingAtom,
 } from '@/atoms/experimental-features';
 
@@ -18,23 +17,6 @@ export const experimentalFeatureGroups: ExperimentalFeatureGroup[] = [
         feature: 'Experimental Dark Mode',
         description: 'Enables experimental Dark Mode',
         atom: storedIsExperimentalDarkModeEnabledAtom,
-      },
-    ],
-  },
-  {
-    groupKey: 'agents',
-    groupLabel: 'Agents',
-    features: [
-      {
-        type: 'boolean',
-        feature: 'Experimental Execution Engine Field',
-        description: (
-          <span>
-            Enables the experimental{' '}
-            <span className="font-bold">Execution Engine</span> field on Agents
-          </span>
-        ),
-        atom: storedIsExperimentalExecutionEngineEnabledAtom,
       },
     ],
   },

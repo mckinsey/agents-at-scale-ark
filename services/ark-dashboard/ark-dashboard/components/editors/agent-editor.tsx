@@ -1,7 +1,6 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useAtomValue } from 'jotai';
 import {
   ChevronRight,
   CircleAlert,
@@ -13,7 +12,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 
-import { isExperimentalExecutionEngineEnabledAtom } from '@/atoms/experimental-features';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -84,7 +82,6 @@ const formSchema = z.object({
   description: z.string().optional(),
   selectedModelName: z.string().optional(),
   selectedModelNamespace: z.string().optional(),
-  executionEngineName: z.string().optional(),
   prompt: z.string().optional(),
 });
 
@@ -100,10 +97,6 @@ export function AgentEditor({
   const [availableTools, setAvailableTools] = useState<Tool[]>([]);
   const [toolsLoading, setToolsLoading] = useState(false);
   const [unavailableTools, setUnavailableTools] = useState<Tool[]>([]);
-  const isExperimentalExecutionEngineEnabled = useAtomValue(
-    isExperimentalExecutionEngineEnabledAtom,
-  );
-
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -111,7 +104,6 @@ export function AgentEditor({
       description: '',
       selectedModelName: '__none__',
       selectedModelNamespace: '',
-      executionEngineName: '',
       prompt: '',
     },
   });
@@ -146,7 +138,6 @@ export function AgentEditor({
         description: agent.description || '',
         selectedModelName: agent.modelRef?.name || '__none__',
         selectedModelNamespace: agent.modelRef?.namespace || '',
-        executionEngineName: agent.executionEngine?.name || '',
         prompt: agent.prompt || '',
       });
       setSelectedTools(agent.tools || []);
@@ -171,12 +162,6 @@ export function AgentEditor({
                 namespace: values.selectedModelNamespace || undefined,
               }
             : undefined,
-        executionEngine:
-          !agent.isA2A && values.executionEngineName
-            ? {
-                name: values.executionEngineName,
-              }
-            : undefined,
         prompt: !agent.isA2A ? values.prompt || undefined : undefined,
         tools: agent.isA2A ? undefined : selectedTools,
         id: agent.id,
@@ -195,11 +180,6 @@ export function AgentEditor({
                 namespace: values.selectedModelNamespace || undefined,
               }
             : undefined,
-        executionEngine: values.executionEngineName
-          ? {
-              name: values.executionEngineName,
-            }
-          : undefined,
         prompt: values.prompt || undefined,
         tools: selectedTools,
       };
@@ -316,25 +296,6 @@ export function AgentEditor({
                       </FormItem>
                     )}
                   />
-                  {isExperimentalExecutionEngineEnabled && (
-                    <FormField
-                      control={form.control}
-                      name="executionEngineName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Execution Engine</FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="e.g., langchain-executor"
-                              disabled={form.formState.isSubmitting}
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  )}
                   <FormField
                     control={form.control}
                     name="prompt"

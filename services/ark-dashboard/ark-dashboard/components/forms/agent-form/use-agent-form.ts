@@ -2,12 +2,10 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAtomValue } from 'jotai';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 
-import { isExperimentalExecutionEngineEnabledAtom } from '@/atoms/experimental-features';
 import type { Parameter } from '@/components/ui/parameter-editor';
 import type {
   Agent,
@@ -55,10 +53,6 @@ export function useAgentForm({
   const [parameters, setParameters] = useState<Parameter[]>([]);
   const [initialParameters, setInitialParameters] = useState<Parameter[]>([]);
 
-  const isExperimentalExecutionEngineEnabled = useAtomValue(
-    isExperimentalExecutionEngineEnabledAtom,
-  );
-
   const form = useForm<AgentFormValues>({
     resolver: zodResolver(agentFormSchema),
     defaultValues: {
@@ -66,7 +60,6 @@ export function useAgentForm({
       description: '',
       selectedModelName: '__none__',
       selectedModelNamespace: '',
-      executionEngineName: '',
       prompt: '',
     },
   });
@@ -111,7 +104,6 @@ export function useAgentForm({
             description: agentData.description || '',
             selectedModelName: agentData.modelRef?.name || '__none__',
             selectedModelNamespace: agentData.modelRef?.namespace || '',
-            executionEngineName: agentData.executionEngine?.name || '',
             prompt: agentData.prompt || '',
           });
         } else {
@@ -165,9 +157,6 @@ export function useAgentForm({
                     namespace: values.selectedModelNamespace || undefined,
                   }
                 : undefined,
-            executionEngine: values.executionEngineName
-              ? { name: values.executionEngineName }
-              : undefined,
             prompt: values.prompt || undefined,
             tools: selectedTools,
             parameters: mapParametersToApi(),
@@ -189,10 +178,6 @@ export function useAgentForm({
                     name: values.selectedModelName,
                     namespace: values.selectedModelNamespace || undefined,
                   }
-                : undefined,
-            executionEngine:
-              !agent.isA2A && values.executionEngineName
-                ? { name: values.executionEngineName }
                 : undefined,
             prompt: !agent.isA2A ? values.prompt || undefined : undefined,
             tools: agent.isA2A ? undefined : selectedTools,
@@ -269,7 +254,6 @@ export function useAgentForm({
       selectedTools,
       unavailableTools,
       parameters,
-      isExperimentalExecutionEngineEnabled,
       hasChanges,
     },
     actions: {

@@ -104,7 +104,6 @@ func TestAPIVersionByKind(t *testing.T) {
 		{"Query", "ark.mckinsey.com/v1alpha1"},
 		{"Agent", "ark.mckinsey.com/v1alpha1"},
 		{"A2AServer", "ark.mckinsey.com/v1prealpha1"},
-		{"ExecutionEngine", "ark.mckinsey.com/v1prealpha1"},
 	}
 
 	for _, tt := range tests {

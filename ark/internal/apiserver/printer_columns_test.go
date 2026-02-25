@@ -44,7 +44,7 @@ func TestGetPrinterColumnRegistry_AllKinds(t *testing.T) {
 	kindsWithColumns := []string{
 		"Agent", "Model", "Query", "Team", "Memory",
 		"MCPServer", "Evaluation", "Evaluator", "A2ATask",
-		"ExecutionEngine", "A2AServer",
+		"A2AServer",
 	}
 
 	for _, kind := range kindsWithColumns {

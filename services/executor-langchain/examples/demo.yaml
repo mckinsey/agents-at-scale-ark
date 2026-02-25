@@ -1,15 +1,5 @@
-# LangChain Execution Engine Demo
-# This demo shows how to use the LangChain execution engine with both regular and RAG agents
-
-# ExecutionEngine CRD - defines the LangChain execution engine
----
-apiVersion: ark.mckinsey.com/v1prealpha1
-kind: ExecutionEngine
-metadata:
-  name: executor-langchain-engine
-spec:
-  type: external
-  description: "LangChain execution engine with RAG support"
+# LangChain Executor Demo
+# This demo shows LangChain-based agents with both regular and RAG capabilities
 
 # Regular LangChain Agent
 ---
@@ -25,12 +15,7 @@ spec:
     rather than the built-in OpenAI engine. 
     
     Always be helpful and mention that you're running on the LangChain Execution Engine!
-  
-  # Use the LangChain execution engine
-  executionEngine:
-    name: executor-langchain-engine
-  
-  # Use the default model
+
   modelRef:
     name: default
 
@@ -52,12 +37,7 @@ spec:
     
     When answering questions, use the retrieved context from the codebase to provide 
     accurate and detailed responses about the code structure, functions, and implementation.
-  
-  # Use the LangChain execution engine
-  executionEngine:
-    name: executor-langchain-engine
-  
-  # Use the chat model (embeddings model specified in label)
+
   modelRef:
     name: default
 

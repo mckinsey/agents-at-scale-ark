@@ -17,14 +17,12 @@ graph TD
     A[Agent] --> M[Model]
     A --> T[Tools]
     A --> MEM[Memory]
-    A --> EE[Execution Engine]
     M --> S[Secrets]
     T --> MCP[MCP Server]
 ```
 
 **Required:**
 - **Model**: Defines the AI model provider and configuration
-- **Execution Engine**: Runtime environment for the agent
 
 **Optional:**
 - **Tools**: External capabilities and functions
@@ -185,8 +183,7 @@ When creating related resources, follow this order:
 3. **Memory** (if using persistent context)
 4. **Tools** (external capabilities)
 5. **MCP Servers** (if using MCP tools)
-6. **Execution Engines** (runtime environments)
-7. **Agents** (individual AI agents)
+6. **Agents** (individual AI agents)
 8. **Teams** (multi-agent orchestration)
 9. **A2A Servers** (agent communication)
 

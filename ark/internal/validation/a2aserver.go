@@ -3,8 +3,29 @@ package validation
 import (
 	"fmt"
 
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 )
+
+func convertV1PreAlpha1ValueSource(vs arkv1prealpha1.ValueSource) arkv1alpha1.ValueSource {
+	out := arkv1alpha1.ValueSource{Value: vs.Value}
+	if vs.ValueFrom == nil {
+		return out
+	}
+	out.ValueFrom = &arkv1alpha1.ValueFromSource{
+		SecretKeyRef:    vs.ValueFrom.SecretKeyRef,
+		ConfigMapKeyRef: vs.ValueFrom.ConfigMapKeyRef,
+	}
+	if vs.ValueFrom.ServiceRef != nil {
+		out.ValueFrom.ServiceRef = &arkv1alpha1.ServiceReference{
+			Name:      vs.ValueFrom.ServiceRef.Name,
+			Namespace: vs.ValueFrom.ServiceRef.Namespace,
+			Port:      vs.ValueFrom.ServiceRef.Port,
+			Path:      vs.ValueFrom.ServiceRef.Path,
+		}
+	}
+	return out
+}
 
 func ValidateA2AServer(a2aserver *arkv1prealpha1.A2AServer) ([]string, error) {
 	var allErrs []error

@@ -24,14 +24,6 @@ description: Implement Retrieval-Augmented Generation with external vector datab
 
 This guide explains how to implement Retrieval-Augmented Generation (RAG) functionality in ARK by integrating with a vector database. The approach enables agents to retrieve relevant context from your knowledge base before generating responses.
 
-### Built-in vs Custom RAG
-
-**ARK includes built-in RAG support** via the LangChain Execution Engine:
-- Enables by adding `langchain: rag` label to agents
-- Uses FAISS for in-memory vector storage
-- Automatically indexes local Python files
-- Suitable for: Code-aware agents, temporary knowledge bases
-
 **Custom RAG implementation is needed when**:
 - Using persistent vector databases (pgvector, Weaviate, Pinecone)
 - Ingesting custom documents/data
@@ -543,8 +535,7 @@ This guide covered:
 
 ### Key Takeaways
 
-1. **ARK has built-in RAG** (LangChain executor) for simple use cases
-2. **Custom RAG needed** for persistent, production knowledge bases
+1. **Custom RAG** is needed for persistent, production knowledge bases
 3. **pgvector** is a good starting point, easy to deploy
 4. **HTTP Tools** provide simple, reliable tool integration
 5. **Ingestion is separate** - build your own pipeline

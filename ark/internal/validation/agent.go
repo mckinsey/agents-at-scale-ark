@@ -5,10 +5,17 @@ import (
 	"fmt"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/genai"
 )
 
 func (v *Validator) ValidateAgent(ctx context.Context, agent *arkv1alpha1.Agent) ([]string, error) {
 	var warnings []string
+
+	if agent.Spec.ExecutionEngine != nil {
+		if err := genai.ValidateExecutionEngine(agent.Spec.ExecutionEngine); err != nil {
+			return warnings, err
+		}
+	}
 
 	if err := v.ValidateParameters(ctx, agent.Namespace, agent.Spec.Parameters); err != nil {
 		return warnings, err

@@ -100,8 +100,6 @@ func newArkObject(kind string) client.Object {
 		return &arkv1alpha1.A2ATask{}
 	case "A2AServer":
 		return &arkv1prealpha1.A2AServer{}
-	case "ExecutionEngine":
-		return &arkv1prealpha1.ExecutionEngine{}
 	default:
 		return nil
 	}

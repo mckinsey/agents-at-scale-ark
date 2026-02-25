@@ -10,7 +10,6 @@ export const agentFormSchema = z.object({
   description: z.string().optional(),
   selectedModelName: z.string().optional(),
   selectedModelNamespace: z.string().optional(),
-  executionEngineName: z.string().optional(),
   prompt: z.string().optional(),
 });
 
@@ -35,7 +34,6 @@ export interface AgentFormState {
   selectedTools: AgentTool[];
   unavailableTools: Tool[];
   parameters: Parameter[];
-  isExperimentalExecutionEngineEnabled: boolean;
   hasChanges: boolean;
 }
 

@@ -21,7 +21,6 @@ When you create a Query resource, it triggers a hierarchical execution flow:
    - MCP Servers - External service integrations
 5. **Optional Components**:
    - Memory - Provides conversation context
-   - Execution Engines - Custom implementations for queries, agents, or teams
 
 ## Execution Steps
 
@@ -91,14 +90,6 @@ The controller:
 2. Updates the Query status with results
 3. Stores conversation in Memory (if configured)
 4. Marks the Query as completed
-
-## Execution Engines
-
-Custom execution engines can override default behavior at different levels:
-
-- **Query Engines**: Custom query processing logic
-- **Agent Engines**: Custom agent execution (e.g., LangChain, AutoGen)
-- **Team Engines**: Custom team coordination strategies
 
 ## Error Handling
 

@@ -87,19 +87,6 @@ func TestDispatchValidate(t *testing.T) {
 		}
 	})
 
-	t.Run("executionengine", func(t *testing.T) {
-		ee := &arkv1prealpha1.ExecutionEngine{
-			ObjectMeta: metav1.ObjectMeta{Name: "langchain", Namespace: "default"},
-			Spec: arkv1prealpha1.ExecutionEngineSpec{
-				Address: arkv1prealpha1.ValueSource{Value: "http://localhost:9090"},
-			},
-		}
-		_, err := v.Validate(ctx, ee)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
 	t.Run("unknown type returns nil", func(t *testing.T) {
 		_, err := v.Validate(ctx, &corev1.ConfigMap{})
 		if err != nil {

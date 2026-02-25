@@ -38,7 +38,6 @@ func TestRegistryTypeConverter_NewObject(t *testing.T) {
 		{"Evaluator", &arkv1alpha1.Evaluator{}},
 		{"A2ATask", &arkv1alpha1.A2ATask{}},
 		{"A2AServer", &arkv1prealpha1.A2AServer{}},
-		{"ExecutionEngine", &arkv1prealpha1.ExecutionEngine{}},
 	}
 
 	for _, tt := range tests {
@@ -169,7 +168,6 @@ func TestRegistryTypeConverter_APIVersion(t *testing.T) {
 		{"Model", "ark.mckinsey.com/v1alpha1"},
 		{"Query", "ark.mckinsey.com/v1alpha1"},
 		{"A2AServer", "ark.mckinsey.com/v1prealpha1"},
-		{"ExecutionEngine", "ark.mckinsey.com/v1prealpha1"},
 		{"UnknownKind", "ark.mckinsey.com/v1alpha1"},
 	}
 

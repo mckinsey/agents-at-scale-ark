@@ -5,7 +5,6 @@ import { useAtom } from 'jotai';
 import {
   storedIsBrokerEnabledAtom,
   storedIsChatStreamingEnabledAtom,
-  storedIsExperimentalExecutionEngineEnabledAtom,
   storedQueryTimeoutSettingAtom,
 } from '@/atoms/experimental-features';
 import { Label } from '@/components/ui/label';
@@ -19,9 +18,6 @@ import {
 import { Switch } from '@/components/ui/switch';
 
 export function ExperimentalFeaturesSettings() {
-  const [isExecutionEngineEnabled, setIsExecutionEngineEnabled] = useAtom(
-    storedIsExperimentalExecutionEngineEnabledAtom,
-  );
   const [isBrokerEnabled, setIsBrokerEnabled] = useAtom(
     storedIsBrokerEnabledAtom,
   );
@@ -34,24 +30,6 @@ export function ExperimentalFeaturesSettings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="mb-4 text-lg font-semibold">Agents</h2>
-        <div className="flex flex-row items-center justify-between rounded-lg border p-4">
-          <div className="space-y-0.5">
-            <Label>Experimental Execution Engine Field</Label>
-            <div className="text-muted-foreground text-sm">
-              Enables the experimental{' '}
-              <span className="font-bold">Execution Engine</span> field on
-              Agents
-            </div>
-          </div>
-          <Switch
-            checked={isExecutionEngineEnabled}
-            onCheckedChange={setIsExecutionEngineEnabled}
-          />
-        </div>
-      </div>
-
       <div>
         <h2 className="mb-4 text-lg font-semibold">Observability</h2>
         <div className="flex flex-row items-center justify-between rounded-lg border p-4">

@@ -1,7 +1,0 @@
-apiVersion: ark.mckinsey.com/v1prealpha1
-kind: ExecutionEngine
-metadata:
-  name: invalid-executionengine-missing-address
-spec:
-  # Missing required address field - should fail admission
-  type: autogen

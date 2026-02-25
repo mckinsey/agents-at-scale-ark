@@ -50,17 +50,13 @@ spec:
               description:
                 type: string
               executionEngine:
-                description: ExecutionEngine to use for running this agent. If not
-                  specified, uses the built-in OpenAI-compatible engine
+                description: ExecutionEngine is reserved for A2A execution. Only "a2a"
+                  is supported as a value.
                 properties:
                   name:
-                    description: Name of the ExecutionEngine resource to use for this
-                      agent
                     minLength: 1
                     type: string
                   namespace:
-                    description: Namespace of the ExecutionEngine resource. Defaults
-                      to the agent's namespace if not specified
                     type: string
                 required:
                 - name

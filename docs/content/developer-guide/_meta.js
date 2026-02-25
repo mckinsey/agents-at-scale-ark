@@ -28,7 +28,6 @@ export default {
   workflows: 'Workflows',
 
   '---advanced': { type: 'separator', title: 'Advanced topics' },
-  'langchain-execution-engine': 'LangChain Execution Engine',
   'rag-implementation': 'RAG Implementation Guide',
   authentication: 'Authentication',
 

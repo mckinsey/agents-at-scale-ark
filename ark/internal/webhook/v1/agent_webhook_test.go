@@ -76,14 +76,14 @@ var _ = Describe("Agent Webhook", func() {
 			Expect(warnings).To(BeEmpty())
 		})
 
-		It("Should allow all agents regardless of execution engine (model validation at runtime)", func() {
+		It("Should reject agents with unsupported execution engine", func() {
 			agent.Spec.ExecutionEngine = &arkv1alpha1.ExecutionEngineRef{
 				Name: "langchain",
 			}
 
-			warnings, err := validator.ValidateCreate(ctx, agent)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(warnings).To(BeEmpty())
+			_, err := validator.ValidateCreate(ctx, agent)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("unsupported execution engine"))
 		})
 	})
 

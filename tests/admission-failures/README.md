@@ -57,9 +57,6 @@ Comprehensive test of admission controller validation by attempting to create in
 - Invalid header configurations
 - Invalid secret references
 
-### ExecutionEngine Validation
-- Missing required address field
-
 ## Running
 ```bash
 chainsaw test

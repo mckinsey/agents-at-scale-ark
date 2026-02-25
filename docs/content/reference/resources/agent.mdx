@@ -27,11 +27,10 @@ spec:
     name: gpt-4-model
     namespace: default
     
-  # Execution engine (optional - uses built-in OpenAI-compatible engine if not specified)
+  # Execution engine (managed by A2AServer - only valid value is 'a2a')
   executionEngine:
-    name: langchain-engine
-    namespace: default
-    
+    name: a2a
+
   # Tools the agent can use
   tools:
     - type: built-in  # System-provided tools (terminate, noop)

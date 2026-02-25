@@ -46,11 +46,6 @@ type AgentRecorder interface {
 	DependencyUnavailable(ctx context.Context, obj runtime.Object, reason string)
 }
 
-type ExecutionEngineRecorder interface {
-	OperationTracker
-	AddressResolutionFailed(ctx context.Context, obj runtime.Object, reason string)
-}
-
 type MCPServerRecorder interface {
 	AddressResolutionFailed(ctx context.Context, obj runtime.Object, reason string)
 	ClientCreationFailed(ctx context.Context, obj runtime.Object, reason string)
@@ -83,7 +78,6 @@ type Provider interface {
 	A2aRecorder() A2aRecorder
 	AgentRecorder() AgentRecorder
 	TeamRecorder() TeamRecorder
-	ExecutionEngineRecorder() ExecutionEngineRecorder
 	MCPServerRecorder() MCPServerRecorder
 	QueryRecorder() QueryRecorder
 	ToolRecorder() ToolRecorder

@@ -40,10 +40,6 @@ func (p *noopProvider) TeamRecorder() eventing.TeamRecorder {
 	return p.teamRecorder
 }
 
-func (p *noopProvider) ExecutionEngineRecorder() eventing.ExecutionEngineRecorder {
-	return nil
-}
-
 func (p *noopProvider) MCPServerRecorder() eventing.MCPServerRecorder {
 	return nil
 }

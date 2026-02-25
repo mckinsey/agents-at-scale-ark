@@ -17,15 +17,14 @@ import (
 var log = logf.Log.WithName("eventing.config")
 
 type Provider struct {
-	modelRecorder           eventing.ModelRecorder
-	a2aRecorder             eventing.A2aRecorder
-	agentRecorder           eventing.AgentRecorder
-	teamRecorder            eventing.TeamRecorder
-	executionEngineRecorder eventing.ExecutionEngineRecorder
-	mcpServerRecorder       eventing.MCPServerRecorder
-	queryRecorder           eventing.QueryRecorder
-	toolRecorder            eventing.ToolRecorder
-	memoryRecorder          eventing.MemoryRecorder
+	modelRecorder     eventing.ModelRecorder
+	a2aRecorder       eventing.A2aRecorder
+	agentRecorder     eventing.AgentRecorder
+	teamRecorder      eventing.TeamRecorder
+	mcpServerRecorder eventing.MCPServerRecorder
+	queryRecorder     eventing.QueryRecorder
+	toolRecorder      eventing.ToolRecorder
+	memoryRecorder    eventing.MemoryRecorder
 }
 
 func NewProvider(mgr ctrl.Manager, k8sClient client.Client) *Provider {
@@ -56,15 +55,14 @@ func NewProvider(mgr ctrl.Manager, k8sClient client.Client) *Provider {
 	}
 
 	return &Provider{
-		modelRecorder:           recorders.NewModelRecorder(k8sEmitter, operationEmitter),
-		a2aRecorder:             recorders.NewA2aRecorder(k8sEmitter, operationEmitter),
-		agentRecorder:           recorders.NewAgentRecorder(k8sEmitter, operationEmitter),
-		teamRecorder:            recorders.NewTeamRecorder(k8sEmitter, operationEmitter),
-		executionEngineRecorder: recorders.NewExecutionEngineRecorder(k8sEmitter, operationEmitter),
-		mcpServerRecorder:       recorders.NewMCPServerRecorder(k8sEmitter),
-		queryRecorder:           recorders.NewQueryRecorder(k8sEmitter, operationEmitter),
-		toolRecorder:            recorders.NewToolRecorder(k8sEmitter, operationEmitter),
-		memoryRecorder:          recorders.NewMemoryRecorder(k8sEmitter, operationEmitter),
+		modelRecorder:     recorders.NewModelRecorder(k8sEmitter, operationEmitter),
+		a2aRecorder:       recorders.NewA2aRecorder(k8sEmitter, operationEmitter),
+		agentRecorder:     recorders.NewAgentRecorder(k8sEmitter, operationEmitter),
+		teamRecorder:      recorders.NewTeamRecorder(k8sEmitter, operationEmitter),
+		mcpServerRecorder: recorders.NewMCPServerRecorder(k8sEmitter),
+		queryRecorder:     recorders.NewQueryRecorder(k8sEmitter, operationEmitter),
+		toolRecorder:      recorders.NewToolRecorder(k8sEmitter, operationEmitter),
+		memoryRecorder:    recorders.NewMemoryRecorder(k8sEmitter, operationEmitter),
 	}
 }
 
@@ -82,10 +80,6 @@ func (p *Provider) AgentRecorder() eventing.AgentRecorder {
 
 func (p *Provider) TeamRecorder() eventing.TeamRecorder {
 	return p.teamRecorder
-}
-
-func (p *Provider) ExecutionEngineRecorder() eventing.ExecutionEngineRecorder {
-	return p.executionEngineRecorder
 }
 
 func (p *Provider) MCPServerRecorder() eventing.MCPServerRecorder {

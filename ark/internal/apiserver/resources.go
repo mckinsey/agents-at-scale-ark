@@ -66,10 +66,6 @@ var V1PreAlpha1Resources = []ResourceDef{
 		Kind: "A2AServer", Resource: "a2aservers", SingularName: "a2aserver", Version: "v1prealpha1",
 		NewFunc: func() runtime.Object { return &arkv1prealpha1.A2AServer{} }, NewListFunc: func() runtime.Object { return &arkv1prealpha1.A2AServerList{} },
 	},
-	{
-		Kind: "ExecutionEngine", Resource: "executionengines", SingularName: "executionengine", Version: "v1prealpha1",
-		NewFunc: func() runtime.Object { return &arkv1prealpha1.ExecutionEngine{} }, NewListFunc: func() runtime.Object { return &arkv1prealpha1.ExecutionEngineList{} },
-	},
 }
 
 var AllResources = append(V1Alpha1Resources, V1PreAlpha1Resources...)

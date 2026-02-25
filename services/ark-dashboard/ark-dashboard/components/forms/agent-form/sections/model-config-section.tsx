@@ -9,7 +9,6 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -24,14 +23,12 @@ import type { AgentFormValues } from '../types';
 interface ModelConfigSectionProps {
   form: UseFormReturn<AgentFormValues>;
   models: Model[];
-  showExecutionEngine?: boolean;
   disabled?: boolean;
 }
 
 export function ModelConfigSection({
   form,
   models,
-  showExecutionEngine = false,
   disabled = false,
 }: ModelConfigSectionProps) {
   return (
@@ -66,26 +63,6 @@ export function ModelConfigSection({
           </FormItem>
         )}
       />
-
-      {showExecutionEngine && (
-        <FormField
-          control={form.control}
-          name="executionEngineName"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Execution Engine</FormLabel>
-              <FormControl>
-                <Input
-                  placeholder="e.g., langchain-executor"
-                  disabled={disabled}
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-      )}
     </div>
   );
 }

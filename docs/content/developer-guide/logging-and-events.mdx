@@ -82,7 +82,6 @@ As an example, controllers log operational details:
 
 ```go
 log.Info("Memory processed successfully", "memory", memory.Name, "address", resolvedAddress)
-log.Error(err, "failed to resolve ExecutionEngine address", "executionEngine", executionEngine.Name)
 
 // Expected failures like probe failures are INFO, not ERROR
 log.Info("model probe failed", "model", model.Name, "status", errorMessage)

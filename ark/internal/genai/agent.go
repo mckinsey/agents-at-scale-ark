@@ -7,12 +7,10 @@ import (
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/packages/param"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
 )
@@ -66,7 +64,7 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 
 func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	if a.ExecutionEngine != nil {
-		return a.executeWithExecutionEngineRouter(ctx, userInput, history, eventStream)
+		return a.executeWithA2AExecutionEngine(ctx, userInput, eventStream)
 	}
 
 	messages, err := a.executeLocally(ctx, userInput, history, memory, eventStream)
@@ -77,37 +75,6 @@ func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []M
 		return nil, err
 	}
 	return &ExecutionResult{Messages: messages}, nil
-}
-
-func (a *Agent) executeWithExecutionEngineRouter(ctx context.Context, userInput Message, history []Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
-	if a.ExecutionEngine.Name == ExecutionEngineA2A {
-		return a.executeWithA2AExecutionEngine(ctx, userInput, eventStream)
-	}
-
-	messages, err := a.executeWithExecutionEngine(ctx, userInput, history)
-	if err != nil {
-		return nil, err
-	}
-	return &ExecutionResult{Messages: messages}, nil
-}
-
-func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
-	engineClient := NewExecutionEngineClient(a.client, a.eventing.ExecutionEngineRecorder())
-
-	agentConfig, err := buildAgentConfig(a)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build agent config: %w", err)
-	}
-
-	resolvedPrompt, err := a.resolvePrompt(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("agent %s prompt resolution failed: %w", a.FullName(), err)
-	}
-	agentConfig.Prompt = resolvedPrompt
-
-	toolDefinitions := buildToolDefinitions(a.Tools)
-
-	return engineClient.Execute(ctx, a.ExecutionEngine, agentConfig, userInput, history, toolDefinitions)
 }
 
 func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
@@ -245,27 +212,10 @@ func (a *Agent) GetDescription() string {
 	return a.Description
 }
 
-// ValidateExecutionEngine checks if the specified ExecutionEngine resource exists
-func ValidateExecutionEngine(ctx context.Context, k8sClient client.Client, executionEngine *arkv1alpha1.ExecutionEngineRef, defaultNamespace string) error {
-	// Resolve execution engine name and namespace
-	engineName := executionEngine.Name
-	namespace := executionEngine.Namespace
-	if namespace == "" {
-		namespace = defaultNamespace
+func ValidateExecutionEngine(executionEngine *arkv1alpha1.ExecutionEngineRef) error {
+	if executionEngine.Name != ExecutionEngineA2A {
+		return fmt.Errorf("unsupported execution engine %q: only %q is supported", executionEngine.Name, ExecutionEngineA2A)
 	}
-
-	// Pass validation for reserved 'a2a' execution engine (internal)
-	if engineName == ExecutionEngineA2A {
-		return nil
-	}
-
-	// Check if ExecutionEngine CRD exists
-	var engineCRD arkv1prealpha1.ExecutionEngine
-	engineKey := types.NamespacedName{Name: engineName, Namespace: namespace}
-	if err := k8sClient.Get(ctx, engineKey, &engineCRD); err != nil {
-		return fmt.Errorf("execution engine %s not found in namespace %s: %w", engineName, namespace, err)
-	}
-
 	return nil
 }
 
@@ -360,7 +310,7 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 	}
 
 	if crd.Spec.ExecutionEngine != nil {
-		err := ValidateExecutionEngine(ctx, k8sClient, crd.Spec.ExecutionEngine, crd.Namespace)
+		err := ValidateExecutionEngine(crd.Spec.ExecutionEngine)
 		if err != nil {
 			return nil, fmt.Errorf("failed to validate execution engine %s for agent %s/%s: %w",
 				crd.Spec.ExecutionEngine.Name, crd.Namespace, crd.Name, err)

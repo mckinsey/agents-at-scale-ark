@@ -15,8 +15,6 @@ spec:
     Use the provided code context to give accurate and helpful responses.
     Be specific and reference actual code when possible.
   description: "Sample RAG-enabled agent demonstrating LangChain executor with code understanding"
-  executionEngine:
-    name: executor-langchain
   modelRef:
     name: default
   tools: []

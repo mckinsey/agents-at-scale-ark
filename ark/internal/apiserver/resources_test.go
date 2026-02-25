@@ -37,7 +37,7 @@ func TestV1PreAlpha1Resources(t *testing.T) {
 		t.Fatal("V1PreAlpha1Resources should not be empty")
 	}
 
-	expectedKinds := []string{"A2AServer", "ExecutionEngine"}
+	expectedKinds := []string{"A2AServer"}
 
 	for _, kind := range expectedKinds {
 		found := false
@@ -72,7 +72,6 @@ func TestGetResourceByKind(t *testing.T) {
 		{"Model", true, "v1alpha1"},
 		{"Query", true, "v1alpha1"},
 		{"A2AServer", true, "v1prealpha1"},
-		{"ExecutionEngine", true, "v1prealpha1"},
 		{"NonExistent", false, ""},
 	}
 

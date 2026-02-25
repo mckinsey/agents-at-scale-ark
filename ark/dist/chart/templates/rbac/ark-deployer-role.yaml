@@ -81,7 +81,6 @@ rules:
   - "teams"
   - "tools"
   - "a2aservers"
-  - "executionengines"
   verbs: ["get", "list", "create", "update", "patch"]
 
 # Read access for deployment verification and troubleshooting  

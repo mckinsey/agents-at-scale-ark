@@ -14,7 +14,6 @@ This page provides detailed specifications for each ARK custom resource.
 | [Evaluator](#evaluators) | `ark.mckinsey.com/v1alpha1` | AI-powered query assessment services |
 | [Evaluation](#evaluations) | `ark.mckinsey.com/v1alpha1` | Multi-type AI output assessments |
 | [A2ATask](/reference/resources/a2atask) | `ark.mckinsey.com/v1alpha1` | Agent-to-Agent protocol tasks |
-| [ExecutionEngine](#execution-engines) | `ark.mckinsey.com/v1prealpha1` | External execution engines |
 
 ## Evaluators
 
@@ -301,21 +300,6 @@ spec:
         weight: 1
 ```
 
-
-## Execution Engines
-
-Execution Engines provide custom runtime environments for specialized agent execution.
-
-### Specification
-```yaml
-apiVersion: ark.mckinsey.com/v1prealpha1
-kind: ExecutionEngine
-metadata:
-  name: custom-engine
-spec:
-  type: external
-  endpoint: "http://custom-engine-service:8080"
-```
 
 ## Resource Relationships
 

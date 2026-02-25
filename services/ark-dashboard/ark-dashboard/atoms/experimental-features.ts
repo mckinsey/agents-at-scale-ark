@@ -13,22 +13,6 @@ export const isExperimentalDarkModeEnabledAtom = atom(get => {
   return get(storedIsExperimentalDarkModeEnabledAtom);
 });
 
-export const EXPERIMENTAL_EXECUTION_ENGINE_FEATURE_KEY =
-  'experimental-execution-engine';
-export const storedIsExperimentalExecutionEngineEnabledAtom =
-  atomWithStorage<boolean>(
-    EXPERIMENTAL_EXECUTION_ENGINE_FEATURE_KEY,
-    false,
-    undefined,
-    {
-      getOnInit: true,
-    },
-  );
-
-export const isExperimentalExecutionEngineEnabledAtom = atom(get => {
-  return get(storedIsExperimentalExecutionEngineEnabledAtom);
-});
-
 export const CHAT_STREAMING_FEATURE_KEY = 'experimental-chat-streaming';
 export const storedIsChatStreamingEnabledAtom = atomWithStorage<boolean>(
   CHAT_STREAMING_FEATURE_KEY,

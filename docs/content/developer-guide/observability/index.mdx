@@ -9,7 +9,7 @@ Comprehensive observability is crucial for production agentic workloads. ARK pro
 
 ## OpenTelemetry Integration
 
-ARK provides observability through OpenTelemetry integration, allowing you to monitor and trace all operations across the controller, execution engines and any other services. You can connect to any OpenTelemetry-compatible provider using standard environment variables.
+ARK provides observability through OpenTelemetry integration, allowing you to monitor and trace all operations across the controller and services. You can connect to any OpenTelemetry-compatible provider using standard environment variables.
 
 Telemetry is enabled by setting the OpenTelemetry environment variables:
 
@@ -22,7 +22,7 @@ Telemetry is enabled by setting the OpenTelemetry environment variables:
 
 ## Architecture
 
-Some queries go directly from the controller to the OTEL endpoint, while others flow through execution engines when multi-framework agent orchestration is used.
+Queries flow from the controller to the OTEL endpoint.
 
 ```
   OTEL Env Vars
@@ -30,12 +30,10 @@ Some queries go directly from the controller to the OTEL endpoint, while others 
 │  ARK Controller │
 └─────────┬───────┘
           │
-          ├─── → Query Executor → OTEL Endpoint
-          │
-          └─── → Query Executor → Execution Engine → OTEL Endpoint
+          └─── → Query Executor → OTEL Endpoint
   OTEL Env Vars
 ┌─────────────────────────┐
-│ Services, Engines, etc  ├─── → OTEL Endpoint
+│ Services                ├─── → OTEL Endpoint
 └─────────────────────────┘
 ```
 
