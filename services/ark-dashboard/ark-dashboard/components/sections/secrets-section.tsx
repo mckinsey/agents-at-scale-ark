@@ -196,10 +196,10 @@ export const SecretsSection = forwardRef<
   return (
     <>
       <div className="flex h-full flex-col">
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4 flex items-center justify-between">
           <div className="flex-1" />
           <Button onClick={handleOpenAddEditor} variant="default">
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="mr-2 h-4 w-4" />
             Add Secret
           </Button>
         </div>
