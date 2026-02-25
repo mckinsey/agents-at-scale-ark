@@ -16,7 +16,6 @@ from kubernetes.client.rest import ApiException
 from ark_sdk.client import with_ark_client
 from ...models.export import (
     ExportRequest,
-    ExportAllRequest,
     ExportResponse,
     ExportHistoryResponse,
     ResourceType
@@ -60,30 +59,41 @@ async def update_export_history(timestamp: datetime, resource_counts: Dict[str, 
         history["export_count"] = history.get("export_count", 0) + 1
         history["last_resource_counts"] = resource_counts
 
+        # Check if ConfigMap exists
+        cm_exists = False
         try:
             cm = v1.read_namespaced_config_map(
                 name=EXPORT_CONFIGMAP_NAME,
                 namespace=EXPORT_CONFIGMAP_NAMESPACE
             )
+            cm_exists = True
+        except ApiException as e:
+            if e.status != 404:
+                # Re-raise non-404 errors to be caught by outer exception handler
+                raise
+            # ConfigMap doesn't exist, will create it
+
+        if cm_exists:
+            # Update existing ConfigMap
             cm.data["history"] = json.dumps(history)
             v1.patch_namespaced_config_map(
                 name=EXPORT_CONFIGMAP_NAME,
                 namespace=EXPORT_CONFIGMAP_NAMESPACE,
                 body=cm
             )
-        except ApiException as e:
-            if e.status == 404:
-                cm_body = client.V1ConfigMap(
-                    metadata=client.V1ObjectMeta(
-                        name=EXPORT_CONFIGMAP_NAME,
-                        namespace=EXPORT_CONFIGMAP_NAMESPACE
-                    ),
-                    data={"history": json.dumps(history)}
-                )
-                v1.create_namespaced_config_map(
-                    namespace=EXPORT_CONFIGMAP_NAMESPACE,
-                    body=cm_body
-                )
+        else:
+            # Create new ConfigMap
+            cm_body = client.V1ConfigMap(
+                metadata=client.V1ObjectMeta(
+                    name=EXPORT_CONFIGMAP_NAME,
+                    namespace=EXPORT_CONFIGMAP_NAMESPACE
+                ),
+                data={"history": json.dumps(history)}
+            )
+            v1.create_namespaced_config_map(
+                namespace=EXPORT_CONFIGMAP_NAMESPACE,
+                body=cm_body
+            )
     except Exception as e:
         logger.error(f"Failed to update export history: {e}")
 
@@ -301,9 +311,12 @@ async def export_resources(
     Returns:
         ZIP file containing YAML files organized by resource type
     """
+    # If no resource types specified, export all
+    resource_types = body.resource_types if body.resource_types else list(ResourceType)
+
     # Collect resources
     resources = await collect_resources(
-        resource_types=body.resource_types,
+        resource_types=resource_types,
         namespace=namespace or body.namespace,
         resource_ids=body.resource_ids
     )
@@ -331,7 +344,7 @@ async def export_resources(
 @router.post("/all", response_class=StreamingResponse)
 @handle_k8s_errors(operation="export", resource_type="all")
 async def export_all_resources(
-    body: ExportAllRequest = ExportAllRequest(),
+    body: ExportRequest = ExportRequest(),
     namespace: Optional[str] = Query(None, description="Namespace for this request")
 ):
     """
