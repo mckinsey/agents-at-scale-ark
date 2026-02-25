@@ -16,7 +16,6 @@ from kubernetes.client.rest import ApiException
 from ark_sdk.client import with_ark_client
 from ...models.export import (
     ExportRequest,
-    ExportResponse,
     ExportHistoryResponse,
     ResourceType
 )
