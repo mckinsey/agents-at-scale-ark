@@ -3,13 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { experimentalFeatureGroups } from '@/components/experimental-features-dialog/experimental-features';
 
 describe('experimentalFeatureGroups', () => {
-  it('should include features in the agents group', () => {
-    const agentsGroup = experimentalFeatureGroups.find(
-      group => group.groupKey === 'agents',
+  it('should include features in the queries group', () => {
+    const queriesGroup = experimentalFeatureGroups.find(
+      group => group.groupKey === 'queries',
     );
 
-    expect(agentsGroup).toBeDefined();
+    expect(queriesGroup).toBeDefined();
 
-    expect(agentsGroup?.features).toBeDefined();
+    expect(queriesGroup?.features).toBeDefined();
   });
 });
