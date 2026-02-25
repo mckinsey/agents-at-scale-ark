@@ -245,7 +245,7 @@ def clean_resource_for_yaml(resource: Dict[str, Any]) -> Dict[str, Any]:
     if "metadata" in resource and resource["metadata"]:
         metadata = {}
         for key in ["name", "namespace", "labels", "annotations"]:
-            if key in resource["metadata"] and resource["metadata"][key]:
+            if resource["metadata"].get(key):
                 metadata[key] = resource["metadata"][key]
         if metadata:
             cleaned["metadata"] = metadata
