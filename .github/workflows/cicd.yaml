@@ -105,6 +105,12 @@ jobs:
           if [ -n "$NEW_VIOLATIONS" ]; then
             echo "New violations found:"
             echo "$NEW_VIOLATIONS"
+
+            # Export NEW_VIOLATIONS for use in next step
+            echo "NEW_VIOLATIONS<<EOF" >> $GITHUB_ENV
+            echo "$NEW_VIOLATIONS" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+
             echo "Checking new violations against whitelist..."
               while read -r violation; do
                 if ! grep -q "$violation" "$WHITELIST"; then
@@ -121,7 +127,14 @@ jobs:
             echo "The following violations were eliminated: $REMOVED_VIOLATIONS."
           else
             echo "No new violations found."
-          fi  
+          fi
+
+      - name: Create GitHub issue for new CVE violations
+        if: always() && env.NEW_VIOLATIONS != ''
+        uses: ./.github/actions/create-cve-issues
+        with:
+          new_violations: ${{ env.NEW_VIOLATIONS }}
+          scan_json: ${{ env.SCAN_JSON }}  
 
   # Build and test Ark itself.
   build-and-test-ark:
