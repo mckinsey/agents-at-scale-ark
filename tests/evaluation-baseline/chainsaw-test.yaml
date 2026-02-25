@@ -26,16 +26,15 @@ spec:
           value: ($namespace)
     - apply:
         file: manifests/*.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          metadata:
-            name: test-baseline-model
-          status:
-            conditions:
-            - type: ModelAvailable
-              status: "True"
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-baseline-model
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True' 
     - assert:
         resource:
           apiVersion: v1
@@ -57,9 +56,9 @@ spec:
         timeout: 7m
         name: test-baseline-evaluation
         for:
-          jsonPath:
-            path: '{.status.phase}'
-            value: 'done'
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1

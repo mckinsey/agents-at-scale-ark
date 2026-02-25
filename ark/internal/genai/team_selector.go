@@ -281,6 +281,8 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 		previousMember = nextMember.GetName()
 
 		if t.MaxTurns != nil && turn+1 >= *t.MaxTurns {
+			maxTurnsMessage := NewSystemMessage(fmt.Sprintf("Team conversation reached maximum turns limit (%d)", *t.MaxTurns))
+			newMessages = append(newMessages, maxTurnsMessage)
 			return newMessages, nil
 		}
 	}

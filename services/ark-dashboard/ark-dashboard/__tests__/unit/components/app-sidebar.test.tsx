@@ -46,6 +46,7 @@ vi.mock('@/lib/services', () => ({
 vi.mock('@/lib/services/proxy', () => ({
   proxyService: {
     getSystemInfo: vi.fn(() => Promise.resolve({})),
+    isServiceAvailable: vi.fn(() => Promise.resolve(true)),
   },
 }));
 
@@ -117,5 +118,79 @@ describe('AppSidebar - Files Section', () => {
 
     const filesButton = await screen.findByText('Files');
     expect(filesButton).toBeInTheDocument();
+  });
+
+  it('should display alert icon when no namespaces are available', async () => {
+    const { useNamespace } = await import('@/providers/NamespaceProvider');
+    vi.mocked(useNamespace).mockReturnValue({
+      availableNamespaces: [],
+      createNamespace: vi.fn(),
+      isPending: false,
+      namespace: '',
+      isNamespaceResolved: false,
+      setNamespace: vi.fn(),
+      readOnlyMode: false,
+    });
+
+    const { container } = render(
+      <JotaiProvider>
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>
+      </JotaiProvider>,
+    );
+
+    await screen.findByText('No namespaces');
+    
+    const alertIcon = container.querySelector('.text-red-500');
+    expect(alertIcon).toBeInTheDocument();
+  });
+
+  it('should display namespace name when available', async () => {
+    const { useNamespace } = await import('@/providers/NamespaceProvider');
+    vi.mocked(useNamespace).mockReturnValue({
+      availableNamespaces: [{ name: 'test-namespace' }],
+      createNamespace: vi.fn(),
+      isPending: false,
+      namespace: 'test-namespace',
+      isNamespaceResolved: true,
+      setNamespace: vi.fn(),
+      readOnlyMode: false,
+    });
+
+    render(
+      <JotaiProvider>
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>
+      </JotaiProvider>,
+    );
+
+    const namespaceText = await screen.findByText('test-namespace');
+    expect(namespaceText).toBeInTheDocument();
+  });
+
+  it('should display loading state when namespace is pending', async () => {
+    const { useNamespace } = await import('@/providers/NamespaceProvider');
+    vi.mocked(useNamespace).mockReturnValue({
+      availableNamespaces: [{ name: 'default' }],
+      createNamespace: vi.fn(),
+      isPending: true,
+      namespace: 'default',
+      isNamespaceResolved: false,
+      setNamespace: vi.fn(),
+      readOnlyMode: false,
+    });
+
+    render(
+      <JotaiProvider>
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>
+      </JotaiProvider>,
+    );
+
+    const loadingText = await screen.findByText('Loading...');
+    expect(loadingText).toBeInTheDocument();
   });
 });

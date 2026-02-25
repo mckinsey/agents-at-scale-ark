@@ -1,14 +1,28 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import {
+  ChevronRight,
+  CircleAlert,
+  GripVertical,
+  Maximize2,
+  Minimize2,
+  Trash2,
+} from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 
+import { DEFAULT_SELECTOR_PROMPT } from '@/components/forms/team-form/use-team-form';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import {
   Dialog,
   DialogContent,
@@ -35,6 +49,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import type { components } from '@/lib/api/generated/types';
 import type {
   Agent,
@@ -46,18 +66,9 @@ import type {
 import { cn } from '@/lib/utils';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 
-import { TeamMemberSelectionSection } from './member-editor';
+export { DEFAULT_SELECTOR_PROMPT };
 
 type GraphEdge = components['schemas']['GraphEdge'];
-
-const DEFAULT_SELECTOR_PROMPT = `You are in a role play game. The following roles are available:
-{{.Roles}}.
-Read the following conversation. Then select the next role from {{.Participants}} to play. Only return the role.
-Make sure to choose the role which is best suited to respond to the most recent message.
-
-{{.History}}
-
-Read the above conversation. Then select the next role from {{.Participants}} to play. Only return the role.`;
 
 interface TeamEditorProps {
   open: boolean;
@@ -121,14 +132,19 @@ function DraggableCard({
   drag(drop(ref));
 
   return (
-    <div ref={ref} className="flex w-fit cursor-move items-center space-x-2">
+    <div
+      ref={ref}
+      className="hover:bg-muted/50 flex items-start space-x-2 rounded-md p-2">
+      <GripVertical className="text-muted-foreground mt-1 h-4 w-4 cursor-move" />
       <Checkbox
+        id={`agent-${agent.id}`}
         checked={isSelected}
         onCheckedChange={() => toggleMember(agent)}
+        className="mt-1"
       />
       <Label
         htmlFor={`agent-${agent.id}`}
-        className="flex-10 cursor-pointer text-sm font-normal">
+        className="flex-1 cursor-pointer text-sm font-normal">
         <div className="font-medium">{agent.name}</div>
         {agent.description && (
           <div className="text-muted-foreground text-xs">
@@ -156,6 +172,9 @@ export function TeamEditor({
     [],
   );
   const [availableMembers, setAvailableMembers] = useState<TeamMember[]>([]);
+  const [isSelectorPromptExpanded, setIsSelectorPromptExpanded] =
+    useState(false);
+  const [memberSearchQuery, setMemberSearchQuery] = useState('');
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -234,7 +253,9 @@ export function TeamEditor({
         strategy: team.strategy || 'round-robin',
         maxTurns: team.maxTurns ? String(team.maxTurns) : '',
         selectorAgent: team.selector?.agent ?? '',
-        selectorPrompt: team.selector?.selectorPrompt ?? '',
+        selectorPrompt:
+          team.selector?.selectorPrompt ||
+          (team.strategy === 'selector' ? DEFAULT_SELECTOR_PROMPT : ''),
       });
       setGraphEdges(team.graph?.edges || []);
     } else {
@@ -487,7 +508,7 @@ export function TeamEditor({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{team ? 'Edit Team' : 'Create New Team'}</DialogTitle>
           <DialogDescription>
@@ -547,7 +568,18 @@ export function TeamEditor({
                       Strategy <span className="text-red-500">*</span>
                     </FormLabel>
                     <Select
-                      onValueChange={field.onChange}
+                      onValueChange={value => {
+                        field.onChange(value);
+                        if (
+                          value === 'selector' &&
+                          !form.getValues('selectorPrompt')
+                        ) {
+                          form.setValue(
+                            'selectorPrompt',
+                            DEFAULT_SELECTOR_PROMPT,
+                          );
+                        }
+                      }}
                       value={field.value}
                       disabled={form.formState.isSubmitting}>
                       <FormControl>
@@ -591,50 +623,87 @@ export function TeamEditor({
                 )}
               />
 
-              <TeamMemberSelectionSection
-                unavailableMembers={unavailableMembers}
-                onDeleteMember={onDeleteClick}
-              />
-
               <div className="grid gap-2">
                 <Label>
                   Members <span className="text-red-500">*</span>
                 </Label>
-                <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
+                <div className="space-y-2">
                   {agents.length === 0 ? (
-                    <p className="text-muted-foreground py-2 text-center text-sm">
-                      No agents available
-                    </p>
+                    <div className="text-muted-foreground text-sm">
+                      No agents available in this namespace
+                    </div>
                   ) : (
-                    <DndProvider backend={HTML5Backend}>
-                      {orderedAgents.map((agent, index) => {
-                        const isSelected = selectedMembers.some(
-                          m => m.name === agent.name && m.type === 'agent',
-                        );
-                        const agentIsExternal = isExternalAgent(agent);
+                    <>
+                      <Input
+                        placeholder="Filter members..."
+                        value={memberSearchQuery}
+                        onChange={e => setMemberSearchQuery(e.target.value)}
+                        className="text-sm"
+                      />
+                      <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-2">
+                        <DndProvider backend={HTML5Backend}>
+                          {unavailableMembers.length > 0 && (
+                            <UnavailableMembersSection
+                              unavailableMembers={unavailableMembers}
+                              onDeleteMember={onDeleteClick}
+                            />
+                          )}
+                          {orderedAgents
+                            .filter(
+                              agent =>
+                                agent.name
+                                  .toLowerCase()
+                                  .includes(memberSearchQuery.toLowerCase()) ||
+                                agent.description
+                                  ?.toLowerCase()
+                                  .includes(memberSearchQuery.toLowerCase()),
+                            )
+                            .map((agent, index) => {
+                              const isSelected = selectedMembers.some(
+                                m =>
+                                  m.name === agent.name && m.type === 'agent',
+                              );
+                              const agentIsExternal = isExternalAgent(agent);
 
-                        return (
-                          <DraggableCard
-                            key={agent.name + `${index}`}
-                            index={index}
-                            moveCard={moveCard}
-                            isSelected={isSelected}
-                            toggleMember={toggleMember}
-                            agent={agent}
-                            agentIsExternal={agentIsExternal}
-                          />
-                        );
-                      })}
-                    </DndProvider>
+                              return (
+                                <DraggableCard
+                                  key={agent.name + `${index}`}
+                                  index={index}
+                                  moveCard={moveCard}
+                                  isSelected={isSelected}
+                                  toggleMember={toggleMember}
+                                  agent={agent}
+                                  agentIsExternal={agentIsExternal}
+                                />
+                              );
+                            })}
+                          {orderedAgents.filter(
+                            agent =>
+                              agent.name
+                                .toLowerCase()
+                                .includes(memberSearchQuery.toLowerCase()) ||
+                              agent.description
+                                ?.toLowerCase()
+                                .includes(memberSearchQuery.toLowerCase()),
+                          ).length === 0 &&
+                            memberSearchQuery && (
+                              <div className="text-muted-foreground py-2 text-center text-sm">
+                                No members found matching &quot;
+                                {memberSearchQuery}&quot;
+                              </div>
+                            )}
+                        </DndProvider>
+                      </div>
+                    </>
+                  )}
+                  <p className="text-muted-foreground text-xs">
+                    {selectedMembers.length} member
+                    {selectedMembers.length !== 1 ? 's' : ''} selected
+                  </p>
+                  {membersError && (
+                    <p className="text-sm text-red-500">{membersError}</p>
                   )}
                 </div>
-                <p className="text-muted-foreground text-xs">
-                  {selectedMembers.length} member
-                  {selectedMembers.length !== 1 ? 's' : ''} selected
-                </p>
-                {membersError && (
-                  <p className="text-sm text-red-500">{membersError}</p>
-                )}
               </div>
 
               {selectedStrategy === 'selector' && (
@@ -703,19 +772,61 @@ export function TeamEditor({
                     name="selectorPrompt"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Selector Prompt</FormLabel>
+                        <div className="flex items-center justify-between">
+                          <FormLabel>Selector Prompt</FormLabel>
+                          <div className="flex items-center gap-2">
+                            {field.value && field.value.length > 0 && (
+                              <span className="text-muted-foreground text-xs">
+                                {field.value.length} characters
+                              </span>
+                            )}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                setIsSelectorPromptExpanded(
+                                  !isSelectorPromptExpanded,
+                                )
+                              }
+                              className="h-8 px-2">
+                              {isSelectorPromptExpanded ? (
+                                <>
+                                  <Minimize2 className="mr-1 h-4 w-4" />
+                                  Collapse
+                                </>
+                              ) : (
+                                <>
+                                  <Maximize2 className="mr-1 h-4 w-4" />
+                                  Expand
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
                         <FormControl>
                           <Textarea
-                            placeholder={DEFAULT_SELECTOR_PROMPT}
-                            className="min-h-[100px]"
+                            placeholder="Enter the selector prompt..."
                             disabled={form.formState.isSubmitting}
+                            className={`resize-none transition-all duration-200 ${
+                              isSelectorPromptExpanded
+                                ? 'max-h-[500px] min-h-[400px] overflow-y-auto'
+                                : 'max-h-[150px] min-h-[100px]'
+                            }`}
+                            style={{
+                              whiteSpace: 'pre-wrap',
+                              wordWrap: 'break-word',
+                            }}
                             {...field}
                           />
                         </FormControl>
-                        <p className="text-muted-foreground text-xs">
-                          Custom prompt for the selector agent. Leave empty to
-                          use the default prompt shown above.
-                        </p>
+                        {isSelectorPromptExpanded &&
+                          field.value &&
+                          field.value.length > 0 && (
+                            <div className="text-muted-foreground text-xs">
+                              {field.value.split('\n').length} lines
+                            </div>
+                          )}
                         <FormMessage />
                       </FormItem>
                     )}
@@ -742,94 +853,102 @@ export function TeamEditor({
                       Add Edge
                     </Button>
                   </div>
-                  <div className="space-y-2">
+                  <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-2">
                     {graphEdges.length === 0 ? (
-                      <p className="text-muted-foreground py-4 text-center text-sm">
+                      <div className="text-muted-foreground py-2 text-center text-sm">
                         No edges defined. Click &quot;Add Edge&quot; to create
                         graph connections.
-                      </p>
+                      </div>
                     ) : (
-                      graphEdges.map((edge, index) => {
-                        const isFromUnavailable = unavailableMembers.some(
-                          member => member.name === edge.from,
-                        );
-                        const isToUnavailable = unavailableMembers.some(
-                          member => member.name === edge.to,
-                        );
-                        return (
-                          <div key={index} className="flex items-center gap-2">
-                            <Select
-                              value={edge.from || ''}
-                              onValueChange={value =>
-                                updateGraphEdge(index, 'from', value)
-                              }
-                              disabled={form.formState.isSubmitting}>
-                              <SelectTrigger
-                                className={cn(
-                                  'flex-1',
-                                  isFromUnavailable && 'border-red-500',
-                                )}>
-                                <SelectValue placeholder="From" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {isFromUnavailable && (
-                                  <SelectItem key={edge.from} value={edge.from}>
-                                    {edge.from} (Unavailable)
-                                  </SelectItem>
-                                )}
-                                {selectedMembers
-                                  .filter(m => m.type === 'agent')
-                                  .map(member => (
+                      <div className="space-y-2">
+                        {graphEdges.map((edge, index) => {
+                          const isFromUnavailable = unavailableMembers.some(
+                            member => member.name === edge.from,
+                          );
+                          const isToUnavailable = unavailableMembers.some(
+                            member => member.name === edge.to,
+                          );
+                          return (
+                            <div
+                              key={index}
+                              className="hover:bg-muted/50 flex items-center gap-2 rounded-md p-2">
+                              <Select
+                                value={edge.from || ''}
+                                onValueChange={value =>
+                                  updateGraphEdge(index, 'from', value)
+                                }
+                                disabled={form.formState.isSubmitting}>
+                                <SelectTrigger
+                                  className={cn(
+                                    'flex-1',
+                                    isFromUnavailable && 'border-red-500',
+                                  )}>
+                                  <SelectValue placeholder="From" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {isFromUnavailable && (
                                     <SelectItem
-                                      key={member.name}
-                                      value={member.name}>
-                                      {member.name}
+                                      key={edge.from}
+                                      value={edge.from}>
+                                      {edge.from} (Unavailable)
                                     </SelectItem>
-                                  ))}
-                              </SelectContent>
-                            </Select>
-                            <span className="text-muted-foreground">→</span>
-                            <Select
-                              value={edge.to}
-                              onValueChange={value =>
-                                updateGraphEdge(index, 'to', value)
-                              }
-                              disabled={form.formState.isSubmitting}>
-                              <SelectTrigger
-                                className={cn(
-                                  'flex-1',
-                                  isToUnavailable && 'border-red-500',
-                                )}>
-                                <SelectValue placeholder="To" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {isToUnavailable && (
-                                  <SelectItem key={edge.to} value={edge.to}>
-                                    {edge.to} (Unavailable)
-                                  </SelectItem>
-                                )}
-                                {selectedMembers
-                                  .filter(m => m.type === 'agent')
-                                  .map(member => (
-                                    <SelectItem
-                                      key={member.name}
-                                      value={member.name}>
-                                      {member.name}
+                                  )}
+                                  {selectedMembers
+                                    .filter(m => m.type === 'agent')
+                                    .map(member => (
+                                      <SelectItem
+                                        key={member.name}
+                                        value={member.name}>
+                                        {member.name}
+                                      </SelectItem>
+                                    ))}
+                                </SelectContent>
+                              </Select>
+                              <span className="text-muted-foreground">→</span>
+                              <Select
+                                value={edge.to}
+                                onValueChange={value =>
+                                  updateGraphEdge(index, 'to', value)
+                                }
+                                disabled={form.formState.isSubmitting}>
+                                <SelectTrigger
+                                  className={cn(
+                                    'flex-1',
+                                    isToUnavailable && 'border-red-500',
+                                  )}>
+                                  <SelectValue placeholder="To" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {isToUnavailable && (
+                                    <SelectItem key={edge.to} value={edge.to}>
+                                      {edge.to} (Unavailable)
                                     </SelectItem>
-                                  ))}
-                              </SelectContent>
-                            </Select>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removeGraphEdge(index)}
-                              disabled={form.formState.isSubmitting}>
-                              Remove
-                            </Button>
-                          </div>
-                        );
-                      })
+                                  )}
+                                  {selectedMembers
+                                    .filter(m => m.type === 'agent')
+                                    .map(member => (
+                                      <SelectItem
+                                        key={member.name}
+                                        value={member.name}>
+                                        {member.name}
+                                      </SelectItem>
+                                    ))}
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 hover:text-red-500"
+                                onClick={() => removeGraphEdge(index)}
+                                disabled={form.formState.isSubmitting}
+                                aria-label="Remove edge">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
                   </div>
                   <p className="text-muted-foreground text-xs">
@@ -861,17 +980,110 @@ export function TeamEditor({
                 disabled={form.formState.isSubmitting}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={form.formState.isSubmitting}>
-                {form.formState.isSubmitting
-                  ? 'Saving...'
-                  : team
-                    ? 'Update'
-                    : 'Create'}
-              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger className="text-left" tabIndex={-1} asChild>
+                    <span className="inline-block">
+                      <Button
+                        type="submit"
+                        disabled={
+                          form.formState.isSubmitting ||
+                          unavailableMembers.length > 0
+                        }>
+                        {form.formState.isSubmitting
+                          ? 'Saving...'
+                          : team
+                            ? 'Update'
+                            : 'Create'}
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>
+                      {unavailableMembers.length > 0
+                        ? 'Delete all unavailable members to proceed'
+                        : ''}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </DialogFooter>
           </form>
         </Form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface UnavailableMembersSectionProps {
+  unavailableMembers: TeamMember[];
+  onDeleteMember: (member: TeamMember) => void;
+}
+
+const MemberItem = ({
+  member,
+  onDelete,
+}: {
+  member: TeamMember;
+  onDelete: (member: TeamMember) => void;
+}) => (
+  <div className="flex flex-row justify-between" key={`member-${member.name}`}>
+    <div className="flex w-fit items-start space-x-2">
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger className="text-left" tabIndex={-1}>
+            <CircleAlert className="mt-1 h-4 w-4 text-red-500" />
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>This member is unavailable in the system</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <Label className="flex-1 cursor-pointer text-sm font-normal">
+        <div className="font-medium">{member.name}</div>
+      </Label>
+    </div>
+    <div>
+      <Button
+        variant={'ghost'}
+        size="sm"
+        className="h-8 w-8 p-0 hover:text-red-500"
+        onClick={() => onDelete(member)}
+        aria-label={'Delete member'}>
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    </div>
+  </div>
+);
+
+function UnavailableMembersSection({
+  unavailableMembers,
+  onDeleteMember,
+}: Readonly<UnavailableMembersSectionProps>) {
+  return (
+    <Collapsible
+      defaultOpen
+      className="group/collapsible"
+      key="unavailable-members">
+      <div className="p-2">
+        <CollapsibleTrigger className="w-full">
+          <div className="flex w-full flex-row items-center justify-between">
+            <Label>Unavailable Members</Label>
+            <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+          </div>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="flex flex-col gap-y-2 pt-2">
+            {unavailableMembers.map(member => (
+              <MemberItem
+                key={member.name}
+                member={member}
+                onDelete={onDeleteMember}
+              />
+            ))}
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
   );
 }
