@@ -20,21 +20,14 @@ class ResourceType(str, Enum):
 
 class ExportRequest(BaseModel):
     """Request model for exporting resources."""
-    resource_types: List[ResourceType] = Field(
-        description="List of resource types to export"
+    resource_types: Optional[List[ResourceType]] = Field(
+        None,
+        description="List of resource types to export. If not specified, exports all resource types"
     )
     resource_ids: Optional[Dict[str, List[str]]] = Field(
         None,
         description="Optional map of resource type to specific resource IDs to export"
     )
-    namespace: Optional[str] = Field(
-        None,
-        description="Namespace to export from (defaults to current context)"
-    )
-
-
-class ExportAllRequest(BaseModel):
-    """Request model for exporting all resources."""
     namespace: Optional[str] = Field(
         None,
         description="Namespace to export from (defaults to current context)"
