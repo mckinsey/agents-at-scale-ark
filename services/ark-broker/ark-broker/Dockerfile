@@ -1,4 +1,4 @@
-FROM node:22-alpine AS builder
+FROM node:25.4.0-alpine AS builder
 
 WORKDIR /workspace
 COPY package.json package-lock.json* ./
@@ -7,7 +7,7 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM node:22-alpine AS runner
+FROM node:25.4.0-alpine AS runner
 WORKDIR /app
 
 # Create non-root user
@@ -25,8 +25,6 @@ COPY --from=builder --chown=nodejs:nodejs /workspace/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /workspace/proto ./proto
 
 USER nodejs
-
-ENV NODE_ENV=production
 
 EXPOSE 8080
 
