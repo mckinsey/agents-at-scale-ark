@@ -201,7 +201,7 @@ RESOURCE_COLLECTORS = {
     ResourceType.TEAMS: ("teams", "teams"),
     ResourceType.MODELS: ("models", "models"),
     ResourceType.QUERIES: ("queries", "queries"),
-    ResourceType.MCP: ("mcpservers", "mcp"),
+    ResourceType.MCP: ("mcpservers", "mcpservers"),
     ResourceType.EVALUATORS: ("evaluators", "evaluators"),
     ResourceType.EVALUATIONS: ("evaluations", "evaluations"),
 }

@@ -12,7 +12,7 @@ class ResourceType(str, Enum):
     MODELS = "models"
     QUERIES = "queries"
     A2A = "a2a"
-    MCP = "mcp"
+    MCP = "mcpservers"
     WORKFLOWS = "workflows"
     EVALUATORS = "evaluators"
     EVALUATIONS = "evaluations"
