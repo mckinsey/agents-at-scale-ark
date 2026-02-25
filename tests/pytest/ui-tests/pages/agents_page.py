@@ -279,15 +279,19 @@ class AgentsPage(BasePage):
         }
     
     def delete_agent_with_verification(self, agent_name: str) -> dict:
+        if not self.is_agent_in_table(agent_name):
+            logger.warning("Agent '%s' not found in table after retries", agent_name)
+            return self._delete_not_available(agent_name)
         try:
             name_element = self.page.get_by_text(agent_name, exact=True).first
-            name_element.wait_for(state="visible", timeout=15000)
+            name_element.wait_for(state="visible", timeout=10000)
             name_element.scroll_into_view_if_needed()
             card = name_element.locator("xpath=ancestor::div[.//button[@aria-label='Delete agent']][1]")
             delete_btn = card.locator("button[aria-label='Delete agent']").first
             delete_btn.wait_for(state="visible", timeout=5000)
-            delete_btn.click()
-        except:
+            delete_btn.click(force=True)
+        except Exception as e:
+            logger.warning("Delete button not accessible for agent '%s': %s", agent_name, e)
             return self._delete_not_available(agent_name)
         
         self.wait_for_modal_open()

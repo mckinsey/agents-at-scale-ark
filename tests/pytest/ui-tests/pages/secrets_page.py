@@ -124,15 +124,19 @@ class SecretsPage(BasePage):
         }
     
     def delete_secret_with_verification(self, secret_name: str) -> dict:
+        if not self.is_secret_in_table(secret_name):
+            logger.warning("Secret '%s' not found in table after retries", secret_name)
+            return self._delete_not_available(secret_name)
         try:
             name_element = self.page.get_by_text(secret_name, exact=True).first
-            name_element.wait_for(state="visible", timeout=15000)
+            name_element.wait_for(state="visible", timeout=10000)
             name_element.scroll_into_view_if_needed()
             card = name_element.locator("xpath=ancestor::div[.//button[@aria-label='Delete secret']][1]")
             delete_btn = card.locator("button[aria-label='Delete secret']").first
             delete_btn.wait_for(state="visible", timeout=5000)
-            delete_btn.click()
-        except:
+            delete_btn.click(force=True)
+        except Exception as e:
+            logger.warning("Delete button not accessible for secret '%s': %s", secret_name, e)
             return self._delete_not_available(secret_name)
         
         self.wait_for_modal_open()

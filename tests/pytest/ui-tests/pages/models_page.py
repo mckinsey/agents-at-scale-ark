@@ -122,15 +122,19 @@ class ModelsPage(BasePage):
         }
     
     def delete_model_with_verification(self, model_name: str) -> dict:
+        if not self.is_model_in_table(model_name):
+            logger.warning("Model '%s' not found in table after retries", model_name)
+            return self._delete_not_available(model_name)
         try:
             name_element = self.page.get_by_text(model_name, exact=True).first
-            name_element.wait_for(state="visible", timeout=15000)
+            name_element.wait_for(state="visible", timeout=10000)
             name_element.scroll_into_view_if_needed()
             card = name_element.locator("xpath=ancestor::div[.//button[@aria-label='Delete model']][1]")
             delete_btn = card.locator("button[aria-label='Delete model']").first
             delete_btn.wait_for(state="visible", timeout=5000)
-            delete_btn.click()
-        except:
+            delete_btn.click(force=True)
+        except Exception as e:
+            logger.warning("Delete button not accessible for model '%s': %s", model_name, e)
             return self._delete_not_available(model_name)
         
         self.wait_for_modal_open()

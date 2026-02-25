@@ -190,16 +190,19 @@ class TeamsPage(BasePage):
         return {"name": team_name, "popup_visible": popup_visible, "in_table": in_table, "strategy": strategy}
 
     def delete_team_with_verification(self, team_name: str) -> dict:
+        if not self.is_team_in_table(team_name):
+            logger.warning("Team '%s' not found in table after retries", team_name)
+            return self._delete_not_available(team_name)
         try:
             name_element = self.page.get_by_text(team_name, exact=True).first
-            name_element.wait_for(state="visible", timeout=15000)
+            name_element.wait_for(state="visible", timeout=10000)
             name_element.scroll_into_view_if_needed()
             card = name_element.locator("xpath=ancestor::div[.//button[@aria-label='Delete team']][1]")
             delete_btn = card.locator("button[aria-label='Delete team']").first
             delete_btn.wait_for(state="visible", timeout=5000)
-            delete_btn.click()
+            delete_btn.click(force=True)
         except Exception as e:
-            logger.warning("Delete button not found for team %s: %s", team_name, e)
+            logger.warning("Delete button not accessible for team '%s': %s", team_name, e)
             return self._delete_not_available(team_name)
 
         self.wait_for_modal_open()

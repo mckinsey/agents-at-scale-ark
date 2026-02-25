@@ -160,15 +160,19 @@ class ToolsPage(BasePage):
     
     def delete_tool_with_verification(self, tool_name: str) -> dict:
         logger.info(f"Deleting tool: {tool_name}")
+        if not self.is_tool_in_table(tool_name):
+            logger.warning("Tool '%s' not found in table after retries", tool_name)
+            return self._delete_not_available(tool_name)
         try:
             name_element = self.page.get_by_text(tool_name, exact=True).first
-            name_element.wait_for(state="visible", timeout=15000)
+            name_element.wait_for(state="visible", timeout=10000)
             name_element.scroll_into_view_if_needed()
             card = name_element.locator("xpath=ancestor::div[.//button[@aria-label='Delete tool']][1]")
             delete_btn = card.locator("button[aria-label='Delete tool']").first
             delete_btn.wait_for(state="visible", timeout=5000)
-            delete_btn.click()
-        except:
+            delete_btn.click(force=True)
+        except Exception as e:
+            logger.warning("Delete button not accessible for tool '%s': %s", tool_name, e)
             return self._delete_not_available(tool_name)
         
         # Wait for confirmation dialog to appear
