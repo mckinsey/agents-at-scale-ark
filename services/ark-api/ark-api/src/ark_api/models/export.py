@@ -1,21 +1,32 @@
 """Export models for Ark API."""
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from pydantic import BaseModel, Field
-from enum import Enum
 
 
-class ResourceType(str, Enum):
-    """Supported resource types for export."""
-    AGENTS = "agents"
-    TEAMS = "teams"
-    MODELS = "models"
-    QUERIES = "queries"
-    A2A = "a2a"
-    MCP = "mcpservers"
-    WORKFLOWS = "workflows"
-    EVALUATORS = "evaluators"
-    EVALUATIONS = "evaluations"
+ResourceType = Literal[
+    "agents",
+    "teams",
+    "models",
+    "queries",
+    "a2a",
+    "mcpservers",
+    "workflows",
+    "evaluators",
+    "evaluations"
+]
+
+ALL_RESOURCE_TYPES = [
+    "agents",
+    "teams",
+    "models",
+    "queries",
+    "a2a",
+    "mcpservers",
+    "workflows",
+    "evaluators",
+    "evaluations"
+]
 
 
 class ExportRequest(BaseModel):

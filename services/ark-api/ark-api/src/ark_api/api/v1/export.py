@@ -17,7 +17,8 @@ from ark_sdk.client import with_ark_client
 from ...models.export import (
     ExportRequest,
     ExportHistoryResponse,
-    ResourceType
+    ResourceType,
+    ALL_RESOURCE_TYPES
 )
 from .exceptions import handle_k8s_errors
 
@@ -193,17 +194,6 @@ async def _collect_workflows(
     return await asyncio.to_thread(_fetch_workflows_sync)
 
 
-# Resource collection mapping
-RESOURCE_COLLECTORS = {
-    ResourceType.AGENTS: "agents",
-    ResourceType.TEAMS: "teams",
-    ResourceType.MODELS: "models",
-    ResourceType.QUERIES: "queries",
-    ResourceType.MCP: "mcpservers",
-    ResourceType.EVALUATORS: "evaluators",
-    ResourceType.EVALUATIONS: "evaluations",
-}
-
 
 async def collect_resources(
     resource_types: List[ResourceType],
@@ -213,29 +203,34 @@ async def collect_resources(
     """Collect resources from Kubernetes."""
     resources = {}
 
+    # Define which resource types are handled by the ark_client
+    standard_resources = {
+        "agents", "teams", "models", "queries",
+        "mcpservers", "evaluators", "evaluations"
+    }
+
     async with with_ark_client(namespace, VERSION) as ark_client:
         for resource_type in resource_types:
             try:
                 # Handle special cases
-                if resource_type == ResourceType.A2A:
+                if resource_type == "a2a":
                     items = await _collect_a2a_servers(namespace, resource_ids)
-                elif resource_type == ResourceType.WORKFLOWS:
+                elif resource_type == "workflows":
                     items = await _collect_workflows(namespace, resource_ids)
-                # Handle standard resources
-                elif resource_type in RESOURCE_COLLECTORS:
-                    resource_name = RESOURCE_COLLECTORS[resource_type]
+                # Handle standard resources - now directly using resource_type as the name
+                elif resource_type in standard_resources:
                     items = await _collect_standard_resource(
-                        ark_client, resource_name, resource_ids
+                        ark_client, resource_type, resource_ids
                     )
                 else:
                     items = []
                     logger.warning(f"Unknown resource type: {resource_type}")
 
-                resources[resource_type.value] = items
+                resources[resource_type] = items
 
             except Exception as e:
-                logger.error(f"Failed to collect {resource_type.value}: {e}")
-                resources[resource_type.value] = []
+                logger.error(f"Failed to collect {resource_type}: {e}")
+                resources[resource_type] = []
 
     return resources
 
@@ -312,7 +307,7 @@ async def export_resources(
         ZIP file containing YAML files organized by resource type
     """
     # If no resource types specified, export all
-    resource_types = body.resource_types if body.resource_types else list(ResourceType)
+    resource_types = body.resource_types if body.resource_types else ALL_RESOURCE_TYPES
 
     # Collect resources
     resources = await collect_resources(
@@ -332,7 +327,7 @@ async def export_resources(
     await update_export_history(timestamp, resource_counts)
 
     # Generate filename based on whether all resources are being exported
-    is_all_export = not body.resource_types or len(body.resource_types) == len(ResourceType)
+    is_all_export = not body.resource_types or len(body.resource_types) == len(ALL_RESOURCE_TYPES)
     filename_prefix = "ark-export-all" if is_all_export else "ark-export"
     filename = f"{filename_prefix}-{timestamp.strftime('%Y%m%d-%H%M%S')}.zip"
 
