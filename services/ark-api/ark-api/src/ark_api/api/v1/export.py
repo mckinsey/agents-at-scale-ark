@@ -123,14 +123,13 @@ async def _convert_and_filter_resources(  # NOSONAR - async for consistency with
 
 async def _collect_standard_resource(
     client: Any,
-    resource_attr: str,
-    resource_type_key: str,
+    resource_name: str,
     resource_ids: Optional[Dict[str, List[str]]]
 ) -> List[Dict[str, Any]]:
     """Collect a standard resource type using the ark client."""
-    resource_client = getattr(client, resource_attr)
+    resource_client = getattr(client, resource_name)
     resources_list = await resource_client.a_list()
-    filter_names = resource_ids.get(resource_type_key) if resource_ids else None
+    filter_names = resource_ids.get(resource_name) if resource_ids else None
     return await _convert_and_filter_resources(resources_list, filter_names)
 
 
@@ -197,13 +196,13 @@ async def _collect_workflows(
 
 # Resource collection mapping
 RESOURCE_COLLECTORS = {
-    ResourceType.AGENTS: ("agents", "agents"),
-    ResourceType.TEAMS: ("teams", "teams"),
-    ResourceType.MODELS: ("models", "models"),
-    ResourceType.QUERIES: ("queries", "queries"),
-    ResourceType.MCP: ("mcpservers", "mcpservers"),
-    ResourceType.EVALUATORS: ("evaluators", "evaluators"),
-    ResourceType.EVALUATIONS: ("evaluations", "evaluations"),
+    ResourceType.AGENTS: "agents",
+    ResourceType.TEAMS: "teams",
+    ResourceType.MODELS: "models",
+    ResourceType.QUERIES: "queries",
+    ResourceType.MCP: "mcpservers",
+    ResourceType.EVALUATORS: "evaluators",
+    ResourceType.EVALUATIONS: "evaluations",
 }
 
 
@@ -225,9 +224,9 @@ async def collect_resources(
                     items = await _collect_workflows(namespace, resource_ids)
                 # Handle standard resources
                 elif resource_type in RESOURCE_COLLECTORS:
-                    client_attr, resource_key = RESOURCE_COLLECTORS[resource_type]
+                    resource_name = RESOURCE_COLLECTORS[resource_type]
                     items = await _collect_standard_resource(
-                        ark_client, client_attr, resource_key, resource_ids
+                        ark_client, resource_name, resource_ids
                     )
                 else:
                     items = []
