@@ -6,7 +6,7 @@ metadata:
 spec:
   reportFormat: JSON                     
   reportName: /tmp/chainsaw-report/chainsaw-report.json
-  delayBeforeCleanup: 20s                # Extra delay for LLM-based tests
+  forceTerminationGracePeriod: 5s
   timeouts:
     apply: 360s                           # Longer timeout for resource creation
     assert: 30s
