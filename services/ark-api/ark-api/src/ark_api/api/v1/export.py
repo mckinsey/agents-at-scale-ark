@@ -257,7 +257,7 @@ def clean_resource_for_yaml(resource: Dict[str, Any]) -> Dict[str, Any]:
     return cleaned
 
 
-def create_export_zip(resources: Dict[str, List[Dict[str, Any]]]) -> bytes:
+def create_export_zip(resources: Dict[str, List[Dict[str, Any]]]) -> io.BytesIO:
     """Create a ZIP file containing YAML files organized by resource type."""
     zip_buffer = io.BytesIO()
 
@@ -281,7 +281,7 @@ def create_export_zip(resources: Dict[str, List[Dict[str, Any]]]) -> bytes:
                 zip_file.writestr(filename, yaml_content)
 
     zip_buffer.seek(0)
-    return zip_buffer.getvalue()
+    return zip_buffer
 
 
 @router.post("/resources", response_class=StreamingResponse)
@@ -311,7 +311,7 @@ async def export_resources(
     resource_counts = {k: len(v) for k, v in resources.items()}
 
     # Create ZIP file
-    zip_content = create_export_zip(resources)
+    zip_buffer = create_export_zip(resources)
 
     # Update export history
     timestamp = datetime.now(timezone.utc)
@@ -321,7 +321,7 @@ async def export_resources(
     filename = f"ark-export-{timestamp.strftime('%Y%m%d-%H%M%S')}.zip"
 
     return StreamingResponse(
-        io.BytesIO(zip_content),
+        zip_buffer,
         media_type="application/zip",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
@@ -356,7 +356,7 @@ async def export_all_resources(
     resource_counts = {k: len(v) for k, v in resources.items()}
 
     # Create ZIP file
-    zip_content = create_export_zip(resources)
+    zip_buffer = create_export_zip(resources)
 
     # Update export history
     timestamp = datetime.now(timezone.utc)
@@ -366,7 +366,7 @@ async def export_all_resources(
     filename = f"ark-export-all-{timestamp.strftime('%Y%m%d-%H%M%S')}.zip"
 
     return StreamingResponse(
-        io.BytesIO(zip_content),
+        zip_buffer,
         media_type="application/zip",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
