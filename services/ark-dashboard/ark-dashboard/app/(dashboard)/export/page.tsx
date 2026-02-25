@@ -101,9 +101,9 @@ const resourceSections: ResourceSection[] = [
 const getAbbreviatedTitle = (type: ResourceType, title: string): string => {
   switch (type) {
     case 'evaluations':
-      return 'Evals';
+      return 'Evaluations';
     case 'evaluators':
-      return 'Eval.';
+      return 'Evaluators';
     case 'workflows':
       return 'Flows';
     default:
