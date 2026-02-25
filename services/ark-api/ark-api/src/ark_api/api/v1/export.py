@@ -297,15 +297,17 @@ def create_export_zip(resources: Dict[str, List[Dict[str, Any]]]) -> io.BytesIO:
 @router.post("/resources", response_class=StreamingResponse)
 @handle_k8s_errors(operation="export", resource_type="resources")
 async def export_resources(
-    body: ExportRequest,
+    body: ExportRequest = ExportRequest(),
     namespace: Optional[str] = Query(None, description="Namespace for this request")
 ):
     """
-    Export selected Ark resources as a ZIP file.
+    Export Ark resources as a ZIP file.
 
     Args:
-        body: Export request with resource types and optional IDs
-        namespace: Namespace to export from
+        body: Export request with optional resource types, IDs, and namespace
+            - If resource_types is not specified or empty, exports all resource types
+            - If resource_ids is specified, exports only those specific resources
+        namespace: Namespace to export from (overrides body.namespace)
 
     Returns:
         ZIP file containing YAML files organized by resource type
@@ -330,8 +332,10 @@ async def export_resources(
     timestamp = datetime.now(timezone.utc)
     await update_export_history(timestamp, resource_counts)
 
-    # Generate filename
-    filename = f"ark-export-{timestamp.strftime('%Y%m%d-%H%M%S')}.zip"
+    # Generate filename based on whether all resources are being exported
+    is_all_export = not body.resource_types or len(body.resource_types) == len(ResourceType)
+    filename_prefix = "ark-export-all" if is_all_export else "ark-export"
+    filename = f"{filename_prefix}-{timestamp.strftime('%Y%m%d-%H%M%S')}.zip"
 
     return StreamingResponse(
         zip_buffer,
@@ -340,14 +344,17 @@ async def export_resources(
     )
 
 
-@router.post("/all", response_class=StreamingResponse)
+@router.post("/all", response_class=StreamingResponse, deprecated=True)
 @handle_k8s_errors(operation="export", resource_type="all")
 async def export_all_resources(
     body: ExportRequest = ExportRequest(),
     namespace: Optional[str] = Query(None, description="Namespace for this request")
 ):
     """
-    Export all Ark resources as a ZIP file.
+    [DEPRECATED] Export all Ark resources as a ZIP file.
+
+    This endpoint is deprecated. Use POST /export/resources instead without specifying
+    resource_types in the request body to export all resources.
 
     Args:
         body: Export request with optional namespace
@@ -356,33 +363,8 @@ async def export_all_resources(
     Returns:
         ZIP file containing all resources organized by type
     """
-    # Export all resource types
-    all_types = list(ResourceType)
-
-    # Collect resources
-    resources = await collect_resources(
-        resource_types=all_types,
-        namespace=namespace or body.namespace
-    )
-
-    # Count resources
-    resource_counts = {k: len(v) for k, v in resources.items()}
-
-    # Create ZIP file
-    zip_buffer = create_export_zip(resources)
-
-    # Update export history
-    timestamp = datetime.now(timezone.utc)
-    await update_export_history(timestamp, resource_counts)
-
-    # Generate filename
-    filename = f"ark-export-all-{timestamp.strftime('%Y%m%d-%H%M%S')}.zip"
-
-    return StreamingResponse(
-        zip_buffer,
-        media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
-    )
+    # Delegate to the unified endpoint
+    return await export_resources(body=body, namespace=namespace)
 
 
 @router.get("/last-export-time", response_model=ExportHistoryResponse)
