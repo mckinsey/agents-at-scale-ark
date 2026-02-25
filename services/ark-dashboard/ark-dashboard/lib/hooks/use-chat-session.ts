@@ -258,24 +258,33 @@ export function useChatSession({
         }
 
         if (delta?.tool_calls) {
-          let index = accumulatedToolCalls.length - 1;
           for (const toolCallDelta of delta.tool_calls) {
-            if (toolCallDelta.function?.name) {
-              index += 1;
+            let existingIndex = -1;
+
+            if (toolCallDelta.id) {
+              existingIndex = accumulatedToolCalls.findIndex(
+                tc => tc.id === toolCallDelta.id,
+              );
+            }
+
+            if (existingIndex === -1 && toolCallDelta.function?.name) {
               accumulatedToolCalls.push({
                 id: toolCallDelta.id || '',
                 type: 'function',
                 function: { name: toolCallDelta.function.name, arguments: '' },
               });
+              existingIndex = accumulatedToolCalls.length - 1;
             }
 
-            if (toolCallDelta.id) {
-              accumulatedToolCalls[index].id = toolCallDelta.id;
-            }
+            if (existingIndex !== -1) {
+              if (toolCallDelta.id) {
+                accumulatedToolCalls[existingIndex].id = toolCallDelta.id;
+              }
 
-            if (toolCallDelta.function?.arguments) {
-              accumulatedToolCalls[index].function.arguments +=
-                toolCallDelta.function.arguments;
+              if (toolCallDelta.function?.arguments) {
+                accumulatedToolCalls[existingIndex].function.arguments +=
+                  toolCallDelta.function.arguments;
+              }
             }
           }
         }
@@ -298,7 +307,7 @@ export function useChatSession({
         });
 
         const finishReason = typedChunk?.choices?.[0]?.finish_reason;
-        if (finishReason) {
+        if (finishReason === 'stop') {
           turnComplete = true;
         }
       }
@@ -327,34 +336,52 @@ export function useChatSession({
       }
 
       if (completedQueryMessages.length > 0) {
-        const systemMessages = completedQueryMessages.filter(
-          msg => msg.role === 'system',
-        );
-        if (systemMessages.length > 0) {
-          updateChatMessages(prev => [
-            ...prev,
-            ...systemMessages.map(
-              msg =>
-                ({
-                  role: 'system',
-                  content: msg.content || '',
-                }) as ExtendedChatMessage,
-            ),
-          ]);
-        }
-      }
-
-      if (accumulatedToolCalls.length > 0) {
         updateChatMessages(prev => {
-          const newMessages = [...prev];
-          accumulatedToolCalls.forEach(toolCall => {
-            newMessages.push({
-              role: 'tool',
-              tool_call_id: toolCall.id,
-              content: `Called ${toolCall.function.name} with ${toolCall.function.arguments}`,
-            } as ExtendedChatMessage);
+          // Keep only user messages, replace everything else with completedQueryMessages
+          const userMessages = prev.filter(m => m.role === 'user');
+          const converted: ExtendedChatMessage[] = [];
+
+          completedQueryMessages.forEach(msg => {
+            if (msg.role === 'system') {
+              converted.push({
+                role: 'system',
+                content: msg.content || '',
+              } as ExtendedChatMessage);
+            } else if (msg.role === 'tool') {
+              converted.push({
+                role: 'tool',
+                content: msg.content || '',
+                tool_call_id:
+                  (msg as { tool_call_id?: string }).tool_call_id || '',
+              } as ExtendedChatMessage);
+            } else if (msg.role === 'assistant') {
+              const toolCalls = (
+                msg as {
+                  tool_calls?: Array<{
+                    id: string;
+                    type: string;
+                    function: { name: string; arguments: string };
+                  }>;
+                }
+              ).tool_calls;
+
+              converted.push({
+                role: 'assistant',
+                content: msg.content || '',
+                name: msg.name,
+                tool_calls: toolCalls
+                  ? toolCalls.map(tc => ({
+                      id: tc.id,
+                      type: 'function' as const,
+                      function: tc.function,
+                    }))
+                  : undefined,
+              } as ExtendedChatMessage);
+            }
           });
-          return newMessages;
+
+          const updated = [...userMessages, ...converted];
+          return updated;
         });
       }
     },
