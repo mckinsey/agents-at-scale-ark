@@ -263,9 +263,6 @@ def create_export_zip(resources: Dict[str, List[Dict[str, Any]]]) -> bytes:
 
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         for resource_type, items in resources.items():
-            if not items:
-                continue
-
             # Create folder for resource type
             for item in items:
                 cleaned_item = clean_resource_for_yaml(item)
