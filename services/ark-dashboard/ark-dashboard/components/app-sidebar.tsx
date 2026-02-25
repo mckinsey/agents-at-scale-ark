@@ -5,10 +5,8 @@ import {
   Activity,
   AlertCircle,
   Bot,
-  Check,
   ChevronsLeft,
   ChevronsRight,
-  ChevronsUpDown,
   ChevronsUpDownIcon,
   File,
   HelpCircle,
@@ -17,7 +15,6 @@ import {
   LogOut,
   Moon,
   MoreHorizontal,
-  Plus,
   Server,
   Settings,
   Sun,
@@ -239,77 +236,35 @@ export function AppSidebar() {
         <SidebarHeader>
           <SidebarMenu>
             <SidebarMenuItem>
-              <DropdownMenu modal={false}>
-                <DropdownMenuTrigger asChild>
-                  <SidebarMenuButton
-                    size="lg"
-                    className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground !p-0 group-data-[collapsible=icon]:!h-12">
-                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
-                      <Image
-                        src={
-                          isExperimentalDarkModeEnabled
-                            ? qbLogoDark
-                            : qbLogoLight
-                        }
-                        alt="QB Logo"
-                        width={32}
-                        height={32}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-0.5 leading-none">
-                      <span className="text-sidebar-accent-foreground font-medium">
-                        ARK Dashboard
-                      </span>
-                      <span className="text-xs">
-                        {isPending
-                          ? 'Loading...'
-                          : availableNamespaces.length === 0
-                            ? 'No namespaces'
-                            : namespace}
-                      </span>
-                    </div>
-                    <ChevronsUpDown className="ml-auto" />
-                    {availableNamespaces.length === 0 && !loading && (
-                      <AlertCircle className="h-4 w-4 text-red-500" />
-                    )}
-                  </SidebarMenuButton>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  className="w-[--radix-dropdown-menu-trigger-width]"
-                  align="end"
-                  side="right">
-                  <DropdownMenuLabel>Namespaces</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {loading ? (
-                    <DropdownMenuItem disabled>
-                      Loading namespaces...
-                    </DropdownMenuItem>
-                  ) : availableNamespaces.length === 0 ? (
-                    <DropdownMenuItem disabled>
-                      No namespaces available
-                    </DropdownMenuItem>
-                  ) : (
-                    <>
-                      {availableNamespaces.map(ns => (
-                        <DropdownMenuItem
-                          key={ns.name}
-                          onSelect={() => setNamespace(ns.name)}>
-                          {ns.name}
-                          {ns.name === namespace && (
-                            <Check className="ml-auto h-4 w-4" />
-                          )}
-                        </DropdownMenuItem>
-                      ))}
-                    </>
-                  )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onSelect={() => setNamespaceEditorOpen(true)}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Namespace
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <SidebarMenuButton
+                size="lg"
+                className="!p-0 group-data-[collapsible=icon]:!h-12">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
+                  <Image
+                    src={
+                      isExperimentalDarkModeEnabled ? qbLogoDark : qbLogoLight
+                    }
+                    alt="QB Logo"
+                    width={32}
+                    height={32}
+                  />
+                </div>
+                <div className="flex flex-col gap-0.5 leading-none">
+                  <span className="text-sidebar-accent-foreground font-medium">
+                    ARK Dashboard
+                  </span>
+                  <span className="text-xs">
+                    {isPending
+                      ? 'Loading...'
+                      : availableNamespaces.length === 0
+                        ? 'No namespaces'
+                        : namespace}
+                  </span>
+                </div>
+                {availableNamespaces.length === 0 && !loading && (
+                  <AlertCircle className="h-4 w-4 text-red-500" />
+                )}
+              </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>
