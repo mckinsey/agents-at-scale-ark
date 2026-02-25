@@ -184,6 +184,20 @@ func (op *OpenAIProvider) processToolCalls(toolCallsMap map[int64]*openai.ChatCo
 
 // sendFinalToolCallChunk sends the final chunk with accumulated tool calls
 func (op *OpenAIProvider) sendFinalToolCallChunk(fullResponse *openai.ChatCompletion, toolCalls []openai.ChatCompletionMessageToolCall, streamFunc func(*openai.ChatCompletionChunk) error) error {
+	// Convert tool calls to delta format for streaming
+	deltaToolCalls := make([]openai.ChatCompletionChunkChoiceDeltaToolCall, len(toolCalls))
+	for i, tc := range toolCalls {
+		deltaToolCalls[i] = openai.ChatCompletionChunkChoiceDeltaToolCall{
+			Index: int64(i),
+			ID:    tc.ID,
+			Type:  "function",
+			Function: openai.ChatCompletionChunkChoiceDeltaToolCallFunction{
+				Name:      tc.Function.Name,
+				Arguments: tc.Function.Arguments,
+			},
+		}
+	}
+
 	finalChunk := &openai.ChatCompletionChunk{
 		ID:      fullResponse.ID,
 		Object:  "chat.completion.chunk",
@@ -191,8 +205,10 @@ func (op *OpenAIProvider) sendFinalToolCallChunk(fullResponse *openai.ChatComple
 		Model:   fullResponse.Model,
 		Choices: []openai.ChatCompletionChunkChoice{
 			{
-				Index:        0,
-				Delta:        openai.ChatCompletionChunkChoiceDelta{},
+				Index: 0,
+				Delta: openai.ChatCompletionChunkChoiceDelta{
+					ToolCalls: deltaToolCalls,
+				},
 				FinishReason: fullResponse.Choices[0].FinishReason,
 			},
 		},
