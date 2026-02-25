@@ -132,6 +132,19 @@ func TestDispatchApplyDefaults(t *testing.T) {
 		}
 	})
 
+	t.Run("execution engine gets default protocol", func(t *testing.T) {
+		ee := &arkv1prealpha1.ExecutionEngine{
+			ObjectMeta: metav1.ObjectMeta{Name: "test"},
+			Spec: arkv1prealpha1.ExecutionEngineSpec{
+				Address: arkv1prealpha1.ValueSource{Value: "http://localhost:9090"},
+			},
+		}
+		ApplyDefaults(ee)
+		if ee.Spec.Protocol != "a2a" {
+			t.Fatalf("expected protocol 'a2a', got %q", ee.Spec.Protocol)
+		}
+	})
+
 	t.Run("non-defaultable type is noop", func(t *testing.T) {
 		ApplyDefaults(&corev1.ConfigMap{})
 	})

@@ -6,6 +6,7 @@ metadata:
     {{- include "executor-langchain.labels" . | nindent 4 }}
 spec:
   type: "langchain"
+  protocol: {{ .Values.executionEngine.protocol | default "a2a" | quote }}
   address:
     valueFrom:
       serviceRef:

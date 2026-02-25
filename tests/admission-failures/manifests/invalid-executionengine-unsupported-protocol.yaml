@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: ExecutionEngine
+metadata:
+  name: invalid-protocol-engine
+spec:
+  # Unsupported protocol - should fail admission
+  type: custom
+  protocol: http
+  address:
+    value: "http://example.com:8000"
+  description: "Attempt to create execution engine with unsupported protocol"

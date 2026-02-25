@@ -2,8 +2,8 @@
 """
 Main entry point for the langchain executor.
 
-This module starts the FastAPI web server that listens for ExecutionEngine requests
-and processes them using LangChain, returning messages in the expected format.
+This module starts the A2A server that processes agent execution requests
+using LangChain, returning messages via the A2A protocol.
 """
 
 import logging

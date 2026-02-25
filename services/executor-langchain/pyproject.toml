@@ -19,6 +19,7 @@ dependencies = [
     "tiktoken>=0.5.0",
     "ark-sdk",
     "urllib3>=2.6.0",
+    "a2a-sdk>=0.3.0",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",

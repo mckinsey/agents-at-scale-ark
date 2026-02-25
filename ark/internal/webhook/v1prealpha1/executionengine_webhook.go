@@ -7,12 +7,15 @@ import (
 	"mckinsey.com/ark/internal/validation"
 )
 
+// +kubebuilder:webhook:path=/mutate-ark-mckinsey-com-v1prealpha1-executionengine,mutating=true,failurePolicy=fail,sideEffects=None,groups=ark.mckinsey.com,resources=executionengines,verbs=create;update,versions=v1prealpha1,name=mexecutionengine-v1prealpha1.kb.io,admissionReviewVersions=v1
+
 // +kubebuilder:webhook:path=/validate-ark-mckinsey-com-v1prealpha1-executionengine,mutating=false,failurePolicy=fail,sideEffects=None,groups=ark.mckinsey.com,resources=executionengines,verbs=create;update,versions=v1prealpha1,name=vexecutionengine-v1prealpha1.kb.io,admissionReviewVersions=v1
 
 func SetupExecutionEngineWebhookWithManager(mgr ctrl.Manager) error {
 	v := validation.NewValidator(&validation.WebhookLookup{Client: mgr.GetClient()})
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&arkv1prealpha1.ExecutionEngine{}).
+		WithDefaulter(&validation.WebhookDefaulter{}).
 		WithValidator(&validation.WebhookValidator{V: v}).
 		Complete()
 }

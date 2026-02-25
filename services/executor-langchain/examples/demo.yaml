@@ -1,15 +1,16 @@
 # LangChain Execution Engine Demo
 # This demo shows how to use the LangChain execution engine with both regular and RAG agents
 
-# ExecutionEngine CRD - defines the LangChain execution engine
+# ExecutionEngine CRD - defines the LangChain A2A execution engine
 ---
 apiVersion: ark.mckinsey.com/v1prealpha1
 kind: ExecutionEngine
 metadata:
   name: executor-langchain-engine
 spec:
-  type: external
-  description: "LangChain execution engine with RAG support"
+  type: langchain
+  protocol: a2a
+  description: "LangChain A2A execution engine with RAG support"
 
 # Regular LangChain Agent
 ---

@@ -58,6 +58,27 @@ webhooks:
           - v1alpha1
         resources:
           - models
+  - name: mexecutionengine-v1prealpha1.kb.io
+    clientConfig:
+      service:
+        name: ark-webhook-service
+        namespace: {{ .Release.Namespace }}
+        path: /mutate-ark-mckinsey-com-v1prealpha1-executionengine
+    failurePolicy: {{ .Values.webhook.failurePolicy | default "Fail" }}
+    timeoutSeconds: {{ .Values.webhook.timeoutSeconds | default 10 }}
+    sideEffects: None
+    admissionReviewVersions:
+      - v1
+    rules:
+      - operations:
+          - CREATE
+          - UPDATE
+        apiGroups:
+          - ark.mckinsey.com
+        apiVersions:
+          - v1prealpha1
+        resources:
+          - executionengines
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration

@@ -1,13 +1,13 @@
 ---
 title: LangChain Execution Engine
-description: LangChain-based execution engine for processing agent queries with optional RAG support
+description: LangChain-based execution engine for processing agent queries with optional RAG support via the A2A protocol
 ---
 
 # LangChain Execution Engine
 
 LangChain-based execution engine for processing agent queries with optional RAG support.
 
-ARK includes a LangChain execution engine that provides specialized processing capabilities beyond standard AI model interactions, including Retrieval-Augmented Generation (RAG), custom chains, and LangChain framework integration.
+Ark includes a LangChain execution engine that provides specialized processing capabilities beyond standard AI model interactions, including Retrieval-Augmented Generation (RAG), custom chains, and LangChain framework integration. The engine communicates using the A2A (Agent-to-Agent) protocol.
 
 ## Installation
 
@@ -17,10 +17,33 @@ make executor-langchain-install
 
 ## Features
 
+- A2A protocol for engine communication
 - LangChain framework integration
 - Optional RAG (Retrieval-Augmented Generation) support via agent labels
 - Memory persistence for stateful conversations
 - Compatible with all Model providers (Azure OpenAI, OpenAI, Ollama)
+
+## ExecutionEngine Resource
+
+The LangChain executor registers as an ExecutionEngine with A2A protocol:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: ExecutionEngine
+metadata:
+  name: executor-langchain
+spec:
+  type: langchain
+  protocol: a2a
+  address:
+    valueFrom:
+      serviceRef:
+        name: executor-langchain
+        port: "8000"
+  description: "LangChain Executor - A2A server with RAG support"
+```
+
+The engine serves an A2A agent card at `/.well-known/agent.json` and accepts messages via the A2A JSON-RPC protocol.
 
 ## Local Development
 

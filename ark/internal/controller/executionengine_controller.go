@@ -15,6 +15,7 @@ import (
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/eventing"
+	"mckinsey.com/ark/internal/genai"
 )
 
 // ExecutionEngineReconciler reconciles an ExecutionEngine object
@@ -82,6 +83,13 @@ func (r *ExecutionEngineReconciler) processExecutionEngine(ctx context.Context, 
 	}
 
 	executionEngine.Status.LastResolvedAddress = resolvedAddress
+
+	if executionEngine.Spec.Protocol == "" || executionEngine.Spec.Protocol == "a2a" {
+		_, err := genai.DiscoverA2AAgents(ctx, r.Client, resolvedAddress, executionEngine.Spec.Headers, executionEngine.Namespace)
+		if err != nil {
+			log.Info("A2A agent card discovery failed (engine may not be ready yet)", "executionEngine", executionEngine.Name, "error", err)
+		}
+	}
 
 	if err := r.updateStatus(ctx, executionEngine, statusReady, "ExecutionEngine address resolved successfully"); err != nil {
 		return ctrl.Result{}, err

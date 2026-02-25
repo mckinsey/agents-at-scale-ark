@@ -9,8 +9,7 @@ import (
 // ExecutionEngineSpec defines the configuration for an execution engine that can run agent workloads.
 // This allows agents to be executed by different frameworks such as LangChain, AutoGen, or other
 // agent execution systems, rather than the built-in OpenAI-compatible engine.
-// Execution engines work as operators that watch Query CRDs and process queries for agents
-// that reference them.
+// Execution engines communicate via the A2A (Agent-to-Agent) protocol.
 type ExecutionEngineSpec struct {
 	// Type specifies which execution engine implementation to use
 	// +kubebuilder:validation:Required
@@ -22,6 +21,16 @@ type ExecutionEngineSpec struct {
 
 	// Description provides human-readable information about this execution engine
 	Description string `json:"description,omitempty"`
+
+	// Protocol specifies the communication protocol. Only "a2a" is supported.
+	// +kubebuilder:default="a2a"
+	Protocol string `json:"protocol,omitempty"`
+
+	// Headers specifies authentication headers for A2A communication
+	Headers []Header `json:"headers,omitempty"`
+
+	// Timeout specifies the execution timeout duration (e.g. "5m", "300s")
+	Timeout string `json:"timeout,omitempty"`
 }
 
 type ExecutionEngineStatus struct {

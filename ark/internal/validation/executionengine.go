@@ -6,12 +6,11 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
-	"mckinsey.com/ark/internal/genai"
 )
 
 func (v *Validator) ValidateExecutionEngine(ctx context.Context, ee *arkv1prealpha1.ExecutionEngine) ([]string, error) {
-	if ee.GetName() == genai.ExecutionEngineA2A {
-		return nil, fmt.Errorf("execution engine name '%s' is reserved for A2A servers", genai.ExecutionEngineA2A)
+	if ee.Spec.Protocol != "" && ee.Spec.Protocol != "a2a" {
+		return nil, fmt.Errorf("unsupported protocol %q, only \"a2a\" is supported", ee.Spec.Protocol)
 	}
 
 	converted := convertV1PreAlpha1ValueSource(ee.Spec.Address)

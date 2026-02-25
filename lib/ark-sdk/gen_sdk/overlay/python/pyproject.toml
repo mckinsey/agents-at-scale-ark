@@ -36,6 +36,7 @@ dependencies = [
   "python-jose[cryptography]==3.5.0",
   "pydantic-settings>=2.0.0",
   "uvicorn[standard]>=0.24.0",
+  "a2a-sdk>=0.3.0",
 ]
 
 [project.optional-dependencies]

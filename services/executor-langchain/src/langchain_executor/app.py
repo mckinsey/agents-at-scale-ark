@@ -1,11 +1,14 @@
-from fastapi import FastAPI
 from ark_sdk.executor_app import ExecutorApp
+from starlette.applications import Starlette
 from .executor import LangChainExecutor
 
-# Create the executor and app
 executor = LangChainExecutor()
-app_instance = ExecutorApp(executor, "LangChain")
+app_instance = ExecutorApp(
+    executor,
+    "LangChain",
+    description="LangChain execution engine with RAG support",
+)
 
 
-def create_app() -> FastAPI:
+def create_app() -> Starlette:
     return app_instance.create_app()
