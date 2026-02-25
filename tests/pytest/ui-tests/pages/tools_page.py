@@ -125,7 +125,7 @@ class ToolsPage(BasePage):
             save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
         
         save_button.scroll_into_view_if_needed()
-        save_button.evaluate("el => el.click()")
+        save_button.click(force=True)
         
         error_banner = self.page.locator("[role='alert']:has-text('error'), [role='alert']:has-text('Error'), .error, .toast-error").first
         if error_banner.count() > 0 and error_banner.is_visible():
@@ -162,8 +162,9 @@ class ToolsPage(BasePage):
         logger.info(f"Deleting tool: {tool_name}")
         try:
             name_element = self.page.get_by_text(tool_name, exact=True).first
+            name_element.wait_for(state="visible", timeout=15000)
             name_element.scroll_into_view_if_needed()
-            card = name_element.locator("../../..").first
+            card = name_element.locator("xpath=ancestor::div[.//button[@aria-label='Delete tool']][1]")
             delete_btn = card.locator("button[aria-label='Delete tool']").first
             delete_btn.wait_for(state="visible", timeout=5000)
             delete_btn.click()

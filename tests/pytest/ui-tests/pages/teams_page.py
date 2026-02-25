@@ -160,7 +160,7 @@ class TeamsPage(BasePage):
 
         logger.info("Clicking Create button in team dialog")
         save_button.scroll_into_view_if_needed()
-        save_button.evaluate("el => el.click()")
+        save_button.click(force=True)
         self.wait_for_load_state("domcontentloaded")
 
         try:
@@ -192,8 +192,9 @@ class TeamsPage(BasePage):
     def delete_team_with_verification(self, team_name: str) -> dict:
         try:
             name_element = self.page.get_by_text(team_name, exact=True).first
+            name_element.wait_for(state="visible", timeout=15000)
             name_element.scroll_into_view_if_needed()
-            card = name_element.locator("../../..").first
+            card = name_element.locator("xpath=ancestor::div[.//button[@aria-label='Delete team']][1]")
             delete_btn = card.locator("button[aria-label='Delete team']").first
             delete_btn.wait_for(state="visible", timeout=5000)
             delete_btn.click()

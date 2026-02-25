@@ -101,7 +101,7 @@ class SecretsPage(BasePage):
         
         save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
         save_button.wait_for(state="visible", timeout=5000)
-        save_button.evaluate("el => el.click()")
+        save_button.click(force=True)
         
         self.wait_for_modal_close()
         self.wait_for_load_state("domcontentloaded")
@@ -126,8 +126,9 @@ class SecretsPage(BasePage):
     def delete_secret_with_verification(self, secret_name: str) -> dict:
         try:
             name_element = self.page.get_by_text(secret_name, exact=True).first
+            name_element.wait_for(state="visible", timeout=15000)
             name_element.scroll_into_view_if_needed()
-            card = name_element.locator("../../..").first
+            card = name_element.locator("xpath=ancestor::div[.//button[@aria-label='Delete secret']][1]")
             delete_btn = card.locator("button[aria-label='Delete secret']").first
             delete_btn.wait_for(state="visible", timeout=5000)
             delete_btn.click()
