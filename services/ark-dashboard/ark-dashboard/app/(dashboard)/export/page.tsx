@@ -185,8 +185,9 @@ export default function ExportPage() {
     }));
   };
 
-  const handleExportSelected = async () => {
-    if (selectedCount === 0) {
+  const handleExport = async (exportAll: boolean = false) => {
+    // Validate selection if not exporting all
+    if (!exportAll && selectedCount === 0) {
       toast.error('No resources selected', {
         description: 'Please select at least one resource to export',
       });
@@ -195,28 +196,20 @@ export default function ExportPage() {
 
     try {
       setIsExporting(true);
-      await exportService.exportResources(resources);
-      toast.success('Export successful', {
-        description: `Successfully exported ${selectedCount} resources`,
-      });
-      // Update last export time
-      exportService.getLastExportTime().then(time => setLastExportTime(time));
-    } catch (error) {
-      toast.error('Export failed', {
-        description: error instanceof Error ? error.message : 'Unknown error',
-      });
-    } finally {
-      setIsExporting(false);
-    }
-  };
 
-  const handleExportAll = async () => {
-    try {
-      setIsExporting(true);
-      await exportService.exportAll();
-      toast.success('Export successful', {
-        description: 'Successfully exported all resources',
-      });
+      // Call appropriate export service method
+      if (exportAll) {
+        await exportService.exportAll();
+        toast.success('Export successful', {
+          description: 'Successfully exported all resources',
+        });
+      } else {
+        await exportService.exportResources(resources);
+        toast.success('Export successful', {
+          description: `Successfully exported ${selectedCount} resources`,
+        });
+      }
+
       // Update last export time
       exportService.getLastExportTime().then(time => setLastExportTime(time));
     } catch (error) {
@@ -360,7 +353,7 @@ export default function ExportPage() {
             </div>
             <div className="flex flex-col gap-2 sm:ml-auto sm:flex-row">
               <Button
-                onClick={handleExportAll}
+                onClick={() => handleExport(true)}
                 disabled={isExporting || totalCount === 0}
                 variant="outline"
                 className="w-full sm:w-auto">
@@ -372,7 +365,7 @@ export default function ExportPage() {
                 Export All ({totalCount})
               </Button>
               <Button
-                onClick={handleExportSelected}
+                onClick={() => handleExport(false)}
                 disabled={isExporting || selectedCount === 0}
                 variant="default"
                 className="w-full sm:w-auto">
