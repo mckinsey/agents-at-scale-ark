@@ -45,7 +45,8 @@ async def get_export_history() -> Dict[str, Any]:  # NOSONAR - Async for consist
         if e.status == 404:
             return {}
         raise
-    except Exception:
+    except json.JSONDecodeError:
+        logger.warning(f"Invalid JSON in export history ConfigMap, returning empty history")
         return {}
 
 
@@ -175,8 +176,8 @@ async def _collect_workflows(
                 logger.warning("WorkflowTemplates CRD not found - Argo Workflows may not be installed")
             else:
                 logger.error(f"Failed to fetch WorkflowTemplates: {e}")
-        except Exception as e:
-            logger.error(f"Unexpected error fetching WorkflowTemplates: {e}")
+        except (KeyError, TypeError) as e:
+            logger.error(f"Invalid WorkflowTemplate structure: {e}")
 
         return items
 
