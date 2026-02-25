@@ -97,6 +97,7 @@ describe('exportService', () => {
 
       expect(clickSpy).toHaveBeenCalled();
       expect(removeSpy).toHaveBeenCalled();
+      expect(localStorage.getItem('ark-dashboard-last-export')).toBeTruthy();
     });
 
     it('should handle export errors gracefully', async () => {

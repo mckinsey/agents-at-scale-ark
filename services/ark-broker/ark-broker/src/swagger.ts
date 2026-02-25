@@ -35,9 +35,9 @@ export function setupSwagger(app: Express, version: string): void {
     ],
   },
   // In production, we run from dist; in dev, from src
-  apis: process.env.NODE_ENV === 'production'
-    ? ['./dist/routes/*.js', './dist/models/*.js']
-    : ['./src/routes/*.ts', './src/models/*.ts'],
+  apis: process.env.NODE_ENV === 'production' 
+    ? ['./dist/**/*.js']
+    : ['./src/**/*.ts'],
   };
 
   const specs = swaggerJsdoc(options);
