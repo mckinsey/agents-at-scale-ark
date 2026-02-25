@@ -84,19 +84,8 @@ export const exportService = {
       return response.last_export;
     } catch (error) {
       console.error('Failed to get last export time:', error);
-      // Fallback to local storage
-      if (typeof window !== 'undefined') {
-        return localStorage.getItem('ark-dashboard-last-export');
-      }
       return null;
     }
-  },
-
-  // Update last export timestamp (kept for backward compatibility)
-  updateLastExportTime(): void {
-    if (typeof window === 'undefined') return;
-    const timestamp = new Date().toISOString();
-    localStorage.setItem('ark-dashboard-last-export', timestamp);
   },
 
   // Fetch all resources for export selection
@@ -256,9 +245,6 @@ export const exportService = {
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
-
-    // Update last export time locally for immediate UI update
-    this.updateLastExportTime();
   },
 
   // Export all resources using new backend endpoint
@@ -291,8 +277,5 @@ export const exportService = {
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
-
-    // Update last export time locally for immediate UI update
-    this.updateLastExportTime();
   },
 };
