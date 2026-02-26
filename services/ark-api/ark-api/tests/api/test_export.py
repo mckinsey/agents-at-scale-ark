@@ -10,13 +10,14 @@ from fastapi.testclient import TestClient
 
 os.environ["AUTH_MODE"] = "open"
 
+from ark_api.main import app
+
 
 class TestExportEndpoints(unittest.TestCase):
     """Test cases for the /export endpoints."""
 
     def setUp(self):
         """Set up test client."""
-        from ark_api.main import app
         self.client = TestClient(app)
 
         # Sample resource data for testing
