@@ -68,6 +68,7 @@ jobs:
           find coverage-artifacts -path "*/ark/*" -name "lcov.info" -exec cp {} ark/unit-tests/ \; 2>/dev/null || true
           find coverage-artifacts -path "*/ark/*" -name "cover.out" -exec cp {} ark/unit-tests/ \; 2>/dev/null || true
           find coverage-artifacts -path "*/ark-api/*" -name "lcov.info" -exec cp {} services/ark-api/ark-api/coverage/ \; 2>/dev/null || true
+          find coverage-artifacts -path "*/ark-api/*" -name "coverage.xml" -exec cp {} services/ark-api/ark-api/coverage/ \; 2>/dev/null || true
           find coverage-artifacts -path "*/ark-dashboard/*" -name "lcov.info" -exec cp {} services/ark-dashboard/ark-dashboard/coverage/ \; 2>/dev/null || true
 
           echo "=== Fixing paths in lcov.info files ==="
@@ -89,13 +90,28 @@ jobs:
             fi
           done
 
+          echo "=== Fixing paths in coverage.xml files ==="
+          for xml_file in $(find . -name "coverage.xml" -not -path "./coverage-artifacts/*" -not -path "./node_modules/*" 2>/dev/null); do
+            dir=$(dirname "$xml_file")
+            echo "Processing $xml_file (dir: $dir)"
+
+            if [[ "$dir" == *"ark-api"* ]]; then
+              sed -i 's|filename="src/|filename="services/ark-api/ark-api/src/|g' "$xml_file"
+            fi
+          done
+
           echo "Coverage files organized:"
-          find . -name "lcov.info" 2>/dev/null | grep -v node_modules | grep -v coverage-artifacts || true
+          find . \( -name "lcov.info" -o -name "coverage.xml" \) 2>/dev/null | grep -v node_modules | grep -v coverage-artifacts || true
 
           echo "=== Sample of rewritten paths ==="
           for f in $(find . -name "lcov.info" -not -path "./coverage-artifacts/*" -not -path "./node_modules/*" 2>/dev/null | head -3); do
             echo "--- $f ---"
             grep "^SF:" "$f" | head -5
+          done
+
+          for f in $(find . -name "coverage.xml" -not -path "./coverage-artifacts/*" -not -path "./node_modules/*" 2>/dev/null | head -3); do
+            echo "--- $f ---"
+            grep 'filename=' "$f" | head -5
           done
 
       - name: Setup Go
@@ -141,6 +157,32 @@ jobs:
 
           echo "=== Running services tests ==="
           make -j4 services-test-all || true
+
+          echo "=== Fixing paths in coverage files ==="
+          for xml_file in $(find . -name "coverage.xml" -not -path "./node_modules/*" -not -path "./.venv/*" 2>/dev/null); do
+            dir=$(dirname "$xml_file")
+            echo "Processing $xml_file (dir: $dir)"
+            if [[ "$dir" == *"ark-api"* ]]; then
+              sed -i 's|filename="src/|filename="services/ark-api/ark-api/src/|g' "$xml_file"
+            fi
+          done
+
+          for lcov_file in $(find . -name "lcov.info" -not -path "./node_modules/*" -not -path "./.venv/*" 2>/dev/null); do
+            dir=$(dirname "$lcov_file")
+            echo "Processing $lcov_file (dir: $dir)"
+            if [[ "$dir" == *"ark-api"* ]]; then
+              sed -i 's|^SF:src/|SF:services/ark-api/ark-api/src/|g' "$lcov_file"
+            elif [[ "$dir" == *"ark-dashboard"* ]]; then
+              sed -i 's|^SF:src/|SF:services/ark-dashboard/ark-dashboard/src/|g' "$lcov_file"
+              sed -i 's|^SF:app/|SF:services/ark-dashboard/ark-dashboard/app/|g' "$lcov_file"
+              sed -i 's|^SF:components/|SF:services/ark-dashboard/ark-dashboard/components/|g' "$lcov_file"
+              sed -i 's|^SF:lib/|SF:services/ark-dashboard/ark-dashboard/lib/|g' "$lcov_file"
+            elif [[ "$dir" == *"ark/unit-tests"* ]]; then
+              sed -i 's|^SF:internal/|SF:ark/internal/|g' "$lcov_file"
+              sed -i 's|^SF:cmd/|SF:ark/cmd/|g' "$lcov_file"
+              sed -i 's|^SF:api/|SF:ark/api/|g' "$lcov_file"
+            fi
+          done
 
           echo "=== Coverage files generated ==="
           find . -name "lcov.info" -o -name "coverage.xml" 2>/dev/null | grep -v node_modules | grep -v .venv | head -20 || echo "No coverage files found"
