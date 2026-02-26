@@ -214,5 +214,103 @@ class TestExportEndpoints(unittest.TestCase):
                 self.assertIn("agent-0", content)
 
 
+class TestCollectResources(unittest.TestCase):
+    """Test cases for the collect_resources function."""
+
+    @patch('ark_api.api.v1.export.with_ark_client')
+    def test_collect_resources_filters_by_type(self, mock_ark_client_context):
+        """Test that collect_resources only collects requested resource types."""
+        import asyncio
+        # Setup mock ark_client with all resource types available
+        mock_ark_client = AsyncMock()
+
+        # Create mock objects with to_dict method
+        mock_agent = Mock()
+        mock_agent.to_dict.return_value = {
+            "apiVersion": "v1alpha1", "kind": "Agent",
+            "metadata": {"name": "agent1", "namespace": "default"},
+            "spec": {"model": "gpt-4"}
+        }
+
+        mock_model = Mock()
+        mock_model.to_dict.return_value = {
+            "apiVersion": "v1alpha1", "kind": "Model",
+            "metadata": {"name": "model1", "namespace": "default"},
+            "spec": {"provider": "openai"}
+        }
+
+        mock_team = Mock()
+        mock_team.to_dict.return_value = {
+            "apiVersion": "v1alpha1", "kind": "Team",
+            "metadata": {"name": "team1", "namespace": "default"},
+            "spec": {"members": ["agent1"]}
+        }
+
+        # Mock the list methods to return objects with to_dict
+        mock_ark_client.agents.a_list = AsyncMock(return_value=[mock_agent])
+        mock_ark_client.models.a_list = AsyncMock(return_value=[mock_model])
+        mock_ark_client.teams.a_list = AsyncMock(return_value=[mock_team])
+
+        # Setup context manager
+        mock_context = AsyncMock()
+        mock_context.__aenter__ = AsyncMock(return_value=mock_ark_client)
+        mock_context.__aexit__ = AsyncMock(return_value=None)
+        mock_ark_client_context.return_value = mock_context
+
+        # Import the function to test
+        from ark_api.api.v1.export import collect_resources
+
+        # Test 1: Request only agents - should NOT call models or teams
+        result = asyncio.run(collect_resources(
+            resource_types=["agents"],
+            namespace="default"
+        ))
+
+        # Verify only agents were collected
+        self.assertIn("agents", result)
+        self.assertNotIn("models", result)
+        self.assertNotIn("teams", result)
+        self.assertEqual(len(result["agents"]), 1)
+        self.assertEqual(result["agents"][0]["metadata"]["name"], "agent1")
+
+        # Verify only agents.a_list was called
+        mock_ark_client.agents.a_list.assert_called_once()
+        mock_ark_client.models.a_list.assert_not_called()
+        mock_ark_client.teams.a_list.assert_not_called()
+
+        # Reset mocks for next test
+        mock_ark_client.agents.a_list.reset_mock()
+        mock_ark_client.models.a_list.reset_mock()
+        mock_ark_client.teams.a_list.reset_mock()
+
+        # Test 2: Request agents and models - should NOT call teams
+        result = asyncio.run(collect_resources(
+            resource_types=["agents", "models"],
+            namespace="default"
+        ))
+
+        # Verify only requested types were collected
+        self.assertIn("agents", result)
+        self.assertIn("models", result)
+        self.assertNotIn("teams", result)
+
+        # Verify only requested methods were called
+        mock_ark_client.agents.a_list.assert_called_once()
+        mock_ark_client.models.a_list.assert_called_once()
+        mock_ark_client.teams.a_list.assert_not_called()
+
+        # Test 3: Request all types
+        result = asyncio.run(collect_resources(
+            resource_types=["agents", "models", "teams"],
+            namespace="default"
+        ))
+
+        # Verify all types were collected
+        self.assertIn("agents", result)
+        self.assertIn("models", result)
+        self.assertIn("teams", result)
+        self.assertEqual(len(result), 3)
+
+
 if __name__ == '__main__':
     unittest.main()
