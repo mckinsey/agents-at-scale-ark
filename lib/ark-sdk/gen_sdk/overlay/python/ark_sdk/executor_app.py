@@ -126,7 +126,7 @@ class ExecutorApp:
         self.agent_card = AgentCard(
             name=self.engine_name,
             description=self.description,
-            url="http://localhost:8000",
+            url="https://localhost:8000",
             version="1.0.0",
             skills=self.skills,
             capabilities=AgentCapabilities(),
@@ -162,7 +162,7 @@ class ExecutorApp:
         return app
 
     def run(self, host: str = "0.0.0.0", port: int = 8000) -> None:
-        self.agent_card.url = f"http://{host}:{port}"
+        self.agent_card.url = f"https://{host}:{port}"
         logger.info(f"Starting {self.engine_name} A2A server on {host}:{port}")
         uvicorn.run(self.build(), host=host, port=port, access_log=True, log_level="info")
 
