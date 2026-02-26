@@ -35,7 +35,6 @@ The Ark repository is organized as follows:
 
 - **`services/`** - Supporting services (Go, Python, TypeScript)
   - `postgres-memory/` - Memory persistence
-  - `executor-langchain/` - LangChain execution engine
   - `ark-api/` - REST API
   - `ark-evaluator/` - Model evaluation
 

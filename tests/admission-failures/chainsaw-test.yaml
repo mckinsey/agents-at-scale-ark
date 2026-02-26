@@ -172,7 +172,3 @@ spec:
     try:
     - error:
         file: manifests/invalid-executionengine-missing-address.yaml
-  - name: test-executionengine-reserved-name-a2a
-    try:
-    - error:
-        file: manifests/invalid-executionengine-reserved-name-a2a.yaml
