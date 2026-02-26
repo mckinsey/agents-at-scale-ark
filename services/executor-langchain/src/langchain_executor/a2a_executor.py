@@ -147,6 +147,22 @@ def _build_native_langchain_messages(history: object) -> List:
     return native_messages
 
 
+def _build_compat_langchain_messages(history: object) -> List:
+    compat_messages: List = []
+    if not _is_list(history):
+        return compat_messages
+    for message in history:
+        role = getattr(message, "role", None)
+        content = getattr(message, "content", "")
+        if role == "system":
+            compat_messages.insert(0, SystemMessage(content=content))
+        elif role == "assistant":
+            compat_messages.append(AIMessage(content=content))
+        elif role == "user":
+            compat_messages.append(HumanMessage(content=content))
+    return compat_messages
+
+
 class A2ALangChainExecutor(BaseExecutor):
     """Handles A2A-native LangChain execution with optional RAG support."""
 
@@ -165,14 +181,20 @@ class A2ALangChainExecutor(BaseExecutor):
             chat_client = create_chat_client(request.agent.model)
             use_rag = should_use_rag(request.agent)
 
-            user_content = _extract_native_content(getattr(request, "a2aUserInput", None))
-            user_query_text = _extract_native_text(getattr(request, "a2aUserInput", None))
+            native_user_input = getattr(request, "a2aUserInput", None)
+            native_history = getattr(request, "a2aHistory", [])
+            compat_history = getattr(request, "history", [])
+
+            user_content = _extract_native_content(native_user_input)
+            user_query_text = _extract_native_text(native_user_input)
             user_input = getattr(request, "userInput", None)
             if not user_content and user_input is not None:
                 user_content = user_input.content
             if not user_query_text and user_input is not None:
                 user_query_text = user_input.content
-            langchain_messages = _build_native_langchain_messages(getattr(request, "a2aHistory", []))
+            langchain_messages = _build_native_langchain_messages(native_history)
+            if len(langchain_messages) == 0:
+                langchain_messages = _build_compat_langchain_messages(compat_history)
 
             rag_context = None
             if use_rag and user_query_text:
@@ -188,7 +210,7 @@ class A2ALangChainExecutor(BaseExecutor):
 
             langchain_messages.append(HumanMessage(content=user_content))
 
-            if len(getattr(request, "a2aHistory", [])) == 0:
+            if len(native_history) == 0 and len(compat_history) == 0:
                 resolved_prompt = self._resolve_prompt(request.agent)
                 langchain_messages.insert(0, SystemMessage(content=resolved_prompt))
 

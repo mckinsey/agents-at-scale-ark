@@ -7,7 +7,6 @@ from ark_api.api.v1.a2agw.registry import (
     ark_to_agent_card,
 )
 from ark_api.constants.annotations import (
-    A2A_EXPERIMENTAL_ENABLED_ANNOTATION,
     A2A_SERVER_SKILLS_ANNOTATION,
     A2A_STREAMING_SUPPORTED_ANNOTATION,
 )
@@ -71,13 +70,11 @@ class TestA2AGatewayRegistry(unittest.TestCase):
 
         self.assertFalse(card.capabilities.streaming)
 
-    def test_ark_to_agent_card_adds_structured_delegation_signal_when_experimental_enabled(self):
+    def test_ark_to_agent_card_adds_structured_delegation_signal_by_default(self):
         agent = SimpleNamespace(
             metadata={
                 "name": "test-agent",
-                "annotations": {
-                    A2A_EXPERIMENTAL_ENABLED_ANNOTATION: "true",
-                },
+                "annotations": {},
             },
             spec=SimpleNamespace(description="test"),
         )
@@ -89,13 +86,11 @@ class TestA2AGatewayRegistry(unittest.TestCase):
         self.assertEqual(structured_skills[0].id, A2A_STRUCTURED_DELEGATION_CAPABILITY_URI)
         self.assertIn(A2A_STRUCTURED_DELEGATION_CAPABILITY_URI, structured_skills[0].tags)
 
-    def test_ark_to_agent_card_skips_structured_delegation_signal_when_experimental_disabled(self):
+    def test_ark_to_agent_card_adds_structured_delegation_signal_without_experimental_annotation(self):
         agent = SimpleNamespace(
             metadata={
                 "name": "test-agent",
-                "annotations": {
-                    A2A_EXPERIMENTAL_ENABLED_ANNOTATION: "false",
-                },
+                "annotations": {},
             },
             spec=SimpleNamespace(description="test"),
         )
@@ -103,4 +98,4 @@ class TestA2AGatewayRegistry(unittest.TestCase):
         card = ark_to_agent_card(agent)
 
         structured_skills = [skill for skill in card.skills if skill.name == A2A_STRUCTURED_DELEGATION_SKILL_NAME]
-        self.assertEqual(len(structured_skills), 0)
+        self.assertEqual(len(structured_skills), 1)

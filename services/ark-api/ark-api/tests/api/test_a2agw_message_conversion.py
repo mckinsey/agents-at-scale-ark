@@ -17,7 +17,7 @@ class TestA2AGatewayMessageConversion(unittest.TestCase):
         )
         self.assertEqual(extract_text_from_message(message), "hello world")
 
-    def test_build_query_payload_uses_user_type_for_simple_text(self):
+    def test_build_query_payload_uses_native_messages_for_simple_text(self):
         message = SimpleNamespace(
             role="user",
             parts=[SimpleNamespace(root=SimpleNamespace(kind="text", text="hello"))],
@@ -26,8 +26,10 @@ class TestA2AGatewayMessageConversion(unittest.TestCase):
 
         payload = build_query_payload(context)
 
-        self.assertEqual(payload.query_type, "user")
-        self.assertEqual(payload.input_data, "hello")
+        self.assertEqual(payload.query_type, "messages")
+        self.assertEqual(payload.input_data[0]["role"], "user")
+        self.assertEqual(payload.input_data[0]["parts"][0]["kind"], "text")
+        self.assertEqual(payload.input_data[0]["parts"][0]["text"], "hello")
 
     def test_build_query_payload_uses_messages_for_multimodal(self):
         message = SimpleNamespace(
@@ -44,8 +46,8 @@ class TestA2AGatewayMessageConversion(unittest.TestCase):
         self.assertEqual(payload.query_type, "messages")
         self.assertIsInstance(payload.input_data, list)
         self.assertEqual(payload.input_data[0]["role"], "user")
-        self.assertIsInstance(payload.input_data[0]["content"], list)
-        self.assertEqual(payload.input_data[0]["content"][1]["type"], "image_url")
+        self.assertEqual(payload.input_data[0]["parts"][0]["kind"], "text")
+        self.assertEqual(payload.input_data[0]["parts"][1]["kind"], "file")
 
     def test_build_query_payload_includes_history(self):
         history_message = SimpleNamespace(
@@ -65,13 +67,13 @@ class TestA2AGatewayMessageConversion(unittest.TestCase):
         self.assertEqual(payload.input_data[0]["role"], "assistant")
         self.assertEqual(payload.input_data[1]["role"], "user")
 
-    def test_build_query_payload_uses_native_messages_when_experimental_enabled(self):
+    def test_build_query_payload_uses_native_messages(self):
         message = SimpleNamespace(
             role="user",
             parts=[SimpleNamespace(root=SimpleNamespace(kind="text", text="hello"))],
         )
         context = SimpleNamespace(message=message, history=[])
-        payload = build_query_payload(context, experimental_enabled=True)
+        payload = build_query_payload(context)
         self.assertEqual(payload.query_type, "messages")
         self.assertIsInstance(payload.input_data, list)
         self.assertEqual(payload.input_data[0]["role"], "user")
@@ -131,13 +133,13 @@ class TestA2AGatewayMessageConversion(unittest.TestCase):
         converted = a2a_message_to_native_message(message)
         self.assertEqual(converted["contextId"], "ctx-from-session")
 
-    def test_build_query_payload_experimental_accepts_explicit_wire_version(self):
+    def test_build_query_payload_accepts_explicit_wire_version(self):
         message = SimpleNamespace(
             role="user",
             parts=[{"root": {"kind": "text", "text": "hello"}}],
         )
         context = SimpleNamespace(message=message, history=[])
-        payload = build_query_payload(context, experimental_enabled=True, native_wire_version="v1")
+        payload = build_query_payload(context, native_wire_version="v1")
         self.assertEqual(payload.query_type, "messages")
         self.assertIn("text", payload.input_data[0]["parts"][0])
         self.assertNotIn("kind", payload.input_data[0]["parts"][0])

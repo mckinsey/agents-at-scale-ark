@@ -2,12 +2,11 @@ from fastapi import FastAPI
 from ark_sdk.executor_app import ExecutorApp
 from ark_sdk.executor import ExecutionEngineRequest, ExecutionEngineResponse
 from pydantic import ValidationError
-from .executor import LangChainExecutor
 from .a2a_executor import A2ALangChainExecutor
 
-executor = LangChainExecutor()
+executor = A2ALangChainExecutor()
 app_instance = ExecutorApp(executor, "LangChain")
-a2a_executor = A2ALangChainExecutor()
+a2a_executor = executor
 
 
 def _make_execution_engine_response(messages, a2a_messages, error):

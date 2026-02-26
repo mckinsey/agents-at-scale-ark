@@ -8,7 +8,6 @@ from ark_sdk.client import V1_ALPHA1, with_ark_client
 from ark_sdk.k8s import get_namespace
 
 from ark_api.constants.annotations import (
-    A2A_EXPERIMENTAL_ENABLED_ANNOTATION,
     A2A_SERVER_SKILLS_ANNOTATION,
     A2A_STREAMING_SUPPORTED_ANNOTATION,
     parse_bool_annotation,
@@ -44,10 +43,6 @@ def _safe_metadata(ark_agent) -> dict:
         except (TypeError, ValueError):
             pass
     return {}
-
-
-def _supports_structured_delegation(annotations: dict) -> bool:
-    return parse_bool_annotation(annotations.get(A2A_EXPERIMENTAL_ENABLED_ANNOTATION), False)
 
 
 def _has_structured_delegation_signal(skills: list[AgentSkill]) -> bool:
@@ -118,7 +113,7 @@ def ark_to_agent_card(ark_agent) -> AgentCard:
             )
         )
 
-    if _supports_structured_delegation(annotations) and not _has_structured_delegation_signal(skills_list):
+    if not _has_structured_delegation_signal(skills_list):
         skills_list.append(
             AgentSkill(
                 id=A2A_STRUCTURED_DELEGATION_CAPABILITY_URI,

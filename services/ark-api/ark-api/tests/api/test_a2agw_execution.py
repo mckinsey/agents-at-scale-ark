@@ -18,10 +18,6 @@ class TestA2AGatewayExecution(unittest.IsolatedAsyncioTestCase):
         context = SimpleNamespace(task_id="task-1", context_id="ctx-old", message=SimpleNamespace(parts=[]))
 
         with patch(
-            "ark_api.api.v1.a2agw.execution.ARKAgentExecutor._resolve_experimental_enabled",
-            new_callable=AsyncMock,
-            return_value=False,
-        ), patch(
             "ark_api.api.v1.a2agw.execution.build_query_payload",
             return_value=QueryPayload(query_type="user", input_data="hello", preview_text="hello"),
         ), patch(
@@ -49,10 +45,6 @@ class TestA2AGatewayExecution(unittest.IsolatedAsyncioTestCase):
         context = SimpleNamespace(message=SimpleNamespace(parts=[]))
 
         with patch(
-            "ark_api.api.v1.a2agw.execution.ARKAgentExecutor._resolve_experimental_enabled",
-            new_callable=AsyncMock,
-            return_value=False,
-        ), patch(
             "ark_api.api.v1.a2agw.execution.build_query_payload",
             return_value=QueryPayload(query_type="user", input_data="hello", preview_text="hello"),
         ), patch(
@@ -76,16 +68,12 @@ class TestA2AGatewayExecution(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(generated_call.kwargs["context_id"], "default")
         self.assertNotEqual(generated_call.kwargs["task_id"], "unknown")
 
-    async def test_execute_passes_experimental_flag_to_query_layer(self):
+    async def test_execute_posts_native_query_payload(self):
         executor = ARKAgentExecutor("test-agent", "default", timeout=1)
         event_queue = SimpleNamespace(enqueue_event=AsyncMock())
         context = SimpleNamespace(task_id="task-1", context_id="ctx-old", message=SimpleNamespace(parts=[]))
 
         with patch(
-            "ark_api.api.v1.a2agw.execution.ARKAgentExecutor._resolve_experimental_enabled",
-            new_callable=AsyncMock,
-            return_value=True,
-        ), patch(
             "ark_api.api.v1.a2agw.execution.build_query_payload",
             return_value=QueryPayload(query_type="messages", input_data=[{"role": "user", "parts": []}], preview_text="hello"),
         ) as mock_build_query_payload, patch(
@@ -104,10 +92,12 @@ class TestA2AGatewayExecution(unittest.IsolatedAsyncioTestCase):
 
         mock_build_query_payload.assert_called_once_with(
             context,
-            experimental_enabled=True,
             native_wire_version="v0.3",
         )
-        self.assertTrue(mock_post_query.await_args.kwargs["experimental_enabled"])
+        self.assertEqual(
+            set(mock_post_query.await_args.kwargs.keys()),
+            {"query_type", "timeout", "context_id"},
+        )
 
     async def test_execute_forwards_normalized_wire_version(self):
         executor = ARKAgentExecutor("test-agent", "default", timeout=1)
@@ -115,10 +105,6 @@ class TestA2AGatewayExecution(unittest.IsolatedAsyncioTestCase):
         context = SimpleNamespace(taskId="task-1", contextId="ctx-old", a2aVersion="v1.0-rc", message=SimpleNamespace(parts=[]))
 
         with patch(
-            "ark_api.api.v1.a2agw.execution.ARKAgentExecutor._resolve_experimental_enabled",
-            new_callable=AsyncMock,
-            return_value=True,
-        ), patch(
             "ark_api.api.v1.a2agw.execution.build_query_payload",
             return_value=QueryPayload(query_type="messages", input_data=[{"role": "user", "parts": []}], preview_text="hello"),
         ) as mock_build_query_payload, patch(

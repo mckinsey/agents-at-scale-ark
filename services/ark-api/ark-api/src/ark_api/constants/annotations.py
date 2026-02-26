@@ -12,7 +12,6 @@ A2A_SERVER_ADDRESS_ANNOTATION = ARK_PREFIX + "a2a-server-address"
 A2A_SERVER_SKILLS_ANNOTATION = ARK_PREFIX + "a2a-server-skills"
 A2A_CONTEXT_ID_ANNOTATION = ARK_PREFIX + "a2a-context-id"
 A2A_STREAMING_SUPPORTED_ANNOTATION = ARK_PREFIX + "a2a-streaming-supported"
-A2A_EXPERIMENTAL_ENABLED_ANNOTATION = ARK_PREFIX + "a2a-experimental-enabled"
 
 
 def parse_bool_annotation(value: object, default: bool) -> bool:

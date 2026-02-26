@@ -2,7 +2,6 @@ import asyncio
 import contextlib
 import logging
 import os
-import time
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -12,20 +11,13 @@ from a2a.server.agent_execution.context import RequestContext
 from a2a.server.events.event_queue import EventQueue
 from a2a.types import TaskState, TaskStatus, TaskStatusUpdateEvent
 from a2a.utils import new_agent_text_message
-from ark_sdk.client import V1_ALPHA1, with_ark_client
 
 from .message_conversion import build_query_payload, normalize_a2a_wire_version
 from .query import QueryExecutionResult, post_query_and_wait
-from .registry import _safe_metadata
-from ark_api.constants.annotations import (
-    A2A_EXPERIMENTAL_ENABLED_ANNOTATION,
-    parse_bool_annotation,
-)
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = int(os.getenv('A2A_DEFAULT_TIMEOUT', '300'))
-_EXPERIMENTAL_CACHE_TTL = 30
 
 class ARKAgentExecutor(AgentExecutor):
     def __init__(self, target_name, namespace, timeout=None):
@@ -35,8 +27,6 @@ class ARKAgentExecutor(AgentExecutor):
         self.timeout = timeout if timeout is not None else DEFAULT_TIMEOUT
         self.tasks_lock = asyncio.Lock()
         self.active_tasks: dict[str, asyncio.Task] = {}
-        self._experimental_enabled: bool = False
-        self._experimental_resolved_at: float = 0
 
     def _resolve_task_id(self, task_id: object) -> str:
         if isinstance(task_id, str) and task_id.strip():
@@ -107,7 +97,6 @@ class ARKAgentExecutor(AgentExecutor):
         query_input: str | list[dict[str, Any]],
         query_type: str,
         context_id: str | None,
-        experimental_enabled: bool,
     ) -> QueryExecutionResult:
         return await post_query_and_wait(
             self.namespace,
@@ -117,31 +106,7 @@ class ARKAgentExecutor(AgentExecutor):
             query_type=query_type,
             timeout=self.timeout,
             context_id=context_id,
-            experimental_enabled=experimental_enabled,
         )
-
-    async def _resolve_experimental_enabled(self) -> bool:
-        now = time.monotonic()
-        if now - self._experimental_resolved_at < _EXPERIMENTAL_CACHE_TTL:
-            return self._experimental_enabled
-        try:
-            async with with_ark_client(self.namespace, V1_ALPHA1) as ark_client:
-                agent = await ark_client.agents.a_get(self.target_name)
-                metadata = _safe_metadata(agent)
-                annotations = metadata.get("annotations") or {}
-                if not isinstance(annotations, dict):
-                    self._experimental_enabled = False
-                else:
-                    self._experimental_enabled = parse_bool_annotation(
-                        annotations.get(A2A_EXPERIMENTAL_ENABLED_ANNOTATION),
-                        False,
-                    )
-                self._experimental_resolved_at = now
-        except Exception as exc:
-            logger.warning("Failed to resolve experimental A2A flag for %s: %s", self.target_name, exc)
-            self._experimental_enabled = False
-            self._experimental_resolved_at = now
-        return self._experimental_enabled
 
     async def execute(
             self, context: RequestContext, event_queue: EventQueue
@@ -150,11 +115,9 @@ class ARKAgentExecutor(AgentExecutor):
         context_id = self._resolve_context_id(self._extract_request_context_id(context))
 
         try:
-            experimental_enabled = await self._resolve_experimental_enabled()
             wire_version = self._resolve_wire_version(context)
             query_payload = build_query_payload(
                 context,
-                experimental_enabled=experimental_enabled,
                 native_wire_version=wire_version,
             )
             logger.info("Task %s Context %s - Processing query: %s", task_id, context_id, query_payload.preview_text)
@@ -168,7 +131,6 @@ class ARKAgentExecutor(AgentExecutor):
                         query_payload.input_data,
                         query_payload.query_type,
                         context_id,
-                        experimental_enabled,
                     )
                 )
 

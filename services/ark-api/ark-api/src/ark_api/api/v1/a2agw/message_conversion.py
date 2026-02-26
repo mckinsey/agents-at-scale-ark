@@ -402,7 +402,6 @@ def _extract_history(context: Any) -> list[Any]:
 
 def build_query_payload(
     context: Any,
-    experimental_enabled: bool = False,
     native_wire_version: str = DEFAULT_A2A_WIRE_VERSION,
 ) -> QueryPayload:
     current_message = getattr(context, "message", None)
@@ -410,33 +409,8 @@ def build_query_payload(
         return QueryPayload(query_type="user", input_data="No message", preview_text="No message")
 
     preview_text = extract_text_from_message(current_message)
-    if experimental_enabled:
-        messages_input = [a2a_message_to_native_message(msg, wire_version=native_wire_version) for msg in _extract_history(context)]
-        messages_input.append(a2a_message_to_native_message(current_message, wire_version=native_wire_version))
-        return QueryPayload(
-            query_type="messages",
-            input_data=messages_input,
-            preview_text=preview_text,
-        )
-
-    current_openai_message = a2a_message_to_openai_message(current_message)
-
-    history_messages = [a2a_message_to_openai_message(msg) for msg in _extract_history(context)]
-    has_history = len(history_messages) > 0
-
-    is_simple_text = (
-        not has_history
-        and current_openai_message.get("role") == "user"
-        and isinstance(current_openai_message.get("content"), str)
-    )
-    if is_simple_text:
-        return QueryPayload(
-            query_type="user",
-            input_data=current_openai_message.get("content", ""),
-            preview_text=preview_text,
-        )
-
-    messages_input = history_messages + [current_openai_message]
+    messages_input = [a2a_message_to_native_message(msg, wire_version=native_wire_version) for msg in _extract_history(context)]
+    messages_input.append(a2a_message_to_native_message(current_message, wire_version=native_wire_version))
     return QueryPayload(
         query_type="messages",
         input_data=messages_input,

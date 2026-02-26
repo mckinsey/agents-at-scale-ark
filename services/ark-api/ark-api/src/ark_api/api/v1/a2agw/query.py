@@ -11,7 +11,6 @@ from ark_sdk.models.query_v1alpha1_spec import QueryV1alpha1Spec
 from ark_sdk.models.query_v1alpha1_spec_target import QueryV1alpha1SpecTarget
 from ark_api.constants.annotations import (
     A2A_CONTEXT_ID_ANNOTATION,
-    A2A_EXPERIMENTAL_ENABLED_ANNOTATION,
 )
 
 logger = logging.getLogger(__name__)
@@ -60,7 +59,6 @@ async def post_query(
     query_type: str = "user",
     timeout: int = 60,
     context_id: str | None = None,
-    experimental_enabled: bool = False,
 ) -> str:
     """
     Post a query to ARK and return the query name.
@@ -92,8 +90,6 @@ async def post_query(
         annotations: dict[str, str] = {}
         if context_id:
             annotations[A2A_CONTEXT_ID_ANNOTATION] = context_id
-        if experimental_enabled:
-            annotations[A2A_EXPERIMENTAL_ENABLED_ANNOTATION] = "true"
         if annotations:
             metadata["annotations"] = annotations
         query_obj = QueryV1alpha1(
@@ -167,7 +163,6 @@ async def post_query_and_wait(
     query_type: str = "user",
     timeout: int = 60,
     context_id: str | None = None,
-    experimental_enabled: bool = False,
 ) -> QueryExecutionResult:
     """
     Post a query to ARK and wait for the result.
@@ -192,6 +187,5 @@ async def post_query_and_wait(
         query_type=query_type,
         timeout=timeout,
         context_id=context_id,
-        experimental_enabled=experimental_enabled,
     )
     return await wait_for_query(namespace, query_name, timeout)
