@@ -202,8 +202,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
   deploy-helm-charts:
-    needs: [resolve_version]
-    if: ${{ inputs.deploy_helm_chart }}
+    needs: [resolve_version, deploy]
+    if: ${{ always() && inputs.deploy_helm_chart && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped') }}
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -285,8 +285,8 @@ jobs:
         uses: actions/deploy-pages@v4
 
   deploy-to-npm:
-    needs: [resolve_version]
-    if: ${{ inputs.deploy_to_npm }}
+    needs: [resolve_version, deploy]
+    if: ${{ always() && inputs.deploy_to_npm && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -314,8 +314,8 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   deploy-to-pypi:
-    needs: [resolve_version]
-    if: ${{ inputs.deploy_to_pypi }}
+    needs: [resolve_version, deploy]
+    if: ${{ always() && inputs.deploy_to_pypi && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
