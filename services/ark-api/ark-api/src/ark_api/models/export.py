@@ -1,6 +1,6 @@
 """Export models for Ark API."""
 from datetime import datetime
-from typing import List, Optional, Dict, Any, Literal
+from typing import List, Optional, Dict, Any, Literal, get_args
 from pydantic import BaseModel, Field
 
 
@@ -16,17 +16,7 @@ ResourceType = Literal[
     "evaluations"
 ]
 
-ALL_RESOURCE_TYPES = [
-    "agents",
-    "teams",
-    "models",
-    "queries",
-    "a2a",
-    "mcpservers",
-    "workflows",
-    "evaluators",
-    "evaluations"
-]
+ALL_RESOURCE_TYPES = list(get_args(ResourceType))
 
 
 class ExportRequest(BaseModel):
