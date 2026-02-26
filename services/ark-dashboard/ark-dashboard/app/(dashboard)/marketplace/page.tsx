@@ -1,6 +1,6 @@
 'use client';
 
-import { Filter, Search, Users } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Filter, Search, Users } from 'lucide-react';
 import { useState } from 'react';
 
 import { PageHeader } from '@/components/common/page-header';
@@ -8,20 +8,32 @@ import { MarketplaceSection } from '@/components/sections/marketplace-section';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import type {
   MarketplaceCategory,
   MarketplaceFilters,
   MarketplaceItemType,
 } from '@/lib/api/generated/marketplace-types';
+import { useGetMarketplaceItems } from '@/lib/services/marketplace-hooks';
 import { cn } from '@/lib/utils';
 
 export default function MarketplacePage() {
   const [filters, setFilters] = useState<MarketplaceFilters>({});
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTab, setSelectedTab] = useState<'public' | 'internal'>(
-    'public',
-  );
+  const [selectedTab, setSelectedTab] = useState<'public' | 'internal'>('public');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 9;
+
+  const { data } = useGetMarketplaceItems(filters);
+
+  const totalItems = data?.items.length || 0;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentItems = data?.items.slice(startIndex, endIndex) || [];
+
+  const pageTitle = data ? `Marketplace (${data.items.length})` : 'Marketplace';
 
   const handleSearch = (value: string) => {
     setSearchQuery(value);
@@ -61,51 +73,51 @@ export default function MarketplacePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-950">
-      <PageHeader currentPage="Marketplace" />
-      <main className="container mx-auto px-6 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white">Marketplace</h1>
-        </div>
-
-        {/* Tabs and Search */}
-        <div className="mb-8 flex items-center justify-between">
-          <Tabs
-            value={selectedTab}
-            onValueChange={v => setSelectedTab(v as 'public' | 'internal')}>
-            <TabsList className="bg-gray-900">
-              <TabsTrigger value="public" className="flex items-center gap-2">
-                Public <span className="text-gray-500">(6)</span>
-              </TabsTrigger>
-              <TabsTrigger value="internal" className="flex items-center gap-2">
-                Internal <span className="text-gray-500">(1)</span>
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-          <div className="flex items-center gap-4">
+    <>
+      <PageHeader
+        breadcrumbs={BASE_BREADCRUMBS}
+        currentPage="Marketplace"
+        actions={
+          <div className="flex items-center gap-2">
             <div className="relative">
-              <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="search"
                 placeholder="Search marketplace..."
                 value={searchQuery}
                 onChange={e => handleSearch(e.target.value)}
-                className="w-[300px] border-gray-800 bg-gray-900 pl-10 text-white placeholder-gray-500"
+                className="w-[300px] pl-10"
               />
             </div>
-            <Button
-              variant="outline"
-              size="icon"
-              className="border-gray-800 bg-gray-900 text-gray-400">
+            <Button variant="outline" size="icon">
               <Filter className="h-4 w-4" />
             </Button>
           </div>
+        }
+      />
+      <div className="flex flex-1 flex-col">
+        <div>
+          <h1 className="text-xl">{pageTitle}</h1>
+        </div>
+
+        {/* Tabs for Public/Internal */}
+        <div className="mb-4 mt-4">
+          <Tabs
+            value={selectedTab}
+            onValueChange={v => setSelectedTab(v as 'public' | 'internal')}>
+            <TabsList>
+              <TabsTrigger value="public" className="flex items-center gap-2">
+                Public <span className="text-muted-foreground">(6)</span>
+              </TabsTrigger>
+              <TabsTrigger value="internal" className="flex items-center gap-2">
+                Internal <span className="text-muted-foreground">(1)</span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
 
         {/* Category Filters */}
-        <div className="mb-8 flex items-center gap-2">
+        <div className="mb-4 flex items-center gap-2">
           <Button
             variant={selectedCategory === 'all' ? 'secondary' : 'ghost'}
             size="sm"
@@ -113,8 +125,8 @@ export default function MarketplacePage() {
             className={cn(
               'h-8 px-4',
               selectedCategory === 'all'
-                ? 'bg-gray-800 text-white hover:bg-gray-700'
-                : 'text-gray-400 hover:bg-gray-900 hover:text-white',
+                ? ''
+                : 'text-muted-foreground hover:text-foreground',
             )}>
             All
           </Button>
@@ -125,8 +137,8 @@ export default function MarketplacePage() {
             className={cn(
               'flex h-8 items-center gap-1.5 px-4',
               selectedCategory === 'agents'
-                ? 'bg-gray-800 text-white hover:bg-gray-700'
-                : 'text-gray-400 hover:bg-gray-900 hover:text-white',
+                ? ''
+                : 'text-muted-foreground hover:text-foreground',
             )}>
             <Users className="h-3.5 w-3.5" />
             Agents
@@ -138,8 +150,8 @@ export default function MarketplacePage() {
             className={cn(
               'flex h-8 items-center gap-1.5 px-4',
               selectedCategory === 'workflow'
-                ? 'bg-gray-800 text-white hover:bg-gray-700'
-                : 'text-gray-400 hover:bg-gray-900 hover:text-white',
+                ? ''
+                : 'text-muted-foreground hover:text-foreground',
             )}>
             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 16 16">
               <path
@@ -159,8 +171,8 @@ export default function MarketplacePage() {
             className={cn(
               'flex h-8 items-center gap-1.5 px-4',
               selectedCategory === 'services'
-                ? 'bg-gray-800 text-white hover:bg-gray-700'
-                : 'text-gray-400 hover:bg-gray-900 hover:text-white',
+                ? ''
+                : 'text-muted-foreground hover:text-foreground',
             )}>
             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 16 16">
               <rect
@@ -204,13 +216,43 @@ export default function MarketplacePage() {
           </Button>
         </div>
 
-        {/* Marketplace Items */}
         <MarketplaceSection
           filters={filters}
           showHeader={false}
           limit={undefined}
         />
-      </main>
-    </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="mt-6 flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              Showing {startIndex + 1}-{Math.min(endIndex, totalItems)} of {totalItems} items
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+
+              <span className="text-sm">
+                Page {currentPage} of {totalPages}
+              </span>
+
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
   );
 }

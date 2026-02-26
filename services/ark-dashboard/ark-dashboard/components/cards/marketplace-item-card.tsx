@@ -129,7 +129,7 @@ export function MarketplaceItemCard({
   return (
     <Card
       className={cn(
-        'group relative flex h-full flex-col border-gray-800 bg-gray-900 transition-all hover:border-gray-700',
+        'group relative flex h-full flex-col transition-all',
         className,
       )}>
       <CardHeader className="flex-none space-y-3">
@@ -139,10 +139,10 @@ export function MarketplaceItemCard({
             className={cn(
               'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium',
               item.type === 'service'
-                ? 'border-blue-500/30 bg-blue-500/10 text-blue-400'
+                ? 'border-blue-500/30 bg-blue-500/10 text-blue-500 dark:text-blue-400'
                 : item.category === 'agents'
-                  ? 'border-green-500/30 bg-green-500/10 text-green-400'
-                  : 'border-gray-700 bg-gray-800 text-gray-400',
+                  ? 'border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400'
+                  : 'border-border bg-muted text-muted-foreground',
             )}>
             {getTypeIcon(item.type)}
             <span className="capitalize">
@@ -153,10 +153,10 @@ export function MarketplaceItemCard({
 
         {/* Title and Description */}
         <div>
-          <CardTitle className="text-xl font-semibold text-white">
+          <CardTitle className="text-xl font-semibold">
             {item.name}
           </CardTitle>
-          <CardDescription className="mt-2 line-clamp-2 text-gray-400">
+          <CardDescription className="mt-2 line-clamp-2">
             {item.shortDescription}
           </CardDescription>
         </div>
@@ -170,14 +170,14 @@ export function MarketplaceItemCard({
               <Badge
                 key={tag}
                 variant="secondary"
-                className="border-0 bg-gray-800 px-2 py-0.5 text-xs text-gray-400">
+                className="px-2 py-0.5 text-xs">
                 {tag}
               </Badge>
             ))}
             {item.tags.length > 4 && (
               <Badge
                 variant="secondary"
-                className="border-0 bg-gray-800 px-2 py-0.5 text-xs text-gray-400">
+                className="px-2 py-0.5 text-xs">
                 +{item.tags.length - 4}
               </Badge>
             )}
@@ -187,12 +187,12 @@ export function MarketplaceItemCard({
 
       <CardFooter className="flex-none pt-4">
         <div className="flex w-full items-center justify-between">
-          <div className="text-xs text-gray-500">v{item.version}</div>
+          <div className="text-xs text-muted-foreground">v{item.version}</div>
 
           <Button
             variant="outline"
             size="sm"
-            className="h-8 border-gray-700 bg-transparent text-white hover:bg-gray-800"
+            className="h-8"
             onClick={handleInstall}
             disabled={isInstalling || localStatus === 'installed'}>
             {localStatus === 'installed' ? (
