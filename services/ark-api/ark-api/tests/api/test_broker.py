@@ -39,7 +39,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
     def test_get_traces_success(self, mock_async_client, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"traces": []}
@@ -68,7 +68,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
     def test_get_traces_connection_error(self, mock_async_client, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         mock_client_instance = AsyncMock()
         mock_client_instance.get = AsyncMock(side_effect=httpx.ConnectError("Connection failed"))
@@ -84,7 +84,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
     def test_get_traces_generic_error(self, mock_async_client, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         mock_client_instance = AsyncMock()
         mock_client_instance.get = AsyncMock(side_effect=Exception("Generic error"))
@@ -100,7 +100,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.proxy_sse_stream')
     def test_get_traces_watch(self, mock_proxy_sse, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         async def mock_stream():
             yield "data: test\n\n"
@@ -115,7 +115,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
     def test_get_trace_success(self, mock_async_client, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"trace_id": "123", "spans": []}
@@ -133,7 +133,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
     def test_get_traces_with_session_id(self, mock_async_client, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"traces": []}
@@ -153,7 +153,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.proxy_sse_stream')
     def test_get_trace_watch(self, mock_proxy_sse, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         async def mock_stream():
             yield "data: span1\n\n"
@@ -168,7 +168,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.proxy_sse_stream')
     def test_get_trace_watch_with_from_beginning(self, mock_proxy_sse, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         async def mock_stream():
             yield "data: span1\n\n"
@@ -185,7 +185,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
     def test_get_messages_success(self, mock_async_client, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"messages": []}
@@ -203,7 +203,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
     def test_get_messages_with_conversation_id(self, mock_async_client, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"messages": [{"id": "1"}]}
@@ -223,7 +223,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.proxy_sse_stream')
     def test_get_messages_watch(self, mock_proxy_sse, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         async def mock_stream():
             yield "data: message\n\n"
@@ -238,7 +238,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
     def test_get_chunks_success(self, mock_async_client, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"statistics": {}}
@@ -256,7 +256,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.proxy_sse_stream')
     def test_get_chunks_watch(self, mock_proxy_sse, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         async def mock_stream():
             yield "data: chunk\n\n"
@@ -271,7 +271,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.proxy_sse_stream')
     def test_get_chunks_watch_with_query_id(self, mock_proxy_sse, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         async def mock_stream():
             yield "data: chunk\n\n"
@@ -289,7 +289,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
     def test_purge_traces_success(self, mock_async_client, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"success": True}
@@ -318,7 +318,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
     def test_purge_traces_connection_error(self, mock_async_client, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         mock_client_instance = AsyncMock()
         mock_client_instance.delete = AsyncMock(side_effect=httpx.ConnectError("Connection failed"))
@@ -334,7 +334,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
     def test_get_events_success(self, mock_async_client, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"events": []}
@@ -363,7 +363,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
     def test_get_events_connection_error(self, mock_async_client, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         mock_client_instance = AsyncMock()
         mock_client_instance.get = AsyncMock(side_effect=httpx.ConnectError("Connection failed"))
@@ -379,7 +379,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
     def test_get_events_generic_error(self, mock_async_client, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         mock_client_instance = AsyncMock()
         mock_client_instance.get = AsyncMock(side_effect=Exception("Generic error"))
@@ -395,7 +395,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
     def test_get_events_with_session_id(self, mock_async_client, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"events": [{"id": "1"}]}
@@ -415,7 +415,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.proxy_sse_stream')
     def test_get_events_watch(self, mock_proxy_sse, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         async def mock_stream():
             yield "data: event\n\n"
@@ -430,7 +430,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
     def test_get_events_with_query_id(self, mock_async_client, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"events": [{"id": "1"}]}
@@ -450,7 +450,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.proxy_sse_stream')
     def test_get_events_watch_with_query_id(self, mock_proxy_sse, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         async def mock_stream():
             yield "data: event\n\n"
@@ -468,7 +468,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
     def test_purge_events_success(self, mock_async_client, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"success": True}
@@ -497,7 +497,7 @@ class TestBrokerAPI(unittest.TestCase):
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
     def test_purge_events_connection_error(self, mock_async_client, mock_get_broker_url):
-        mock_get_broker_url.return_value = "http://broker:8080"
+        mock_get_broker_url.return_value = "https://broker:8080"
 
         mock_client_instance = AsyncMock()
         mock_client_instance.delete = AsyncMock(side_effect=httpx.ConnectError("Connection failed"))
@@ -580,7 +580,7 @@ class TestHelperFunctions(unittest.IsolatedAsyncioTestCase):
             mock_async_client.return_value = mock_client
 
             result = []
-            async for chunk in proxy_sse_stream("http://broker:8080/traces"):
+            async for chunk in proxy_sse_stream("https://broker:8080/traces"):
                 result.append(chunk)
 
             self.assertEqual(len(result), 2)
@@ -610,7 +610,7 @@ class TestHelperFunctions(unittest.IsolatedAsyncioTestCase):
             mock_async_client.return_value = mock_client_context
 
             result = []
-            async for chunk in proxy_sse_stream("http://broker:8080/traces"):
+            async for chunk in proxy_sse_stream("https://broker:8080/traces"):
                 result.append(chunk)
 
             self.assertEqual(len(result), 1)
@@ -629,7 +629,7 @@ class TestHelperFunctions(unittest.IsolatedAsyncioTestCase):
             mock_async_client.return_value = mock_client
 
             result = []
-            async for chunk in proxy_sse_stream("http://broker:8080/traces"):
+            async for chunk in proxy_sse_stream("https://broker:8080/traces"):
                 result.append(chunk)
 
             self.assertEqual(len(result), 1)
@@ -649,7 +649,7 @@ class TestHelperFunctions(unittest.IsolatedAsyncioTestCase):
             mock_async_client.return_value = mock_client_context
 
             result = []
-            async for chunk in proxy_sse_stream("http://broker:8080/traces"):
+            async for chunk in proxy_sse_stream("https://broker:8080/traces"):
                 result.append(chunk)
 
             self.assertEqual(len(result), 1)
@@ -722,8 +722,8 @@ class TestSanitizeForLog(unittest.TestCase):
     def test_sanitize_for_log_safe_string(self):
         from ark_api.api.v1.broker import sanitize_for_log
 
-        result = sanitize_for_log("http://broker:8080/traces?limit=100")
-        self.assertEqual(result, "http://broker:8080/traces?limit=100")
+        result = sanitize_for_log("https://broker:8080/traces?limit=100")
+        self.assertEqual(result, "https://broker:8080/traces?limit=100")
 
     def test_sanitize_for_log_alphanumeric(self):
         from ark_api.api.v1.broker import sanitize_for_log
