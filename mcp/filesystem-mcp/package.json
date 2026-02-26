@@ -20,7 +20,7 @@
     "@modelcontextprotocol/sdk": "^1.18.1",
     "diff": "^8.0.3",
     "express": "^4.19.2",
-    "minimatch": "^10.2.1",
+    "minimatch": "^10.2.3",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.23.5"
   },

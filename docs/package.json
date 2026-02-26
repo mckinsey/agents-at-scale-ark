@@ -43,6 +43,7 @@
   },
   "overrides": {
     "undici": "^7.18.2",
-    "rollup": "4.59.0"
+    "rollup": "4.59.0",
+    "minimatch": "^10.2.3"
   }
 }
