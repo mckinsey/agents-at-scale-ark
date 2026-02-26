@@ -21,10 +21,8 @@ export default {
   troubleshooting: 'Troubleshooting',
   'utility-images': 'Utility Images',
 
-  '---rfcs': { type: 'separator', title: 'RFCs' },
+  '---a2a': { type: 'separator', title: 'A2A Transport' },
   'a2a-native-execution': 'A2A Native Execution',
-  'a2a-v1-implementation': 'A2A Experimental V1 Implementation',
-  'a2a-v1-next-actions': 'A2A V1 Next Actions',
   'a2a-streaming-responses-primer': 'A2A Task Streaming + Responses Primer',
 
   '---project': { type: 'separator', title: 'Project' },

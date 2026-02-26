@@ -289,24 +289,6 @@ type delegatedInvocation struct {
 	contextID    string
 }
 
-func resolveDelegationMode(_ context.Context, _ map[string]string) string {
-	return A2APayloadModeNative
-}
-
-func parseLegacyDelegationInput(arguments map[string]any, targetType, targetName string) (delegatedInvocation, string, error) {
-	input, exists := arguments["input"]
-	if !exists {
-		return delegatedInvocation{}, "input parameter is required", fmt.Errorf("input parameter is required for %s tool %s", targetType, targetName)
-	}
-	inputStr, ok := input.(string)
-	if !ok {
-		return delegatedInvocation{}, "input parameter must be a string", fmt.Errorf("input parameter must be a string for %s tool %s", targetType, targetName)
-	}
-	return delegatedInvocation{
-		userInput: NewUserMessage(inputStr),
-		history:   []Message{},
-	}, "", nil
-}
 
 func parseA2AMessageArgument(rawValue any) (protocol.Message, error) {
 	rawJSON, err := json.Marshal(rawValue)
@@ -480,15 +462,11 @@ func parseNativeDelegationInput(arguments map[string]any, targetType, targetName
 	return invocation, "", nil
 }
 
-func parseDelegatedInvocation(arguments map[string]any, payloadMode, targetType, targetName string) (delegatedInvocation, string, error) {
-	if payloadMode == A2APayloadModeNative {
-		return parseNativeDelegationInput(arguments, targetType, targetName)
-	}
-	return parseLegacyDelegationInput(arguments, targetType, targetName)
+func parseDelegatedInvocation(arguments map[string]any, targetType, targetName string) (delegatedInvocation, string, error) {
+	return parseNativeDelegationInput(arguments, targetType, targetName)
 }
 
-func applyDelegationContext(ctx context.Context, payloadMode, contextID string) context.Context {
-	_ = payloadMode
+func applyDelegationContext(ctx context.Context, contextID string) context.Context {
 	ctx = WithA2APayloadMode(ctx, A2APayloadModeNative)
 	if contextID == "" {
 		return ctx
@@ -503,8 +481,7 @@ func buildToolStepID(toolCallID string) string {
 	return fmt.Sprintf("tool-step:%s", toolCallID)
 }
 
-func getDelegationEventStream(ctx context.Context, payloadMode string, call ToolCall) EventStreamInterface {
-	_ = payloadMode
+func getDelegationEventStream(ctx context.Context, call ToolCall) EventStreamInterface {
 	base := GetToolEventStream(ctx)
 	if base == nil {
 		return nil
@@ -654,8 +631,7 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolRes
 		}, fmt.Errorf("failed to parse tool arguments: %v", err)
 	}
 
-	payloadMode := resolveDelegationMode(ctx, a.AgentCRD.Annotations)
-	invocation, userError, err := parseDelegatedInvocation(arguments, payloadMode, "agent", a.AgentName)
+	invocation, userError, err := parseDelegatedInvocation(arguments, "agent", a.AgentName)
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,
@@ -673,8 +649,8 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolRes
 		}, err
 	}
 
-	execCtx := applyDelegationContext(ctx, payloadMode, invocation.contextID)
-	eventStream := getDelegationEventStream(ctx, payloadMode, call)
+	execCtx := applyDelegationContext(ctx, invocation.contextID)
+	eventStream := getDelegationEventStream(ctx, call)
 	result, err := agent.ExecuteA2A(execCtx, invocation.a2aUserInput, invocation.a2aHistory, nil, eventStream)
 	if err != nil {
 		return ToolResult{
@@ -738,8 +714,7 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResu
 		}, fmt.Errorf("failed to parse tool arguments: %v", err)
 	}
 
-	payloadMode := resolveDelegationMode(ctx, t.TeamCRD.Annotations)
-	invocation, userError, err := parseDelegatedInvocation(arguments, payloadMode, "team", t.TeamName)
+	invocation, userError, err := parseDelegatedInvocation(arguments, "team", t.TeamName)
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,
@@ -757,8 +732,8 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResu
 		}, err
 	}
 
-	execCtx := applyDelegationContext(ctx, payloadMode, invocation.contextID)
-	eventStream := getDelegationEventStream(ctx, payloadMode, call)
+	execCtx := applyDelegationContext(ctx, invocation.contextID)
+	eventStream := getDelegationEventStream(ctx, call)
 	result, err := team.ExecuteA2A(execCtx, invocation.a2aUserInput, invocation.a2aHistory, nil, eventStream)
 	if err != nil {
 		return ToolResult{
