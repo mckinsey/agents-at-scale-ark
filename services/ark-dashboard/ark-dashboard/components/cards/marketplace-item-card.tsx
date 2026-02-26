@@ -1,6 +1,6 @@
 'use client';
 
-import { Copy, Loader2, Terminal } from 'lucide-react';
+import { Bot, Copy, Loader2, Server, Terminal } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -119,48 +119,9 @@ export function MarketplaceItemCard({
 
   const getTypeIcon = (type: string) => {
     if (type === 'service') {
-      return (
-        <svg className="h-4 w-4" fill="none" viewBox="0 0 16 16">
-          <rect
-            x="2"
-            y="2"
-            width="5"
-            height="5"
-            rx="1"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          />
-          <rect
-            x="9"
-            y="2"
-            width="5"
-            height="5"
-            rx="1"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          />
-          <rect
-            x="2"
-            y="9"
-            width="5"
-            height="5"
-            rx="1"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          />
-          <rect
-            x="9"
-            y="9"
-            width="5"
-            height="5"
-            rx="1"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          />
-        </svg>
-      );
+      return <Server className="h-4 w-4" />;
     } else if (item.category === 'agents') {
-      return <Terminal className="h-4 w-4" />;
+      return <Bot className="h-4 w-4" />;
     }
     return null;
   };
