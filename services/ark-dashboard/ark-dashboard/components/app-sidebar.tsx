@@ -16,9 +16,9 @@ import {
   LogOut,
   Moon,
   MoreHorizontal,
-  Package,
   Server,
   Settings,
+  Store,
   Sun,
   Workflow,
   Wrench,
@@ -353,6 +353,15 @@ export function AppSidebar() {
             />
 
             <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={() => navigateToSection('marketplace')}
+                isActive={getCurrentSection() === 'marketplace'}>
+                <Store />
+                <span>Marketplace</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
               <Popover open={morePopoverOpen} onOpenChange={setMorePopoverOpen}>
                 <PopoverTrigger asChild>
                   <SidebarMenuButton isActive={morePopoverOpen}>
@@ -392,15 +401,6 @@ export function AppSidebar() {
                       className="hover:bg-accent hover:text-accent-foreground flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm">
                       <Download className="h-4 w-4" />
                       <span>Exports</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        navigateToSection('marketplace');
-                        setMorePopoverOpen(false);
-                      }}
-                      className="hover:bg-accent hover:text-accent-foreground flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm">
-                      <Package className="h-4 w-4" />
-                      <span>Marketplace</span>
                     </button>
                   </div>
                 </PopoverContent>
