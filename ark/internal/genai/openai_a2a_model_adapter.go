@@ -70,7 +70,7 @@ func (a *openAIA2AModelAdapter) A2ATurn(ctx context.Context, messages []protocol
 }
 
 func (a *openAIA2AModelAdapter) a2aTurnViaChatCompletionsEdge(ctx context.Context, messages []protocol.Message, toolOutcomes []A2AToolOutcome, tools []A2AToolDefinition, eventStream EventStreamInterface) (*A2ATurnResult, error) {
-	compatMessages, err := convertA2AMessagesToCompatExperimental(messages)
+	compatMessages, err := convertA2AMessagesToCompatMultimodal(messages)
 	if err != nil {
 		return nil, fmt.Errorf("adapter: failed to convert A2A messages to compat: %w", err)
 	}

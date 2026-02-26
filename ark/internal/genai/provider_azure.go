@@ -72,7 +72,7 @@ func (ap *AzureProvider) A2ATurnNative(
 	tools []A2AToolDefinition,
 	_ EventStreamInterface,
 ) (*A2ATurnResult, error) {
-	compatMessages, err := convertA2AMessagesToCompatExperimental(messages)
+	compatMessages, err := convertA2AMessagesToCompatMultimodal(messages)
 	if err != nil {
 		return nil, fmt.Errorf("azure native turn: failed to convert A2A messages: %w", err)
 	}

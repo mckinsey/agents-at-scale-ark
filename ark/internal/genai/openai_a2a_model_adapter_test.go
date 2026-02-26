@@ -419,7 +419,7 @@ func TestA2ATurnKeepsLegacyCompatMessageShapes(t *testing.T) {
 	assert.Len(t, provider.lastMessages[3].OfUser.Content.OfArrayOfContentParts, 0)
 }
 
-func TestConvertA2AMessagesToCompatExperimentalMatchesLegacyForTextOnlyTraffic(t *testing.T) {
+func TestConvertA2AMessagesToCompatMultimodalMatchesLegacyForTextOnlyTraffic(t *testing.T) {
 	messages := []protocol.Message{
 		protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
 			protocol.NewTextPart("system prompt"),
@@ -462,12 +462,12 @@ func TestConvertA2AMessagesToCompatExperimentalMatchesLegacyForTextOnlyTraffic(t
 
 	legacyMessages, err := convertA2AMessagesToCompat(messages)
 	require.NoError(t, err)
-	experimentalMessages, err := convertA2AMessagesToCompatExperimental(messages)
+	multimodalMessages, err := convertA2AMessagesToCompatMultimodal(messages)
 	require.NoError(t, err)
 
 	legacyJSON, err := json.Marshal(legacyMessages)
 	require.NoError(t, err)
-	experimentalJSON, err := json.Marshal(experimentalMessages)
+	experimentalJSON, err := json.Marshal(multimodalMessages)
 	require.NoError(t, err)
 	assert.JSONEq(t, string(legacyJSON), string(experimentalJSON))
 }

@@ -223,7 +223,7 @@ func (bm *BedrockModel) convertMessages(messages []openai.ChatCompletionMessageP
 	var systemPrompt string
 
 	for _, msg := range messages {
-		content, role := extractMessageContentExperimental(msg)
+		content, role := extractMessageContentMultimodal(msg)
 		if content == "" {
 			continue
 		}
@@ -366,7 +366,7 @@ func extractMessageContent(msg openai.ChatCompletionMessageParamUnion) (string, 
 	return "", ""
 }
 
-func extractMessageContentExperimental(msg openai.ChatCompletionMessageParamUnion) (string, string) {
+func extractMessageContentMultimodal(msg openai.ChatCompletionMessageParamUnion) (string, string) {
 	if content, role := extractMessageContent(msg); content != "" {
 		return content, role
 	}

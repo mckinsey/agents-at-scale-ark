@@ -395,7 +395,7 @@ func TestHTTPMemoryAddMessagesFormatCompat(t *testing.T) {
 	require.Nil(t, decoded.Messages[0]["parts"])
 }
 
-func TestHTTPMemoryAddMessagesCompatIgnoresExperimentalContext(t *testing.T) {
+func TestHTTPMemoryAddMessagesCompatIgnoresPayloadModeContext(t *testing.T) {
 	var requestBody []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == MessagesEndpoint && r.Method == http.MethodPost {
@@ -506,7 +506,7 @@ func TestHTTPMemoryGetMessagesReturnsOpenAIDirectly(t *testing.T) {
 	require.Equal(t, "hi there", ExtractTextFromMessage(messages[1]))
 }
 
-func TestHTTPMemoryGetMessagesRemainsLegacyWhenExperimentalEnabled(t *testing.T) {
+func TestHTTPMemoryGetMessagesRemainsLegacyWhenNonNativePayloadMode(t *testing.T) {
 	a2aUser := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
 		protocol.NewFilePartWithURI("diagram.png", "image/png", "https://example.com/diagram.png"),
 	})
@@ -566,7 +566,7 @@ func TestHTTPMemoryGetMessagesRemainsLegacyWhenExperimentalEnabled(t *testing.T)
 	require.Len(t, messages[0].OfUser.Content.OfArrayOfContentParts, 0)
 }
 
-func TestHTTPMemoryGetMessagesRemainsLegacyWhenExperimentalAndNativePayloadModeEnabled(t *testing.T) {
+func TestHTTPMemoryGetMessagesReturnsA2AWhenNativePayloadModeEnabled(t *testing.T) {
 	a2aUser := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
 		protocol.NewFilePartWithURI("diagram.png", "image/png", "https://example.com/diagram.png"),
 	})

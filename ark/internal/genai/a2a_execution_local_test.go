@@ -41,7 +41,7 @@ func (p *testChatCompletionProvider) ChatCompletionStream(ctx context.Context, m
 func (p *testChatCompletionProvider) SetOutputSchema(_ *runtime.RawExtension, _ string) {}
 
 func (p *testChatCompletionProvider) A2ATurnNative(_ context.Context, messages []protocol.Message, outcomes []A2AToolOutcome, _ []A2AToolDefinition, _ EventStreamInterface) (*A2ATurnResult, error) {
-	compatMessages, err := convertA2AMessagesToCompatExperimental(messages)
+	compatMessages, err := convertA2AMessagesToCompatMultimodal(messages)
 	if err != nil {
 		return nil, err
 	}
