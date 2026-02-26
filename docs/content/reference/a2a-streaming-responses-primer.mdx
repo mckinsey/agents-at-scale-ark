@@ -15,7 +15,7 @@ It describes conversion at **edge adapters** only:
 ## Version Assumptions
 
 - Runtime interoperability baseline is **A2A v0.3**.
-- V1 RC support is adapter-scoped and migration-oriented.
+- V1 RC support is adapter-scoped.
 - Streaming/event parsers may read both v0.3 and V1-style shapes, but serializers should emit an explicit configured shape.
 
 ## A2A Streaming Essentials
@@ -93,20 +93,15 @@ flowchart LR
 
 | Area | Status |
 | --- | --- |
-| Native A2A task streaming path | Implemented |
+| Native A2A task streaming path | Implemented (default) |
 | Task-first delegated streaming + correlation extension | Implemented |
-| Experimental V1 implementation and rollout docs | Published |
+| V1 adapter boundary contracts | Documented in [A2A Native Execution](/reference/a2a-native-execution#adapter-boundary-contracts) |
 | OpenAI Responses API adapter | Planned (tracked in issue #965) |
-| Default non-experimental compat path | Unchanged |
 
-This means current behavior remains:
-- A2A-native task streaming is available by default.
-- Responses API support should be implemented as an edge adapter, not as internal transport replacement.
+A2A-native task streaming is the default. Responses API support should be implemented as an edge adapter, not as internal transport replacement.
 
 ## References
 
 - [A2A Native Execution](/reference/a2a-native-execution)
-- [A2A Experimental V1 Implementation](/reference/a2a-v1-implementation)
-- [A2A V1 Next Actions](/reference/a2a-v1-next-actions)
 - [A2A Protocol Specification](https://raw.githubusercontent.com/a2aproject/A2A/main/docs/specification.md)
 - [Issue #965: Response API adapter](https://github.com/mckinsey/agents-at-scale-ark/issues/965)

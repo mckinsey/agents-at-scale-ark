@@ -201,7 +201,7 @@ func (t *Team) GetDescription() string {
 }
 
 func MakeTeam(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Team, telemetryProvider telemetry.Provider, eventingProvider eventing.Provider) (*Team, error) {
-	members, _, err := loadTeamMembers(ctx, k8sClient, crd, telemetryProvider, eventingProvider)
+	members, err := loadTeamMembers(ctx, k8sClient, crd, telemetryProvider, eventingProvider)
 	if err != nil {
 		return nil, err
 	}
@@ -223,22 +223,18 @@ func MakeTeam(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Tea
 	}, nil
 }
 
-func loadTeamMembers(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Team, telemetryProvider telemetry.Provider, eventingProvider eventing.Provider) ([]TeamMember, []map[string]string, error) {
+func loadTeamMembers(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Team, telemetryProvider telemetry.Provider, eventingProvider eventing.Provider) ([]TeamMember, error) {
 	members := make([]TeamMember, 0, len(crd.Spec.Members))
-	agentAnnotations := make([]map[string]string, 0, len(crd.Spec.Members))
 
 	for _, memberSpec := range crd.Spec.Members {
-		member, memberAnnotations, err := loadTeamMember(ctx, k8sClient, memberSpec, crd.Namespace, crd.Name, telemetryProvider, eventingProvider)
+		member, _, err := loadTeamMember(ctx, k8sClient, memberSpec, crd.Namespace, crd.Name, telemetryProvider, eventingProvider)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		members = append(members, member)
-		if memberAnnotations != nil {
-			agentAnnotations = append(agentAnnotations, memberAnnotations)
-		}
 	}
 
-	return members, agentAnnotations, nil
+	return members, nil
 }
 
 //nolint:dupl // A2A variant intentionally mirrors executeWithTracking for separate removability
@@ -354,7 +350,6 @@ func (t *Team) validateSelectorA2ACompatibility(ctx context.Context) error {
 	if err := t.Client.Get(ctx, key, &agentCRD); err != nil {
 		return fmt.Errorf("failed to validate selector agent %s for A2A team %s: %w", t.Selector.Agent, t.FullName(), err)
 	}
-	resolveA2AExecutionCapability(agentCRD.Spec.ExecutionEngine)
 	return nil
 }
 

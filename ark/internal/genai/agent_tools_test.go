@@ -633,25 +633,15 @@ func (c *captureToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolR
 	}, nil
 }
 
-func TestParseDelegatedInvocationCompat(t *testing.T) {
+func TestParseDelegatedInvocationWithStringInput(t *testing.T) {
 	args := map[string]any{
 		"input": "hello",
 	}
-	invocation, userError, err := parseDelegatedInvocation(args, A2APayloadModeCompat, "agent", "test-agent")
+	invocation, userError, err := parseDelegatedInvocation(args, "agent", "test-agent")
 	require.NoError(t, err)
 	require.Equal(t, "", userError)
-	require.Equal(t, RoleUser, resolveMessageRole(invocation.userInput))
-	require.Equal(t, "hello", ExtractTextFromMessage(invocation.userInput))
-	require.Len(t, invocation.history, 0)
-	require.Equal(t, "", invocation.contextID)
-}
-
-func TestParseDelegatedInvocationCompatRequiresInput(t *testing.T) {
-	args := map[string]any{}
-	_, userError, err := parseDelegatedInvocation(args, A2APayloadModeCompat, "agent", "test-agent")
-	require.Error(t, err)
-	require.Equal(t, "input parameter is required", userError)
-	require.Contains(t, err.Error(), "input parameter is required")
+	require.Equal(t, protocol.MessageRoleUser, invocation.a2aUserInput.Role)
+	require.Equal(t, "hello", ExtractA2ATextFromMessage(invocation.a2aUserInput))
 }
 
 func TestParseDelegatedInvocationNativeMessageHistoryContext(t *testing.T) {
@@ -681,7 +671,7 @@ func TestParseDelegatedInvocationNativeMessageHistoryContext(t *testing.T) {
 			"routingScope": "scope-123",
 		},
 	}
-	invocation, userError, err := parseDelegatedInvocation(args, A2APayloadModeNative, "agent", "test-agent")
+	invocation, userError, err := parseDelegatedInvocation(args, "agent", "test-agent")
 	require.NoError(t, err)
 	require.Equal(t, "", userError)
 	require.Equal(t, "ctx-123", invocation.contextID)
@@ -695,7 +685,7 @@ func TestParseDelegatedInvocationNativeFallsBackToInput(t *testing.T) {
 	args := map[string]any{
 		"input": "fallback input",
 	}
-	invocation, userError, err := parseDelegatedInvocation(args, A2APayloadModeNative, "team", "test-team")
+	invocation, userError, err := parseDelegatedInvocation(args, "team", "test-team")
 	require.NoError(t, err)
 	require.Equal(t, "", userError)
 	require.Equal(t, protocol.MessageRoleUser, invocation.a2aUserInput.Role)
@@ -719,7 +709,7 @@ func TestParseDelegatedInvocationNativeAppendsDelegatedInvocationPayload(t *test
 			"ticketId":       "01-generic-agent",
 		},
 	}
-	invocation, userError, err := parseDelegatedInvocation(args, A2APayloadModeNative, "agent", "test-agent")
+	invocation, userError, err := parseDelegatedInvocation(args, "agent", "test-agent")
 	require.NoError(t, err)
 	require.Equal(t, "", userError)
 	require.Contains(t, invocation.a2aUserInput.Extensions, A2ADelegatedToolExtensionKey)
@@ -834,7 +824,7 @@ func TestParseDelegatedInvocationNativeAllowsMissingDelegationParameters(t *test
 		},
 		"routingScope": "scope-123",
 	}
-	invocation, userError, err := parseDelegatedInvocation(args, A2APayloadModeNative, "agent", "test-agent")
+	invocation, userError, err := parseDelegatedInvocation(args, "agent", "test-agent")
 	require.NoError(t, err)
 	require.Equal(t, "", userError)
 	_, hasPayload := extractDataPayloadBySchema(invocation.a2aUserInput.Parts, A2APayloadSchemaDelegatedInvocationV1)
@@ -854,7 +844,7 @@ func TestParseDelegatedInvocationNativeInvalidContextID(t *testing.T) {
 		},
 		"contextId": 10,
 	}
-	_, userError, err := parseDelegatedInvocation(args, A2APayloadModeNative, "agent", "test-agent")
+	_, userError, err := parseDelegatedInvocation(args, "agent", "test-agent")
 	require.Error(t, err)
 	require.Equal(t, "contextId parameter must be a string", userError)
 	require.Contains(t, err.Error(), "contextId parameter must be a string")
@@ -878,7 +868,7 @@ func TestParseDelegatedInvocationNativeAllowsUnattributedMetadataKeys(t *testing
 			"routingScope": "scope-123",
 		},
 	}
-	invocation, userError, err := parseDelegatedInvocation(args, A2APayloadModeNative, "agent", "test-agent")
+	invocation, userError, err := parseDelegatedInvocation(args, "agent", "test-agent")
 	require.NoError(t, err)
 	require.Equal(t, "", userError)
 	require.Equal(t, "call-1", invocation.a2aUserInput.Metadata["ark.mckinsey.com/tool-call-id"])
@@ -897,7 +887,7 @@ func TestNormalizeContextIDRejectsExceedsMaxLength(t *testing.T) {
 	require.Contains(t, err.Error(), "exceeds max length")
 }
 
-func TestGetDelegationEventStreamNotGatedByPayloadMode(t *testing.T) {
+func TestGetDelegationEventStreamReturnsStreamWhenAvailable(t *testing.T) {
 	ctx := WithToolEventStream(context.Background(), &testToolEventStream{})
 	call := ToolCall{
 		ID: "call-1",
@@ -905,17 +895,13 @@ func TestGetDelegationEventStreamNotGatedByPayloadMode(t *testing.T) {
 			Name: "delegate-agent",
 		},
 	}
-	compatStream := getDelegationEventStream(ctx, A2APayloadModeCompat, call)
-	nativeStream := getDelegationEventStream(ctx, A2APayloadModeNative, call)
-	require.NotNil(t, compatStream)
-	require.NotNil(t, nativeStream)
+	stream := getDelegationEventStream(ctx, call)
+	require.NotNil(t, stream)
 }
 
-func TestApplyDelegationContextAlwaysSetsNativePayloadMode(t *testing.T) {
-	nativeCtx := applyDelegationContext(context.Background(), A2APayloadModeNative, "")
-	require.Equal(t, A2APayloadModeNative, GetA2APayloadModeFromContext(nativeCtx))
-	compatCtx := applyDelegationContext(context.Background(), A2APayloadModeCompat, "")
-	require.Equal(t, A2APayloadModeNative, GetA2APayloadModeFromContext(compatCtx))
+func TestApplyDelegationContextSetsNativePayloadMode(t *testing.T) {
+	ctx := applyDelegationContext(context.Background(), "")
+	require.Equal(t, A2APayloadModeNative, GetA2APayloadModeFromContext(ctx))
 }
 
 func TestBuildDelegatedToolResultContentBuildsTypedPayload(t *testing.T) {
@@ -1041,7 +1027,7 @@ func TestDelegatedStreamBridgeAnnotatesDownstreamEvents(t *testing.T) {
 			Name: "delegate-agent",
 		},
 	}
-	stream := getDelegationEventStream(ctx, A2APayloadModeNative, call)
+	stream := getDelegationEventStream(ctx, call)
 	require.NotNil(t, stream)
 
 	statusMessage := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
@@ -1104,7 +1090,7 @@ func TestDelegatedStreamBridgeAnnotatesMessageEvents(t *testing.T) {
 			Name: "delegate-agent",
 		},
 	}
-	stream := getDelegationEventStream(ctx, A2APayloadModeNative, call)
+	stream := getDelegationEventStream(ctx, call)
 	require.NotNil(t, stream)
 
 	message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
@@ -1129,7 +1115,7 @@ func TestDelegatedStreamBridgeWithEmptyToolCallIDOmitStepID(t *testing.T) {
 			Name: "delegate-agent",
 		},
 	}
-	stream := getDelegationEventStream(ctx, A2APayloadModeNative, call)
+	stream := getDelegationEventStream(ctx, call)
 	require.NotNil(t, stream)
 
 	message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{

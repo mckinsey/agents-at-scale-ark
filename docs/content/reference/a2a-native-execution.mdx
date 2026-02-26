@@ -1,23 +1,16 @@
 ---
-title: "A2A Native Execution: Internal Transport RFC"
+title: "A2A Native Execution: Internal Transport"
 description: A2A as Ark's canonical internal transport with protocol conversion at edges
 ---
 
-import { Callout } from 'nextra/components'
-
 # A2A Native Execution
-
-<Callout type="warning">
-**Experimental / RFC.** This feature is subject to change or withdrawal without notice. Do not depend on it for production workloads without accepting the risk of breaking changes.
-</Callout>
 
 | Field | Value |
 |-------|-------|
-| **Status** | Experimental |
+| **Status** | Default |
 | **Author** | Drew Foxall |
 | **Date** | 2026-02-13 |
-| **PRs** | [#1060](https://github.com/mckinsey/agents-at-scale-ark/pull/1060), [#1092](https://github.com/mckinsey/agents-at-scale-ark/pull/1092) |
-| **Annotations** | `ark.mckinsey.com/execution-mode` |
+| **PRs** | [#1060](https://github.com/mckinsey/agents-at-scale-ark/pull/1060), [#1092](https://github.com/mckinsey/agents-at-scale-ark/pull/1092), [#1215](https://github.com/mckinsey/agents-at-scale-ark/pull/1215), [#1232](https://github.com/mckinsey/agents-at-scale-ark/pull/1232) |
 
 ---
 
@@ -33,14 +26,14 @@ As of the payload-only cutover, Ark treats A2A `parts` as the only transport for
 
 ## Executive Summary
 
-This RFC proposes adopting **A2A as Ark's canonical internal transport format**, with protocol conversion happening at system edges.
+Ark uses **A2A as its canonical internal transport format**, with protocol conversion happening at system edges.
 
-### Current State
+### Background
 
-Ark currently uses **OpenAI Chat Completions API format** (`ChatCompletionMessageParamUnion`) as its internal message representation. This creates friction when:
-- Integrating A2A-native agents (requires conversion on every message)
-- Supporting non-OpenAI models (forces OpenAI-shaped abstractions)
-- Delegating between agents (loses semantic richness)
+Ark previously used **OpenAI Chat Completions API format** (`ChatCompletionMessageParamUnion`) as its internal message representation. This created friction when:
+- Integrating A2A-native agents (required conversion on every message)
+- Supporting non-OpenAI models (forced OpenAI-shaped abstractions)
+- Delegating between agents (lost semantic richness)
 
 ### Proposed Architecture
 
@@ -95,7 +88,7 @@ Issue #965 proposes adding OpenAI Response API support. This is valuable for Ope
 
 | Aspect | Chat Completions | Response API | A2A |
 |--------|-----------------|--------------|-----|
-| **Current Ark status** | In use (internal) | Not implemented | Experimental |
+| **Current Ark status** | Edge adapter | Not implemented | Default internal transport |
 | **Message format** | `{role, content}` | `{role, content[]}` | `{role, parts[]}` |
 | **Multi-modal** | Via content array | Native | Native |
 | **Agent discovery** | None | None | AgentCard spec |
@@ -123,7 +116,7 @@ Issue #965 proposes adding OpenAI Response API support. This is valuable for Ope
 
 | Limitation | Mitigation |
 |------------|------------|
-| **Emerging standard** | Opt-in via annotation; OpenAI path unchanged |
+| **Emerging standard** | Edge adapters maintain full Chat Completions compatibility |
 | **Smaller ecosystem** | Edge adapters maintain Chat Completions compatibility |
 | **No built-in features** | Response API's code interpreter/file search require explicit tool implementations |
 | **Learning curve** | Internal change; external APIs remain familiar |
@@ -148,7 +141,7 @@ type EdgeAdapter interface {
 
 | Edge | Adapter | Direction | Status |
 |------|---------|-----------|--------|
-| **OpenAI Chat Completions** | `ChatCompletionsAdapter` | Bidirectional | Current (to be edge-only) |
+| **OpenAI Chat Completions** | `ChatCompletionsAdapter` | Bidirectional | Implemented (edge-only) |
 | **OpenAI Response API** | `ResponseAPIAdapter` | Bidirectional | Planned (#965) |
 | **External A2A Agents** | Passthrough | Native | Implemented |
 | **A2A Gateway (ark-api)** | Passthrough | Native | Implemented |
@@ -206,20 +199,15 @@ delegationMsg := protocol.Message{
 
 ### Default Behavior
 
-Agent and team execution use A2A internal transport by default.
-
-`ark.mckinsey.com/execution-mode: "a2a"` is not required to enable A2A behavior.
+Agent and team execution use A2A internal transport unconditionally. No annotation or configuration is required.
 
 ### Internal Execution Flow
 
-In default A2A mode:
-
 1. **Query Input**: `GetQueryInputA2AMessages` returns `[]protocol.Message` directly
 2. **Agent Execution**: Routes through capability resolution:
-   - A2A execution engine → `ExecuteNative`
-   - Native external engines → `/execute-a2a` endpoint
-   - Model-backed agents → native local A2A loop (convert only at model boundary)
-   - OpenAI-compatible executors → compat wrapper
+   - Reserved "a2a" engine → `ExecuteNative` (direct A2A task execution)
+   - Named external engines → `ExecutionEngineA2AClient.ExecuteA2A` (A2A SendMessage protocol)
+   - Model-backed agents (no engine) → native local A2A loop (convert only at model boundary)
 3. **Team Strategies**: `executeSequentialA2A`, `executeRoundRobinA2A`, etc.
 4. **Memory**: `AddA2AMessages` / `GetA2AMessages` (native format)
 5. **Tool Delegation**: `ExecuteA2A` with structured metadata
@@ -259,16 +247,16 @@ Even with A2A internal, model calls require format conversion:
 
 This conversion is unavoidable—models speak their native formats. The key improvement is that this conversion happens **only at model boundaries**, not throughout the internal execution flow.
 
-### External Behavior by Mode
+### Execution Surface
 
-| Surface | Disabled (Chat Completions) | Enabled (A2A Native) |
-|---------|----------------------------|---------------------|
-| Query input | `GetQueryInputMessages` | `GetQueryInputA2AMessages` |
-| Internal payload | OpenAI format | `protocol.Message` |
-| Memory writes | `AddMessages` (OpenAI JSON) | `AddA2AMessages` (A2A JSON) |
-| Memory reads | `GetMessages` | `GetA2AMessages` (reads both) |
-| Delegation | `input` string | A2A message + typed data parts |
-| Response | OpenAI JSON | A2A JSON |
+| Surface | Behavior |
+|---------|----------|
+| Query input | `GetQueryInputA2AMessages` → `[]protocol.Message` |
+| Internal payload | `protocol.Message` end-to-end |
+| Memory writes | `AddA2AMessages` (A2A JSON) |
+| Memory reads | `GetA2AMessages` (reads both A2A and legacy OpenAI formats) |
+| Delegation | A2A message + typed data parts (legacy `input` string fallback supported) |
+| Response | A2A JSON (compat conversion available at controller boundary) |
 
 ---
 
@@ -392,19 +380,16 @@ A2A defines **how agents communicate**. Aggregation defines **how queries are st
 
 ---
 
-## Part 7: Migration and Compatibility
+## Part 7: Compatibility
 
 ### Version Support Contract
 
-Ark currently supports **A2A v0.3 wire interoperability** as the production baseline.
+Ark supports **A2A v0.3 wire interoperability** as the production baseline.
 
-V1 RC work is intentionally **adapter-scoped**:
+V1 RC work is **adapter-scoped**:
 
 - Read both v0.3 and V1-compatible shapes where practical at protocol boundaries.
 - Emit versioned payload shapes intentionally, not by implicit fallback.
-- Keep default non-experimental Chat Completions and compat behavior unchanged.
-
-This keeps migration additive: v0.3 remains the runtime contract today, while V1 adoption is staged through explicit adapter and serializer changes.
 
 ### Memory Compatibility
 
@@ -412,23 +397,47 @@ This keeps migration additive: v0.3 remains the runtime contract today, while V1
 - Legacy: `{"role": "user", "content": "text"}`
 - A2A: `{"role": "user", "parts": [{"type": "text", "text": "..."}]}`
 
-Existing OpenAI-format memory remains readable after enabling A2A mode.
+Existing OpenAI-format memory remains readable. No migration is required for stored messages.
 
-### Revert Path
+### Execution Engine Compatibility
 
-Disabling the annotation restores Chat Completions behavior immediately.
+All execution engines communicate via A2A SendMessage protocol. PR #1215 established this as the single engine contract — engines no longer declare a type field. The `ExecutionEngineA2AClient` handles all external engine communication.
 
-If the experiment is withdrawn, removal is isolated to additive functions:
+### Chat Completions Compatibility
 
-| Component | Functions to remove |
-|-----------|-------------------|
-| Controller | `executeAgentA2A`, `executeTeamA2A` |
-| Agent | `ExecuteA2A`, capability routing |
-| Team | `executeSequentialA2A`, `executeRoundRobinA2A`, etc. |
-| Memory | `AddA2AMessages`, `GetA2AMessages` |
-| Edge Adapters | Can remain for external A2A support |
+OpenAI Chat Completions format is maintained at edge boundaries:
+- The controller can serialize responses in compat (OpenAI) format when needed
+- Model provider adapters convert between A2A and provider-specific formats at the model boundary
+- Legacy delegation input (`input` string) is still accepted with automatic conversion to A2A
 
-The Chat Completions path remains intact and requires no changes on removal.
+### Adapter Boundary Contracts
+
+| Boundary | Behavior |
+| --- | --- |
+| `message_conversion.go` / `message_conversion_experimental.go` | Content-part-aware converters preserve text/image file parts across A2A and OpenAI compat messages |
+| `openai_a2a_model_adapter.go` + `a2a_execution_local.go` | Model adapter converts between A2A and provider-specific formats at the model boundary |
+| `execution_engine.go` | `ExecutionEngineA2AClient` uses A2A SendMessage protocol for all external engines |
+| `provider_bedrock.go` | Bedrock path extracts array content parts (`text`, `image_url`) and projects to Bedrock content |
+| `memory_http.go` | Native A2A flows use native message APIs; legacy OpenAI format remains readable |
+
+Lossless rules for all adapters:
+
+- Preserve part order for `parts[]` and content arrays.
+- Preserve `messageId`, `taskId`, and `contextId` when present.
+- Preserve task lifecycle state transitions in streaming mode.
+- Preserve delegated tool extension metadata (`https://ark.mckinsey.com/extensions/delegated-tool/v1`).
+
+### Verification Matrix
+
+| Area | Verification |
+| --- | --- |
+| Message conversion fidelity | `message_conversion_test.go` |
+| Adapter boundary usage | `openai_a2a_model_adapter_test.go` |
+| Native streaming event behavior | `a2a_streaming_integration_test.go` |
+| External engine boundary behavior | `execution_engine_native_test.go`, `execution_engine_test.go` |
+| Memory compatibility | `memory_http_test.go` |
+| Bedrock adapter | `provider_bedrock_test.go` |
+| Capability resolution | `executor_capability_test.go` |
 
 ---
 
@@ -502,21 +511,21 @@ This keeps the internal native path aligned with A2A task lifecycle semantics wh
 
 ---
 
-## Part 9: Implementation Roadmap
+## Part 9: Implementation Status
 
-### Phase 1: Foundation (Complete)
-- [x] A2A execution annotations (`ark.mckinsey.com/execution-mode`)
-- [x] Separate execution paths (`executeAgentA2A`, `executeTeamA2A`, `ExecuteA2A`)
+### Foundation (Complete)
+- [x] Unified execution paths (`executeAgentA2A`, `executeTeamA2A`, `ExecuteA2A`)
 - [x] Native memory operations (`AddA2AMessages`, `GetA2AMessages` in MemoryInterface)
-- [x] Compat wrapper for existing executors (`executionCapabilityOpenAICompat`)
-- [x] Capability resolution (`resolveA2AExecutionCapability` with engine type routing)
+- [x] Capability resolution (`resolveA2AExecutionCapability` — routes by engine reference)
 - [x] Native local A2A execution loop (`executeLocallyA2ANative`)
 - [x] Dedicated A2A local engine (`A2ALocalEngine`) decoupled from OpenAI types
 - [x] Provider-neutral model interface (`A2AModelProvider`) with OpenAI adapter (`OpenAIA2AModelAdapter`)
 - [x] A2A tool call types (`A2AToolCall`, `A2AToolDefinition`) without OpenAI dependency
 - [x] Hard-fail for unsupported providers (`ErrA2AModelProviderNotSupported`)
+- [x] All execution engines via A2A SendMessage protocol (`ExecutionEngineA2AClient`)
+- [x] Removed experimental switches and annotation-based opt-in
 
-### Phase 2: Streaming (Largely Complete)
+### Streaming (Largely Complete)
 - [x] Native A2A SSE streaming (`streamA2AEvent` with `A2APayloadModeNative` passthrough)
 - [x] TaskStatusUpdateEvent handling (`handleTaskStatusUpdateEvent`, `BuildNativeStreamCompletionEvent`)
 - [x] Direct event forwarding in native mode (no OpenAI chunk conversion)
@@ -524,39 +533,49 @@ This keeps the internal native path aligned with A2A task lifecycle semantics wh
 - [ ] End-to-end streaming validation across all team strategies
 - [ ] Streaming resumption after network interruption
 
-### Phase 3: Edge Adapters (Planned)
+### Edge Adapters (Planned)
 - [ ] Response API adapter (#965)
 - [ ] Formalize ChatCompletions adapter as explicit boundary
 - [ ] Claude/Gemini model boundary adapters (currently: conversion at model call)
 
-### Phase 4: Composability (In Progress)
-- [x] Structured agent-as-tool delegation (#1082) - Schema exposed for `message`, `history`, `contextId`
+### Composability (In Progress)
+- [x] Structured agent-as-tool delegation (#1082) — Schema exposed for `message`, `history`, `contextId`
 - [x] Delegated invocation payload contract (`https://ark.mckinsey.com/payloads/delegated-invocation/v1`)
 - [x] Task-first delegated stream forwarding (status/artifact/message passthrough + typed step-event parts)
 - [x] Structured native tool outcomes (`A2AToolOutcome`) replacing synthetic tool-result message dependency
 - [ ] History propagation extension
 - [ ] Identity/permissions extension
 
-### Experimental Multimodal Boundary
+### Multimodal Boundary
 
-Experimental multimodal handling is implemented only at A2A-native adapter boundaries.
+Multimodal handling is implemented at A2A-native adapter boundaries:
 
-- Default completions conversion paths remain unchanged, including shared memory and compat decode surfaces.
-- `GetMessages(...)` remains legacy conversion (`A2AToOpenAIMessage`) with no experimental branching.
-- Shared compat decode remains string-only (`convertFromExecutionEngineMessage(...)`), while `contentParts` decode is experimental-only in `ExecuteA2A(...)`.
-- Experimental converter functions are additive and referenced only by experimental adapter call sites.
-- No compatibility fallback is added between native and compat paths.
+- Content-part-aware converters preserve text/image file parts across A2A and OpenAI compat messages.
+- Shared compat decode remains string-only while native decode supports structured `contentParts`.
+- No compatibility fallback between native and compat paths.
 
-### Rollback Checklist (Experimental Multimodal Additions)
+---
 
-If experimental multimodal handling must be removed, delete only the additive experimental surface:
+## Part 10: Next Actions
 
-1. Remove experimental converter files/functions under `ark/internal/genai` (for example `*experimental*` conversion helpers).
-2. Revert experimental-only call sites in A2A-native adapters back to existing legacy converters.
-3. Remove experimental-only tests that validate multimodal adapter boundaries.
-4. Keep default completions and compat converter paths unchanged.
+| Phase | Action | Tracking issues | Exit signal |
+| --- | --- | --- | --- |
+| P1 hardening | Expand interop/regression coverage for multimodal history, delegated tool flows, and memory/native boundary behavior | [#1059](https://github.com/mckinsey/agents-at-scale-ark/issues/1059), [#530](https://github.com/mckinsey/agents-at-scale-ark/issues/530) | Stable CI coverage across native and compat payload modes |
+| P1 hardening | Add boundary observability for payload mode, conversion path, and stream correlation IDs | [#1059](https://github.com/mckinsey/agents-at-scale-ark/issues/1059), [#1116](https://github.com/mckinsey/agents-at-scale-ark/issues/1116) | Events/metrics can trace request to task/message outcomes |
+| P1 hardening | Add resilience tests for stream interruption, partial event sequences, and recovery behavior | [#530](https://github.com/mckinsey/agents-at-scale-ark/issues/530), [#1059](https://github.com/mckinsey/agents-at-scale-ark/issues/1059) | Streaming behavior is deterministic under failure injection |
+| P2 edge adapter | Implement OpenAI Responses API adapter as an edge boundary (not internal canonical transport) | [#965](https://github.com/mckinsey/agents-at-scale-ark/issues/965), [#630](https://github.com/mckinsey/agents-at-scale-ark/issues/630), [#1028](https://github.com/mckinsey/agents-at-scale-ark/issues/1028) | Response API users get feature parity without changing internal A2A model |
+| P2 edge adapter | Validate round-trip mapping for task/message semantics and IDs (`taskId`, `contextId`, `messageId`) | [#530](https://github.com/mckinsey/agents-at-scale-ark/issues/530), [#965](https://github.com/mckinsey/agents-at-scale-ark/issues/965) | Adapter preserves lifecycle and correlation fidelity |
+| P3 extensions | Implement history propagation extension contract in A2A-native delegation | [#1059](https://github.com/mckinsey/agents-at-scale-ark/issues/1059) | Upstream/downstream history exchange is explicit and versioned |
+| P3 extensions | Implement identity and permissions extension contract for delegated calls | [#1059](https://github.com/mckinsey/agents-at-scale-ark/issues/1059), [#877](https://github.com/mckinsey/agents-at-scale-ark/issues/877) | Delegated execution carries identity context with enforcement hooks |
+| P3 tools and params | Continue tool parameter ergonomics and deterministic multi-turn tool orchestration | [#557](https://github.com/mckinsey/agents-at-scale-ark/issues/557), [#558](https://github.com/mckinsey/agents-at-scale-ark/issues/558), [#1082](https://github.com/mckinsey/agents-at-scale-ark/issues/1082), [#1116](https://github.com/mckinsey/agents-at-scale-ark/issues/1116) | Structured params and `valueFrom` flows work consistently in A2A-enabled teams |
 
-This keeps rollback bounded to additive code and preserves existing non-experimental behavior.
+### V0.3 Deprecation Timeline
+
+- Keep dual-shape adapter support (v0.3 and V1) available for at least **two minor releases**.
+- Mark v0.3 default-path deprecation in docs and release notes when V1 wire format becomes the default.
+- Remove v0.3 emission only after dual-release stability criteria are met.
+
+---
 
 #### Agent-as-Tool A2A Schema
 
@@ -584,13 +603,13 @@ inputSchema:
       description: "Context ID for stateful conversations"
 ```
 
-See `samples/a2a-experimental/agent-as-tool/coordinator-example.yaml` for complete examples
+See the agent-as-tool samples for complete examples
 
 ---
 
 ## Conclusion
 
-The proposal is straightforward:
+Ark uses A2A as its internal transport:
 
 1. **A2A as internal transport**: Rich, provider-agnostic message format
 2. **Edge adapters for compatibility**: Chat Completions, Response API, external A2A
@@ -602,7 +621,7 @@ This architecture enables:
 - Existing OpenAI workloads to continue unchanged (via edge adapters)
 - Future Response API support as another edge adapter
 
-The runtime now follows a single A2A-first execution path for agent and team targets.
+The runtime follows a single A2A-first execution path for all agent and team targets.
 
 ---
 
@@ -612,11 +631,11 @@ This section tracks related GitHub issues and how A2A-native execution plus file
 
 | Issue | Title | Tracking Note |
 | --- | --- | --- |
-| [#1059](https://github.com/mckinsey/agents-at-scale-ark/issues/1059) | feat: A2A native execution with capability routing, streaming, and composability | Primary umbrella for A2A-native architecture. Multimodal boundary work and AgentCard structured-delegation signaling keep experimental behavior additive, discoverable, and removable. |
+| [#1059](https://github.com/mckinsey/agents-at-scale-ark/issues/1059) | feat: A2A native execution with capability routing, streaming, and composability | Primary umbrella for A2A-native architecture. Multimodal boundary work and AgentCard structured-delegation signaling keep behavior additive and discoverable. |
 | [#530](https://github.com/mckinsey/agents-at-scale-ark/issues/530) | feat: A2A streaming for real-time task and query updates | Native event streaming path can carry richer A2A message semantics; multimodal-safe boundaries reduce risk of payload loss in streamed updates. |
 | [#965](https://github.com/mckinsey/agents-at-scale-ark/issues/965) | Add support for openAI response API | Tracked as an edge adapter. A2A internal transport and multimodal support reduce coupling and keep Response API optional. |
 | [#630](https://github.com/mckinsey/agents-at-scale-ark/issues/630) | rfc: responses api | Same framing as #965: Response API remains useful but not the internal canonical transport for rich message content. |
-| [#1028](https://github.com/mckinsey/agents-at-scale-ark/issues/1028) | Desing: upgrade the experience to enable image input and tool usage for response API | A2A experimental multimodal handling addresses the core transport problem for images/files; Response API work remains an experience and compatibility layer. |
+| [#1028](https://github.com/mckinsey/agents-at-scale-ark/issues/1028) | Desing: upgrade the experience to enable image input and tool usage for response API | A2A multimodal handling addresses the core transport problem for images/files; Response API work remains an experience and compatibility layer. |
 | [#37](https://github.com/mckinsey/agents-at-scale-ark/issues/37) | rfc: Non-Completions Models | A2A-first internal message format supports provider/API decoupling and helps avoid OpenAI-specific internal abstractions. |
 | [#869](https://github.com/mckinsey/agents-at-scale-ark/issues/869) | rfc: Claude Code A2A integration | A2A boundary model supports heterogeneous external agents while preserving internal execution semantics. |
 | [#1101](https://github.com/mckinsey/agents-at-scale-ark/issues/1101) | Reference implementation - Claude agent execution behind A2A | Directly enabled by stable A2A transport boundaries and delegated tool/event contracts. |
@@ -632,8 +651,6 @@ This section tracks related GitHub issues and how A2A-native execution plus file
 
 - [A2A Protocol Documentation](https://github.com/a2aproject/A2A)
 - [Core Architecture](/reference/core-architecture)
-- [A2A Experimental V1 Implementation](/reference/a2a-v1-implementation)
-- [A2A V1 Next Actions](/reference/a2a-v1-next-actions)
 - [A2A Task Streaming + Responses API Primer](/reference/a2a-streaming-responses-primer)
 - [Response API Support](https://github.com/mckinsey/agents-at-scale-ark/issues/965)
 - GitHub Issues: #37, #530, #557, #558, #630, #869, #877, #965, #1028, #1059, #1082, #1101, #1116

@@ -313,8 +313,11 @@ kind: ExecutionEngine
 metadata:
   name: custom-engine
 spec:
-  type: external
-  endpoint: "http://custom-engine-service:8080"
+  address:
+    valueFrom:
+      serviceRef:
+        name: custom-engine-service
+        port: "http"
 ```
 
 ## Resource Relationships

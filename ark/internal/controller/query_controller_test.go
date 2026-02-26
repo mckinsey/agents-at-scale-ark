@@ -427,7 +427,11 @@ var _ = Describe("Query Controller Delegated A2A Aggregation", func() {
 })
 
 var _ = Describe("Query Controller Execution Mode", func() {
-	It("agent dispatch always returns native payload mode", func() {
-		Expect(genai.A2APayloadModeNative).To(Equal("native-a2a"))
+	It("ResolvePayloadMode always returns native", func() {
+		Expect(genai.ResolvePayloadMode()).To(Equal(genai.A2APayloadModeNative))
+	})
+
+	It("ResolveDelegationPayloadMode defaults to native without context", func() {
+		Expect(genai.ResolveDelegationPayloadMode(context.Background())).To(Equal(genai.A2APayloadModeNative))
 	})
 })

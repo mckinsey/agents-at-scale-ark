@@ -33,7 +33,7 @@ func buildA2ATurnResultFromChatChoice(choice openai.ChatCompletionChoice, assist
 		assistantMsg.OfAssistant.ToolCalls = toolCallParams
 	}
 
-	a2aMsg, err := OpenAIToA2AMessageExperimental(assistantMsg)
+	a2aMsg, err := OpenAIToA2AMessageMultimodal(assistantMsg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert assistant message to A2A: %w", err)
 	}
