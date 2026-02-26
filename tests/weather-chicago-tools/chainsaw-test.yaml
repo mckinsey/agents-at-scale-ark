@@ -186,8 +186,7 @@ spec:
 
           while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
             EVENT_COUNT=$(kubectl get events -n $NAMESPACE \
-              --field-selector involvedObject.name=chicago-weather-query \
-              --field-selector involvedObject.kind=Query \
+              --field-selector involvedObject.name=chicago-weather-query,involvedObject.kind=Query \
               -o json | jq '.items | length')
 
             echo "Attempt $((ATTEMPT+1))/$MAX_ATTEMPTS: Found $EVENT_COUNT events"
