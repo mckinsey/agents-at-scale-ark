@@ -1,17 +1,17 @@
-# A2A Experimental Team Graph Test
+# A2A Native Team Graph Test
 
-Tests graph team execution with A2A experimental mode enabled.
+Tests graph team execution with A2A native mode enabled.
 
 ## What it tests
 
 - Graph team execution uses A2A execution path (`executeGraphA2A`)
-- Query with `ark.mckinsey.com/a2a-experimental-enabled: "true"` annotation triggers A2A mode
+- Query executes through A2A mode by default
 - Graph edges define execution flow: researcher -> analyzer -> reviewer -> writer
 - All four agents execute in defined graph order
 
 ## A2A Features Validated
 
-- A2A annotation processing on Query resource
+- Default A2A execution on Query resource
 - A2A-enabled graph team execution flow
 - Graph edge traversal in A2A mode
 - Message passing through graph nodes in A2A format

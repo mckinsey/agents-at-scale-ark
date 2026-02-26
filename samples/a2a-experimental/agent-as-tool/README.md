@@ -58,13 +58,7 @@ Enhanced pattern using the A2A message format for richer communication.
 
 **Requirements**:
 
-Both the Tool and target Agent must opt into A2A mode:
-```yaml
-annotations:
-  ark.mckinsey.com/execution-mode: "a2a"
-  # Legacy alternative:
-  # ark.mckinsey.com/a2a-experimental-enabled: "true"
-```
+A2A mode is the default for agent and team execution.
 
 **Example Tool**:
 ```yaml
@@ -72,8 +66,6 @@ apiVersion: ark.mckinsey.com/v1alpha1
 kind: Tool
 metadata:
   name: call-research-agent-a2a
-  annotations:
-    ark.mckinsey.com/execution-mode: "a2a"
 spec:
   type: agent
   description: "Delegate research tasks with A2A message support"
@@ -179,8 +171,6 @@ spec:
    kind: Query
    metadata:
      name: test-coordinator-a2a
-     annotations:
-       ark.mckinsey.com/execution-mode: "a2a"
    spec:
      input: "Research the latest AI trends and provide analysis"
      target:

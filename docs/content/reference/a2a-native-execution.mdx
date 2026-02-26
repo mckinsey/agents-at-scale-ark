@@ -17,7 +17,7 @@ import { Callout } from 'nextra/components'
 | **Author** | Drew Foxall |
 | **Date** | 2026-02-13 |
 | **PRs** | [#1060](https://github.com/mckinsey/agents-at-scale-ark/pull/1060), [#1092](https://github.com/mckinsey/agents-at-scale-ark/pull/1092) |
-| **Annotations** | Preferred: `ark.mckinsey.com/execution-mode`; Legacy: `ark.mckinsey.com/a2a-experimental-enabled` |
+| **Annotations** | `ark.mckinsey.com/execution-mode` |
 
 ---
 
@@ -204,38 +204,15 @@ delegationMsg := protocol.Message{
 
 ## Part 3: Technical Specification
 
-### Enable the Experiment
+### Default Behavior
 
-Set `ark.mckinsey.com/execution-mode: "a2a"` on agent, team, or query resources.
+Agent and team execution use A2A internal transport by default.
 
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Agent
-metadata:
-  name: my-agent
-  annotations:
-    ark.mckinsey.com/execution-mode: "a2a"
-spec:
-  # ...
-```
-
-Legacy opt-in is still supported with `ark.mckinsey.com/a2a-experimental-enabled: "true"`.
-
-Mode resolution uses this order:
-
-1. `ark.mckinsey.com/execution-mode` with valid values (`a2a`, `chat-completions`)
-2. `ark.mckinsey.com/a2a-experimental-enabled` (`true/1/yes` or `false/0/no`)
-3. `ARK_DEFAULT_EXECUTION_MODE`
-4. Compat default (`chat-completions`)
-
-If `execution-mode` is present with an invalid value, resolution falls back to legacy annotation handling, then config default.
-
-When no opt-in signal resolves to A2A, the existing Chat Completions path is used unchanged.
-This rollout keeps the non-experimental default path unchanged.
+`ark.mckinsey.com/execution-mode: "a2a"` is not required to enable A2A behavior.
 
 ### Internal Execution Flow
 
-When A2A mode is enabled:
+In default A2A mode:
 
 1. **Query Input**: `GetQueryInputA2AMessages` returns `[]protocol.Message` directly
 2. **Agent Execution**: Routes through capability resolution:
@@ -302,7 +279,7 @@ This conversion is unavoidable—models speak their native formats. The key impr
 The `ark-api` service exposes an A2A JSON-RPC gateway that:
 - Discovers Ark agents and builds A2A AgentCards
 - Routes incoming A2A requests to Kubernetes Query CRDs
-- Propagates the experimental annotation to created Queries
+- Propagates A2A execution mode to created Queries
 - Persists per-agent task stores for lifecycle continuity
 
 This enables external systems to invoke Ark agents using A2A without Ark-specific knowledge.
@@ -528,7 +505,7 @@ This keeps the internal native path aligned with A2A task lifecycle semantics wh
 ## Part 9: Implementation Roadmap
 
 ### Phase 1: Foundation (Complete)
-- [x] A2A execution annotations (`ark.mckinsey.com/execution-mode`, legacy `ark.mckinsey.com/a2a-experimental-enabled`)
+- [x] A2A execution annotations (`ark.mckinsey.com/execution-mode`)
 - [x] Separate execution paths (`executeAgentA2A`, `executeTeamA2A`, `ExecuteA2A`)
 - [x] Native memory operations (`AddA2AMessages`, `GetA2AMessages` in MemoryInterface)
 - [x] Compat wrapper for existing executors (`executionCapabilityOpenAICompat`)
@@ -607,11 +584,6 @@ inputSchema:
       description: "Context ID for stateful conversations"
 ```
 
-Both Tool and target Agent must opt into A2A mode using either:
-
-- `ark.mckinsey.com/execution-mode: "a2a"` (preferred)
-- `ark.mckinsey.com/a2a-experimental-enabled: "true"` (legacy)
-
 See `samples/a2a-experimental/agent-as-tool/coordinator-example.yaml` for complete examples
 
 ---
@@ -630,7 +602,7 @@ This architecture enables:
 - Existing OpenAI workloads to continue unchanged (via edge adapters)
 - Future Response API support as another edge adapter
 
-Execution-mode annotations keep adoption opt-in without disrupting production workloads.
+The runtime now follows a single A2A-first execution path for agent and team targets.
 
 ---
 

@@ -4,8 +4,6 @@ apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
 metadata:
   name: specialist-agent-a2a
-  annotations:
-    ark.mckinsey.com/a2a-experimental-enabled: "true"
 spec:
   description: "A2A-enabled specialist agent that processes delegated tasks"
   modelRef:

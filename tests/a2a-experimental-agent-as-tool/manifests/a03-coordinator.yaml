@@ -4,8 +4,6 @@ apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
 metadata:
   name: coordinator-agent-a2a
-  annotations:
-    ark.mckinsey.com/a2a-experimental-enabled: "true"
 spec:
   description: "A2A-enabled coordinator that delegates to specialists with rich messages"
   modelRef:

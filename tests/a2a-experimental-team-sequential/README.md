@@ -1,17 +1,17 @@
-# A2A Experimental Team Sequential Test
+# A2A Native Team Sequential Test
 
-Tests sequential team execution with A2A experimental mode enabled.
+Tests sequential team execution with A2A native mode enabled.
 
 ## What it tests
 
 - Sequential team execution uses A2A execution path (`executeSequentialA2A`)
-- Query with `ark.mckinsey.com/a2a-experimental-enabled: "true"` annotation triggers A2A mode
+- Query executes through A2A mode by default
 - All three agents (researcher, analyst, summarizer) execute in sequence
 - Final response contains expected SUMMARY: content from summarizer
 
 ## A2A Features Validated
 
-- A2A annotation processing on Query resource
+- Default A2A execution on Query resource
 - A2A-enabled team execution flow
 - Message passing through sequential team members in A2A format
 

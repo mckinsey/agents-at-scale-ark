@@ -95,7 +95,6 @@ spec:
           metadata:
             name: a2a-memory-second
             annotations:
-              ark.mckinsey.com/a2a-experimental-enabled: "true"
               ark.mckinsey.com/a2a-context-id: ($contextId)
           spec:
             input: "Second message to verify context"

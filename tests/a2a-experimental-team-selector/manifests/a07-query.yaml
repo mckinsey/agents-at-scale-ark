@@ -2,8 +2,6 @@ apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
   name: a2a-selector-team-query
-  annotations:
-    ark.mckinsey.com/a2a-experimental-enabled: "true"
 spec:
   input: "Analyze the benefits and challenges of implementing microservices architecture in enterprise applications."
   target:

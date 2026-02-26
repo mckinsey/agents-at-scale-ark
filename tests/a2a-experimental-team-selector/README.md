@@ -1,17 +1,17 @@
-# A2A Experimental Team Selector Test
+# A2A Native Team Selector Test
 
-Tests selector team strategy with A2A experimental mode enabled.
+Tests selector team strategy with A2A native mode enabled.
 
 ## What it tests
 
 - Selector team execution uses A2A execution path (`executeSelectorA2A`)
-- Query with `ark.mckinsey.com/a2a-experimental-enabled: "true"` annotation triggers A2A mode
+- Query executes through A2A mode by default
 - Coordinator agent dynamically selects participants based on conversation flow
 - Selection flow: researcher -> analyst -> coordinator (terminate)
 
 ## A2A Features Validated
 
-- A2A annotation processing on Query resource
+- Default A2A execution on Query resource
 - A2A-enabled selector team execution flow
 - AI-driven participant selection in A2A mode
 - Selector prompt template variable substitution (Roles, History, Participants)

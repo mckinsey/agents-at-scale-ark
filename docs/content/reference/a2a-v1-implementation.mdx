@@ -24,19 +24,11 @@ V1 includes:
 - Task-first delegated streaming and delegated-tool correlation metadata.
 - Agent-as-tool structured delegation surfaces (`message`, `history`, `contextId`, `input` fallback).
 
-V1 does not replace default Chat Completions or compat execution paths.
+V1 establishes A2A as the default internal transport for agent and team execution.
 
-## Opt-In Enablement
+## Enablement
 
-Enable experimental behavior with the annotation:
-
-```yaml
-metadata:
-  annotations:
-    ark.mckinsey.com/a2a-experimental-enabled: "true"
-```
-
-Apply it to resources that should use experimental A2A behavior (agent, team, tool target, query).
+No annotation is required to enable A2A behavior.
 
 ## V1 Boundary Contract
 

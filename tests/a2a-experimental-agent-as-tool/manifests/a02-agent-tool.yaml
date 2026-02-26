@@ -4,8 +4,6 @@ apiVersion: ark.mckinsey.com/v1alpha1
 kind: Tool
 metadata:
   name: call-specialist-a2a
-  annotations:
-    ark.mckinsey.com/a2a-experimental-enabled: "true"
 spec:
   type: agent
   description: "Delegate tasks to specialist with A2A message, history, and context support"

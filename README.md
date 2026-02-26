@@ -58,7 +58,7 @@ ARK is a runtime environment built on Kubernetes to host AI agents - with built-
 
 Ark supports the [A2A (Agent-to-Agent) protocol](https://github.com/a2aproject/A2A) for streaming communication with external agents. External agents hosted via `A2AServer` resources are automatically discovered and queryable.
 
-Ark also includes an experimental A2A-native execution mode behind `ark.mckinsey.com/a2a-experimental-enabled: "true"`. In this mode:
+Ark uses A2A-native execution by default. In this mode:
 
 - Ark executes agent and team targets with `protocol.Message` end-to-end.
 - Model-backed agents run a native-local A2A loop with OpenAI conversion only at the model provider boundary.
@@ -66,7 +66,7 @@ Ark also includes an experimental A2A-native execution mode behind `ark.mckinsey
 - All stream writes are strict: failures propagate as errors and halt execution.
 - Existing OpenAI-format memory records remain readable for compatibility.
 
-See the [RFC: Experimental A2A transport](https://mckinsey.github.io/agents-at-scale-ark/reference/a2a-experimental-rfc) for details and constraints.
+See the [A2A Native Execution reference](https://mckinsey.github.io/agents-at-scale-ark/reference/a2a-native-execution) for details and constraints.
 
 ## Technical Preview
 

@@ -1,17 +1,17 @@
-# A2A Experimental Team Round-Robin Test
+# A2A Native Team Round-Robin Test
 
-Tests round-robin team execution with A2A experimental mode enabled.
+Tests round-robin team execution with A2A native mode enabled.
 
 ## What it tests
 
 - Round-robin team execution uses A2A execution path (`executeRoundRobinA2A`)
-- Query with `ark.mckinsey.com/a2a-experimental-enabled: "true"` annotation triggers A2A mode
+- Query executes through A2A mode by default
 - Agents (brainstormer, critic, coordinator) cycle through in round-robin fashion
 - Coordinator uses terminate tool to end conversation with summary
 
 ## A2A Features Validated
 
-- A2A annotation processing on Query resource
+- Default A2A execution on Query resource
 - A2A-enabled round-robin team execution flow
 - Tool calls (terminate) work correctly in A2A mode
 - Message cycling through team members in A2A format
