@@ -75,15 +75,6 @@ updates:
       interval: weekly
     open-pull-requests-limit: 1
 
-  # Python - executor-langchain
-  - package-ecosystem: "pip"
-    directory: "services/executor-langchain"
-    commit-message:
-      prefix: 'chore(python): '
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 1
-
   # Docker - scan for base image updates
   - package-ecosystem: "docker"
     directories:
@@ -92,7 +83,6 @@ updates:
       - "services/ark-dashboard"
       - "services/ark-evaluator"
       - "services/ark-cluster-memory"
-      - "services/executor-langchain"
       - "services/ark-mcp"
     commit-message:
       prefix: 'chore(docker): '
