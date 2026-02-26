@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, Filter, Search, Users } from 'lucide-react';
+import { Bot, ChevronLeft, ChevronRight, Filter, Search, Server, Workflow } from 'lucide-react';
 import { useState } from 'react';
 
 import { PageHeader } from '@/components/common/page-header';
@@ -140,7 +140,7 @@ export default function MarketplacePage() {
                 ? ''
                 : 'text-muted-foreground hover:text-foreground',
             )}>
-            <Users className="h-3.5 w-3.5" />
+            <Bot className="h-3.5 w-3.5" />
             Agents
           </Button>
           <Button
@@ -153,15 +153,7 @@ export default function MarketplacePage() {
                 ? ''
                 : 'text-muted-foreground hover:text-foreground',
             )}>
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 16 16">
-              <path
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="1.5"
-                d="M2 4h12M4 8h8M6 12h4"
-              />
-            </svg>
+            <Workflow className="h-3.5 w-3.5" />
             Workflow
           </Button>
           <Button
@@ -174,44 +166,7 @@ export default function MarketplacePage() {
                 ? ''
                 : 'text-muted-foreground hover:text-foreground',
             )}>
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 16 16">
-              <rect
-                x="2"
-                y="2"
-                width="5"
-                height="5"
-                rx="1"
-                stroke="currentColor"
-                strokeWidth="1.5"
-              />
-              <rect
-                x="9"
-                y="2"
-                width="5"
-                height="5"
-                rx="1"
-                stroke="currentColor"
-                strokeWidth="1.5"
-              />
-              <rect
-                x="2"
-                y="9"
-                width="5"
-                height="5"
-                rx="1"
-                stroke="currentColor"
-                strokeWidth="1.5"
-              />
-              <rect
-                x="9"
-                y="9"
-                width="5"
-                height="5"
-                rx="1"
-                stroke="currentColor"
-                strokeWidth="1.5"
-              />
-            </svg>
+            <Server className="h-3.5 w-3.5" />
             Services
           </Button>
         </div>
