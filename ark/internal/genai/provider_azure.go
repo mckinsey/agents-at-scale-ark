@@ -133,27 +133,7 @@ func (ap *AzureProvider) ChatCompletionStream(ctx context.Context, messages []Me
 		accumulateStreamChunk(&chunk, &fullResponse, toolCallsMap)
 	}
 
-	if len(toolCallsMap) > 0 && fullResponse != nil && len(fullResponse.Choices) > 0 {
-		maxIndex := int64(-1)
-		for idx := range toolCallsMap {
-			if idx > maxIndex {
-				maxIndex = idx
-			}
-		}
-
-		toolCalls := make([]openai.ChatCompletionMessageToolCall, 0, len(toolCallsMap))
-		for i := int64(0); i <= maxIndex; i++ {
-			if toolCall, exists := toolCallsMap[i]; exists {
-				toolCalls = append(toolCalls, *toolCall)
-			}
-		}
-		fullResponse.Choices[0].Message.ToolCalls = toolCalls
-
-		// Send final chunk with tool calls in delta for frontend visibility
-		if err := ap.sendFinalToolCallChunk(fullResponse, toolCalls, streamFunc); err != nil {
-			logf.Log.Error(err, "Failed to send final tool call chunk")
-		}
-	}
+	ap.finalizeToolCalls(fullResponse, toolCallsMap, streamFunc)
 
 	if err := stream.Err(); err != nil {
 		return nil, err
@@ -163,6 +143,40 @@ func (ap *AzureProvider) ChatCompletionStream(ctx context.Context, messages []Me
 		return nil, fmt.Errorf("streaming completed but no response was accumulated")
 	}
 
+	ap.ensureUsageData(fullResponse)
+
+	return fullResponse, nil
+}
+
+// finalizeToolCalls assembles and sends final tool calls from the tool calls map
+func (ap *AzureProvider) finalizeToolCalls(fullResponse *openai.ChatCompletion, toolCallsMap map[int64]*openai.ChatCompletionMessageToolCall, streamFunc func(*openai.ChatCompletionChunk) error) {
+	if len(toolCallsMap) == 0 || fullResponse == nil || len(fullResponse.Choices) == 0 {
+		return
+	}
+
+	maxIndex := int64(-1)
+	for idx := range toolCallsMap {
+		if idx > maxIndex {
+			maxIndex = idx
+		}
+	}
+
+	toolCalls := make([]openai.ChatCompletionMessageToolCall, 0, len(toolCallsMap))
+	for i := int64(0); i <= maxIndex; i++ {
+		if toolCall, exists := toolCallsMap[i]; exists {
+			toolCalls = append(toolCalls, *toolCall)
+		}
+	}
+	fullResponse.Choices[0].Message.ToolCalls = toolCalls
+
+	// Send final chunk with tool calls in delta for frontend visibility
+	if err := SendFinalToolCallChunk(fullResponse, toolCalls, streamFunc); err != nil {
+		logf.Log.Error(err, "Failed to send final tool call chunk")
+	}
+}
+
+// ensureUsageData ensures the response has usage data
+func (ap *AzureProvider) ensureUsageData(fullResponse *openai.ChatCompletion) {
 	if fullResponse.Usage.TotalTokens == 0 {
 		fullResponse.Usage = openai.CompletionUsage{
 			PromptTokens:     0,
@@ -170,48 +184,6 @@ func (ap *AzureProvider) ChatCompletionStream(ctx context.Context, messages []Me
 			TotalTokens:      0,
 		}
 	}
-
-	return fullResponse, nil
-}
-
-// sendFinalToolCallChunk sends the final chunk with accumulated tool calls
-func (ap *AzureProvider) sendFinalToolCallChunk(fullResponse *openai.ChatCompletion, toolCalls []openai.ChatCompletionMessageToolCall, streamFunc func(*openai.ChatCompletionChunk) error) error {
-	// Convert tool calls to delta format for streaming
-	deltaToolCalls := make([]openai.ChatCompletionChunkChoiceDeltaToolCall, len(toolCalls))
-	for i, tc := range toolCalls {
-		deltaToolCalls[i] = openai.ChatCompletionChunkChoiceDeltaToolCall{
-			Index: int64(i),
-			ID:    tc.ID,
-			Type:  "function",
-			Function: openai.ChatCompletionChunkChoiceDeltaToolCallFunction{
-				Name:      tc.Function.Name,
-				Arguments: tc.Function.Arguments,
-			},
-		}
-	}
-
-	finalChunk := &openai.ChatCompletionChunk{
-		ID:      fullResponse.ID,
-		Object:  "chat.completion.chunk",
-		Created: fullResponse.Created,
-		Model:   fullResponse.Model,
-		Choices: []openai.ChatCompletionChunkChoice{
-			{
-				Index: 0,
-				Delta: openai.ChatCompletionChunkChoiceDelta{
-					ToolCalls: deltaToolCalls,
-				},
-				FinishReason: fullResponse.Choices[0].FinishReason,
-			},
-		},
-	}
-
-	logf.Log.Info("Sending final accumulated message with tool calls", "toolCount", len(toolCalls))
-	if err := streamFunc(finalChunk); err != nil {
-		logf.Log.Error(err, "Failed to send final accumulated message")
-		return err
-	}
-	return nil
 }
 
 func (ap *AzureProvider) createClient(ctx context.Context) (openai.Client, error) {
