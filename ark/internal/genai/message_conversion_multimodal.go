@@ -9,7 +9,7 @@ import (
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
-func A2AToOpenAIMessageExperimental(msg protocol.Message) (openai.ChatCompletionMessageParamUnion, error) {
+func A2AToOpenAIMessageMultimodal(msg protocol.Message) (openai.ChatCompletionMessageParamUnion, error) {
 	role := resolveA2AMessageRole(msg)
 	if role != RoleUser {
 		return A2AToOpenAIMessage(msg)
@@ -54,7 +54,7 @@ func A2AToOpenAIMessageExperimental(msg protocol.Message) (openai.ChatCompletion
 	return openai.UserMessage(contentParts), nil
 }
 
-func OpenAIToA2AMessageExperimental(msg openai.ChatCompletionMessageParamUnion) (protocol.Message, error) {
+func OpenAIToA2AMessageMultimodal(msg openai.ChatCompletionMessageParamUnion) (protocol.Message, error) {
 	if msg.OfUser == nil {
 		return OpenAIToA2AMessage(msg)
 	}

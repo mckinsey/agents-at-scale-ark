@@ -279,13 +279,13 @@ func TestA2AToOpenAIMessageFallsBackToLegacyRoleMetadataTool(t *testing.T) {
 	assert.Equal(t, "call-legacy-2", recovered.OfTool.ToolCallID)
 }
 
-func TestA2AToOpenAIMessageExperimentalPreservesImageFileParts(t *testing.T) {
+func TestA2AToOpenAIMessageMultimodalPreservesImageFileParts(t *testing.T) {
 	message := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
 		protocol.NewTextPart("describe image"),
 		protocol.NewFilePartWithURI("diagram.png", "image/png", "https://example.com/diagram.png"),
 	})
 
-	recovered, err := A2AToOpenAIMessageExperimental(message)
+	recovered, err := A2AToOpenAIMessageMultimodal(message)
 	require.NoError(t, err)
 	require.NotNil(t, recovered.OfUser)
 	require.Len(t, recovered.OfUser.Content.OfArrayOfContentParts, 2)
@@ -295,12 +295,12 @@ func TestA2AToOpenAIMessageExperimentalPreservesImageFileParts(t *testing.T) {
 	assert.Equal(t, "https://example.com/diagram.png", recovered.OfUser.Content.OfArrayOfContentParts[1].OfImageURL.ImageURL.URL)
 }
 
-func TestA2AToOpenAIMessageExperimentalConvertsImageBytesToDataURL(t *testing.T) {
+func TestA2AToOpenAIMessageMultimodalConvertsImageBytesToDataURL(t *testing.T) {
 	message := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
 		protocol.NewFilePartWithBytes("image.png", "image/png", "YWJj"),
 	})
 
-	recovered, err := A2AToOpenAIMessageExperimental(message)
+	recovered, err := A2AToOpenAIMessageMultimodal(message)
 	require.NoError(t, err)
 	require.NotNil(t, recovered.OfUser)
 	require.Len(t, recovered.OfUser.Content.OfArrayOfContentParts, 1)
@@ -321,7 +321,7 @@ func TestDefaultA2AToOpenAIMessageRemainsTextOnlyForImageFilePart(t *testing.T) 
 	assert.Len(t, recovered.OfUser.Content.OfArrayOfContentParts, 0)
 }
 
-func TestOpenAIToA2AMessageExperimentalPreservesImageURLParts(t *testing.T) {
+func TestOpenAIToA2AMessageMultimodalPreservesImageURLParts(t *testing.T) {
 	message := openai.UserMessage([]openai.ChatCompletionContentPartUnionParam{
 		openai.TextContentPart("please inspect"),
 		openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{
@@ -329,7 +329,7 @@ func TestOpenAIToA2AMessageExperimentalPreservesImageURLParts(t *testing.T) {
 		}),
 	})
 
-	recovered, err := OpenAIToA2AMessageExperimental(message)
+	recovered, err := OpenAIToA2AMessageMultimodal(message)
 	require.NoError(t, err)
 	assert.Equal(t, protocol.MessageRoleUser, recovered.Role)
 	require.Len(t, recovered.Parts, 2)
@@ -404,12 +404,12 @@ func TestA2AToOpenAIMessageToolWithEmptyContentUsesJSONFallback(t *testing.T) {
 	assert.Equal(t, "{}", recovered.OfTool.Content.OfString.Value)
 }
 
-func TestA2AToOpenAIMessageExperimentalUserWithEmptyTextUsesFallbackContent(t *testing.T) {
+func TestA2AToOpenAIMessageMultimodalUserWithEmptyTextUsesFallbackContent(t *testing.T) {
 	message := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
 		protocol.NewTextPart(""),
 	})
 
-	recovered, err := A2AToOpenAIMessageExperimental(message)
+	recovered, err := A2AToOpenAIMessageMultimodal(message)
 	require.NoError(t, err)
 	require.NotNil(t, recovered.OfUser)
 	assert.Equal(t, emptyTextContentFallback, recovered.OfUser.Content.OfString.Value)
