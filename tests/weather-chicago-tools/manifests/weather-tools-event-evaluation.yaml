@@ -49,4 +49,8 @@ spec:
     parameters:
       - name: evaluation-type
         value: "event"
+      - name: query.name
+        value: "chicago-weather-query"
+      - name: query.namespace
+        value: ($namespace)
   timeout: 5m
