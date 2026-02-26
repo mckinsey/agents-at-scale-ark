@@ -117,7 +117,7 @@ runs:
           --create-namespace \
           --set controllerManager.container.image.repository="${{ inputs.ci-cache-registry }}/ark-controller" \
           --set controllerManager.container.image.tag="${{ inputs.ark-image-tag }}" \
-          --set controllerManager.container.image.pullPolicy=IfNotPresent \
+          --set controllerManager.container.image.pullPolicy=Always \
           --wait --timeout=5m
 
         # Install ark-tenant from local chart
