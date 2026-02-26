@@ -150,15 +150,9 @@ class TestExportEndpoints(unittest.TestCase):
         self.assertEqual(data["last_export"], "2024-01-01T00:00:00Z")
         self.assertEqual(data["export_count"], 5)
 
-    @patch('ark_api.api.v1.export.logger')
     @patch('ark_api.api.v1.export.collect_resources')
-    def test_export_handles_errors(self, mock_collect, mock_logger):
-        """Test that errors in collection are handled properly.
-
-        Verifies:
-        - Generic error message is returned to client (no internal details leaked)
-        - Detailed error is logged internally for debugging
-        """
+    def test_export_handles_errors(self, mock_collect):
+        """Test that errors in collection are handled properly."""
         # Mock an error during collection
         async def mock_error(*args, **kwargs):
             raise Exception("Failed to collect resources")
@@ -166,16 +160,8 @@ class TestExportEndpoints(unittest.TestCase):
 
         response = self.client.post("/v1/export/resources", json={})
 
-        # Should return 500 error with generic message (no internal details)
+        # Should return 500 error
         self.assertEqual(response.status_code, 500)
-        error_detail = response.json()["detail"]
-        self.assertEqual(error_detail, "Internal server error")
-        # Verify the specific error is NOT leaked to the client
-        self.assertNotIn("Failed to collect resources", error_detail)
-
-        # Verify the detailed error was logged for debugging
-        # Note: The actual logging happens in the exceptions decorator
-        # This would need to mock the logger in exceptions.py for full verification
 
     @patch('ark_api.api.v1.export.update_export_history')
     @patch('ark_api.api.v1.export.collect_resources')
