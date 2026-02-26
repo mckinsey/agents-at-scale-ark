@@ -486,6 +486,7 @@ function QueryDetailContent() {
         timeout: query.timeout,
         ttl: query.ttl,
         sessionId: query.sessionId,
+        ...(query.conversationId && { conversationId: query.conversationId }),
         memory: query.memory,
         ...(apiParameters.length > 0 && { parameters: apiParameters }),
         ...(streaming && {
@@ -745,7 +746,7 @@ function QueryDetailContent() {
                   </a>
                 </div>
               </div>
-              <table className="w-full table-fixed">
+              <table className="w-full">
                 <tbody>
                   <QueryNameField
                     mode={mode}
@@ -799,7 +800,19 @@ function QueryDetailContent() {
                     }
                     label="Session ID"
                     placeholder="Default: Auto-generated"
-                    tooltip="Identifier for grouping related queries, used for conversation memory"
+                    tooltip="Identifier for grouping related queries"
+                  />
+                  <QueryNameField
+                    mode={mode}
+                    value={query.conversationId}
+                    onChange={conversationId =>
+                      setQuery(prev =>
+                        prev ? { ...prev, conversationId } : null,
+                      )
+                    }
+                    label="Conversation ID"
+                    placeholder="Default: Auto-generated"
+                    tooltip="Identifier for conversation history and memory chain"
                   />
                 </tbody>
               </table>

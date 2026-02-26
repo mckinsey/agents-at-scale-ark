@@ -1,12 +1,13 @@
 'use client';
 
 import { ArrowUpRightIcon, Plus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import type React from 'react';
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { toast } from 'sonner';
 
 import { TeamCard } from '@/components/cards';
-import { TeamEditor } from '@/components/editors';
+import { TeamRow } from '@/components/rows/team-row';
 import { Button } from '@/components/ui/button';
 import {
   Empty,
@@ -16,6 +17,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
+import { type ToggleOption, ToggleSwitch } from '@/components/ui/toggle-switch';
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { useDelayedLoading } from '@/lib/hooks';
 import {
@@ -30,15 +32,21 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 
 export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
   function TeamsSection(_, ref) {
+    const router = useRouter();
     const [teams, setTeams] = useState<Team[]>([]);
     const [agents, setAgents] = useState<Agent[]>([]);
-    const [teamEditorOpen, setTeamEditorOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const showLoading = useDelayedLoading(loading);
+    const [showCompactView, setShowCompactView] = useState(false);
+
+    const viewOptions: ToggleOption[] = [
+      { id: 'compact', label: 'compact view', active: !showCompactView },
+      { id: 'card', label: 'card view', active: showCompactView },
+    ];
     const { readOnlyMode } = useNamespace();
 
     useImperativeHandle(ref, () => ({
-      openAddEditor: () => setTeamEditorOpen(true),
+      openAddEditor: () => router.push('/teams/new'),
     }));
 
     useEffect(() => {
@@ -135,26 +143,24 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
 
     if (teams.length === 0 && !loading) {
       return (
-        <>
-          <Empty>
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <DASHBOARD_SECTIONS.teams.icon />
-              </EmptyMedia>
-              <EmptyTitle>No Teams Yet</EmptyTitle>
-              <EmptyDescription>
-                You haven&apos;t created any teams yet. Get started by creating
-                your first team.
-              </EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              <Button
-                onClick={() => setTeamEditorOpen(true)}
-                disabled={readOnlyMode}>
-                <Plus className="h-4 w-4" />
-                Create Team
-              </Button>
-            </EmptyContent>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <DASHBOARD_SECTIONS.teams.icon />
+            </EmptyMedia>
+            <EmptyTitle>No Teams Yet</EmptyTitle>
+            <EmptyDescription>
+              You haven&apos;t created any teams yet. Get started by creating
+              your first team.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button
+              onClick={() => router.push('/teams/new')}
+              disabled={readOnlyMode}>
+              <Plus className="h-4 w-4" />
+              Create Team
+            </Button>
             <Button
               variant="link"
               asChild
@@ -166,22 +172,22 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
                 Learn More <ArrowUpRightIcon />
               </a>
             </Button>
-          </Empty>
-          <TeamEditor
-            open={teamEditorOpen}
-            onOpenChange={setTeamEditorOpen}
-            team={null}
-            agents={agents}
-            onSave={handleSaveTeam}
-          />
-        </>
+          </EmptyContent>
+        </Empty>
       );
     }
 
     return (
-      <>
-        <div className="flex h-full flex-col">
-          <main className="mt-4 flex-1 overflow-auto">
+      <div className="flex h-full flex-col">
+        <div className="flex items-center justify-end px-6 py-3">
+          <ToggleSwitch
+            options={viewOptions}
+            onChange={id => setShowCompactView(id === 'card')}
+          />
+        </div>
+
+        <main className="flex-1 overflow-auto px-6 py-0">
+          {showCompactView && (
             <div className="grid gap-6 pb-6 md:grid-cols-2 lg:grid-cols-3">
               {teams.map(team => (
                 <TeamCard
@@ -193,17 +199,23 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
                 />
               ))}
             </div>
-          </main>
-        </div>
+          )}
 
-        <TeamEditor
-          open={teamEditorOpen}
-          onOpenChange={setTeamEditorOpen}
-          team={null}
-          agents={agents}
-          onSave={handleSaveTeam}
-        />
-      </>
+          {!showCompactView && (
+            <div className="flex flex-col gap-3">
+              {teams.map(team => (
+                <TeamRow
+                  key={team.id}
+                  team={team}
+                  agents={agents}
+                  onUpdate={handleSaveTeam}
+                  onDelete={handleDeleteTeam}
+                />
+              ))}
+            </div>
+          )}
+        </main>
+      </div>
     );
   },
 );

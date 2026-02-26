@@ -1,6 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAtomValue } from 'jotai';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -17,6 +18,7 @@ import type {
   Tool,
 } from '@/lib/services';
 import { agentsService, modelsService, toolsService } from '@/lib/services';
+import { GET_ALL_AGENTS_QUERY_KEY } from '@/lib/services/agents-hooks';
 
 import { AgentFormMode, type AgentFormValues, agentFormSchema } from './types';
 import {
@@ -35,6 +37,7 @@ export function useAgentForm({
   agentName,
   onSuccess,
 }: UseAgentFormOptions) {
+  const queryClient = useQueryClient();
   const onSuccessRef = useRef(onSuccess);
   onSuccessRef.current = onSuccess;
 
@@ -171,6 +174,9 @@ export function useAgentForm({
           };
 
           await agentsService.create(createData);
+          queryClient.invalidateQueries({
+            queryKey: [GET_ALL_AGENTS_QUERY_KEY],
+          });
         } else if (agent) {
           const updateData: AgentUpdateRequest = {
             description: values.description || undefined,
@@ -210,7 +216,7 @@ export function useAgentForm({
         setSaving(false);
       }
     },
-    [mode, agent, selectedTools, mapParametersToApi],
+    [mode, agent, selectedTools, mapParametersToApi, queryClient],
   );
 
   const handleToolToggle = useCallback((tool: Tool, checked: boolean) => {

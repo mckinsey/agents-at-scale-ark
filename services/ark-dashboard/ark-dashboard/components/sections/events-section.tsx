@@ -237,11 +237,11 @@ export function EventsSection({
   const getEventTypeBadge = (eventType: string) => {
     switch (eventType) {
       case 'Warning':
-        return <Badge variant="destructive">{type}</Badge>;
+        return <Badge variant="destructive">{eventType}</Badge>;
       case 'Normal':
-        return <Badge variant="secondary">{type}</Badge>;
+        return <Badge variant="secondary">{eventType}</Badge>;
       default:
-        return <Badge variant="outline">{type}</Badge>;
+        return <Badge variant="outline">{eventType}</Badge>;
     }
   };
 

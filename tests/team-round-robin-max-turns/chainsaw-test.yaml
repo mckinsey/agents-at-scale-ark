@@ -75,7 +75,7 @@ spec:
           status:
             (response != null): true
             (response.target.name): 'round-robin-max-turns-team'
-            (length(response.content) > `50`): true
+            (length(response.raw) > `50`): true
     catch:
     - events: {}
     - describe:

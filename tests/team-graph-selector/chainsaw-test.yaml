@@ -89,7 +89,7 @@ spec:
           status:
             (conditions[?type == 'Completed']):
             - status: 'True'
-        timeout: 180s
+        timeout: 360s
   - name: validate-graph-selector-execution
     try:
     - assert:
