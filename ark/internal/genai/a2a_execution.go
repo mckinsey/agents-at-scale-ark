@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/openai/openai-go"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
@@ -29,18 +31,34 @@ func NewA2AExecutionEngine(k8sClient client.Client, eventingRecorder eventing.A2
 	}
 }
 
-func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace string, agentAnnotations map[string]string, contextID string, userInput Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
+// Execute executes a query against an A2A agent
+func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace string, agentAnnotations map[string]string, contextID string, userInput Message, history []Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	a2aHistory := make([]protocol.Message, 0, len(history))
+	for i := range history {
+		converted, convErr := OpenAIToA2AMessage(history[i])
+		if convErr != nil {
+			return nil, fmt.Errorf("failed to convert history message %d to A2A: %w", i, convErr)
+		}
+		a2aHistory = append(a2aHistory, converted)
+	}
+	a2aUserInput, err := OpenAIToA2AMessage(userInput)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert user input to A2A: %w", err)
+	}
+	return e.executeA2A(ctx, agentName, namespace, agentAnnotations, contextID, a2aUserInput, a2aHistory, eventStream, true)
+}
+
+func (e *A2AExecutionEngine) ExecuteNative(ctx context.Context, agentName, namespace string, agentAnnotations map[string]string, contextID string, userInput protocol.Message, history []protocol.Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	return e.executeA2A(ctx, agentName, namespace, agentAnnotations, contextID, userInput, history, eventStream, false)
+}
+
+func (e *A2AExecutionEngine) executeA2A(ctx context.Context, agentName, namespace string, agentAnnotations map[string]string, contextID string, userInput protocol.Message, history []protocol.Message, eventStream EventStreamInterface, includeOpenAIMessages bool) (*ExecutionResult, error) {
 	log := logf.FromContext(ctx)
 	log.Info("executing A2A agent", "agent", agentName)
 
-	a2aAddress, hasAddress := agentAnnotations[arkann.A2AServerAddress]
-	if !hasAddress {
-		return nil, fmt.Errorf("A2A agent missing %s annotation", arkann.A2AServerAddress)
-	}
-
-	a2aServerName, hasServerName := agentAnnotations[arkann.A2AServerName]
-	if !hasServerName {
-		return nil, fmt.Errorf("A2A agent missing %s annotation", arkann.A2AServerName)
+	a2aAddress, a2aServerName, err := getA2AServerRouting(agentAnnotations)
+	if err != nil {
+		return nil, err
 	}
 
 	operationData := map[string]string{
@@ -52,226 +70,432 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 
 	var a2aServer arkv1prealpha1.A2AServer
 	serverKey := client.ObjectKey{Name: a2aServerName, Namespace: namespace}
-	if err := e.client.Get(ctx, serverKey, &a2aServer); err != nil {
+	if err = e.client.Get(ctx, serverKey, &a2aServer); err != nil {
 		return nil, fmt.Errorf("unable to get A2AServer %v: %w", serverKey, err)
 	}
 
-	if a2aServer.Spec.Timeout != "" {
-		timeout, err := time.ParseDuration(a2aServer.Spec.Timeout)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse A2AServer timeout %q: %w", a2aServer.Spec.Timeout, err)
-		}
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, timeout)
+	ctx, cancel, err := applyA2AServerTimeout(ctx, &a2aServer)
+	if err != nil {
+		return nil, err
+	}
+	if cancel != nil {
 		defer cancel()
 	}
 
-	content := ""
-	if userInput.OfUser != nil && userInput.OfUser.Content.OfString.Value != "" {
-		content = userInput.OfUser.Content.OfString.Value
-	}
-
 	queryName := getQueryName(ctx)
-	modelID := fmt.Sprintf("agent/%s", agentName)
-
-	if agentAnnotations[arkann.A2AStreamingSupported] == TrueString && eventStream != nil {
-		result, err := e.executeStreaming(ctx, a2aAddress, a2aServer.Spec.Headers, namespace, content, agentName, queryName, contextID, modelID, eventStream, &a2aServer)
-		if err != nil {
-			log.Error(err, "A2A streaming failed, falling back to blocking", "agent", agentName)
-		} else {
-			e.eventingRecorder.Complete(ctx, "A2AExecution", "A2A execution completed successfully", operationData)
-			return result, nil
-		}
+	includeHistory := shouldIncludeA2AHistory(agentAnnotations, false)
+	metadata, err := buildA2AMetadata(agentAnnotations, history, includeHistory)
+	if err != nil {
+		return nil, err
 	}
 
-	a2aResponse, err := ExecuteA2AAgent(ctx, e.client, a2aAddress, a2aServer.Spec.Headers, namespace, content, agentName, queryName, contextID, e.eventingRecorder, &a2aServer)
+	payloadMode := resolveA2AExecutionPayloadMode(ctx, agentAnnotations)
+	streamResult, streamed, streamErr := e.tryA2AStreamingExecution(ctx, a2aAddress, a2aServer.Spec.Headers, namespace, agentAnnotations, agentName, queryName, contextID, userInput, metadata, eventStream, payloadMode, &a2aServer, includeOpenAIMessages)
+	if streamErr == nil && streamResult != nil {
+		e.eventingRecorder.Complete(ctx, "A2AExecution", "A2A execution completed successfully", operationData)
+		return streamResult, nil
+	}
+	if streamed && streamErr != nil {
+		log.Error(streamErr, "A2A streaming execution failed, falling back to blocking", "agent", agentName)
+	}
+
+	a2aResponse, err := ExecuteA2AAgent(ctx, e.client, a2aAddress, a2aServer.Spec.Headers, namespace, userInput, metadata, agentName, queryName, contextID, e.eventingRecorder, &a2aServer)
 	if err != nil {
-		StreamError(ctx, eventStream, err, "a2a_execution_failed", modelID)
+		modelID := fmt.Sprintf("agent/%s", agentName)
+		streamA2AError(ctx, eventStream, payloadMode, modelID, err)
 		e.eventingRecorder.Fail(ctx, "A2AExecution", fmt.Sprintf("A2A execution failed: %v", err), err, operationData)
 		return nil, err
 	}
 
-	responseMessage := NewAssistantMessage(a2aResponse.Content)
-
-	if eventStream != nil {
-		completionID := getQueryID(ctx)
-		chunk := NewContentChunk(completionID, modelID, a2aResponse.Content)
-		chunk.Choices[0].Delta.Role = RoleAssistant
-		chunk.Choices[0].FinishReason = "stop"
-		chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, modelID, nil)
-		if err := eventStream.StreamChunk(ctx, chunkWithMeta); err != nil {
-			log.Error(err, "failed to send A2A response chunk to event stream")
-		}
-	}
+	emitA2ABlockingResponse(ctx, eventStream, payloadMode, agentName, a2aResponse)
 
 	e.eventingRecorder.Complete(ctx, "A2AExecution", "A2A execution completed successfully", operationData)
 
-	return &ExecutionResult{
-		Messages:    []Message{responseMessage},
-		A2AResponse: a2aResponse,
-	}, nil
+	result := &ExecutionResult{
+		A2AMessages:    buildA2AMessagesFromResponse(a2aResponse),
+		A2AResponse:    a2aResponse,
+		A2APayloadMode: payloadMode,
+	}
+	if includeOpenAIMessages {
+		result.Messages = []Message{buildAssistantMessageFromA2AResponse(a2aResponse)}
+	}
+	return result, nil
 }
 
-func (e *A2AExecutionEngine) executeStreaming(ctx context.Context, address string, headers []arkv1prealpha1.Header, namespace, input, agentName, queryName, contextID, modelID string, eventStream EventStreamInterface, a2aServer *arkv1prealpha1.A2AServer) (*ExecutionResult, error) {
-	rpcURL := strings.TrimSuffix(address, "/")
-
-	a2aClient, err := CreateA2AClient(ctx, e.client, rpcURL, headers, namespace, agentName, e.eventingRecorder)
+func (e *A2AExecutionEngine) streamA2AExecution(ctx context.Context, address string, headers []arkv1prealpha1.Header, namespace, agentName, queryName, contextID string, userInput protocol.Message, metadata map[string]interface{}, eventStream EventStreamInterface, payloadMode string, a2aServer *arkv1prealpha1.A2AServer, includeOpenAIMessages bool) (*ExecutionResult, error) {
+	events, err := StreamA2AAgent(ctx, e.client, address, headers, namespace, userInput, metadata, agentName, contextID, e.eventingRecorder)
 	if err != nil {
 		return nil, err
 	}
 
-	var message protocol.Message
-	if contextID != "" {
-		message = protocol.NewMessageWithContext(protocol.MessageRoleUser, []protocol.Part{
-			protocol.NewTextPart(input),
-		}, nil, &contextID)
-	} else {
-		message = protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
-			protocol.NewTextPart(input),
-		})
-	}
-
-	params := protocol.SendMessageParams{
-		RPCID:   protocol.GenerateRPCID(),
-		Message: message,
-	}
-
-	events, err := a2aClient.StreamMessage(ctx, params)
-	if err != nil {
-		return nil, fmt.Errorf("A2A StreamMessage failed: %w", err)
-	}
-
+	modelID := fmt.Sprintf("agent/%s", agentName)
 	completionID := getQueryID(ctx)
-	return consumeA2AStreamEvents(ctx, e.client, events, eventStream, modelID, completionID, agentName, namespace, queryName, a2aServer)
+	response, err := e.consumeA2AStreamEvents(ctx, events, eventStream, payloadMode, modelID, completionID, agentName, namespace, queryName, a2aServer)
+	if err != nil {
+		return nil, err
+	}
+	result := &ExecutionResult{
+		A2AMessages:    buildA2AMessagesFromResponse(response),
+		A2AResponse:    response,
+		A2APayloadMode: payloadMode,
+	}
+	if includeOpenAIMessages {
+		result.Messages = []Message{buildAssistantMessageFromA2AResponse(response)}
+	}
+	return result, nil
 }
 
-func consumeA2AStreamEvents(ctx context.Context, k8sClient client.Client, events <-chan protocol.StreamingMessageEvent, eventStream EventStreamInterface, modelID, completionID, agentName, namespace, queryName string, a2aServer *arkv1prealpha1.A2AServer) (*ExecutionResult, error) {
-	var content strings.Builder
-	var response A2AResponse
-	received := false
-
+func (e *A2AExecutionEngine) consumeA2AStreamEvents(ctx context.Context, events <-chan protocol.StreamingMessageEvent, eventStream EventStreamInterface, payloadMode, modelID, completionID, agentName, namespace, queryName string, a2aServer *arkv1prealpha1.A2AServer) (*A2AResponse, error) {
+	state := &a2aStreamState{
+		response: &A2AResponse{},
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case event, ok := <-events:
 			if !ok {
-				if !received {
+				if !state.received {
 					return nil, fmt.Errorf("a2a streaming returned no events")
 				}
-				return buildA2AStreamResult(&content, &response), nil
+				return state.finalize(), nil
 			}
-			received = true
+			state.received = true
 			if event.Result == nil {
 				continue
 			}
-			switch result := event.Result.(type) {
-			case *protocol.Message:
-				consumeA2AMessageEvent(ctx, result, &content, &response, eventStream, completionID, modelID)
-			case *protocol.Task:
-				consumeA2ATaskEvent(ctx, k8sClient, result, &content, &response, eventStream, completionID, modelID, agentName, namespace, queryName, a2aServer)
-			case *protocol.TaskStatusUpdateEvent:
-				if consumeA2AStatusUpdateEvent(ctx, result, &content, &response, eventStream, completionID, modelID) {
-					return buildA2AStreamResult(&content, &response), nil
-				}
-			case *protocol.TaskArtifactUpdateEvent:
-				consumeA2AArtifactUpdateEvent(ctx, result, &content, &response, eventStream, completionID, modelID)
+			if err := state.handleEvent(ctx, e.client, event, eventStream, payloadMode, modelID, completionID, agentName, namespace, queryName, a2aServer); err != nil {
+				return nil, err
+			}
+			if state.done {
+				return state.finalize(), nil
 			}
 		}
 	}
 }
 
-func consumeA2AMessageEvent(ctx context.Context, msg *protocol.Message, content *strings.Builder, response *A2AResponse, eventStream EventStreamInterface, completionID, modelID string) {
-	text := extractTextFromParts(msg.Parts)
-	if text != "" {
-		content.WriteString(text)
+func getA2AServerRouting(agentAnnotations map[string]string) (string, string, error) {
+	a2aAddress, hasAddress := agentAnnotations[arkann.A2AServerAddress]
+	if !hasAddress {
+		return "", "", fmt.Errorf("A2A agent missing %s annotation", arkann.A2AServerAddress)
 	}
-	if msg.ContextID != nil && *msg.ContextID != "" {
-		response.ContextID = *msg.ContextID
+	a2aServerName, hasServerName := agentAnnotations[arkann.A2AServerName]
+	if !hasServerName {
+		return "", "", fmt.Errorf("A2A agent missing %s annotation", arkann.A2AServerName)
 	}
-	streamContentChunk(ctx, eventStream, completionID, modelID, text)
+	return a2aAddress, a2aServerName, nil
 }
 
-func consumeA2ATaskEvent(ctx context.Context, k8sClient client.Client, task *protocol.Task, content *strings.Builder, response *A2AResponse, eventStream EventStreamInterface, completionID, modelID, agentName, namespace, queryName string, a2aServer *arkv1prealpha1.A2AServer) {
-	response.TaskID = task.ID
-	response.ContextID = task.ContextID
-	text := extractTextFromTaskStatus(task)
-	if text != "" {
-		content.Reset()
-		content.WriteString(text)
+func applyA2AServerTimeout(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer) (context.Context, context.CancelFunc, error) {
+	if a2aServer.Spec.Timeout == "" {
+		return ctx, nil, nil
 	}
-	maybeCreateA2ATask(ctx, k8sClient, task, agentName, namespace, queryName, a2aServer)
-	streamContentChunk(ctx, eventStream, completionID, modelID, text)
+	timeout, err := time.ParseDuration(a2aServer.Spec.Timeout)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse A2AServer timeout %q: %w", a2aServer.Spec.Timeout, err)
+	}
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+	return timeoutCtx, cancel, nil
 }
 
-func consumeA2AStatusUpdateEvent(ctx context.Context, event *protocol.TaskStatusUpdateEvent, content *strings.Builder, response *A2AResponse, eventStream EventStreamInterface, completionID, modelID string) bool {
-	if response.TaskID == "" {
-		response.TaskID = event.TaskID
+func resolveA2AExecutionPayloadMode(ctx context.Context, _ map[string]string) string {
+	if HasA2APayloadModeInContext(ctx) {
+		return GetA2APayloadModeFromContext(ctx)
 	}
-	if response.ContextID == "" {
-		response.ContextID = event.ContextID
-	}
-	var text string
-	if event.Status.Message != nil {
-		text = extractTextFromParts(event.Status.Message.Parts)
-	}
-	if event.Final && text != "" && content.Len() == 0 {
-		content.WriteString(text)
-	}
-	streamContentChunk(ctx, eventStream, completionID, modelID, text)
-	return event.Final
+	return A2APayloadModeNative
 }
 
-func consumeA2AArtifactUpdateEvent(ctx context.Context, event *protocol.TaskArtifactUpdateEvent, content *strings.Builder, response *A2AResponse, eventStream EventStreamInterface, completionID, modelID string) {
-	if response.TaskID == "" {
-		response.TaskID = event.TaskID
+func (e *A2AExecutionEngine) tryA2AStreamingExecution(ctx context.Context, address string, headers []arkv1prealpha1.Header, namespace string, agentAnnotations map[string]string, agentName, queryName, contextID string, userInput protocol.Message, metadata map[string]interface{}, eventStream EventStreamInterface, payloadMode string, a2aServer *arkv1prealpha1.A2AServer, includeOpenAIMessages bool) (*ExecutionResult, bool, error) {
+	if !isA2AStreamingSupported(agentAnnotations) {
+		logf.FromContext(ctx).Info("A2A streaming not supported by agent", "agent", agentName)
+		return nil, false, nil
 	}
-	text := extractTextFromParts(event.Artifact.Parts)
-	if text != "" {
-		content.WriteString(text)
+	result, err := e.streamA2AExecution(ctx, address, headers, namespace, agentName, queryName, contextID, userInput, metadata, eventStream, payloadMode, a2aServer, includeOpenAIMessages)
+	if err != nil {
+		return nil, true, err
 	}
-	streamContentChunk(ctx, eventStream, completionID, modelID, text)
+	return result, true, nil
 }
 
-func buildA2AStreamResult(content *strings.Builder, response *A2AResponse) *ExecutionResult {
-	response.Content = content.String()
-	return &ExecutionResult{
-		Messages:    []Message{NewAssistantMessage(response.Content)},
-		A2AResponse: response,
+func buildA2AMessagesFromResponse(response *A2AResponse) []protocol.Message {
+	if response == nil {
+		return nil
 	}
+	if response.Message != nil {
+		return []protocol.Message{*response.Message}
+	}
+	if response.Content == "" {
+		return nil
+	}
+	var contextRef *string
+	if response.ContextID != "" {
+		contextRef = &response.ContextID
+	}
+	var taskRef *string
+	if response.TaskID != "" {
+		taskRef = &response.TaskID
+	}
+	message := protocol.NewMessageWithContext(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart(response.Content),
+	}, taskRef, contextRef)
+	return []protocol.Message{message}
 }
 
-func streamContentChunk(ctx context.Context, eventStream EventStreamInterface, completionID, modelID, content string) {
-	if eventStream == nil || content == "" {
+func emitA2ABlockingResponse(ctx context.Context, eventStream EventStreamInterface, payloadMode, agentName string, a2aResponse *A2AResponse) {
+	if eventStream == nil || a2aResponse == nil {
 		return
 	}
-	chunk := NewContentChunk(completionID, modelID, content)
+	completionID := getQueryID(ctx)
+	modelID := fmt.Sprintf("agent/%s", agentName)
+	if payloadMode == A2APayloadModeNative {
+		streamA2ANativeBlockingResponse(ctx, eventStream, payloadMode, modelID, completionID, a2aResponse)
+		return
+	}
+	streamA2ACompatBlockingResponse(ctx, eventStream, modelID, completionID, a2aResponse.Content)
+}
+
+func streamA2ANativeBlockingResponse(ctx context.Context, eventStream EventStreamInterface, payloadMode, modelID, completionID string, a2aResponse *A2AResponse) {
+	if a2aResponse.Message != nil {
+		if err := streamA2AEvent(ctx, eventStream, payloadMode, modelID, completionID, extractTextFromParts(a2aResponse.Message.Parts), a2aResponse.Message); err != nil {
+			logf.FromContext(ctx).Error(err, "failed to stream native A2A blocking message")
+		}
+		return
+	}
+	var contextRef *string
+	if a2aResponse.ContextID != "" {
+		contextRef = &a2aResponse.ContextID
+	}
+	var taskRef *string
+	if a2aResponse.TaskID != "" {
+		taskRef = &a2aResponse.TaskID
+	}
+	a2aMessage := protocol.NewMessageWithContext(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart(a2aResponse.Content),
+	}, taskRef, contextRef)
+	if err := streamA2AEvent(ctx, eventStream, payloadMode, modelID, completionID, a2aResponse.Content, &a2aMessage); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to stream native A2A blocking synthesized message")
+	}
+}
+
+func streamA2ACompatBlockingResponse(ctx context.Context, eventStream EventStreamInterface, modelID, completionID, content string) {
+	chunk := &openai.ChatCompletionChunk{
+		ID:      completionID,
+		Object:  "chat.completion.chunk",
+		Created: time.Now().Unix(),
+		Model:   modelID,
+		Choices: []openai.ChatCompletionChunkChoice{
+			{
+				Index: 0,
+				Delta: openai.ChatCompletionChunkChoiceDelta{
+					Content: content,
+					Role:    RoleAssistant,
+				},
+				FinishReason: "stop",
+			},
+		},
+	}
 	chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, modelID, nil)
 	if err := eventStream.StreamChunk(ctx, chunkWithMeta); err != nil {
-		logf.FromContext(ctx).Error(err, "failed to send A2A streaming chunk")
+		logf.FromContext(ctx).Error(err, "failed to send A2A response chunk to event stream")
 	}
 }
 
-func extractTextFromTaskStatus(task *protocol.Task) string {
-	if task.Status.Message != nil {
-		if text := extractTextFromParts(task.Status.Message.Parts); text != "" {
-			return text
-		}
-	}
-	for i := len(task.History) - 1; i >= 0; i-- {
-		msg := task.History[i]
-		if msg.Role == protocol.MessageRoleAgent && len(msg.Parts) > 0 {
-			if text := extractTextFromParts(msg.Parts); text != "" {
-				return text
-			}
-		}
-	}
-	return ""
+type a2aStreamState struct {
+	response     *A2AResponse
+	finalContent strings.Builder
+	latestTask   *protocol.Task
+	lastStatus   *protocol.TaskStatus
+	received     bool
+	done         bool
 }
 
-func maybeCreateA2ATask(ctx context.Context, k8sClient client.Client, task *protocol.Task, agentName, namespace, queryName string, a2aServer *arkv1prealpha1.A2AServer) {
-	if a2aServer == nil || queryName == "" {
+func (s *a2aStreamState) finalize() *A2AResponse {
+	s.applyLatestTaskContent()
+	s.response.Content = s.finalContent.String()
+	if s.response.Message == nil && s.response.Content != "" {
+		message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+			protocol.NewTextPart(s.response.Content),
+		})
+		s.response.Message = &message
+	}
+	return s.response
+}
+
+func (s *a2aStreamState) applyLatestTaskContent() {
+	if s.latestTask == nil {
 		return
 	}
-	_ = handleA2ATaskResponse(ctx, k8sClient, task, agentName, namespace, queryName, a2aServer)
+	text, err := extractTextFromTask(s.latestTask)
+	if err != nil || text == "" {
+		return
+	}
+	s.finalContent.Reset()
+	s.finalContent.WriteString(text)
+}
+
+func (s *a2aStreamState) handleEvent(ctx context.Context, k8sClient client.Client, event protocol.StreamingMessageEvent, eventStream EventStreamInterface, payloadMode, modelID, completionID, agentName, namespace, queryName string, a2aServer *arkv1prealpha1.A2AServer) error {
+	switch result := event.Result.(type) {
+	case *protocol.Message:
+		return s.handleMessageEvent(ctx, eventStream, payloadMode, modelID, completionID, result)
+	case *protocol.Task:
+		return s.handleTaskEvent(ctx, k8sClient, eventStream, payloadMode, modelID, completionID, agentName, namespace, queryName, a2aServer, result)
+	case *protocol.TaskStatusUpdateEvent:
+		return s.handleTaskStatusUpdateEvent(ctx, k8sClient, eventStream, payloadMode, modelID, completionID, agentName, namespace, queryName, a2aServer, result)
+	case *protocol.TaskArtifactUpdateEvent:
+		return s.handleTaskArtifactUpdateEvent(ctx, k8sClient, eventStream, payloadMode, modelID, completionID, agentName, namespace, queryName, a2aServer, result)
+	}
+	return nil
+}
+
+func (s *a2aStreamState) handleMessageEvent(ctx context.Context, eventStream EventStreamInterface, payloadMode, modelID, completionID string, message *protocol.Message) error {
+	text := extractTextFromParts(message.Parts)
+	if text != "" {
+		s.finalContent.WriteString(text)
+	}
+	s.response.Message = message
+	if message.ContextID != nil && *message.ContextID != "" {
+		s.response.ContextID = *message.ContextID
+	}
+	if message.TaskID != nil && *message.TaskID != "" {
+		s.response.TaskID = *message.TaskID
+	}
+	if err := streamA2AEvent(ctx, eventStream, payloadMode, modelID, completionID, text, message); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *a2aStreamState) handleTaskEvent(ctx context.Context, k8sClient client.Client, eventStream EventStreamInterface, payloadMode, modelID, completionID, agentName, namespace, queryName string, a2aServer *arkv1prealpha1.A2AServer, task *protocol.Task) error {
+	s.latestTask = task
+	s.response.TaskID = task.ID
+	s.response.ContextID = task.ContextID
+	s.lastStatus = &task.Status
+	s.response.Artifacts = task.Artifacts
+	if message := extractLatestAgentMessageFromTask(task); message != nil {
+		s.response.Message = message
+	}
+	maybeUpsertA2ATask(ctx, k8sClient, task, agentName, namespace, queryName, a2aServer)
+	if err := streamA2AEvent(ctx, eventStream, payloadMode, modelID, completionID, "", task); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *a2aStreamState) handleTaskStatusUpdateEvent(ctx context.Context, k8sClient client.Client, eventStream EventStreamInterface, payloadMode, modelID, completionID, agentName, namespace, queryName string, a2aServer *arkv1prealpha1.A2AServer, update *protocol.TaskStatusUpdateEvent) error {
+	s.lastStatus = &update.Status
+	if s.response.TaskID == "" {
+		s.response.TaskID = update.TaskID
+	}
+	if s.response.ContextID == "" {
+		s.response.ContextID = update.ContextID
+	}
+	task := taskFromStatusUpdate(update)
+	maybeUpsertA2ATask(ctx, k8sClient, task, agentName, namespace, queryName, a2aServer)
+	if update.Status.Message != nil {
+		s.response.Message = update.Status.Message
+	}
+	if update.Final && update.Status.Message != nil && s.finalContent.Len() == 0 {
+		if text := extractTextFromParts(update.Status.Message.Parts); text != "" {
+			s.finalContent.WriteString(text)
+		}
+	}
+	if err := streamA2AEvent(ctx, eventStream, payloadMode, modelID, completionID, "", update); err != nil {
+		return err
+	}
+	if update.Final {
+		s.done = true
+	}
+	return nil
+}
+
+func (s *a2aStreamState) handleTaskArtifactUpdateEvent(ctx context.Context, k8sClient client.Client, eventStream EventStreamInterface, payloadMode, modelID, completionID, agentName, namespace, queryName string, a2aServer *arkv1prealpha1.A2AServer, update *protocol.TaskArtifactUpdateEvent) error {
+	if s.response.TaskID == "" {
+		s.response.TaskID = update.TaskID
+	}
+	if s.response.ContextID == "" {
+		s.response.ContextID = update.ContextID
+	}
+	text := extractTextFromParts(update.Artifact.Parts)
+	if text != "" {
+		s.finalContent.WriteString(text)
+	}
+	s.response.Artifacts = append(s.response.Artifacts, update.Artifact)
+	task := taskFromArtifactUpdate(update, s.lastStatus)
+	maybeUpsertA2ATask(ctx, k8sClient, task, agentName, namespace, queryName, a2aServer)
+	if err := streamA2AEvent(ctx, eventStream, payloadMode, modelID, completionID, text, update); err != nil {
+		return err
+	}
+	return nil
+}
+
+func buildAssistantMessageFromA2AResponse(response *A2AResponse) Message {
+	if response != nil && response.Message != nil {
+		converted, err := A2AToOpenAIMessage(*response.Message)
+		if err == nil {
+			return converted
+		}
+	}
+	if response != nil {
+		return NewAssistantMessage(response.Content)
+	}
+	return NewAssistantMessage("")
+}
+
+func maybeUpsertA2ATask(ctx context.Context, k8sClient client.Client, task *protocol.Task, agentName, namespace, queryName string, a2aServer *arkv1prealpha1.A2AServer) {
+	if a2aServer == nil {
+		return
+	}
+	_ = upsertA2ATaskFromTask(ctx, k8sClient, task, agentName, namespace, queryName, a2aServer.Name)
+}
+
+func streamA2AEvent(ctx context.Context, eventStream EventStreamInterface, payloadMode, modelID, completionID, content string, payload interface{}) error {
+	if eventStream == nil {
+		return nil
+	}
+	if payloadMode == A2APayloadModeNative {
+		if err := eventStream.StreamChunk(ctx, payload); err != nil {
+			return fmt.Errorf("failed to stream native A2A event: %w", err)
+		}
+		return nil
+	}
+	chunk := NewContentChunk(completionID, modelID, content)
+	chunkWithMeta := WrapChunkWithA2A(ctx, chunk, modelID, nil, payload)
+	if err := eventStream.StreamChunk(ctx, chunkWithMeta); err != nil {
+		return fmt.Errorf("failed to stream compat A2A event: %w", err)
+	}
+	return nil
+}
+
+func streamA2AError(ctx context.Context, eventStream EventStreamInterface, payloadMode, modelID string, err error) {
+	if eventStream == nil || err == nil {
+		return
+	}
+	if payloadMode == A2APayloadModeNative {
+		taskID := getQueryID(ctx)
+		contextID := GetA2AContextID(ctx)
+		stepPayload := StepEventPayloadV1{
+			Schema:    A2APayloadSchemaStepEventV1,
+			StepID:    fmt.Sprintf("task-error:%s", taskID),
+			StepState: "error",
+			StepKind:  A2ADelegatedToolKindStatus,
+		}
+		statusMessage := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+			protocol.NewTextPart(err.Error()),
+			&protocol.DataPart{Kind: protocol.KindData, Data: stepPayload},
+		})
+		failedEvent := &protocol.TaskStatusUpdateEvent{
+			TaskID:    taskID,
+			ContextID: contextID,
+			Final:     true,
+			Status: protocol.TaskStatus{
+				State:   protocol.TaskStateFailed,
+				Message: &statusMessage,
+			},
+		}
+		if streamErr := streamA2AEvent(ctx, eventStream, payloadMode, modelID, taskID, err.Error(), failedEvent); streamErr != nil {
+			logf.FromContext(ctx).Error(streamErr, "failed to stream native A2A failure event")
+		}
+		return
+	}
+	StreamError(ctx, eventStream, err, "a2a_execution_failed", modelID)
 }

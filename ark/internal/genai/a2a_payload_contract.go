@@ -1,0 +1,90 @@
+package genai
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
+)
+
+const (
+	A2APayloadSchemaDelegatedInvocationV1 = "https://ark.mckinsey.com/payloads/delegated-invocation/v1"
+	A2APayloadSchemaStepEventV1           = "https://ark.mckinsey.com/payloads/step-event/v1"
+	A2APayloadSchemaToolCallsV1           = "https://ark.mckinsey.com/payloads/tool-calls/v1"
+	A2APayloadSchemaToolResultV1          = "https://ark.mckinsey.com/payloads/tool-result/v1"
+	A2APayloadSchemaRoleHintV1            = "https://ark.mckinsey.com/payloads/role-hint/v1"
+)
+
+type DelegatedInvocationPayloadV1 struct {
+	Schema     string            `json:"schema"`
+	Parameters map[string]string `json:"parameters,omitempty"`
+	ContextID  string            `json:"contextId,omitempty"`
+}
+
+type RoleHintPayloadV1 struct {
+	Schema string `json:"schema"`
+	Role   string `json:"role"`
+}
+
+type ToolCallPayloadV1 struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+type ToolCallsPayloadV1 struct {
+	Schema    string              `json:"schema"`
+	ToolCalls []ToolCallPayloadV1 `json:"toolCalls"`
+}
+
+type StepEventPayloadV1 struct {
+	Schema             string `json:"schema"`
+	StepID             string `json:"stepId,omitempty"`
+	StepEventID        string `json:"stepEventId,omitempty"`
+	StepState          string `json:"stepState,omitempty"`
+	StepKind           string `json:"stepKind,omitempty"`
+	ToolCallID         string `json:"toolCallId,omitempty"`
+	ToolName           string `json:"toolName,omitempty"`
+	ParentStepID       string `json:"parentStepId,omitempty"`
+	DelegatedTaskID    string `json:"delegatedTaskId,omitempty"`
+	DelegatedContextID string `json:"delegatedContextId,omitempty"`
+	Sequence           *int   `json:"sequence,omitempty"`
+}
+
+type ToolResultPayloadV1 struct {
+	Schema             string                   `json:"schema"`
+	ToolCallID         string                   `json:"toolCallId,omitempty"`
+	ToolName           string                   `json:"toolName,omitempty"`
+	Content            string                   `json:"content,omitempty"`
+	Error              string                   `json:"error,omitempty"`
+	Step               *StepEventPayloadV1      `json:"step,omitempty"`
+	DelegatedTaskID    string                   `json:"delegatedTaskId,omitempty"`
+	DelegatedContextID string                   `json:"delegatedContextId,omitempty"`
+	Message            map[string]interface{}   `json:"message,omitempty"`
+	Artifacts          []map[string]interface{} `json:"artifacts,omitempty"`
+}
+
+func appendPayloadPart(parts []protocol.Part, payload interface{}) []protocol.Part {
+	return append(parts, &protocol.DataPart{
+		Kind: protocol.KindData,
+		Data: payload,
+	})
+}
+
+func appendPayloadPartToMessage(message *protocol.Message, payload interface{}) {
+	if message == nil {
+		return
+	}
+	message.Parts = appendPayloadPart(message.Parts, payload)
+}
+
+func buildToolResultPayloadContent(payload ToolResultPayloadV1) (string, error) {
+	if payload.Schema == "" {
+		payload.Schema = A2APayloadSchemaToolResultV1
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("failed to serialize tool-result payload: %w", err)
+	}
+	return string(raw), nil
+}

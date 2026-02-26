@@ -3,13 +3,18 @@
 package genai
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -18,6 +23,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
+	arkann "mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
 )
@@ -26,13 +32,327 @@ const (
 	// AgentCardPathVersion2 is the A2A protocol 0.2.x agent card path
 	AgentCardPathVersion2 = "/.well-known/agent.json"
 	// AgentCardPathVersion3 is the A2A protocol 0.3.x agent card path
-	AgentCardPathVersion3 = "/.well-known/agent-card.json"
+	AgentCardPathVersion3      = "/.well-known/agent-card.json"
+	a2aHistoryExtensionKey     = "https://ark.mckinsey.com/extensions/history/v1"
+	a2aPermissionsExtensionKey = "https://ark.mckinsey.com/extensions/permissions/v1"
+	a2aExtensionsHeader = "A2A-Extensions"
 )
 
 type A2AResponse struct {
 	Content   string
 	ContextID string
 	TaskID    string
+	Message   *protocol.Message   `json:"-"`
+	Artifacts []protocol.Artifact `json:"-"`
+}
+
+type A2APermissions struct {
+	Subject    string                 `json:"subject,omitempty"`
+	Scopes     []string               `json:"scopes,omitempty"`
+	Claims     map[string]interface{} `json:"claims,omitempty"`
+	Issuer     string                 `json:"issuer,omitempty"`
+	Audience   []string               `json:"audience,omitempty"`
+	IssuedAt   string                 `json:"issuedAt,omitempty"`
+	ExpiresAt  string                 `json:"expiresAt,omitempty"`
+	Token      string                 `json:"token,omitempty"`
+	TokenType  string                 `json:"tokenType,omitempty"`
+	Delegation *A2ADelegation         `json:"delegation,omitempty"`
+}
+
+type A2ADelegation struct {
+	Subject string   `json:"subject,omitempty"`
+	Chain   []string `json:"chain,omitempty"`
+}
+
+func isA2AStreamingSupported(agentAnnotations map[string]string) bool {
+	if agentAnnotations == nil {
+		return false
+	}
+	return agentAnnotations[arkann.A2AStreamingSupported] == TrueString
+}
+
+func shouldIncludeA2AHistory(agentAnnotations map[string]string, defaultValue bool) bool {
+	if agentAnnotations == nil {
+		return defaultValue
+	}
+	if value, ok := agentAnnotations[arkann.A2AHistoryEnabled]; ok {
+		return value == TrueString
+	}
+	return defaultValue
+}
+
+func getA2AHistoryLimit(agentAnnotations map[string]string) int {
+	if agentAnnotations == nil {
+		return 0
+	}
+	value := agentAnnotations[arkann.A2AHistoryLimit]
+	if value == "" {
+		return 0
+	}
+	limit, err := strconv.Atoi(value)
+	if err != nil {
+		return 0
+	}
+	if limit < 0 {
+		return 0
+	}
+	return limit
+}
+
+func getA2ASupportedExtensions(agentAnnotations map[string]string) map[string]struct{} {
+	if agentAnnotations == nil {
+		return nil
+	}
+	raw := agentAnnotations[arkann.A2ASupportedExtensions]
+	if raw == "" {
+		return nil
+	}
+	var values []string
+	if err := json.Unmarshal([]byte(raw), &values); err != nil {
+		return nil
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	result := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if value != "" {
+			result[value] = struct{}{}
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func supportsA2AExtension(agentAnnotations map[string]string, extension string) bool {
+	if extension == "" {
+		return false
+	}
+	supported := getA2ASupportedExtensions(agentAnnotations)
+	if len(supported) == 0 {
+		return false
+	}
+	_, ok := supported[extension]
+	return ok
+}
+
+func parseA2APermissions(raw string) (map[string]interface{}, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	permissions, err := decodeA2APermissions(raw)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateA2APermissions(permissions); err != nil {
+		return nil, err
+	}
+	return encodeA2APermissions(permissions)
+}
+
+func buildA2AMetadata(agentAnnotations map[string]string, history []protocol.Message, includeHistory bool) (map[string]interface{}, error) {
+	supportsPermissions := supportsA2AExtension(agentAnnotations, a2aPermissionsExtensionKey)
+	supportsHistory := supportsA2AExtension(agentAnnotations, a2aHistoryExtensionKey)
+	metadata, err := parseA2AExtensionsMetadata(agentAnnotations)
+	if err != nil {
+		return nil, err
+	}
+	metadata = filterUnsupportedA2AExtensions(metadata, supportsPermissions, supportsHistory)
+
+	metadata, err = addA2APermissionsMetadata(metadata, agentAnnotations, supportsPermissions)
+	if err != nil {
+		return nil, err
+	}
+	metadata = addA2AHistoryMetadata(metadata, history, includeHistory && supportsHistory, agentAnnotations)
+
+	if len(metadata) == 0 {
+		return nil, nil
+	}
+	return metadata, nil
+}
+
+func decodeA2APermissions(raw string) (A2APermissions, error) {
+	var permissions A2APermissions
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&permissions); err != nil {
+		return A2APermissions{}, fmt.Errorf("failed to parse A2A permissions: %w", err)
+	}
+	return permissions, nil
+}
+
+func validateA2APermissions(permissions A2APermissions) error {
+	if permissions.Subject == "" && permissions.Token == "" {
+		return fmt.Errorf("A2A permissions must include subject or token")
+	}
+	if permissions.Token != "" && permissions.TokenType == "" {
+		return fmt.Errorf("A2A permissions tokenType is required when token is provided")
+	}
+	if permissions.Delegation != nil && permissions.Delegation.Subject == "" {
+		return fmt.Errorf("A2A permissions delegation subject is required")
+	}
+	return validateA2APermissionsTimestamps(permissions.IssuedAt, permissions.ExpiresAt)
+}
+
+func validateA2APermissionsTimestamps(issuedAtRaw, expiresAtRaw string) error {
+	issuedAt, err := parseOptionalRFC3339(issuedAtRaw, "issuedAt")
+	if err != nil {
+		return err
+	}
+	expiresAt, err := parseOptionalRFC3339(expiresAtRaw, "expiresAt")
+	if err != nil {
+		return err
+	}
+	if !issuedAt.IsZero() && !expiresAt.IsZero() && expiresAt.Before(issuedAt) {
+		return fmt.Errorf("A2A permissions expiresAt must be after issuedAt")
+	}
+	return nil
+}
+
+func parseOptionalRFC3339(raw, field string) (time.Time, error) {
+	if raw == "" {
+		return time.Time{}, nil
+	}
+	parsed, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("A2A permissions %s must be RFC3339: %w", field, err)
+	}
+	return parsed, nil
+}
+
+func encodeA2APermissions(permissions A2APermissions) (map[string]interface{}, error) {
+	data, err := json.Marshal(permissions)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode A2A permissions: %w", err)
+	}
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return nil, fmt.Errorf("failed to parse A2A permissions: %w", err)
+	}
+	if len(parsed) == 0 {
+		return nil, nil
+	}
+	return parsed, nil
+}
+
+func parseA2AExtensionsMetadata(agentAnnotations map[string]string) (map[string]interface{}, error) {
+	if agentAnnotations == nil {
+		return nil, nil
+	}
+	raw := agentAnnotations[arkann.A2AExtensions]
+	if raw == "" {
+		return nil, nil
+	}
+	var metadata map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &metadata); err != nil {
+		return nil, fmt.Errorf("failed to parse A2A extensions: %w", err)
+	}
+	return metadata, nil
+}
+
+func filterUnsupportedA2AExtensions(metadata map[string]interface{}, supportsPermissions, supportsHistory bool) map[string]interface{} {
+	if metadata == nil {
+		return nil
+	}
+	if !supportsPermissions {
+		delete(metadata, a2aPermissionsExtensionKey)
+	}
+	if !supportsHistory {
+		delete(metadata, a2aHistoryExtensionKey)
+	}
+	if len(metadata) == 0 {
+		return nil
+	}
+	return metadata
+}
+
+func addA2APermissionsMetadata(metadata map[string]interface{}, agentAnnotations map[string]string, supported bool) (map[string]interface{}, error) {
+	if !supported || agentAnnotations == nil {
+		return metadata, nil
+	}
+	permissionsValue, err := parseA2APermissions(agentAnnotations[arkann.A2APermissions])
+	if err != nil {
+		return nil, err
+	}
+	if permissionsValue == nil {
+		return metadata, nil
+	}
+	metadata = ensureA2AMetadata(metadata)
+	metadata[a2aPermissionsExtensionKey] = permissionsValue
+	return metadata, nil
+}
+
+func addA2AHistoryMetadata(metadata map[string]interface{}, history []protocol.Message, include bool, agentAnnotations map[string]string) map[string]interface{} {
+	if !include || len(history) == 0 {
+		return metadata
+	}
+	limit := getA2AHistoryLimit(agentAnnotations)
+	if limit > 0 && len(history) > limit {
+		history = history[len(history)-limit:]
+	}
+	metadata = ensureA2AMetadata(metadata)
+	metadata[a2aHistoryExtensionKey] = convertToA2AHistory(history)
+	return metadata
+}
+
+func ensureA2AMetadata(metadata map[string]interface{}) map[string]interface{} {
+	if metadata != nil {
+		return metadata
+	}
+	return map[string]interface{}{}
+}
+
+func buildA2ASendMessageParams(userInput protocol.Message, contextID string, metadata map[string]interface{}, blocking bool) (protocol.SendMessageParams, error) {
+	message := userInput
+	message.Role = protocol.MessageRoleUser
+	// A2A requires message.messageId on Message payloads.
+	// Ensure the field is always populated before dispatch.
+	if message.MessageID == "" {
+		message.MessageID = protocol.GenerateRPCID()
+	}
+	if contextID != "" {
+		message.ContextID = &contextID
+	}
+	params := protocol.SendMessageParams{
+		RPCID:   protocol.GenerateRPCID(),
+		Message: message,
+		Configuration: &protocol.SendMessageConfiguration{
+			Blocking: &blocking,
+		},
+	}
+	seen := make(map[string]struct{})
+	extensions := make([]string, 0, len(message.Extensions)+len(metadata))
+	for _, extension := range message.Extensions {
+		trimmed := strings.TrimSpace(extension)
+		if trimmed == "" {
+			continue
+		}
+		if _, exists := seen[trimmed]; exists {
+			continue
+		}
+		extensions = append(extensions, trimmed)
+		seen[trimmed] = struct{}{}
+	}
+	if len(metadata) > 0 {
+		for key := range metadata {
+			if !isA2AExtensionURI(key) {
+				continue
+			}
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			extensions = append(extensions, key)
+			seen[key] = struct{}{}
+		}
+		params.Metadata = metadata
+	}
+	if len(extensions) > 0 {
+		sort.Strings(extensions)
+		params.Message.Extensions = extensions
+	}
+	return params, nil
 }
 
 // DiscoverA2AAgents discovers agents from an A2A server using simplified HTTP approach
@@ -45,10 +365,6 @@ func DiscoverA2AAgents(ctx context.Context, k8sClient client.Client, address str
 // Note: protocol.AgentCardPath is version 0.2.x (agent.json) at time of writing
 func DiscoverA2AAgentsWithRecorder(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace string, a2aRecorder eventing.A2aRecorder, obj client.Object) (*A2AAgentCard, error) {
 	baseURL := strings.TrimSuffix(address, "/")
-
-	if err := validateA2AClient(address, headers, ctx, k8sClient, namespace); err != nil {
-		return nil, err
-	}
 
 	endpoints := []struct {
 		url     string
@@ -79,7 +395,7 @@ func DiscoverA2AAgentsWithRecorder(ctx context.Context, k8sClient client.Client,
 }
 
 // ExecuteA2AAgent executes a task on an A2A agent with optional K8s event recording and query context
-func ExecuteA2AAgent(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace, input, agentName, queryName, contextID string, a2aRecorder eventing.A2aRecorder, obj client.Object) (*A2AResponse, error) {
+func ExecuteA2AAgent(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace string, userInput protocol.Message, metadata map[string]interface{}, agentName, queryName, contextID string, a2aRecorder eventing.A2aRecorder, obj client.Object) (*A2AResponse, error) {
 	rpcURL := strings.TrimSuffix(address, "/")
 
 	// Create and configure A2A client
@@ -89,7 +405,68 @@ func ExecuteA2AAgent(ctx context.Context, k8sClient client.Client, address strin
 	}
 
 	// Execute agent and get response
-	return executeA2AAgentMessage(ctx, k8sClient, a2aClient, input, agentName, namespace, queryName, contextID, obj, a2aRecorder)
+	return executeA2AAgentMessage(ctx, k8sClient, a2aClient, userInput, metadata, agentName, namespace, queryName, contextID, obj, a2aRecorder, true)
+}
+
+func StreamA2AAgent(ctx context.Context, k8sClient client.Client, address string, headers []arkv1prealpha1.Header, namespace string, userInput protocol.Message, metadata map[string]interface{}, agentName, contextID string, a2aRecorder eventing.A2aRecorder) (<-chan protocol.StreamingMessageEvent, error) {
+	rpcURL := strings.TrimSuffix(address, "/")
+	a2aClient, err := CreateA2AClient(ctx, k8sClient, rpcURL, headers, namespace, agentName, a2aRecorder)
+	if err != nil {
+		return nil, err
+	}
+	params, err := buildA2ASendMessageParams(userInput, contextID, metadata, false)
+	if err != nil {
+		return nil, err
+	}
+	events, streamErr := a2aClient.StreamMessage(ctx, params)
+	if streamErr == nil {
+		return events, nil
+	}
+
+	log := logf.FromContext(ctx)
+	log.V(1).Info("A2A message/stream failed, falling back to message/send", "agent", agentName, "error", streamErr)
+
+	result, sendErr := a2aClient.SendMessage(ctx, params)
+	if sendErr != nil {
+		return nil, fmt.Errorf("A2A streaming failed (%w) and blocking fallback also failed: %w", streamErr, sendErr)
+	}
+	if result == nil || result.Result == nil {
+		return nil, fmt.Errorf("A2A streaming response is nil")
+	}
+	switch r := result.Result.(type) {
+	case *protocol.Message:
+		out := make(chan protocol.StreamingMessageEvent, 1)
+		out <- protocol.StreamingMessageEvent{Result: r}
+		close(out)
+		return out, nil
+	case *protocol.Task:
+		resubscribe, resubscribeErr := a2aClient.ResubscribeTask(ctx, protocol.TaskIDParams{
+			RPCID: protocol.GenerateRPCID(),
+			ID:    r.ID,
+		})
+		if resubscribeErr != nil {
+			return nil, resubscribeErr
+		}
+		out := make(chan protocol.StreamingMessageEvent, 1)
+		go func() {
+			defer close(out)
+			select {
+			case out <- protocol.StreamingMessageEvent{Result: r}:
+			case <-ctx.Done():
+				return
+			}
+			for event := range resubscribe {
+				select {
+				case out <- event:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+		return out, nil
+	default:
+		return nil, fmt.Errorf("unexpected A2A streaming result type: %T", result.Result)
+	}
 }
 
 // CreateA2AClient creates and configures A2A client with header resolution and injection
@@ -128,31 +505,11 @@ func CreateA2AClient(ctx context.Context, k8sClient client.Client, rpcURL string
 }
 
 // executeA2AAgentMessage sends message to A2A agent and processes response
-func executeA2AAgentMessage(ctx context.Context, k8sClient client.Client, a2aClient *a2aclient.A2AClient, input, agentName, namespace, queryName, contextID string, obj client.Object, a2aRecorder eventing.A2aRecorder) (*A2AResponse, error) {
-	var message protocol.Message
-	if contextID != "" {
-		message = protocol.NewMessageWithContext(protocol.MessageRoleUser, []protocol.Part{
-			protocol.NewTextPart(input),
-		}, nil, &contextID)
-	} else {
-		message = protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
-			protocol.NewTextPart(input),
-		})
+func executeA2AAgentMessage(ctx context.Context, k8sClient client.Client, a2aClient *a2aclient.A2AClient, userInput protocol.Message, metadata map[string]interface{}, agentName, namespace, queryName, contextID string, obj client.Object, a2aRecorder eventing.A2aRecorder, blocking bool) (*A2AResponse, error) {
+	params, err := buildA2ASendMessageParams(userInput, contextID, metadata, blocking)
+	if err != nil {
+		return nil, err
 	}
-
-	blocking := true
-	params := protocol.SendMessageParams{
-		RPCID:   protocol.GenerateRPCID(),
-		Message: message,
-		// Blocking: true causes the A2A server to wait for task completion before responding.
-		// When false, the server returns immediately with a Task in "submitted" state, requiring
-		// the client to poll for updates. Ark currently only supports blocking mode, expecting
-		// Tasks to be in terminal state ("completed" or "failed") when returned.
-		Configuration: &protocol.SendMessageConfiguration{
-			Blocking: &blocking,
-		},
-	}
-
 	result, err := a2aClient.SendMessage(ctx, params)
 	if err != nil {
 		if a2aRecorder != nil {
@@ -183,6 +540,9 @@ func (h *customA2ARequestHandler) Handle(ctx context.Context, httpClient *http.C
 	for name, value := range h.headers {
 		req.Header.Set(name, value)
 	}
+	if extensionHeader := extractA2AExtensionsHeader(req); extensionHeader != "" {
+		req.Header.Set(a2aExtensionsHeader, extensionHeader)
+	}
 
 	// Inject OTEL trace context and session headers
 	headerMap := make(map[string]string)
@@ -193,6 +553,71 @@ func (h *customA2ARequestHandler) Handle(ctx context.Context, httpClient *http.C
 
 	// Perform the request
 	return httpClient.Do(req)
+}
+
+func extractA2AExtensionsHeader(req *http.Request) string {
+	if req == nil {
+		return ""
+	}
+	existingHeader := req.Header.Get(a2aExtensionsHeader)
+	if req.Body == nil {
+		return existingHeader
+	}
+
+	bodyBytes, err := io.ReadAll(req.Body)
+	if err != nil {
+		return existingHeader
+	}
+	req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+	req.ContentLength = int64(len(bodyBytes))
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(bodyBytes)), nil
+	}
+
+	if len(bytes.TrimSpace(bodyBytes)) == 0 {
+		return existingHeader
+	}
+
+	var payload struct {
+		Params struct {
+			Message struct {
+				Extensions []string `json:"extensions"`
+			} `json:"message"`
+		} `json:"params"`
+	}
+	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+		return existingHeader
+	}
+	if len(payload.Params.Message.Extensions) == 0 {
+		return existingHeader
+	}
+	return mergeA2AExtensions(existingHeader, payload.Params.Message.Extensions)
+}
+
+func mergeA2AExtensions(existing string, discovered []string) string {
+	unique := make(map[string]struct{})
+	for _, entry := range strings.Split(existing, ",") {
+		trimmed := strings.TrimSpace(entry)
+		if trimmed != "" {
+			unique[trimmed] = struct{}{}
+		}
+	}
+	for _, entry := range discovered {
+		trimmed := strings.TrimSpace(entry)
+		if trimmed != "" {
+			unique[trimmed] = struct{}{}
+		}
+	}
+	if len(unique) == 0 {
+		return ""
+	}
+
+	extensions := make([]string, 0, len(unique))
+	for extension := range unique {
+		extensions = append(extensions, extension)
+	}
+	sort.Strings(extensions)
+	return strings.Join(extensions, ", ")
 }
 
 // extractResponseFromMessageResult extracts response from MessageResult and handles both messages and tasks
@@ -207,9 +632,13 @@ func extractResponseFromMessageResult(ctx context.Context, k8sClient client.Clie
 		text := extractTextFromParts(r.Parts)
 		response := &A2AResponse{
 			Content: text,
+			Message: r,
 		}
 		if r.ContextID != nil && *r.ContextID != "" {
 			response.ContextID = *r.ContextID
+		}
+		if r.TaskID != nil && *r.TaskID != "" {
+			response.TaskID = *r.TaskID
 		}
 		return response, nil
 	case *protocol.Task:
@@ -229,6 +658,8 @@ func extractResponseFromMessageResult(ctx context.Context, k8sClient client.Clie
 			Content:   text,
 			ContextID: r.ContextID,
 			TaskID:    r.ID,
+			Message:   extractLatestAgentMessageFromTask(r),
+			Artifacts: r.Artifacts,
 		}
 		return response, nil
 	default:
@@ -237,7 +668,7 @@ func extractResponseFromMessageResult(ctx context.Context, k8sClient client.Clie
 	}
 }
 
-// extractTextFromTask extracts text from a completed or failed Task
+//nolint:gocognit // Extracts text from task status message, artifacts, and history; cohesive extraction logic
 func extractTextFromTask(task *protocol.Task) (string, error) {
 	if task.Status.State == "" {
 		return "", fmt.Errorf("task has no status state")
@@ -245,6 +676,12 @@ func extractTextFromTask(task *protocol.Task) (string, error) {
 
 	switch task.Status.State {
 	case TaskStateCompleted:
+		if task.Status.Message != nil && len(task.Status.Message.Parts) > 0 {
+			if statusText := extractTextFromParts(task.Status.Message.Parts); statusText != "" {
+				return statusText, nil
+			}
+		}
+
 		// Extract all agent messages from history
 		var text strings.Builder
 		for _, msg := range task.History {
@@ -274,39 +711,70 @@ func extractTextFromTask(task *protocol.Task) (string, error) {
 	}
 }
 
+func extractLatestAgentMessageFromTask(task *protocol.Task) *protocol.Message {
+	if task == nil {
+		return nil
+	}
+	if task.Status.Message != nil && task.Status.Message.Role == protocol.MessageRoleAgent && len(task.Status.Message.Parts) > 0 {
+		return task.Status.Message
+	}
+	for i := len(task.History) - 1; i >= 0; i-- {
+		message := task.History[i]
+		if message.Role == protocol.MessageRoleAgent && len(message.Parts) > 0 {
+			copyMessage := message
+			return &copyMessage
+		}
+	}
+	return nil
+}
+
 // extractTextFromParts extracts text from message parts in a type-safe way
 func extractTextFromParts(parts []protocol.Part) string {
 	var text strings.Builder
 	for _, part := range parts {
-		if textPart, ok := part.(protocol.TextPart); ok {
-			text.WriteString(textPart.Text)
-		} else if textPartPtr, ok := part.(*protocol.TextPart); ok {
-			text.WriteString(textPartPtr.Text)
+		switch p := part.(type) {
+		case protocol.TextPart:
+			text.WriteString(p.Text)
+		case *protocol.TextPart:
+			text.WriteString(p.Text)
+		case protocol.DataPart:
+			// Data parts carry structured payloads and should not be concatenated into user-facing text.
+			continue
+		case *protocol.DataPart:
+			// Data parts carry structured payloads and should not be concatenated into user-facing text.
+			continue
+		case protocol.FilePart:
+			text.WriteString(extractFilePartText(p.File))
+		case *protocol.FilePart:
+			text.WriteString(extractFilePartText(p.File))
 		}
 	}
 	return text.String()
 }
 
-// validateA2AClient validates A2A client creation
-func validateA2AClient(address string, headers []arkv1prealpha1.Header, ctx context.Context, k8sClient client.Client, namespace string) error {
-	var clientOptions []a2aclient.Option
-	clientOptions = append(clientOptions, a2aclient.WithTimeout(30*time.Second))
-
-	if len(headers) > 0 {
-		resolvedHeaders, err := resolveA2AHeaders(ctx, k8sClient, headers, namespace)
-		if err != nil {
-			return err
+func extractFilePartText(file interface{}) string {
+	switch f := file.(type) {
+	case *protocol.FileWithURI:
+		return f.URI
+	case *protocol.FileWithBytes:
+		if f.Name != nil && *f.Name != "" {
+			return *f.Name
 		}
-		clientOptions = append(clientOptions, a2aclient.WithHTTPReqHandler(&customA2ARequestHandler{
-			headers: resolvedHeaders,
-		}))
+		return "file-bytes"
+	default:
+		return ""
 	}
+}
 
-	_, err := a2aclient.NewA2AClient(address, clientOptions...)
-	if err != nil {
-		return fmt.Errorf("failed to create A2A client: %w", err)
+func convertToA2AHistory(history []protocol.Message) []protocol.Message {
+	results := make([]protocol.Message, 0, len(history))
+	for _, msg := range history {
+		if msg.Role == "" {
+			continue
+		}
+		results = append(results, msg)
 	}
-	return nil
+	return results
 }
 
 // createA2ARequest creates and configures HTTP request for A2A discovery
@@ -432,4 +900,87 @@ func handleA2ATaskResponse(ctx context.Context, k8sClient client.Client, task *p
 	}
 
 	return nil
+}
+
+func upsertA2ATaskFromTask(ctx context.Context, k8sClient client.Client, task *protocol.Task, agentName, namespace, queryName, a2aServerName string) error {
+	if task == nil || queryName == "" || a2aServerName == "" {
+		return nil
+	}
+
+	taskName := fmt.Sprintf("a2a-task-%s", task.ID)
+	existing := &arkv1alpha1.A2ATask{}
+	err := k8sClient.Get(ctx, client.ObjectKey{Name: taskName, Namespace: namespace}, existing)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			a2aTask := &arkv1alpha1.A2ATask{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      taskName,
+					Namespace: namespace,
+				},
+				Spec: arkv1alpha1.A2ATaskSpec{
+					TaskID:    task.ID,
+					ContextID: task.ContextID,
+					QueryRef: arkv1alpha1.QueryRef{
+						Name:      queryName,
+						Namespace: namespace,
+					},
+					A2AServerRef: arkv1alpha1.A2AServerRef{
+						Name:      a2aServerName,
+						Namespace: namespace,
+					},
+					AgentRef: arkv1alpha1.AgentRef{
+						Name:      agentName,
+						Namespace: namespace,
+					},
+				},
+				Status: arkv1alpha1.A2ATaskStatus{
+					Phase: ConvertA2AStateToPhase(string(task.Status.State)),
+				},
+			}
+			PopulateA2ATaskStatusFromProtocol(&a2aTask.Status, task)
+			now := metav1.NewTime(time.Now())
+			a2aTask.Status.StartTime = &now
+			return k8sClient.Create(ctx, a2aTask)
+		}
+		return err
+	}
+
+	UpdateA2ATaskStatus(&existing.Status, task)
+	return k8sClient.Status().Update(ctx, existing)
+}
+
+func taskFromStatusUpdate(event *protocol.TaskStatusUpdateEvent) *protocol.Task {
+	if event == nil {
+		return nil
+	}
+	return &protocol.Task{
+		ID:        event.TaskID,
+		ContextID: event.ContextID,
+		Kind:      protocol.KindTask,
+		Status:    event.Status,
+		Metadata:  event.Metadata,
+	}
+}
+
+func taskFromArtifactUpdate(event *protocol.TaskArtifactUpdateEvent, status *protocol.TaskStatus) *protocol.Task {
+	if event == nil {
+		return nil
+	}
+	taskStatus := protocol.TaskStatus{}
+	if status != nil {
+		taskStatus = *status
+	} else {
+		taskStatus.State = protocol.TaskStateWorking
+	}
+	if taskStatus.State == "" {
+		taskStatus.State = protocol.TaskStateWorking
+	}
+	return &protocol.Task{
+		ID:        event.TaskID,
+		ContextID: event.ContextID,
+		Kind:      protocol.KindTask,
+		Status:    taskStatus,
+		Artifacts: []protocol.Artifact{event.Artifact},
+		Metadata:  event.Metadata,
+	}
 }

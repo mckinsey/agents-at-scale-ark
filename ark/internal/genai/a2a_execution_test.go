@@ -2,191 +2,344 @@ package genai
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	arkann "mckinsey.com/ark/internal/annotations"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
-type mockEventStream struct {
+type fakeEventStream struct {
 	chunks []interface{}
 }
 
-func (m *mockEventStream) StreamChunk(_ context.Context, chunk interface{}) error {
-	m.chunks = append(m.chunks, chunk)
+func (f *fakeEventStream) StreamChunk(_ context.Context, chunk interface{}) error {
+	f.chunks = append(f.chunks, chunk)
 	return nil
 }
 
-func (m *mockEventStream) NotifyCompletion(_ context.Context) error { return nil }
-func (m *mockEventStream) Close() error                             { return nil }
-
-func TestConsumeA2AStreamEventsMessage(t *testing.T) {
-	ctx := context.Background()
-	events := make(chan protocol.StreamingMessageEvent, 1)
-	stream := &mockEventStream{}
-
-	contextID := "ctx-1"
-	events <- protocol.StreamingMessageEvent{
-		Result: &protocol.Message{
-			Role:      protocol.MessageRoleAgent,
-			Parts:     []protocol.Part{protocol.NewTextPart("hello world")},
-			ContextID: &contextID,
-		},
-	}
-	close(events)
-
-	result, err := consumeA2AStreamEvents(ctx, nil, events, stream, "agent/test", "comp-1", "test", "default", "", nil)
-	require.NoError(t, err)
-	assert.Equal(t, "hello world", result.A2AResponse.Content)
-	assert.Equal(t, "ctx-1", result.A2AResponse.ContextID)
-	assert.Len(t, stream.chunks, 1)
+func (f *fakeEventStream) NotifyCompletion(_ context.Context) error {
+	return nil
 }
 
-func TestConsumeA2AStreamEventsArtifact(t *testing.T) {
-	ctx := context.Background()
-	events := make(chan protocol.StreamingMessageEvent, 2)
-	stream := &mockEventStream{}
+func (f *fakeEventStream) Close() error {
+	return nil
+}
 
-	events <- protocol.StreamingMessageEvent{
-		Result: &protocol.TaskArtifactUpdateEvent{
-			TaskID: "task-1",
-			Artifact: protocol.Artifact{
-				Parts: []protocol.Part{protocol.NewTextPart("chunk 1")},
-			},
+type failingA2AEventStream struct {
+	callCount  int
+	failOnCall int
+}
+
+func (f *failingA2AEventStream) StreamChunk(_ context.Context, _ interface{}) error {
+	f.callCount++
+	if f.callCount == f.failOnCall {
+		return errors.New("stream boom")
+	}
+	return nil
+}
+
+func (f *failingA2AEventStream) NotifyCompletion(_ context.Context) error {
+	return nil
+}
+
+func (f *failingA2AEventStream) Close() error {
+	return nil
+}
+
+func TestStreamA2AEventNative(t *testing.T) {
+	ctx := context.Background()
+	stream := &fakeEventStream{}
+	payload := &protocol.Message{
+		Kind: protocol.KindMessage,
+		Role: protocol.MessageRoleAgent,
+		Parts: []protocol.Part{
+			protocol.TextPart{Kind: protocol.KindText, Text: "hello"},
 		},
 	}
-	events <- protocol.StreamingMessageEvent{
-		Result: &protocol.TaskArtifactUpdateEvent{
-			TaskID: "task-1",
-			Artifact: protocol.Artifact{
-				Parts: []protocol.Part{protocol.NewTextPart("chunk 2")},
-			},
+
+	err := streamA2AEvent(ctx, stream, A2APayloadModeNative, "agent/test", "completion-1", "hello", payload)
+
+	assert.NoError(t, err)
+	assert.Len(t, stream.chunks, 1)
+	assert.Equal(t, payload, stream.chunks[0])
+}
+
+func TestStreamA2AEventNativeFailure(t *testing.T) {
+	ctx := context.Background()
+	stream := &failingA2AEventStream{failOnCall: 1}
+	payload := &protocol.Message{
+		Kind: protocol.KindMessage,
+		Role: protocol.MessageRoleAgent,
+		Parts: []protocol.Part{
+			protocol.TextPart{Kind: protocol.KindText, Text: "hello"},
 		},
 	}
+
+	err := streamA2AEvent(ctx, stream, A2APayloadModeNative, "agent/test", "completion-1", "hello", payload)
+
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, "failed to stream native A2A event")
+}
+
+func TestStreamA2AErrorNative(t *testing.T) {
+	ctx := context.Background()
+	ctx = WithA2AContextID(ctx, "ctx-err")
+	ctx = WithQueryContext(ctx, "query-err", "session-1", "query-name")
+	stream := &fakeEventStream{}
+
+	streamA2AError(ctx, stream, A2APayloadModeNative, "agent/test", errors.New("boom"))
+
+	assert.Len(t, stream.chunks, 1)
+	event, ok := stream.chunks[0].(*protocol.TaskStatusUpdateEvent)
+	assert.True(t, ok)
+	assert.Equal(t, protocol.TaskStateFailed, event.Status.State)
+	assert.True(t, event.Final)
+	assert.Equal(t, "ctx-err", event.ContextID)
+	assert.NotNil(t, event.Status.Message)
+	assert.Equal(t, "boom", extractTextFromParts(event.Status.Message.Parts))
+	stepPayload, hasStepPayload := extractDataPayloadBySchema(
+		event.Status.Message.Parts,
+		A2APayloadSchemaStepEventV1,
+	)
+	assert.True(t, hasStepPayload)
+	assert.Equal(t, "task-error:query-err", stepPayload["stepId"])
+	assert.Equal(t, "error", stepPayload["stepState"])
+	assert.Equal(t, "status", stepPayload["stepKind"])
+}
+
+func TestConsumeA2AStreamEventsMessageCompat(t *testing.T) {
+	ctx := context.Background()
+	stream := &fakeEventStream{}
+	events := make(chan protocol.StreamingMessageEvent, 1)
+	message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.TextPart{Kind: protocol.KindText, Text: "hello"},
+	})
+	events <- protocol.StreamingMessageEvent{Result: &message}
 	close(events)
 
-	result, err := consumeA2AStreamEvents(ctx, nil, events, stream, "agent/test", "comp-1", "test", "default", "", nil)
-	require.NoError(t, err)
-	assert.Equal(t, "chunk 1chunk 2", result.A2AResponse.Content)
-	assert.Equal(t, "task-1", result.A2AResponse.TaskID)
+	engine := &A2AExecutionEngine{}
+	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "hello", response.Content)
+	assert.Len(t, stream.chunks, 1)
+	wrapped, ok := stream.chunks[0].(ChunkWithMetadata)
+	assert.True(t, ok)
+	assert.Equal(t, "hello", wrapped.Choices[0].Delta.Content)
+	assert.Equal(t, &message, wrapped.Ark.A2A)
+}
+
+func TestConsumeA2AStreamEventsMessageThenFinalStatus(t *testing.T) {
+	ctx := context.Background()
+	stream := &fakeEventStream{}
+	events := make(chan protocol.StreamingMessageEvent, 2)
+
+	message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.TextPart{Kind: protocol.KindText, Text: "partial"},
+	})
+	events <- protocol.StreamingMessageEvent{Result: &message}
+
+	status := protocol.TaskStatus{
+		State: protocol.TaskStateCompleted,
+		Message: &protocol.Message{
+			Parts: []protocol.Part{
+				protocol.TextPart{Kind: protocol.KindText, Text: "done"},
+			},
+		},
+	}
+	events <- protocol.StreamingMessageEvent{Result: &protocol.TaskStatusUpdateEvent{
+		TaskID:    "task-seq",
+		ContextID: "context-seq",
+		Status:    status,
+		Final:     true,
+	}}
+	close(events)
+
+	engine := &A2AExecutionEngine{}
+	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "partial", response.Content)
+	assert.Equal(t, "task-seq", response.TaskID)
+	assert.Equal(t, "context-seq", response.ContextID)
+	assert.NotNil(t, response.Message)
+	assert.Equal(t, "done", extractTextFromParts(response.Message.Parts))
 	assert.Len(t, stream.chunks, 2)
+}
+
+func TestConsumeA2AStreamEventsArtifactUpdate(t *testing.T) {
+	ctx := context.Background()
+	stream := &fakeEventStream{}
+	events := make(chan protocol.StreamingMessageEvent, 1)
+	artifact := protocol.Artifact{
+		ArtifactID: "artifact-1",
+		Parts: []protocol.Part{
+			protocol.TextPart{Kind: protocol.KindText, Text: "part-1"},
+		},
+	}
+	events <- protocol.StreamingMessageEvent{Result: &protocol.TaskArtifactUpdateEvent{
+		TaskID:    "task-1",
+		ContextID: "context-1",
+		Artifact:  artifact,
+	}}
+	close(events)
+
+	engine := &A2AExecutionEngine{}
+	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "part-1", response.Content)
+	assert.Equal(t, "task-1", response.TaskID)
+	assert.Equal(t, "context-1", response.ContextID)
 }
 
 func TestConsumeA2AStreamEventsFinalStatus(t *testing.T) {
 	ctx := context.Background()
-	events := make(chan protocol.StreamingMessageEvent, 2)
-	stream := &mockEventStream{}
-
-	events <- protocol.StreamingMessageEvent{
-		Result: &protocol.TaskStatusUpdateEvent{
-			TaskID:    "task-1",
-			ContextID: "ctx-1",
-			Status: protocol.TaskStatus{
-				State: protocol.TaskState(TaskStateWorking),
+	stream := &fakeEventStream{}
+	events := make(chan protocol.StreamingMessageEvent, 1)
+	status := protocol.TaskStatus{
+		State: protocol.TaskStateCompleted,
+		Message: &protocol.Message{
+			Parts: []protocol.Part{
+				protocol.TextPart{Kind: protocol.KindText, Text: "done"},
 			},
 		},
 	}
-	events <- protocol.StreamingMessageEvent{
-		Result: &protocol.TaskStatusUpdateEvent{
-			TaskID:    "task-1",
-			ContextID: "ctx-1",
-			Final:     true,
-			Status: protocol.TaskStatus{
-				State: protocol.TaskState(TaskStateCompleted),
-				Message: &protocol.Message{
-					Parts: []protocol.Part{protocol.NewTextPart("done")},
-				},
-			},
+	events <- protocol.StreamingMessageEvent{Result: &protocol.TaskStatusUpdateEvent{
+		TaskID:    "task-2",
+		ContextID: "context-2",
+		Status:    status,
+		Final:     true,
+	}}
+	close(events)
+
+	engine := &A2AExecutionEngine{}
+	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "done", response.Content)
+	assert.Equal(t, "task-2", response.TaskID)
+	assert.Equal(t, "context-2", response.ContextID)
+}
+
+func TestConsumeA2AStreamEventsTaskHistory(t *testing.T) {
+	ctx := context.Background()
+	stream := &fakeEventStream{}
+	events := make(chan protocol.StreamingMessageEvent, 1)
+	task := &protocol.Task{
+		ID:        "task-3",
+		ContextID: "context-3",
+		Status: protocol.TaskStatus{
+			State: protocol.TaskStateCompleted,
+		},
+		History: []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.TextPart{Kind: protocol.KindText, Text: "history"},
+			}),
 		},
 	}
+	events <- protocol.StreamingMessageEvent{Result: task}
+	close(events)
 
-	result, err := consumeA2AStreamEvents(ctx, nil, events, stream, "agent/test", "comp-1", "test", "default", "", nil)
-	require.NoError(t, err)
-	assert.Equal(t, "done", result.A2AResponse.Content)
-	assert.Equal(t, "task-1", result.A2AResponse.TaskID)
-	assert.Len(t, stream.chunks, 1)
+	engine := &A2AExecutionEngine{}
+	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "history", response.Content)
+	assert.Equal(t, "task-3", response.TaskID)
+	assert.Equal(t, "context-3", response.ContextID)
 }
 
 func TestConsumeA2AStreamEventsNoEvents(t *testing.T) {
 	ctx := context.Background()
+	stream := &fakeEventStream{}
 	events := make(chan protocol.StreamingMessageEvent)
 	close(events)
 
-	_, err := consumeA2AStreamEvents(ctx, nil, events, nil, "agent/test", "comp-1", "test", "default", "", nil)
+	engine := &A2AExecutionEngine{}
+	_, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
+
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no events")
 }
 
-func TestConsumeA2AStreamEventsTask(t *testing.T) {
+func TestConsumeA2AStreamEventsMessageNativeStreamFailure(t *testing.T) {
 	ctx := context.Background()
+	stream := &failingA2AEventStream{failOnCall: 1}
 	events := make(chan protocol.StreamingMessageEvent, 1)
-	stream := &mockEventStream{}
-
-	events <- protocol.StreamingMessageEvent{
-		Result: &protocol.Task{
-			ID:        "task-1",
-			ContextID: "ctx-1",
-			Status: protocol.TaskStatus{
-				State: protocol.TaskState(TaskStateCompleted),
-				Message: &protocol.Message{
-					Parts: []protocol.Part{protocol.NewTextPart("task result")},
-				},
-			},
-		},
-	}
+	message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.TextPart{Kind: protocol.KindText, Text: "hello"},
+	})
+	events <- protocol.StreamingMessageEvent{Result: &message}
 	close(events)
 
-	result, err := consumeA2AStreamEvents(ctx, nil, events, stream, "agent/test", "comp-1", "test", "default", "", nil)
-	require.NoError(t, err)
-	assert.Equal(t, "task result", result.A2AResponse.Content)
-	assert.Equal(t, "task-1", result.A2AResponse.TaskID)
-	assert.Len(t, stream.chunks, 1)
+	engine := &A2AExecutionEngine{}
+	_, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeNative, "agent/test", "completion-1", "agent", "default", "query", nil)
+
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, "failed to stream native A2A event")
 }
 
-func TestStreamContentChunkSkipsEmpty(t *testing.T) {
+func TestConsumeA2AStreamEventsStatusNativeStreamFailure(t *testing.T) {
 	ctx := context.Background()
-	stream := &mockEventStream{}
+	stream := &failingA2AEventStream{failOnCall: 1}
+	events := make(chan protocol.StreamingMessageEvent, 1)
+	status := protocol.TaskStatus{
+		State: protocol.TaskStateWorking,
+	}
+	events <- protocol.StreamingMessageEvent{Result: &protocol.TaskStatusUpdateEvent{
+		TaskID:    "task-1",
+		ContextID: "context-1",
+		Status:    status,
+		Final:     false,
+	}}
+	close(events)
 
-	streamContentChunk(ctx, stream, "comp-1", "model-1", "")
-	assert.Empty(t, stream.chunks)
+	engine := &A2AExecutionEngine{}
+	_, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeNative, "agent/test", "completion-1", "agent", "default", "query", nil)
 
-	streamContentChunk(ctx, nil, "comp-1", "model-1", "hello")
-	assert.Empty(t, stream.chunks)
-
-	streamContentChunk(ctx, stream, "comp-1", "model-1", "hello")
-	assert.Len(t, stream.chunks, 1)
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, "failed to stream native A2A event")
 }
 
-func TestExtractTextFromTaskStatus(t *testing.T) {
-	t.Run("from status message", func(t *testing.T) {
-		task := &protocol.Task{
-			Status: protocol.TaskStatus{
-				State: protocol.TaskState(TaskStateCompleted),
-				Message: &protocol.Message{
-					Parts: []protocol.Part{protocol.NewTextPart("from status")},
-				},
+func TestConsumeA2AStreamEventsArtifactNativeStreamFailure(t *testing.T) {
+	ctx := context.Background()
+	stream := &failingA2AEventStream{failOnCall: 1}
+	events := make(chan protocol.StreamingMessageEvent, 1)
+	events <- protocol.StreamingMessageEvent{Result: &protocol.TaskArtifactUpdateEvent{
+		TaskID:    "task-1",
+		ContextID: "context-1",
+		Artifact: protocol.Artifact{
+			ArtifactID: "artifact-1",
+			Parts: []protocol.Part{
+				protocol.TextPart{Kind: protocol.KindText, Text: "artifact-part"},
 			},
-		}
-		assert.Equal(t, "from status", extractTextFromTaskStatus(task))
-	})
+		},
+	}}
+	close(events)
 
-	t.Run("from history fallback", func(t *testing.T) {
-		task := &protocol.Task{
-			Status: protocol.TaskStatus{
-				State: protocol.TaskState(TaskStateCompleted),
-			},
-			History: []protocol.Message{
-				{Role: protocol.MessageRoleAgent, Parts: []protocol.Part{protocol.NewTextPart("from history")}},
-			},
-		}
-		assert.Equal(t, "from history", extractTextFromTaskStatus(task))
-	})
+	engine := &A2AExecutionEngine{}
+	_, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeNative, "agent/test", "completion-1", "agent", "default", "query", nil)
 
-	t.Run("empty task", func(t *testing.T) {
-		task := &protocol.Task{
-			Status: protocol.TaskStatus{State: protocol.TaskState(TaskStateWorking)},
-		}
-		assert.Equal(t, "", extractTextFromTaskStatus(task))
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, "failed to stream native A2A event")
+}
+
+func TestResolveA2AExecutionPayloadModeDefaultsNative(t *testing.T) {
+	mode := resolveA2AExecutionPayloadMode(context.Background(), nil)
+	assert.Equal(t, A2APayloadModeNative, mode)
+}
+
+func TestResolveA2AExecutionPayloadModeUsesPayloadModeContext(t *testing.T) {
+	ctx := WithA2APayloadMode(context.Background(), A2APayloadModeCompat)
+	mode := resolveA2AExecutionPayloadMode(ctx, nil)
+	assert.Equal(t, A2APayloadModeCompat, mode)
+}
+
+func TestResolveA2AExecutionPayloadModeIgnoresAgentAnnotations(t *testing.T) {
+	mode := resolveA2AExecutionPayloadMode(context.Background(), map[string]string{
+		arkann.ExecutionMode: "chat-completions",
 	})
+	assert.Equal(t, A2APayloadModeNative, mode)
 }
