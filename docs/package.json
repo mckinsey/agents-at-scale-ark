@@ -42,6 +42,7 @@
     "@napi-rs/simple-git-linux-x64-musl": "^0.1.19"
   },
   "overrides": {
-    "undici": "^7.18.2"
+    "undici": "^7.18.2",
+    "rollup": "4.59.0"
   }
 }
