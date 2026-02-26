@@ -8,6 +8,12 @@ A2ATask represents tasks executed by external agents through the Agent-to-Agent 
 
 A2ATasks are created automatically by the ARK controller when queries target agents hosted via A2A servers. They provide a bridge between ARK's native query system and external agent implementations.
 
+## Version Support
+
+- Runtime compatibility baseline is **A2A v0.3**.
+- Current persisted part examples use v0.3-style `kind` parts (`text`, `file`, `data`).
+- V1 RC adoption is adapter-based and additive; see the mapping section in this document for part-shape translation.
+
 ## Example YAML
 
 ```yaml
@@ -30,46 +36,39 @@ spec:
   timeout: "5m"
 status:
   phase: "running"
-  assignedAgent:
-    name: "langchain-weather-agent"
-    namespace: "default"
+  protocolState: "working"
+  contextId: "context-67890"
   startTime: "2025-01-15T10:30:00Z"
-  task:
-    id: "task-12345"
-    sessionId: "context-67890"
-    status:
-      state: "working"
-      timestamp: "2025-01-15T10:32:30Z"
-    artifacts:
-      - artifactId: "weather-data-001"
-        name: "Weather Report"
-        description: "Current weather conditions for New York City"
-        parts:
-          - kind: "text"
-            text: "Current temperature: 72°F, Humidity: 65%, Wind: 8 mph"
-          - kind: "file"
-            uri: "https://api.weather.com/v1/reports/nyc-20250115.json"
-            mimeType: "application/json"
-        metadata:
-          location: "New York, NY"
-          source: "WeatherAPI"
-          timestamp: "2025-01-15T10:32:00Z"
-    history:
-      - messageId: "msg-001"
-        role: "user"
-        parts:
-          - kind: "text"
-            text: "What is the weather like in New York today?"
-      - messageId: "msg-002"
-        role: "agent"
-        parts:
-          - kind: "text"
-            text: "I'll check the current weather conditions for New York..."
-      - messageId: "msg-003"
-        role: "agent"
-        parts:
-          - kind: "text"
-            text: "The current weather in New York is 72°F with sunny conditions."
+  artifacts:
+    - artifactId: "weather-data-001"
+      name: "Weather Report"
+      description: "Current weather conditions for New York City"
+      parts:
+        - kind: "text"
+          text: "Current temperature: 72°F, Humidity: 65%, Wind: 8 mph"
+        - kind: "file"
+          uri: "https://api.weather.com/v1/reports/nyc-20250115.json"
+          mimeType: "application/json"
+      metadata:
+        location: "New York, NY"
+        source: "WeatherAPI"
+        timestamp: "2025-01-15T10:32:00Z"
+  history:
+    - messageId: "msg-001"
+      role: "user"
+      parts:
+        - kind: "text"
+          text: "What is the weather like in New York today?"
+    - messageId: "msg-002"
+      role: "agent"
+      parts:
+        - kind: "text"
+          text: "I'll check the current weather conditions for New York..."
+    - messageId: "msg-003"
+      role: "agent"
+      parts:
+        - kind: "text"
+          text: "The current weather in New York is 72°F with sunny conditions."
 ```
 
 ## Specification Fields
@@ -96,16 +95,16 @@ status:
   - `completed`: Task execution finished successfully
   - `failed`: Task execution failed
   - `cancelled`: Task was cancelled
-- **assignedAgent** (Ark): Reference to the agent executing the task
+- **protocolState** (A2A protocol): Last observed protocol state (`submitted`, `working`, `input-required`, `auth-required`, `completed`, `canceled`, `failed`, `rejected`)
+- **contextId** (A2A protocol): Conversation context identifier
 - **startTime** (Ark): When task execution began, set from A2A protocol timestamp
 - **completionTime** (Ark): When task execution finished, set from A2A protocol timestamp
 - **error** (Ark): Error message if task failed
-- **task** (A2A protocol): Full A2A protocol task structure with execution details
-  - **id** (A2A protocol): Task identifier
-  - **sessionId** (A2A protocol): Session or context identifier
-  - **artifacts** (A2A protocol): Array of task artifacts produced during execution, each with artifactId
-  - **history** (A2A protocol): Complete message history, each message includes messageId from A2A protocol for deduplication
-  - **status** (A2A protocol): Current task status with state and timestamps
+- **artifacts** (A2A protocol projection): Array of task artifacts produced during execution, each with `artifactId`
+- **history** (A2A protocol projection): Message history with `messageId` for deduplication
+- **protocolMetadata** (A2A protocol): Additional key-value metadata captured from upstream task payloads
+- **lastStatusMessage** (A2A protocol): Last status message projection from task updates
+- **lastStatusTimestamp** (A2A protocol): RFC3339 status timestamp from latest protocol update
 
 ## A2A Protocol Integration
 
@@ -118,6 +117,19 @@ Content is structured using typed parts:
 - **text**: Plain text content
 - **file**: File references with URI or embedded bytes
 - **data**: Structured data content
+
+### v0.3 -> V1 Part Mapping
+
+Current runtime payloads and this CRD surface are v0.3-oriented (`kind` discriminator). For V1 RC migration, adapters map shapes as follows:
+
+| v0.3-compatible part shape | V1 RC-oriented shape |
+| --- | --- |
+| `{"kind":"text","text":"hello"}` | `{"text":"hello"}` |
+| `{"kind":"file","file":{"uri":"https://example.com/a.png"},"mimeType":"image/png"}` | `{"url":"https://example.com/a.png","mediaType":"image/png"}` |
+| `{"kind":"file","file":{"bytes":"<base64>"},"mimeType":"application/pdf"}` | `{"raw":"<base64>","mediaType":"application/pdf"}` |
+| `{"kind":"data","data":{"k":"v"}}` | `{"data":{"k":"v"}}` |
+
+During migration windows, readers should tolerate both shapes; emitters should choose one shape intentionally per configured wire version.
 
 ### Message History
 

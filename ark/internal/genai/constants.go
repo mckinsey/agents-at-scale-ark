@@ -47,6 +47,37 @@ const (
 	RoleTool      = "tool"
 )
 
+const (
+	MetadataRoleKey       = "ark.mckinsey.com/role"
+	MetadataToolCallIDKey = "ark.mckinsey.com/tool-call-id"
+	MetadataToolNameKey   = "ark.mckinsey.com/tool-name"
+	MetadataToolCallsKey  = "ark.mckinsey.com/tool-calls"
+	MetadataAgentNameKey  = "ark.mckinsey.com/agent-name"
+	MetadataA2AResultKey  = "ark.mckinsey.com/a2a-result"
+	MetadataStepIDKey     = "ark.mckinsey.com/step-id"
+	MetadataStepStateKey  = "ark.mckinsey.com/step-state"
+	MetadataStepKindKey   = "ark.mckinsey.com/step-kind"
+	MetadataParentStepKey = "ark.mckinsey.com/parent-step-id"
+)
+
+const (
+	A2ADelegatedToolExtensionKey = "https://ark.mckinsey.com/extensions/delegated-tool/v1"
+)
+
+const (
+	A2ADelegationInvocationArgsKey = "ark.mckinsey.com/delegation-args"
+)
+
+const (
+	A2ADelegatedToolKindTool   = "tool"
+	A2ADelegatedToolKindStatus = "status"
+)
+
+const (
+	A2APayloadModeCompat = "compat"
+	A2APayloadModeNative = "native-a2a"
+)
+
 // Tool type constants
 const (
 	ToolTypeHTTP    = "http"
@@ -59,6 +90,14 @@ const (
 // Team member type constants
 const (
 	MemberTypeAgent = "agent"
+)
+
+// Team strategy constants
+const (
+	StrategySequential = "sequential"
+	StrategyRoundRobin = "round-robin"
+	StrategySelector   = "selector"
+	StrategyGraph      = "graph"
 )
 
 // Built-in tool name constants

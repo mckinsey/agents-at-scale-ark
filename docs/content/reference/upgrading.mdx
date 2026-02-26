@@ -12,6 +12,31 @@ Ark uses [Semantic Versioning](https://semver.org/). The technical details are i
 
 A detailed record of every change is documented in [`CHANGELOG.md`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.github/CHANGELOG.md).
 
+## v0.1.51
+
+### A2A Native Delegation Is Task-First
+
+In `execution-mode: a2a` native mode, delegated tool execution now follows task lifecycle semantics end-to-end.
+
+**Previous behavior**
+- Native local loop appended synthetic tool-result messages to continue the next model turn.
+- Some consumers relied on tool-message-shaped chunks in delegated flows.
+
+**New behavior**
+- Delegated activity streams as native A2A task events and task-scoped messages.
+- Correlation is provided via `https://ark.mckinsey.com/extensions/delegated-tool/v1`.
+- Native loop passes structured tool outcomes to the provider boundary and no longer depends on synthetic tool-result message injection.
+- Native delegated streams no longer forward OpenAI model chunk payloads.
+
+This is a **breaking** change for consumers parsing delegated native streams/messages as tool-message records.
+
+**Consumer action required**
+1. Read delegated progress/results from `TaskStatusUpdateEvent` and `TaskArtifactUpdateEvent`.
+2. Correlate delegated work using extension payload under `https://ark.mckinsey.com/extensions/delegated-tool/v1` (`toolCallId`, `stepId`, `delegatedTaskId`, `delegatedContextId`, `sequence`).
+3. Stop depending on synthetic native tool-result messages being present in `A2AMessages`.
+4. Stop depending on OpenAI chunk payloads appearing in native delegated streams.
+5. Keep compat-mode parsers unchanged unless you opt into native payload mode.
+
 ## v0.1.50
 
 ### Broker Service Rename

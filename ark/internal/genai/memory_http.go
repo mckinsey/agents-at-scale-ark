@@ -14,6 +14,7 @@ import (
 	"mckinsey.com/ark/internal/eventing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
 // HTTPMemory handles memory operations for ARK queries
@@ -157,7 +158,7 @@ func (m *HTTPMemory) resolveAndUpdateAddress(ctx context.Context) error {
 	return nil
 }
 
-// AddMessages stores messages to the memory backend
+// AddMessages stores messages to the memory backend in OpenAI format.
 func (m *HTTPMemory) AddMessages(ctx context.Context, queryID string, messages []Message) error {
 	if len(messages) == 0 {
 		return nil
@@ -172,16 +173,16 @@ func (m *HTTPMemory) AddMessages(ctx context.Context, queryID string, messages [
 		return err
 	}
 
-	// Convert messages to the request format
-	openaiMessages := make([]openai.ChatCompletionMessageParamUnion, len(messages))
-	for i, msg := range messages {
-		openaiMessages[i] = openai.ChatCompletionMessageParamUnion(msg)
-	}
-
-	reqBody, err := json.Marshal(MessagesRequest{
+	var reqBody []byte
+	var err error
+	reqBody, err = json.Marshal(struct {
+		ConversationID string                                   `json:"conversation_id,omitempty"`
+		QueryID        string                                   `json:"query_id"`
+		Messages       []openai.ChatCompletionMessageParamUnion `json:"messages"`
+	}{
 		ConversationID: m.conversationId,
 		QueryID:        queryID,
-		Messages:       openaiMessages,
+		Messages:       messages,
 	})
 	if err != nil {
 		operationData := map[string]string{"result": fmt.Sprintf("Failed to serialize messages: %v", err)}
@@ -229,11 +230,115 @@ func (m *HTTPMemory) AddMessages(ctx context.Context, queryID string, messages [
 	return nil
 }
 
-// GetMessages retrieves messages from the memory backend
+// GetMessages retrieves messages from the memory backend as OpenAI types.
 func (m *HTTPMemory) GetMessages(ctx context.Context) ([]Message, error) {
+	records, err := m.fetchMessageRecords(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	messages := make([]Message, 0, len(records))
+	for i, record := range records {
+		a2aMessage, err := unmarshalMessageRobust(record.Message)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal message at index %d: %w", i, err)
+		}
+		openaiMessage, convErr := A2AToOpenAIMessage(a2aMessage)
+		if convErr != nil {
+			return nil, fmt.Errorf("failed to convert message at index %d: %w", i, convErr)
+		}
+		messages = append(messages, openaiMessage)
+	}
+	return messages, nil
+}
+
+func (m *HTTPMemory) AddA2AMessages(ctx context.Context, queryID string, messages []protocol.Message) error {
+	if len(messages) == 0 {
+		return nil
+	}
+
+	ctx = m.eventingRecorder.Start(ctx, "MemoryAddMessages", "Adding messages to memory", nil)
+
+	if err := m.resolveAndUpdateAddress(ctx); err != nil {
+		operationData := map[string]string{"result": fmt.Sprintf("Failed to resolve memory address: %v", err)}
+		m.eventingRecorder.Fail(ctx, "MemoryAddMessages", operationData["result"], err, operationData)
+		return err
+	}
+
+	reqBody, err := json.Marshal(struct {
+		ConversationID string             `json:"conversation_id,omitempty"`
+		QueryID        string             `json:"query_id"`
+		Messages       []protocol.Message `json:"messages"`
+	}{
+		ConversationID: m.conversationId,
+		QueryID:        queryID,
+		Messages:       messages,
+	})
+	if err != nil {
+		operationData := map[string]string{"result": fmt.Sprintf("Failed to serialize messages: %v", err)}
+		m.eventingRecorder.Fail(ctx, "MemoryAddMessages", operationData["result"], err, operationData)
+		return fmt.Errorf("failed to serialize messages: %w", err)
+	}
+
+	requestURL := fmt.Sprintf("%s%s", m.baseURL, MessagesEndpoint)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewReader(reqBody))
+	if err != nil {
+		operationData := map[string]string{"result": fmt.Sprintf("Failed to create request: %v", err)}
+		m.eventingRecorder.Fail(ctx, "MemoryAddMessages", operationData["result"], err, operationData)
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", ContentTypeJSON)
+	req.Header.Set("User-Agent", UserAgent)
+
+	for name, value := range m.headers {
+		req.Header.Set(name, value)
+	}
+
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		operationData := map[string]string{"result": fmt.Sprintf("HTTP request failed: %v", err)}
+		m.eventingRecorder.Fail(ctx, "MemoryAddMessages", operationData["result"], err, operationData)
+		return fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		err := fmt.Errorf("HTTP status %d", resp.StatusCode)
+		operationData := map[string]string{"result": err.Error()}
+		m.eventingRecorder.Fail(ctx, "MemoryAddMessages", operationData["result"], err, operationData)
+		return err
+	}
+
+	operationData := map[string]string{
+		"messages":       fmt.Sprintf("%d", len(messages)),
+		"conversationId": m.conversationId,
+		"result":         "Memory add messages completed successfully",
+	}
+	m.eventingRecorder.Complete(ctx, "MemoryAddMessages", operationData["result"], operationData)
+	return nil
+}
+
+func (m *HTTPMemory) GetA2AMessages(ctx context.Context) ([]protocol.Message, error) {
+	records, err := m.fetchMessageRecords(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	messages := make([]protocol.Message, 0, len(records))
+	for i, record := range records {
+		a2aMessage, err := unmarshalMessageRobust(record.Message)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal message at index %d: %w", i, err)
+		}
+		messages = append(messages, a2aMessage)
+	}
+	return messages, nil
+}
+
+func (m *HTTPMemory) fetchMessageRecords(ctx context.Context) ([]MessageRecord, error) {
 	ctx = m.eventingRecorder.Start(ctx, "MemoryGetMessages", "Getting messages from memory", nil)
 
-	// Resolve address dynamically
 	if err := m.resolveAndUpdateAddress(ctx); err != nil {
 		operationData := map[string]string{"result": fmt.Sprintf("Failed to resolve memory address: %v", err)}
 		m.eventingRecorder.Fail(ctx, "MemoryGetMessages", operationData["result"], err, operationData)
@@ -251,7 +356,6 @@ func (m *HTTPMemory) GetMessages(ctx context.Context) ([]Message, error) {
 	req.Header.Set("Accept", ContentTypeJSON)
 	req.Header.Set("User-Agent", UserAgent)
 
-	// Add custom headers
 	for name, value := range m.headers {
 		req.Header.Set(name, value)
 	}
@@ -278,23 +382,12 @@ func (m *HTTPMemory) GetMessages(ctx context.Context) ([]Message, error) {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	messages := make([]Message, 0, len(response.Items))
-	for i, record := range response.Items {
-		openaiMessage, err := unmarshalMessageRobust(record.Message)
-		if err != nil {
-			operationData := map[string]string{"result": fmt.Sprintf("Failed to unmarshal message at index %d: %v", i, err)}
-			m.eventingRecorder.Fail(ctx, "MemoryGetMessages", operationData["result"], err, operationData)
-			return nil, fmt.Errorf("failed to unmarshal message at index %d: %w", i, err)
-		}
-		messages = append(messages, Message(openaiMessage))
-	}
-
 	operationData := map[string]string{
-		"messages": fmt.Sprintf("%d", len(messages)),
+		"messages": fmt.Sprintf("%d", len(response.Items)),
 		"result":   "Memory get messages completed successfully",
 	}
 	m.eventingRecorder.Complete(ctx, "MemoryGetMessages", operationData["result"], operationData)
-	return messages, nil
+	return response.Items, nil
 }
 
 // GetConversationID returns the current conversation ID
@@ -320,38 +413,65 @@ func (m *HTTPMemory) Close() error {
 	return nil
 }
 
-// unmarshalMessageRobust tries discriminated union first, then falls back to simple role/content extraction
-func unmarshalMessageRobust(rawJSON json.RawMessage) (openai.ChatCompletionMessageParamUnion, error) {
-	// Step 1: Try discriminated union first (the normal case)
-	var openaiMessage openai.ChatCompletionMessageParamUnion
-	if err := json.Unmarshal(rawJSON, &openaiMessage); err == nil {
-		return openaiMessage, nil
+// unmarshalMessageRobust prefers native A2A payloads, then OpenAI payloads, then simple role/content fallback.
+func unmarshalMessageRobust(rawJSON json.RawMessage) (protocol.Message, error) {
+	if len(rawJSON) == 0 {
+		return protocol.Message{}, fmt.Errorf("empty message payload")
+	}
+	trimmed := strings.TrimSpace(string(rawJSON))
+	if trimmed == "" || trimmed == "null" {
+		return protocol.Message{}, fmt.Errorf("empty message payload")
+	}
+	var message protocol.Message
+	if err := json.Unmarshal(rawJSON, &message); err == nil && message.Role != "" && len(message.Parts) > 0 {
+		return message, nil
 	}
 
-	// Step 2: Fallback - try to extract role/content from simple format
+	var openAIMessage Message
+	if err := json.Unmarshal(rawJSON, &openAIMessage); err == nil {
+		converted, convErr := OpenAIToA2AMessage(openAIMessage)
+		if convErr == nil && converted.Role != "" && len(converted.Parts) > 0 {
+			return converted, nil
+		}
+	}
+
 	var simple simpleMessage
 	if err := json.Unmarshal(rawJSON, &simple); err != nil {
-		return openai.ChatCompletionMessageParamUnion{}, fmt.Errorf("malformed JSON: %v", err)
+		return protocol.Message{}, fmt.Errorf("malformed JSON: %v", err)
 	}
 
-	// Step 3: Validate role is present (any role is acceptable for future compatibility)
 	if simple.Role == "" {
-		return openai.ChatCompletionMessageParamUnion{}, fmt.Errorf("missing required 'role' field")
+		return protocol.Message{}, fmt.Errorf("missing required 'role' field")
 	}
 
-	// Step 4: Convert simple format to proper OpenAI message based on known roles
-	// For unknown roles, try user message as fallback (most permissive)
+	role := protocol.MessageRoleAgent
 	switch simple.Role {
 	case RoleUser:
-		return openai.UserMessage(simple.Content), nil
+		role = protocol.MessageRoleUser
+	case RoleAssistant, RoleSystem, RoleTool:
+		role = protocol.MessageRoleAgent
+	}
+
+	message = protocol.NewMessage(role, []protocol.Part{
+		protocol.NewTextPart(simple.Content),
+	})
+	switch simple.Role {
+	case RoleUser:
+		return message, nil
 	case RoleAssistant:
-		return openai.AssistantMessage(simple.Content), nil
+		return message, nil
 	case RoleSystem:
-		return openai.SystemMessage(simple.Content), nil
+		message.Metadata = map[string]interface{}{
+			MetadataRoleKey: RoleSystem,
+		}
+		return message, nil
+	case RoleTool:
+		message.Metadata = map[string]interface{}{
+			MetadataRoleKey: RoleTool,
+		}
+		return message, nil
 	default:
-		// Future-proof: accept any role by treating as user message
-		// The OpenAI SDK will handle validation of the actual role
-		return openai.UserMessage(simple.Content), nil
+		return message, nil
 	}
 }
 

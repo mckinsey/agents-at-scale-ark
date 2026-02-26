@@ -3,17 +3,19 @@ package genai
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/openai/openai-go"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/eventing"
@@ -134,11 +136,45 @@ func TestUnmarshalMessageRobust(t *testing.T) {
 				t.Errorf("Expected error for %s, but got none. Description: %s", tc.name, tc.description)
 			case !tc.expectError && err != nil:
 				t.Errorf("Unexpected error for %s: %v. Description: %s", tc.name, err, tc.description)
-			case !tc.expectError && result == (openai.ChatCompletionMessageParamUnion{}):
+			case !tc.expectError && result.Role == "" && len(result.Parts) == 0:
 				t.Errorf("Got empty message for %s. Description: %s", tc.name, tc.description)
 			}
 		})
 	}
+}
+
+func TestUnmarshalMessageRobustPreservesOpenAIToolCalls(t *testing.T) {
+	rawJSON := json.RawMessage(`{"role":"assistant","content":"let me check","tool_calls":[{"id":"call_123","type":"function","function":{"name":"lookup_weather","arguments":"{\"city\":\"Berlin\"}"}}]}`)
+
+	result, err := unmarshalMessageRobust(rawJSON)
+	require.NoError(t, err)
+	assert.Equal(t, protocol.MessageRoleAgent, result.Role)
+	assert.Equal(t, "let me check", extractTextFromParts(result.Parts))
+
+	toolCalls := extractToolCallsFromParts(result.Parts)
+	require.Len(t, toolCalls, 1)
+	assert.Equal(t, "call_123", toolCalls[0].ID)
+	assert.Equal(t, "lookup_weather", toolCalls[0].Function.Name)
+	assert.Equal(t, `{"city":"Berlin"}`, toolCalls[0].Function.Arguments)
+}
+
+func TestUnmarshalMessageRobustPreservesOpenAIToolCallID(t *testing.T) {
+	rawJSON := json.RawMessage(`{"role":"tool","tool_call_id":"call_123","content":"{\"temperature\":21}"}`)
+
+	result, err := unmarshalMessageRobust(rawJSON)
+	require.NoError(t, err)
+	assert.Equal(t, protocol.MessageRoleAgent, result.Role)
+
+	toolResult, ok := extractToolResultPayloadFromParts(result.Parts)
+	require.True(t, ok)
+	assert.Equal(t, "call_123", toolResult.ToolCallID)
+	assert.Equal(t, `{"temperature":21}`, toolResult.Content)
+
+	recovered, err := A2AToOpenAIMessage(result)
+	require.NoError(t, err)
+	require.NotNil(t, recovered.OfTool)
+	assert.Equal(t, "call_123", recovered.OfTool.ToolCallID)
+	assert.Equal(t, `{"temperature":21}`, recovered.OfTool.Content.OfString.Value)
 }
 
 func TestUnmarshalMessageRobustFutureRoles(t *testing.T) {
@@ -151,7 +187,7 @@ func TestUnmarshalMessageRobustFutureRoles(t *testing.T) {
 			if err != nil {
 				t.Errorf("Future role '%s' should not fail: %v", role, err)
 			}
-			if result == (openai.ChatCompletionMessageParamUnion{}) {
+			if result.Role == "" && len(result.Parts) == 0 {
 				t.Errorf("Future role '%s' should produce valid message", role)
 			}
 		})
@@ -204,7 +240,7 @@ func TestHTTPMemoryAddMessagesWithHeaders(t *testing.T) {
 				"Authorization": "Bearer test-token",
 			},
 			messages: []Message{
-				Message(openai.UserMessage("test message")),
+				NewUserMessage("test message"),
 			},
 		},
 		{
@@ -220,8 +256,8 @@ func TestHTTPMemoryAddMessagesWithHeaders(t *testing.T) {
 				"X-API-Key":       "api-key-123",
 			},
 			messages: []Message{
-				Message(openai.UserMessage("message 1")),
-				Message(openai.AssistantMessage("message 2")),
+				NewUserMessage("message 1"),
+				NewAssistantMessage("message 2"),
 			},
 		},
 		{
@@ -229,7 +265,7 @@ func TestHTTPMemoryAddMessagesWithHeaders(t *testing.T) {
 			headers:         map[string]string{},
 			expectedHeaders: map[string]string{},
 			messages: []Message{
-				Message(openai.UserMessage("test")),
+				NewUserMessage("test"),
 			},
 		},
 	}
@@ -303,6 +339,348 @@ func TestHTTPMemoryAddMessagesWithHeaders(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHTTPMemoryAddMessagesFormatCompat(t *testing.T) {
+	var requestBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == MessagesEndpoint && r.Method == http.MethodPost {
+			requestBody, _ = io.ReadAll(r.Body)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	resolvedAddress := server.URL
+	memory := &arkv1alpha1.Memory{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-memory",
+			Namespace: "default",
+		},
+		Spec: arkv1alpha1.MemorySpec{
+			Address: arkv1alpha1.ValueSource{
+				Value: server.URL,
+			},
+		},
+		Status: arkv1alpha1.MemoryStatus{
+			LastResolvedAddress: &resolvedAddress,
+			Phase:               "ready",
+		},
+	}
+
+	fakeClient := setupMemoryTestClient([]client.Object{memory})
+	httpMemory := &HTTPMemory{
+		client:           fakeClient,
+		httpClient:       server.Client(),
+		baseURL:          server.URL,
+		conversationId:   "test-conv-id",
+		name:             "test-memory",
+		namespace:        "default",
+		headers:          make(map[string]string),
+		eventingRecorder: &noOpMemoryRecorder{},
+	}
+
+	ctx := context.Background()
+	err := httpMemory.AddMessages(ctx, "query-id", []Message{NewUserMessage("hello")})
+	require.NoError(t, err)
+
+	var decoded struct {
+		Messages []map[string]interface{} `json:"messages"`
+	}
+	require.NoError(t, json.Unmarshal(requestBody, &decoded))
+	require.Len(t, decoded.Messages, 1)
+	require.NotNil(t, decoded.Messages[0]["content"])
+	require.Nil(t, decoded.Messages[0]["parts"])
+}
+
+func TestHTTPMemoryAddMessagesCompatIgnoresExperimentalContext(t *testing.T) {
+	var requestBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == MessagesEndpoint && r.Method == http.MethodPost {
+			requestBody, _ = io.ReadAll(r.Body)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	resolvedAddress := server.URL
+	memory := &arkv1alpha1.Memory{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-memory",
+			Namespace: "default",
+		},
+		Spec: arkv1alpha1.MemorySpec{
+			Address: arkv1alpha1.ValueSource{
+				Value: server.URL,
+			},
+		},
+		Status: arkv1alpha1.MemoryStatus{
+			LastResolvedAddress: &resolvedAddress,
+			Phase:               "ready",
+		},
+	}
+
+	fakeClient := setupMemoryTestClient([]client.Object{memory})
+	httpMemory := &HTTPMemory{
+		client:           fakeClient,
+		httpClient:       server.Client(),
+		baseURL:          server.URL,
+		conversationId:   "test-conv-id",
+		name:             "test-memory",
+		namespace:        "default",
+		headers:          make(map[string]string),
+		eventingRecorder: &noOpMemoryRecorder{},
+	}
+
+	ctx := WithA2APayloadMode(context.Background(), A2APayloadModeNative)
+	err := httpMemory.AddMessages(ctx, "query-id", []Message{NewUserMessage("hello")})
+	require.NoError(t, err)
+
+	var decoded struct {
+		Messages []map[string]interface{} `json:"messages"`
+	}
+	require.NoError(t, json.Unmarshal(requestBody, &decoded))
+	require.Len(t, decoded.Messages, 1)
+	require.NotNil(t, decoded.Messages[0]["content"], "AddMessages must always write OpenAI format regardless of context flags")
+	require.Nil(t, decoded.Messages[0]["parts"], "AddMessages must not produce A2A parts even when payload mode context is set")
+}
+
+func TestHTTPMemoryGetMessagesReturnsOpenAIDirectly(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == MessagesEndpoint && r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			response := MessagesResponse{
+				Items: []MessageRecord{
+					{Message: json.RawMessage(`{"role": "user", "content": "hello from memory"}`)},
+					{Message: json.RawMessage(`{"role": "assistant", "content": "hi there"}`)},
+				},
+			}
+			_ = json.NewEncoder(w).Encode(response)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	resolvedAddress := server.URL
+	memory := &arkv1alpha1.Memory{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-memory",
+			Namespace: "default",
+		},
+		Spec: arkv1alpha1.MemorySpec{
+			Address: arkv1alpha1.ValueSource{
+				Value: server.URL,
+			},
+		},
+		Status: arkv1alpha1.MemoryStatus{
+			LastResolvedAddress: &resolvedAddress,
+			Phase:               "ready",
+		},
+	}
+
+	fakeClient := setupMemoryTestClient([]client.Object{memory})
+	httpMemory := &HTTPMemory{
+		client:           fakeClient,
+		httpClient:       server.Client(),
+		baseURL:          server.URL,
+		conversationId:   "test-conv-id",
+		name:             "test-memory",
+		namespace:        "default",
+		headers:          make(map[string]string),
+		eventingRecorder: &noOpMemoryRecorder{},
+	}
+
+	ctx := context.Background()
+	messages, err := httpMemory.GetMessages(ctx)
+	require.NoError(t, err)
+	require.Len(t, messages, 2)
+
+	require.Equal(t, RoleUser, resolveMessageRole(messages[0]))
+	require.Equal(t, "hello from memory", ExtractTextFromMessage(messages[0]))
+	require.Equal(t, RoleAssistant, resolveMessageRole(messages[1]))
+	require.Equal(t, "hi there", ExtractTextFromMessage(messages[1]))
+}
+
+func TestHTTPMemoryGetMessagesRemainsLegacyWhenExperimentalEnabled(t *testing.T) {
+	a2aUser := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewFilePartWithURI("diagram.png", "image/png", "https://example.com/diagram.png"),
+	})
+	serializedA2AUser, err := json.Marshal(a2aUser)
+	require.NoError(t, err)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == MessagesEndpoint && r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			response := MessagesResponse{
+				Items: []MessageRecord{
+					{Message: json.RawMessage(serializedA2AUser)},
+				},
+			}
+			_ = json.NewEncoder(w).Encode(response)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	resolvedAddress := server.URL
+	memory := &arkv1alpha1.Memory{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-memory",
+			Namespace: "default",
+		},
+		Spec: arkv1alpha1.MemorySpec{
+			Address: arkv1alpha1.ValueSource{
+				Value: server.URL,
+			},
+		},
+		Status: arkv1alpha1.MemoryStatus{
+			LastResolvedAddress: &resolvedAddress,
+			Phase:               "ready",
+		},
+	}
+
+	fakeClient := setupMemoryTestClient([]client.Object{memory})
+	httpMemory := &HTTPMemory{
+		client:           fakeClient,
+		httpClient:       server.Client(),
+		baseURL:          server.URL,
+		conversationId:   "test-conv-id",
+		name:             "test-memory",
+		namespace:        "default",
+		headers:          make(map[string]string),
+		eventingRecorder: &noOpMemoryRecorder{},
+	}
+
+	ctx := context.Background()
+	messages, err := httpMemory.GetMessages(ctx)
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+	require.NotNil(t, messages[0].OfUser)
+	require.Equal(t, "https://example.com/diagram.png", messages[0].OfUser.Content.OfString.Value)
+	require.Len(t, messages[0].OfUser.Content.OfArrayOfContentParts, 0)
+}
+
+func TestHTTPMemoryGetMessagesRemainsLegacyWhenExperimentalAndNativePayloadModeEnabled(t *testing.T) {
+	a2aUser := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewFilePartWithURI("diagram.png", "image/png", "https://example.com/diagram.png"),
+	})
+	serializedA2AUser, err := json.Marshal(a2aUser)
+	require.NoError(t, err)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == MessagesEndpoint && r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			response := MessagesResponse{
+				Items: []MessageRecord{
+					{Message: json.RawMessage(serializedA2AUser)},
+				},
+			}
+			_ = json.NewEncoder(w).Encode(response)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	resolvedAddress := server.URL
+	memory := &arkv1alpha1.Memory{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-memory",
+			Namespace: "default",
+		},
+		Spec: arkv1alpha1.MemorySpec{
+			Address: arkv1alpha1.ValueSource{
+				Value: server.URL,
+			},
+		},
+		Status: arkv1alpha1.MemoryStatus{
+			LastResolvedAddress: &resolvedAddress,
+			Phase:               "ready",
+		},
+	}
+
+	fakeClient := setupMemoryTestClient([]client.Object{memory})
+	httpMemory := &HTTPMemory{
+		client:           fakeClient,
+		httpClient:       server.Client(),
+		baseURL:          server.URL,
+		conversationId:   "test-conv-id",
+		name:             "test-memory",
+		namespace:        "default",
+		headers:          make(map[string]string),
+		eventingRecorder: &noOpMemoryRecorder{},
+	}
+
+	ctx := WithA2APayloadMode(context.Background(), A2APayloadModeNative)
+	messages, err := httpMemory.GetMessages(ctx)
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+	require.NotNil(t, messages[0].OfUser)
+	require.Equal(t, "https://example.com/diagram.png", messages[0].OfUser.Content.OfString.Value)
+	require.Len(t, messages[0].OfUser.Content.OfArrayOfContentParts, 0)
+}
+
+func TestHTTPMemoryAddMessagesFormatNative(t *testing.T) {
+	var requestBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == MessagesEndpoint && r.Method == http.MethodPost {
+			requestBody, _ = io.ReadAll(r.Body)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	resolvedAddress := server.URL
+	memory := &arkv1alpha1.Memory{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-memory",
+			Namespace: "default",
+		},
+		Spec: arkv1alpha1.MemorySpec{
+			Address: arkv1alpha1.ValueSource{
+				Value: server.URL,
+			},
+		},
+		Status: arkv1alpha1.MemoryStatus{
+			LastResolvedAddress: &resolvedAddress,
+			Phase:               "ready",
+		},
+	}
+
+	fakeClient := setupMemoryTestClient([]client.Object{memory})
+	httpMemory := &HTTPMemory{
+		client:           fakeClient,
+		httpClient:       server.Client(),
+		baseURL:          server.URL,
+		conversationId:   "test-conv-id",
+		name:             "test-memory",
+		namespace:        "default",
+		headers:          make(map[string]string),
+		eventingRecorder: &noOpMemoryRecorder{},
+	}
+
+	ctx := context.Background()
+	a2aMessages := []protocol.Message{
+		protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{protocol.NewTextPart("hello")}),
+	}
+	err := httpMemory.AddA2AMessages(ctx, "query-id", a2aMessages)
+	require.NoError(t, err)
+
+	var decoded struct {
+		Messages []map[string]interface{} `json:"messages"`
+	}
+	require.NoError(t, json.Unmarshal(requestBody, &decoded))
+	require.Len(t, decoded.Messages, 1)
+	require.NotNil(t, decoded.Messages[0]["parts"])
+	require.Nil(t, decoded.Messages[0]["content"])
 }
 
 func TestHTTPMemoryGetMessagesWithHeaders(t *testing.T) {
@@ -466,7 +844,8 @@ func TestHTTPMemoryHeadersLoadedFromStatus(t *testing.T) {
 	httpMemory, err := NewHTTPMemory(ctx, fakeClient, "header-memory", "default", Config{}, &noOpMemoryRecorder{})
 	require.NoError(t, err)
 
-	mem := httpMemory.(*HTTPMemory)
+	mem, ok := httpMemory.(*HTTPMemory)
+	require.True(t, ok)
 	require.Equal(t, expectedHeaders, mem.headers, "Headers should be resolved from Memory spec on-demand")
 }
 
@@ -530,7 +909,7 @@ func TestHTTPMemoryHeadersUpdatedOnResolve(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	err := httpMemory.AddMessages(ctx, "query-id", []Message{Message(openai.UserMessage("test"))})
+	err := httpMemory.AddMessages(ctx, "query-id", []Message{NewUserMessage("test")})
 	require.NoError(t, err)
 
 	require.Equal(t, "Bearer updated-token", receivedHeaders.Get("Authorization"),
@@ -580,7 +959,7 @@ func TestHTTPMemoryEmptyHeaders(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	err := httpMemory.AddMessages(ctx, "query-id", []Message{Message(openai.UserMessage("test"))})
+	err := httpMemory.AddMessages(ctx, "query-id", []Message{NewUserMessage("test")})
 	require.NoError(t, err)
 }
 
@@ -721,7 +1100,8 @@ func TestNewHTTPMemoryWithMixedHeaderSources(t *testing.T) {
 	httpMemory, err := NewHTTPMemory(ctx, fakeClient, "mixed-headers-memory", "default", Config{}, &noOpMemoryRecorder{})
 	require.NoError(t, err)
 
-	mem := httpMemory.(*HTTPMemory)
+	mem, ok := httpMemory.(*HTTPMemory)
+	require.True(t, ok)
 	require.Equal(t, "direct-value", mem.headers["X-Direct"])
 	require.Equal(t, "Bearer secret-token-123", mem.headers["Authorization"])
 	require.Equal(t, "config-api-key-456", mem.headers["X-API-Key"])

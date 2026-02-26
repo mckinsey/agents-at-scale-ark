@@ -1,0 +1,84 @@
+---
+title: "A2A Experimental V1 Implementation"
+description: Scope, boundaries, validation, and rollback for the experimental A2A V1 implementation.
+---
+
+# A2A Experimental V1 Implementation
+
+This document defines what is included in A2A experimental V1 and how to operate it without affecting default query execution paths.
+
+## Version Contract
+
+- Current runtime wire baseline is **A2A v0.3**.
+- V1 RC support is implemented through **bounded adapter layers**.
+- Default non-experimental behavior stays unchanged.
+
+This means V1 work in this document is migration scaffolding, not a production wire cutover.
+
+## Scope
+
+V1 includes:
+
+- Native A2A task/message transport in experimental mode.
+- Additive multimodal conversion at A2A adapter boundaries.
+- Task-first delegated streaming and delegated-tool correlation metadata.
+- Agent-as-tool structured delegation surfaces (`message`, `history`, `contextId`, `input` fallback).
+
+V1 establishes A2A as the default internal transport for agent and team execution.
+
+## Enablement
+
+No annotation is required to enable A2A behavior.
+
+## V1 Boundary Contract
+
+| Boundary | V1 behavior | Default behavior |
+| --- | --- | --- |
+| `message_conversion_experimental.go` | Experimental converters preserve text/image file parts across A2A and OpenAI compat messages | Legacy converters remain text-first |
+| `openai_a2a_model_adapter.go` + `a2a_execution_local.go` | Experimental adapter call sites use experimental converters only | Non-experimental call sites are unchanged |
+| `execution_engine.go` | Native A2A fallback can decode compat `contentParts` when experimental mode is enabled | Shared compat decode remains string-only |
+| `provider_bedrock.go` | Experimental path extracts array content parts (`text`, `image_url`) and projects to Bedrock content string | Default extraction remains `OfString`-only |
+| `memory_http.go` | Native A2A flows use native message APIs where available | `GetMessages(...)` remains legacy OpenAI conversion |
+| `executor-langchain/a2a_executor.py` | Native payload supports image file part projection to `image_url` content blocks | Compat text behavior remains unchanged |
+
+## Lossless Rules for V1 Adapters
+
+- Preserve part order for `parts[]` and content arrays.
+- Preserve `messageId`, `taskId`, and `contextId` when present.
+- Preserve task lifecycle state transitions in streaming mode.
+- Preserve delegated tool extension metadata (`https://ark.mckinsey.com/extensions/delegated-tool/v1`).
+- Do not silently widen default-path behavior outside experimental call sites.
+
+## Verification Matrix
+
+| Area | Verification |
+| --- | --- |
+| Experimental message conversion fidelity | `message_conversion_test.go` (`A2AToOpenAIMessageExperimental`, `OpenAIToA2AMessageExperimental`) |
+| Adapter boundary usage | `openai_a2a_model_adapter_test.go` |
+| Native streaming event behavior | `a2a_streaming_integration_test.go` |
+| External engine compat/native boundary behavior | `execution_engine_native_test.go` |
+| Memory default-path isolation | `memory_http_test.go` |
+| Bedrock experimental/default split | `provider_bedrock_test.go` |
+| Native executor image projection | `services/executor-langchain/tests/test_executor_native_payload.py` |
+
+## Known Limitations
+
+- Legacy shared conversion helpers remain text-first by design.
+- Bedrock experimental conversion currently projects multimodal parts into string content, not provider-native binary blocks.
+- OpenAI Responses API adapter is not part of V1 (tracked separately).
+- Python native payload tests depend on local service dependencies and build artifacts.
+
+## Rollback
+
+Rollback remains bounded to additive experimental surfaces:
+
+1. Remove experimental converter helpers and call sites.
+2. Remove experimental-only decode branches in A2A-native boundaries.
+3. Remove experimental-only tests and docs.
+4. Keep default compat/completions paths unchanged.
+
+## References
+
+- [A2A Native Execution](/reference/a2a-native-execution)
+- [A2A Task Streaming + Responses API Primer](/reference/a2a-streaming-responses-primer)
+- [A2A Protocol Specification](https://raw.githubusercontent.com/a2aproject/A2A/main/docs/specification.md)

@@ -1,0 +1,34 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: executor-langchain-rag-agent
+  labels:
+    example: executor-langchain
+    langchain: rag  # Enable RAG functionality
+spec:
+  prompt: |
+    You are a code-aware AI assistant powered by LangChain with RAG capabilities.
+    You have access to a knowledge base of code files and can answer questions
+    about code structure, implementation details, and provide guidance based on
+    the existing codebase.
+    
+    Use the provided code context to give accurate and helpful responses.
+    Be specific and reference actual code when possible.
+  description: "Sample RAG-enabled agent demonstrating LangChain executor with code understanding"
+  executionEngine:
+    name: executor-langchain
+  modelRef:
+    name: default
+  tools: []
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-executor-langchain-rag-agent
+  labels:
+    example: executor-langchain
+spec:
+  input: "Can you explain how the LangChain executor processes requests? What are the main components?"
+  targets:
+    - type: agent
+      name: executor-langchain-rag-agent

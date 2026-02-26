@@ -65,12 +65,39 @@ func convertPartFromProtocol(part interface{}) arkv1alpha1.A2ATaskPart {
 			Kind: PartKindText,
 			Text: p.Text,
 		}
+	case protocol.TextPart:
+		return arkv1alpha1.A2ATaskPart{
+			Kind: PartKindText,
+			Text: p.Text,
+		}
 	case *protocol.DataPart:
 		return arkv1alpha1.A2ATaskPart{
 			Kind: PartKindData,
 			Data: fmt.Sprintf("%v", p.Data),
 		}
+	case protocol.DataPart:
+		return arkv1alpha1.A2ATaskPart{
+			Kind: PartKindData,
+			Data: fmt.Sprintf("%v", p.Data),
+		}
 	case *protocol.FilePart:
+		taskPart := arkv1alpha1.A2ATaskPart{
+			Kind: PartKindFile,
+		}
+		if fileWithURI, ok := p.File.(*protocol.FileWithURI); ok {
+			taskPart.URI = fileWithURI.URI
+			if fileWithURI.MimeType != nil {
+				taskPart.MimeType = *fileWithURI.MimeType
+			}
+		}
+		if fileWithBytes, ok := p.File.(*protocol.FileWithBytes); ok {
+			taskPart.Data = fileWithBytes.Bytes
+			if fileWithBytes.MimeType != nil {
+				taskPart.MimeType = *fileWithBytes.MimeType
+			}
+		}
+		return taskPart
+	case protocol.FilePart:
 		taskPart := arkv1alpha1.A2ATaskPart{
 			Kind: PartKindFile,
 		}

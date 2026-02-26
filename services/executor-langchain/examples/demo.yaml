@@ -1,0 +1,85 @@
+# LangChain Execution Engine Demo
+# This demo shows how to use the LangChain execution engine with both regular and RAG agents
+
+# ExecutionEngine CRD - defines the LangChain execution engine
+---
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: ExecutionEngine
+metadata:
+  name: executor-langchain-engine
+spec:
+  type: external
+  description: "LangChain execution engine with RAG support"
+
+# Regular LangChain Agent
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: executor-langchain-demo-agent
+spec:
+  prompt: |
+    You are a helpful assistant powered by the LangChain Execution Engine! 🚀
+    
+    You process queries through an external LangChain execution engine operator
+    rather than the built-in OpenAI engine. 
+    
+    Always be helpful and mention that you're running on the LangChain Execution Engine!
+  
+  # Use the LangChain execution engine
+  executionEngine:
+    name: executor-langchain-engine
+  
+  # Use the default model
+  modelRef:
+    name: default
+
+# RAG-enabled LangChain Agent  
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: executor-langchain-demo-rag-agent
+  labels:
+    langchain: rag  # This enables RAG support
+    langchain-embeddings-model: azure-openai-embeddings  # Specifies which model to use for embeddings
+spec:
+  prompt: |
+    You are a code-aware assistant powered by the LangChain Execution Engine with RAG! 🔍🚀
+    
+    You have access to a code knowledge base and can answer questions about the codebase.
+    You process queries through an external LangChain execution engine with RAG capabilities.
+    
+    When answering questions, use the retrieved context from the codebase to provide 
+    accurate and detailed responses about the code structure, functions, and implementation.
+  
+  # Use the LangChain execution engine
+  executionEngine:
+    name: executor-langchain-engine
+  
+  # Use the chat model (embeddings model specified in label)
+  modelRef:
+    name: default
+
+# Example queries to test both agents
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: executor-langchain-demo-query
+spec:
+  input: "Hi! Can you tell me about yourself and how the LangChain execution engine works?"
+  targets:
+    - type: agent
+      name: executor-langchain-demo-agent
+
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: executor-langchain-demo-rag-query
+spec:
+  input: "What is the main function in the langchain execution engine code?"
+  targets:
+    - type: agent
+      name: executor-langchain-demo-rag-agent 
