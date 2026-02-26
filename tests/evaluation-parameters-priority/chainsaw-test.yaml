@@ -26,7 +26,7 @@ spec:
     - script:
         content: bash ../helpers/wait-for-evaluator.sh
     - apply:
-        file: manifests/*.yaml
+        file: manifests/a0[0-4]-*.yaml
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Model
@@ -51,6 +51,8 @@ spec:
           kind: ConfigMap
           metadata:
             name: golden-examples
+    - apply:
+        file: manifests/a05-evaluation.yaml
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
