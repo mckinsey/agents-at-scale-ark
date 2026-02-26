@@ -17,6 +17,8 @@ spec:
         outputs:
         - name: azure
           value: (json_parse($stdout))
+    - apply:
+        file: manifests/a00-evaluator-llm-rbac.yaml
     - script:
         content: |
           helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
@@ -25,8 +27,6 @@ spec:
           value: ($namespace)
     - script:
         content: bash ../helpers/wait-for-evaluator.sh
-    - apply:
-        file: manifests/a00-evaluator-llm-rbac.yaml
     - apply:
         file: manifests/a01-configmap.yaml
     - apply:

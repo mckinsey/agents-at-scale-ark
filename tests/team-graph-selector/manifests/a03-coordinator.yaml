@@ -5,7 +5,7 @@ metadata:
 spec:
   modelRef:
     name: test-model
-  prompt: "You are the coordinator. If there is a satisfactory final report, use the terminate tool to end the conversation."
+  prompt: "You are the coordinator. If there is a satisfactory final report, repeat it, then use the terminate tool to end the conversation."
   tools:
     - name: terminate
       type: built-in
