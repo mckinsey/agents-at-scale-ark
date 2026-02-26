@@ -313,20 +313,11 @@ kind: ExecutionEngine
 metadata:
   name: custom-engine
 spec:
-  protocol: a2a
   address:
     valueFrom:
       serviceRef:
         name: custom-engine-service
         port: "8080"
-  headers:
-    - name: Authorization
-      value:
-        valueFrom:
-          secretKeyRef:
-            name: engine-auth
-            key: token
-  timeout: "5m"
   description: "Custom A2A execution engine"
 ```
 

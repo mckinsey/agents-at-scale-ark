@@ -98,8 +98,6 @@ readinessProbe:
 
 # ExecutionEngine CRD configuration
 executionEngine:
-  # Protocol used by the execution engine (a2a is the default)
-  protocol: "a2a"
   # Description of the execution engine
   description: "LangChain Executor - A2A server that executes agents using LangChain with RAG support"
   # Address configuration for the execution engine

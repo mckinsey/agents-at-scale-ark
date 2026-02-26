@@ -9,10 +9,6 @@ import (
 )
 
 func (v *Validator) ValidateExecutionEngine(ctx context.Context, ee *arkv1prealpha1.ExecutionEngine) ([]string, error) {
-	if ee.Spec.Protocol != "" && ee.Spec.Protocol != "a2a" {
-		return nil, fmt.Errorf("unsupported protocol %q, only \"a2a\" is supported", ee.Spec.Protocol)
-	}
-
 	converted := convertV1PreAlpha1ValueSource(ee.Spec.Address)
 	if _, err := v.ResolveValueSource(ctx, converted, ee.GetNamespace()); err != nil {
 		return nil, fmt.Errorf("failed to resolve Address: %w", err)

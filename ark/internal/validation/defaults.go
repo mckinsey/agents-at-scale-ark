@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/genai"
 )
@@ -33,12 +32,6 @@ func DefaultAgent(agent *arkv1alpha1.Agent) {
 			)
 			break
 		}
-	}
-}
-
-func DefaultExecutionEngine(ee *arkv1prealpha1.ExecutionEngine) {
-	if ee.Spec.Protocol == "" {
-		ee.Spec.Protocol = "a2a"
 	}
 }
 

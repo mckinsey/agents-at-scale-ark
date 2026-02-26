@@ -8,7 +8,6 @@ kind: ExecutionEngine
 metadata:
   name: executor-langchain-engine
 spec:
-  protocol: a2a
   description: "LangChain A2A execution engine with RAG support"
 
 # Regular LangChain Agent

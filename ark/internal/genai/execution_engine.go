@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -72,20 +71,10 @@ func (c *ExecutionEngineA2AClient) Execute(ctx context.Context, engineRef *arkv1
 	}
 	ctx = c.eventingRecorder.Start(ctx, "ExecutionEngine", fmt.Sprintf("Executing agent via A2A execution engine %s", engineRef.Name), operationData)
 
-	engineAddress, engineCRD, err := c.resolveExecutionEngine(ctx, engineRef, agentConfig.Namespace)
+	engineAddress, err := c.resolveExecutionEngineAddress(ctx, engineRef, agentConfig.Namespace)
 	if err != nil {
 		c.eventingRecorder.Fail(ctx, "ExecutionEngine", fmt.Sprintf("Failed to resolve execution engine: %v", err), err, operationData)
 		return nil, fmt.Errorf("failed to resolve execution engine: %w", err)
-	}
-
-	if engineCRD.Spec.Timeout != "" {
-		timeout, err := time.ParseDuration(engineCRD.Spec.Timeout)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse execution engine timeout %q: %w", engineCRD.Spec.Timeout, err)
-		}
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
 	}
 
 	content := ""
@@ -134,7 +123,7 @@ func (c *ExecutionEngineA2AClient) Execute(ctx context.Context, engineRef *arkv1
 	})
 	message.Metadata = metadata
 
-	a2aClient, err := CreateA2AClient(ctx, c.client, engineAddress, engineCRD.Spec.Headers, agentConfig.Namespace, agentConfig.Name, nil)
+	a2aClient, err := CreateA2AClient(ctx, c.client, engineAddress, nil, agentConfig.Namespace, agentConfig.Name, nil)
 	if err != nil {
 		c.eventingRecorder.Fail(ctx, "ExecutionEngine", fmt.Sprintf("Failed to create A2A client: %v", err), err, operationData)
 		return nil, fmt.Errorf("failed to create A2A client: %w", err)
@@ -184,7 +173,7 @@ func extractResponseText(result *protocol.MessageResult) (string, error) {
 	}
 }
 
-func (c *ExecutionEngineA2AClient) resolveExecutionEngine(ctx context.Context, engineRef *arkv1alpha1.ExecutionEngineRef, defaultNamespace string) (string, *arkv1prealpha1.ExecutionEngine, error) {
+func (c *ExecutionEngineA2AClient) resolveExecutionEngineAddress(ctx context.Context, engineRef *arkv1alpha1.ExecutionEngineRef, defaultNamespace string) (string, error) {
 	engineName := engineRef.Name
 	namespace := engineRef.Namespace
 	if namespace == "" {
@@ -194,14 +183,14 @@ func (c *ExecutionEngineA2AClient) resolveExecutionEngine(ctx context.Context, e
 	var engineCRD arkv1prealpha1.ExecutionEngine
 	engineKey := types.NamespacedName{Name: engineName, Namespace: namespace}
 	if err := c.client.Get(ctx, engineKey, &engineCRD); err != nil {
-		return "", nil, fmt.Errorf("execution engine %s not found in namespace %s: %w", engineName, namespace, err)
+		return "", fmt.Errorf("execution engine %s not found in namespace %s: %w", engineName, namespace, err)
 	}
 
 	if engineCRD.Status.LastResolvedAddress == "" {
-		return "", nil, fmt.Errorf("execution engine %s address not yet resolved", engineName)
+		return "", fmt.Errorf("execution engine %s address not yet resolved", engineName)
 	}
 
-	return engineCRD.Status.LastResolvedAddress, &engineCRD, nil
+	return engineCRD.Status.LastResolvedAddress, nil
 }
 
 func convertToExecutionEngineMessage(msg Message) ExecutionEngineMessage {

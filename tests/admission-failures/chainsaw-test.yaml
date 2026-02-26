@@ -172,7 +172,3 @@ spec:
     try:
     - error:
         file: manifests/invalid-executionengine-missing-address.yaml
-  - name: test-executionengine-unsupported-protocol
-    try:
-    - error:
-        file: manifests/invalid-executionengine-unsupported-protocol.yaml
