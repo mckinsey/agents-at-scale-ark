@@ -7,14 +7,13 @@ authors = [
 ]
 readme = "README.md"
 keywords = ["kubernetes", "ai", "agents", "mckinsey", "ark", "llm", "automation", "agentic-ai"]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
   "Topic :: Software Development :: Libraries :: Python Modules",
   "Topic :: System :: Clustering",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
@@ -36,6 +35,7 @@ dependencies = [
   "python-jose[cryptography]==3.5.0",
   "pydantic-settings>=2.0.0",
   "uvicorn[standard]>=0.24.0",
+  "a2a-sdk[http-server]>=0.3.0",
 ]
 
 [project.optional-dependencies]

@@ -113,6 +113,7 @@ describe('Dashboard Sections - enabledWhen', () => {
 
       const serviceKeys = serviceSections.map(s => s.key);
       expect(serviceKeys).toContain('api-keys');
+      expect(serviceKeys).toContain('export');
     });
   });
 });
