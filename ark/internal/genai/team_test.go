@@ -31,14 +31,14 @@ func TestShouldIncludeMemberAnnotationsForA2A(t *testing.T) {
 			agentAnnotations: map[string]string{
 				arkann.ExecutionMode: "a2a",
 			},
-			want: true,
+			want: false,
 		},
 		{
 			name: "valid execution-mode chat-completions",
 			agentAnnotations: map[string]string{
 				arkann.ExecutionMode: "chat-completions",
 			},
-			want: true,
+			want: false,
 		},
 		{
 			name: "invalid execution-mode only",
@@ -48,38 +48,9 @@ func TestShouldIncludeMemberAnnotationsForA2A(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "valid legacy enabled",
-			agentAnnotations: map[string]string{
-				arkann.A2AExperimentalEnabled: "true",
-			},
-			want: true,
-		},
-		{
-			name: "valid legacy disabled",
-			agentAnnotations: map[string]string{
-				arkann.A2AExperimentalEnabled: "no",
-			},
-			want: true,
-		},
-		{
-			name: "invalid legacy only",
-			agentAnnotations: map[string]string{
-				arkann.A2AExperimentalEnabled: "maybe",
-			},
-			want: false,
-		},
-		{
 			name: "server address only",
 			agentAnnotations: map[string]string{
 				arkann.A2AServerAddress: "http://a2a-agent:8080",
-			},
-			want: true,
-		},
-		{
-			name: "invalid execution-mode falls back to valid legacy",
-			agentAnnotations: map[string]string{
-				arkann.ExecutionMode:          "invalid",
-				arkann.A2AExperimentalEnabled: "1",
 			},
 			want: true,
 		},

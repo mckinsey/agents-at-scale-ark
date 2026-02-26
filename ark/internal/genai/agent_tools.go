@@ -13,7 +13,6 @@ import (
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	"mckinsey.com/ark/internal/config"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
 )
@@ -290,8 +289,8 @@ type delegatedInvocation struct {
 	contextID    string
 }
 
-func resolveDelegationMode(ctx context.Context, targetAnnotations map[string]string) string {
-	return ResolveDelegationPayloadMode(ctx, targetAnnotations, config.Global())
+func resolveDelegationMode(_ context.Context, _ map[string]string) string {
+	return A2APayloadModeNative
 }
 
 func parseLegacyDelegationInput(arguments map[string]any, targetType, targetName string) (delegatedInvocation, string, error) {
@@ -435,26 +434,49 @@ func parseNativeDelegationInput(arguments map[string]any, targetType, targetName
 		}
 		invocation.a2aHistory = history
 	}
-	rawMessage, exists := arguments["message"]
-	if !exists {
-		return delegatedInvocation{}, "message parameter is required", fmt.Errorf("message parameter is required for %s tool %s", targetType, targetName)
-	}
-
-	message, err := parseA2AMessageArgument(rawMessage)
-	if err != nil {
-		return delegatedInvocation{}, "message parameter is invalid", err
-	}
 	invocationArgs := extractDelegationInvocationArgs(arguments)
-	if len(invocationArgs) == 0 {
-		return delegatedInvocation{}, "delegation parameters are required", fmt.Errorf("delegation parameters are required for %s tool %s", targetType, targetName)
+	rawMessage, hasMessage := arguments["message"]
+	switch {
+	case hasMessage:
+		message, err := parseA2AMessageArgument(rawMessage)
+		if err != nil {
+			return delegatedInvocation{}, "message parameter is invalid", err
+		}
+		if len(invocationArgs) > 0 {
+			appendPayloadPartToMessage(&message, DelegatedInvocationPayloadV1{
+				Schema:     A2APayloadSchemaDelegatedInvocationV1,
+				Parameters: invocationArgs,
+				ContextID:  invocation.contextID,
+			})
+			ensureMessageHasExtension(&message, A2ADelegatedToolExtensionKey)
+		}
+		invocation.a2aUserInput = message
+	default:
+		rawInput, hasInput := arguments["input"]
+		if !hasInput {
+			return delegatedInvocation{}, "message parameter is required", fmt.Errorf("message parameter is required for %s tool %s", targetType, targetName)
+		}
+		inputStr, ok := rawInput.(string)
+		if !ok {
+			return delegatedInvocation{}, "input parameter must be a string", fmt.Errorf("input parameter must be a string for %s tool %s", targetType, targetName)
+		}
+		message := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+			protocol.NewTextPart(inputStr),
+		})
+		if len(invocationArgs) > 0 {
+			appendPayloadPartToMessage(&message, DelegatedInvocationPayloadV1{
+				Schema:     A2APayloadSchemaDelegatedInvocationV1,
+				Parameters: invocationArgs,
+				ContextID:  invocation.contextID,
+			})
+			ensureMessageHasExtension(&message, A2ADelegatedToolExtensionKey)
+		}
+		invocation.a2aUserInput = message
 	}
-	appendPayloadPartToMessage(&message, DelegatedInvocationPayloadV1{
-		Schema:     A2APayloadSchemaDelegatedInvocationV1,
-		Parameters: invocationArgs,
-		ContextID:  invocation.contextID,
-	})
-	ensureMessageHasExtension(&message, A2ADelegatedToolExtensionKey)
-	invocation.a2aUserInput = message
+	if invocation.contextID != "" && (invocation.a2aUserInput.ContextID == nil || *invocation.a2aUserInput.ContextID == "") {
+		contextIDCopy := invocation.contextID
+		invocation.a2aUserInput.ContextID = &contextIDCopy
+	}
 	return invocation, "", nil
 }
 
@@ -466,8 +488,8 @@ func parseDelegatedInvocation(arguments map[string]any, payloadMode, targetType,
 }
 
 func applyDelegationContext(ctx context.Context, payloadMode, contextID string) context.Context {
-	ctx = WithA2AExperimentalEnabled(ctx, payloadMode == A2APayloadModeNative)
-	ctx = WithA2APayloadMode(ctx, payloadMode)
+	_ = payloadMode
+	ctx = WithA2APayloadMode(ctx, A2APayloadModeNative)
 	if contextID == "" {
 		return ctx
 	}
@@ -482,9 +504,7 @@ func buildToolStepID(toolCallID string) string {
 }
 
 func getDelegationEventStream(ctx context.Context, payloadMode string, call ToolCall) EventStreamInterface {
-	if payloadMode != A2APayloadModeNative {
-		return nil
-	}
+	_ = payloadMode
 	base := GetToolEventStream(ctx)
 	if base == nil {
 		return nil
@@ -655,12 +675,7 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolRes
 
 	execCtx := applyDelegationContext(ctx, payloadMode, invocation.contextID)
 	eventStream := getDelegationEventStream(ctx, payloadMode, call)
-	var result *ExecutionResult
-	if payloadMode == A2APayloadModeNative {
-		result, err = agent.ExecuteA2A(execCtx, invocation.a2aUserInput, invocation.a2aHistory, nil, eventStream)
-	} else {
-		result, err = agent.Execute(execCtx, invocation.userInput, invocation.history, nil, eventStream)
-	}
+	result, err := agent.ExecuteA2A(execCtx, invocation.a2aUserInput, invocation.a2aHistory, nil, eventStream)
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,
@@ -744,12 +759,7 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResu
 
 	execCtx := applyDelegationContext(ctx, payloadMode, invocation.contextID)
 	eventStream := getDelegationEventStream(ctx, payloadMode, call)
-	var result *ExecutionResult
-	if payloadMode == A2APayloadModeNative {
-		result, err = team.ExecuteA2A(execCtx, invocation.a2aUserInput, invocation.a2aHistory, nil, eventStream)
-	} else {
-		result, err = team.Execute(execCtx, invocation.userInput, invocation.history, nil, eventStream)
-	}
+	result, err := team.ExecuteA2A(execCtx, invocation.a2aUserInput, invocation.a2aHistory, nil, eventStream)
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,

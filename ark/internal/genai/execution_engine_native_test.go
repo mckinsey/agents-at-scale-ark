@@ -165,8 +165,7 @@ func TestExecutionEngineClientExecuteA2AConvertsCompatImagePartsInExperimentalMo
 	agentConfig := AgentConfig{Name: "test-agent", Namespace: testEngineNS}
 	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{protocol.NewTextPart("hello")})
 
-	ctx := WithA2AExperimentalEnabled(context.Background(), true)
-	messages, err := engineClient.ExecuteA2A(ctx, engineRef, agentConfig, userInput, nil, nil)
+	messages, err := engineClient.ExecuteA2A(context.Background(), engineRef, agentConfig, userInput, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, messages, 1)
 	require.Len(t, messages[0].Parts, 2)
@@ -184,7 +183,7 @@ func TestExecutionEngineClientExecuteA2AConvertsCompatImagePartsInExperimentalMo
 	assert.Equal(t, "image/png", *fileWithURI.MimeType)
 }
 
-func TestExecutionEngineClientExecuteA2AIgnoresContentPartsWithoutExperimentalMode(t *testing.T) {
+func TestExecutionEngineClientExecuteA2APreservesContentParts(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/execute-a2a", r.URL.Path)
 		response := ExecutionEngineResponse{
@@ -223,8 +222,8 @@ func TestExecutionEngineClientExecuteA2AIgnoresContentPartsWithoutExperimentalMo
 	messages, err := engineClient.ExecuteA2A(context.Background(), engineRef, agentConfig, userInput, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, messages, 1)
-	require.Len(t, messages[0].Parts, 1)
+	require.Len(t, messages[0].Parts, 2)
 	textPart, ok := messages[0].Parts[0].(protocol.TextPart)
 	require.True(t, ok)
-	assert.Equal(t, "compat-fallback-content", textPart.Text)
+	assert.Equal(t, "describe this", textPart.Text)
 }

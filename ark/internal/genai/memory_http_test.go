@@ -436,8 +436,7 @@ func TestHTTPMemoryAddMessagesCompatIgnoresExperimentalContext(t *testing.T) {
 		eventingRecorder: &noOpMemoryRecorder{},
 	}
 
-	ctx := WithA2AExperimentalEnabled(context.Background(), true)
-	ctx = WithA2APayloadMode(ctx, A2APayloadModeNative)
+	ctx := WithA2APayloadMode(context.Background(), A2APayloadModeNative)
 	err := httpMemory.AddMessages(ctx, "query-id", []Message{NewUserMessage("hello")})
 	require.NoError(t, err)
 
@@ -558,7 +557,7 @@ func TestHTTPMemoryGetMessagesRemainsLegacyWhenExperimentalEnabled(t *testing.T)
 		eventingRecorder: &noOpMemoryRecorder{},
 	}
 
-	ctx := WithA2AExperimentalEnabled(context.Background(), true)
+	ctx := context.Background()
 	messages, err := httpMemory.GetMessages(ctx)
 	require.NoError(t, err)
 	require.Len(t, messages, 1)
@@ -618,8 +617,7 @@ func TestHTTPMemoryGetMessagesRemainsLegacyWhenExperimentalAndNativePayloadModeE
 		eventingRecorder: &noOpMemoryRecorder{},
 	}
 
-	ctx := WithA2AExperimentalEnabled(context.Background(), true)
-	ctx = WithA2APayloadMode(ctx, A2APayloadModeNative)
+	ctx := WithA2APayloadMode(context.Background(), A2APayloadModeNative)
 	messages, err := httpMemory.GetMessages(ctx)
 	require.NoError(t, err)
 	require.Len(t, messages, 1)

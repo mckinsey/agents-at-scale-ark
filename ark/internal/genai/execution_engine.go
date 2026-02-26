@@ -336,12 +336,8 @@ func (c *ExecutionEngineClient) ExecuteA2A(ctx context.Context, engineRef *arkv1
 	contextID := GetA2AContextID(ctx)
 	queryID := getQueryID(ctx)
 	for i := range response.Messages {
-		experimentalMode := IsA2AExperimentalEnabledInContext(ctx)
-		compatMessage := convertFromExecutionEngineMessage(response.Messages[i])
-		if experimentalMode {
-			compatMessage = convertFromExecutionEngineMessageExperimental(response.Messages[i])
-		}
-		converted, convErr := convertCompatMessageToA2A(compatMessage, experimentalMode)
+		compatMessage := convertFromExecutionEngineMessageExperimental(response.Messages[i])
+		converted, convErr := convertCompatMessageToA2A(compatMessage)
 		if convErr != nil {
 			return nil, fmt.Errorf("failed to convert execution engine response message %d to A2A: %w", i, convErr)
 		}

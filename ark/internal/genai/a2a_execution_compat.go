@@ -13,8 +13,7 @@ func (a *Agent) executeWithA2ACompatExecution(ctx context.Context, userInput pro
 		return nil, err
 	}
 
-	execCtx := WithA2AExperimentalEnabled(ctx, false)
-	execCtx = WithA2APayloadMode(execCtx, A2APayloadModeCompat)
+	execCtx := WithA2APayloadMode(ctx, A2APayloadModeCompat)
 
 	var messages []Message
 	if a.ExecutionEngine == nil {

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -36,8 +35,7 @@ const (
 	AgentCardPathVersion3      = "/.well-known/agent-card.json"
 	a2aHistoryExtensionKey     = "https://ark.mckinsey.com/extensions/history/v1"
 	a2aPermissionsExtensionKey = "https://ark.mckinsey.com/extensions/permissions/v1"
-	a2aPayloadModeEnv          = "ARK_A2A_STREAMING_PAYLOAD_MODE"
-	a2aExtensionsHeader        = "A2A-Extensions"
+	a2aExtensionsHeader = "A2A-Extensions"
 )
 
 type A2AResponse struct {
@@ -71,24 +69,6 @@ func isA2AStreamingSupported(agentAnnotations map[string]string) bool {
 		return false
 	}
 	return agentAnnotations[arkann.A2AStreamingSupported] == TrueString
-}
-
-func GetA2APayloadMode(agentAnnotations map[string]string) string {
-	mode := ""
-	if agentAnnotations != nil {
-		if value := agentAnnotations[arkann.A2APayloadMode]; value != "" {
-			mode = value
-		}
-	}
-	if mode == "" {
-		mode = os.Getenv(a2aPayloadModeEnv)
-	}
-	switch mode {
-	case A2APayloadModeCompat, A2APayloadModeNative:
-		return mode
-	default:
-		return A2APayloadModeCompat
-	}
 }
 
 func shouldIncludeA2AHistory(agentAnnotations map[string]string, defaultValue bool) bool {
@@ -441,9 +421,6 @@ func StreamA2AAgent(ctx context.Context, k8sClient client.Client, address string
 	events, streamErr := a2aClient.StreamMessage(ctx, params)
 	if streamErr == nil {
 		return events, nil
-	}
-	if IsA2AExperimentalEnabledInContext(ctx) {
-		return nil, streamErr
 	}
 
 	log := logf.FromContext(ctx)

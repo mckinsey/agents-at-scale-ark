@@ -326,20 +326,20 @@ func TestConsumeA2AStreamEventsArtifactNativeStreamFailure(t *testing.T) {
 	assert.ErrorContains(t, err, "failed to stream native A2A event")
 }
 
-func TestResolveA2AExecutionPayloadModeDefaultsCompat(t *testing.T) {
+func TestResolveA2AExecutionPayloadModeDefaultsNative(t *testing.T) {
 	mode := resolveA2AExecutionPayloadMode(context.Background(), nil)
-	assert.Equal(t, A2APayloadModeCompat, mode)
-}
-
-func TestResolveA2AExecutionPayloadModeUsesExperimentalContext(t *testing.T) {
-	ctx := WithA2AExperimentalEnabled(context.Background(), true)
-	mode := resolveA2AExecutionPayloadMode(ctx, nil)
 	assert.Equal(t, A2APayloadModeNative, mode)
 }
 
-func TestResolveA2AExecutionPayloadModeUsesAgentExperimentalAnnotation(t *testing.T) {
+func TestResolveA2AExecutionPayloadModeUsesPayloadModeContext(t *testing.T) {
+	ctx := WithA2APayloadMode(context.Background(), A2APayloadModeCompat)
+	mode := resolveA2AExecutionPayloadMode(ctx, nil)
+	assert.Equal(t, A2APayloadModeCompat, mode)
+}
+
+func TestResolveA2AExecutionPayloadModeIgnoresAgentAnnotations(t *testing.T) {
 	mode := resolveA2AExecutionPayloadMode(context.Background(), map[string]string{
-		arkann.A2AExperimentalEnabled: "true",
+		arkann.ExecutionMode: "chat-completions",
 	})
 	assert.Equal(t, A2APayloadModeNative, mode)
 }

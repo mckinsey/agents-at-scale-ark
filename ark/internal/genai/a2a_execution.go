@@ -16,7 +16,6 @@ import (
 
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	arkann "mckinsey.com/ark/internal/annotations"
-	"mckinsey.com/ark/internal/config"
 	"mckinsey.com/ark/internal/eventing"
 )
 
@@ -90,7 +89,6 @@ func (e *A2AExecutionEngine) executeA2A(ctx context.Context, agentName, namespac
 		return nil, err
 	}
 
-	experimentalEnabled := resolveA2AExperimentalExecutionEnabled(ctx, agentAnnotations)
 	payloadMode := resolveA2AExecutionPayloadMode(ctx, agentAnnotations)
 	streamResult, streamed, streamErr := e.tryA2AStreamingExecution(ctx, a2aAddress, a2aServer.Spec.Headers, namespace, agentAnnotations, agentName, queryName, contextID, userInput, metadata, eventStream, payloadMode, &a2aServer, includeOpenAIMessages)
 	if streamErr == nil && streamResult != nil {
@@ -98,12 +96,6 @@ func (e *A2AExecutionEngine) executeA2A(ctx context.Context, agentName, namespac
 		return streamResult, nil
 	}
 	if streamed && streamErr != nil {
-		if experimentalEnabled {
-			modelID := fmt.Sprintf("agent/%s", agentName)
-			streamA2AError(ctx, eventStream, payloadMode, modelID, streamErr)
-			e.eventingRecorder.Fail(ctx, "A2AExecution", fmt.Sprintf("A2A execution failed: %v", streamErr), streamErr, operationData)
-			return nil, streamErr
-		}
 		log.Error(streamErr, "A2A streaming execution failed, falling back to blocking", "agent", agentName)
 	}
 
@@ -206,22 +198,11 @@ func applyA2AServerTimeout(ctx context.Context, a2aServer *arkv1prealpha1.A2ASer
 	return timeoutCtx, cancel, nil
 }
 
-func resolveA2AExecutionPayloadMode(ctx context.Context, agentAnnotations map[string]string) string {
-	payloadMode := GetA2APayloadModeFromContext(ctx)
-	if payloadMode != A2APayloadModeCompat {
-		return payloadMode
+func resolveA2AExecutionPayloadMode(ctx context.Context, _ map[string]string) string {
+	if HasA2APayloadModeInContext(ctx) {
+		return GetA2APayloadModeFromContext(ctx)
 	}
-	if resolveA2AExperimentalExecutionEnabled(ctx, agentAnnotations) {
-		return A2APayloadModeNative
-	}
-	return A2APayloadModeCompat
-}
-
-func resolveA2AExperimentalExecutionEnabled(ctx context.Context, agentAnnotations map[string]string) bool {
-	if HasA2AExperimentalEnabledInContext(ctx) {
-		return IsA2AExperimentalEnabledInContext(ctx)
-	}
-	return IsA2AEnabled(agentAnnotations, config.Global())
+	return A2APayloadModeNative
 }
 
 func (e *A2AExecutionEngine) tryA2AStreamingExecution(ctx context.Context, address string, headers []arkv1prealpha1.Header, namespace string, agentAnnotations map[string]string, agentName, queryName, contextID string, userInput protocol.Message, metadata map[string]interface{}, eventStream EventStreamInterface, payloadMode string, a2aServer *arkv1prealpha1.A2AServer, includeOpenAIMessages bool) (*ExecutionResult, bool, error) {

@@ -14,7 +14,6 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
-	"mckinsey.com/ark/internal/config"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
 )
@@ -52,7 +51,13 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 	}
 	ctx = a.eventingRecorder.Start(ctx, "AgentExecution", fmt.Sprintf("Executing agent %s", a.FullName()), operationData)
 
-	result, err := a.executeAgent(ctx, userInput, history, memory, eventStream)
+	a2aUserInput, a2aHistory, err := convertCompatInputToA2A(userInput, history)
+	if err != nil {
+		a.telemetryRecorder.RecordError(span, err)
+		a.eventingRecorder.Fail(ctx, "AgentExecution", fmt.Sprintf("Agent execution failed: %v", err), err, operationData)
+		return nil, err
+	}
+	result, err := a.executeAgentA2A(ctx, a2aUserInput, a2aHistory, memory, eventStream)
 	if err != nil {
 		a.telemetryRecorder.RecordError(span, err)
 		if !IsTerminateTeam(err) {
@@ -65,6 +70,22 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 	a.telemetryRecorder.RecordSuccess(span)
 	a.eventingRecorder.Complete(ctx, "AgentExecution", "Agent execution completed successfully", operationData)
 	return result, nil
+}
+
+func convertCompatInputToA2A(userInput Message, history []Message) (protocol.Message, []protocol.Message, error) {
+	a2aUserInput, err := OpenAIToA2AMessage(userInput)
+	if err != nil {
+		return protocol.Message{}, nil, fmt.Errorf("failed to convert user input to A2A: %w", err)
+	}
+	a2aHistory := make([]protocol.Message, 0, len(history))
+	for i := range history {
+		converted, convErr := OpenAIToA2AMessage(history[i])
+		if convErr != nil {
+			return protocol.Message{}, nil, fmt.Errorf("failed to convert history message %d to A2A: %w", i, convErr)
+		}
+		a2aHistory = append(a2aHistory, converted)
+	}
+	return a2aUserInput, a2aHistory, nil
 }
 
 func (a *Agent) ExecuteA2A(ctx context.Context, userInput protocol.Message, history []protocol.Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
@@ -90,33 +111,6 @@ func (a *Agent) ExecuteA2A(ctx context.Context, userInput protocol.Message, hist
 	return result, nil
 }
 
-func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
-	if a.ExecutionEngine != nil {
-		return a.executeWithExecutionEngineRouter(ctx, userInput, history, eventStream)
-	}
-
-	messages, err := a.executeLocally(ctx, userInput, history, memory, eventStream)
-	if err != nil {
-		if IsTerminateTeam(err) {
-			return &ExecutionResult{Messages: messages}, err
-		}
-		return nil, err
-	}
-	return &ExecutionResult{Messages: messages}, nil
-}
-
-func (a *Agent) executeWithExecutionEngineRouter(ctx context.Context, userInput Message, history []Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
-	if a.ExecutionEngine.Name == ExecutionEngineA2A {
-		return a.executeWithA2AExecutionEngine(ctx, userInput, history, eventStream)
-	}
-
-	messages, err := a.executeWithExecutionEngine(ctx, userInput, history)
-	if err != nil {
-		return nil, err
-	}
-	return &ExecutionResult{Messages: messages}, nil
-}
-
 func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
 	engineClient := NewExecutionEngineClient(a.client, a.eventing.ExecutionEngineRecorder())
 
@@ -133,17 +127,7 @@ func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Messag
 	return engineClient.Execute(ctx, a.ExecutionEngine, agentConfig, userInput, history, toolDefinitions)
 }
 
-func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Message, history []Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
-	if !HasA2AExperimentalEnabledInContext(ctx) {
-		ctx = WithA2AExperimentalEnabled(ctx, IsA2AEnabled(a.Annotations, config.Global()))
-	}
-	a2aEngine := NewA2AExecutionEngine(a.client, a.eventing.A2aRecorder())
-	contextID := GetA2AContextID(ctx)
-	return a2aEngine.Execute(ctx, a.Name, a.Namespace, a.Annotations, contextID, userInput, history, eventStream)
-}
-
 func (a *Agent) executeWithA2AExecutionEngineNative(ctx context.Context, userInput protocol.Message, history []protocol.Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
-	ctx = WithA2AExperimentalEnabled(ctx, true)
 	ctx = WithA2APayloadMode(ctx, A2APayloadModeNative)
 	a2aEngine := NewA2AExecutionEngine(a.client, a.eventing.A2aRecorder())
 	contextID := GetA2AContextID(ctx)

@@ -11,14 +11,6 @@ func (a *Agent) executeLocallyA2ANative(ctx context.Context, userInput protocol.
 	if a.Model == nil {
 		return nil, fmt.Errorf("agent %s has no model configured", a.FullName())
 	}
-	if !a.Model.SupportsA2ANativeTurns() {
-		return nil, fmt.Errorf(
-			"agent %s model provider %T does not support native A2A turns: %w",
-			a.FullName(),
-			a.Model.Provider,
-			ErrA2AExperimentalRequiresNativeProvider,
-		)
-	}
 
 	a2aProvider := NewOpenAIA2AModelAdapter(a.Model, a.Name, a.Namespace)
 
@@ -79,9 +71,6 @@ func convertA2AMessagesToCompatExperimental(messages []protocol.Message) ([]Mess
 	return compatMessages, nil
 }
 
-func convertCompatMessageToA2A(msg Message, experimental bool) (protocol.Message, error) {
-	if experimental {
-		return OpenAIToA2AMessageExperimental(msg)
-	}
-	return OpenAIToA2AMessage(msg)
+func convertCompatMessageToA2A(msg Message) (protocol.Message, error) {
+	return OpenAIToA2AMessageExperimental(msg)
 }

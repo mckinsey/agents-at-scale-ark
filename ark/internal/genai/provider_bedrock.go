@@ -124,7 +124,7 @@ func (bm *BedrockModel) ChatCompletion(ctx context.Context, messages []openai.Ch
 		return nil, err
 	}
 
-	bedrockMessages, systemPrompt := bm.convertMessages(messages, IsA2AExperimentalEnabledInContext(ctx))
+	bedrockMessages, systemPrompt := bm.convertMessages(messages)
 	bedrockTools := bm.convertTools(toolsParam)
 
 	request := bm.buildRequest(bedrockMessages, systemPrompt, bedrockTools)
@@ -218,15 +218,12 @@ func (bm *BedrockModel) buildRequest(messages []bedrockMessage, systemPrompt str
 	}
 }
 
-func (bm *BedrockModel) convertMessages(messages []openai.ChatCompletionMessageParamUnion, experimental bool) ([]bedrockMessage, string) {
+func (bm *BedrockModel) convertMessages(messages []openai.ChatCompletionMessageParamUnion) ([]bedrockMessage, string) {
 	var bedrockMessages []bedrockMessage
 	var systemPrompt string
 
 	for _, msg := range messages {
-		content, role := extractMessageContent(msg)
-		if experimental {
-			content, role = extractMessageContentExperimental(msg)
-		}
+		content, role := extractMessageContentExperimental(msg)
 		if content == "" {
 			continue
 		}

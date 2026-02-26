@@ -199,7 +199,7 @@ func TestA2ATurnStreamsOpenAIChunksInCompatMode(t *testing.T) {
 		protocol.NewTextPart("hello"),
 	})
 
-	_, err := adapter.A2ATurn(WithA2AExperimentalEnabled(context.Background(), false), []protocol.Message{userMessage}, nil, nil, stream)
+	_, err := adapter.A2ATurn(context.Background(), []protocol.Message{userMessage}, nil, nil, stream)
 	require.NoError(t, err)
 	assert.Equal(t, 0, provider.chatCalls)
 	assert.Equal(t, 1, provider.streamCalls)
@@ -232,7 +232,7 @@ func TestA2ATurnConvertsA2AImagePartToOpenAIImageURL(t *testing.T) {
 		protocol.NewFilePartWithURI("diagram.png", "image/png", "https://example.com/diagram.png"),
 	})
 
-	_, err := adapter.A2ATurn(WithA2AExperimentalEnabled(context.Background(), false), []protocol.Message{userMessage}, nil, nil, nil)
+	_, err := adapter.A2ATurn(context.Background(), []protocol.Message{userMessage}, nil, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, provider.chatCalls)
 	require.Len(t, provider.lastMessages, 1)
@@ -244,14 +244,14 @@ func TestA2ATurnConvertsA2AImagePartToOpenAIImageURL(t *testing.T) {
 	assert.Equal(t, "https://example.com/diagram.png", provider.lastMessages[0].OfUser.Content.OfArrayOfContentParts[1].OfImageURL.ImageURL.URL)
 }
 
-func TestA2ATurnExperimentalWithoutNativeProviderFailsFast(t *testing.T) {
+func TestA2ATurnFallsBackToCompatProviderWhenNativeProviderMissing(t *testing.T) {
 	provider := &adapterTestChatProvider{
 		response: &openai.ChatCompletion{
 			Choices: []openai.ChatCompletionChoice{
 				{
 					Message: openai.ChatCompletionMessage{
 						Role:    "assistant",
-						Content: "should-not-run",
+						Content: "compat-response",
 					},
 				},
 			},
@@ -269,10 +269,11 @@ func TestA2ATurnExperimentalWithoutNativeProviderFailsFast(t *testing.T) {
 		protocol.NewTextPart("hello"),
 	})
 
-	result, err := adapter.A2ATurn(WithA2AExperimentalEnabled(context.Background(), true), []protocol.Message{userMessage}, nil, nil, nil)
-	require.ErrorIs(t, err, ErrA2AExperimentalRequiresNativeProvider)
-	assert.Nil(t, result)
-	assert.Equal(t, 0, provider.chatCalls)
+	result, err := adapter.A2ATurn(context.Background(), []protocol.Message{userMessage}, nil, nil, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "compat-response", result.Content)
+	assert.Equal(t, 1, provider.chatCalls)
 	assert.Equal(t, 0, provider.streamCalls)
 }
 

@@ -29,7 +29,7 @@ type openAIA2AModelAdapter struct {
 }
 
 // A2ANativeTurnProvider is an optional provider capability for native A2A turns.
-// When available, A2A experimental execution can avoid ChatCompletions transport.
+// When unavailable, the adapter falls back to ChatCompletions transport.
 type A2ANativeTurnProvider interface {
 	A2ATurnNative(
 		ctx context.Context,
@@ -66,9 +66,6 @@ func (a *openAIA2AModelAdapter) A2ATurn(ctx context.Context, messages []protocol
 	if a.nativeProvider != nil {
 		return a.nativeProvider.A2ATurnNative(ctx, messages, toolOutcomes, tools, eventStream)
 	}
-	if IsA2AExperimentalEnabledInContext(ctx) {
-		return nil, ErrA2AExperimentalRequiresNativeProvider
-	}
 	return a.a2aTurnViaChatCompletionsEdge(ctx, messages, toolOutcomes, tools, eventStream)
 }
 
@@ -89,9 +86,8 @@ func (a *openAIA2AModelAdapter) a2aTurnViaChatCompletionsEdge(ctx context.Contex
 		a.provider.SetOutputSchema(a.outputSchema, a.schemaName)
 	}
 
-	modelCtx := WithA2AExperimentalEnabled(ctx, false)
-	modelCtx = WithA2APayloadMode(modelCtx, A2APayloadModeCompat)
-	forwardOpenAIChunks := eventStream != nil && !IsA2AExperimentalEnabledInContext(ctx)
+	modelCtx := WithA2APayloadMode(ctx, A2APayloadModeCompat)
+	forwardOpenAIChunks := eventStream != nil && GetA2APayloadModeFromContext(ctx) == A2APayloadModeCompat
 
 	response, err := a.callProvider(modelCtx, compatMessages, openAITools, eventStream, forwardOpenAIChunks)
 	if err != nil {

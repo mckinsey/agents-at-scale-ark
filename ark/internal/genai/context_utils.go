@@ -22,8 +22,6 @@ const (
 	modelKey           contextKey = "model"  // Current model name
 	a2aPayloadModeKey  contextKey = "a2aPayloadMode"
 	a2aPayloadSetKey   contextKey = "a2aPayloadSet"
-	a2aExperimentalKey contextKey = "a2aExperimentalEnabled"
-	a2aExperimentalSet contextKey = "a2aExperimentalSet"
 	toolEventStreamKey contextKey = "toolEventStream"
 )
 
@@ -132,29 +130,6 @@ func GetA2APayloadModeFromContext(ctx context.Context) string {
 
 func HasA2APayloadModeInContext(ctx context.Context) bool {
 	if val := ctx.Value(a2aPayloadSetKey); val != nil {
-		if hasValue, ok := val.(bool); ok {
-			return hasValue
-		}
-	}
-	return false
-}
-
-func WithA2AExperimentalEnabled(ctx context.Context, enabled bool) context.Context {
-	ctx = context.WithValue(ctx, a2aExperimentalKey, enabled)
-	return context.WithValue(ctx, a2aExperimentalSet, true)
-}
-
-func IsA2AExperimentalEnabledInContext(ctx context.Context) bool {
-	if val := ctx.Value(a2aExperimentalKey); val != nil {
-		if enabled, ok := val.(bool); ok {
-			return enabled
-		}
-	}
-	return false
-}
-
-func HasA2AExperimentalEnabledInContext(ctx context.Context) bool {
-	if val := ctx.Value(a2aExperimentalSet); val != nil {
 		if hasValue, ok := val.(bool); ok {
 			return hasValue
 		}

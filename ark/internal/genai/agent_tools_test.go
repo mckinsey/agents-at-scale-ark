@@ -418,7 +418,7 @@ func TestTeamToolExecutor_Execute(t *testing.T) {
 		require.Contains(t, err.Error(), "failed to parse tool arguments")
 	})
 
-	t.Run("fails when input parameter is missing", func(t *testing.T) {
+	t.Run("fails when message and input parameters are missing", func(t *testing.T) {
 		executor := &TeamToolExecutor{
 			TeamName:          "test-team",
 			Namespace:         "default",
@@ -445,8 +445,8 @@ func TestTeamToolExecutor_Execute(t *testing.T) {
 		require.Error(t, err)
 		require.Equal(t, "test-call-id", result.ID)
 		require.Equal(t, "test-team-tool", result.Name)
-		require.Equal(t, "input parameter is required", result.Error)
-		require.Contains(t, err.Error(), "input parameter is required")
+		require.Equal(t, "message parameter is required", result.Error)
+		require.Contains(t, err.Error(), "message parameter is required")
 	})
 
 	t.Run("fails when input parameter is not a string", func(t *testing.T) {
@@ -691,14 +691,15 @@ func TestParseDelegatedInvocationNativeMessageHistoryContext(t *testing.T) {
 	require.Equal(t, protocol.MessageRoleAgent, invocation.a2aHistory[0].Role)
 }
 
-func TestParseDelegatedInvocationNativeRequiresMessage(t *testing.T) {
+func TestParseDelegatedInvocationNativeFallsBackToInput(t *testing.T) {
 	args := map[string]any{
 		"input": "fallback input",
 	}
-	_, userError, err := parseDelegatedInvocation(args, A2APayloadModeNative, "team", "test-team")
-	require.Error(t, err)
-	require.Equal(t, "message parameter is required", userError)
-	require.Contains(t, err.Error(), "message parameter is required")
+	invocation, userError, err := parseDelegatedInvocation(args, A2APayloadModeNative, "team", "test-team")
+	require.NoError(t, err)
+	require.Equal(t, "", userError)
+	require.Equal(t, protocol.MessageRoleUser, invocation.a2aUserInput.Role)
+	require.Equal(t, "fallback input", ExtractA2ATextFromMessage(invocation.a2aUserInput))
 }
 
 func TestParseDelegatedInvocationNativeAppendsDelegatedInvocationPayload(t *testing.T) {
@@ -820,7 +821,7 @@ func TestPartialToolExecutorPartialParametersOverrideAgentArguments(t *testing.T
 	require.Equal(t, "ticket-01", extArgs["ticketId"])
 }
 
-func TestParseDelegatedInvocationNativeRequiresDelegationParameters(t *testing.T) {
+func TestParseDelegatedInvocationNativeAllowsMissingDelegationParameters(t *testing.T) {
 	args := map[string]any{
 		"message": map[string]any{
 			"role": "user",
@@ -833,9 +834,11 @@ func TestParseDelegatedInvocationNativeRequiresDelegationParameters(t *testing.T
 		},
 		"routingScope": "scope-123",
 	}
-	_, userError, err := parseDelegatedInvocation(args, A2APayloadModeNative, "agent", "test-agent")
-	require.Error(t, err)
-	require.Equal(t, "delegation parameters are required", userError)
+	invocation, userError, err := parseDelegatedInvocation(args, A2APayloadModeNative, "agent", "test-agent")
+	require.NoError(t, err)
+	require.Equal(t, "", userError)
+	_, hasPayload := extractDataPayloadBySchema(invocation.a2aUserInput.Parts, A2APayloadSchemaDelegatedInvocationV1)
+	require.False(t, hasPayload)
 }
 
 func TestParseDelegatedInvocationNativeInvalidContextID(t *testing.T) {
@@ -894,7 +897,7 @@ func TestNormalizeContextIDRejectsExceedsMaxLength(t *testing.T) {
 	require.Contains(t, err.Error(), "exceeds max length")
 }
 
-func TestGetDelegationEventStreamGatedByPayloadMode(t *testing.T) {
+func TestGetDelegationEventStreamNotGatedByPayloadMode(t *testing.T) {
 	ctx := WithToolEventStream(context.Background(), &testToolEventStream{})
 	call := ToolCall{
 		ID: "call-1",
@@ -904,15 +907,15 @@ func TestGetDelegationEventStreamGatedByPayloadMode(t *testing.T) {
 	}
 	compatStream := getDelegationEventStream(ctx, A2APayloadModeCompat, call)
 	nativeStream := getDelegationEventStream(ctx, A2APayloadModeNative, call)
-	require.Nil(t, compatStream)
+	require.NotNil(t, compatStream)
 	require.NotNil(t, nativeStream)
 }
 
-func TestApplyDelegationContextSetsExperimentalFlagFromPayloadMode(t *testing.T) {
+func TestApplyDelegationContextAlwaysSetsNativePayloadMode(t *testing.T) {
 	nativeCtx := applyDelegationContext(context.Background(), A2APayloadModeNative, "")
-	require.True(t, IsA2AExperimentalEnabledInContext(nativeCtx))
+	require.Equal(t, A2APayloadModeNative, GetA2APayloadModeFromContext(nativeCtx))
 	compatCtx := applyDelegationContext(context.Background(), A2APayloadModeCompat, "")
-	require.False(t, IsA2AExperimentalEnabledInContext(compatCtx))
+	require.Equal(t, A2APayloadModeNative, GetA2APayloadModeFromContext(compatCtx))
 }
 
 func TestBuildDelegatedToolResultContentBuildsTypedPayload(t *testing.T) {
@@ -1204,7 +1207,7 @@ func TestAgentToolExecutor_NativeMessageDelegationWithoutInput(t *testing.T) {
 	require.NotContains(t, result.Error, "input parameter is required")
 }
 
-func TestAgentToolExecutor_CompatMessageStillRequiresInput(t *testing.T) {
+func TestAgentToolExecutor_CompatMessageDoesNotRequireInput(t *testing.T) {
 	executor := &AgentToolExecutor{
 		AgentName: "delegate-agent",
 		Namespace: "default",
@@ -1241,8 +1244,8 @@ func TestAgentToolExecutor_CompatMessageStillRequiresInput(t *testing.T) {
 	}
 	result, err := executor.Execute(context.Background(), call)
 	require.Error(t, err)
-	require.Equal(t, "input parameter is required", result.Error)
-	require.Contains(t, err.Error(), "input parameter is required")
+	require.NotContains(t, result.Error, "input parameter is required")
+	require.Contains(t, err.Error(), "missing query context")
 }
 
 func TestTeamToolExecutor_NativeMessageDelegationWithoutInput(t *testing.T) {

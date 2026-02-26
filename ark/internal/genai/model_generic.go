@@ -44,9 +44,6 @@ func (m *Model) ChatCompletion(ctx context.Context, messages []Message, eventStr
 	if m.Provider == nil {
 		return nil, nil
 	}
-	if IsA2AExperimentalEnabledInContext(ctx) {
-		return nil, fmt.Errorf("openai transport is disabled while A2A experimental mode is enabled")
-	}
 
 	ctx, span := m.telemetryRecorder.StartModelExecution(ctx, m.Model, m.Type)
 	defer span.End()
@@ -121,9 +118,8 @@ func (m *Model) HealthCheck(ctx context.Context) error {
 	case *BedrockModel:
 		return provider.HealthCheck(ctx)
 	default:
-		healthCtx := WithA2AExperimentalEnabled(ctx, false)
 		testMessages := []Message{NewUserMessage("Hello")}
-		_, err := m.ChatCompletion(healthCtx, testMessages, nil, 1)
+		_, err := m.ChatCompletion(ctx, testMessages, nil, 1)
 		return err
 	}
 }
