@@ -25,12 +25,8 @@ export function ManageMarketplaceSettings() {
     },
   ]);
 
-  const [editingSource, setEditingSource] = useState<MarketplaceSource | null>(
-    null,
-  );
   const [isAdding, setIsAdding] = useState(false);
   const [newSource, setNewSource] = useState<Partial<MarketplaceSource>>({
-    name: '',
     url: '',
     displayName: '',
   });
@@ -49,7 +45,7 @@ export function ManageMarketplaceSettings() {
     };
 
     setSources([...sources, source]);
-    setNewSource({ name: '', url: '', displayName: '' });
+    setNewSource({ url: '', displayName: '' });
     setIsAdding(false);
     toast.success('Marketplace source added');
   };
@@ -65,63 +61,75 @@ export function ManageMarketplaceSettings() {
   };
 
   const handleCancel = () => {
-    setEditingSource(null);
     setIsAdding(false);
-    setNewSource({ name: '', url: '', displayName: '' });
+    setNewSource({ url: '', displayName: '' });
   };
 
   return (
     <div className="space-y-6">
       {/* Existing sources */}
-      {sources.map(source => (
-        <div
-          key={source.id}
-          className="rounded-lg border border-border bg-card p-6 space-y-4">
-          <div className="flex items-start justify-between">
-            <h3 className="text-lg font-medium">{source.name}</h3>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => handleDeleteSource(source.id)}
-              className="h-8 w-8 text-destructive hover:text-destructive">
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
+      {sources.length > 0 && (
+        <div>
+          <h2 className="mb-4 text-lg font-semibold">Marketplace Sources</h2>
+          <div className="space-y-3">
+            {sources.map(source => (
+              <div key={source.id} className="rounded-lg border p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 space-y-4">
+                    <div className="space-y-0.5">
+                      <Label className="text-sm font-medium">{source.name}</Label>
+                    </div>
 
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor={`url-${source.id}`}>Marketplace JSON URL</Label>
-              <Input
-                id={`url-${source.id}`}
-                value={source.url}
-                readOnly
-                className="font-mono text-sm"
-              />
-            </div>
+                    <div className="space-y-3">
+                      <div>
+                        <div className="text-sm text-muted-foreground mb-1">
+                          Marketplace JSON URL
+                        </div>
+                        <Input
+                          value={source.url}
+                          readOnly
+                          className="font-mono text-sm bg-muted/50"
+                        />
+                      </div>
 
-            <div className="space-y-2">
-              <Label htmlFor={`display-${source.id}`}>
-                Display name (optional)
-              </Label>
-              <Input
-                id={`display-${source.id}`}
-                value={source.displayName || ''}
-                placeholder="e.g., ARK marketplace"
-                readOnly
-              />
-            </div>
+                      <div>
+                        <div className="text-sm text-muted-foreground mb-1">
+                          Display name (optional)
+                        </div>
+                        <Input
+                          value={source.displayName || ''}
+                          placeholder="e.g., ARK marketplace"
+                          readOnly
+                          className="text-sm bg-muted/50"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleDeleteSource(source.id)}
+                    className="ml-4 h-8 w-8 text-muted-foreground hover:text-destructive">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-      ))}
+      )}
 
       {/* Add new source form */}
       {isAdding && (
-        <div className="rounded-lg border border-border bg-card p-6 space-y-4">
-          <h3 className="text-lg font-medium">Add new marketplace</h3>
+        <div className="rounded-lg border p-4">
+          <h3 className="mb-4 text-sm font-medium">Add new marketplace</h3>
 
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="new-url">Marketplace JSON URL</Label>
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="new-url" className="text-sm">
+                Marketplace JSON URL
+              </Label>
               <Input
                 id="new-url"
                 value={newSource.url || ''}
@@ -129,12 +137,14 @@ export function ManageMarketplaceSettings() {
                   setNewSource({ ...newSource, url: e.target.value })
                 }
                 placeholder="https://raw.githubusercontent.com/org/repo/main/marketplace.json"
-                className="font-mono text-sm"
+                className="mt-1.5 font-mono text-sm"
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="new-display">Display name (optional)</Label>
+            <div>
+              <Label htmlFor="new-display" className="text-sm">
+                Display name (optional)
+              </Label>
               <Input
                 id="new-display"
                 value={newSource.displayName || ''}
@@ -142,36 +152,44 @@ export function ManageMarketplaceSettings() {
                   setNewSource({ ...newSource, displayName: e.target.value })
                 }
                 placeholder="e.g., ARK marketplace"
+                className="mt-1.5 text-sm"
               />
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={handleCancel}>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={handleCancel}>
               Cancel
             </Button>
-            <Button onClick={handleAddSource}>Add</Button>
+            <Button size="sm" onClick={handleAddSource}>
+              Add
+            </Button>
           </div>
         </div>
       )}
 
       {/* Add new marketplace button */}
       {!isAdding && (
-        <Button
-          variant="ghost"
-          className="flex items-center gap-2"
-          onClick={() => setIsAdding(true)}>
-          <Plus className="h-4 w-4" />
-          Add new marketplace
-        </Button>
+        <div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2"
+            onClick={() => setIsAdding(true)}>
+            <Plus className="h-4 w-4" />
+            Add new marketplace
+          </Button>
+        </div>
       )}
 
       {/* Save/Cancel buttons */}
-      <div className="flex justify-end gap-2 pt-6 border-t">
+      <div className="flex justify-end gap-2 border-t pt-4">
         <Button variant="outline" onClick={handleCancel}>
           Cancel
         </Button>
-        <Button onClick={handleSave}>Save</Button>
+        <Button onClick={handleSave}>
+          Save
+        </Button>
       </div>
     </div>
   );
