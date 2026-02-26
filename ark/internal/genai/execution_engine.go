@@ -268,7 +268,7 @@ func buildAgentConfig(agent *Agent) (AgentConfig, error) {
 		Parameters:  parameters,
 		Model: ExecutionEngineModel{
 			Name:   agent.Model.Model,
-			Type:   agent.Model.Type,
+			Type:   detectProviderName(agent.Model),
 			Config: modelConfig,
 		},
 		OutputSchema: agent.OutputSchema,
@@ -288,18 +288,24 @@ func buildParameters(agentParams []arkv1alpha1.Parameter) []Parameter {
 	return parameters
 }
 
+func detectProviderName(model *Model) string {
+	switch model.Provider.(type) {
+	case *AzureProvider:
+		return ProviderAzure
+	case *OpenAIProvider:
+		return ProviderOpenAI
+	case *BedrockModel:
+		return ProviderBedrock
+	}
+	return model.Type
+}
+
 func buildModelConfig(model *Model) map[string]any {
 	modelConfig := make(map[string]any)
 
 	if configProvider, ok := model.Provider.(ConfigProvider); ok {
-		switch model.Type {
-		case ModelTypeAzure:
-			modelConfig["azure"] = configProvider.BuildConfig()
-		case ModelTypeOpenAI:
-			modelConfig["openai"] = configProvider.BuildConfig()
-		case ModelTypeBedrock:
-			modelConfig["bedrock"] = configProvider.BuildConfig()
-		}
+		provider := detectProviderName(model)
+		modelConfig[provider] = configProvider.BuildConfig()
 	}
 
 	return modelConfig

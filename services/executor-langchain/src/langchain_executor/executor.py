@@ -2,7 +2,8 @@
 
 import logging
 from typing import List, Optional
-from langchain.schema import Document, HumanMessage, AIMessage, SystemMessage
+from langchain_core.documents import Document
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_community.vectorstores import FAISS
 from ark_sdk.executor import BaseExecutor, Message
 from .utils import (

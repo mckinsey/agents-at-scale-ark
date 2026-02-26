@@ -30,14 +30,10 @@ dependencies = [
     "openpyxl>=3.1.0",
     "pandas>=2.2.0",
     "xlrd>=2.0.0",
-    "ark-sdk",
 ]
 
 [tool.uv]
 package = true
-
-[tool.uv.sources]
-ark-sdk = { path = "out/ark_sdk-0.1.53-py3-none-any.whl" }
 
 [tool.coverage.run]
 data_file = "coverage/.coverage"

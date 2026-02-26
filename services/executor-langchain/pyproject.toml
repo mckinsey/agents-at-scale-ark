@@ -12,14 +12,15 @@ dependencies = [
     "fastapi>=0.104.0", # web framework
     "uvicorn[standard]>=0.24.0", # ASGI server
     "pydantic>=2.0.0", # data validation
-    "langchain>=0.1.0", # langchain framework
+    "langchain-core>=0.3.0", # langchain core types
     "langchain-openai>=0.1.0", # openai integration
     "langchain-community>=0.0.20", # community integrations (FAISS)
+    "langchain-text-splitters>=0.3.0", # text splitting
     "faiss-cpu>=1.7.4", # vector search
     "tiktoken>=0.5.0",
     "ark-sdk",
     "urllib3>=2.6.0",
-    "a2a-sdk>=0.3.0",
+    "a2a-sdk[http-server]>=0.3.0",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -87,4 +88,4 @@ testpaths = [
 ]
 
 [tool.uv.sources]
-ark-sdk = { path = "../../out/ark-sdk/py-sdk/dist/ark_sdk-0.1.47-py3-none-any.whl" }
+ark-sdk = { path = "../../out/ark-sdk/py-sdk/dist/ark_sdk-0.1.53-py3-none-any.whl" }

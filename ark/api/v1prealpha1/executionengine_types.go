@@ -11,10 +11,6 @@ import (
 // agent execution systems, rather than the built-in OpenAI-compatible engine.
 // Execution engines communicate via the A2A (Agent-to-Agent) protocol.
 type ExecutionEngineSpec struct {
-	// Type specifies which execution engine implementation to use
-	// +kubebuilder:validation:Required
-	Type string `json:"type"`
-
 	// Address specifies how to reach the execution engine
 	// +kubebuilder:validation:Required
 	Address ValueSource `json:"address"`
@@ -43,7 +39,7 @@ type ExecutionEngineStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Type",type=string,JSONPath=`.spec.type`
+// +kubebuilder:printcolumn:name="Protocol",type=string,JSONPath=`.spec.protocol`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Address",type=string,JSONPath=`.status.lastResolvedAddress`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`

@@ -10,7 +10,7 @@ from a2a.server.apps import A2AStarletteApplication
 from a2a.server.events import EventQueue
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
-from a2a.types import AgentCard, AgentSkill, Part, TextPart, Message as A2AMessage
+from a2a.types import AgentCapabilities, AgentCard, AgentSkill, Part, TextPart, Message as A2AMessage
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -40,18 +40,11 @@ class A2AExecutorAdapter(AgentExecutor):
         self.executor = executor
 
     async def execute(self, context: Any, event_queue: EventQueue) -> None:
-        request_msg: A2AMessage = context.message
-        metadata = request_msg.metadata or {}
-
-        user_text = ""
-        if request_msg.parts:
-            for part in request_msg.parts:
-                if hasattr(part, "root") and hasattr(part.root, "text"):
-                    user_text += part.root.text
-                elif hasattr(part, "text"):
-                    user_text += part.text
-
-        ark_metadata = metadata.get(ARK_METADATA_KEY, {})
+        user_text = context.get_user_input()
+        msg_metadata = {}
+        if context.message and context.message.metadata:
+            msg_metadata = context.message.metadata
+        ark_metadata = msg_metadata.get(ARK_METADATA_KEY, {})
         agent_data = ark_metadata.get("agent", {})
         model_data = agent_data.get("model", {})
         tools_data = ark_metadata.get("tools", [])
@@ -89,7 +82,7 @@ class A2AExecutorAdapter(AgentExecutor):
                 if msg.role == "assistant" and msg.content:
                     response_text += msg.content
 
-            event_queue.enqueue_event(
+            await event_queue.enqueue_event(
                 A2AMessage(
                     role="agent",
                     parts=[Part(root=TextPart(text=response_text))],
@@ -98,7 +91,7 @@ class A2AExecutorAdapter(AgentExecutor):
             )
         except Exception as e:
             logger.error(f"Execution failed: {e}", exc_info=True)
-            event_queue.enqueue_event(
+            await event_queue.enqueue_event(
                 A2AMessage(
                     role="agent",
                     parts=[Part(root=TextPart(text=f"Execution error: {e}"))],
@@ -126,15 +119,19 @@ class ExecutorApp:
                 id=f"{self.engine_name}-execute",
                 name=f"{engine_name} Agent Execution",
                 description=f"Executes agents using {engine_name}",
+                tags=[self.engine_name, "execution-engine"],
             )
         ]
 
         self.agent_card = AgentCard(
             name=self.engine_name,
             description=self.description,
-            url=f"http://localhost:8000",
+            url="http://localhost:8000",
             version="1.0.0",
             skills=self.skills,
+            capabilities=AgentCapabilities(),
+            defaultInputModes=["text"],
+            defaultOutputModes=["text"],
         )
 
         adapter = A2AExecutorAdapter(executor)

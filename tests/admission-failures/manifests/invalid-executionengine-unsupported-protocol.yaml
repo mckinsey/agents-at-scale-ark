@@ -3,8 +3,6 @@ kind: ExecutionEngine
 metadata:
   name: invalid-protocol-engine
 spec:
-  # Unsupported protocol - should fail admission
-  type: custom
   protocol: http
   address:
     value: "http://example.com:8000"
