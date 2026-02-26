@@ -167,7 +167,7 @@ export function useChatSession({
               content: accumulatedContent,
               tool_calls:
                 accumulatedToolCalls.length > 0
-                  ? accumulatedToolCalls
+                  ? [...accumulatedToolCalls]
                   : undefined,
             } as ExtendedChatMessage;
             if (currentAgent) {
@@ -236,7 +236,7 @@ export function useChatSession({
           const arkData = chunk.ark as { agent?: string };
           const chunkAgent = arkData.agent;
 
-          if (chunkAgent && (chunkAgent !== currentAgent || turnComplete)) {
+          if (chunkAgent && chunkAgent !== currentAgent) {
             if (currentAgent) {
               finalizeCurrentMessage();
               accumulatedContent = '';
@@ -248,6 +248,16 @@ export function useChatSession({
               ]);
             }
             currentAgent = chunkAgent;
+            turnComplete = false;
+          } else if (chunkAgent === currentAgent && turnComplete) {
+            finalizeCurrentMessage();
+            accumulatedContent = '';
+            accumulatedToolCalls.length = 0;
+            currentMessageIndex++;
+            updateChatMessages(prev => [
+              ...prev,
+              { role: 'assistant', content: '' } as ExtendedChatMessage,
+            ]);
             turnComplete = false;
           }
         }
