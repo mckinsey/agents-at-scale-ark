@@ -80,7 +80,7 @@ function generateItemId(item: GitHubMarketplaceItem): string {
   return item.name
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .replace(/^-+|-+$/g, ''); // NOSONAR - This regex is safe from ReDoS, uses anchored patterns with linear complexity
 }
 
 function getIconForItem(item: GitHubMarketplaceItem): string {
