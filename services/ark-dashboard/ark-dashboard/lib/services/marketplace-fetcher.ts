@@ -141,7 +141,7 @@ function getIconForItem(item: GitHubMarketplaceItem): string {
   }
 
   // Return original icon if it's not a placeholder
-  return item.icon || '📦';
+  return item.icon ?? '📦';
 }
 
 export function transformGitHubItemToMarketplaceItem(
@@ -153,19 +153,19 @@ export function transformGitHubItemToMarketplaceItem(
 
   return {
     id,
-    name: item.displayName || item.name,
+    name: item.displayName ?? item.name,
     description: item.description || '',
     shortDescription: item.description?.substring(0, 150) || '',
     category: mapCategoryFromGitHub(item.category),
     type: mapTypeFromGitHub(item.type),
-    version: item.version || '1.0.0',
-    author: item.author || 'Community',
+    version: item.version ?? '1.0.0',
+    author: item.author ?? 'Community',
     repository:
-      item.repository ||
+      item.repository ??
       'https://github.com/mckinsey/agents-at-scale-marketplace',
-    documentation: item.documentation || item.homepage,
+    documentation: item.documentation ?? item.homepage,
     installCommand: item.ark?.helmReleaseName
-      ? `helm install ${item.ark.helmReleaseName} ${item.ark.chartPath || ''}`
+      ? `helm install ${item.ark.helmReleaseName} ${item.ark.chartPath ?? ''}`
       : undefined,
     status: isInstalled ? 'installed' : 'available',
     featured: false,
@@ -182,7 +182,7 @@ export function transformGitHubItemToMarketplaceItem(
 }
 
 export async function fetchMarketplaceManifest(url?: string): Promise<GitHubMarketplaceManifest | null> {
-  const manifestUrl = url || DEFAULT_MARKETPLACE_MANIFEST_URL;
+  const manifestUrl = url ?? DEFAULT_MARKETPLACE_MANIFEST_URL;
 
   try {
     console.log(
@@ -239,7 +239,7 @@ export async function fetchMarketplaceItemsFromSource(
       item,
       installedItems.has(generateItemId(item)),
     ),
-    source: source.displayName || source.name,
+    source: source.displayName ?? source.name,
   }));
 }
 
