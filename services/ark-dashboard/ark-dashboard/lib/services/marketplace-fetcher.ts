@@ -43,7 +43,7 @@ interface GitHubMarketplaceManifest {
   items: GitHubMarketplaceItem[];
 }
 
-const MARKETPLACE_MANIFEST_URL =
+const DEFAULT_MARKETPLACE_MANIFEST_URL =
   'https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json';
 
 function mapCategoryFromGitHub(category?: string): MarketplaceCategory {
@@ -181,13 +181,15 @@ export function transformGitHubItemToMarketplaceItem(
   };
 }
 
-export async function fetchMarketplaceManifest(): Promise<GitHubMarketplaceManifest | null> {
+export async function fetchMarketplaceManifest(url?: string): Promise<GitHubMarketplaceManifest | null> {
+  const manifestUrl = url || DEFAULT_MARKETPLACE_MANIFEST_URL;
+
   try {
     console.log(
       'Fetching marketplace manifest from:',
-      MARKETPLACE_MANIFEST_URL,
+      manifestUrl,
     );
-    const response = await fetch(MARKETPLACE_MANIFEST_URL, {
+    const response = await fetch(manifestUrl, {
       next: { revalidate: 3600 }, // Cache for 1 hour
       headers: {
         Accept: 'application/json',
@@ -196,24 +198,34 @@ export async function fetchMarketplaceManifest(): Promise<GitHubMarketplaceManif
 
     if (!response.ok) {
       console.error(
-        `Failed to fetch marketplace manifest: ${response.status} ${response.statusText}`,
+        `Failed to fetch marketplace manifest from ${manifestUrl}: ${response.status} ${response.statusText}`,
       );
       return null;
     }
 
     const data = (await response.json()) as GitHubMarketplaceManifest;
     console.log(
-      `Successfully fetched ${data.items?.length || 0} marketplace items`,
+      `Successfully fetched ${data.items?.length || 0} marketplace items from ${manifestUrl}`,
     );
     return data;
   } catch (error) {
-    console.error('Error fetching marketplace manifest:', error);
+    console.error(`Error fetching marketplace manifest from ${manifestUrl}:`, error);
     return null;
   }
 }
 
-export async function getMarketplaceItems(): Promise<MarketplaceItem[]> {
-  const manifest = await fetchMarketplaceManifest();
+export interface MarketplaceSource {
+  id: string;
+  name: string;
+  url: string;
+  displayName?: string;
+  enabled?: boolean;
+}
+
+export async function fetchMarketplaceItemsFromSource(
+  source: MarketplaceSource,
+): Promise<MarketplaceItem[]> {
+  const manifest = await fetchMarketplaceManifest(source.url);
 
   if (!manifest || !manifest.items) {
     return [];
@@ -222,12 +234,53 @@ export async function getMarketplaceItems(): Promise<MarketplaceItem[]> {
   // TODO: Check actual installation status from cluster
   const installedItems = new Set<string>();
 
-  return manifest.items.map(item =>
-    transformGitHubItemToMarketplaceItem(
+  return manifest.items.map(item => ({
+    ...transformGitHubItemToMarketplaceItem(
       item,
       installedItems.has(generateItemId(item)),
     ),
+    source: source.displayName || source.name,
+  }));
+}
+
+export async function getMarketplaceItemsFromSources(
+  sources?: MarketplaceSource[],
+): Promise<MarketplaceItem[]> {
+  // Use default source if none provided
+  const effectiveSources = sources?.length ? sources : [
+    {
+      id: 'default',
+      name: 'ARK marketplace',
+      url: DEFAULT_MARKETPLACE_MANIFEST_URL,
+      displayName: 'ARK marketplace',
+      enabled: true,
+    },
+  ];
+
+  // Only fetch from enabled sources
+  const enabledSources = effectiveSources.filter(s => s.enabled !== false);
+
+  // Fetch from all sources in parallel
+  const allItemsArrays = await Promise.all(
+    enabledSources.map(source => fetchMarketplaceItemsFromSource(source))
   );
+
+  // Flatten and deduplicate items by ID
+  const itemsMap = new Map<string, MarketplaceItem>();
+  for (const items of allItemsArrays) {
+    for (const item of items) {
+      if (!itemsMap.has(item.id)) {
+        itemsMap.set(item.id, item);
+      }
+    }
+  }
+
+  return Array.from(itemsMap.values());
+}
+
+// Keep the original function for backward compatibility
+export async function getMarketplaceItems(): Promise<MarketplaceItem[]> {
+  return getMarketplaceItemsFromSources();
 }
 
 export async function getMarketplaceItemById(

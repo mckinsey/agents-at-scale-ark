@@ -5,7 +5,10 @@ import type {
   MarketplaceFilters,
   MarketplaceResponse,
 } from '@/lib/api/generated/marketplace-types';
-import { getMarketplaceItems } from '@/lib/services/marketplace-fetcher';
+import {
+  getMarketplaceItemsFromSources,
+  type MarketplaceSource
+} from '@/lib/services/marketplace-fetcher';
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,8 +26,20 @@ export async function GET(request: NextRequest) {
       featured: searchParams.get('featured') === 'true',
     };
 
-    // Fetch all items from GitHub
-    let items = await getMarketplaceItems();
+    // Get marketplace sources from header (sent from client)
+    const sourcesHeader = request.headers.get('X-Marketplace-Sources');
+    let sources: MarketplaceSource[] | undefined;
+
+    if (sourcesHeader) {
+      try {
+        sources = JSON.parse(sourcesHeader);
+      } catch (e) {
+        console.error('Failed to parse marketplace sources:', e);
+      }
+    }
+
+    // Fetch all items from configured sources
+    let items = await getMarketplaceItemsFromSources(sources);
 
     // Apply filters
     if (filters.category) {

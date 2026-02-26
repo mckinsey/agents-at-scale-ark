@@ -1,35 +1,32 @@
 'use client';
 
-import { Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useAtom } from 'jotai';
+import { Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+import { marketplaceSourcesAtom, type MarketplaceSource } from '@/atoms/marketplace-sources';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-
-interface MarketplaceSource {
-  id: string;
-  name: string;
-  url: string;
-  displayName?: string;
-}
+import { Switch } from '@/components/ui/switch';
 
 export function ManageMarketplaceSettings() {
-  const [sources, setSources] = useState<MarketplaceSource[]>([
-    {
-      id: '1',
-      name: 'ARK marketplace',
-      url: 'https://raw.githubusercontent.com/org/repo/main/marketplace.json',
-      displayName: 'ARK marketplace',
-    },
-  ]);
+  const queryClient = useQueryClient();
+  const [sources, setSources] = useAtom(marketplaceSourcesAtom);
+  const [localSources, setLocalSources] = useState<MarketplaceSource[]>([]);
 
   const [isAdding, setIsAdding] = useState(false);
   const [newSource, setNewSource] = useState<Partial<MarketplaceSource>>({
     url: '',
     displayName: '',
   });
+
+  // Load sources from persistent storage on mount
+  useEffect(() => {
+    setLocalSources(sources);
+  }, [sources]);
 
   const handleAddSource = () => {
     if (!newSource.url) {
@@ -42,42 +39,78 @@ export function ManageMarketplaceSettings() {
       name: newSource.displayName || 'Marketplace JSON URL',
       url: newSource.url,
       displayName: newSource.displayName,
+      enabled: true,
     };
 
-    setSources([...sources, source]);
+    setLocalSources([...localSources, source]);
     setNewSource({ url: '', displayName: '' });
     setIsAdding(false);
-    toast.success('Marketplace source added');
   };
 
   const handleDeleteSource = (id: string) => {
-    setSources(sources.filter(s => s.id !== id));
-    toast.success('Marketplace source removed');
+    // Don't allow deleting the default source
+    if (id === 'default') {
+      toast.error('Cannot delete the default marketplace source');
+      return;
+    }
+    setLocalSources(localSources.filter(s => s.id !== id));
   };
 
-  const handleSave = () => {
-    // TODO: Implement actual save logic to backend
-    toast.success('Marketplace settings saved');
+  const handleToggleSource = (id: string) => {
+    setLocalSources(localSources.map(s =>
+      s.id === id ? { ...s, enabled: !s.enabled } : s
+    ));
+  };
+
+  const handleSave = async () => {
+    // Save to persistent storage
+    setSources(localSources);
+
+    // Invalidate marketplace queries to refresh data
+    await queryClient.invalidateQueries({ queryKey: ['marketplace'] });
+
+    toast.success('Marketplace settings saved and data refreshed');
   };
 
   const handleCancel = () => {
     setIsAdding(false);
     setNewSource({ url: '', displayName: '' });
+    // Reset to original sources
+    setLocalSources(sources);
+  };
+
+  const handleRefresh = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['marketplace'] });
+    toast.success('Marketplace data refreshed');
   };
 
   return (
     <div className="space-y-6">
       {/* Existing sources */}
-      {sources.length > 0 && (
+      {localSources.length > 0 && (
         <div>
-          <h2 className="mb-4 text-lg font-semibold">Marketplace Sources</h2>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Marketplace Sources</h2>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              className="flex items-center gap-2">
+              <RefreshCw className="h-3 w-3" />
+              Refresh Data
+            </Button>
+          </div>
           <div className="space-y-3">
-            {sources.map(source => (
+            {localSources.map(source => (
               <div key={source.id} className="rounded-lg border p-4">
                 <div className="flex items-start justify-between">
                   <div className="flex-1 space-y-4">
-                    <div className="space-y-0.5">
+                    <div className="flex items-center justify-between">
                       <Label className="text-sm font-medium">{source.name}</Label>
+                      <Switch
+                        checked={source.enabled !== false}
+                        onCheckedChange={() => handleToggleSource(source.id)}
+                      />
                     </div>
 
                     <div className="space-y-3">
@@ -106,13 +139,15 @@ export function ManageMarketplaceSettings() {
                     </div>
                   </div>
 
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDeleteSource(source.id)}
-                    className="ml-4 h-8 w-8 text-muted-foreground hover:text-destructive">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {source.id !== 'default' && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDeleteSource(source.id)}
+                      className="ml-4 h-8 w-8 text-muted-foreground hover:text-destructive">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
