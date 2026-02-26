@@ -464,12 +464,30 @@ func (r *QueryReconciler) createSuccessResponse(target arkv1alpha1.QueryTarget, 
 		return r.createErrorResponse(target, serializationErr)
 	}
 
+	content := lastResponseContent(messages)
+
 	return arkv1alpha1.Response{
 		Target:  target,
-		Content: messageToText(messages[len(messages)-1]),
+		Content: content,
 		Raw:     rawJSON,
 		Phase:   statusDone,
 	}
+}
+
+func lastResponseContent(messages []genai.Message) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].OfSystem != nil {
+			continue
+		}
+		text := messageToText(messages[i])
+		if text != "" {
+			return text
+		}
+	}
+	if len(messages) > 0 {
+		return messageToText(messages[len(messages)-1])
+	}
+	return ""
 }
 
 // messageToText extracts text content from a single OpenAI message format structure.
@@ -724,7 +742,9 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 
 	result, err := agent.Execute(ctx, currentMessage, contextMessages, memory, eventStream)
 	if err != nil {
-		return nil, err
+		if !genai.IsTerminateTeam(err) {
+			return nil, err
+		}
 	}
 
 	// Save all new messages (input + response) to memory

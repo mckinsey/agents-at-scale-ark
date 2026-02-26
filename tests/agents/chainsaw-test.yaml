@@ -28,16 +28,15 @@ spec:
           file: (join('', ['manifests/a01-model-', $provider.type, '.yaml']))
       - apply:
           file: manifests/a03-agent.yaml
-      - assert:
-          resource:
-            apiVersion: ark.mckinsey.com/v1alpha1
-            kind: Model
-            metadata:
-              name: test-model
-            status:
-              conditions:
-              - type: ModelAvailable
-                status: "True"
+      - wait:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          name: test-model
+          timeout: 3m
+          for:
+            condition:
+              name: ModelAvailable
+              value: 'True' 
       - assert:
           resource:
             apiVersion: ark.mckinsey.com/v1alpha1

@@ -127,7 +127,7 @@ function EventDetailContent() {
 
   const breadcrumbs: BreadcrumbElement[] = [
     ...BASE_BREADCRUMBS,
-    { href: '/query-logs', label: 'Query Logs' },
+    { href: '/events', label: 'Events' },
   ];
 
   useEffect(() => {

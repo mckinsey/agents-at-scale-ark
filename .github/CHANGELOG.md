@@ -1,5 +1,49 @@
 # Changelog
 
+## [0.1.54](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.53...v0.1.54) (2026-02-25)
+
+
+### Features
+
+* add Azure Managed Identity and Workload Identity support to Model resource ([#1152](https://github.com/mckinsey/agents-at-scale-ark/issues/1152)) ([77dd6fc](https://github.com/mckinsey/agents-at-scale-ark/commit/77dd6fcbbc8a401b9c611021be6c2e39529d4984))
+* add tool based queries to conversation-id based memory chain ([#1144](https://github.com/mckinsey/agents-at-scale-ark/issues/1144)) ([f0edeba](https://github.com/mckinsey/agents-at-scale-ark/commit/f0edeba8b09c8d99aa356f3ec1bce6609fb851e9))
+* add Tools menu item with Wrench icon after MCPs in sidebar ([#1176](https://github.com/mckinsey/agents-at-scale-ark/issues/1176)) ([6e5c895](https://github.com/mckinsey/agents-at-scale-ark/commit/6e5c895cf63c2aea5c6ee1f288181761f955d873))
+* ark query tools doc update ([#1158](https://github.com/mckinsey/agents-at-scale-ark/issues/1158)) ([d908442](https://github.com/mckinsey/agents-at-scale-ark/commit/d9084425e0d9d20cd6240cb48cbced92804d1bc7))
+* **ark:** add embedded API server with PostgreSQL storage backend ([#937](https://github.com/mckinsey/agents-at-scale-ark/issues/937)) ([e4e6fee](https://github.com/mckinsey/agents-at-scale-ark/commit/e4e6feec546d516595e7034c5af310760427d20e))
+* enable a2a chunk streaming ([#1109](https://github.com/mckinsey/agents-at-scale-ark/issues/1109)) ([93558d6](https://github.com/mckinsey/agents-at-scale-ark/commit/93558d6c942ee89f73b1c0ea16efd1b4a3f0a258))
+* enable SonarQube scan  ([#849](https://github.com/mckinsey/agents-at-scale-ark/issues/849)) ([6399f05](https://github.com/mckinsey/agents-at-scale-ark/commit/6399f05a8d9a605b1ebe687dd77b42e661ae42d9))
+* navigation ([#1088](https://github.com/mckinsey/agents-at-scale-ark/issues/1088)) ([a4cb6c7](https://github.com/mckinsey/agents-at-scale-ark/commit/a4cb6c70f778fff5ad93f53e88c7407cd655bd32))
+* Per-Tenant (namespace) OTEL Routing ([#1055](https://github.com/mckinsey/agents-at-scale-ark/issues/1055)) ([7e44629](https://github.com/mckinsey/agents-at-scale-ark/commit/7e446296648c0f89c83bd31fccbe96fd53100cca))
+* remove namespace switcher ([#1191](https://github.com/mckinsey/agents-at-scale-ark/issues/1191)) ([02c6cc8](https://github.com/mckinsey/agents-at-scale-ark/commit/02c6cc8013e5daeb900c14ccd967b4f3181f0e0b))
+* Team Studio ([#1045](https://github.com/mckinsey/agents-at-scale-ark/issues/1045)) ([eb73a7a](https://github.com/mckinsey/agents-at-scale-ark/commit/eb73a7a0dde5cd556ebd97b454020783d15aa5f0))
+* unify validation and defaulting into shared validation package ([#1127](https://github.com/mckinsey/agents-at-scale-ark/issues/1127)) ([44c1a97](https://github.com/mckinsey/agents-at-scale-ark/commit/44c1a9781cecb439959ec53100cb0c2b19b0a6b6))
+
+
+### Bug Fixes
+
+* add left padding to plain text files in file preview ([#1120](https://github.com/mckinsey/agents-at-scale-ark/issues/1120)) ([0a9d384](https://github.com/mckinsey/agents-at-scale-ark/commit/0a9d38448e94bc634b55e353420da73060f5dd2b))
+* Adding waiting time for health check instead of seconds ([#1080](https://github.com/mckinsey/agents-at-scale-ark/issues/1080)) ([af9124e](https://github.com/mckinsey/agents-at-scale-ark/commit/af9124e8668b384840a4bacd12c0940d1079ce5f))
+* **argo-workflows:** make artifact repository optional ([#952](https://github.com/mckinsey/agents-at-scale-ark/issues/952)) ([e5be5fa](https://github.com/mckinsey/agents-at-scale-ark/commit/e5be5fa7cb128e527a2be43bcfcfa84f29f0b4db))
+* ark cli query tool returns response from tool ([#1148](https://github.com/mckinsey/agents-at-scale-ark/issues/1148)) ([2c74753](https://github.com/mckinsey/agents-at-scale-ark/commit/2c74753be33bc8501b54d6cd3065acfa8448a306))
+* **ark:** use value types for EvaluationConfig inline fields to prevent SSA panic ([#1112](https://github.com/mckinsey/agents-at-scale-ark/issues/1112)) ([0ace52e](https://github.com/mckinsey/agents-at-scale-ark/commit/0ace52ea2ec876d8afcffcfc5277e92b7e2a4d81))
+* broker minimatch compatibility issues ([#1175](https://github.com/mckinsey/agents-at-scale-ark/issues/1175)) ([ffd53b4](https://github.com/mckinsey/agents-at-scale-ark/commit/ffd53b47f49061afb4a7d954eb55292af3165824))
+* Cloud deployments: remove tresholds for probes ([#1090](https://github.com/mckinsey/agents-at-scale-ark/issues/1090)) ([d23845c](https://github.com/mckinsey/agents-at-scale-ark/commit/d23845c1ec73871cf5d1cbd5e9551d24caaa7a70))
+* correct argo-workflows resource names in post-install hook ([#1126](https://github.com/mckinsey/agents-at-scale-ark/issues/1126)) ([0cc68d5](https://github.com/mckinsey/agents-at-scale-ark/commit/0cc68d51fd5ab34a0f284f23ac7523941a9800fc))
+* e2e-cli-tests should find the file gateway ([#992](https://github.com/mckinsey/agents-at-scale-ark/issues/992)) ([df06131](https://github.com/mckinsey/agents-at-scale-ark/commit/df0613152734a692745c0f7165439e2b0ebfe1d6))
+* improve e2e evaluator test stability and clarity ([#1131](https://github.com/mckinsey/agents-at-scale-ark/issues/1131)) ([6fbc1e0](https://github.com/mckinsey/agents-at-scale-ark/commit/6fbc1e0124d6bcbe7b6ad056a7dd38e7374d8c34))
+* invalidate agents query after create so dashboard count updates ([#1015](https://github.com/mckinsey/agents-at-scale-ark/issues/1015)) ([#1130](https://github.com/mckinsey/agents-at-scale-ark/issues/1130)) ([9d07a95](https://github.com/mckinsey/agents-at-scale-ark/commit/9d07a95486022b79dd77424040069e2e6c7f1a4b))
+* loadmemory format to match broker interface ([#1147](https://github.com/mckinsey/agents-at-scale-ark/issues/1147)) ([30ebc98](https://github.com/mckinsey/agents-at-scale-ark/commit/30ebc98205517f08cffd9d8391b37bfc3a665949))
+* Make sure selector is invoked for every turn ([#1086](https://github.com/mckinsey/agents-at-scale-ark/issues/1086)) ([442a9e7](https://github.com/mckinsey/agents-at-scale-ark/commit/442a9e78473ae2c034124bd2306f0400a998653a))
+* mock API calls for llm-tests as well ([#1118](https://github.com/mckinsey/agents-at-scale-ark/issues/1118)) ([04ca740](https://github.com/mckinsey/agents-at-scale-ark/commit/04ca740de57d2f6a64dfea1107ff2b33e9735190))
+* prompts for mcp isolation tests ([#1054](https://github.com/mckinsey/agents-at-scale-ark/issues/1054)) ([3dc0c72](https://github.com/mckinsey/agents-at-scale-ark/commit/3dc0c7203d4065cb29888b86af750c84916270bb))
+* rename "Query Logs" to "Events" throughout dashboard and fix bad… ([#1190](https://github.com/mckinsey/agents-at-scale-ark/issues/1190)) ([5ad69e3](https://github.com/mckinsey/agents-at-scale-ark/commit/5ad69e33689bab3b9f2d6a4ed69632281c9a2ea1))
+* Require all workflows to be successful before going into release ([#1085](https://github.com/mckinsey/agents-at-scale-ark/issues/1085)) ([0d059af](https://github.com/mckinsey/agents-at-scale-ark/commit/0d059af02a3b18de4cdf56e4655eb8320703e027))
+* restore Add Secret button for non-empty secrets list ([#1193](https://github.com/mckinsey/agents-at-scale-ark/issues/1193)) ([f039365](https://github.com/mckinsey/agents-at-scale-ark/commit/f03936525ab33c5c4fb7296fae71efb09f74efa4))
+* Return security headers at the nextjs level ([#1117](https://github.com/mckinsey/agents-at-scale-ark/issues/1117)) ([ef1164e](https://github.com/mckinsey/agents-at-scale-ark/commit/ef1164e97defbaef855a19b5f4d2f31dc99464a7))
+* Violations: Bump minimatch and tar to the next version ([#1160](https://github.com/mckinsey/agents-at-scale-ark/issues/1160)) ([613b935](https://github.com/mckinsey/agents-at-scale-ark/commit/613b935dd89d9ac4bcec1a0ed3a6bab889167565))
+* when networkpolicy is disabled (default) don't block access to webhooks ([#1166](https://github.com/mckinsey/agents-at-scale-ark/issues/1166)) ([9eb76e6](https://github.com/mckinsey/agents-at-scale-ark/commit/9eb76e6674403fdad2c78c5b19905f94c36459ef))
+* workflow template permissions and argo base url env var ([#1098](https://github.com/mckinsey/agents-at-scale-ark/issues/1098)) ([a989ca8](https://github.com/mckinsey/agents-at-scale-ark/commit/a989ca805335bc986d8de43ee0530b7a8966e2a6))
+
 ## [0.1.53](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.52...v0.1.53) (2026-02-10)
 
 

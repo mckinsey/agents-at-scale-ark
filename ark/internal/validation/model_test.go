@@ -113,7 +113,100 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit
 				Config: arkv1alpha1.ModelConfig{
 					Azure: &arkv1alpha1.AzureModelConfig{
 						BaseURL: arkv1alpha1.ValueSource{Value: "https://azure.openai.com"},
-						APIKey:  arkv1alpha1.ValueSource{Value: "key"},
+						APIKey:  &arkv1alpha1.ValueSource{Value: "key"},
+					},
+				},
+			},
+		}
+		_, err := v.ValidateModel(ctx, model)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("valid azure model with Auth.APIKey", func(t *testing.T) {
+		model := &arkv1alpha1.Model{
+			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
+			Spec: arkv1alpha1.ModelSpec{
+				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
+				Provider: genai.ProviderAzure,
+				Config: arkv1alpha1.ModelConfig{
+					Azure: &arkv1alpha1.AzureModelConfig{
+						BaseURL: arkv1alpha1.ValueSource{Value: "https://azure.openai.com"},
+						Auth: &arkv1alpha1.AzureAuth{
+							APIKey: &arkv1alpha1.ValueSource{Value: "key"},
+						},
+					},
+				},
+			},
+		}
+		_, err := v.ValidateModel(ctx, model)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("valid azure model with Auth.ManagedIdentity", func(t *testing.T) {
+		model := &arkv1alpha1.Model{
+			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
+			Spec: arkv1alpha1.ModelSpec{
+				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
+				Provider: genai.ProviderAzure,
+				Config: arkv1alpha1.ModelConfig{
+					Azure: &arkv1alpha1.AzureModelConfig{
+						BaseURL: arkv1alpha1.ValueSource{Value: "https://azure.openai.com"},
+						Auth: &arkv1alpha1.AzureAuth{
+							ManagedIdentity: &arkv1alpha1.AzureManagedIdentity{},
+						},
+					},
+				},
+			},
+		}
+		_, err := v.ValidateModel(ctx, model)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("valid azure model with Auth.ManagedIdentity and clientId", func(t *testing.T) {
+		model := &arkv1alpha1.Model{
+			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
+			Spec: arkv1alpha1.ModelSpec{
+				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
+				Provider: genai.ProviderAzure,
+				Config: arkv1alpha1.ModelConfig{
+					Azure: &arkv1alpha1.AzureModelConfig{
+						BaseURL: arkv1alpha1.ValueSource{Value: "https://azure.openai.com"},
+						Auth: &arkv1alpha1.AzureAuth{
+							ManagedIdentity: &arkv1alpha1.AzureManagedIdentity{
+								ClientID: &arkv1alpha1.ValueSource{Value: "client-id"},
+							},
+						},
+					},
+				},
+			},
+		}
+		_, err := v.ValidateModel(ctx, model)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("valid azure model with Auth.WorkloadIdentity", func(t *testing.T) {
+		model := &arkv1alpha1.Model{
+			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
+			Spec: arkv1alpha1.ModelSpec{
+				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
+				Provider: genai.ProviderAzure,
+				Config: arkv1alpha1.ModelConfig{
+					Azure: &arkv1alpha1.AzureModelConfig{
+						BaseURL: arkv1alpha1.ValueSource{Value: "https://azure.openai.com"},
+						Auth: &arkv1alpha1.AzureAuth{
+							WorkloadIdentity: &arkv1alpha1.AzureWorkloadIdentity{
+								ClientID: arkv1alpha1.ValueSource{Value: "wi-client-id"},
+								TenantID: arkv1alpha1.ValueSource{Value: "wi-tenant-id"},
+							},
+						},
 					},
 				},
 			},
@@ -152,7 +245,7 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit
 				Config: arkv1alpha1.ModelConfig{
 					Azure: &arkv1alpha1.AzureModelConfig{
 						BaseURL: arkv1alpha1.ValueSource{Value: "https://azure.openai.com"},
-						APIKey:  arkv1alpha1.ValueSource{Value: "key"},
+						APIKey:  &arkv1alpha1.ValueSource{Value: "key"},
 						Headers: []arkv1alpha1.Header{{Name: "", Value: arkv1alpha1.HeaderValue{Value: "v"}}},
 					},
 				},

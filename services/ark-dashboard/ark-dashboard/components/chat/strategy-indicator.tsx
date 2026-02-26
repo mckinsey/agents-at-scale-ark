@@ -1,0 +1,52 @@
+import { MousePointerClick, RefreshCw, Waypoints } from 'lucide-react';
+
+interface StrategyIndicatorProps {
+  strategy?: string;
+  selectorAgentName?: string;
+}
+
+export function StrategyIndicator({
+  strategy,
+  selectorAgentName,
+}: Readonly<StrategyIndicatorProps>) {
+  if (strategy === 'round-robin') {
+    return (
+      <div className="flex items-center justify-center gap-2 py-2">
+        <div className="bg-muted/50 flex items-center gap-2 rounded-full px-3 py-1.5 text-xs">
+          <RefreshCw className="text-muted-foreground h-3.5 w-3.5" />
+          <span className="text-muted-foreground">
+            Agents respond in round-robin order
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (strategy === 'selector') {
+    return (
+      <div className="flex items-center justify-center gap-2 py-2">
+        <div className="bg-muted/50 flex items-center gap-2 rounded-full px-3 py-1.5 text-xs">
+          <MousePointerClick className="text-muted-foreground h-3.5 w-3.5" />
+          <span className="text-muted-foreground">
+            {selectorAgentName || 'AI selector'} chooses each respondent
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (strategy === 'graph') {
+    return (
+      <div className="flex items-center justify-center gap-2 py-2">
+        <div className="bg-muted/50 flex items-center gap-2 rounded-full px-3 py-1.5 text-xs">
+          <Waypoints className="text-muted-foreground h-3.5 w-3.5" />
+          <span className="text-muted-foreground">
+            Agents respond following graph edges
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
