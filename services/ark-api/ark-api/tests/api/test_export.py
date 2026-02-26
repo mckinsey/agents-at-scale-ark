@@ -82,19 +82,30 @@ class TestExportEndpoints(unittest.TestCase):
     @patch('ark_api.api.v1.export.update_export_history')
     @patch('ark_api.api.v1.export.collect_resources')
     def test_export_with_specific_resource_types(self, mock_collect, mock_update_history):
-        """Test export with specific resource types."""
-        # Mock the collect_resources to return only agents
-        async def mock_collect_resources(*args, **kwargs):
-            return {
-                "agents": [self.sample_agent]
+        """Test export with specific resource types - verifies filtering works correctly."""
+        # Mock the collect_resources to return only what was requested
+        # This simulates the actual filtering behavior of collect_resources
+        async def mock_collect_resources(resource_types, *args, **kwargs):
+            # Full data available (simulating what's in the cluster)
+            all_resources = {
+                "agents": [self.sample_agent],
+                "models": [self.sample_model],
+                "teams": [{
+                    "apiVersion": "v1alpha1",
+                    "kind": "Team",
+                    "metadata": {"name": "test-team", "namespace": "default"},
+                    "spec": {"members": ["agent1", "agent2"]}
+                }]
             }
+            # Return only the requested resource types (simulating filtering)
+            return {k: v for k, v in all_resources.items() if k in resource_types}
         mock_collect.side_effect = mock_collect_resources
 
         async def mock_update(*args, **kwargs):
             return None
         mock_update_history.side_effect = mock_update
 
-        # Request only agents
+        # Request only agents (even though models and teams exist)
         response = self.client.post(
             "/v1/export/resources",
             json={"resource_types": ["agents"]}
@@ -102,12 +113,20 @@ class TestExportEndpoints(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
 
-        # Verify ZIP contains only agents
+        # Verify ZIP contains only agents (not models or teams)
         zip_data = io.BytesIO(response.content)
         with zipfile.ZipFile(zip_data, 'r') as zip_file:
             namelist = zip_file.namelist()
             self.assertIn("agents/test-agent.yaml", namelist)
+            # Ensure models and teams are NOT in the export
+            self.assertNotIn("models/test-model.yaml", namelist)
+            self.assertNotIn("teams/test-team.yaml", namelist)
             self.assertEqual(len(namelist), 1)
+
+        # Verify that collect_resources was called with correct parameters
+        mock_collect.assert_called_once()
+        call_kwargs = mock_collect.call_args.kwargs
+        self.assertEqual(call_kwargs['resource_types'], ["agents"])
 
     @patch('ark_api.api.v1.export.get_export_history')
     def test_export_history_endpoint(self, mock_get_history):
