@@ -82,14 +82,27 @@ class TestExportEndpoints(unittest.TestCase):
     @patch('ark_api.api.v1.export.update_export_history')
     @patch('ark_api.api.v1.export.collect_resources')
     def test_export_with_specific_resource_types(self, mock_collect, mock_update_history):
-        """Test export with specific resource types - verifies correct filtering parameters are passed."""
-        # Mock collect_resources to return ONLY agents (as if the filtering happened there)
-        # We're testing that the endpoint correctly passes the filter and handles the response
-        async def mock_collect_resources(*args, **kwargs):
-            # Return only agents - simulating that collect_resources did the filtering
-            return {
-                "agents": [self.sample_agent]
+        """Test that endpoint correctly passes filtering parameters to collect_resources.
+
+        Note: The actual filtering happens inside collect_resources, not in the endpoint.
+        This test verifies the endpoint correctly passes the requested resource types.
+        """
+        # Mock collect_resources to return only what was requested
+        # (simulating that it correctly filtered based on the resource_types parameter)
+        async def mock_collect_resources(resource_types, *args, **kwargs):
+            # Simulate the filtering that happens inside collect_resources
+            all_available = {
+                "agents": [self.sample_agent],
+                "models": [self.sample_model],
+                "teams": [{
+                    "apiVersion": "v1alpha1",
+                    "kind": "Team",
+                    "metadata": {"name": "test-team", "namespace": "default"},
+                    "spec": {"members": ["agent1", "agent2"]}
+                }]
             }
+            # Return only requested types (this is what collect_resources does internally)
+            return {k: v for k, v in all_available.items() if k in resource_types}
         mock_collect.side_effect = mock_collect_resources
 
         async def mock_update(*args, **kwargs):
@@ -104,22 +117,32 @@ class TestExportEndpoints(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
 
-        # Verify ZIP contains only what collect_resources returned (agents)
+        # Verify ZIP contains only agents (what collect_resources returned)
         zip_data = io.BytesIO(response.content)
         with zipfile.ZipFile(zip_data, 'r') as zip_file:
             namelist = zip_file.namelist()
             self.assertIn("agents/test-agent.yaml", namelist)
             self.assertEqual(len(namelist), 1)
 
-        # CRITICAL: Verify that collect_resources was called with the correct filtering parameters
+        # Verify that collect_resources was called with the correct filtering parameters
         mock_collect.assert_called_once()
         call_kwargs = mock_collect.call_args.kwargs
         self.assertEqual(call_kwargs['resource_types'], ["agents"])
 
-        # Also verify it wasn't called with ALL_RESOURCE_TYPES (which would mean no filtering)
-        self.assertNotEqual(call_kwargs['resource_types'],
-                           ["agents", "teams", "models", "queries", "a2a", "mcpservers",
-                            "workflows", "evaluators", "evaluations"])
+        # Test with multiple resource types
+        response2 = self.client.post(
+            "/v1/export/resources",
+            json={"resource_types": ["agents", "models"]}
+        )
+        self.assertEqual(response2.status_code, 200)
+
+        # Verify both types are in the ZIP
+        zip_data2 = io.BytesIO(response2.content)
+        with zipfile.ZipFile(zip_data2, 'r') as zip_file:
+            namelist = zip_file.namelist()
+            self.assertIn("agents/test-agent.yaml", namelist)
+            self.assertIn("models/test-model.yaml", namelist)
+            self.assertEqual(len(namelist), 2)
 
     @patch('ark_api.api.v1.export.get_export_history')
     def test_export_history_endpoint(self, mock_get_history):
