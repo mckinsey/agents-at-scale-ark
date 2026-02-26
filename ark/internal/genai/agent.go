@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
@@ -18,20 +19,21 @@ import (
 )
 
 type Agent struct {
-	Name              string
-	Namespace         string
-	Prompt            string
-	Description       string
-	Parameters        []arkv1alpha1.Parameter
-	Model             *Model
-	Tools             *ToolRegistry
-	telemetryRecorder telemetry.AgentRecorder
-	eventingRecorder  eventing.AgentRecorder
-	eventing          eventing.Provider
-	ExecutionEngine   *arkv1alpha1.ExecutionEngineRef
-	Annotations       map[string]string
-	OutputSchema      *runtime.RawExtension
-	client            client.Client
+	Name               string
+	Namespace          string
+	Prompt             string
+	Description        string
+	Parameters         []arkv1alpha1.Parameter
+	Model              *Model
+	Tools              *ToolRegistry
+	telemetryRecorder  telemetry.AgentRecorder
+	eventingRecorder   eventing.AgentRecorder
+	eventing           eventing.Provider
+	ExecutionEngine    *arkv1alpha1.ExecutionEngineRef
+	Annotations        map[string]string
+	OutputSchema       *runtime.RawExtension
+	client             client.Client
+	resolvedCapability executionCapability
 }
 
 // FullName returns the namespace/name format for the agent
@@ -49,7 +51,13 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 	}
 	ctx = a.eventingRecorder.Start(ctx, "AgentExecution", fmt.Sprintf("Executing agent %s", a.FullName()), operationData)
 
-	result, err := a.executeAgent(ctx, userInput, history, memory, eventStream)
+	a2aUserInput, a2aHistory, err := convertCompatInputToA2A(userInput, history)
+	if err != nil {
+		a.telemetryRecorder.RecordError(span, err)
+		a.eventingRecorder.Fail(ctx, "AgentExecution", fmt.Sprintf("Agent execution failed: %v", err), err, operationData)
+		return nil, err
+	}
+	result, err := a.executeAgentA2A(ctx, a2aUserInput, a2aHistory, memory, eventStream)
 	if err != nil {
 		a.telemetryRecorder.RecordError(span, err)
 		if !IsTerminateTeam(err) {
@@ -64,39 +72,51 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 	return result, nil
 }
 
-func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
-	if a.ExecutionEngine != nil {
-		return a.executeWithExecutionEngineRouter(ctx, userInput, history, eventStream)
-	}
-
-	messages, err := a.executeLocally(ctx, userInput, history, memory, eventStream)
+func convertCompatInputToA2A(userInput Message, history []Message) (protocol.Message, []protocol.Message, error) {
+	a2aUserInput, err := OpenAIToA2AMessage(userInput)
 	if err != nil {
-		if IsTerminateTeam(err) {
-			return &ExecutionResult{Messages: messages}, err
+		return protocol.Message{}, nil, fmt.Errorf("failed to convert user input to A2A: %w", err)
+	}
+	a2aHistory := make([]protocol.Message, 0, len(history))
+	for i := range history {
+		converted, convErr := OpenAIToA2AMessage(history[i])
+		if convErr != nil {
+			return protocol.Message{}, nil, fmt.Errorf("failed to convert history message %d to A2A: %w", i, convErr)
+		}
+		a2aHistory = append(a2aHistory, converted)
+	}
+	return a2aUserInput, a2aHistory, nil
+}
+
+func (a *Agent) ExecuteA2A(ctx context.Context, userInput protocol.Message, history []protocol.Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	ctx, span := a.telemetryRecorder.StartAgentExecution(ctx, a.Name, a.Namespace)
+	defer span.End()
+
+	operationData := map[string]string{
+		"agent": a.FullName(),
+	}
+	ctx = a.eventingRecorder.Start(ctx, "AgentExecution", fmt.Sprintf("Executing agent %s", a.FullName()), operationData)
+
+	result, err := a.executeAgentA2A(ctx, userInput, history, memory, eventStream)
+	if err != nil {
+		a.telemetryRecorder.RecordError(span, err)
+		if !IsTerminateTeam(err) {
+			a.eventingRecorder.Fail(ctx, "AgentExecution", fmt.Sprintf("Agent execution failed: %v", err), err, operationData)
 		}
 		return nil, err
 	}
-	return &ExecutionResult{Messages: messages}, nil
+
+	a.telemetryRecorder.RecordSuccess(span)
+	a.eventingRecorder.Complete(ctx, "AgentExecution", "Agent execution completed successfully", operationData)
+	return result, nil
 }
 
-func (a *Agent) executeWithExecutionEngineRouter(ctx context.Context, userInput Message, history []Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
-	if a.ExecutionEngine.Name == ExecutionEngineA2A {
-		return a.executeWithA2AExecutionEngine(ctx, userInput, eventStream)
-	}
-
-	messages, err := a.executeWithNamedExecutionEngine(ctx, userInput, history)
-	if err != nil {
-		return nil, err
-	}
-	return &ExecutionResult{Messages: messages}, nil
-}
-
-func (a *Agent) executeWithNamedExecutionEngine(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
+func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
 	engineClient := NewExecutionEngineA2AClient(a.client, a.eventing.ExecutionEngineRecorder())
 
 	agentConfig, err := buildAgentConfig(a)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build agent config: %w", err)
+		return nil, err
 	}
 
 	resolvedPrompt, err := a.resolvePrompt(ctx)
@@ -110,10 +130,29 @@ func (a *Agent) executeWithNamedExecutionEngine(ctx context.Context, userInput M
 	return engineClient.Execute(ctx, a.ExecutionEngine, agentConfig, userInput, history, toolDefinitions)
 }
 
-func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
+func (a *Agent) executeWithA2AExecutionEngineNative(ctx context.Context, userInput protocol.Message, history []protocol.Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	ctx = WithA2APayloadMode(ctx, A2APayloadModeNative)
 	a2aEngine := NewA2AExecutionEngine(a.client, a.eventing.A2aRecorder())
 	contextID := GetA2AContextID(ctx)
-	return a2aEngine.Execute(ctx, a.Name, a.Namespace, a.Annotations, contextID, userInput, eventStream)
+	return a2aEngine.ExecuteNative(ctx, a.Name, a.Namespace, a.Annotations, contextID, userInput, history, eventStream)
+}
+
+func (a *Agent) executeAgentA2A(ctx context.Context, userInput protocol.Message, history []protocol.Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	capability := a.resolvedCapability
+	if capability == "" {
+		capability = resolveA2AExecutionCapability(a.ExecutionEngine)
+	}
+
+	switch capability {
+	case executionCapabilityA2ANativeA2AEngine:
+		return a.executeWithA2AExecutionEngineNative(ctx, userInput, history, eventStream)
+	case executionCapabilityA2ANativeExternalEngine:
+		return a.executeWithExternalA2ANativeExecutionEngine(ctx, userInput, history, memory, eventStream)
+	case executionCapabilityA2ANativeLocal:
+		return a.executeLocallyA2ANative(ctx, userInput, history, memory, eventStream)
+	default:
+		return nil, fmt.Errorf("agent %s has unsupported execution capability %s", a.FullName(), capability)
+	}
 }
 
 func (a *Agent) prepareMessages(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
@@ -148,17 +187,37 @@ func (a *Agent) executeModelCall(ctx context.Context, agentMessages []Message, t
 }
 
 func (a *Agent) processAssistantMessage(choice openai.ChatCompletionChoice) Message {
-	assistantMessage := Message(choice.Message.ToParam())
-
-	if m := assistantMessage.OfAssistant; m != nil {
-		m.Name = param.Opt[string]{Value: a.Name}
+	assistantMessage := openai.AssistantMessage(choice.Message.Content)
+	if assistantMessage.OfAssistant != nil {
+		assistantMessage.OfAssistant.Name = param.Opt[string]{Value: a.Name}
 	}
-
+	// NOTE: call.ToParam() uses param.Override with json.RawMessage internally,
+	// which can produce empty RawMessage on A2A metadata round-trips. The A2A
+	// path defends against this in recoverToolCalls/rebuildToolCallParams. If
+	// this path also exhibits MarshalJSON errors, apply the same explicit field
+	// construction here instead of ToParam().
+	if len(choice.Message.ToolCalls) > 0 {
+		toolCalls := make([]openai.ChatCompletionMessageToolCallParam, len(choice.Message.ToolCalls))
+		for i, call := range choice.Message.ToolCalls {
+			args := call.Function.Arguments
+			if args == "" {
+				args = "{}"
+			}
+			toolCalls[i] = openai.ChatCompletionMessageToolCallParam{
+				ID: call.ID,
+				Function: openai.ChatCompletionMessageToolCallFunctionParam{
+					Name:      call.Function.Name,
+					Arguments: args,
+				},
+			}
+		}
+		assistantMessage.OfAssistant.ToolCalls = toolCalls
+	}
 	return assistantMessage
 }
 
 func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) (Message, error) {
-	result, err := a.Tools.ExecuteTool(ctx, ToolCall(toolCall))
+	result, err := a.Tools.ExecuteTool(ctx, toolCall)
 	toolMessage := ToolMessage(result.Content, result.ID)
 
 	if err != nil {
@@ -168,13 +227,14 @@ func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatComplet
 	return toolMessage, nil
 }
 
-func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCompletionMessageToolCall, agentMessages, newMessages *[]Message) error {
+func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCompletionMessageToolCall, eventStream EventStreamInterface, agentMessages, newMessages *[]Message) error {
+	execCtx := WithToolEventStream(ctx, eventStream)
 	for _, tc := range toolCalls {
-		if ctx.Err() != nil {
-			return ctx.Err()
+		if execCtx.Err() != nil {
+			return execCtx.Err()
 		}
 
-		toolMessage, err := a.executeToolCall(ctx, tc)
+		toolMessage, err := a.executeToolCall(execCtx, tc)
 		*agentMessages = append(*agentMessages, toolMessage)
 		*newMessages = append(*newMessages, toolMessage)
 
@@ -223,7 +283,7 @@ func (a *Agent) executeLocally(ctx context.Context, userInput Message, history [
 			return newMessages, nil
 		}
 
-		if err := a.executeToolCalls(ctx, choice.Message.ToolCalls, &agentMessages, &newMessages); err != nil {
+		if err := a.executeToolCalls(ctx, choice.Message.ToolCalls, eventStream, &agentMessages, &newMessages); err != nil {
 			logger := logf.FromContext(ctx)
 			if !IsTerminateTeam(err) {
 				logger.Error(err, "Tool execution failed", "agent", a.FullName())
@@ -246,7 +306,7 @@ func (a *Agent) GetDescription() string {
 }
 
 // ValidateExecutionEngine checks if the specified ExecutionEngine resource exists
-func ValidateExecutionEngine(ctx context.Context, k8sClient client.Client, executionEngine *arkv1alpha1.ExecutionEngineRef, defaultNamespace string) error {
+func ValidateExecutionEngine(ctx context.Context, k8sClient client.Client, executionEngine *arkv1alpha1.ExecutionEngineRef, defaultNamespace string) (string, error) {
 	// Resolve execution engine name and namespace
 	engineName := executionEngine.Name
 	namespace := executionEngine.Namespace
@@ -256,17 +316,17 @@ func ValidateExecutionEngine(ctx context.Context, k8sClient client.Client, execu
 
 	// Pass validation for reserved 'a2a' execution engine (internal)
 	if engineName == ExecutionEngineA2A {
-		return nil
+		return "", nil
 	}
 
 	// Check if ExecutionEngine CRD exists
 	var engineCRD arkv1prealpha1.ExecutionEngine
 	engineKey := types.NamespacedName{Name: engineName, Namespace: namespace}
 	if err := k8sClient.Get(ctx, engineKey, &engineCRD); err != nil {
-		return fmt.Errorf("execution engine %s not found in namespace %s: %w", engineName, namespace, err)
+		return "", fmt.Errorf("execution engine %s not found in namespace %s: %w", engineName, namespace, err)
 	}
 
-	return nil
+	return engineName, nil
 }
 
 func resolveModelHeadersForAgent(ctx context.Context, k8sClient client.Client, agentCRD *arkv1alpha1.Agent, queryCRD *arkv1alpha1.Query) (map[string]string, error) {
@@ -348,22 +408,21 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 		return nil, err
 	}
 
+	resolvedCapability := resolveA2AExecutionCapability(crd.Spec.ExecutionEngine)
+	if crd.Spec.ExecutionEngine != nil {
+		if _, err := ValidateExecutionEngine(ctx, k8sClient, crd.Spec.ExecutionEngine, crd.Namespace); err != nil {
+			return nil, fmt.Errorf("failed to validate execution engine %s for agent %s/%s: %w",
+				crd.Spec.ExecutionEngine.Name, crd.Namespace, crd.Name, err)
+		}
+	}
+
 	var resolvedModel *Model
 
-	// A2A agents don't need models - they delegate to external A2A servers
-	if crd.Spec.ExecutionEngine == nil || crd.Spec.ExecutionEngine.Name != ExecutionEngineA2A {
+	if resolvedCapability != executionCapabilityA2ANativeA2AEngine && resolvedCapability != executionCapabilityA2ANativeExternalEngine {
 		var err error
 		resolvedModel, err = LoadModel(ctx, k8sClient, crd.Spec.ModelRef, crd.Namespace, modelHeaders, telemetryProvider.ModelRecorder(), eventingProvider.ModelRecorder())
 		if err != nil {
 			return nil, fmt.Errorf("failed to load model for agent %s/%s: %w", crd.Namespace, crd.Name, err)
-		}
-	}
-
-	if crd.Spec.ExecutionEngine != nil {
-		err := ValidateExecutionEngine(ctx, k8sClient, crd.Spec.ExecutionEngine, crd.Namespace)
-		if err != nil {
-			return nil, fmt.Errorf("failed to validate execution engine %s for agent %s/%s: %w",
-				crd.Spec.ExecutionEngine.Name, crd.Namespace, crd.Name, err)
 		}
 	}
 
@@ -384,19 +443,20 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 	}
 
 	return &Agent{
-		Name:              crd.Name,
-		Namespace:         crd.Namespace,
-		Prompt:            crd.Spec.Prompt,
-		Description:       crd.Spec.Description,
-		Parameters:        crd.Spec.Parameters,
-		Model:             resolvedModel,
-		Tools:             tools,
-		telemetryRecorder: telemetryProvider.AgentRecorder(),
-		eventingRecorder:  eventingProvider.AgentRecorder(),
-		eventing:          eventingProvider,
-		ExecutionEngine:   crd.Spec.ExecutionEngine,
-		Annotations:       crd.Annotations,
-		OutputSchema:      crd.Spec.OutputSchema,
-		client:            k8sClient,
+		Name:               crd.Name,
+		Namespace:          crd.Namespace,
+		Prompt:             crd.Spec.Prompt,
+		Description:        crd.Spec.Description,
+		Parameters:         crd.Spec.Parameters,
+		Model:              resolvedModel,
+		Tools:              tools,
+		telemetryRecorder:  telemetryProvider.AgentRecorder(),
+		eventingRecorder:   eventingProvider.AgentRecorder(),
+		eventing:           eventingProvider,
+		ExecutionEngine:    crd.Spec.ExecutionEngine,
+		Annotations:        crd.Annotations,
+		OutputSchema:       crd.Spec.OutputSchema,
+		client:             k8sClient,
+		resolvedCapability: resolvedCapability,
 	}, nil
 }

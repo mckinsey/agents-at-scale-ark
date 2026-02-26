@@ -18,7 +18,10 @@ from ...models.agents import (
     ModelRef
 )
 from ...models.common import extract_availability_from_conditions
-from ...constants.annotations import A2A_SERVER_ADDRESS_ANNOTATION
+from ...constants.annotations import (
+    A2A_SERVER_ADDRESS_ANNOTATION,
+    A2A_SERVER_SKILLS_ANNOTATION,
+)
 from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
@@ -53,7 +56,7 @@ def agent_to_response(agent: dict) -> AgentResponse:
         annotations=metadata.get("annotations", {})
     )
 
-SKILLS_ANNOTATION_REGEX = re.compile(r'a2a\..*\/skills$')
+SKILLS_ANNOTATION_REGEX = re.compile(r'(a2a\..*\/skills|ark\.mckinsey\.com\/a2a-server-skills)$')
 
 def agent_to_detail_response(agent: dict) -> AgentDetailResponse:
     """Convert a Kubernetes Agent CR to a detailed response model."""
@@ -66,15 +69,28 @@ def agent_to_detail_response(agent: dict) -> AgentDetailResponse:
     
     skills = []
     skills_annotation_key = None
-    for annotation_key in annotations:
-        if SKILLS_ANNOTATION_REGEX.search(annotation_key):
-            skills_annotation_key = annotation_key
-            break
+    if A2A_SERVER_SKILLS_ANNOTATION in annotations:
+        skills_annotation_key = A2A_SERVER_SKILLS_ANNOTATION
+    else:
+        for annotation_key in annotations:
+            if SKILLS_ANNOTATION_REGEX.search(annotation_key):
+                skills_annotation_key = annotation_key
+                break
     
     if skills_annotation_key:
         try:
             skills_data = json.loads(annotations[skills_annotation_key])
-            skills = skills_data if isinstance(skills_data, list) else []
+            if isinstance(skills_data, list):
+                normalized_skills = []
+                for idx, skill in enumerate(skills_data):
+                    if isinstance(skill, dict):
+                        skill_entry = dict(skill)
+                        skill_entry["id"] = skill_entry.get("id") or f"{metadata.get('name', 'agent')}-skill-{idx}"
+                        skill_entry["name"] = skill_entry.get("name") or f"skill-{idx + 1}"
+                        normalized_skills.append(skill_entry)
+                skills = normalized_skills
+            else:
+                skills = []
         except (json.JSONDecodeError, TypeError):
             logger.warning(f"Failed to parse skills annotation for agent {metadata.get('name', '')}")
             skills = []
@@ -141,7 +157,7 @@ async def create_agent(body: AgentCreateRequest, namespace: Optional[str] = Quer
     """
     async with with_ark_client(namespace, VERSION) as ark_client:
         # Build the agent spec
-        agent_spec = {}
+        agent_spec: dict[str, object] = {}
         
         # Add optional fields if provided
         if body.description is not None:

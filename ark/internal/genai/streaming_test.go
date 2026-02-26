@@ -244,7 +244,6 @@ func TestSendFinalToolCallChunk(t *testing.T) {
 			validateFunc: func(t *testing.T, chunk *openai.ChatCompletionChunk) {
 				assert.Len(t, chunk.Choices[0].Delta.ToolCalls, 3)
 
-				// Verify all tool calls are present in order
 				assert.Equal(t, int64(0), chunk.Choices[0].Delta.ToolCalls[0].Index)
 				assert.Equal(t, "call_1", chunk.Choices[0].Delta.ToolCalls[0].ID)
 				assert.Equal(t, "get_weather", chunk.Choices[0].Delta.ToolCalls[0].Function.Name)
@@ -332,4 +331,22 @@ func TestSendFinalToolCallChunk_StreamFunctionError(t *testing.T) {
 	err := SendFinalToolCallChunk(fullResponse, toolCalls, streamFunc)
 	assert.Error(t, err)
 	assert.Equal(t, expectedError, err)
+}
+
+func TestWrapChunkWithA2A(t *testing.T) {
+	ctx := context.Background()
+	chunk := &openai.ChatCompletionChunk{
+		ID: "chunk-1",
+	}
+	payload := map[string]string{
+		"kind": "message",
+	}
+
+	result := WrapChunkWithA2A(ctx, chunk, "test-model", nil, payload)
+
+	wrapped, ok := result.(ChunkWithMetadata)
+	assert.True(t, ok)
+	assert.Equal(t, chunk, wrapped.ChatCompletionChunk)
+	assert.NotNil(t, wrapped.Ark)
+	assert.Equal(t, payload, wrapped.Ark.A2A)
 }

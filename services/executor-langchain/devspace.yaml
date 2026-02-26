@@ -1,0 +1,85 @@
+# DevSpace configuration for executor-langchain service
+version: v2beta1
+
+images:
+  executor-langchain:
+    image: executor-langchain
+    dockerfile: Dockerfile
+    context: .
+
+dependencies:
+  ark-sdk:
+    path: ../../lib/ark-sdk
+
+pipelines:
+  deploy: |-
+    run_dependency_pipelines --all --pipeline=deploy
+    mkdir -p build-context
+    cp ../../out/ark-sdk/py-sdk/dist/ark_sdk-*.whl build-context/
+    build_images --all
+    create_deployments --all
+  dev: |-
+    run_dependency_pipelines --all --pipeline=dev
+    mkdir -p build-context
+    cp ../../out/ark-sdk/py-sdk/dist/ark_sdk-*.whl build-context/
+    create_deployments --all
+    start_dev --all
+
+deployments:
+  executor-langchain:
+    namespace: default
+    helm:
+      chart:
+        path: ./chart
+      values:
+        image:
+          repository: ${runtime.images.executor-langchain.image}
+          tag: ${runtime.images.executor-langchain.tag}
+        # Override resources for local development
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+            ephemeral-storage: 1Gi
+          requests:
+            cpu: 500m
+            memory: 512Mi
+            ephemeral-storage: 100Mi
+        # Override security context for dev mode to allow DevSpace sync
+        podSecurityContext:
+          runAsNonRoot: false
+          runAsUser: 0
+          fsGroup: 0
+        securityContext:
+          runAsUser: 0
+          allowPrivilegeEscalation: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            add:
+              - SETUID
+              - SETGID
+              - CHOWN
+              - FOWNER
+              - DAC_OVERRIDE
+
+dev:
+  executor-langchain:
+    imageSelector: executor-langchain
+    devImage: python:3.12-slim
+    command:
+      [
+        "sh",
+        "-c",
+        "cd /app && pip install uv && uv remove ark-sdk || true && uv add file://$(ls /app/build-context/ark_sdk-*.whl) && uv sync && uv run python -m langchain_executor",
+      ]
+    namespace: default
+    logs:
+      lastLines: 50
+    sync:
+      - path: .:/app
+        startContainer: true
+        disableDownload: true
+        uploadExcludeFile: .dockerignore
+    ssh:
+      enabled: true
+

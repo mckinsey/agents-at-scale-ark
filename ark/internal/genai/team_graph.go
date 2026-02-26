@@ -3,15 +3,18 @@ package genai
 import (
 	"context"
 	"fmt"
+
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
-func (t *Team) executeGraph(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
+//nolint:dupl // A2A variant intentionally mirrors executeGraph for separate removability
+func (t *Team) executeGraphA2A(ctx context.Context, userInput protocol.Message, history []protocol.Message) ([]protocol.Message, error) {
 	if len(t.Members) == 0 {
 		return nil, fmt.Errorf("team %s has no members for graph execution", t.FullName())
 	}
 
-	messages := append([]Message{}, history...)
-	var newMessages []Message
+	messages := append([]protocol.Message{}, history...)
+	var newMessages []protocol.Message
 
 	memberMap := make(map[string]TeamMember)
 	for _, member := range t.Members {
@@ -33,7 +36,6 @@ func (t *Team) executeGraph(ctx context.Context, userInput Message, history []Me
 			return newMessages, fmt.Errorf("member %s not found in team %s", currentMemberName, t.FullName())
 		}
 
-		// Start turn-level telemetry span
 		turnCtx, turnSpan := t.telemetryRecorder.StartTurn(ctx, turns, member.GetName(), member.GetType())
 
 		operationData := map[string]string{
@@ -43,11 +45,10 @@ func (t *Team) executeGraph(ctx context.Context, userInput Message, history []Me
 		}
 		turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s", turns, t.Name), operationData)
 
-		err := t.executeMemberAndAccumulate(turnCtx, member, userInput, &messages, &newMessages, turns)
+		err := t.executeMemberAndAccumulateA2A(turnCtx, member, userInput, &messages, &newMessages, turns)
 
-		// Record turn output
 		if len(newMessages) > 0 {
-			t.telemetryRecorder.RecordTurnOutput(turnSpan, newMessages, len(newMessages))
+			t.telemetryRecorder.RecordTurnOutput(turnSpan, nil, len(newMessages))
 		}
 
 		if err != nil {
@@ -72,8 +73,6 @@ func (t *Team) executeGraph(ctx context.Context, userInput Message, history []Me
 		currentMemberName = nextMember
 
 		if t.MaxTurns != nil && turns+1 >= *t.MaxTurns {
-			maxTurnsMessage := NewSystemMessage(fmt.Sprintf("Team conversation reached maximum turns limit (%d)", *t.MaxTurns))
-			newMessages = append(newMessages, maxTurnsMessage)
 			return newMessages, nil
 		}
 	}
