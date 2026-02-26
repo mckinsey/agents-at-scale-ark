@@ -119,6 +119,66 @@ describe('createQueryCommand', () => {
     });
   });
 
+  it('should pass conversation-id option to executeQuery', async () => {
+    mockParseTarget.mockReturnValue({
+      type: 'agent',
+      name: 'test-agent',
+    });
+
+    mockExecuteQuery.mockResolvedValue(undefined);
+
+    const command = createQueryCommand({} as any);
+
+    await command.parseAsync([
+      'node',
+      'test',
+      'agent/test-agent',
+      'Hello world',
+      '--conversation-id',
+      'my-conversation-456',
+    ]);
+
+    expect(mockParseTarget).toHaveBeenCalledWith('agent/test-agent');
+    expect(mockExecuteQuery).toHaveBeenCalledWith({
+      targetType: 'agent',
+      targetName: 'test-agent',
+      message: 'Hello world',
+      outputFormat: undefined,
+      conversationId: 'my-conversation-456',
+    });
+  });
+
+  it('should pass both session-id and conversation-id options to executeQuery', async () => {
+    mockParseTarget.mockReturnValue({
+      type: 'agent',
+      name: 'test-agent',
+    });
+
+    mockExecuteQuery.mockResolvedValue(undefined);
+
+    const command = createQueryCommand({} as any);
+
+    await command.parseAsync([
+      'node',
+      'test',
+      'agent/test-agent',
+      'Hello world',
+      '--session-id',
+      'my-session-123',
+      '--conversation-id',
+      'my-conversation-456',
+    ]);
+
+    expect(mockExecuteQuery).toHaveBeenCalledWith({
+      targetType: 'agent',
+      targetName: 'test-agent',
+      message: 'Hello world',
+      outputFormat: undefined,
+      sessionId: 'my-session-123',
+      conversationId: 'my-conversation-456',
+    });
+  });
+
   it('should error on invalid target format', async () => {
     mockParseTarget.mockReturnValue(null);
 
