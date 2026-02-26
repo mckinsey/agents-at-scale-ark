@@ -197,8 +197,8 @@ class TeamsPage(BasePage):
             name_element = self.page.get_by_text(team_name, exact=True).first
             name_element.wait_for(state="visible", timeout=10000)
             name_element.scroll_into_view_if_needed()
-            card = name_element.locator("xpath=ancestor::div[.//button[@aria-label='Delete team']][1]")
-            delete_btn = card.locator("button[aria-label='Delete team']").first
+            card = name_element.locator("xpath=ancestor::div[.//button[@aria-label='Delete team'] or .//button[.//*[contains(@class,'lucide-trash')]]  ][1]")
+            delete_btn = card.locator("button[aria-label='Delete team'], button:has(svg.lucide-trash-2)").first
             delete_btn.wait_for(state="visible", timeout=5000)
             delete_btn.click(force=True)
         except Exception as e:
