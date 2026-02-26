@@ -838,37 +838,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/export/all": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Export All Resources
-         * @deprecated
-         * @description [DEPRECATED] Export all Ark resources as a ZIP file.
-         *
-         *     This endpoint is deprecated. Use POST /export/resources instead without specifying
-         *     resource_types in the request body to export all resources.
-         *
-         *     Args:
-         *         body: Export request with optional namespace
-         *         namespace: Namespace to export from
-         *
-         *     Returns:
-         *         ZIP file containing all resources organized by type
-         */
-        post: operations["export_all_resources_v1_export_all_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/export/last-export-time": {
         parameters: {
             query?: never;
@@ -6749,40 +6718,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["EventResponse"];
                 };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    export_all_resources_v1_export_all_post: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request */
-                namespace?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["ExportRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Validation Error */
             422: {

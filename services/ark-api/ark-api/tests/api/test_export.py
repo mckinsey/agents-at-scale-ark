@@ -50,7 +50,7 @@ class TestExportEndpoints(unittest.TestCase):
 
     @patch('ark_api.api.v1.export.update_export_history')
     @patch('ark_api.api.v1.export.collect_resources')
-    def test_export_all_resources_success(self, mock_collect, mock_update_history):
+    def test_export_resources_all_types_success(self, mock_collect, mock_update_history):
         """Test successful export of all resource types as ZIP."""
         # Mock the collect_resources to return our test data
         async def mock_collect_resources(*args, **kwargs):

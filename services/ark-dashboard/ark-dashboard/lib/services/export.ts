@@ -247,10 +247,10 @@ export const exportService = {
     window.URL.revokeObjectURL(url);
   },
 
-  // Export all resources using new backend endpoint
+  // Export all resources using the unified export endpoint
   async exportAll(): Promise<void> {
-    // Call backend export all endpoint using fetch directly for blob response
-    const response = await fetch(`${API_CONFIG.baseURL}/api/v1/export/all`, {
+    // Call backend export endpoint without resource_types to export all
+    const response = await fetch(`${API_CONFIG.baseURL}/api/v1/export/resources`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

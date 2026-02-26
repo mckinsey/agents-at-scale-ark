@@ -338,29 +338,6 @@ async def export_resources(
     )
 
 
-@router.post("/all", response_class=StreamingResponse, deprecated=True)
-@handle_k8s_errors(operation="export", resource_type="all")
-async def export_all_resources(
-    body: ExportRequest = ExportRequest(),
-    namespace: Optional[str] = Query(None, description="Namespace for this request")
-):
-    """
-    [DEPRECATED] Export all Ark resources as a ZIP file.
-
-    This endpoint is deprecated. Use POST /export/resources instead without specifying
-    resource_types in the request body to export all resources.
-
-    Args:
-        body: Export request with optional namespace
-        namespace: Namespace to export from
-
-    Returns:
-        ZIP file containing all resources organized by type
-    """
-    # Delegate to the unified endpoint
-    return await export_resources(body=body, namespace=namespace)
-
-
 @router.get("/last-export-time", response_model=ExportHistoryResponse)
 @handle_k8s_errors(operation="get", resource_type="export-history")
 async def get_last_export_time() -> ExportHistoryResponse:
