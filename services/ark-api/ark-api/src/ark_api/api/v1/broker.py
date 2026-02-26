@@ -60,10 +60,7 @@ async def get_broker_url(memory_name: str) -> Optional[str]:
             validated_memory_name = validate_resource_name(memory_name, "memory")
             memory_dicts = await get_all_memory_resources(client, validated_memory_name)
             if not memory_dicts:
-                if validated_memory_name.replace('-', '').replace('.', '').isalnum():
-                    logger.warning("No memory resource found with name: %s", validated_memory_name)
-                else:
-                    logger.warning("No memory resource found with name: %s", base64.b64encode(validated_memory_name.encode('utf-8')).decode('ascii'))
+                logger.warning("No memory resource found with name: %s", base64.b64encode(validated_memory_name.encode('utf-8')).decode('ascii'))
                 return None
             return get_memory_service_address(memory_dicts[0])
     except Exception as e:
