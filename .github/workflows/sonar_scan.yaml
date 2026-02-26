@@ -49,12 +49,32 @@ jobs:
       - name: Check for coverage files
         id: check-coverage
         run: |
-          if [ -d "coverage-artifacts" ] && find coverage-artifacts -name "lcov.info" | grep -q .; then
+          echo "Checking for coverage artifacts..."
+          LCOV_FOUND=false
+          PYTHON_FOUND=false
+
+          if [ -d "coverage-artifacts" ]; then
+            echo "Coverage artifacts directory exists"
+            echo "Contents:"
+            find coverage-artifacts -type f 2>/dev/null | head -20
+
+            if find coverage-artifacts -name "lcov.info" | grep -q .; then
+              LCOV_FOUND=true
+              echo "Found lcov.info files"
+            fi
+
+            if find coverage-artifacts -name "coverage.xml" | grep -q .; then
+              PYTHON_FOUND=true
+              echo "Found coverage.xml files"
+            fi
+          fi
+
+          if [ "$LCOV_FOUND" = "true" ] && [ "$PYTHON_FOUND" = "true" ]; then
             echo "found=true" >> $GITHUB_OUTPUT
-            echo "Coverage artifacts found"
+            echo "All coverage artifacts found"
           else
             echo "found=false" >> $GITHUB_OUTPUT
-            echo "No coverage artifacts found - will run tests"
+            echo "Missing coverage artifacts (lcov: $LCOV_FOUND, python: $PYTHON_FOUND) - will run tests"
           fi
 
       - name: Organize existing coverage files
@@ -96,7 +116,15 @@ jobs:
             echo "Processing $xml_file (dir: $dir)"
 
             if [[ "$dir" == *"ark-api"* ]]; then
-              sed -i 's|filename="src/|filename="services/ark-api/ark-api/src/|g' "$xml_file"
+              echo "Before fix:"
+              grep -E '<source>|filename=' "$xml_file" | head -5
+              # Fix source element to point to project root
+              sed -i 's|<source>.*</source>|<source>.</source>|g' "$xml_file"
+              # Fix filename attributes to include full path from project root
+              sed -i 's|filename="src/ark_api/|filename="services/ark-api/ark-api/src/ark_api/|g' "$xml_file"
+              sed -i 's|filename="ark_api/|filename="services/ark-api/ark-api/src/ark_api/|g' "$xml_file"
+              echo "After fix:"
+              grep -E '<source>|filename=' "$xml_file" | head -5
             fi
           done
 
@@ -111,7 +139,7 @@ jobs:
 
           for f in $(find . -name "coverage.xml" -not -path "./coverage-artifacts/*" -not -path "./node_modules/*" 2>/dev/null | head -3); do
             echo "--- $f ---"
-            grep 'filename=' "$f" | head -5
+            grep -E '<source>|filename=' "$f" | head -10
           done
 
       - name: Setup Go
@@ -163,7 +191,15 @@ jobs:
             dir=$(dirname "$xml_file")
             echo "Processing $xml_file (dir: $dir)"
             if [[ "$dir" == *"ark-api"* ]]; then
-              sed -i 's|filename="src/|filename="services/ark-api/ark-api/src/|g' "$xml_file"
+              echo "Before fix:"
+              grep -E '<source>|filename=' "$xml_file" | head -5
+              # Fix source element to point to project root
+              sed -i 's|<source>.*</source>|<source>.</source>|g' "$xml_file"
+              # Fix filename attributes to include full path from project root
+              sed -i 's|filename="src/ark_api/|filename="services/ark-api/ark-api/src/ark_api/|g' "$xml_file"
+              sed -i 's|filename="ark_api/|filename="services/ark-api/ark-api/src/ark_api/|g' "$xml_file"
+              echo "After fix:"
+              grep -E '<source>|filename=' "$xml_file" | head -5
             fi
           done
 
@@ -198,6 +234,33 @@ jobs:
           organization: ${{ secrets.CF_ORGANIZATION }}
           auth_client_id: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_ID }}
           auth_client_secret: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_SECRET }}
+
+      - name: Verify coverage files before scan
+        run: |
+          echo "=== Verifying coverage files exist ==="
+          echo "Looking for Python coverage.xml files:"
+          find . -name "coverage.xml" -not -path "./node_modules/*" 2>/dev/null || echo "No coverage.xml files found"
+
+          echo ""
+          echo "Expected location: services/ark-api/ark-api/coverage/coverage.xml"
+          if [ -f "services/ark-api/ark-api/coverage/coverage.xml" ]; then
+            echo "SUCCESS: File exists"
+            echo "File size: $(wc -c < services/ark-api/ark-api/coverage/coverage.xml) bytes"
+            echo "Sample content:"
+            head -20 services/ark-api/ark-api/coverage/coverage.xml
+          else
+            echo "WARNING: File does not exist"
+            echo "Contents of services/ark-api/ark-api/coverage/:"
+            ls -la services/ark-api/ark-api/coverage/ 2>/dev/null || echo "Directory does not exist"
+          fi
+
+          echo ""
+          echo "Looking for Go coverage files:"
+          find . -name "cover.out" -not -path "./node_modules/*" 2>/dev/null || echo "No cover.out files found"
+
+          echo ""
+          echo "Looking for lcov.info files:"
+          find . -name "lcov.info" -not -path "./node_modules/*" 2>/dev/null || echo "No lcov.info files found"
 
       - name: Run SonarQube Scan (Branch)
         if: github.event_name != 'pull_request'
