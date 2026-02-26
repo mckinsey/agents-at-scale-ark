@@ -654,3 +654,64 @@ class TestHelperFunctions(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(len(result), 1)
             self.assertIn("server_error", result[0])
+
+
+class TestValidationFunctions(unittest.TestCase):
+
+    def test_validate_resource_name_invalid_empty(self):
+        from ark_api.api.v1.broker import validate_resource_name
+        from fastapi import HTTPException
+
+        with self.assertRaises(HTTPException) as context:
+            validate_resource_name("", "memory")
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertIn("Invalid memory", context.exception.detail)
+
+    def test_validate_resource_name_invalid_uppercase(self):
+        from ark_api.api.v1.broker import validate_resource_name
+        from fastapi import HTTPException
+
+        with self.assertRaises(HTTPException) as context:
+            validate_resource_name("Invalid-Name", "memory")
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertIn("must be a valid Kubernetes resource name", context.exception.detail)
+
+    def test_validate_resource_name_valid(self):
+        from ark_api.api.v1.broker import validate_resource_name
+
+        result = validate_resource_name("valid-name", "memory")
+        self.assertEqual(result, "valid-name")
+
+    def test_validate_id_invalid_special_chars(self):
+        from ark_api.api.v1.broker import validate_id
+        from fastapi import HTTPException
+
+        with self.assertRaises(HTTPException) as context:
+            validate_id("invalid@id!", "session_id")
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertIn("Invalid session_id", context.exception.detail)
+
+    def test_validate_id_invalid_spaces(self):
+        from ark_api.api.v1.broker import validate_id
+        from fastapi import HTTPException
+
+        with self.assertRaises(HTTPException) as context:
+            validate_id("invalid id", "query_id")
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertIn("must contain only alphanumeric characters", context.exception.detail)
+
+    def test_validate_id_valid(self):
+        from ark_api.api.v1.broker import validate_id
+
+        result = validate_id("valid-id_123.test", "session_id")
+        self.assertEqual(result, "valid-id_123.test")
+
+    def test_validate_id_none(self):
+        from ark_api.api.v1.broker import validate_id
+
+        result = validate_id(None, "session_id")
+        self.assertIsNone(result)
