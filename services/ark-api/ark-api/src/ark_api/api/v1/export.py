@@ -230,7 +230,8 @@ async def collect_resources(
 
             except Exception as e:
                 logger.error(f"Failed to collect {resource_type}: {e}")
-                resources[resource_type] = []
+                # Re-raise the error so it's visible to the user
+                raise Exception(f"Failed to collect {resource_type}: {str(e)}") from e
 
     return resources
 

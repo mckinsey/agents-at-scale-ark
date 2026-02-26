@@ -168,16 +168,20 @@ class TestExportEndpoints(unittest.TestCase):
 
     @patch('ark_api.api.v1.export.collect_resources')
     def test_export_handles_errors(self, mock_collect):
-        """Test that errors in collection are handled properly."""
+        """Test that errors in collection are handled properly and visible to user."""
         # Mock an error during collection
         async def mock_error(*args, **kwargs):
-            raise Exception("Failed to collect resources")
+            raise Exception("Failed to collect resources: Database connection timeout")
         mock_collect.side_effect = mock_error
 
         response = self.client.post("/v1/export/resources", json={})
 
         # Should return 500 error
         self.assertEqual(response.status_code, 500)
+
+        # Verify error message is in the response
+        error_detail = response.json().get("detail", "")
+        self.assertIn("Internal server error", error_detail)
 
     @patch('ark_api.api.v1.export.update_export_history')
     @patch('ark_api.api.v1.export.collect_resources')
