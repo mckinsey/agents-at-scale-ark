@@ -15,9 +15,6 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.type
-      name: Type
-      type: string
     - jsonPath: .status.phase
       name: Phase
       type: string
@@ -53,8 +50,7 @@ spec:
               ExecutionEngineSpec defines the configuration for an execution engine that can run agent workloads.
               This allows agents to be executed by different frameworks such as LangChain, AutoGen, or other
               agent execution systems, rather than the built-in OpenAI-compatible engine.
-              Execution engines work as operators that watch Query CRDs and process queries for agents
-              that reference them.
+              Execution engines communicate via the A2A (Agent-to-Agent) protocol.
             properties:
               address:
                 description: Address specifies how to reach the execution engine
@@ -137,13 +133,8 @@ spec:
                 description: Description provides human-readable information about
                   this execution engine
                 type: string
-              type:
-                description: Type specifies which execution engine implementation
-                  to use
-                type: string
             required:
             - address
-            - type
             type: object
           status:
             properties:
