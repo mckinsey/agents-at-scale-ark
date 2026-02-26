@@ -8,27 +8,27 @@ import (
 )
 
 type (
-	Message          openai.ChatCompletionMessageParamUnion
-	ToolCall         openai.ChatCompletionMessageToolCall
-	UserMessage      openai.ChatCompletionUserMessageParam
-	AssistantMessage openai.ChatCompletionAssistantMessageParam
-	SystemMessage    openai.ChatCompletionSystemMessageParam
+	Message          = openai.ChatCompletionMessageParamUnion
+	ToolCall         = openai.ChatCompletionMessageToolCall
+	UserMessage      = openai.ChatCompletionUserMessageParam
+	AssistantMessage = openai.ChatCompletionAssistantMessageParam
+	SystemMessage    = openai.ChatCompletionSystemMessageParam
 )
 
 func NewSystemMessage(content string) Message {
-	return Message(openai.SystemMessage(content))
+	return openai.SystemMessage(content)
 }
 
 func NewUserMessage(content string) Message {
-	return Message(openai.UserMessage(content))
+	return openai.UserMessage(content)
 }
 
 func NewAssistantMessage(content string) Message {
-	return Message(openai.AssistantMessage(content))
+	return openai.AssistantMessage(content)
 }
 
 func ToolMessage[T string | []openai.ChatCompletionContentPartTextParam](content T, toolCallID string) Message {
-	return Message(openai.ToolMessage(content, toolCallID))
+	return openai.ToolMessage(content, toolCallID)
 }
 
 type TeamMember interface {
@@ -39,10 +39,11 @@ type TeamMember interface {
 }
 
 type ToolResult struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Content string `json:"content,omitempty"`
-	Error   string `json:"error,omitempty"`
+	ID       string                 `json:"id"`
+	Name     string                 `json:"name"`
+	Content  string                 `json:"content,omitempty"`
+	Error    string                 `json:"error,omitempty"`
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
 type ToolExecutor interface {

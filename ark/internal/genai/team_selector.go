@@ -8,7 +8,7 @@ import (
 	"text/template"
 
 	"k8s.io/apimachinery/pkg/types"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
@@ -28,14 +28,35 @@ type SelectorTemplateData struct {
 }
 
 func buildHistory(messages []Message) string {
-	var history []string
+	history := make([]string, 0, len(messages))
 	for _, msg := range messages {
-		if m := msg.OfAssistant; m != nil {
-			history = append(history, fmt.Sprintf("# %s:\n%s\n", m.Name.Value, m.Content.OfString))
+		role := resolveMessageRole(msg)
+		text := ExtractTextFromMessage(msg)
+		if text == "" {
+			continue
 		}
-		if m := msg.OfUser; m != nil {
-			history = append(history, fmt.Sprintf("# user:\n%s\n", m.Content.OfString))
+		switch role {
+		case RoleAssistant:
+			history = append(history, fmt.Sprintf("# assistant:\n%s\n", text))
+		case RoleUser:
+			history = append(history, fmt.Sprintf("# user:\n%s\n", text))
 		}
+	}
+	return strings.Join(history, "\n")
+}
+
+func buildA2AHistory(messages []protocol.Message) string {
+	history := make([]string, 0, len(messages))
+	for _, msg := range messages {
+		text := ExtractA2ATextFromMessage(msg)
+		if text == "" {
+			continue
+		}
+		if msg.Role == protocol.MessageRoleUser {
+			history = append(history, fmt.Sprintf("# user:\n%s\n", text))
+			continue
+		}
+		history = append(history, fmt.Sprintf("# assistant:\n%s\n", text))
 	}
 	return strings.Join(history, "\n")
 }
@@ -119,12 +140,10 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 
 	var selectedName string
 	lastMsg := result.Messages[len(result.Messages)-1]
-	if lastMsg.OfAssistant != nil && lastMsg.OfAssistant.Content.OfString.Value != "" {
-		selectedName = strings.TrimSpace(lastMsg.OfAssistant.Content.OfString.Value)
-		logger := logf.FromContext(ctx)
-		logger.Info("Selector chose", "selectedName", selectedName)
-
-	} else {
+	if resolveMessageRole(lastMsg) == RoleAssistant {
+		selectedName = strings.TrimSpace(ExtractTextFromMessage(lastMsg))
+	}
+	if selectedName == "" {
 		return nil, fmt.Errorf("selector agent returned invalid response")
 	}
 
@@ -155,6 +174,73 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	return nil, fmt.Errorf("no members available")
 }
 
+//nolint:dupl // A2A variant intentionally mirrors selectMember for separate removability
+func (t *Team) selectMemberA2A(ctx context.Context, messages []protocol.Message, tmpl *template.Template, participantsList, rolesList, previousMember string, candidateMembers []TeamMember) (TeamMember, error) {
+	history := buildA2AHistory(messages)
+	data := SelectorTemplateData{
+		Roles:        rolesList,
+		Participants: participantsList,
+		History:      history,
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return nil, err
+	}
+
+	selectorAgent, err := t.loadSelectorAgent(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	systemMessage := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart(buf.String()),
+	})
+	systemMessage.Metadata = map[string]interface{}{
+		MetadataRoleKey: RoleSystem,
+	}
+
+	result, err := selectorAgent.ExecuteA2A(ctx, protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("Select the next participant to respond."),
+	}), []protocol.Message{systemMessage}, nil, nil)
+	if err != nil {
+		if IsTerminateTeam(err) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("selector agent call failed: %w", err)
+	}
+
+	resultMessages, err := extractA2AMessages(result)
+	if err != nil || len(resultMessages) == 0 {
+		return nil, fmt.Errorf("selector agent returned no messages")
+	}
+
+	selectedName := strings.TrimSpace(ExtractA2ATextFromMessage(resultMessages[len(resultMessages)-1]))
+	if selectedName == "" {
+		return nil, fmt.Errorf("selector agent returned invalid response")
+	}
+
+	membersToSearch := t.Members
+	if candidateMembers != nil {
+		membersToSearch = candidateMembers
+	}
+	for _, member := range membersToSearch {
+		if member.GetName() == selectedName {
+			return member, nil
+		}
+	}
+
+	if len(membersToSearch) > 0 {
+		fallback := membersToSearch[0]
+		if fallback.GetName() == previousMember && len(membersToSearch) > 1 {
+			fallback = membersToSearch[1]
+		}
+		return fallback, nil
+	}
+
+	return nil, fmt.Errorf("no members available")
+}
+
 // determineNextMember routes to the appropriate selection logic based on whether graph constraints exist.
 func (t *Team) determineNextMember(ctx context.Context, messages []Message, tmpl *template.Template, previousMember string, legalTransitions map[string][]TeamMember) (TeamMember, error) {
 	if len(legalTransitions) == 0 {
@@ -165,6 +251,19 @@ func (t *Team) determineNextMember(ctx context.Context, messages []Message, tmpl
 	}
 	// Graph constraints provided: use legal transitions
 	return t.selectFromGraphConstraints(ctx, messages, tmpl, previousMember, legalTransitions)
+}
+
+func (t *Team) determineNextMemberA2A(ctx context.Context, messages []protocol.Message, tmpl *template.Template, previousMember string, legalTransitions map[string][]TeamMember) (TeamMember, error) {
+	switch {
+	case previousMember == "":
+		return t.Members[0], nil
+	case len(legalTransitions) == 0:
+		participantsList := buildParticipants(t.Members)
+		rolesList := buildRoles(t.Members)
+		return t.selectMemberA2A(ctx, messages, tmpl, participantsList, rolesList, previousMember, nil)
+	default:
+		return t.selectFromGraphConstraintsA2A(ctx, messages, tmpl, previousMember, legalTransitions)
+	}
 }
 
 // selectFromGraphConstraints selects a member from the graph-constrained legal transitions.
@@ -197,6 +296,32 @@ func (t *Team) selectFromGraphConstraints(ctx context.Context, messages []Messag
 		participantsList := buildParticipants(legal)
 		rolesList := buildRoles(legal)
 		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, legal)
+	}
+}
+
+func (t *Team) selectFromGraphConstraintsA2A(ctx context.Context, messages []protocol.Message, tmpl *template.Template, previousMember string, legalTransitions map[string][]TeamMember) (TeamMember, error) {
+	memberLookup := make(map[string]TeamMember, len(t.Members))
+	for _, member := range t.Members {
+		memberLookup[member.GetName()] = member
+	}
+
+	previousMemberObj := memberLookup[previousMember]
+	if previousMemberObj == nil {
+		return t.Members[0], nil
+	}
+
+	legal := legalTransitions[previousMember]
+
+	switch len(legal) {
+	case 0:
+		return t.Members[0], nil
+	case 1:
+		selectedMember := legal[0]
+		return selectedMember, nil
+	default:
+		participantsList := buildParticipants(legal)
+		rolesList := buildRoles(legal)
+		return t.selectMemberA2A(ctx, messages, tmpl, participantsList, rolesList, previousMember, legal)
 	}
 }
 
@@ -286,4 +411,97 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 			return newMessages, nil
 		}
 	}
+}
+
+func (t *Team) resolveSelectorTemplate() (*template.Template, error) {
+	promptTemplate := defaultSelectorPrompt
+	if t.Selector != nil && t.Selector.SelectorPrompt != "" {
+		promptTemplate = t.Selector.SelectorPrompt
+	}
+	return template.New("selector").Parse(promptTemplate)
+}
+
+func (t *Team) buildLegalTransitions() map[string][]TeamMember {
+	legalTransitions := make(map[string][]TeamMember)
+	if t.Graph == nil {
+		return legalTransitions
+	}
+	memberLookup := make(map[string]TeamMember)
+	for _, member := range t.Members {
+		memberLookup[member.GetName()] = member
+	}
+	for _, edge := range t.Graph.Edges {
+		if member, exists := memberLookup[edge.To]; exists {
+			legalTransitions[edge.From] = append(legalTransitions[edge.From], member)
+		}
+	}
+	return legalTransitions
+}
+
+func (t *Team) executeSelectorA2A(ctx context.Context, userInput protocol.Message, history []protocol.Message) ([]protocol.Message, error) {
+	messages := append([]protocol.Message{}, history...)
+	var newMessages []protocol.Message
+
+	tmpl, err := t.resolveSelectorTemplate()
+	if err != nil {
+		return newMessages, err
+	}
+
+	legalTransitions := t.buildLegalTransitions()
+	previousMember := ""
+
+	for turn := 0; ; turn++ {
+		nextMember, err := t.determineNextMemberA2A(ctx, messages, tmpl, previousMember, legalTransitions)
+		if err != nil {
+			if IsTerminateTeam(err) {
+				return newMessages, nil
+			}
+			return newMessages, err
+		}
+
+		done, err := t.executeSelectorTurnA2A(ctx, turn, nextMember, userInput, &messages, &newMessages)
+		if err != nil {
+			return newMessages, err
+		}
+		previousMember = nextMember.GetName()
+		if done {
+			return newMessages, nil
+		}
+	}
+}
+
+func (t *Team) executeSelectorTurnA2A(ctx context.Context, turn int, member TeamMember, userInput protocol.Message, messages, newMessages *[]protocol.Message) (bool, error) {
+	turnCtx, turnSpan := t.telemetryRecorder.StartTurn(ctx, turn, member.GetName(), member.GetType())
+
+	operationData := map[string]string{
+		"teamName": t.Name,
+		"strategy": t.Strategy,
+		"turn":     fmt.Sprintf("%d", turn),
+	}
+	turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s", turn, t.Name), operationData)
+
+	err := t.executeMemberAndAccumulateA2A(turnCtx, member, userInput, messages, newMessages, turn)
+
+	if len(*newMessages) > 0 {
+		t.telemetryRecorder.RecordTurnOutput(turnSpan, nil, len(*newMessages))
+	}
+
+	if err != nil {
+		t.telemetryRecorder.RecordError(turnSpan, err)
+		turnSpan.End()
+		t.eventingRecorder.Fail(turnCtx, "TeamTurn", fmt.Sprintf("Team turn failed: %v", err), err, operationData)
+		if IsTerminateTeam(err) {
+			return true, nil
+		}
+		return false, err
+	}
+
+	t.telemetryRecorder.RecordSuccess(turnSpan)
+	turnSpan.End()
+	t.eventingRecorder.Complete(turnCtx, "TeamTurn", fmt.Sprintf("Team turn %d completed successfully", turn), operationData)
+
+	if t.MaxTurns != nil && turn+1 >= *t.MaxTurns {
+		return true, nil
+	}
+	return false, nil
 }

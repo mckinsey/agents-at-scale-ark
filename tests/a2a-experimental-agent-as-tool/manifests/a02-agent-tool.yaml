@@ -1,0 +1,45 @@
+# A2A-Native Agent Tool
+# Exposes full A2A inputSchema (message, history, contextId) for delegation
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: call-specialist-a2a
+  annotations:
+    ark.mckinsey.com/a2a-experimental-enabled: "true"
+spec:
+  type: agent
+  description: "Delegate tasks to specialist with A2A message, history, and context support"
+  inputSchema:
+    type: object
+    properties:
+      message:
+        type: object
+        description: "A2A message with parts array"
+        properties:
+          role:
+            type: string
+            enum: ["user"]
+            default: "user"
+          parts:
+            type: array
+            description: "Message content parts (text, file, or data)"
+            items:
+              type: object
+              properties:
+                kind:
+                  type: string
+                  enum: ["text", "file", "data"]
+                text:
+                  type: string
+                  description: "Text content (when kind='text')"
+      history:
+        type: array
+        description: "Previous messages for conversation context"
+      contextId:
+        type: string
+        description: "Context ID for stateful multi-turn conversations"
+      input:
+        type: string
+        description: "Simple text input (fallback - prefer 'message')"
+  agent:
+    name: specialist-agent-a2a

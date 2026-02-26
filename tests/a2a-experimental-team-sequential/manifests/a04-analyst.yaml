@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: analyst
+spec:
+  prompt: |
+    You are an Analyst Agent. Analyze information and identify patterns.
+    Start your response with "ANALYSIS:" to identify your contribution.
+  modelRef:
+    name: test-model

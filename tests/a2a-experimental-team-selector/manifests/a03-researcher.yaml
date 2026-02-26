@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: researcher
+spec:
+  description: Research and data analysis specialist
+  prompt: |
+    You are a research specialist. Gather relevant information and provide factual insights.
+    Keep responses brief and focused. Do not ask questions.
+  modelRef:
+    name: test-model

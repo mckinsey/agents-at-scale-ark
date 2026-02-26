@@ -275,6 +275,18 @@ func (tr *ToolRegistry) ExecuteTool(ctx context.Context, call ToolCall) (ToolRes
 	return result, nil
 }
 
+func (tr *ToolRegistry) ExecuteToolA2A(ctx context.Context, call A2AToolCall) (ToolResult, error) {
+	compatCall := ToolCall{
+		ID:   call.ID,
+		Type: "function",
+		Function: openai.ChatCompletionMessageToolCallFunction{
+			Name:      call.Name,
+			Arguments: call.Arguments,
+		},
+	}
+	return tr.ExecuteTool(ctx, compatCall)
+}
+
 func (tr *ToolRegistry) ToOpenAITools() []openai.ChatCompletionToolParam {
 	tools := make([]openai.ChatCompletionToolParam, 0, len(tr.tools))
 

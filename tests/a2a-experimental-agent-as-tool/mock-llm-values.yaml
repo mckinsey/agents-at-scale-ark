@@ -1,0 +1,119 @@
+terminationGracePeriodSeconds: 3
+ark:
+  a2a:
+    enabled: true
+  model:
+    enabled: true
+    name: test-model
+    type: completions
+    provider: openai
+    model: gpt-4
+    apiKey: mock-api-key
+
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "gpt-4",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            }
+          ]
+        }
+
+  # Catch-all for model probes
+  - path: "/v1/chat/completions"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}]}'
+
+  # Coordinator scenario: message + history + contextId
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'A2A-native Coordinator') && contains(body.messages[length(body.messages)-1].content || '', '[scenario-message-history-context]')"
+    response:
+      status: 200
+      content: |
+        {
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "tool_calls": [{
+                "id": "call_delegate_a2a",
+                "type": "function",
+                "function": {
+                  "name": "call-specialist-a2a",
+                  "arguments": "{\"message\":{\"role\":\"user\",\"parts\":[{\"kind\":\"text\",\"text\":\"Process this request with A2A message\"}]},\"history\":[{\"role\":\"agent\",\"parts\":[{\"kind\":\"text\",\"text\":\"Prior discussion context\"}]}],\"contextId\":\"test-context-123\"}"
+                }
+              }]
+            },
+            "finish_reason": "tool_calls"
+          }]
+        }
+
+  # Coordinator scenario: message-only (no history/contextId)
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'A2A-native Coordinator') && contains(body.messages[length(body.messages)-1].content || '', '[scenario-message-only]')"
+    response:
+      status: 200
+      content: |
+        {
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "tool_calls": [{
+                "id": "call_delegate_a2a_message_only",
+                "type": "function",
+                "function": {
+                  "name": "call-specialist-a2a",
+                  "arguments": "{\"message\":{\"role\":\"user\",\"parts\":[{\"kind\":\"text\",\"text\":\"Process this request with message only\"}]}}"
+                }
+              }]
+            },
+            "finish_reason": "tool_calls"
+          }]
+        }
+
+  # Coordinator scenario: legacy input fallback
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'A2A-native Coordinator') && contains(body.messages[length(body.messages)-1].content || '', '[scenario-input-fallback]')"
+    response:
+      status: 200
+      content: |
+        {
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "tool_calls": [{
+                "id": "call_delegate_a2a_input_fallback",
+                "type": "function",
+                "function": {
+                  "name": "call-specialist-a2a",
+                  "arguments": "{\"input\":\"Process this request via legacy input fallback\"}"
+                }
+              }]
+            },
+            "finish_reason": "tool_calls"
+          }]
+        }
+
+  # Coordinator agent - second call (has tool result): return final answer
+  - path: "/v1/chat/completions"
+    match: "body.messages[?role=='tool']"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"Delegation complete. The specialist processed the A2A message successfully."},"finish_reason":"stop"}]}'
+
+  # Specialist agent: echo back confirmation
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'A2A-enabled Specialist')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"Specialist received A2A message. Processing request with context."},"finish_reason":"stop"}]}'

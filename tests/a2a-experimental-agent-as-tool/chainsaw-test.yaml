@@ -1,0 +1,234 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: a2a-agent-as-tool-message
+spec:
+  description: Test A2A-native agent-as-tool delegation with message, history, and contextId
+  timeouts:
+    apply: 30s
+    assert: 120s
+  steps:
+  - name: setup-mock-llm
+    try:
+    - script:
+        content: |
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.28 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml \
+            --wait --timeout=120s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+
+  - name: wait-for-model
+    try:
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: test-model
+          status:
+            conditions:
+            - type: ModelAvailable
+              status: "True"
+    catch:
+    - script:
+        content: |
+          echo "=== Model not ready ==="
+          kubectl get model -n $NAMESPACE -o yaml 2>/dev/null || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: deploy-specialist
+    try:
+    - apply:
+        file: manifests/a01-specialist-agent.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: specialist-agent-a2a
+    catch:
+    - events: {}
+
+  - name: deploy-agent-tool
+    try:
+    - apply:
+        file: manifests/a02-agent-tool.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: call-specialist-a2a
+    catch:
+    - events: {}
+
+  - name: deploy-coordinator
+    try:
+    - apply:
+        file: manifests/a03-coordinator.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: coordinator-agent-a2a
+    catch:
+    - events: {}
+
+  - name: execute-query-message-history-context
+    try:
+    - apply:
+        file: manifests/a04-query.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: a2a-delegation-test
+          status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
+    catch:
+    - events: {}
+    - script:
+        content: |
+          echo "=== Debug: Query status (message+history+contextId) ==="
+          kubectl get query a2a-delegation-test -n $NAMESPACE -o yaml 2>/dev/null || true
+          echo "=== Debug: Mock LLM logs ==="
+          kubectl logs -l app.kubernetes.io/name=mock-llm -n $NAMESPACE --tail=100 2>/dev/null || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: verify-response-message-history-context
+    try:
+    - assert:
+        timeout: 5s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: a2a-delegation-test
+          status:
+            (response != null): true
+            (response.target.name): 'coordinator-agent-a2a'
+            (length(response.content) > `10`): true
+    catch:
+    - events: {}
+    - script:
+        content: |
+          echo "=== Query response (message+history+contextId) ==="
+          kubectl get query a2a-delegation-test -n $NAMESPACE -o jsonpath='{.status.response}' 2>/dev/null || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: execute-query-message-only
+    try:
+    - apply:
+        file: manifests/a05-query-message-only.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: a2a-delegation-message-only
+          status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
+    catch:
+    - events: {}
+    - script:
+        content: |
+          echo "=== Debug: Query status (message-only) ==="
+          kubectl get query a2a-delegation-message-only -n $NAMESPACE -o yaml 2>/dev/null || true
+          echo "=== Debug: Mock LLM logs ==="
+          kubectl logs -l app.kubernetes.io/name=mock-llm -n $NAMESPACE --tail=100 2>/dev/null || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: verify-response-message-only
+    try:
+    - assert:
+        timeout: 5s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: a2a-delegation-message-only
+          status:
+            (response != null): true
+            (response.target.name): 'coordinator-agent-a2a'
+            (length(response.content) > `10`): true
+    catch:
+    - events: {}
+    - script:
+        content: |
+          echo "=== Query response (message-only) ==="
+          kubectl get query a2a-delegation-message-only -n $NAMESPACE -o jsonpath='{.status.response}' 2>/dev/null || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: execute-query-input-fallback
+    try:
+    - apply:
+        file: manifests/a06-query-input-fallback.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: a2a-delegation-input-fallback
+          status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
+    catch:
+    - events: {}
+    - script:
+        content: |
+          echo "=== Debug: Query status (input fallback) ==="
+          kubectl get query a2a-delegation-input-fallback -n $NAMESPACE -o yaml 2>/dev/null || true
+          echo "=== Debug: Mock LLM logs ==="
+          kubectl logs -l app.kubernetes.io/name=mock-llm -n $NAMESPACE --tail=100 2>/dev/null || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: verify-response-input-fallback
+    try:
+    - assert:
+        timeout: 5s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: a2a-delegation-input-fallback
+          status:
+            (response != null): true
+            (response.target.name): 'coordinator-agent-a2a'
+            (length(response.content) > `10`): true
+    catch:
+    - events: {}
+    - script:
+        content: |
+          echo "=== Query response (input fallback) ==="
+          kubectl get query a2a-delegation-input-fallback -n $NAMESPACE -o jsonpath='{.status.response}' 2>/dev/null || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

@@ -33,6 +33,7 @@ type StreamMetadata struct {
 	Agent          string             `json:"agent,omitempty"`
 	Model          string             `json:"model,omitempty"`
 	CompletedQuery *arkv1alpha1.Query `json:"completedQuery,omitempty"`
+	A2A            interface{}        `json:"a2a,omitempty"`
 }
 
 // ChunkWithMetadata wraps an OpenAI chunk with ARK metadata
@@ -138,6 +139,22 @@ func WrapChunkWithMetadata(ctx context.Context, chunk *openai.ChatCompletionChun
 
 	if query != nil {
 		metadata.CompletedQuery = query
+	}
+
+	return ChunkWithMetadata{
+		ChatCompletionChunk: chunk,
+		Ark:                 metadata,
+	}
+}
+
+func WrapChunkWithA2A(ctx context.Context, chunk *openai.ChatCompletionChunk, modelName string, query *arkv1alpha1.Query, payload interface{}) interface{} {
+	metadata := buildMetadata(ctx, modelName)
+
+	if query != nil {
+		metadata.CompletedQuery = query
+	}
+	if payload != nil {
+		metadata.A2A = payload
 	}
 
 	return ChunkWithMetadata{

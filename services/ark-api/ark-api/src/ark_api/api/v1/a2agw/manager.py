@@ -9,6 +9,7 @@ from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
 from ark_sdk.k8s import get_namespace, is_k8s
 from starlette.applications import Starlette
+from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .execution import ARKAgentExecutor
@@ -82,11 +83,16 @@ class ProxyApp:
             self._app = app
 
 
+_REMOVAL_GRACE_SYNCS = 2
+
 class DynamicManager:
     def __init__(self):
         self.agents = {}
+        self.executors = {}
+        self.task_stores = {}
+        self._removal_candidates: dict[str, int] = {}
         self.lock = threading.Lock()
-        self.app = ProxyApp()  # Use proxy instead of Starlette
+        self.app = ProxyApp()
         self.registry = get_registry()
         self._refresh_task = None
         self._running = False
@@ -132,24 +138,45 @@ class DynamicManager:
             
             # Check for changes
             changes_detected = False
+            removed_executors = []
             
             with self.lock:
                 current_names = set(self.agents.keys())
                 registry_names = set(registry_agents.keys())
-                
-                # Find agents to remove
-                to_remove = current_names - registry_names
+
+                missing_names = current_names - registry_names
+                for name in missing_names:
+                    self._removal_candidates[name] = self._removal_candidates.get(name, 0) + 1
+
+                for name in list(self._removal_candidates):
+                    if name in registry_names:
+                        del self._removal_candidates[name]
+
+                to_remove = {
+                    name for name, count in self._removal_candidates.items()
+                    if count >= _REMOVAL_GRACE_SYNCS
+                }
                 for name in to_remove:
                     del self.agents[name]
-                    logger.info(f"Removed agent: {name}")
+                    self._removal_candidates.pop(name, None)
+                    executor = self.executors.pop(name, None)
+                    if executor is not None:
+                        removed_executors.append(executor)
+                    self.task_stores.pop(name, None)
+                    logger.info("Removed agent after grace period: %s", name)
                     changes_detected = True
-                
-                # Find agents to add or update
+
                 for name, card in registry_agents.items():
                     if name not in self.agents or self.agents[name] != card:
                         self.agents[name] = card
-                        logger.info(f"Added/Updated agent: {name}")
+                        logger.info("Added/Updated agent: %s", name)
                         changes_detected = True
+
+            if removed_executors:
+                await asyncio.gather(
+                    *(executor.cancel_all_tasks() for executor in removed_executors),
+                    return_exceptions=True,
+                )
             
             # Only update routes if changes were detected
             if changes_detected:
@@ -172,16 +199,36 @@ class DynamicManager:
     async def shutdown(self):
         """Shutdown the manager and stop periodic sync"""
         await self.stop_periodic_sync()
+        with self.lock:
+            executors = list(self.executors.values())
+            self.executors.clear()
+            self.task_stores.clear()
+        if executors:
+            await asyncio.gather(
+                *(executor.cancel_all_tasks() for executor in executors),
+                return_exceptions=True,
+            )
 
     def _update_routes(self):
         # Create a new Starlette app with all routes
         new_app = Starlette()
+        with self.lock:
+            agent_items = list(self.agents.items())
         
         # Add routes for each agent
-        for name, agent_card in self.agents.items():
+        for name, agent_card in agent_items:
+            with self.lock:
+                executor = self.executors.get(name)
+                if executor is None:
+                    executor = ARKAgentExecutor(name, get_namespace())
+                    self.executors[name] = executor
+                task_store = self.task_stores.get(name)
+                if task_store is None:
+                    task_store = InMemoryTaskStore()
+                    self.task_stores[name] = task_store
             request_handler = DefaultRequestHandler(
-                agent_executor=ARKAgentExecutor(name, get_namespace()),
-                task_store=InMemoryTaskStore(),
+                agent_executor=executor,
+                task_store=task_store,
             )
 
             server = A2AStarletteApplication(
@@ -189,10 +236,28 @@ class DynamicManager:
                 http_handler=request_handler
             )
 
-            new_app.mount(f"/{name}/", server.build())
+            agent_app = server.build()
+            agent_app.add_route(
+                "/.well-known/agent-card.json",
+                self._agent_card_handler(agent_card),
+                methods=["GET"],
+            )
+            new_app.mount(f"/{name}/", agent_app)
 
         # Atomically swap the entire app
         self.app.set_app(new_app)
         
         logger.info(f"Updated routes - Active agents: {list(self.agents.keys())}")
+
+    def _agent_card_handler(self, agent_card):
+        async def handler(_request):
+            if hasattr(agent_card, "model_dump"):
+                payload = agent_card.model_dump()
+            elif hasattr(agent_card, "dict"):
+                payload = agent_card.dict()
+            else:
+                payload = agent_card
+            return JSONResponse(payload)
+
+        return handler
 

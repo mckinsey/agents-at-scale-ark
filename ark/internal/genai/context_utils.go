@@ -16,10 +16,15 @@ const (
 	// Execution metadata keys for streaming
 	// These values are sent back with streaming chunks in the 'ark' metadata field,
 	// allowing callers to differentiate the source of chunks (e.g., specific agents in a team query)
-	targetKey contextKey = "target" // Original query target (e.g., "team/my-team")
-	teamKey   contextKey = "team"   // Current team name
-	agentKey  contextKey = "agent"  // Current agent name
-	modelKey  contextKey = "model"  // Current model name
+	targetKey          contextKey = "target" // Original query target (e.g., "team/my-team")
+	teamKey            contextKey = "team"   // Current team name
+	agentKey           contextKey = "agent"  // Current agent name
+	modelKey           contextKey = "model"  // Current model name
+	a2aPayloadModeKey  contextKey = "a2aPayloadMode"
+	a2aPayloadSetKey   contextKey = "a2aPayloadSet"
+	a2aExperimentalKey contextKey = "a2aExperimentalEnabled"
+	a2aExperimentalSet contextKey = "a2aExperimentalSet"
+	toolEventStreamKey contextKey = "toolEventStream"
 )
 
 func WithQueryContext(ctx context.Context, queryID, sessionID, queryName string) context.Context {
@@ -106,4 +111,69 @@ func GetA2AContextID(ctx context.Context) string {
 		}
 	}
 	return ""
+}
+
+func WithA2APayloadMode(ctx context.Context, payloadMode string) context.Context {
+	if payloadMode == "" {
+		return ctx
+	}
+	ctx = context.WithValue(ctx, a2aPayloadModeKey, payloadMode)
+	return context.WithValue(ctx, a2aPayloadSetKey, true)
+}
+
+func GetA2APayloadModeFromContext(ctx context.Context) string {
+	if val := ctx.Value(a2aPayloadModeKey); val != nil {
+		if payloadMode, ok := val.(string); ok {
+			return payloadMode
+		}
+	}
+	return A2APayloadModeCompat
+}
+
+func HasA2APayloadModeInContext(ctx context.Context) bool {
+	if val := ctx.Value(a2aPayloadSetKey); val != nil {
+		if hasValue, ok := val.(bool); ok {
+			return hasValue
+		}
+	}
+	return false
+}
+
+func WithA2AExperimentalEnabled(ctx context.Context, enabled bool) context.Context {
+	ctx = context.WithValue(ctx, a2aExperimentalKey, enabled)
+	return context.WithValue(ctx, a2aExperimentalSet, true)
+}
+
+func IsA2AExperimentalEnabledInContext(ctx context.Context) bool {
+	if val := ctx.Value(a2aExperimentalKey); val != nil {
+		if enabled, ok := val.(bool); ok {
+			return enabled
+		}
+	}
+	return false
+}
+
+func HasA2AExperimentalEnabledInContext(ctx context.Context) bool {
+	if val := ctx.Value(a2aExperimentalSet); val != nil {
+		if hasValue, ok := val.(bool); ok {
+			return hasValue
+		}
+	}
+	return false
+}
+
+func WithToolEventStream(ctx context.Context, eventStream EventStreamInterface) context.Context {
+	if eventStream == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, toolEventStreamKey, eventStream)
+}
+
+func GetToolEventStream(ctx context.Context) EventStreamInterface {
+	if val := ctx.Value(toolEventStreamKey); val != nil {
+		if eventStream, ok := val.(EventStreamInterface); ok {
+			return eventStream
+		}
+	}
+	return nil
 }

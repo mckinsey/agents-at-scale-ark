@@ -3,6 +3,8 @@ title: Ark API
 description: REST API service for managing ARK resources with integrated A2A Gateway
 ---
 
+import { Callout } from 'nextra/components'
+
 # Ark API
 
 REST API service for managing ARK resources. Provides native ARK endpoints, OpenAI-compatible endpoints, and includes the A2A Gateway for agent-to-agent communication.
@@ -68,21 +70,25 @@ See [ARK APIs Reference](/reference/ark-apis) and [Resources API](/reference/res
 
 ### A2A Gateway
 
-The A2A Gateway exposes ARK agents via the [A2A Protocol](https://github.com/a2a-integration/a2a-spec) for standardized agent-to-agent communication. All ARK agents in Kubernetes are automatically discovered and exposed.
+The A2A Gateway exposes ARK agents via the [A2A Protocol](https://github.com/a2aproject/A2A) for standardized agent-to-agent communication. All ARK agents in Kubernetes are automatically discovered and exposed. Streaming is supported by default when a broker is available.
 
 **Endpoints:**
-- `GET /agents` - List all available agents
-- `GET /agent/{agent-name}/.well-known/agent-card.json` - Get agent card
-- `GET /agent/{agent-name}/*` - Dynamic A2A protocol routes
+- `GET /a2a/agents` - List all available agents
+- `GET /a2a/agent/{agent-name}/.well-known/agent-card.json` - Get agent card
+- `POST /a2a/agent/{agent-name}/` - A2A JSON-RPC routes (`message/send`, `message/stream`)
 
 **Example:**
 ```bash
 # List agents
-curl http://localhost:8000/agents
+curl http://localhost:8000/a2a/agents
 
 # Get agent card
-curl http://localhost:8000/agent/<agent-name>/.well-known/agent.json
+curl http://localhost:8000/a2a/agent/<agent-name>/.well-known/agent-card.json
 ```
+
+<Callout type="warning">
+**Experimental.** An opt-in internal A2A transport mode replaces the default OpenAI wire format with native A2A messages. Enable it by setting `ark.mckinsey.com/a2a-experimental-enabled: "true"` on agent, team, or query resources. This feature is subject to change or withdrawal. See the [A2A Native Execution reference](/reference/a2a-native-execution) for full details.
+</Callout>
 
 ### Service Proxy
 

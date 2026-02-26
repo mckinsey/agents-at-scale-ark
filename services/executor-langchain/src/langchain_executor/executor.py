@@ -47,8 +47,10 @@ class LangChainExecutor(BaseExecutor):
             else:
                 logger.info(f"Standard LangChain execution (no RAG) for agent: {request.agent.name}")
 
-            # Convert message history to LangChain format
             langchain_messages = []
+            if request.userInput is None:
+                raise ValueError("userInput is required for compat execution")
+            user_content = request.userInput.content
             for msg in request.history:
                 if msg.role == "user":
                     langchain_messages.append(HumanMessage(content=msg.content))
@@ -57,13 +59,9 @@ class LangChainExecutor(BaseExecutor):
                 elif msg.role == "system":
                     langchain_messages.insert(0, SystemMessage(content=msg.content))
 
-            # Add current user message
             if use_rag and rag_context:
-                # For RAG, include context in the user message
                 rag_instruction = "Use this code context to answer the user's question accurately!"
-                user_content = f"🔥 RELEVANT CODE CONTEXT:\n\n{rag_context}\n\n{rag_instruction}\n\nUser: {request.userInput.content}"
-            else:
-                user_content = request.userInput.content
+                user_content = f"🔥 RELEVANT CODE CONTEXT:\n\n{rag_context}\n\n{rag_instruction}\n\nUser: {user_content}"
 
             langchain_messages.append(HumanMessage(content=user_content))
 

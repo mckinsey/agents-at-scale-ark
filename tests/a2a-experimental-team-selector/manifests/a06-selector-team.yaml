@@ -1,0 +1,29 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: selector-team
+spec:
+  strategy: selector
+  description: AI team with intelligent participant selection for testing
+  maxTurns: 6
+  members:
+    - name: researcher
+      type: agent
+    - name: analyst
+      type: agent
+  selector:
+    agent: coordinator
+    selectorPrompt: |
+      You are coordinating a team for testing selector functionality. Select the most appropriate team member
+      to respond next based on the conversation flow and expertise needed.
+
+      Available roles:
+      {{.Roles}}
+
+      Conversation history:
+      {{.History}}
+
+      Choose from: {{.Participants}}
+
+      Start with researcher, then analyst, then coordinator. Avoid selecting the same participant twice in a row.
+      Return only the exact name of the selected participant.

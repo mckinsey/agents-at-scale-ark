@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: a2a-memory-first
+  annotations:
+    ark.mckinsey.com/a2a-experimental-enabled: "true"
+spec:
+  input: "First message to establish context"
+  target:
+    type: agent
+    name: message-counter-agent

@@ -2,11 +2,13 @@ package genai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/common"
@@ -148,31 +150,95 @@ func GetQueryInputMessages(ctx context.Context, query arkv1alpha1.Query, k8sClie
 		queryType = RoleUser // default type
 	}
 
-	if queryType == RoleUser {
-		// For 'user' type (default), get input string using helper method
-		inputString, err := query.Spec.GetInputString()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get input string: %w", err)
-		}
-
-		// Resolve input with template parameters and create a single user message
-		resolvedInput, err := ResolveQueryInput(ctx, k8sClient, query.Namespace, inputString, query.Spec.Parameters)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve query input: %w", err)
-		}
-		return []Message{NewUserMessage(resolvedInput)}, nil
-	} else {
+	if queryType != RoleUser {
 		openaiMessages, err := query.Spec.GetInputMessages()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get input messages: %w", err)
 		}
 
-		messages := make([]Message, len(openaiMessages))
-		for i := range openaiMessages {
-			messages[i] = Message(openaiMessages[i])
+		messages := make([]Message, 0, len(openaiMessages))
+		messages = append(messages, openaiMessages...)
+		return messages, nil
+	}
+
+	inputString, err := query.Spec.GetInputString()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get input string: %w", err)
+	}
+
+	resolvedInput, err := ResolveQueryInput(ctx, k8sClient, query.Namespace, inputString, query.Spec.Parameters)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve query input: %w", err)
+	}
+	return []Message{NewUserMessage(resolvedInput)}, nil
+}
+
+// GetQueryInputA2AMessages returns A2A-native input messages for experimental execution.
+func GetQueryInputA2AMessages(ctx context.Context, query arkv1alpha1.Query, k8sClient client.Client) ([]protocol.Message, error) {
+	queryType := query.Spec.Type
+	if queryType == "" {
+		queryType = RoleUser
+	}
+
+	if queryType != RoleUser {
+		openAIMessages, openAIParseErr := query.Spec.GetInputMessages()
+		if openAIParseErr == nil {
+			messages, convErr := convertOpenAIInputToA2AMessages(openAIMessages)
+			if convErr == nil {
+				return messages, nil
+			}
+			openAIParseErr = fmt.Errorf("failed to convert OpenAI messages to A2A: %w", convErr)
+		}
+
+		var messages []protocol.Message
+		if err := json.Unmarshal(query.Spec.Input.Raw, &messages); err != nil {
+			return nil, fmt.Errorf("failed to parse input messages as OpenAI (%v) or A2A (%w)", openAIParseErr, err)
+		}
+		if err := validateA2AInputMessages(messages); err != nil {
+			return nil, fmt.Errorf("failed to parse input messages as OpenAI (%v) or valid A2A (%w)", openAIParseErr, err)
 		}
 		return messages, nil
 	}
+
+	inputString, err := query.Spec.GetInputString()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get input string: %w", err)
+	}
+
+	resolvedInput, err := ResolveQueryInput(ctx, k8sClient, query.Namespace, inputString, query.Spec.Parameters)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve query input: %w", err)
+	}
+
+	return []protocol.Message{
+		protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+			protocol.NewTextPart(resolvedInput),
+		}),
+	}, nil
+}
+
+func convertOpenAIInputToA2AMessages(messages []Message) ([]protocol.Message, error) {
+	converted := make([]protocol.Message, 0, len(messages))
+	for i := range messages {
+		msg, err := OpenAIToA2AMessage(messages[i])
+		if err != nil {
+			return nil, fmt.Errorf("message %d: %w", i, err)
+		}
+		converted = append(converted, msg)
+	}
+	return converted, nil
+}
+
+func validateA2AInputMessages(messages []protocol.Message) error {
+	for i := range messages {
+		if messages[i].Role == "" {
+			return fmt.Errorf("message %d missing role", i)
+		}
+		if len(messages[i].Parts) == 0 {
+			return fmt.Errorf("message %d missing parts", i)
+		}
+	}
+	return nil
 }
 
 // toAnyMap converts map[string]string to map[string]any

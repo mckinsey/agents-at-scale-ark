@@ -168,6 +168,25 @@ AUTH_MODE=open
 
 For detailed usage examples including API key authentication, JWT authentication, and code examples in multiple languages, see the [Authentication Guide](../../docs/content/developer-guide/authentication.mdx).
 
+## A2A Gateway
+
+The ARK API includes an A2A Gateway that exposes all ARK agents via the [A2A protocol](https://github.com/a2aproject/A2A) with streaming support. Agents are automatically discovered from Kubernetes and exposed as A2A-compatible endpoints.
+
+**Key endpoints:**
+- `GET /a2a/agents` - List available agents
+- `GET /a2a/agent/{agent-name}/.well-known/agent-card.json` - Get agent card
+- `POST /a2a/agent/{agent-name}/` - A2A JSON-RPC (message/send, message/stream)
+
+Streaming is supported by default when a broker is available.
+
+The gateway also supports an experimental A2A-native controller execution mode via `ark.mckinsey.com/a2a-experimental-enabled: "true"`. In that mode, Ark keeps A2A message types end-to-end for agent/team execution and routes by executor capability:
+- model-backed agents with no execution engine run a native-local A2A loop with OpenAI conversion only at the model provider boundary
+- reserved `a2a` engine for native A2A servers
+- known native external engine types (currently `a2a-langchain`, served at `/execute-a2a`)
+- known OpenAI-compatible executors (`langchain`, served at `/execute`) through a boundary compat wrapper
+
+Unknown execution engine types fail fast in experimental mode. All A2A stream writes are strict: failures propagate as errors and halt execution. See the [RFC: Experimental A2A transport](https://mckinsey.github.io/agents-at-scale-ark/reference/a2a-experimental-rfc) for details.
+
 ## Notes
 - Requires Python 3.11+ and uv package manager
 - Run commands from repository root directory

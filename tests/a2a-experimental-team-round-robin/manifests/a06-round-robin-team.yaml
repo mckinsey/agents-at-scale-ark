@@ -1,0 +1,13 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: round-robin-brainstorm-team
+spec:
+  strategy: round-robin
+  members:
+    - type: agent
+      name: brainstormer
+    - type: agent
+      name: critic
+    - type: agent
+      name: coordinator

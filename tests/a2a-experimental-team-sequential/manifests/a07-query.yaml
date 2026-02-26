@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: a2a-sequential-team-query
+  annotations:
+    ark.mckinsey.com/a2a-experimental-enabled: "true"
+spec:
+  input: "Analyze the impact of artificial intelligence on modern business operations"
+  target:
+    type: team
+    name: sequential-research-team

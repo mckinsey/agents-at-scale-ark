@@ -111,3 +111,12 @@ executionEngine:
       port: ""
       # Optional: specify path to append to service address
       path: ""
+
+a2aExecutionEngine:
+  enabled: false
+  description: "A2A LangChain Executor - native A2A endpoint for experimental mode"
+  address:
+    serviceRef:
+      namespace: ""
+      port: ""
+      path: "/execute-a2a"

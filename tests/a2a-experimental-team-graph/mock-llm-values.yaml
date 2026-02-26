@@ -1,0 +1,82 @@
+terminationGracePeriodSeconds: 3
+ark:
+  a2a:
+    enabled: true
+  model:
+    enabled: true
+    name: test-model
+    type: completions
+    provider: openai
+    model: gpt-4
+    apiKey: mock-api-key
+
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "gpt-4",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            },
+            {
+              "id": "gpt-4o-mini",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            },
+            {
+              "id": "gpt-4.1",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            },
+            {
+              "id": "gpt-5",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            }
+          ]
+        }
+
+  # Catch-all - matches everything but gets overridden by more specific rules.
+  - path: "/v1/chat/completions"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}]}'
+
+  # Researcher Agent - first node in graph
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'research specialist')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"RESEARCH: Found 5 relevant case studies on renewable energy. Solar adoption up 45%, wind up 38%, hydro stable."},"finish_reason":"stop"}]}'
+
+  # Analyzer Agent - second node in graph
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'data analyst')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"ANALYSIS: Solar shows highest growth trajectory. Wind has best cost efficiency. Hydro provides stable baseload."},"finish_reason":"stop"}]}'
+
+  # Reviewer Agent - third node in graph
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'quality reviewer')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"REVIEW: Analysis is accurate and comprehensive. Data sources verified. Recommendations are sound."},"finish_reason":"stop"}]}'
+
+  # Writer Agent - final node in graph
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'technical writer')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"REPORT: Renewable Energy Trends Summary\n\n1. Solar energy leads growth at 45%\n2. Wind offers best cost efficiency\n3. Hydro provides reliable baseload\n\nRecommendation: Diversified portfolio approach combining all three sources for optimal reliability and cost."},"finish_reason":"stop"}]}'

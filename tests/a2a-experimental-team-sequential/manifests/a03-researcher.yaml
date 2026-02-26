@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: researcher
+spec:
+  prompt: |
+    You are a Researcher Agent. Gather information and provide facts.
+    Start your response with "RESEARCH:" to identify your contribution.
+  modelRef:
+    name: test-model

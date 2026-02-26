@@ -1,0 +1,279 @@
+# Example: Agent calling other agents as tools
+# This demonstrates both legacy and A2A-native agent-as-tool patterns.
+#
+# For full documentation, see:
+# - samples/a2a-experimental/agent-as-tool/README.md
+# - docs/content/reference/a2a-native-execution.mdx
+
+# ==============================================================================
+# PATTERN 1: Legacy String Input
+# ==============================================================================
+# The original pattern - uses simple "input" string for delegation.
+# Compatible with all agents, no special annotations required.
+
+# 1. Worker Agent - Specializes in research
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: research-agent
+  namespace: default
+spec:
+  description: "Specialized research agent that gathers information from various sources"
+  prompt: |
+    You are a research specialist. Your job is to gather comprehensive information
+    about the topics you're asked to research. Be thorough and provide sources
+    when possible.
+---
+# 2. Worker Agent - Specializes in analysis
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: analysis-agent
+  namespace: default
+spec:
+  description: "Specialized analysis agent that processes data and provides insights"
+  prompt: |
+    You are a data analysis specialist. Your job is to take research data or
+    information and provide clear insights, trends, and actionable conclusions.
+    Always structure your analysis clearly.
+---
+# 3. Agent Tool - Legacy pattern with string input only
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: call-research-agent
+spec:
+  type: agent
+  description: "Delegate research tasks to the research specialist"
+  inputSchema:
+    type: object
+    properties:
+      input:
+        type: string
+        description: "The research task to delegate"
+    required: ["input"]
+  agent:
+    name: research-agent
+---
+# 4. Coordinator Agent - Legacy pattern (no A2A annotation)
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: coordinator-agent
+  namespace: default
+spec:
+  description: "Coordinator agent that orchestrates research and analysis workflows"
+  prompt: |
+    You are a smart coordinator that helps users by delegating work to specialist agents.
+
+    Available specialist agents:
+    - call-research-agent(input="...") - for gathering information, web research, and fact-finding
+    - noop(message="...") - no-operation tool for testing
+
+    For complex requests:
+    1. Break down the task
+    2. Use call-research-agent to gather information first
+    3. Use call-analysis-agent to analyze the research results
+    4. Synthesize the results into a comprehensive response
+
+    Always explain your approach and provide a final integrated answer.
+  tools:
+  - type: agent
+    name: call-research-agent
+
+---
+# ==============================================================================
+# PATTERN 2: A2A-Native Message Input (Recommended)
+# ==============================================================================
+# Enhanced pattern using A2A message format for richer communication.
+# Requires ark.mckinsey.com/execution-mode: "a2a" annotation on:
+# - The Tool resource
+# - The target Agent resource
+# - The coordinator Agent resource (or Query)
+# Legacy alternative remains supported: ark.mckinsey.com/a2a-experimental-enabled: "true"
+
+# 5. A2A-enabled Research Agent
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: research-agent-a2a
+  namespace: default
+  annotations:
+    ark.mckinsey.com/execution-mode: "a2a"
+spec:
+  description: "A2A-enabled research agent with rich message support"
+  prompt: |
+    You are a research specialist with A2A native mode enabled.
+
+    You can receive:
+    - Structured messages with multiple content parts
+    - Conversation history for context
+    - Context IDs for stateful conversations
+
+    Your job is to gather comprehensive information about the topics you're asked
+    to research. Be thorough and provide sources when possible.
+---
+# 6. A2A-enabled Analysis Agent
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: analysis-agent-a2a
+  namespace: default
+  annotations:
+    ark.mckinsey.com/execution-mode: "a2a"
+spec:
+  description: "A2A-enabled analysis agent with rich message support"
+  prompt: |
+    You are a data analysis specialist with A2A native mode enabled.
+
+    You can receive:
+    - Structured messages with multiple content parts
+    - Conversation history for context
+    - Context IDs for stateful conversations
+
+    Your job is to take research data or information and provide clear insights,
+    trends, and actionable conclusions. Always structure your analysis clearly.
+---
+# 7. A2A-Native Agent Tool - Full inputSchema
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: call-research-agent-a2a
+  annotations:
+    ark.mckinsey.com/execution-mode: "a2a"
+spec:
+  type: agent
+  description: "Delegate research tasks with rich A2A messages, history, and context"
+  inputSchema:
+    type: object
+    properties:
+      message:
+        type: object
+        description: "A2A message with parts array"
+        properties:
+          role:
+            type: string
+            enum: ["user"]
+            default: "user"
+          parts:
+            type: array
+            description: "Message content parts (text, file, or data)"
+            items:
+              type: object
+              properties:
+                kind:
+                  type: string
+                  enum: ["text", "file", "data"]
+                text:
+                  type: string
+                  description: "Text content (when kind='text')"
+      history:
+        type: array
+        description: "Previous messages for conversation context"
+      contextId:
+        type: string
+        description: "Context ID for stateful multi-turn conversations"
+      input:
+        type: string
+        description: "Simple text input (fallback - prefer 'message')"
+  agent:
+    name: research-agent-a2a
+---
+# 8. A2A-Native Analysis Tool
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: call-analysis-agent-a2a
+  annotations:
+    ark.mckinsey.com/execution-mode: "a2a"
+spec:
+  type: agent
+  description: "Delegate analysis tasks with rich A2A messages, history, and context"
+  inputSchema:
+    type: object
+    properties:
+      message:
+        type: object
+        description: "A2A message with parts array"
+        properties:
+          role:
+            type: string
+            enum: ["user"]
+            default: "user"
+          parts:
+            type: array
+            description: "Message content parts (text, file, or data)"
+            items:
+              type: object
+              properties:
+                kind:
+                  type: string
+                  enum: ["text", "file", "data"]
+                text:
+                  type: string
+                  description: "Text content (when kind='text')"
+      history:
+        type: array
+        description: "Previous messages for conversation context"
+      contextId:
+        type: string
+        description: "Context ID for stateful multi-turn conversations"
+      input:
+        type: string
+        description: "Simple text input (fallback - prefer 'message')"
+  agent:
+    name: analysis-agent-a2a
+---
+# 9. A2A-Native Coordinator Agent
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: coordinator-agent-a2a
+  namespace: default
+  annotations:
+    ark.mckinsey.com/execution-mode: "a2a"
+spec:
+  description: "A2A-enabled coordinator that orchestrates research and analysis workflows"
+  prompt: |
+    You are a smart coordinator with A2A native mode enabled.
+    You delegate work to specialist agents using rich message formats.
+
+    Available specialist agents and how to call them:
+
+    1. SIMPLE STRING (fallback):
+       call-research-agent-a2a(input="research topic here")
+       call-analysis-agent-a2a(input="data to analyze")
+
+    2. A2A MESSAGE (recommended for rich context):
+       call-research-agent-a2a(message={
+         "role": "user",
+         "parts": [{"kind": "text", "text": "research topic here"}]
+       })
+
+    3. WITH CONVERSATION HISTORY:
+       call-research-agent-a2a(
+         message={"role": "user", "parts": [{"kind": "text", "text": "follow-up question"}]},
+         history=[
+           {"role": "user", "parts": [{"kind": "text", "text": "initial question"}]},
+           {"role": "assistant", "parts": [{"kind": "text", "text": "initial answer"}]}
+         ]
+       )
+
+    4. WITH CONTEXT ID (for stateful conversations):
+       call-research-agent-a2a(
+         message={"role": "user", "parts": [{"kind": "text", "text": "question"}]},
+         contextId="session-123"
+       )
+
+    For complex requests:
+    1. Break down the task
+    2. Use call-research-agent-a2a to gather information (with history for context)
+    3. Use call-analysis-agent-a2a to analyze results (pass research as history)
+    4. Synthesize the results into a comprehensive response
+
+    Always explain your approach and provide a final integrated answer.
+  tools:
+  - type: agent
+    name: call-research-agent-a2a
+  - type: agent
+    name: call-analysis-agent-a2a

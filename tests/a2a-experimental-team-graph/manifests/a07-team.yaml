@@ -1,0 +1,24 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: graph-team
+spec:
+  strategy: graph
+  maxTurns: 10
+  members:
+    - type: agent
+      name: researcher
+    - type: agent
+      name: analyzer
+    - type: agent
+      name: reviewer
+    - type: agent
+      name: writer
+  graph:
+    edges:
+      - from: researcher
+        to: analyzer
+      - from: analyzer
+        to: reviewer
+      - from: reviewer
+        to: writer
