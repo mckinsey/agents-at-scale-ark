@@ -1,10 +1,12 @@
 FROM node:25.4.0-alpine AS builder
 
 WORKDIR /workspace
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json ./
 RUN npm ci
 
-COPY . .
+COPY src ./src
+COPY proto ./proto
+COPY tsconfig.json ./
 RUN npm run build
 
 FROM node:25.4.0-alpine AS runner
@@ -15,14 +17,15 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nodejs
 
 # Copy package files and install only production dependencies
-COPY --chown=nodejs:nodejs package.json package-lock.json* ./
+COPY --chown=root:root --chmod=755 package.json ./
+COPY --chown=root:root --chmod=755 package-lock.json ./
 RUN npm ci --only=production && npm cache clean --force
 
 # Copy built application
-COPY --from=builder --chown=nodejs:nodejs /workspace/dist ./dist
+COPY --from=builder --chown=root:root --chmod=755 /workspace/dist ./dist
 
 # Copy proto definitions needed for OTLP trace parsing
-COPY --from=builder --chown=nodejs:nodejs /workspace/proto ./proto
+COPY --from=builder --chown=root:root --chmod=755 /workspace/proto ./proto
 
 USER nodejs
 
