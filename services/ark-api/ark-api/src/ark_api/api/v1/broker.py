@@ -1,4 +1,5 @@
 """Broker API endpoints for real-time streaming of traces, messages, and chunks."""
+import base64
 import json
 import logging
 import os
@@ -16,6 +17,14 @@ from ...utils.memory_client import get_memory_service_address, get_all_memory_re
 
 VALID_RESOURCE_NAME = re.compile(r'^[a-z0-9]([a-z0-9\-\.]{0,251}[a-z0-9])?$')
 VALID_ID_PATTERN = re.compile(r'^[a-zA-Z0-9\-_\.]{1,256}$')
+SAFE_LOG_PATTERN = re.compile(r'^[a-zA-Z0-9\-_\./:?=&%]+$')
+
+
+def sanitize_for_log(data: str) -> str:
+    """Sanitize data for safe logging to prevent log injection attacks."""
+    if SAFE_LOG_PATTERN.match(data):
+        return data
+    return f"base64:{base64.b64encode(data.encode('utf-8')).decode('ascii')}"
 
 
 def validate_resource_name(name: str, param_name: str) -> str:
@@ -59,11 +68,11 @@ async def get_broker_url(memory_name: str) -> Optional[str]:
             validated_memory_name = validate_resource_name(memory_name, "memory")
             memory_dicts = await get_all_memory_resources(client, validated_memory_name)
             if not memory_dicts:
-                logger.warning(f"No memory resource found with name: {validated_memory_name}")
+                logger.warning("No memory resource found with name: %s", sanitize_for_log(validated_memory_name))
                 return None
             return get_memory_service_address(memory_dicts[0])
     except Exception as e:
-        logger.error(f"Failed to get memory service address: {e}")
+        logger.error("Failed to get memory service address: %s", sanitize_for_log(str(e)))
         return None
 
 
@@ -96,10 +105,10 @@ async def proxy_sse_stream(url: str):
                     if line.strip():
                         yield line + "\n\n"
     except httpx.ConnectError as e:
-        logger.error(f"Failed to connect to broker at {url}: {e}")
+        logger.error("Failed to connect to broker at %s: %s", sanitize_for_log(url), sanitize_for_log(str(e)))
         yield f"data: {json.dumps({'error': {'message': 'Failed to connect to broker service', 'type': 'connection_error'}})}\n\n"
     except Exception as e:
-        logger.error(f"Error proxying SSE stream: {e}")
+        logger.error("Error proxying SSE stream: %s", sanitize_for_log(str(e)))
         yield f"data: {json.dumps({'error': {'message': str(e), 'type': 'server_error'}})}\n\n"
 
 
@@ -124,7 +133,7 @@ async def proxy_broker_request(
         url = f"{broker_url}{path}"
         if query_params:
             url += f"?{urlencode(query_params)}"
-        logger.info(f"Proxying SSE stream from {url}")
+        logger.info("Proxying SSE stream from %s", sanitize_for_log(url))
         return StreamingResponse(
             proxy_sse_stream(url),
             media_type="text/event-stream",
@@ -139,13 +148,13 @@ async def proxy_broker_request(
             response = await client.get(url)
             return JSONResponse(content=response.json(), status_code=response.status_code)
     except httpx.ConnectError as e:
-        logger.error(f"Failed to connect to broker: {e}")
+        logger.error("Failed to connect to broker: %s", sanitize_for_log(str(e)))
         return JSONResponse(
             content={"error": {"message": "Failed to connect to broker service", "type": "connection_error"}},
             status_code=503,
         )
     except Exception as e:
-        logger.error(f"Error fetching from broker: {e}")
+        logger.error("Error fetching from broker: %s", sanitize_for_log(str(e)))
         return JSONResponse(
             content={"error": {"message": str(e), "type": "server_error"}},
             status_code=500,
@@ -257,7 +266,7 @@ async def get_chunks(
                 status_code=503,
             )
         url = f"{broker_url}/stream/{validated_query_id}?from-beginning=true"
-        logger.info(f"Proxying chunks SSE stream from {url}")
+        logger.info("Proxying chunks SSE stream from %s", sanitize_for_log(url))
         return StreamingResponse(
             proxy_sse_stream(url),
             media_type="text/event-stream",
@@ -283,13 +292,13 @@ async def proxy_broker_delete(memory: str, path: str):
             response = await client.delete(f"{broker_url}{path}")
             return JSONResponse(content=response.json(), status_code=response.status_code)
     except httpx.ConnectError as e:
-        logger.error(f"Failed to connect to broker: {e}")
+        logger.error("Failed to connect to broker: %s", sanitize_for_log(str(e)))
         return JSONResponse(
             content={"error": {"message": "Failed to connect to broker service", "type": "connection_error"}},
             status_code=503,
         )
     except Exception as e:
-        logger.error(f"Error in DELETE request: {e}")
+        logger.error("Error in DELETE request: %s", sanitize_for_log(str(e)))
         return JSONResponse(
             content={"error": {"message": str(e), "type": "server_error"}},
             status_code=500,

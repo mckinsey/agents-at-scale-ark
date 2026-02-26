@@ -715,3 +715,38 @@ class TestValidationFunctions(unittest.TestCase):
 
         result = validate_id(None, "session_id")
         self.assertIsNone(result)
+
+
+class TestSanitizeForLog(unittest.TestCase):
+
+    def test_sanitize_for_log_safe_string(self):
+        from ark_api.api.v1.broker import sanitize_for_log
+
+        result = sanitize_for_log("http://broker:8080/traces?limit=100")
+        self.assertEqual(result, "http://broker:8080/traces?limit=100")
+
+    def test_sanitize_for_log_alphanumeric(self):
+        from ark_api.api.v1.broker import sanitize_for_log
+
+        result = sanitize_for_log("valid-name_123.test")
+        self.assertEqual(result, "valid-name_123.test")
+
+    def test_sanitize_for_log_newline_injection(self):
+        from ark_api.api.v1.broker import sanitize_for_log
+
+        result = sanitize_for_log("malicious\nFake log entry")
+        self.assertTrue(result.startswith("base64:"))
+        self.assertNotIn("\n", result)
+
+    def test_sanitize_for_log_carriage_return(self):
+        from ark_api.api.v1.broker import sanitize_for_log
+
+        result = sanitize_for_log("malicious\rFake log entry")
+        self.assertTrue(result.startswith("base64:"))
+        self.assertNotIn("\r", result)
+
+    def test_sanitize_for_log_special_chars(self):
+        from ark_api.api.v1.broker import sanitize_for_log
+
+        result = sanitize_for_log("data with <script>alert('xss')</script>")
+        self.assertTrue(result.startswith("base64:"))
