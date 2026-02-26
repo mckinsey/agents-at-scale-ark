@@ -1,0 +1,26 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: executor-langchain-sample-agent
+spec:
+  prompt: |
+    You are a helpful AI assistant powered by LangChain. 
+    You can help with various tasks including answering questions, 
+    providing explanations, and having conversations.
+    Be friendly and informative in your responses.
+  description: "Sample agent demonstrating LangChain executor usage"
+  executionEngine:
+    name: executor-langchain
+  modelRef:
+    name: default
+  tools: []
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-executor-langchain-agent
+spec:
+  input: "Hello! Can you tell me what execution engine you're using and how you work?"
+  targets:
+    - type: agent
+      name: executor-langchain-sample-agent

@@ -1,7 +1,10 @@
 import asyncio
+import contextlib
 import logging
 import os
 from datetime import UTC, datetime
+from typing import Any
+from uuid import uuid4
 
 from a2a.server.agent_execution import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
@@ -9,7 +12,8 @@ from a2a.server.events.event_queue import EventQueue
 from a2a.types import TaskState, TaskStatus, TaskStatusUpdateEvent
 from a2a.utils import new_agent_text_message
 
-from .query import post_query_and_wait
+from .message_conversion import build_query_payload, normalize_a2a_wire_version
+from .query import QueryExecutionResult, post_query_and_wait
 
 logger = logging.getLogger(__name__)
 
@@ -22,180 +26,176 @@ class ARKAgentExecutor(AgentExecutor):
         self.namespace = namespace
         self.timeout = timeout if timeout is not None else DEFAULT_TIMEOUT
         self.tasks_lock = asyncio.Lock()
-        self.active_coroutines = {}  # task_id -> coroutine mapping
+        self.active_tasks: dict[str, asyncio.Task] = {}
 
-    def _extract_message_text(self, message) -> str:
-        """Extract text content from a message object.
-        
-        Args:
-            message: The message object containing parts
-            
-        Returns:
-            The extracted text or "No message" if not found
-        """
-        if not message or not hasattr(message, 'parts'):
-            return "No message"
-            
-        for part in message.parts:
-            # Check if it's a Part wrapper object
-            if hasattr(part, 'root'):
-                part_root = part.root
-                if hasattr(part_root, 'kind') and part_root.kind == 'text' and hasattr(part_root, 'text'):
-                    return part_root.text
-            # Or if it's directly a text part
-            elif hasattr(part, 'kind') and part.kind == 'text' and hasattr(part, 'text'):
-                return part.text
-                
-        return "No message"
-    
-    def _create_status_event(self, context_id: str, task_id: str, state: TaskState, 
-                           final: bool = False, error_msg: str = None) -> TaskStatusUpdateEvent:
-        """Create a task status update event.
-        
-        Args:
-            context_id: The context ID
-            task_id: The task ID
-            state: The task state
-            final: Whether this is the final status
-            error_msg: Optional error message for failed states
-            
-        Returns:
-            A TaskStatusUpdateEvent
-        """
+    def _resolve_task_id(self, task_id: object) -> str:
+        if isinstance(task_id, str) and task_id.strip():
+            return task_id.strip()
+        return f"task-{uuid4()}"
+
+    def _resolve_context_id(self, context_id: object) -> str:
+        if isinstance(context_id, str) and context_id.strip():
+            return context_id.strip()
+        return str(uuid4())
+
+    def _extract_request_task_id(self, context: RequestContext) -> object:
+        return getattr(context, "task_id", None) or getattr(context, "taskId", None)
+
+    def _extract_request_context_id(self, context: RequestContext) -> object:
+        return (
+            getattr(context, "context_id", None)
+            or getattr(context, "contextId", None)
+            or getattr(context, "session_id", None)
+            or getattr(context, "sessionId", None)
+        )
+
+    def _resolve_wire_version(self, context: RequestContext) -> str:
+        raw_version = (
+            getattr(context, "a2a_version", None)
+            or getattr(context, "a2aVersion", None)
+            or getattr(context, "protocol_version", None)
+            or getattr(context, "protocolVersion", None)
+        )
+        return normalize_a2a_wire_version(raw_version if isinstance(raw_version, str) else None)
+
+    def _create_status_event(
+        self,
+        context_id: str,
+        task_id: str,
+        state: TaskState,
+        final: bool = False,
+        error_msg: str | None = None,
+    ) -> TaskStatusUpdateEvent:
         status = TaskStatus(
             state=state,
             timestamp=datetime.now(UTC).isoformat()
         )
-        
+
         if error_msg and state == TaskState.failed:
             status.message = new_agent_text_message(f"Task failed: {error_msg}")
-            
+
         return TaskStatusUpdateEvent(
-            contextId=context_id or "default",
-            taskId=task_id or "unknown",
+            contextId=context_id,
+            taskId=task_id,
             status=status,
             final=final
         )
-    
-    async def _send_task_update(self, event_queue: EventQueue, context_id: str, 
-                               task_id: str, state: TaskState, final: bool = False):
-        """Send a task status update to the event queue.
-        
-        Args:
-            event_queue: The event queue
-            context_id: The context ID
-            task_id: The task ID
-            state: The task state
-            final: Whether this is the final status
-        """
+
+    async def _send_task_update(
+        self,
+        event_queue: EventQueue,
+        context_id: str,
+        task_id: str,
+        state: TaskState,
+        final: bool = False,
+    ):
         status_event = self._create_status_event(context_id, task_id, state, final)
         await event_queue.enqueue_event(status_event)
-    
-    async def _process_query(self, user_message: str) -> str:
-        """Process the query and return the result.
-        
-        Args:
-            user_message: The user's query message
-            
-        Returns:
-            The query result
-        """
-        return await post_query_and_wait(self.namespace, 'agent', self.target_name, user_message, timeout=self.timeout)
-    
+
+    async def _process_query(
+        self,
+        query_input: str | list[dict[str, Any]],
+        query_type: str,
+        context_id: str | None,
+    ) -> QueryExecutionResult:
+        return await post_query_and_wait(
+            self.namespace,
+            'agent',
+            self.target_name,
+            query_input,
+            query_type=query_type,
+            timeout=self.timeout,
+            context_id=context_id,
+        )
+
     async def execute(
             self, context: RequestContext, event_queue: EventQueue
     ) -> None:
-        """Execute the agent's logic for a given request context.
+        task_id = self._resolve_task_id(self._extract_request_task_id(context))
+        context_id = self._resolve_context_id(self._extract_request_context_id(context))
 
-        Args:
-            context: The request context containing the message, task ID, etc.
-            event_queue: The queue to publish events to.
-        """
-        # Extract IDs from context
-        task_id = getattr(context, 'task_id', None)
-        context_id = getattr(context, 'context_id', None)
-        
         try:
-            # Extract and log the message
-            user_message = self._extract_message_text(context.message)
-            logger.info(f"Task {task_id} Context {context_id} - Processing query: {user_message}")
-            logger.info(f"Task {task_id} - Using timeout: {self.timeout} seconds")
-            
-            # Send starting status
+            wire_version = self._resolve_wire_version(context)
+            query_payload = build_query_payload(
+                context,
+                native_wire_version=wire_version,
+            )
+            logger.info("Task %s Context %s - Processing query: %s", task_id, context_id, query_payload.preview_text)
+            logger.info("Task %s - Using timeout: %s seconds", task_id, self.timeout)
+
             await self._send_task_update(event_queue, context_id, task_id, TaskState.working, final=False)
 
             try:
-                # Process the query with timeout
-                result_co = self._process_query(user_message)
-                
-                # Store the coroutine for potential cancellation
+                result_task = asyncio.create_task(
+                    self._process_query(
+                        query_payload.input_data,
+                        query_payload.query_type,
+                        context_id,
+                    )
+                )
+
                 async with self.tasks_lock:
-                    self.active_coroutines[task_id] = result_co
-                
+                    self.active_tasks[task_id] = result_task
+
                 try:
-                    # Wait up to configured timeout for result
-                    result = await asyncio.wait_for(result_co, timeout=self.timeout)
-                    
-                    # Send the result
-                    result_msg = new_agent_text_message(result, context_id=context_id, task_id=task_id)
+                    result = await asyncio.wait_for(asyncio.shield(result_task), timeout=self.timeout)
+
+                    response_context_id = result.context_id or context_id
+                    result_msg = new_agent_text_message(
+                        result.content,
+                        context_id=response_context_id,
+                        task_id=task_id,
+                    )
                     await event_queue.enqueue_event(result_msg)
 
-                    # Send completion status
-                    await self._send_task_update(event_queue, context_id, task_id, TaskState.completed, final=True)
+                    await self._send_task_update(event_queue, response_context_id, task_id, TaskState.completed, final=True)
 
-                    logger.info(f"Task {task_id} - Query completed successfully")
-                    
+                    logger.info("Task %s - Query completed successfully", task_id)
+
                 except TimeoutError:
-                    logger.error(f"Task {task_id} - Query timed out after {self.timeout} seconds")
-                    
-                    # Cancel the coroutine if still running
-                    if isinstance(result_co, asyncio.Task):
-                        result_co.cancel()
-                    
-                    # Send timeout error
+                    logger.error("Task %s - Query timed out after %s seconds", task_id, self.timeout)
+
+                    if not result_task.done():
+                        result_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError, Exception):
+                        await result_task
+
                     timeout_msg = new_agent_text_message(
                         f"Query timed out after {self.timeout} seconds",
                         context_id=context_id,
                         task_id=task_id
                     )
                     await event_queue.enqueue_event(timeout_msg)
-                    
-                    # Send failure status
+
                     failure_event = self._create_status_event(
                         context_id, task_id, TaskState.failed,
                         final=True, error_msg=f"Query timeout after {self.timeout}s"
                     )
                     await event_queue.enqueue_event(failure_event)
-                    
+
             finally:
-                # Remove task and coroutine with lock
                 async with self.tasks_lock:
-                    self.active_coroutines.pop(task_id, None)  # Remove coroutine reference
+                    self.active_tasks.pop(task_id, None)
 
         except Exception as e:
             await self._handle_error(e, event_queue, context_id, task_id)
-    
-    async def _handle_error(self, error: Exception, event_queue: EventQueue, 
-                           context_id: str, task_id: str):
-        """Handle errors during query processing.
-        
-        Args:
-            error: The exception that occurred
-            event_queue: The event queue
-            context_id: The context ID
-            task_id: The task ID
-        """
-        logger.error(f"Task {task_id} - Error processing query: {str(error)}")
-        
-        # Send error message
-        error_message = new_agent_text_message(f"Error: {str(error)}", 
-                                             context_id=context_id, 
+
+    async def _handle_error(
+        self,
+        error: Exception,
+        event_queue: EventQueue,
+        context_id: str,
+        task_id: str,
+    ):
+        logger.error("Task %s - Error processing query: %s", task_id, error)
+
+        error_message = new_agent_text_message(f"Error: {error}",
+                                             context_id=context_id,
                                              task_id=task_id)
         await event_queue.enqueue_event(error_message)
-        
-        # Send failure status
+
         failure_event = self._create_status_event(
-            context_id, task_id, TaskState.failed, 
+            context_id, task_id, TaskState.failed,
             final=True, error_msg=str(error)
         )
         await event_queue.enqueue_event(failure_event)
@@ -203,32 +203,30 @@ class ARKAgentExecutor(AgentExecutor):
     async def cancel(
             self, context: RequestContext, event_queue: EventQueue
     ) -> None:
-        """Request the agent to cancel an ongoing task.
+        task_id_raw = self._extract_request_task_id(context)
+        context_id_raw = self._extract_request_context_id(context)
+        task_id = self._resolve_task_id(task_id_raw)
+        context_id = self._resolve_context_id(context_id_raw)
 
-        Args:
-            context: The request context containing the task ID to cancel.
-            event_queue: The queue to publish the cancellation status update to.
-        """
-        task_id = getattr(context, 'task_id', "unknown")
-        context_id = getattr(context, 'context_id', None)
-        
-        # Check if task is active and get coroutine
         async with self.tasks_lock:
-            coroutine = self.active_coroutines.get(task_id)
-            
-        if coroutine:
-            logger.info(f"Cancellation requested for active task {task_id}")
-            
-            # Cancel the coroutine if it exists
-            if coroutine and isinstance(coroutine, asyncio.Task):
-                coroutine.cancel()
-                logger.info(f"Cancelled coroutine for task {task_id}")
-            
-            # Remove from tracking
-            async with self.tasks_lock:
-                self.active_coroutines.pop(task_id, None)
-            
-            # Send cancellation status
+            task = self.active_tasks.pop(task_id, None)
+
+        if task:
+            logger.info("Cancellation requested for active task %s", task_id)
+
+            if not task.done():
+                task.cancel()
+                logger.info("Cancelled task %s", task_id)
+
             await self._send_task_update(event_queue, context_id, task_id, TaskState.canceled, final=True)
         else:
-            logger.warning(f"Cancellation requested for task {task_id}, but task is not active")
+            logger.warning("Cancellation requested for task %s, but task is not active", task_id)
+
+    async def cancel_all_tasks(self) -> None:
+        async with self.tasks_lock:
+            tasks = list(self.active_tasks.values())
+            self.active_tasks.clear()
+
+        for task in tasks:
+            if not task.done():
+                task.cancel()

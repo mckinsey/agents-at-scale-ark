@@ -2,6 +2,7 @@ package genai
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/openai/openai-go"
@@ -11,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
@@ -42,9 +44,8 @@ func TestGetQueryInputMessages(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, messages, 1)
 
-		// Check that it's a user message
-		assert.NotNil(t, messages[0].OfUser)
-		assert.Equal(t, "Hello, how are you?", messages[0].OfUser.Content.OfString.Value)
+		assert.Equal(t, RoleUser, resolveMessageRole(messages[0]))
+		assert.Equal(t, "Hello, how are you?", ExtractTextFromMessage(messages[0]))
 	})
 
 	t.Run("user type with template parameters", func(t *testing.T) {
@@ -95,9 +96,8 @@ func TestGetQueryInputMessages(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, messages, 1)
 
-		// Check that template was resolved
-		assert.NotNil(t, messages[0].OfUser)
-		assert.Equal(t, "What's the weather in Berlin?", messages[0].OfUser.Content.OfString.Value)
+		assert.Equal(t, RoleUser, resolveMessageRole(messages[0]))
+		assert.Equal(t, "What's the weather in Berlin?", ExtractTextFromMessage(messages[0]))
 	})
 
 	t.Run("messages type with multiple messages", func(t *testing.T) {
@@ -126,17 +126,14 @@ func TestGetQueryInputMessages(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, messages, 3)
 
-		// Check first message (user)
-		assert.NotNil(t, messages[0].OfUser)
-		assert.Equal(t, "Hello!", messages[0].OfUser.Content.OfString.Value)
+		assert.Equal(t, RoleUser, resolveMessageRole(messages[0]))
+		assert.Equal(t, "Hello!", ExtractTextFromMessage(messages[0]))
 
-		// Check second message (assistant)
-		assert.NotNil(t, messages[1].OfAssistant)
-		assert.Equal(t, "Hi there! How can I help you?", messages[1].OfAssistant.Content.OfString.Value)
+		assert.Equal(t, RoleAssistant, resolveMessageRole(messages[1]))
+		assert.Equal(t, "Hi there! How can I help you?", ExtractTextFromMessage(messages[1]))
 
-		// Check third message (user)
-		assert.NotNil(t, messages[2].OfUser)
-		assert.Equal(t, "What's the weather like?", messages[2].OfUser.Content.OfString.Value)
+		assert.Equal(t, RoleUser, resolveMessageRole(messages[2]))
+		assert.Equal(t, "What's the weather like?", ExtractTextFromMessage(messages[2]))
 	})
 
 	t.Run("messages type with system message", func(t *testing.T) {
@@ -164,13 +161,12 @@ func TestGetQueryInputMessages(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, messages, 2)
 
-		// Check system message
-		assert.NotNil(t, messages[0].OfSystem)
-		assert.Equal(t, "You are a helpful assistant.", messages[0].OfSystem.Content.OfString.Value)
+		assert.Equal(t, RoleSystem, resolveMessageRole(messages[0]))
+		assert.Equal(t, RoleSystem, resolveMessageRole(messages[0]))
+		assert.Equal(t, "You are a helpful assistant.", ExtractTextFromMessage(messages[0]))
 
-		// Check user message
-		assert.NotNil(t, messages[1].OfUser)
-		assert.Equal(t, "Hello!", messages[1].OfUser.Content.OfString.Value)
+		assert.Equal(t, RoleUser, resolveMessageRole(messages[1]))
+		assert.Equal(t, "Hello!", ExtractTextFromMessage(messages[1]))
 	})
 
 	t.Run("messages type with tool message", func(t *testing.T) {
@@ -196,7 +192,8 @@ func TestGetQueryInputMessages(t *testing.T) {
 		messages, err := GetQueryInputMessages(ctx, query, k8sClient)
 		require.NoError(t, err)
 		require.Len(t, messages, 1)
-		assert.NotNil(t, messages[0].OfTool)
+		assert.Equal(t, RoleTool, resolveMessageRole(messages[0]))
+		assert.Equal(t, RoleTool, resolveMessageRole(messages[0]))
 	})
 
 	t.Run("empty type defaults to user", func(t *testing.T) {
@@ -220,9 +217,8 @@ func TestGetQueryInputMessages(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, messages, 1)
 
-		// Check that it defaults to user type
-		assert.NotNil(t, messages[0].OfUser)
-		assert.Equal(t, "Default behavior test", messages[0].OfUser.Content.OfString.Value)
+		assert.Equal(t, RoleUser, resolveMessageRole(messages[0]))
+		assert.Equal(t, "Default behavior test", ExtractTextFromMessage(messages[0]))
 	})
 
 	t.Run("user type with template resolution error", func(t *testing.T) {
@@ -341,5 +337,140 @@ func BenchmarkGetQueryInputMessages(b *testing.B) {
 				b.Fatal(err)
 			}
 		}
+	})
+}
+
+func TestGetQueryInputA2AMessages(t *testing.T) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, arkv1alpha1.AddToScheme(scheme))
+
+	t.Run("messages type converts OpenAI input into A2A messages", func(t *testing.T) {
+		k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+		assistant := openai.AssistantMessage("let me check")
+		assistant.OfAssistant.ToolCalls = []openai.ChatCompletionMessageToolCallParam{
+			{
+				ID:   "call_123",
+				Type: "function",
+				Function: openai.ChatCompletionMessageToolCallFunctionParam{
+					Name:      "lookup_weather",
+					Arguments: `{"city":"Berlin"}`,
+				},
+			},
+		}
+
+		input := []openai.ChatCompletionMessageParamUnion{
+			openai.UserMessage("hello"),
+			assistant,
+			openai.ToolMessage(`{"temperature":21}`, "call_123"),
+		}
+
+		query := arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-query",
+				Namespace: "test-ns",
+			},
+			Spec: arkv1alpha1.QuerySpec{
+				Type: "messages",
+			},
+		}
+		err := query.Spec.SetInputMessages(input)
+		require.NoError(t, err)
+
+		messages, err := GetQueryInputA2AMessages(ctx, query, k8sClient)
+		require.NoError(t, err)
+		require.Len(t, messages, 3)
+		assert.Equal(t, protocol.MessageRoleUser, messages[0].Role)
+		assert.Equal(t, "hello", ExtractA2ATextFromMessage(messages[0]))
+
+		assert.Equal(t, protocol.MessageRoleAgent, messages[1].Role)
+		assert.Equal(t, "let me check", ExtractA2ATextFromMessage(messages[1]))
+		toolCalls := extractToolCallsFromParts(messages[1].Parts)
+		require.Len(t, toolCalls, 1)
+		assert.Equal(t, "call_123", toolCalls[0].ID)
+		assert.Equal(t, "lookup_weather", toolCalls[0].Function.Name)
+		assert.Equal(t, `{"city":"Berlin"}`, toolCalls[0].Function.Arguments)
+
+		assert.Equal(t, protocol.MessageRoleAgent, messages[2].Role)
+		toolResult, ok := extractToolResultPayloadFromParts(messages[2].Parts)
+		require.True(t, ok)
+		assert.Equal(t, "call_123", toolResult.ToolCallID)
+		assert.Equal(t, `{"temperature":21}`, toolResult.Content)
+	})
+
+	t.Run("messages type uses A2A input directly when valid", func(t *testing.T) {
+		k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+		input := []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{protocol.NewTextPart("hello")}),
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{protocol.NewTextPart("world")}),
+		}
+		raw, err := json.Marshal(input)
+		require.NoError(t, err)
+
+		query := arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-query",
+				Namespace: "test-ns",
+			},
+			Spec: arkv1alpha1.QuerySpec{
+				Type: "messages",
+				Input: runtime.RawExtension{
+					Raw: raw,
+				},
+			},
+		}
+
+		messages, err := GetQueryInputA2AMessages(ctx, query, k8sClient)
+		require.NoError(t, err)
+		require.Len(t, messages, 2)
+		assert.Equal(t, protocol.MessageRoleUser, messages[0].Role)
+		assert.Equal(t, "hello", ExtractA2ATextFromMessage(messages[0]))
+		assert.Equal(t, protocol.MessageRoleAgent, messages[1].Role)
+		assert.Equal(t, "world", ExtractA2ATextFromMessage(messages[1]))
+	})
+
+	t.Run("messages type fails for malformed payloads", func(t *testing.T) {
+		k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+		query := arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-query",
+				Namespace: "test-ns",
+			},
+			Spec: arkv1alpha1.QuerySpec{
+				Type: "messages",
+				Input: runtime.RawExtension{
+					Raw: []byte(`[{"parts":[{"kind":"text","text":"hello"}]}]`),
+				},
+			},
+		}
+
+		_, err := GetQueryInputA2AMessages(ctx, query, k8sClient)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to parse input messages")
+	})
+
+	t.Run("user type resolves text input into a user message", func(t *testing.T) {
+		k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+		query := arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-query",
+				Namespace: "test-ns",
+			},
+			Spec: arkv1alpha1.QuerySpec{
+				Type: "user",
+			},
+		}
+		err := query.Spec.SetInputString("hello from user")
+		require.NoError(t, err)
+
+		messages, err := GetQueryInputA2AMessages(ctx, query, k8sClient)
+		require.NoError(t, err)
+		require.Len(t, messages, 1)
+		assert.Equal(t, protocol.MessageRoleUser, messages[0].Role)
+		assert.Equal(t, "hello from user", ExtractA2ATextFromMessage(messages[0]))
 	})
 }
