@@ -3,6 +3,8 @@ import type {
   MarketplaceItem,
   MarketplaceItemType,
 } from '@/lib/api/generated/marketplace-types';
+import { exportService } from '@/lib/services/export';
+import { exportServiceServer } from '@/lib/services/export-server';
 
 interface GitHubMarketplaceItem {
   name: string;
@@ -222,6 +224,109 @@ export interface MarketplaceSource {
   enabled?: boolean;
 }
 
+/**
+ * Get installed marketplace items by checking cluster resources
+ * Uses the export service to fetch all resources and matches them
+ * against marketplace item naming conventions
+ */
+async function getInstalledMarketplaceItems(): Promise<Set<string>> {
+  try {
+    console.log('Fetching resources from cluster via export service...');
+    console.log('Running in context:', typeof window !== 'undefined' ? 'client-side' : 'server-side');
+
+    // Use appropriate service based on context
+    const isServerSide = typeof window === 'undefined';
+    const service = isServerSide ? exportServiceServer : exportService;
+
+    // Fetch all resources from the cluster
+    const resources = await service.fetchAllResources();
+
+    // Log all found resources for debugging
+    console.log('=== Found Resources in Cluster ===');
+    console.log('Agents:', resources.agents?.length || 0, resources.agents || []);
+    console.log('MCP Servers:', resources.mcpservers?.length || 0, resources.mcpservers || []);
+    console.log('A2A Servers:', resources.a2a?.length || 0, resources.a2a || []);
+    console.log('Workflows:', resources.workflows?.length || 0, resources.workflows || []);
+    console.log('Models:', resources.models?.length || 0, resources.models || []);
+    console.log('Teams:', resources.teams?.length || 0, resources.teams || []);
+    console.log('Queries:', resources.queries?.length || 0, resources.queries || []);
+    console.log('Evaluators:', resources.evaluators?.length || 0, resources.evaluators || []);
+    console.log('Evaluations:', resources.evaluations?.length || 0, resources.evaluations || []);
+    console.log('=================================');
+
+    // Log the raw response object for debugging
+    console.log('Raw resources object:', JSON.stringify(resources, null, 2));
+
+    const installedItems = new Set<string>();
+
+    // Check agents
+    if (resources.agents) {
+      for (const agent of resources.agents) {
+        // Add both the exact name and a normalized version
+        installedItems.add(agent.name.toLowerCase());
+        installedItems.add(generateItemIdFromName(agent.name));
+      }
+    }
+
+    // Check services (MCP servers, A2A servers)
+    if (resources.mcpservers) {
+      for (const server of resources.mcpservers) {
+        installedItems.add(server.name.toLowerCase());
+        installedItems.add(generateItemIdFromName(server.name));
+      }
+    }
+
+    if (resources.a2a) {
+      for (const server of resources.a2a) {
+        installedItems.add(server.name.toLowerCase());
+        installedItems.add(generateItemIdFromName(server.name));
+      }
+    }
+
+    // Check workflows
+    if (resources.workflows) {
+      for (const workflow of resources.workflows) {
+        installedItems.add(workflow.name.toLowerCase());
+        installedItems.add(generateItemIdFromName(workflow.name));
+      }
+    }
+
+    // Check models
+    if (resources.models) {
+      for (const model of resources.models) {
+        installedItems.add(model.name.toLowerCase());
+        installedItems.add(generateItemIdFromName(model.name));
+      }
+    }
+
+    // Check evaluators
+    if (resources.evaluators) {
+      for (const evaluator of resources.evaluators) {
+        installedItems.add(evaluator.name.toLowerCase());
+        installedItems.add(generateItemIdFromName(evaluator.name));
+      }
+    }
+
+    console.log('Found installed marketplace items:', installedItems.size);
+    return installedItems;
+  } catch (error) {
+    console.error('Failed to fetch installed marketplace items:', error);
+    // Return empty set if we can't fetch resources
+    return new Set<string>();
+  }
+}
+
+/**
+ * Generate a consistent item ID from a resource name
+ * This normalizes the name to match marketplace item IDs
+ */
+function generateItemIdFromName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
 export async function fetchMarketplaceItemsFromSource(
   source: MarketplaceSource,
 ): Promise<MarketplaceItem[]> {
@@ -231,16 +336,21 @@ export async function fetchMarketplaceItemsFromSource(
     return [];
   }
 
-  // TODO: Check actual installation status from cluster
-  const installedItems = new Set<string>();
+  // Get actual installation status from cluster
+  const installedItems = await getInstalledMarketplaceItems();
 
-  return manifest.items.map(item => ({
-    ...transformGitHubItemToMarketplaceItem(
-      item,
-      installedItems.has(generateItemId(item)),
-    ),
-    source: source.displayName ?? source.name,
-  }));
+  return manifest.items.map(item => {
+    const itemId = generateItemId(item);
+    // Check if item is installed by matching against various forms of the name
+    const isInstalled = installedItems.has(itemId) ||
+                       installedItems.has(item.name.toLowerCase()) ||
+                       installedItems.has(generateItemIdFromName(item.name));
+
+    return {
+      ...transformGitHubItemToMarketplaceItem(item, isInstalled),
+      source: source.displayName ?? source.name,
+    };
+  });
 }
 
 export async function getMarketplaceItemsFromSources(
