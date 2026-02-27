@@ -174,6 +174,38 @@ spec:
           condition:
             name: Completed
             value: 'True'
+    # Wait for events to propagate before creating evaluation
+    - script:
+        content: |
+          echo "Waiting for query events to propagate..."
+
+          # Poll for events
+          MAX_ATTEMPTS=10
+          ATTEMPT=0
+          MIN_EVENTS=1
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            EVENT_COUNT=$(kubectl get events -n $NAMESPACE \
+              --field-selector involvedObject.name=chicago-weather-query,involvedObject.kind=Query \
+              -o json | jq '.items | length')
+
+            echo "Attempt $((ATTEMPT+1))/$MAX_ATTEMPTS: Found $EVENT_COUNT events"
+
+            if [ "$EVENT_COUNT" -ge $MIN_EVENTS ]; then
+              echo "✓ Events available ($EVENT_COUNT >= $MIN_EVENTS)"
+              exit 0
+            fi
+
+            ATTEMPT=$((ATTEMPT+1))
+            sleep 1
+          done
+
+          echo "Warning: Only found $EVENT_COUNT events after $MAX_ATTEMPTS attempts (expected >= $MIN_EVENTS)"
+          echo "Proceeding anyway..."
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        timeout: 30s
     - apply:
         file: manifests/weather-tools-event-evaluation.yaml
     - wait:
