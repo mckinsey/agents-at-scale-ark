@@ -7,7 +7,6 @@ import { MarketplaceItemCard } from '@/components/cards/marketplace-item-card';
 import { PageHeader } from '@/components/common/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import type {
   MarketplaceCategory,
@@ -20,7 +19,6 @@ import { cn } from '@/lib/utils';
 export default function MarketplacePage() {
   const [filters, setFilters] = useState<MarketplaceFilters>({});
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTab, setSelectedTab] = useState<'public' | 'internal'>('public');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6;
@@ -102,24 +100,8 @@ export default function MarketplacePage() {
           <h1 className="text-xl">{pageTitle}</h1>
         </div>
 
-        {/* Tabs for Public/Internal */}
-        <div className="mb-4 mt-4">
-          <Tabs
-            value={selectedTab}
-            onValueChange={v => setSelectedTab(v as 'public' | 'internal')}>
-            <TabsList>
-              <TabsTrigger value="public" className="flex items-center gap-2">
-                Public <span className="text-muted-foreground">(6)</span>
-              </TabsTrigger>
-              <TabsTrigger value="internal" className="flex items-center gap-2">
-                Internal <span className="text-muted-foreground">(1)</span>
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-
         {/* Category Filters */}
-        <div className="mb-4 flex items-center gap-2">
+        <div className="mb-4 mt-4 flex items-center gap-2">
           <Button
             variant={selectedCategory === 'all' ? 'secondary' : 'ghost'}
             size="sm"
