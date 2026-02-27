@@ -46,6 +46,8 @@ router = APIRouter(prefix="/broker", tags=["broker"])
 
 VERSION = "v1alpha1"
 BROKER_CONNECT_TIMEOUT = float(os.getenv('BROKER_CONNECT_TIMEOUT', '10.0'))
+MEMORY_RESOURCE_NAME_DESC = "Memory resource name"
+CURSOR_PAGINATION_DESC = "Cursor for pagination"
 
 sse_headers = {
     "Cache-Control": "no-cache",
@@ -156,9 +158,9 @@ async def proxy_broker_request(
 @router.get("/traces")
 async def get_traces(
     watch: bool = Query(False, description="Stream traces via SSE"),
-    memory: str = Query("default", description="Memory resource name"),
+    memory: str = Query("default", description=MEMORY_RESOURCE_NAME_DESC),
     limit: int = Query(100, description="Max traces to return"),
-    cursor: Optional[int] = Query(None, description="Cursor for pagination"),
+    cursor: Optional[int] = Query(None, description=CURSOR_PAGINATION_DESC),
     session_id: Optional[str] = Query(None, description="Filter by session ID"),
 ):
     """Get or stream OTEL traces from the broker."""
@@ -176,7 +178,7 @@ async def get_trace(
     watch: bool = Query(False, description="Stream trace spans via SSE"),
     from_beginning: bool = Query(False, alias="from-beginning", description="Include existing spans"),
     cursor: Optional[int] = Query(None, description="Cursor for pagination/streaming"),
-    memory: str = Query("default", description="Memory resource name"),
+    memory: str = Query("default", description=MEMORY_RESOURCE_NAME_DESC),
 ):
     """Get or stream a specific trace from the broker."""
     validated_memory = validate_resource_name(memory, "memory")
@@ -189,9 +191,9 @@ async def get_trace(
 @router.get("/messages")
 async def get_messages(
     watch: bool = Query(False, description="Stream messages via SSE"),
-    memory: str = Query("default", description="Memory resource name"),
+    memory: str = Query("default", description=MEMORY_RESOURCE_NAME_DESC),
     limit: int = Query(100, description="Max messages to return"),
-    cursor: Optional[int] = Query(None, description="Cursor for pagination"),
+    cursor: Optional[int] = Query(None, description=CURSOR_PAGINATION_DESC),
     conversation_id: Optional[str] = Query(None, description="Filter by conversation ID"),
     query_id: Optional[str] = Query(None, description="Filter by query ID"),
 ):
@@ -208,9 +210,9 @@ async def get_messages(
 @router.get("/events")
 async def get_events(
     watch: bool = Query(False, description="Stream events via SSE"),
-    memory: str = Query("default", description="Memory resource name"),
+    memory: str = Query("default", description=MEMORY_RESOURCE_NAME_DESC),
     limit: int = Query(100, description="Max events to return"),
-    cursor: Optional[int] = Query(None, description="Cursor for pagination"),
+    cursor: Optional[int] = Query(None, description=CURSOR_PAGINATION_DESC),
     session_id: Optional[str] = Query(None, description="Filter by session ID"),
 ):
     """Get or stream operation events from the broker."""
@@ -228,7 +230,7 @@ async def get_events_by_query(
     watch: bool = Query(False, description="Stream events via SSE"),
     from_beginning: bool = Query(False, alias="from-beginning", description="Include existing events"),
     cursor: Optional[int] = Query(None, description="Cursor for pagination/streaming"),
-    memory: str = Query("default", description="Memory resource name"),
+    memory: str = Query("default", description=MEMORY_RESOURCE_NAME_DESC),
     limit: int = Query(100, description="Max events to return"),
 ):
     """Get or stream events for a specific query."""
@@ -243,9 +245,9 @@ async def get_events_by_query(
 async def get_chunks(
     watch: bool = Query(False, description="Stream chunks via SSE"),
     query_id: Optional[str] = Query(None, alias="query-id", description="Filter by query ID"),
-    memory: str = Query("default", description="Memory resource name"),
+    memory: str = Query("default", description=MEMORY_RESOURCE_NAME_DESC),
     limit: int = Query(100, description="Max chunks to return"),
-    cursor: Optional[int] = Query(None, description="Cursor for pagination"),
+    cursor: Optional[int] = Query(None, description=CURSOR_PAGINATION_DESC),
 ):
     """Get or stream LLM chunks from the broker."""
     validated_memory = validate_resource_name(memory, "memory")
@@ -298,28 +300,28 @@ async def proxy_broker_delete(memory: str, path: str):
 
 
 @router.delete("/traces")
-async def purge_traces(memory: str = Query("default", description="Memory resource name")):
+async def purge_traces(memory: str = Query("default", description=MEMORY_RESOURCE_NAME_DESC)):
     """Purge all traces from the broker."""
     validated_memory = validate_resource_name(memory, "memory")
     return await proxy_broker_delete(validated_memory, "/traces")
 
 
 @router.delete("/events")
-async def purge_events(memory: str = Query("default", description="Memory resource name")):
+async def purge_events(memory: str = Query("default", description=MEMORY_RESOURCE_NAME_DESC)):
     """Purge all events from the broker."""
     validated_memory = validate_resource_name(memory, "memory")
     return await proxy_broker_delete(validated_memory, "/events")
 
 
 @router.delete("/messages")
-async def purge_messages(memory: str = Query("default", description="Memory resource name")):
+async def purge_messages(memory: str = Query("default", description=MEMORY_RESOURCE_NAME_DESC)):
     """Purge all messages from the broker."""
     validated_memory = validate_resource_name(memory, "memory")
     return await proxy_broker_delete(validated_memory, "/messages")
 
 
 @router.delete("/chunks")
-async def purge_chunks(memory: str = Query("default", description="Memory resource name")):
+async def purge_chunks(memory: str = Query("default", description=MEMORY_RESOURCE_NAME_DESC)):
     """Purge all chunks from the broker."""
     validated_memory = validate_resource_name(memory, "memory")
     return await proxy_broker_delete(validated_memory, "/stream")
