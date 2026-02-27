@@ -1,6 +1,6 @@
 'use client';
 
-import { Bot, Copy, Loader2, Server, Terminal } from 'lucide-react';
+import { Bot, Check, Copy, Loader2, Server, Terminal } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -196,7 +196,10 @@ export function MarketplaceItemCard({
             onClick={handleInstall}
             disabled={isInstalling || localStatus === 'installed'}>
             {localStatus === 'installed' ? (
-              'Installed'
+              <>
+                Installed
+                <Check className="ml-1 h-3 w-3" />
+              </>
             ) : isInstalling ? (
               <>
                 <Loader2 className="mr-1 h-3 w-3 animate-spin" />

@@ -241,22 +241,6 @@ async function getInstalledMarketplaceItems(): Promise<Set<string>> {
     // Fetch all resources from the cluster
     const resources = await service.fetchAllResources();
 
-    // Log all found resources for debugging
-    console.log('=== Found Resources in Cluster ===');
-    console.log('Agents:', resources.agents?.length || 0, resources.agents || []);
-    console.log('MCP Servers:', resources.mcpservers?.length || 0, resources.mcpservers || []);
-    console.log('A2A Servers:', resources.a2a?.length || 0, resources.a2a || []);
-    console.log('Workflows:', resources.workflows?.length || 0, resources.workflows || []);
-    console.log('Models:', resources.models?.length || 0, resources.models || []);
-    console.log('Teams:', resources.teams?.length || 0, resources.teams || []);
-    console.log('Queries:', resources.queries?.length || 0, resources.queries || []);
-    console.log('Evaluators:', resources.evaluators?.length || 0, resources.evaluators || []);
-    console.log('Evaluations:', resources.evaluations?.length || 0, resources.evaluations || []);
-    console.log('=================================');
-
-    // Log the raw response object for debugging
-    console.log('Raw resources object:', JSON.stringify(resources, null, 2));
-
     const installedItems = new Set<string>();
 
     // Check agents
