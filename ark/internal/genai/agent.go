@@ -59,9 +59,15 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 		a.telemetryRecorder.RecordError(span, err)
 		if !IsTerminateTeam(err) {
 			a.eventingRecorder.Fail(ctx, "AgentExecution", fmt.Sprintf("Agent execution failed: %v", err), err, operationData)
+			if result != nil {
+				return result, err
+			}
 			return nil, err
 		}
-		return result, err
+		if result != nil {
+			return result, err
+		}
+		return nil, err
 	}
 
 	a.telemetryRecorder.RecordSuccess(span)
@@ -70,13 +76,13 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 }
 
 func convertCompatInputToA2A(userInput Message, history []Message) (protocol.Message, []protocol.Message, error) {
-	a2aUserInput, err := OpenAIToA2AMessage(userInput)
+	a2aUserInput, err := OpenAIToA2AMessageMultimodal(userInput)
 	if err != nil {
 		return protocol.Message{}, nil, fmt.Errorf("failed to convert user input to A2A: %w", err)
 	}
 	a2aHistory := make([]protocol.Message, 0, len(history))
 	for i := range history {
-		converted, convErr := OpenAIToA2AMessage(history[i])
+		converted, convErr := OpenAIToA2AMessageMultimodal(history[i])
 		if convErr != nil {
 			return protocol.Message{}, nil, fmt.Errorf("failed to convert history message %d to A2A: %w", i, convErr)
 		}
@@ -99,6 +105,9 @@ func (a *Agent) ExecuteA2A(ctx context.Context, userInput protocol.Message, hist
 		a.telemetryRecorder.RecordError(span, err)
 		if !IsTerminateTeam(err) {
 			a.eventingRecorder.Fail(ctx, "AgentExecution", fmt.Sprintf("Agent execution failed: %v", err), err, operationData)
+		}
+		if result != nil {
+			return result, err
 		}
 		return nil, err
 	}

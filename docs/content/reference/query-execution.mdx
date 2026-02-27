@@ -1,11 +1,11 @@
 ---
 title: Query Execution Flow
-description: How queries are processed through the ARK system
+description: How queries are processed through the Ark system
 ---
 
 # Query Execution Flow
 
-This page explains how a Query is executed in the ARK platform, from creation to completion.
+This page explains how a Query is executed in the Ark platform, from creation to completion.
 
 ## Overview
 
@@ -78,6 +78,7 @@ For each target (Agent or Team):
 5. **Model Invocation**: Sends request to the model provider
 6. **Tool Execution**: Handles any tool calls from the model
 7. **Response Generation**: Collects and formats the final response
+   - Agent and team internals run on A2A-native messages, with compatibility conversion applied at the controller response boundary
 
 #### Team Execution
 1. **Strategy Application**: Uses the team's strategy (sequential, parallel, etc.)
@@ -88,9 +89,10 @@ For each target (Agent or Team):
 
 The controller:
 1. Collects responses from all targets
-2. Updates the Query status with results
-3. Stores conversation in Memory (if configured)
-4. Marks the Query as completed
+2. Projects native A2A execution output to Query response payloads
+3. Updates the Query status with results
+4. Stores conversation in Memory (if configured), using native A2A writes when available and compat fallback otherwise
+5. Marks the Query as completed
 
 ## Execution Engines
 
@@ -131,4 +133,4 @@ Here's a complete example of a weather query execution:
 7. Controller updates Query with final response
 8. Memory stores conversation for future context
 
-This flow demonstrates ARK's orchestration of multiple components to deliver intelligent, tool-enabled responses.
+This flow demonstrates Ark's orchestration of multiple components to deliver intelligent, tool-enabled responses.

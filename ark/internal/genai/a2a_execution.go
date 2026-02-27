@@ -29,23 +29,6 @@ func NewA2AExecutionEngine(k8sClient client.Client, eventingRecorder eventing.A2
 	}
 }
 
-// Execute executes a query against an A2A agent
-func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace string, agentAnnotations map[string]string, contextID string, userInput Message, history []Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
-	a2aHistory := make([]protocol.Message, 0, len(history))
-	for i := range history {
-		converted, convErr := OpenAIToA2AMessage(history[i])
-		if convErr != nil {
-			return nil, fmt.Errorf("failed to convert history message %d to A2A: %w", i, convErr)
-		}
-		a2aHistory = append(a2aHistory, converted)
-	}
-	a2aUserInput, err := OpenAIToA2AMessage(userInput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert user input to A2A: %w", err)
-	}
-	return e.executeA2A(ctx, agentName, namespace, agentAnnotations, contextID, a2aUserInput, a2aHistory, eventStream, true)
-}
-
 func (e *A2AExecutionEngine) ExecuteNative(ctx context.Context, agentName, namespace string, agentAnnotations map[string]string, contextID string, userInput protocol.Message, history []protocol.Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	return e.executeA2A(ctx, agentName, namespace, agentAnnotations, contextID, userInput, history, eventStream, false)
 }
@@ -190,7 +173,6 @@ func applyA2AServerTimeout(ctx context.Context, a2aServer *arkv1prealpha1.A2ASer
 	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
 	return timeoutCtx, cancel, nil
 }
-
 
 func (e *A2AExecutionEngine) tryA2AStreamingExecution(ctx context.Context, address string, headers []arkv1prealpha1.Header, namespace string, agentAnnotations map[string]string, agentName, queryName, contextID string, userInput protocol.Message, metadata map[string]interface{}, eventStream EventStreamInterface, a2aServer *arkv1prealpha1.A2AServer, includeOpenAIMessages bool) (*ExecutionResult, bool, error) {
 	if !isA2AStreamingSupported(agentAnnotations) {

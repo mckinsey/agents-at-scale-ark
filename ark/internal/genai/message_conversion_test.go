@@ -347,6 +347,39 @@ func TestOpenAIToA2AMessageMultimodalPreservesImageURLParts(t *testing.T) {
 	assert.Equal(t, "image/png", *fileWithURI.MimeType)
 }
 
+func TestConvertCompatInputToA2APreservesMultimodalMessages(t *testing.T) {
+	userInput := openai.UserMessage([]openai.ChatCompletionContentPartUnionParam{
+		openai.TextContentPart("new question"),
+		openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{
+			URL: "https://example.com/new.png",
+		}),
+	})
+	historyInput := openai.UserMessage([]openai.ChatCompletionContentPartUnionParam{
+		openai.TextContentPart("prior question"),
+		openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{
+			URL: "https://example.com/history.png",
+		}),
+	})
+
+	a2aUserInput, a2aHistory, err := convertCompatInputToA2A(userInput, []Message{historyInput})
+	require.NoError(t, err)
+	require.Len(t, a2aUserInput.Parts, 2)
+	require.Len(t, a2aHistory, 1)
+	require.Len(t, a2aHistory[0].Parts, 2)
+
+	userFilePart, ok := a2aUserInput.Parts[1].(protocol.FilePart)
+	require.True(t, ok)
+	userFileWithURI, ok := userFilePart.File.(*protocol.FileWithURI)
+	require.True(t, ok)
+	assert.Equal(t, "https://example.com/new.png", userFileWithURI.URI)
+
+	historyFilePart, ok := a2aHistory[0].Parts[1].(protocol.FilePart)
+	require.True(t, ok)
+	historyFileWithURI, ok := historyFilePart.File.(*protocol.FileWithURI)
+	require.True(t, ok)
+	assert.Equal(t, "https://example.com/history.png", historyFileWithURI.URI)
+}
+
 func TestDefaultOpenAIToA2AMessageRemainsTextOnlyForImageURL(t *testing.T) {
 	message := openai.UserMessage([]openai.ChatCompletionContentPartUnionParam{
 		openai.TextContentPart("keep text"),
