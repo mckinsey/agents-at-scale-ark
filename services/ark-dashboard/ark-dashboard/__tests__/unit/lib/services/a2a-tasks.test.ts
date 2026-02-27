@@ -49,7 +49,7 @@ describe('a2aTasksService', () => {
       const result = await a2aTasksService.getAll();
 
       expect(apiClient.get).toHaveBeenCalledTimes(1);
-      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/a2a-tasks');
+      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/a2a-tasks', undefined);
 
       expect(result).toHaveLength(2);
       expect(result[0]).toMatchObject({
@@ -91,7 +91,7 @@ describe('a2aTasksService', () => {
       const result = await a2aTasksService.get('task-1');
 
       expect(apiClient.get).toHaveBeenCalledTimes(1);
-      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/a2a-tasks/task-1');
+      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/a2a-tasks/task-1', undefined);
 
       expect(result).toMatchObject({
         id: 'task-1',

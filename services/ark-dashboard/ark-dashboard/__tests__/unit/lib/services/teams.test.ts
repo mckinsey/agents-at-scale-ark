@@ -43,9 +43,9 @@ describe('teamsService', () => {
 
       const result = await teamsService.getAll()
 
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams`)
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams/team1`)
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams/team2`)
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams`, undefined)
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams/team1`, undefined)
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams/team2`, undefined)
       
       expect(result).toHaveLength(2)
       expect(result[0]).toMatchObject({ id: 'team1', name: 'team1' })
@@ -60,7 +60,7 @@ describe('teamsService', () => {
       const result = await teamsService.getByName('test-team')
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        `/api/v1/teams/test-team`
+        `/api/v1/teams/test-team`, undefined
       )
       expect(result).toMatchObject({
         ...mockTeam,
@@ -95,7 +95,7 @@ describe('teamsService', () => {
       const result = await teamsService.getById(123)
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        `/api/v1/teams/123`
+        `/api/v1/teams/123`, undefined
       )
       expect(result).toMatchObject({ id: 'test-team' })
     })
@@ -106,7 +106,7 @@ describe('teamsService', () => {
       await teamsService.getById('string-id')
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        `/api/v1/teams/string-id`
+        `/api/v1/teams/string-id`, undefined
       )
     })
   })
