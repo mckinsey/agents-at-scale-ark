@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
@@ -442,19 +443,110 @@ func (r *QueryReconciler) executeTarget(ctx context.Context, query arkv1alpha1.Q
 		return &errResponse
 	}
 
-	if executionResult == nil || executionResult.Messages == nil {
+	compatMessages, err := executionResultToCompatMessages(executionResult)
+	if err != nil {
+		errResponse := r.createErrorResponse(target, err)
+		return &errResponse
+	}
+
+	if len(compatMessages) == 0 {
 		return nil
 	}
 
-	response := r.createSuccessResponse(target, executionResult.Messages)
-	if executionResult.A2AResponse != nil {
-		response.A2A = &arkv1alpha1.A2AMetadata{
-			ContextID: executionResult.A2AResponse.ContextID,
-			TaskID:    executionResult.A2AResponse.TaskID,
-		}
+	response := r.createSuccessResponse(target, compatMessages)
+	if metadata := extractA2AMetadataFromExecutionResult(executionResult); metadata != nil {
+		response.A2A = metadata
 	}
 
 	return &response
+}
+
+func executionResultToCompatMessages(executionResult *genai.ExecutionResult) ([]genai.Message, error) {
+	if executionResult == nil {
+		return nil, nil
+	}
+	if len(executionResult.Messages) > 0 {
+		return executionResult.Messages, nil
+	}
+	a2aMessages := extractResponseA2AMessages(executionResult)
+	if len(a2aMessages) == 0 {
+		return nil, nil
+	}
+	compatMessages := make([]genai.Message, 0, len(a2aMessages))
+	for i := range a2aMessages {
+		converted, err := genai.A2AToOpenAIMessageMultimodal(a2aMessages[i])
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert A2A message %d to OpenAI format: %w", i, err)
+		}
+		compatMessages = append(compatMessages, converted)
+	}
+	return compatMessages, nil
+}
+
+func extractA2AMetadataFromExecutionResult(executionResult *genai.ExecutionResult) *arkv1alpha1.A2AMetadata {
+	if executionResult == nil {
+		return nil
+	}
+	if executionResult.A2AResponse != nil {
+		if executionResult.A2AResponse.ContextID != "" || executionResult.A2AResponse.TaskID != "" {
+			return &arkv1alpha1.A2AMetadata{
+				ContextID: executionResult.A2AResponse.ContextID,
+				TaskID:    executionResult.A2AResponse.TaskID,
+			}
+		}
+	}
+	a2aMessages := extractResponseA2AMessages(executionResult)
+	if len(a2aMessages) == 0 {
+		return nil
+	}
+	lastMessage := a2aMessages[len(a2aMessages)-1]
+	contextID := ""
+	if lastMessage.ContextID != nil {
+		contextID = *lastMessage.ContextID
+	}
+	taskID := ""
+	if lastMessage.TaskID != nil {
+		taskID = *lastMessage.TaskID
+	}
+	if contextID == "" && taskID == "" {
+		return nil
+	}
+	return &arkv1alpha1.A2AMetadata{
+		ContextID: contextID,
+		TaskID:    taskID,
+	}
+}
+
+func extractResponseA2AMessages(result *genai.ExecutionResult) []protocol.Message {
+	if result == nil {
+		return nil
+	}
+	if len(result.A2AMessages) > 0 {
+		return result.A2AMessages
+	}
+	if result.A2AResponse == nil {
+		return nil
+	}
+	if result.A2AResponse.Message != nil {
+		return []protocol.Message{*result.A2AResponse.Message}
+	}
+	if result.A2AResponse.Content == "" {
+		return nil
+	}
+	var contextIDRef *string
+	if result.A2AResponse.ContextID != "" {
+		contextIDValue := result.A2AResponse.ContextID
+		contextIDRef = &contextIDValue
+	}
+	var taskIDRef *string
+	if result.A2AResponse.TaskID != "" {
+		taskIDValue := result.A2AResponse.TaskID
+		taskIDRef = &taskIDValue
+	}
+	message := protocol.NewMessageWithContext(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart(result.A2AResponse.Content),
+	}, taskIDRef, contextIDRef)
+	return []protocol.Message{message}
 }
 
 func (r *QueryReconciler) createSuccessResponse(target arkv1alpha1.QueryTarget, messages []genai.Message) arkv1alpha1.Response {
@@ -747,10 +839,8 @@ func (r *QueryReconciler) executeAgent(ctx context.Context, query arkv1alpha1.Qu
 		}
 	}
 
-	// Save all new messages (input + response) to memory
-	newMessages := genai.PrepareNewMessagesForMemory(inputMessages, result.Messages)
-	if err := memory.AddMessages(ctx, query.Name, newMessages); err != nil {
-		return nil, fmt.Errorf("failed to save new messages to memory: %w", err)
+	if err := saveExecutionResultToMemory(ctx, memory, query.Name, inputMessages, result); err != nil {
+		return nil, err
 	}
 
 	return result, nil
@@ -782,10 +872,8 @@ func (r *QueryReconciler) executeTeam(ctx context.Context, query arkv1alpha1.Que
 		return nil, err
 	}
 
-	// Save all new messages (input + response) to memory
-	newMessages := genai.PrepareNewMessagesForMemory(inputMessages, result.Messages)
-	if err := memory.AddMessages(ctx, query.Name, newMessages); err != nil {
-		return nil, fmt.Errorf("failed to save new messages to memory: %w", err)
+	if err := saveExecutionResultToMemory(ctx, memory, query.Name, inputMessages, result); err != nil {
+		return nil, err
 	}
 
 	return result, nil
@@ -932,6 +1020,47 @@ func mustMarshalJSON(v any) string {
 		return "{}"
 	}
 	return string(data)
+}
+
+func convertCompatMessagesToA2A(messages []genai.Message) ([]protocol.Message, error) {
+	converted := make([]protocol.Message, 0, len(messages))
+	for i := range messages {
+		message, err := genai.OpenAIToA2AMessageMultimodal(messages[i])
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert input message %d to A2A: %w", i, err)
+		}
+		converted = append(converted, message)
+	}
+	return converted, nil
+}
+
+func saveExecutionResultToMemory(ctx context.Context, memory genai.MemoryInterface, queryName string, inputMessages []genai.Message, result *genai.ExecutionResult) error {
+	if memory == nil || result == nil {
+		return nil
+	}
+	responseA2AMessages := extractResponseA2AMessages(result)
+	if len(responseA2AMessages) > 0 {
+		inputA2AMessages, err := convertCompatMessagesToA2A(inputMessages)
+		if err != nil {
+			return fmt.Errorf("failed to convert input messages to A2A for memory: %w", err)
+		}
+		newA2AMessages := genai.PrepareA2ANewMessagesForMemory(inputA2AMessages, responseA2AMessages)
+		if len(newA2AMessages) == 0 {
+			return nil
+		}
+		if err := memory.AddA2AMessages(ctx, queryName, newA2AMessages); err != nil {
+			return fmt.Errorf("failed to save native messages to memory: %w", err)
+		}
+		return nil
+	}
+	newMessages := genai.PrepareNewMessagesForMemory(inputMessages, result.Messages)
+	if len(newMessages) == 0 {
+		return nil
+	}
+	if err := memory.AddMessages(ctx, queryName, newMessages); err != nil {
+		return fmt.Errorf("failed to save new messages to memory: %w", err)
+	}
+	return nil
 }
 
 func (r *QueryReconciler) loadInitialMessages(ctx context.Context, memory genai.MemoryInterface) ([]genai.Message, error) {
