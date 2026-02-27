@@ -1,8 +1,22 @@
-import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
+
 import { TeamCard } from '@/components/cards/team-card';
 import type { Agent, Team, TeamMember } from '@/lib/services';
+
+vi.mock('next/navigation', () => ({
+  useRouter: vi.fn(() => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    refresh: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+    prefetch: vi.fn(),
+  })),
+  usePathname: vi.fn(() => '/teams'),
+  useSearchParams: vi.fn(() => new URLSearchParams()),
+}));
 
 vi.mock('@/lib/api/client', () => ({
   apiClient: {
@@ -70,7 +84,10 @@ vi.mock('@/components/editors', () => ({
           </button>
           <button
             onClick={() => {
-              onSave({ id: team.id, description: 'Updated description' } as Team);
+              onSave({
+                id: team.id,
+                description: 'Updated description',
+              } as Team);
               onOpenChange(false);
             }}>
             Update Description
@@ -132,7 +149,10 @@ vi.mock('@/components/cards/base-card', () => ({
         {description && <div data-testid="card-description">{description}</div>}
         <div data-testid="card-actions">
           {actions?.map((action, idx) => (
-            <button key={idx} onClick={action.onClick} aria-label={action.label}>
+            <button
+              key={idx}
+              onClick={action.onClick}
+              aria-label={action.label}>
               {action.label}
             </button>
           ))}
@@ -189,12 +209,12 @@ describe('TeamCard', () => {
   });
 
   it('should render team card with unavailable status when a member is missing', () => {
-    const filtered_agents = agents.filter(agent => agent.name !== 'agent2')
+    const filteredAgents = agents.filter(agent => agent.name !== 'agent2');
     const teamUnavailable = {
       ...baseTeam,
-      available: false
-    }as unknown as Team;
-    render(<TeamCard team={teamUnavailable} agents={filtered_agents} />);
+      available: false,
+    } as unknown as Team;
+    render(<TeamCard team={teamUnavailable} agents={filteredAgents} />);
 
     expect(screen.getByTestId('card-title')).toHaveTextContent('team-name');
     expect(screen.getByTestId('card-description')).toHaveTextContent(
@@ -238,7 +258,10 @@ describe('TeamCard', () => {
     );
 
     expect(onUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'team-id', description: 'Updated description' }),
+      expect.objectContaining({
+        id: 'team-id',
+        description: 'Updated description',
+      }),
     );
   });
 
@@ -274,7 +297,13 @@ describe('TeamCard', () => {
       ],
     } as unknown as Team;
 
-    render(<TeamCard team={teamWithUnavailable} agents={agents} onUpdate={onUpdate} />);
+    render(
+      <TeamCard
+        team={teamWithUnavailable}
+        agents={agents}
+        onUpdate={onUpdate}
+      />,
+    );
 
     await userEvent.click(screen.getByRole('button', { name: /edit team/i }));
 
@@ -311,5 +340,3 @@ describe('TeamCard', () => {
     expect(onDelete).toHaveBeenCalledWith('team-id');
   });
 });
-
-

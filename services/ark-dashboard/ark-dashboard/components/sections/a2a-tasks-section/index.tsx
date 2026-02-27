@@ -136,7 +136,7 @@ export function A2ATasksSection() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <main className="flex-1 overflow-auto p-4">
+      <main className="mt-3 flex-1 overflow-auto">
         <div className="mb-4 flex items-center justify-end">
           <Button
             variant="outline"

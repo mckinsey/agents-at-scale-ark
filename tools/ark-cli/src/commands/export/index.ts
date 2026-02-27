@@ -1,5 +1,4 @@
 import {Command} from 'commander';
-import {execa} from 'execa';
 import * as fs from 'fs/promises';
 import yaml from 'yaml';
 import type {ArkConfig} from '../../lib/config.js';
@@ -28,10 +27,10 @@ interface ExportOptions {
 
 async function exportResources(options: ExportOptions, config: ArkConfig) {
   try {
-    const allResourceTypes = config.defaultExportTypes || RESOURCE_ORDER
+    const allResourceTypes = config.defaultExportTypes || RESOURCE_ORDER;
     const outputPath = options.output || 'ark-export.yaml';
-    let resourceTypes = options.types
-      ? (options.types.split(','))
+    const resourceTypes = options.types
+      ? options.types.split(',')
       : allResourceTypes;
 
     // ensure that we get resources in the correct order; e.g. agents before teams that use the agents
@@ -52,11 +51,11 @@ async function exportResources(options: ExportOptions, config: ArkConfig) {
 
       output.info(`fetching ${resourceType}...`);
       const resources = await listResources(resourceType, {
-          namespace: options.namespace,
-          labels: options.labels
-        });
+        namespace: options.namespace,
+        labels: options.labels,
+      });
 
-      const resourceCount = resources.length
+      const resourceCount = resources.length;
       if (resources.length > 0) {
         output.success(`found ${resourceCount} ${resourceType}`);
         allResources.push(...resources);
@@ -69,13 +68,13 @@ async function exportResources(options: ExportOptions, config: ArkConfig) {
       return;
     }
 
-    const yamlContent = allResources.map((resource) => yaml.stringify(resource)).join("\n---\n");
+    const yamlContent = allResources
+      .map((resource) => yaml.stringify(resource))
+      .join('\n---\n');
 
     await fs.writeFile(outputPath, yamlContent, 'utf-8');
 
-    output.success(
-      `exported ${allResourceCount} resources to ${outputPath}`
-    );
+    output.success(`exported ${allResourceCount} resources to ${outputPath}`);
   } catch (error) {
     output.error(
       'export failed:',

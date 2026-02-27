@@ -25,7 +25,10 @@ import {
 } from '../../lib/waitForReady.js';
 import {parseTimeoutToSeconds} from '../../lib/timeout.js';
 
-async function uninstallPrerequisites(service: ArkService, verbose: boolean = false) {
+async function uninstallPrerequisites(
+  service: ArkService,
+  verbose: boolean = false
+) {
   if (!service.prerequisiteUninstalls?.length) return;
 
   for (const prereq of service.prerequisiteUninstalls) {
@@ -48,17 +51,14 @@ async function checkAndCleanFailedRelease(
   }
 
   try {
-    const result = await execute(
-      'helm',
-      statusArgs,
-      {},
-      {verbose: false}
-    );
+    const result = await execute('helm', statusArgs, {}, {verbose: false});
 
     const stdout = String(result.stdout || '');
-    if (stdout.includes('STATUS: pending-install') ||
-        stdout.includes('STATUS: failed') ||
-        stdout.includes('STATUS: uninstalling')) {
+    if (
+      stdout.includes('STATUS: pending-install') ||
+      stdout.includes('STATUS: failed') ||
+      stdout.includes('STATUS: uninstalling')
+    ) {
       const uninstallArgs = ['uninstall', releaseName];
       if (namespace) {
         uninstallArgs.push('--namespace', namespace);
@@ -66,6 +66,7 @@ async function checkAndCleanFailedRelease(
       await execute('helm', uninstallArgs, {stdio: 'inherit'}, {verbose});
     }
   } catch {
+    // Ignore errors - prerequisite may not exist
   }
 }
 
@@ -125,9 +126,7 @@ export async function installArk(
       const service = await getMarketplaceItem(serviceName);
 
       if (!service) {
-        output.error(
-          `marketplace item '${serviceName}' not found`
-        );
+        output.error(`marketplace item '${serviceName}' not found`);
         output.info('available marketplace items:');
         const marketplaceServices = await getAllMarketplaceServices();
         if (marketplaceServices) {
@@ -228,7 +227,7 @@ export async function installArk(
       })),
     ];
 
-    let selectedComponents: string[] = [];
+    let selectedComponents: string[];
     try {
       const answers = await inquirer.prompt([
         {

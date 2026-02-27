@@ -33,7 +33,4 @@ import {BedrockConfig} from './bedrock.js';
 /**
  * Union type of all supported provider configurations.
  */
-export type ProviderConfig =
-  | OpenAIConfig
-  | AzureConfig
-  | BedrockConfig;
+export type ProviderConfig = OpenAIConfig | AzureConfig | BedrockConfig;

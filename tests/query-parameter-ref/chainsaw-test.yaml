@@ -38,16 +38,15 @@ spec:
             metadata:
               name: query-secrets
       # Wait for Model to be available before creating agents/queries
-      - assert:
-          resource:
-            apiVersion: ark.mckinsey.com/v1alpha1
-            kind: Model
-            metadata:
-              name: mock-gpt-4.1
-            status:
-              conditions:
-              - type: ModelAvailable
-                status: "True"
+      - wait:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          name: mock-gpt-4.1
+          timeout: 3m
+          for:
+            condition:
+              name: ModelAvailable
+              value: 'True' 
       # Apply agents first
       - apply:
           file: manifests/a0[4,6]-*.yaml

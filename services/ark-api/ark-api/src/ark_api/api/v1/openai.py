@@ -103,7 +103,7 @@ def process_request_metadata(
 # See https://github.com/mckinsey/agents-at-scale-ark/issues/415 for potential improvement:
 # Start streaming first, wait for the first chunk/response, and use the status code of that to respond with
 async def proxy_streaming_response(streaming_url: str):
-    """Proxy streaming chunks from memory service."""
+    """Proxy streaming chunks from broker, including the final chunk with Query status."""
     timeout = httpx.Timeout(BROKER_CONNECT_TIMEOUT, read=None)
     async with httpx.AsyncClient(timeout=timeout) as client:
         async with client.stream("GET", streaming_url) as response:
@@ -161,11 +161,12 @@ async def proxy_streaming_response(streaming_url: str):
                 # Forward the error response as an SSE error event
                 yield f"data: {json.dumps(error_data)}\n\n"
                 return  # Streaming failed, exit generator
-            # Use aiter_lines() for line-by-line streaming without buffering
+
             async for line in response.aiter_lines():
-                if line.strip():  # Skip empty lines
-                    # SSE format: each chunk is on its own line
-                    yield line + "\n\n"  # Add back SSE double newline separator
+                if line.strip():
+                    if line.strip().startswith("data: {") and '"error":{' in line:
+                        continue
+                    yield line + "\n\n"
 
 
 @router.post("/chat/completions")

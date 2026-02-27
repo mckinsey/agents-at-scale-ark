@@ -16,6 +16,7 @@ spec:
         app: {{ .Values.app.name }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
+      automountServiceAccountToken: false
       securityContext:
         {{- toYaml .Values.app.podSecurityContext | nindent 8 }}
       containers:

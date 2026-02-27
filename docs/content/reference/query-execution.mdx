@@ -94,11 +94,11 @@ The controller:
 
 ## Execution Engines
 
-Custom execution engines can override default behavior at different levels:
+Custom execution engines override default agent execution using the A2A protocol:
 
-- **Query Engines**: Custom query processing logic
-- **Agent Engines**: Custom agent execution (e.g., LangChain, AutoGen)
-- **Team Engines**: Custom team coordination strategies
+- **Agent Engines**: Custom agent execution via A2A (e.g., LangChain, AutoGen)
+- Agents referencing an ExecutionEngine send requests via A2A with agent config, tools, and history in message metadata
+- The engine processes the request and returns results through the A2A protocol
 
 ## Error Handling
 
