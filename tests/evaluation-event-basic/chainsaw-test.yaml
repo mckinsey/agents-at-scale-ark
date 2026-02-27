@@ -26,7 +26,7 @@ spec:
     - script:
         content: bash ../helpers/wait-for-evaluator.sh
     - apply:
-        file: manifests/*.yaml
+        file: manifests/a0[0-5]-*.yaml
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Model
@@ -59,6 +59,8 @@ spec:
             name: test-event-query
           status:
             phase: done
+    - apply:
+        file: manifests/a06-evaluation.yaml
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation

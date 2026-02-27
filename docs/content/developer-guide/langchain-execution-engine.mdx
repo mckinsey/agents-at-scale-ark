@@ -1,31 +1,52 @@
 ---
 title: LangChain Execution Engine
-description: LangChain-based execution engine for processing agent queries with optional RAG support
+description: LangChain-based execution engine for processing agent queries with optional RAG support via the A2A protocol
 ---
 
 # LangChain Execution Engine
 
-LangChain-based execution engine for processing agent queries with optional RAG support.
-
-ARK includes a LangChain execution engine that provides specialized processing capabilities beyond standard AI model interactions, including Retrieval-Augmented Generation (RAG), custom chains, and LangChain framework integration.
+The LangChain execution engine has moved to the [Ark Marketplace](https://github.com/mckinsey/agents-at-scale-marketplace/tree/main/services/executor-langchain).
 
 ## Installation
 
+Install from the marketplace:
+
 ```bash
-make executor-langchain-install
+ark marketplace install executor-langchain
+```
+
+Or deploy with DevSpace as a dependency:
+
+```yaml
+dependencies:
+  executor-langchain:
+    git: https://github.com/mckinsey/agents-at-scale-marketplace
+    subPath: services/executor-langchain
 ```
 
 ## Features
 
+- A2A protocol for engine communication
 - LangChain framework integration
 - Optional RAG (Retrieval-Augmented Generation) support via agent labels
-- Memory persistence for stateful conversations
-- Compatible with all Model providers (Azure OpenAI, OpenAI, Ollama)
+- Compatible with all Model providers (Azure OpenAI, OpenAI)
 
-## Local Development
+## ExecutionEngine Resource
 
-```bash
-make executor-langchain-dev
+The LangChain executor registers as an ExecutionEngine with A2A protocol:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: ExecutionEngine
+metadata:
+  name: executor-langchain
+spec:
+  address:
+    valueFrom:
+      serviceRef:
+        name: executor-langchain
+        port: "8000"
+  description: "LangChain Executor - A2A server with RAG support"
 ```
 
 ## RAG Support
@@ -41,38 +62,13 @@ metadata:
     langchain: rag
 spec:
   executionEngine:
-    name: langchain-engine
+    name: executor-langchain
   prompt: |
     You are an expert Python developer assistant with deep knowledge of the codebase.
-    When RAG context is provided, use it to give accurate, specific answers about the code.
-    Reference specific functions, classes, and modules when relevant.
-    Provide code examples from the indexed codebase when helpful.
-```
-
-When RAG is enabled, the engine indexes local Python files and provides relevant code context to the agent.
-
-## Memory Support
-
-To enable stateful conversations with memory persistence, you must install a Memory resource. The [ARK Broker Service](/developer-guide/services/ark-broker) provides a memory implementation with streaming support that can be used with this execution engine.
-
-Example query with memory:
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: my-query
-spec:
-  input: "Remember that my name is Alice"
-  target:
-  - type: agent
-    name: my-agent
-  memory:
-    name: ark-broker  # Reference to installed Memory resource
-  sessionId: "alice-session"
 ```
 
 ## Next Steps
 
+- [Ark Marketplace](https://github.com/mckinsey/agents-at-scale-marketplace) - Browse available services
 - [ARK Broker](/developer-guide/services/ark-broker) - Memory storage with streaming
-- [ARK API](/developer-guide/services/ark-api) - REST API including A2A Gateway for agent-to-agent communication
+- [ARK API](/developer-guide/services/ark-api) - REST API including A2A Gateway

@@ -84,15 +84,15 @@ func (a *Agent) executeWithExecutionEngineRouter(ctx context.Context, userInput 
 		return a.executeWithA2AExecutionEngine(ctx, userInput, eventStream)
 	}
 
-	messages, err := a.executeWithExecutionEngine(ctx, userInput, history)
+	messages, err := a.executeWithNamedExecutionEngine(ctx, userInput, history)
 	if err != nil {
 		return nil, err
 	}
 	return &ExecutionResult{Messages: messages}, nil
 }
 
-func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
-	engineClient := NewExecutionEngineClient(a.client, a.eventing.ExecutionEngineRecorder())
+func (a *Agent) executeWithNamedExecutionEngine(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
+	engineClient := NewExecutionEngineA2AClient(a.client, a.eventing.ExecutionEngineRecorder())
 
 	agentConfig, err := buildAgentConfig(a)
 	if err != nil {

@@ -247,9 +247,6 @@ jobs:
           - path: services/ark-evaluator
             image: ark-evaluator
             prebuild: "make ark-evaluator-deps"
-          - path: services/executor-langchain
-            image: executor-langchain
-            prebuild: "make executor-langchain-deps && mkdir -p services/executor-langchain/build-context && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/executor-langchain/build-context/"
           - path: services/ark-broker/ark-broker
             image: ark-broker
           - path: samples/a2a/langchain-weather-agent
@@ -308,7 +305,6 @@ jobs:
           - ark-api
           - ark-dashboard
           - ark-evaluator
-          - executor-langchain
           - ark-broker
           - langchain-weather-agent
           - ark-mcp

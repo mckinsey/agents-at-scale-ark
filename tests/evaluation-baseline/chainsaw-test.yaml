@@ -25,7 +25,7 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
     - apply:
-        file: manifests/*.yaml
+        file: manifests/a0[1-4]-*.yaml
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Model
@@ -34,7 +34,7 @@ spec:
         for:
           condition:
             name: ModelAvailable
-            value: 'True' 
+            value: 'True'
     - assert:
         resource:
           apiVersion: v1
@@ -50,6 +50,8 @@ spec:
           jsonPath:
             path: '{.status.phase}'
             value: 'ready'
+    - apply:
+        file: manifests/a05-evaluation.yaml
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
