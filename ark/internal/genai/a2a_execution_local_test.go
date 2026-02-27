@@ -19,6 +19,7 @@ type testChatCompletionProvider struct {
 	responses []*openai.ChatCompletion
 	errs      []error
 	calls     [][]openai.ChatCompletionMessageParamUnion
+	a2aCalls  [][]protocol.Message
 }
 
 func (p *testChatCompletionProvider) ChatCompletion(_ context.Context, messages []openai.ChatCompletionMessageParamUnion, _ int64, _ ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
@@ -41,6 +42,9 @@ func (p *testChatCompletionProvider) ChatCompletionStream(ctx context.Context, m
 func (p *testChatCompletionProvider) SetOutputSchema(_ *runtime.RawExtension, _ string) {}
 
 func (p *testChatCompletionProvider) A2ATurnNative(_ context.Context, messages []protocol.Message, outcomes []A2AToolOutcome, _ []A2AToolDefinition, _ EventStreamInterface) (*A2ATurnResult, error) {
+	nativeCopy := append([]protocol.Message(nil), messages...)
+	p.a2aCalls = append(p.a2aCalls, nativeCopy)
+
 	compatMessages, err := convertA2AMessagesToCompatMultimodal(messages)
 	if err != nil {
 		return nil, err
@@ -179,6 +183,46 @@ func TestExecuteLocallyA2ANativeSimpleResponse(t *testing.T) {
 	require.Len(t, stream.chunks, 1)
 	_, ok := stream.chunks[0].(*protocol.Message)
 	assert.True(t, ok)
+}
+
+func TestAgentExecuteCompatIngressPreservesMultimodalInput(t *testing.T) {
+	provider := &testChatCompletionProvider{
+		responses: []*openai.ChatCompletion{
+			testCompletion("native-response", nil),
+		},
+	}
+	agent := newTestAgentForLocalExecution(provider, nil)
+	agent.telemetryRecorder = telemetrynoop.NewProvider().AgentRecorder()
+	agent.eventingRecorder = eventingnoop.NewProvider().AgentRecorder()
+	agent.resolvedCapability = executionCapabilityA2ANativeLocal
+
+	userInput := openai.UserMessage([]openai.ChatCompletionContentPartUnionParam{
+		openai.TextContentPart("describe this"),
+		openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{
+			URL: "https://example.com/input.png",
+		}),
+	})
+
+	result, err := agent.Execute(context.Background(), userInput, nil, NewNoopMemory(), nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, provider.a2aCalls, 1)
+	require.NotEmpty(t, provider.a2aCalls[0])
+
+	var seenUserMessage *protocol.Message
+	for i := range provider.a2aCalls[0] {
+		if provider.a2aCalls[0][i].Role == protocol.MessageRoleUser {
+			seenUserMessage = &provider.a2aCalls[0][i]
+			break
+		}
+	}
+	require.NotNil(t, seenUserMessage)
+	require.Len(t, seenUserMessage.Parts, 2)
+	filePart, ok := seenUserMessage.Parts[1].(protocol.FilePart)
+	require.True(t, ok)
+	fileWithURI, ok := filePart.File.(*protocol.FileWithURI)
+	require.True(t, ok)
+	assert.Equal(t, "https://example.com/input.png", fileWithURI.URI)
 }
 
 func TestExecuteLocallyA2ANativeWithToolCalls(t *testing.T) {
