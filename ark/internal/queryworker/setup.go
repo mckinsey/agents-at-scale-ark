@@ -3,6 +3,7 @@ package queryworker
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"strconv"
@@ -74,9 +75,9 @@ func buildConnString() string {
 	u := &url.URL{
 		Scheme:   "postgres",
 		User:     url.UserPassword(user, pass),
-		Host:     fmt.Sprintf("%s:%s", host, port),
+		Host:     net.JoinHostPort(host, port),
 		Path:     db,
-		RawQuery: fmt.Sprintf("sslmode=%s", url.QueryEscape(sslMode)),
+		RawQuery: "sslmode=" + url.QueryEscape(sslMode),
 	}
 	return u.String()
 }

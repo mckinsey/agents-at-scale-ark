@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -49,8 +50,8 @@ type QueryReconciler struct {
 	Scheme              *runtime.Scheme
 	Telemetry           *telemetryconfig.Provider
 	Eventing            *eventingconfig.Provider
-	QueryWorkersEnabled bool
 	RiverClient         *queryworker.RiverClient
+	QueryWorkersEnabled bool
 	operations          sync.Map
 }
 
@@ -621,11 +622,30 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 	if duration != nil {
 		query.Status.Duration = duration
 	}
-	err := r.Status().Update(ctx, query)
-	if err != nil {
-		logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
+
+	if !r.QueryWorkersEnabled {
+		err := r.Status().Update(ctx, query)
+		if err != nil {
+			logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
+		}
+		return err
 	}
-	return err
+
+	localStatus := query.Status
+	key := types.NamespacedName{Name: query.Name, Namespace: query.Namespace}
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest, err := r.fetchQuery(ctx, key)
+		if err != nil {
+			return err
+		}
+		latest.Status = localStatus
+		if err := r.Status().Update(ctx, &latest); err != nil {
+			logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
+			return err
+		}
+		*query = latest
+		return nil
+	})
 }
 
 // determineQueryStatus checks if any responses have error phase and returns appropriate query status

@@ -78,7 +78,7 @@ func (s *QueryAdmissionStorage) Create(ctx context.Context, obj runtime.Object, 
 		TimeoutSeconds: timeoutSeconds,
 	}, nil)
 	if insertErr != nil {
-		return nil, fmt.Errorf("failed to insert River job for query %s/%s: %w", accessor.GetNamespace(), accessor.GetName(), insertErr)
+		return nil, fmt.Errorf("failed to enqueue query execution job: %w", insertErr)
 	}
 	klog.V(4).Infof("inserted River job for query %s/%s (jobId=%d)", accessor.GetNamespace(), accessor.GetName(), insertRes.Job.ID)
 
