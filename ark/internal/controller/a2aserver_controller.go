@@ -255,27 +255,14 @@ func (r *A2AServerReconciler) createAgentWithSkills(ctx context.Context, a2aServ
 func (r *A2AServerReconciler) buildAgentWithSkills(a2aServer *arkv1prealpha1.A2AServer, agentCard *genai.A2AAgentCard, agentName string) *arkv1alpha1.Agent {
 	// Build skills annotation JSON
 	skillsJSON, _ := json.Marshal(agentCard.Skills)
-	streamingSupported := false
-	if agentCard.Capabilities.Streaming != nil {
-		streamingSupported = *agentCard.Capabilities.Streaming
-	}
-	supportedExtensions := make([]string, 0, len(agentCard.Capabilities.Extensions))
-	for _, extension := range agentCard.Capabilities.Extensions {
-		if extension.URI != "" {
-			supportedExtensions = append(supportedExtensions, extension.URI)
-		}
-	}
+
+	streamingSupported := agentCard.Capabilities.Streaming != nil && *agentCard.Capabilities.Streaming
 
 	agentAnnotations := map[string]string{
 		annotations.A2AServerName:         a2aServer.Name,
 		annotations.A2AServerAddress:      a2aServer.Status.LastResolvedAddress,
 		annotations.A2AServerSkills:       string(skillsJSON),
 		annotations.A2AStreamingSupported: strconv.FormatBool(streamingSupported),
-	}
-	if len(supportedExtensions) > 0 {
-		if encoded, err := json.Marshal(supportedExtensions); err == nil {
-			agentAnnotations[annotations.A2ASupportedExtensions] = string(encoded)
-		}
 	}
 
 	// Inherit ark.mckinsey.com annotations from A2AServer to Agent
