@@ -308,7 +308,7 @@ function generateItemIdFromName(name: string): string {
   return name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
+    .replace(/(^-)|(-$)/g, '');
 }
 
 export async function fetchMarketplaceItemsFromSource(
