@@ -10,26 +10,6 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /mutate-ark-mckinsey-com-v1alpha1-agent
-  failurePolicy: Fail
-  name: magent-v1.kb.io
-  rules:
-  - apiGroups:
-    - ark.mckinsey.com
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - agents
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: webhook-service
-      namespace: system
       path: /mutate-ark-mckinsey-com-v1alpha1-model
   failurePolicy: Fail
   name: mmodel-v1.kb.io
@@ -50,26 +30,6 @@ kind: ValidatingWebhookConfiguration
 metadata:
   name: validating-webhook-configuration
 webhooks:
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: webhook-service
-      namespace: system
-      path: /validate-ark-mckinsey-com-v1alpha1-agent
-  failurePolicy: Fail
-  name: vagent-v1.kb.io
-  rules:
-  - apiGroups:
-    - ark.mckinsey.com
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - agents
-  sideEffects: None
 - admissionReviewVersions:
   - v1
   clientConfig:
