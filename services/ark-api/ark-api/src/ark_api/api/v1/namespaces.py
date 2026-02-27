@@ -1,4 +1,5 @@
 """Namespaces API endpoints."""
+import base64
 import logging
 import os
 
@@ -103,7 +104,7 @@ async def get_context_endpoint(namespace: str = None) -> ContextResponse:
             if ns.metadata.labels and ns.metadata.labels.get("ark.mckinsey.com/demo") == "true":
                 read_only_mode = True
     except Exception as e:
-        logger.warning(f"Could not check namespace labels for {target_namespace}: {e}")
+        logger.warning("Could not check namespace labels for %s: %s", base64.b64encode(target_namespace.encode('utf-8')).decode('ascii'), base64.b64encode(str(e).encode('utf-8')).decode('ascii'))
         # Fall back to environment variable if we can't check the namespace
         read_only_mode = os.getenv("READ_ONLY_MODE", "false").lower() == "true"
 
