@@ -8,7 +8,11 @@ import type {
 import type { RefObject } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { chatHistoryAtom, createNewSessionId } from '@/atoms/chat-history';
+import {
+  type TokenUsage,
+  chatHistoryAtom,
+  createNewSessionId,
+} from '@/atoms/chat-history';
 import {
   isChatStreamingEnabledAtom,
   queryTimeoutSettingAtom,
@@ -34,6 +38,8 @@ interface UseChatSessionReturn {
   sendMessage: (message: string) => Promise<void>;
   clearChat: () => void;
   messagesEndRef: RefObject<HTMLDivElement | null>;
+  tokenUsage?: TokenUsage;
+  messageTokenUsage?: Record<number, TokenUsage>;
 }
 
 export function useChatSession({
@@ -94,6 +100,34 @@ export function useChatSession({
     [chatKey, setChatHistory],
   );
 
+  const updateTokenUsage = useCallback(
+    (usage: TokenUsage) => {
+      setChatHistory(prev => {
+        const safePrev = prev || {};
+        const currentSession = safePrev[chatKey];
+        if (!currentSession) return safePrev;
+        const currentUsage = currentSession.tokenUsage || {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+        };
+        return {
+          ...safePrev,
+          [chatKey]: {
+            ...currentSession,
+            tokenUsage: {
+              prompt_tokens: currentUsage.prompt_tokens + usage.prompt_tokens,
+              completion_tokens:
+                currentUsage.completion_tokens + usage.completion_tokens,
+              total_tokens: currentUsage.total_tokens + usage.total_tokens,
+            },
+          },
+        };
+      });
+    },
+    [chatKey, setChatHistory],
+  );
+
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
@@ -141,6 +175,7 @@ export function useChatSession({
       ]);
 
       let accumulatedContent = '';
+      let messageTokenUsage: TokenUsage | null = null;
       const accumulatedToolCalls: Array<{
         id: string;
         type: 'function';
@@ -212,6 +247,11 @@ export function useChatSession({
                   content?: string;
                   raw?: string;
                 };
+                tokenUsage?: {
+                  promptTokens?: number;
+                  completionTokens?: number;
+                  totalTokens?: number;
+                };
               };
             };
           };
@@ -229,6 +269,28 @@ export function useChatSession({
             } catch (e) {
               console.error('Failed to parse completed query messages:', e);
             }
+          }
+
+          if (typedChunk?.usage) {
+            const usage: TokenUsage = {
+              prompt_tokens: typedChunk.usage.prompt_tokens ?? 0,
+              completion_tokens: typedChunk.usage.completion_tokens ?? 0,
+              total_tokens: typedChunk.usage.total_tokens ?? 0,
+            };
+            messageTokenUsage = usage;
+            updateTokenUsage(usage);
+          }
+
+          const arkTokenUsage =
+            arkData.completedQuery?.status?.tokenUsage;
+          if (arkTokenUsage) {
+            const usage: TokenUsage = {
+              prompt_tokens: arkTokenUsage.promptTokens || 0,
+              completion_tokens: arkTokenUsage.completionTokens || 0,
+              total_tokens: arkTokenUsage.totalTokens || 0,
+            };
+            messageTokenUsage = usage;
+            updateTokenUsage(usage);
           }
         }
 
@@ -305,6 +367,25 @@ export function useChatSession({
 
       finalizeCurrentMessage();
 
+      if (messageTokenUsage) {
+        const assistantIndex = currentMessageIndex;
+        setChatHistory(prev => {
+          const safePrev = prev || {};
+          const currentSession = safePrev[chatKey];
+          if (!currentSession) return safePrev;
+          return {
+            ...safePrev,
+            [chatKey]: {
+              ...currentSession,
+              messageTokenUsage: {
+                ...(currentSession.messageTokenUsage || {}),
+                [assistantIndex]: messageTokenUsage,
+              },
+            },
+          };
+        });
+      }
+
       if (hasError) {
         const hasTerminateToolCall = accumulatedToolCalls.some(
           tc => tc.function.name === 'terminate',
@@ -360,12 +441,15 @@ export function useChatSession({
     },
     [
       buildChatMessages,
+      chatKey,
       chatMessages,
       name,
       queryTimeout,
       sessionId,
+      setChatHistory,
       type,
       updateChatMessages,
+      updateTokenUsage,
     ],
   );
 
@@ -589,7 +673,12 @@ export function useChatSession({
     setLastConversationId(newSessionId);
     setChatHistory(prev => ({
       ...(prev || {}),
-      [chatKey]: { messages: [], sessionId: newSessionId },
+      [chatKey]: {
+        messages: [],
+        sessionId: newSessionId,
+        tokenUsage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        messageTokenUsage: {},
+      },
     }));
     setError(null);
   }, [chatKey, setChatHistory, setLastConversationId]);
@@ -602,5 +691,7 @@ export function useChatSession({
     sendMessage,
     clearChat,
     messagesEndRef,
+    tokenUsage: chatSession.tokenUsage,
+    messageTokenUsage: chatSession.messageTokenUsage,
   };
 }

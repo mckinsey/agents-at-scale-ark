@@ -28,20 +28,6 @@ interface StreamEntry {
   data: unknown;
 }
 
-interface ArkExtendedChunk extends ChatCompletionChunk {
-  ark?: {
-    completedQuery?: {
-      status?: {
-        tokenUsage?: {
-          promptTokens?: number;
-          completionTokens?: number;
-          totalTokens?: number;
-        };
-      };
-    };
-  };
-}
-
 interface PaginatedResponse<T> {
   items: T[];
   total: number;

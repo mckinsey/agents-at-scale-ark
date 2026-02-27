@@ -10,6 +10,7 @@ import { MaxTurnsEvent } from '@/components/chat/max-turns-event';
 import { SelectorTransition } from '@/components/chat/selector-transition';
 import { StrategyIndicator } from '@/components/chat/strategy-indicator';
 import { TerminationEvent } from '@/components/chat/termination-event';
+import type { TokenUsage } from '@/atoms/chat-history';
 import type { ExtendedChatMessage, GraphEdge } from '@/lib/types/chat-message';
 
 interface ChatMessageListProps {
@@ -23,6 +24,7 @@ interface ChatMessageListProps {
   error: string | null;
   viewMode?: 'text' | 'markdown';
   messagesEndRef: RefObject<HTMLDivElement | null>;
+  messageTokenUsage?: Record<number, TokenUsage>;
 }
 
 export function ChatMessageList({
@@ -36,6 +38,7 @@ export function ChatMessageList({
   error,
   viewMode = 'markdown',
   messagesEndRef,
+  messageTokenUsage,
 }: Readonly<ChatMessageListProps>) {
   const transitionMap = useMemo(() => {
     if (!graphEdges || graphEdges.length === 0)
@@ -306,6 +309,7 @@ export function ChatMessageList({
                 sender={pm.senderName}
                 status={pm.message.metadata?.status}
                 queryName={pm.message.metadata?.queryName}
+                tokenUsage={messageTokenUsage?.[pm.index]}
               />
             )}
             {pm.hasTermination && (

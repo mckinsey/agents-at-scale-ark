@@ -18,20 +18,6 @@ import type { GraphEdge } from '@/lib/types/chat-message';
 type ChatType = 'model' | 'team' | 'agent';
 type WindowState = 'default' | 'minimized' | 'maximized';
 
-interface ArkExtendedChunk extends ChatCompletionChunk {
-  ark?: {
-    completedQuery?: {
-      status?: {
-        tokenUsage?: {
-          promptTokens?: number;
-          completionTokens?: number;
-          totalTokens?: number;
-        };
-      };
-    };
-  };
-}
-
 interface FloatingChatProps {
   id: string;
   name: string;
