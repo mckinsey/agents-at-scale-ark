@@ -56,7 +56,7 @@ func TestConvertA2AMessagesToBedrockNativePairsAssistantToolCallsWithOutcomes(t 
 }
 
 func TestConvertBedrockResponseToA2ATurnResultIncludesToolCallsPayload(t *testing.T) {
-	result := convertBedrockResponseToA2ATurnResult(bedrockResponse{
+	response := bedrockResponse{
 		Content: []bedrockContent{
 			{
 				Type: "text",
@@ -71,7 +71,11 @@ func TestConvertBedrockResponseToA2ATurnResultIncludesToolCallsPayload(t *testin
 				},
 			},
 		},
-	})
+	}
+	response.Usage.InputTokens = 42
+	response.Usage.OutputTokens = 8
+
+	result := convertBedrockResponseToA2ATurnResult(response)
 
 	require.NotNil(t, result)
 	assert.Equal(t, "thinking complete", result.Content)
@@ -82,6 +86,10 @@ func TestConvertBedrockResponseToA2ATurnResultIncludesToolCallsPayload(t *testin
 	payload, ok := extractDataPayloadBySchema(result.Message.Parts, A2APayloadSchemaToolCallsV1)
 	require.True(t, ok)
 	require.Contains(t, payload, "toolCalls")
+	require.NotNil(t, result.Usage)
+	assert.Equal(t, int64(42), result.Usage.PromptTokens)
+	assert.Equal(t, int64(8), result.Usage.CompletionTokens)
+	assert.Equal(t, int64(50), result.Usage.TotalTokens)
 }
 
 func TestBuildA2AToolOutcomeContentByIDUsesFallbackContentOrder(t *testing.T) {

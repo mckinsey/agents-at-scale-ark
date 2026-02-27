@@ -84,7 +84,16 @@ func (ap *AzureProvider) A2ATurnNative(
 	if len(response.Choices) == 0 {
 		return nil, fmt.Errorf("azure native turn: model returned empty response")
 	}
-	return buildA2ATurnResultFromChatChoice(response.Choices[0], "")
+	result, err := buildA2ATurnResultFromChatChoice(response.Choices[0], "")
+	if err != nil {
+		return nil, err
+	}
+	result.Usage = &A2ATurnUsage{
+		PromptTokens:     response.Usage.PromptTokens,
+		CompletionTokens: response.Usage.CompletionTokens,
+		TotalTokens:      response.Usage.TotalTokens,
+	}
+	return result, nil
 }
 
 func (ap *AzureProvider) ChatCompletion(ctx context.Context, messages []openai.ChatCompletionMessageParamUnion, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
