@@ -25,8 +25,28 @@ export function ManageMarketplaceSettings() {
 
   // Load sources from persistent storage on mount
   useEffect(() => {
+    // On client-side mount, check localStorage directly as fallback
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('marketplace-sources');
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setLocalSources(parsed);
+            // Also update the atom if it's out of sync
+            if (JSON.stringify(sources) !== stored) {
+              setSources(parsed);
+            }
+            return;
+          }
+        } catch (e) {
+          console.error('Failed to parse stored marketplace sources:', e);
+        }
+      }
+    }
+
     setLocalSources(sources);
-  }, [sources]);
+  }, [sources, setSources]);
 
   const handleAddSource = () => {
     if (!newSource.url) {

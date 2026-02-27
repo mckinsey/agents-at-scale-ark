@@ -1,5 +1,5 @@
 import { atom } from 'jotai';
-import { atomWithStorage } from 'jotai/utils';
+import { atomWithStorage, createJSONStorage } from 'jotai/utils';
 
 export interface MarketplaceSource {
   id: string;
@@ -18,11 +18,25 @@ const DEFAULT_MARKETPLACE_SOURCE: MarketplaceSource = {
   enabled: true,
 };
 
+// Custom storage that handles SSR properly
+const storage = createJSONStorage<MarketplaceSource[]>(() => {
+  // Only use localStorage on the client
+  if (typeof window !== 'undefined') {
+    return localStorage;
+  }
+  // Return a no-op storage for SSR
+  return {
+    getItem: () => null,
+    setItem: () => {},
+    removeItem: () => {},
+  };
+});
+
 // Persistent storage for marketplace sources
 export const marketplaceSourcesAtom = atomWithStorage<MarketplaceSource[]>(
   'marketplace-sources',
   [DEFAULT_MARKETPLACE_SOURCE],
-  undefined,
+  storage,
   { getOnInit: true },
 );
 
