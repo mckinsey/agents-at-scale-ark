@@ -899,9 +899,9 @@ func TestGetDelegationEventStreamReturnsStreamWhenAvailable(t *testing.T) {
 	require.NotNil(t, stream)
 }
 
-func TestApplyDelegationContextSetsNativePayloadMode(t *testing.T) {
-	ctx := applyDelegationContext(context.Background(), "")
-	require.Equal(t, A2APayloadModeNative, GetA2APayloadModeFromContext(ctx))
+func TestApplyDelegationContextSetsContextIDWhenProvided(t *testing.T) {
+	ctx := applyDelegationContext(context.Background(), "ctx-123")
+	require.Equal(t, "ctx-123", GetA2AContextID(ctx))
 }
 
 func TestBuildDelegatedToolResultContentBuildsTypedPayload(t *testing.T) {
@@ -1185,7 +1185,6 @@ func TestAgentToolExecutor_NativeMessageDelegationWithoutInput(t *testing.T) {
 			Namespace: "default",
 		},
 	})
-	queryCtx = WithA2APayloadMode(queryCtx, A2APayloadModeNative)
 	result, err := executor.Execute(queryCtx, call)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "A2A agent missing")
@@ -1277,8 +1276,7 @@ func TestTeamToolExecutor_NativeMessageDelegationWithoutInput(t *testing.T) {
 		},
 		Type: "function",
 	}
-	ctx := WithA2APayloadMode(context.Background(), A2APayloadModeNative)
-	result, err := executor.Execute(ctx, call)
+	result, err := executor.Execute(context.Background(), call)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "has no members configured")
 	require.Contains(t, result.Error, "failed to execute team")

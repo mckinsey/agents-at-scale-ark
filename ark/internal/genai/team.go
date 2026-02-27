@@ -89,8 +89,7 @@ func (t *Team) ExecuteA2A(ctx context.Context, userInput protocol.Message, histo
 
 	messages, err := t.executeWithTrackingA2A(execFunc, ctx, userInput, history)
 	return &ExecutionResult{
-		A2AMessages:    messages,
-		A2APayloadMode: A2APayloadModeNative,
+		A2AMessages: messages,
 	}, err
 }
 

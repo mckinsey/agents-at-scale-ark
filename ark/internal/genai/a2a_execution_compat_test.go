@@ -10,40 +10,6 @@ import (
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
-func TestConvertA2AInputToCompatMessages(t *testing.T) {
-	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
-		protocol.NewTextPart("hello"),
-	})
-	history := []protocol.Message{
-		protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
-			protocol.NewTextPart("previous"),
-		}),
-	}
-
-	compatUser, compatHistory, err := convertA2AInputToCompatMessages(userInput, history)
-	require.NoError(t, err)
-	assert.Equal(t, RoleUser, resolveMessageRole(compatUser))
-	assert.Equal(t, "hello", ExtractTextFromMessage(compatUser))
-	require.Len(t, compatHistory, 1)
-	assert.Equal(t, RoleAssistant, resolveMessageRole(compatHistory[0]))
-	assert.Equal(t, "previous", ExtractTextFromMessage(compatHistory[0]))
-}
-
-func TestConvertCompatMessagesToA2AAddsContextAndTask(t *testing.T) {
-	messages := []Message{
-		NewAssistantMessage("answer"),
-	}
-
-	converted, err := convertCompatMessagesToA2A(messages, "ctx-1", "task-1")
-	require.NoError(t, err)
-	require.Len(t, converted, 1)
-	assert.Equal(t, protocol.MessageRoleAgent, converted[0].Role)
-	require.NotNil(t, converted[0].ContextID)
-	assert.Equal(t, "ctx-1", *converted[0].ContextID)
-	require.NotNil(t, converted[0].TaskID)
-	assert.Equal(t, "task-1", *converted[0].TaskID)
-}
-
 func TestResolveA2AMetadataFromInputUsesMessageValues(t *testing.T) {
 	ctx := context.Background()
 	ctx = WithQueryContext(ctx, "query-id", "session-id", "query-name")

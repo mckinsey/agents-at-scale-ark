@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	arkann "mckinsey.com/ark/internal/annotations"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
@@ -59,14 +58,14 @@ func TestStreamA2AEventNative(t *testing.T) {
 		},
 	}
 
-	err := streamA2AEvent(ctx, stream, A2APayloadModeNative, "agent/test", "completion-1", "hello", payload)
+	err := streamA2AEvent(ctx, stream, payload)
 
 	assert.NoError(t, err)
 	assert.Len(t, stream.chunks, 1)
 	assert.Equal(t, payload, stream.chunks[0])
 }
 
-func TestStreamA2AEventNativeFailure(t *testing.T) {
+func TestStreamA2AEventFailure(t *testing.T) {
 	ctx := context.Background()
 	stream := &failingA2AEventStream{failOnCall: 1}
 	payload := &protocol.Message{
@@ -77,19 +76,19 @@ func TestStreamA2AEventNativeFailure(t *testing.T) {
 		},
 	}
 
-	err := streamA2AEvent(ctx, stream, A2APayloadModeNative, "agent/test", "completion-1", "hello", payload)
+	err := streamA2AEvent(ctx, stream, payload)
 
 	assert.Error(t, err)
-	assert.ErrorContains(t, err, "failed to stream native A2A event")
+	assert.ErrorContains(t, err, "failed to stream A2A event")
 }
 
-func TestStreamA2AErrorNative(t *testing.T) {
+func TestStreamA2AError(t *testing.T) {
 	ctx := context.Background()
 	ctx = WithA2AContextID(ctx, "ctx-err")
 	ctx = WithQueryContext(ctx, "query-err", "session-1", "query-name")
 	stream := &fakeEventStream{}
 
-	streamA2AError(ctx, stream, A2APayloadModeNative, "agent/test", errors.New("boom"))
+	streamA2AError(ctx, stream, "agent/test", errors.New("boom"))
 
 	assert.Len(t, stream.chunks, 1)
 	event, ok := stream.chunks[0].(*protocol.TaskStatusUpdateEvent)
@@ -109,7 +108,7 @@ func TestStreamA2AErrorNative(t *testing.T) {
 	assert.Equal(t, "status", stepPayload["stepKind"])
 }
 
-func TestConsumeA2AStreamEventsMessageCompat(t *testing.T) {
+func TestConsumeA2AStreamEventsMessage(t *testing.T) {
 	ctx := context.Background()
 	stream := &fakeEventStream{}
 	events := make(chan protocol.StreamingMessageEvent, 1)
@@ -120,15 +119,14 @@ func TestConsumeA2AStreamEventsMessageCompat(t *testing.T) {
 	close(events)
 
 	engine := &A2AExecutionEngine{}
-	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
+	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, "agent", "default", "query", nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "hello", response.Content)
 	assert.Len(t, stream.chunks, 1)
-	wrapped, ok := stream.chunks[0].(ChunkWithMetadata)
+	streamedMessage, ok := stream.chunks[0].(*protocol.Message)
 	assert.True(t, ok)
-	assert.Equal(t, "hello", wrapped.Choices[0].Delta.Content)
-	assert.Equal(t, &message, wrapped.Ark.A2A)
+	assert.Equal(t, "hello", extractTextFromParts(streamedMessage.Parts))
 }
 
 func TestConsumeA2AStreamEventsMessageThenFinalStatus(t *testing.T) {
@@ -158,7 +156,7 @@ func TestConsumeA2AStreamEventsMessageThenFinalStatus(t *testing.T) {
 	close(events)
 
 	engine := &A2AExecutionEngine{}
-	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
+	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, "agent", "default", "query", nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "partial", response.Content)
@@ -187,7 +185,7 @@ func TestConsumeA2AStreamEventsArtifactUpdate(t *testing.T) {
 	close(events)
 
 	engine := &A2AExecutionEngine{}
-	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
+	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, "agent", "default", "query", nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "part-1", response.Content)
@@ -216,7 +214,7 @@ func TestConsumeA2AStreamEventsFinalStatus(t *testing.T) {
 	close(events)
 
 	engine := &A2AExecutionEngine{}
-	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
+	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, "agent", "default", "query", nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "done", response.Content)
@@ -244,7 +242,7 @@ func TestConsumeA2AStreamEventsTaskHistory(t *testing.T) {
 	close(events)
 
 	engine := &A2AExecutionEngine{}
-	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
+	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, "agent", "default", "query", nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "history", response.Content)
@@ -259,12 +257,12 @@ func TestConsumeA2AStreamEventsNoEvents(t *testing.T) {
 	close(events)
 
 	engine := &A2AExecutionEngine{}
-	_, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
+	_, err := engine.consumeA2AStreamEvents(ctx, events, stream, "agent", "default", "query", nil)
 
 	assert.Error(t, err)
 }
 
-func TestConsumeA2AStreamEventsMessageNativeStreamFailure(t *testing.T) {
+func TestConsumeA2AStreamEventsMessageStreamFailure(t *testing.T) {
 	ctx := context.Background()
 	stream := &failingA2AEventStream{failOnCall: 1}
 	events := make(chan protocol.StreamingMessageEvent, 1)
@@ -275,13 +273,13 @@ func TestConsumeA2AStreamEventsMessageNativeStreamFailure(t *testing.T) {
 	close(events)
 
 	engine := &A2AExecutionEngine{}
-	_, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeNative, "agent/test", "completion-1", "agent", "default", "query", nil)
+	_, err := engine.consumeA2AStreamEvents(ctx, events, stream, "agent", "default", "query", nil)
 
 	assert.Error(t, err)
-	assert.ErrorContains(t, err, "failed to stream native A2A event")
+	assert.ErrorContains(t, err, "failed to stream A2A event")
 }
 
-func TestConsumeA2AStreamEventsStatusNativeStreamFailure(t *testing.T) {
+func TestConsumeA2AStreamEventsStatusStreamFailure(t *testing.T) {
 	ctx := context.Background()
 	stream := &failingA2AEventStream{failOnCall: 1}
 	events := make(chan protocol.StreamingMessageEvent, 1)
@@ -297,13 +295,13 @@ func TestConsumeA2AStreamEventsStatusNativeStreamFailure(t *testing.T) {
 	close(events)
 
 	engine := &A2AExecutionEngine{}
-	_, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeNative, "agent/test", "completion-1", "agent", "default", "query", nil)
+	_, err := engine.consumeA2AStreamEvents(ctx, events, stream, "agent", "default", "query", nil)
 
 	assert.Error(t, err)
-	assert.ErrorContains(t, err, "failed to stream native A2A event")
+	assert.ErrorContains(t, err, "failed to stream A2A event")
 }
 
-func TestConsumeA2AStreamEventsArtifactNativeStreamFailure(t *testing.T) {
+func TestConsumeA2AStreamEventsArtifactStreamFailure(t *testing.T) {
 	ctx := context.Background()
 	stream := &failingA2AEventStream{failOnCall: 1}
 	events := make(chan protocol.StreamingMessageEvent, 1)
@@ -320,26 +318,8 @@ func TestConsumeA2AStreamEventsArtifactNativeStreamFailure(t *testing.T) {
 	close(events)
 
 	engine := &A2AExecutionEngine{}
-	_, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeNative, "agent/test", "completion-1", "agent", "default", "query", nil)
+	_, err := engine.consumeA2AStreamEvents(ctx, events, stream, "agent", "default", "query", nil)
 
 	assert.Error(t, err)
-	assert.ErrorContains(t, err, "failed to stream native A2A event")
-}
-
-func TestResolveA2AExecutionPayloadModeDefaultsNative(t *testing.T) {
-	mode := resolveA2AExecutionPayloadMode(context.Background(), nil)
-	assert.Equal(t, A2APayloadModeNative, mode)
-}
-
-func TestResolveA2AExecutionPayloadModeUsesPayloadModeContext(t *testing.T) {
-	ctx := WithA2APayloadMode(context.Background(), A2APayloadModeCompat)
-	mode := resolveA2AExecutionPayloadMode(ctx, nil)
-	assert.Equal(t, A2APayloadModeCompat, mode)
-}
-
-func TestResolveA2AExecutionPayloadModeIgnoresAgentAnnotations(t *testing.T) {
-	mode := resolveA2AExecutionPayloadMode(context.Background(), map[string]string{
-		arkann.ExecutionMode: "chat-completions",
-	})
-	assert.Equal(t, A2APayloadModeNative, mode)
+	assert.ErrorContains(t, err, "failed to stream A2A event")
 }

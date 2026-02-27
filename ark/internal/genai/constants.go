@@ -73,11 +73,6 @@ const (
 	A2ADelegatedToolKindStatus = "status"
 )
 
-const (
-	A2APayloadModeCompat = "compat"
-	A2APayloadModeNative = "native-a2a"
-)
-
 // Tool type constants
 const (
 	ToolTypeHTTP    = "http"

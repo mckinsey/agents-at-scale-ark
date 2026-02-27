@@ -123,10 +123,9 @@ func (a *openAIA2AModelAdapter) a2aTurnViaChatCompletionsEdge(ctx context.Contex
 		a.provider.SetOutputSchema(a.outputSchema, a.schemaName)
 	}
 
-	modelCtx := WithA2APayloadMode(ctx, A2APayloadModeCompat)
-	forwardOpenAIChunks := eventStream != nil && GetA2APayloadModeFromContext(ctx) == A2APayloadModeCompat
+	useStreaming := eventStream != nil
 
-	response, err := a.callProvider(modelCtx, compatMessages, openAITools, eventStream, forwardOpenAIChunks)
+	response, err := a.callProvider(ctx, compatMessages, openAITools, eventStream, useStreaming)
 	if err != nil {
 		return nil, err
 	}

@@ -71,7 +71,6 @@ func TestA2ALocalEngineSimpleResponse(t *testing.T) {
 	result, err := engine.Execute(context.Background(), userInput, messages, stream)
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, A2APayloadModeNative, result.A2APayloadMode)
 	require.Len(t, result.A2AMessages, 1)
 	assert.Equal(t, "hello world", ExtractA2ATextFromMessage(result.A2AMessages[0]))
 	assert.Empty(t, result.Messages)
