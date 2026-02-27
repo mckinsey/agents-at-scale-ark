@@ -395,7 +395,7 @@ func TestHTTPMemoryAddMessagesFormatCompat(t *testing.T) {
 	require.Nil(t, decoded.Messages[0]["parts"])
 }
 
-func TestHTTPMemoryAddMessagesCompatIgnoresPayloadModeContext(t *testing.T) {
+func TestHTTPMemoryAddMessagesWritesOpenAIFormatWithContext(t *testing.T) {
 	var requestBody []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == MessagesEndpoint && r.Method == http.MethodPost {
@@ -436,8 +436,7 @@ func TestHTTPMemoryAddMessagesCompatIgnoresPayloadModeContext(t *testing.T) {
 		eventingRecorder: &noOpMemoryRecorder{},
 	}
 
-	ctx := WithA2APayloadMode(context.Background(), A2APayloadModeNative)
-	err := httpMemory.AddMessages(ctx, "query-id", []Message{NewUserMessage("hello")})
+	err := httpMemory.AddMessages(context.Background(), "query-id", []Message{NewUserMessage("hello")})
 	require.NoError(t, err)
 
 	var decoded struct {
@@ -445,8 +444,8 @@ func TestHTTPMemoryAddMessagesCompatIgnoresPayloadModeContext(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(requestBody, &decoded))
 	require.Len(t, decoded.Messages, 1)
-	require.NotNil(t, decoded.Messages[0]["content"], "AddMessages must always write OpenAI format regardless of context flags")
-	require.Nil(t, decoded.Messages[0]["parts"], "AddMessages must not produce A2A parts even when payload mode context is set")
+	require.NotNil(t, decoded.Messages[0]["content"], "AddMessages must always write OpenAI format")
+	require.Nil(t, decoded.Messages[0]["parts"], "AddMessages must not produce A2A parts")
 }
 
 func TestHTTPMemoryGetMessagesReturnsOpenAIDirectly(t *testing.T) {
@@ -506,7 +505,7 @@ func TestHTTPMemoryGetMessagesReturnsOpenAIDirectly(t *testing.T) {
 	require.Equal(t, "hi there", ExtractTextFromMessage(messages[1]))
 }
 
-func TestHTTPMemoryGetMessagesRemainsLegacyWhenNonNativePayloadMode(t *testing.T) {
+func TestHTTPMemoryGetMessagesConvertsA2AMessageToOpenAIShape(t *testing.T) {
 	a2aUser := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
 		protocol.NewFilePartWithURI("diagram.png", "image/png", "https://example.com/diagram.png"),
 	})
@@ -558,66 +557,6 @@ func TestHTTPMemoryGetMessagesRemainsLegacyWhenNonNativePayloadMode(t *testing.T
 	}
 
 	ctx := context.Background()
-	messages, err := httpMemory.GetMessages(ctx)
-	require.NoError(t, err)
-	require.Len(t, messages, 1)
-	require.NotNil(t, messages[0].OfUser)
-	require.Equal(t, "https://example.com/diagram.png", messages[0].OfUser.Content.OfString.Value)
-	require.Len(t, messages[0].OfUser.Content.OfArrayOfContentParts, 0)
-}
-
-func TestHTTPMemoryGetMessagesReturnsA2AWhenNativePayloadModeEnabled(t *testing.T) {
-	a2aUser := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
-		protocol.NewFilePartWithURI("diagram.png", "image/png", "https://example.com/diagram.png"),
-	})
-	serializedA2AUser, err := json.Marshal(a2aUser)
-	require.NoError(t, err)
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == MessagesEndpoint && r.Method == http.MethodGet {
-			w.Header().Set("Content-Type", "application/json")
-			response := MessagesResponse{
-				Items: []MessageRecord{
-					{Message: json.RawMessage(serializedA2AUser)},
-				},
-			}
-			_ = json.NewEncoder(w).Encode(response)
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer server.Close()
-
-	resolvedAddress := server.URL
-	memory := &arkv1alpha1.Memory{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-memory",
-			Namespace: "default",
-		},
-		Spec: arkv1alpha1.MemorySpec{
-			Address: arkv1alpha1.ValueSource{
-				Value: server.URL,
-			},
-		},
-		Status: arkv1alpha1.MemoryStatus{
-			LastResolvedAddress: &resolvedAddress,
-			Phase:               "ready",
-		},
-	}
-
-	fakeClient := setupMemoryTestClient([]client.Object{memory})
-	httpMemory := &HTTPMemory{
-		client:           fakeClient,
-		httpClient:       server.Client(),
-		baseURL:          server.URL,
-		conversationId:   "test-conv-id",
-		name:             "test-memory",
-		namespace:        "default",
-		headers:          make(map[string]string),
-		eventingRecorder: &noOpMemoryRecorder{},
-	}
-
-	ctx := WithA2APayloadMode(context.Background(), A2APayloadModeNative)
 	messages, err := httpMemory.GetMessages(ctx)
 	require.NoError(t, err)
 	require.Len(t, messages, 1)
