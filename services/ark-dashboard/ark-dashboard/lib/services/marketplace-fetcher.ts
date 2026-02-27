@@ -85,7 +85,7 @@ function generateItemId(item: GitHubMarketplaceItem): string {
 
 function getIconForItem(item: GitHubMarketplaceItem): string {
   // Check if icon is a placeholder URL
-  if (item.icon && item.icon.includes('example.com')) {
+  if (item.icon?.includes('example.com')) {
     // Return emoji based on category or type
     const categoryIcons: Record<string, string> = {
       observability: '📊',
@@ -227,7 +227,7 @@ export async function fetchMarketplaceItemsFromSource(
 ): Promise<MarketplaceItem[]> {
   const manifest = await fetchMarketplaceManifest(source.url);
 
-  if (!manifest || !manifest.items) {
+  if (!manifest?.items) {
     return [];
   }
 
@@ -294,7 +294,7 @@ export async function getRawMarketplaceItemById(
   id: string,
 ): Promise<GitHubMarketplaceItem | null> {
   const manifest = await fetchMarketplaceManifest();
-  if (!manifest || !manifest.items) {
+  if (!manifest?.items) {
     return null;
   }
 
