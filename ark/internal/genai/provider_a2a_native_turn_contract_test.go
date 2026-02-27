@@ -194,6 +194,10 @@ func TestOpenAIProviderA2ATurnNativeSendsCompatMessages(t *testing.T) {
 	assert.Equal(t, "final answer", result.Content)
 	assert.Equal(t, "final answer", extractTextFromParts(result.Message.Parts))
 	assert.Len(t, result.ToolCalls, 0)
+	require.NotNil(t, result.Usage)
+	assert.Equal(t, int64(10), result.Usage.PromptTokens)
+	assert.Equal(t, int64(5), result.Usage.CompletionTokens)
+	assert.Equal(t, int64(15), result.Usage.TotalTokens)
 
 	require.Len(t, captured, 4)
 	system := decodeMessageObject(t, captured[0])
@@ -271,6 +275,10 @@ func TestAzureProviderA2ATurnNativeSendsCompatMessages(t *testing.T) {
 	assert.Equal(t, "azure answer", result.Content)
 	assert.Equal(t, "azure answer", extractTextFromParts(result.Message.Parts))
 	assert.Len(t, result.ToolCalls, 0)
+	require.NotNil(t, result.Usage)
+	assert.Equal(t, int64(10), result.Usage.PromptTokens)
+	assert.Equal(t, int64(5), result.Usage.CompletionTokens)
+	assert.Equal(t, int64(15), result.Usage.TotalTokens)
 
 	require.Len(t, captured, 4)
 	system := decodeMessageObject(t, captured[0])

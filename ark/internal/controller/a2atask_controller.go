@@ -68,35 +68,29 @@ func (r *A2ATaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// Handle terminal states
 	if genai.IsTerminalPhase(a2aTask.Status.Phase) {
-		if r.ensureTerminalConditions(&a2aTask) {
-			if err := r.Status().Update(ctx, &a2aTask); err != nil {
-				log.Error(err, "unable to update terminal A2ATask status")
-				return ctrl.Result{}, err
-			}
-		}
 		return ctrl.Result{}, nil
 	}
 
-	pollInterval := time.Second * 5
-	if a2aTask.Spec.PollInterval != nil {
-		pollInterval = a2aTask.Spec.PollInterval.Duration
-	}
-
-	if shouldSkipA2ATaskPolling(&a2aTask, pollInterval) {
-		return ctrl.Result{RequeueAfter: pollInterval}, nil
-	}
-
+	// Fetch task status from A2A server for all non-terminal tasks
 	if err := r.fetchA2ATaskStatus(ctx, &a2aTask); err != nil {
 		log.Error(err, "failed to fetch A2A task status", "taskId", a2aTask.Spec.TaskID)
 		r.Eventing.A2aRecorder().TaskPollingFailed(ctx, &a2aTask, fmt.Sprintf("Failed to fetch task status: %v", err))
+
+		// Continue with requeue even on error to retry polling
 	}
 
+	// Update status
 	if err := r.Status().Update(ctx, &a2aTask); err != nil {
 		log.Error(err, "unable to update A2ATask status")
 		return ctrl.Result{}, err
 	}
 
+	// Requeue for non-terminal tasks using the configured poll interval
 	if !genai.IsTerminalPhase(a2aTask.Status.Phase) {
+		pollInterval := time.Second * 5 // default fallback
+		if a2aTask.Spec.PollInterval != nil {
+			pollInterval = a2aTask.Spec.PollInterval.Duration
+		}
 		return ctrl.Result{RequeueAfter: pollInterval}, nil
 	}
 
@@ -194,35 +188,4 @@ func (r *A2ATaskReconciler) setConditionCompleted(a2aTask *arkv1alpha1.A2ATask, 
 		Message:            message,
 		ObservedGeneration: a2aTask.Generation,
 	})
-}
-
-func shouldSkipA2ATaskPolling(a2aTask *arkv1alpha1.A2ATask, pollInterval time.Duration) bool {
-	if a2aTask.Status.LastStatusTimestamp == "" {
-		return false
-	}
-	lastUpdate, err := time.Parse(time.RFC3339, a2aTask.Status.LastStatusTimestamp)
-	if err != nil {
-		return false
-	}
-	return time.Since(lastUpdate) < pollInterval
-}
-
-func (r *A2ATaskReconciler) ensureTerminalConditions(a2aTask *arkv1alpha1.A2ATask) bool {
-	for _, condition := range a2aTask.Status.Conditions {
-		if condition.Type == string(arkv1alpha1.A2ATaskCompleted) && condition.Status == metav1.ConditionTrue {
-			return false
-		}
-	}
-
-	switch a2aTask.Status.Phase {
-	case genai.PhaseCompleted:
-		r.setConditionCompleted(a2aTask, metav1.ConditionTrue, "TaskSucceeded", "Task completed successfully")
-	case genai.PhaseFailed:
-		r.setConditionCompleted(a2aTask, metav1.ConditionTrue, "TaskFailed", "Task failed")
-	case genai.PhaseCancelled:
-		r.setConditionCompleted(a2aTask, metav1.ConditionTrue, "TaskCancelled", "Task was cancelled")
-	default:
-		return false
-	}
-	return true
 }

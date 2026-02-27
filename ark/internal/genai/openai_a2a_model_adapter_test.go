@@ -290,6 +290,11 @@ func (p *adapterTestNativeProvider) A2ATurnNative(_ context.Context, _ []protoco
 	return &A2ATurnResult{
 		Message: msg,
 		Content: "native-response",
+		Usage: &A2ATurnUsage{
+			PromptTokens:     7,
+			CompletionTokens: 5,
+			TotalTokens:      12,
+		},
 	}, nil
 }
 
@@ -324,8 +329,37 @@ func TestA2ATurnPrefersNativeProviderWhenAvailable(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "native-response", extractTextFromParts(result.Message.Parts))
+	require.NotNil(t, result.Usage)
+	assert.Equal(t, int64(7), result.Usage.PromptTokens)
+	assert.Equal(t, int64(5), result.Usage.CompletionTokens)
+	assert.Equal(t, int64(12), result.Usage.TotalTokens)
 	assert.Equal(t, 1, provider.nativeCalls)
 	assert.Equal(t, 0, provider.chatCalls)
+}
+
+func TestA2ATurnNativeProviderRecordsTokenUsage(t *testing.T) {
+	provider := &adapterTestNativeProvider{}
+	eventingRecorder := eventingnoop.NewModelRecorder()
+	model := &Model{
+		Model:             "test-model",
+		Type:              "native",
+		Provider:          provider,
+		telemetryRecorder: telemetrynoop.NewModelRecorder(),
+		eventingRecorder:  eventingRecorder,
+	}
+	adapter := NewOpenAIA2AModelAdapter(model, "test-agent", "default")
+	userMessage := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("hello"),
+	})
+
+	ctx := eventingRecorder.StartTokenCollection(context.Background())
+	_, err := adapter.A2ATurn(ctx, []protocol.Message{userMessage}, nil, nil, nil)
+	require.NoError(t, err)
+
+	summary := eventingRecorder.GetTokenSummary(ctx)
+	assert.Equal(t, int64(7), summary.PromptTokens)
+	assert.Equal(t, int64(5), summary.CompletionTokens)
+	assert.Equal(t, int64(12), summary.TotalTokens)
 }
 
 func TestA2ATurnKeepsLegacyCompatMessageShapes(t *testing.T) {

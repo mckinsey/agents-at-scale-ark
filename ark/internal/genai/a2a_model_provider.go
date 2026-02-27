@@ -23,10 +23,17 @@ type A2AToolOutcome struct {
 	Metadata   map[string]interface{} `json:"metadata,omitempty"`
 }
 
+type A2ATurnUsage struct {
+	PromptTokens     int64
+	CompletionTokens int64
+	TotalTokens      int64
+}
+
 type A2ATurnResult struct {
 	Message   protocol.Message
 	ToolCalls []A2AToolCall
 	Content   string
+	Usage     *A2ATurnUsage
 }
 
 type A2AModelProvider interface {

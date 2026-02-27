@@ -64,9 +64,46 @@ func NewOpenAIA2AModelAdapter(model *Model, agentName, agentNamespace string) A2
 
 func (a *openAIA2AModelAdapter) A2ATurn(ctx context.Context, messages []protocol.Message, toolOutcomes []A2AToolOutcome, tools []A2AToolDefinition, eventStream EventStreamInterface) (*A2ATurnResult, error) {
 	if a.nativeProvider != nil {
-		return a.nativeProvider.A2ATurnNative(ctx, messages, toolOutcomes, tools, eventStream)
+		return a.a2aTurnViaNativeProvider(ctx, messages, toolOutcomes, tools, eventStream)
 	}
 	return a.a2aTurnViaChatCompletionsEdge(ctx, messages, toolOutcomes, tools, eventStream)
+}
+
+func (a *openAIA2AModelAdapter) a2aTurnViaNativeProvider(ctx context.Context, messages []protocol.Message, toolOutcomes []A2AToolOutcome, tools []A2AToolDefinition, eventStream EventStreamInterface) (*A2ATurnResult, error) {
+	ctx, span := a.telemetryRecorder.StartModelExecution(ctx, a.modelName, a.modelType)
+	defer span.End()
+
+	operationData := map[string]string{
+		"model":     a.modelName,
+		"modelType": a.modelType,
+	}
+	ctx = a.eventingRecorder.Start(ctx, "LLMCall", fmt.Sprintf("Calling model %s", a.modelName), operationData)
+
+	result, err := a.nativeProvider.A2ATurnNative(ctx, messages, toolOutcomes, tools, eventStream)
+	if err != nil {
+		a.telemetryRecorder.RecordError(span, err)
+		a.eventingRecorder.Fail(ctx, "LLMCall", fmt.Sprintf("Model call failed: %v", err), err, operationData)
+		return nil, err
+	}
+	if result == nil {
+		nilErr := fmt.Errorf("model provider returned nil response without error")
+		a.telemetryRecorder.RecordError(span, nilErr)
+		a.eventingRecorder.Fail(ctx, "LLMCall", "Model returned nil response", nilErr, operationData)
+		return nil, nilErr
+	}
+
+	a.telemetryRecorder.RecordOutput(span, result.Message)
+	if result.Usage != nil {
+		a.telemetryRecorder.RecordTokenUsage(span, result.Usage.PromptTokens, result.Usage.CompletionTokens, result.Usage.TotalTokens)
+		a.eventingRecorder.AddTokenUsage(ctx, arkv1alpha1.TokenUsage{
+			PromptTokens:     result.Usage.PromptTokens,
+			CompletionTokens: result.Usage.CompletionTokens,
+			TotalTokens:      result.Usage.TotalTokens,
+		})
+	}
+	a.telemetryRecorder.RecordSuccess(span)
+	a.eventingRecorder.Complete(ctx, "LLMCall", "Model call completed successfully", operationData)
+	return result, nil
 }
 
 func (a *openAIA2AModelAdapter) a2aTurnViaChatCompletionsEdge(ctx context.Context, messages []protocol.Message, toolOutcomes []A2AToolOutcome, tools []A2AToolDefinition, eventStream EventStreamInterface) (*A2ATurnResult, error) {

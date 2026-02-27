@@ -213,9 +213,17 @@ func convertBedrockResponseToA2ATurnResult(response bedrockResponse) *A2ATurnRes
 		})
 	}
 
-	return &A2ATurnResult{
+	result := &A2ATurnResult{
 		Message:   protocol.NewMessage(protocol.MessageRoleAgent, parts),
 		ToolCalls: toolCalls,
 		Content:   content,
 	}
+	if response.Usage.InputTokens > 0 || response.Usage.OutputTokens > 0 {
+		result.Usage = &A2ATurnUsage{
+			PromptTokens:     int64(response.Usage.InputTokens),
+			CompletionTokens: int64(response.Usage.OutputTokens),
+			TotalTokens:      int64(response.Usage.InputTokens + response.Usage.OutputTokens),
+		}
+	}
+	return result
 }
