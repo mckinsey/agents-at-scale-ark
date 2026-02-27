@@ -77,7 +77,7 @@ describe('a2a-tasks hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toEqual(mockTask);
-      expect(a2aTasksService.get).toHaveBeenCalledWith('task-1');
+      expect(a2aTasksService.get).toHaveBeenCalledWith('task-1', undefined);
     });
 
     it('should handle errors', async () => {
