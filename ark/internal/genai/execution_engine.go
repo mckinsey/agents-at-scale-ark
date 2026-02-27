@@ -307,4 +307,3 @@ func buildToolDefinitions(tools *ToolRegistry) []ToolDefinition {
 
 	return tools.GetToolDefinitions()
 }
-
