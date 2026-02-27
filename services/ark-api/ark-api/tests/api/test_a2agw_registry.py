@@ -27,8 +27,13 @@ class TestA2AGatewayRegistry(unittest.TestCase):
         card = ark_to_agent_card(agent)
 
         self.assertEqual(card.name, "test-agent")
-        self.assertEqual(len(card.skills), 1)
-        self.assertEqual(card.skills[0].name, "weather")
+        self.assertEqual(len(card.skills), 2)
+        weather_skills = [skill for skill in card.skills if skill.name == "weather"]
+        self.assertEqual(len(weather_skills), 1)
+        structured_skills = [skill for skill in card.skills if skill.name == A2A_STRUCTURED_DELEGATION_SKILL_NAME]
+        self.assertEqual(len(structured_skills), 1)
+        self.assertEqual(structured_skills[0].id, A2A_STRUCTURED_DELEGATION_CAPABILITY_URI)
+        self.assertIn(A2A_STRUCTURED_DELEGATION_CAPABILITY_URI, structured_skills[0].tags)
 
     def test_ark_to_agent_card_uses_default_skill_for_invalid_json(self):
         agent = SimpleNamespace(
@@ -41,8 +46,13 @@ class TestA2AGatewayRegistry(unittest.TestCase):
 
         card = ark_to_agent_card(agent)
 
-        self.assertEqual(len(card.skills), 1)
-        self.assertEqual(card.skills[0].name, "General")
+        self.assertEqual(len(card.skills), 2)
+        default_skills = [skill for skill in card.skills if skill.name == "General"]
+        self.assertEqual(len(default_skills), 1)
+        structured_skills = [skill for skill in card.skills if skill.name == A2A_STRUCTURED_DELEGATION_SKILL_NAME]
+        self.assertEqual(len(structured_skills), 1)
+        self.assertEqual(structured_skills[0].id, A2A_STRUCTURED_DELEGATION_CAPABILITY_URI)
+        self.assertIn(A2A_STRUCTURED_DELEGATION_CAPABILITY_URI, structured_skills[0].tags)
 
     def test_ark_to_agent_card_uses_default_skill_when_missing_annotation(self):
         agent = SimpleNamespace(
@@ -52,8 +62,13 @@ class TestA2AGatewayRegistry(unittest.TestCase):
 
         card = ark_to_agent_card(agent)
 
-        self.assertEqual(len(card.skills), 1)
-        self.assertEqual(card.skills[0].name, "General")
+        self.assertEqual(len(card.skills), 2)
+        default_skills = [skill for skill in card.skills if skill.name == "General"]
+        self.assertEqual(len(default_skills), 1)
+        structured_skills = [skill for skill in card.skills if skill.name == A2A_STRUCTURED_DELEGATION_SKILL_NAME]
+        self.assertEqual(len(structured_skills), 1)
+        self.assertEqual(structured_skills[0].id, A2A_STRUCTURED_DELEGATION_CAPABILITY_URI)
+        self.assertIn(A2A_STRUCTURED_DELEGATION_CAPABILITY_URI, structured_skills[0].tags)
 
     def test_ark_to_agent_card_streaming_capability_from_annotation(self):
         agent = SimpleNamespace(
