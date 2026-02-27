@@ -22,6 +22,8 @@ const DEFAULT_MARKETPLACE_SOURCE: MarketplaceSource = {
 export const marketplaceSourcesAtom = atomWithStorage<MarketplaceSource[]>(
   'marketplace-sources',
   [DEFAULT_MARKETPLACE_SOURCE],
+  undefined,
+  { getOnInit: true },
 );
 
 // Loading state for marketplace data
