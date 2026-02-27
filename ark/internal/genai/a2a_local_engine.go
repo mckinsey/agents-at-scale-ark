@@ -51,8 +51,7 @@ func (e *A2ALocalEngine) Execute(ctx context.Context, userInput protocol.Message
 
 		if len(turnResult.ToolCalls) == 0 {
 			result := &ExecutionResult{
-				A2AMessages:    newMessages,
-				A2APayloadMode: A2APayloadModeNative,
+				A2AMessages: newMessages,
 			}
 			lastMessage := newMessages[len(newMessages)-1]
 			result.A2AResponse = &A2AResponse{

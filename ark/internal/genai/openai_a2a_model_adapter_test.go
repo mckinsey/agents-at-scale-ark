@@ -173,7 +173,7 @@ func (p *adapterTestChatProvider) ChatCompletionStream(_ context.Context, messag
 
 func (p *adapterTestChatProvider) SetOutputSchema(_ *runtime.RawExtension, _ string) {}
 
-func TestA2ATurnStreamsOpenAIChunksInCompatMode(t *testing.T) {
+func TestA2ATurnUsesStreamingWhenEventStreamProvided(t *testing.T) {
 	provider := &adapterTestChatProvider{
 		response: &openai.ChatCompletion{
 			Choices: []openai.ChatCompletionChoice{
@@ -501,7 +501,7 @@ func TestConvertA2AMessagesToCompatMultimodalMatchesLegacyForTextOnlyTraffic(t *
 
 	legacyJSON, err := json.Marshal(legacyMessages)
 	require.NoError(t, err)
-	experimentalJSON, err := json.Marshal(multimodalMessages)
+	multimodalJSON, err := json.Marshal(multimodalMessages)
 	require.NoError(t, err)
-	assert.JSONEq(t, string(legacyJSON), string(experimentalJSON))
+	assert.JSONEq(t, string(legacyJSON), string(multimodalJSON))
 }

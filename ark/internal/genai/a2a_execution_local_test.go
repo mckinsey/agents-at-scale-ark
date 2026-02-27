@@ -171,7 +171,6 @@ func TestExecuteLocallyA2ANativeSimpleResponse(t *testing.T) {
 	require.NotNil(t, result)
 	require.Len(t, result.A2AMessages, 1)
 	assert.Equal(t, "native-response", ExtractA2ATextFromMessage(result.A2AMessages[0]))
-	assert.Equal(t, A2APayloadModeNative, result.A2APayloadMode)
 	assert.Empty(t, result.Messages)
 	require.NotNil(t, result.A2AMessages[0].ContextID)
 	require.NotNil(t, result.A2AMessages[0].TaskID)

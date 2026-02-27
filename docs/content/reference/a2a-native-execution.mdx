@@ -322,7 +322,7 @@ message.Extensions["history"] = HistoryExtension{
 ```
 
 **Principles**:
-- Opt-in and negotiated via AgentCard capabilities
+- Declared and negotiated via AgentCard capabilities
 - Size-bounded to prevent payload bloat
 - Non-authoritative (receivers may ignore)
 
@@ -414,7 +414,7 @@ OpenAI Chat Completions format is maintained at edge boundaries:
 
 | Boundary | Behavior |
 | --- | --- |
-| `message_conversion.go` / `message_conversion_experimental.go` | Content-part-aware converters preserve text/image file parts across A2A and OpenAI compat messages |
+| `message_conversion.go` / `message_conversion_multimodal.go` | Content-part-aware converters preserve text/image file parts across A2A and OpenAI compat messages |
 | `openai_a2a_model_adapter.go` + `a2a_execution_local.go` | Model adapter converts between A2A and provider-specific formats at the model boundary |
 | `execution_engine.go` | `ExecutionEngineA2AClient` uses A2A SendMessage protocol for all external engines |
 | `provider_bedrock.go` | Bedrock path extracts array content parts (`text`, `image_url`) and projects to Bedrock content |
@@ -523,10 +523,10 @@ This keeps the internal native path aligned with A2A task lifecycle semantics wh
 - [x] A2A tool call types (`A2AToolCall`, `A2AToolDefinition`) without OpenAI dependency
 - [x] Hard-fail for unsupported providers (`ErrA2AModelProviderNotSupported`)
 - [x] All execution engines via A2A SendMessage protocol (`ExecutionEngineA2AClient`)
-- [x] Removed experimental switches and annotation-based opt-in
+- [x] A2A native is the default path (no switch or annotation gate)
 
 ### Streaming (Largely Complete)
-- [x] Native A2A SSE streaming (`streamA2AEvent` with `A2APayloadModeNative` passthrough)
+- [x] Native A2A SSE streaming (`streamA2AEvent` forwards protocol-native events)
 - [x] TaskStatusUpdateEvent handling (`handleTaskStatusUpdateEvent`, `BuildNativeStreamCompletionEvent`)
 - [x] Direct event forwarding in native mode (no OpenAI chunk conversion)
 - [x] Strict streaming with error propagation (`streamNativeA2AMessageStrict`)
@@ -560,8 +560,8 @@ Multimodal handling is implemented at A2A-native adapter boundaries:
 
 | Phase | Action | Tracking issues | Exit signal |
 | --- | --- | --- | --- |
-| P1 hardening | Expand interop/regression coverage for multimodal history, delegated tool flows, and memory/native boundary behavior | [#1059](https://github.com/mckinsey/agents-at-scale-ark/issues/1059), [#530](https://github.com/mckinsey/agents-at-scale-ark/issues/530) | Stable CI coverage across native and compat payload modes |
-| P1 hardening | Add boundary observability for payload mode, conversion path, and stream correlation IDs | [#1059](https://github.com/mckinsey/agents-at-scale-ark/issues/1059), [#1116](https://github.com/mckinsey/agents-at-scale-ark/issues/1116) | Events/metrics can trace request to task/message outcomes |
+| P1 hardening | Expand interop/regression coverage for multimodal history, delegated tool flows, and memory/native boundary behavior | [#1059](https://github.com/mckinsey/agents-at-scale-ark/issues/1059), [#530](https://github.com/mckinsey/agents-at-scale-ark/issues/530) | Stable CI coverage across native transport and compat edge adapters |
+| P1 hardening | Add boundary observability for conversion path and stream correlation IDs | [#1059](https://github.com/mckinsey/agents-at-scale-ark/issues/1059), [#1116](https://github.com/mckinsey/agents-at-scale-ark/issues/1116) | Events/metrics can trace request to task/message outcomes |
 | P1 hardening | Add resilience tests for stream interruption, partial event sequences, and recovery behavior | [#530](https://github.com/mckinsey/agents-at-scale-ark/issues/530), [#1059](https://github.com/mckinsey/agents-at-scale-ark/issues/1059) | Streaming behavior is deterministic under failure injection |
 | P2 edge adapter | Implement OpenAI Responses API adapter as an edge boundary (not internal canonical transport) | [#965](https://github.com/mckinsey/agents-at-scale-ark/issues/965), [#630](https://github.com/mckinsey/agents-at-scale-ark/issues/630), [#1028](https://github.com/mckinsey/agents-at-scale-ark/issues/1028) | Response API users get feature parity without changing internal A2A model |
 | P2 edge adapter | Validate round-trip mapping for task/message semantics and IDs (`taskId`, `contextId`, `messageId`) | [#530](https://github.com/mckinsey/agents-at-scale-ark/issues/530), [#965](https://github.com/mckinsey/agents-at-scale-ark/issues/965) | Adapter preserves lifecycle and correlation fidelity |
