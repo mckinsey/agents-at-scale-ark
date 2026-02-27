@@ -24,8 +24,8 @@ vi.mock('@/lib/services/workflow-templates', () => ({
 }));
 
 vi.mock('@/components/common/page-header', () => ({
-  PageHeader: ({ currentPage }: { currentPage: string }) => (
-    <div data-testid="page-header">{currentPage}</div>
+  PageHeader: () => (
+    <div data-testid="page-header">Page Header</div>
   ),
 }));
 
@@ -51,6 +51,18 @@ vi.mock('@/components/ui/sidebar', () => ({
     isMobile: false,
     state: 'expanded',
     toggleSidebar: vi.fn(),
+  })),
+}));
+
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: vi.fn(() => ({
+    namespace: 'default',
+    readOnlyMode: false,
+    availableNamespaces: [],
+    createNamespace: vi.fn(),
+    isPending: false,
+    isNamespaceResolved: true,
+    setNamespace: vi.fn(),
   })),
 }));
 
@@ -128,7 +140,7 @@ describe('FlowDetailPage', () => {
     render(<FlowDetailPage />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('page-header')).toHaveTextContent('Test Workflow');
+      expect(screen.getByText('Test Workflow')).toBeInTheDocument();
     });
 
     expect(screen.getByText('A test workflow template')).toBeInTheDocument();
@@ -151,7 +163,7 @@ describe('FlowDetailPage', () => {
     render(<FlowDetailPage />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('page-header')).toHaveTextContent('simple-workflow');
+      expect(screen.getByText('simple-workflow')).toBeInTheDocument();
     });
 
     expect(screen.queryByText('Test Workflow')).not.toBeInTheDocument();

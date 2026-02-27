@@ -1,29 +1,29 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 import {Command} from 'commander';
 
-const mockGetClusterInfo = jest.fn() as any;
-jest.unstable_mockModule('../../lib/cluster.js', () => ({
+const mockGetClusterInfo = vi.fn() as any;
+vi.mock('../../lib/cluster.js', () => ({
   getClusterInfo: mockGetClusterInfo,
 }));
 
 const mockOutput = {
-  error: jest.fn(),
+  error: vi.fn(),
 };
-jest.unstable_mockModule('../../lib/output.js', () => ({
+vi.mock('../../lib/output.js', () => ({
   default: mockOutput,
 }));
 
-const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+const mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {
   throw new Error('process.exit called');
 }) as any);
 
-const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
 
 const {createGetCommand} = await import('./get.js');
 
 describe('cluster get command', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('creates command with correct structure', () => {

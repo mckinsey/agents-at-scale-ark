@@ -45,17 +45,16 @@ spec:
 
   - name: verify-model-ready
     try:
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          metadata:
-            name: test-model
-            namespace: ($namespace)
-          status:
-            conditions:
-            - type: ModelAvailable
-              status: "True"
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model
+        namespace: ($namespace)
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True' 
     
   - name: verify-agent-created
     try:

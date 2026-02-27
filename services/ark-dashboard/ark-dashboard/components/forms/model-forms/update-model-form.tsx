@@ -64,6 +64,10 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
         provider: defaultValues.provider,
         disabledFields,
         formId,
+        initialAzureAuthMethod:
+          defaultValues.provider === 'azure'
+            ? defaultValues.azureAuthMethod
+            : undefined,
       }}>
       <div className="shrink-0 space-y-4 md:w-md md:max-w-md">
         <section>

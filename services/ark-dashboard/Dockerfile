@@ -1,13 +1,13 @@
 FROM node:25.4.0-alpine AS base
 
-FROM base AS deps
+FROM --platform=$BUILDPLATFORM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY ark-dashboard/package.json ark-dashboard/package-lock.json* ./
 RUN npm ci
 
-FROM base AS builder
+FROM --platform=$BUILDPLATFORM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY ark-dashboard/ .

@@ -22,6 +22,7 @@ import {
 } from '@/lib/services/workflow-templates';
 import { countWorkflowTasks } from '@/lib/utils/workflow';
 import { showWorkflowStartedToast } from '@/lib/utils/workflow-toast';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 function mapWorkflowTemplateToFlow(template: WorkflowTemplate): Flow {
   const annotations = template.metadata.annotations || {};
@@ -35,6 +36,7 @@ function mapWorkflowTemplateToFlow(template: WorkflowTemplate): Flow {
 }
 
 export function WorkflowTemplatesSection() {
+  const { readOnlyMode } = useNamespace();
   const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const showLoading = useDelayedLoading(loading);
@@ -135,7 +137,7 @@ export function WorkflowTemplatesSection() {
 
   return (
     <div className="flex h-full flex-col">
-      <main className="flex-1 overflow-auto px-6 py-6">
+      <main className="mt-4 flex-1 overflow-auto">
         <div className="flex flex-col gap-3">
           {templates.map(template => {
             const flow = mapWorkflowTemplateToFlow(template);
@@ -144,6 +146,7 @@ export function WorkflowTemplatesSection() {
                 key={flow.id}
                 flow={flow}
                 parameters={template.spec?.arguments?.parameters}
+                readOnly={readOnlyMode}
                 onRun={handleRunWorkflow}
                 onDelete={handleDeleteWorkflow}
               />

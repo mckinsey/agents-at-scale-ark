@@ -9,10 +9,10 @@ spec:
   delayBeforeCleanup: 20s                # Extra delay for LLM-based tests
   timeouts:
     apply: 360s                           # Longer timeout for resource creation
-    assert: 360s                         # 6 minutes for LLM assertions
+    assert: 30s
     cleanup: 360s                         # Longer cleanup for complex resources
     delete: 360s                          # Longer delete timeout
     error: 360s                           # Longer error handling
-    exec: 600s                           # 10 minutes for scripts with LLM calls in CI
+    exec: 600s                            # 10 minutes for scripts with LLM calls in CI
   failFast: false                        
-  parallel: 1                            # Run evaluated tests sequentially to avoid resource contention
+  parallel: 2                             # Run evaluated tests sequentially to avoid resource contention

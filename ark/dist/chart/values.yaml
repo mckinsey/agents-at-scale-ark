@@ -20,14 +20,18 @@ controllerManager:
         cpu: 10m
         memory: 64Mi
     livenessProbe:
-      initialDelaySeconds: 15
+      initialDelaySeconds: 60
       periodSeconds: 20
+      timeoutSeconds: 10
+      failureThreshold: 3
       httpGet:
         path: /healthz
         port: 8081
     readinessProbe:
-      initialDelaySeconds: 5
+      initialDelaySeconds: 30
       periodSeconds: 10
+      timeoutSeconds: 10
+      failureThreshold: 3
       httpGet:
         path: /readyz
         port: 8081
@@ -114,6 +118,14 @@ customCACert:
   secretName: "custom-ca-cert"
   key: "ca.crt"
 
+# [TELEMETRY]: Telemetry and tracing configuration
+telemetry:
+  tenantRouting:
+    # Enable per-tenant OTEL endpoint discovery from Secrets.
+    # When enabled, the controller looks for Secrets named "otel-environment-variables"
+    # in each namespace containing OTEL_EXPORTER_OTLP_ENDPOINT and optional
+    # OTEL_EXPORTER_OTLP_HEADERS, then routes traces to those endpoints.
+    otelDiscovery: false
 # [STORAGE]: Storage backend configuration for embedded API server
 # When backend is set to "postgresql", an embedded API server is started
 # and Ark resources are stored in PostgreSQL instead of etcd via CRDs.

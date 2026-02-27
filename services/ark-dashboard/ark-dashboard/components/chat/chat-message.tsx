@@ -14,11 +14,7 @@ interface ChatMessageProps {
   className?: string;
   viewMode?: 'text' | 'markdown';
   toolCalls?: ToolCallData[];
-  tokenUsage?: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
+  sender?: string;
 }
 
 export function ChatMessage({
@@ -29,7 +25,7 @@ export function ChatMessage({
   viewMode = 'text',
   queryName,
   toolCalls,
-  tokenUsage,
+  sender,
 }: Readonly<ChatMessageProps>) {
   const isUser = role === 'user';
   const isFailed = status === 'failed';
@@ -170,7 +166,12 @@ export function ChatMessage({
               ? { minWidth: `${expandedWidth}px` }
               : undefined
           }>
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-2">
+            {sender && !isUser && (
+              <div className="text-muted-foreground text-xs font-medium">
+                {sender}
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <div ref={contentRef} className="min-w-0 flex-1 overflow-x-auto">
                 {viewMode === 'markdown' ? (
@@ -190,13 +191,6 @@ export function ChatMessage({
                 </button>
               )}
             </div>
-            {!isUser && tokenUsage && tokenUsage.total_tokens > 0 && (
-              <div className="text-muted-foreground mt-1 text-xs opacity-60">
-                {tokenUsage.total_tokens.toLocaleString()} tokens (
-                {tokenUsage.prompt_tokens.toLocaleString()} in,{' '}
-                {tokenUsage.completion_tokens.toLocaleString()} out)
-              </div>
-            )}
           </div>
         </div>
       )}

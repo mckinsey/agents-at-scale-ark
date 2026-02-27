@@ -23,8 +23,8 @@ vi.mock('@/lib/services/a2a-tasks-hooks', () => ({
 
 // Mock components that might cause issues in unit tests
 vi.mock('@/components/common/page-header', () => ({
-  PageHeader: ({ currentPage }: { currentPage: string }) => (
-    <div data-testid="page-header">{currentPage}</div>
+  PageHeader: () => (
+    <div data-testid="page-header">Page Header</div>
   ),
 }));
 
@@ -82,7 +82,7 @@ describe('A2ATaskPage', () => {
 
     render(<A2ATaskPage />);
 
-    expect(screen.getByText('Test Task')).toBeInTheDocument();
+    expect(screen.getByTestId('page-header')).toBeInTheDocument();
     expect(screen.getByText('task-1')).toBeInTheDocument();
     expect(screen.getByText('completed')).toBeInTheDocument();
     expect(screen.getByText('Agent Smith')).toBeInTheDocument();

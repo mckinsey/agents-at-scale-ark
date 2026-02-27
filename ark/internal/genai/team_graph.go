@@ -72,6 +72,8 @@ func (t *Team) executeGraph(ctx context.Context, userInput Message, history []Me
 		currentMemberName = nextMember
 
 		if t.MaxTurns != nil && turns+1 >= *t.MaxTurns {
+			maxTurnsMessage := NewSystemMessage(fmt.Sprintf("Team conversation reached maximum turns limit (%d)", *t.MaxTurns))
+			newMessages = append(newMessages, maxTurnsMessage)
 			return newMessages, nil
 		}
 	}

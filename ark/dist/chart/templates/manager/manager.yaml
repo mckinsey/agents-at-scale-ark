@@ -40,6 +40,10 @@ spec:
             value: "ark-controller"
           - name: ARK_MEMORY_HTTP_TIMEOUT_SECONDS
             value: "30"
+          {{- if .Values.telemetry.tenantRouting.otelDiscovery }}
+          - name: ARK_TELEMETRY_OTEL_DISCOVERY
+            value: "true"
+          {{- end }}
           {{- if .Values.customCACert.enabled }}
           - name: SSL_CERT_FILE
             value: "/etc/ssl/certs/custom-ca/{{ .Values.customCACert.key }}"
