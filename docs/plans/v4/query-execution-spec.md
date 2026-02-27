@@ -73,13 +73,13 @@ Default `ExecutionEngine` in `ark-system`, points to the controller itself.
 
 ## Tools
 
-Three ways an engine gets tools:
+Tools work as they do now — but any engine, even non-Ark-native, can use Ark tools. Three sources:
 
-1. **Call out to Ark tools** — the engine uses A2A `input-required` to ask the controller to execute an Ark-managed tool (MCP servers, Tool CRDs). This is what the Ark completions engine does today. Drew's proposal formalises this as the standard callback pattern.
-2. **Embedded tools** — the engine has its own tools built in. Claude Code has Bash, Read, Write, etc. These don't involve the controller at all.
-3. **Agent annotations** — an agent specifies additional tools via annotations that the engine reads. E.g., a Responses API engine might pick up a Responses-specific tool from an annotation that other engines would ignore.
+1. **Ark tools via `input-required`** — the engine calls back to the controller to execute Ark-managed tools (MCP servers, Tool CRDs). This is what the completions engine does today. Any external engine can do the same — Drew's proposal formalises this as the standard A2A callback.
+2. **Embedded tools** — the engine has its own tools built in. Claude Code has Bash, Read, Write. These don't involve the controller.
+3. **Engine-specific tools via agent annotations** — an agent declares additional tools the engine should configure. E.g., the Responses API supports context-free grammars. An agent targeting the Responses engine could carry `ark.mckinsey.com/engine.tool: {CFG tool definition}` and the engine configures that tool. Other engines ignore it.
 
-All three compose. An engine can call Ark tools, embed its own, and read agent annotations for extras.
+All three compose. A Claude engine can call Ark MCP tools via `input-required`, use its own embedded tools, and read agent annotations for extras — all in the same query.
 
 ## ExecutionEngine CRD
 
