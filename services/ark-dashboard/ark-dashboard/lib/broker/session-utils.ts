@@ -1,7 +1,34 @@
-interface StreamEntry {
+export interface StreamEntry {
   id: string;
   timestamp: string;
   data: unknown;
+}
+
+const MAX_DISPLAY_LENGTH = 48;
+
+function getInputFromEvent(data: unknown): string | undefined {
+  if (data == null || typeof data !== 'object') return undefined;
+  const obj = data as Record<string, unknown>;
+  const inner = obj?.data as Record<string, unknown> | undefined;
+  const val = inner?.input ?? obj?.input;
+  if (typeof val !== 'string') return undefined;
+  const trimmed = val.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+export function getSessionDisplayNameFromEntries(
+  entries: StreamEntry[],
+  sessionId: string,
+): string {
+  for (const entry of entries) {
+    const input = getInputFromEvent(entry.data);
+    if (input) {
+      return input.length <= MAX_DISPLAY_LENGTH
+        ? input
+        : input.slice(0, MAX_DISPLAY_LENGTH - 3) + '...';
+    }
+  }
+  return sessionId;
 }
 
 export function extractQueryIdAndSessionId(entry: StreamEntry): {

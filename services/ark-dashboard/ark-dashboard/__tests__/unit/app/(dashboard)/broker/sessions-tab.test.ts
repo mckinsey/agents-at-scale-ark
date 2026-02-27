@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   extractQueryIdAndSessionId,
+  getSessionDisplayNameFromEntries,
   groupEntriesBySession,
   sortEntriesByTimestampAndSequence,
 } from '@/lib/broker/session-utils';
@@ -12,6 +13,65 @@ interface StreamEntry {
 }
 
 describe('Sessions Tab Functionality', () => {
+  describe('getSessionDisplayNameFromEntries', () => {
+    it('should return sessionId when entries are empty', () => {
+      expect(getSessionDisplayNameFromEntries([], 'sid-123')).toBe('sid-123');
+    });
+
+    it('should return sessionId when no entry has input', () => {
+      const entries: StreamEntry[] = [
+        {
+          id: '1',
+          timestamp: '2024-01-15T10:00:00.000Z',
+          data: { spans: [] },
+        },
+      ];
+      expect(getSessionDisplayNameFromEntries(entries, 'sid-456')).toBe(
+        'sid-456',
+      );
+    });
+
+    it('should return input from first entry when present', () => {
+      const entries: StreamEntry[] = [
+        {
+          id: '1',
+          timestamp: '2024-01-15T10:00:00.000Z',
+          data: { input: 'What is 2+2?' },
+        },
+      ];
+      expect(getSessionDisplayNameFromEntries(entries, 'sid-789')).toBe(
+        'What is 2+2?',
+      );
+    });
+
+    it('should return input from nested data.data.input', () => {
+      const entries: StreamEntry[] = [
+        {
+          id: '1',
+          timestamp: '2024-01-15T10:00:00.000Z',
+          data: { data: { input: 'Nested input from controller event' } },
+        },
+      ];
+      expect(getSessionDisplayNameFromEntries(entries, 'sid-abc')).toBe(
+        'Nested input from controller event',
+      );
+    });
+
+    it('should truncate long text to 48 characters with ellipsis', () => {
+      const long = 'a'.repeat(60);
+      const entries: StreamEntry[] = [
+        {
+          id: '1',
+          timestamp: '2024-01-15T10:00:00.000Z',
+          data: { input: long },
+        },
+      ];
+      const result = getSessionDisplayNameFromEntries(entries, 'sid');
+      expect(result).toHaveLength(48);
+      expect(result).toBe('a'.repeat(45) + '...');
+    });
+  });
+
   describe('extractQueryIdAndSessionId', () => {
     describe('query ID extraction', () => {
       it('should extract queryId from innerData.queryName', () => {

@@ -219,9 +219,10 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	opCtx = r.Eventing.QueryRecorder().StartTokenCollection(opCtx)
 	opCtx = r.Eventing.QueryRecorder().Start(opCtx, "QueryExecution", fmt.Sprintf("Executing query %s", obj.Name), nil)
 
+	var queryInput string
 	inputMessages, err := genai.GetQueryInputMessages(opCtx, obj, impersonatedClient)
 	if err == nil {
-		queryInput := genai.ExtractUserMessageContent(inputMessages)
+		queryInput = genai.ExtractUserMessageContent(inputMessages)
 		r.Telemetry.QueryRecorder().RecordRootInput(span, queryInput)
 	}
 
@@ -259,6 +260,14 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		"promptTokens":     fmt.Sprintf("%d", tokenSummary.PromptTokens),
 		"completionTokens": fmt.Sprintf("%d", tokenSummary.CompletionTokens),
 		"totalTokens":      fmt.Sprintf("%d", tokenSummary.TotalTokens),
+	}
+	if queryInput != "" {
+		const maxDisplayInputLength = 48
+		displayInput := queryInput
+		if len(displayInput) > maxDisplayInputLength {
+			displayInput = displayInput[:maxDisplayInputLength-3] + "..."
+		}
+		operationData["input"] = displayInput
 	}
 	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", operationData)
 }
