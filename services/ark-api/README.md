@@ -179,7 +179,7 @@ The ARK API includes an A2A Gateway that exposes all ARK agents via the [A2A pro
 
 Streaming is supported by default when a broker is available.
 
-The gateway uses A2A-native controller execution mode by default. Ark keeps A2A message types end-to-end for agent/team execution and routes by executor capability:
+The gateway uses A2A-native controller execution mode by default. Ark keeps A2A message types as the internal execution format for agent/team execution, then applies compatibility projection at controller response and memory boundaries. Routing remains capability-based:
 - model-backed agents with no execution engine run a native-local A2A loop with OpenAI conversion only at the model provider boundary
 - reserved `a2a` engine for native A2A servers
 - known native external engine types (currently `a2a-langchain`, served at `/execute-a2a`)

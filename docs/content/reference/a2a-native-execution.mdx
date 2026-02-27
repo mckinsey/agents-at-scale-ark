@@ -203,15 +203,15 @@ Agent and team execution use A2A internal transport unconditionally. No annotati
 
 ### Internal Execution Flow
 
-1. **Query Input**: `GetQueryInputA2AMessages` returns `[]protocol.Message` directly
+1. **Query Input**: Controller resolves compat query input (`GetQueryInputMessages`); agent/team entrypoints convert it to `[]protocol.Message` at the execution boundary
 2. **Agent Execution**: Routes through capability resolution:
    - Reserved "a2a" engine → `ExecuteNative` (direct A2A task execution)
    - Named external engines → `ExecutionEngineA2AClient.ExecuteA2A` (A2A SendMessage protocol)
    - Model-backed agents (no engine) → native local A2A loop (convert only at model boundary)
 3. **Team Strategies**: `executeSequentialA2A`, `executeRoundRobinA2A`, etc.
-4. **Memory**: `AddA2AMessages` / `GetA2AMessages` (native format)
+4. **Memory**: Controller writes `AddA2AMessages` for native outputs (fallback `AddMessages` for compat-only payloads) and reads through `GetMessages` compatibility view
 5. **Tool Delegation**: `ExecuteA2A` with structured metadata
-6. **Response**: `ExecutionResult.A2AMessages` serialized directly
+6. **Response**: Controller projects native `ExecutionResult.A2AMessages` / `A2AResponse` to compat Query response payloads while preserving A2A metadata
 
 ### Model Boundary Conversion
 
@@ -251,12 +251,12 @@ This conversion is unavoidable—models speak their native formats. The key impr
 
 | Surface | Behavior |
 |---------|----------|
-| Query input | `GetQueryInputA2AMessages` → `[]protocol.Message` |
-| Internal payload | `protocol.Message` end-to-end |
-| Memory writes | `AddA2AMessages` (A2A JSON) |
-| Memory reads | `GetA2AMessages` (reads both A2A and legacy OpenAI formats) |
+| Query input | `GetQueryInputMessages` (compat) converted to `[]protocol.Message` at agent/team boundary |
+| Internal payload | `protocol.Message` end-to-end for agent/team execution |
+| Memory writes | `AddA2AMessages` for native outputs (`AddMessages` fallback for compat-only paths) |
+| Memory reads | `GetMessages` compatibility view (decodes both A2A and legacy OpenAI records) |
 | Delegation | A2A message + typed data parts (legacy `input` string fallback supported) |
-| Response | A2A JSON (compat conversion available at controller boundary) |
+| Response | Compat response serialization from A2A outputs at controller boundary (A2A metadata preserved) |
 
 ---
 

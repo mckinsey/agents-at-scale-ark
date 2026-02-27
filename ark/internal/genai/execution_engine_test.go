@@ -83,6 +83,37 @@ func TestConvertToExecutionEngineMessage(t *testing.T) {
 	}
 }
 
+func TestConvertA2AToExecutionEngineMessages(t *testing.T) {
+	t.Run("converts text and tool-result history", func(t *testing.T) {
+		a2aMessages := []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+				protocol.NewTextPart("hello"),
+			}),
+			protocol.NewMessage(protocol.MessageRoleAgent, appendPayloadPart([]protocol.Part{
+				protocol.NewTextPart(`{"city":"london"}`),
+			}, ToolResultPayloadV1{
+				Schema:     A2APayloadSchemaToolResultV1,
+				ToolCallID: "call-1",
+				Content:    `{"city":"london"}`,
+			})),
+		}
+
+		converted, err := convertA2AToExecutionEngineMessages(a2aMessages)
+		require.NoError(t, err)
+		require.Len(t, converted, 2)
+		assert.Equal(t, "user", converted[0].Role)
+		assert.Equal(t, "hello", converted[0].Content)
+		assert.Equal(t, "tool", converted[1].Role)
+		assert.Equal(t, `{"city":"london"}`, converted[1].Content)
+	})
+
+	t.Run("empty history", func(t *testing.T) {
+		converted, err := convertA2AToExecutionEngineMessages(nil)
+		require.NoError(t, err)
+		assert.Nil(t, converted)
+	})
+}
+
 func TestBuildAgentConfig(t *testing.T) {
 	t.Run("with model", func(t *testing.T) {
 		agent := &Agent{

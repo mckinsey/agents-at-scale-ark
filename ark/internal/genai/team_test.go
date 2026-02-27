@@ -4,6 +4,7 @@ package genai
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -101,6 +102,32 @@ func (m *a2aRecordingTeamMember) ExecuteA2A(ctx context.Context, userInput proto
 	return &ExecutionResult{A2AMessages: m.output}, nil
 }
 
+type a2aErroringTeamMember struct {
+	name   string
+	output []protocol.Message
+	err    error
+}
+
+func (m *a2aErroringTeamMember) GetName() string {
+	return m.name
+}
+
+func (m *a2aErroringTeamMember) GetType() string {
+	return MemberTypeAgent
+}
+
+func (m *a2aErroringTeamMember) GetDescription() string {
+	return ""
+}
+
+func (m *a2aErroringTeamMember) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	return &ExecutionResult{}, nil
+}
+
+func (m *a2aErroringTeamMember) ExecuteA2A(ctx context.Context, userInput protocol.Message, history []protocol.Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	return &ExecutionResult{A2AMessages: m.output}, m.err
+}
+
 func TestTeamExecuteA2ASequentialPreservesPriorMemberToolPairing(t *testing.T) {
 	memberOne := &a2aRecordingTeamMember{
 		name: "member-one",
@@ -168,4 +195,37 @@ func TestTeamExecuteA2ASequentialPreservesPriorMemberToolPairing(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, toolAsCompat.OfTool)
 	assert.Equal(t, "call-1", toolAsCompat.OfTool.ToolCallID)
+}
+
+func TestTeamExecuteA2ASequentialPreservesPartialMessagesOnError(t *testing.T) {
+	member := &a2aErroringTeamMember{
+		name: "member-one",
+		output: []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("partial response"),
+			}),
+		},
+		err: errors.New("member failure"),
+	}
+
+	team := &Team{
+		Name:      "team",
+		Namespace: "default",
+		Strategy:  StrategySequential,
+		Members:   []TeamMember{member},
+	}
+	telemetryProvider := telemetrynoop.NewProvider()
+	eventingProvider := eventingnoop.NewProvider()
+	team.telemetryRecorder = telemetryProvider.TeamRecorder()
+	team.eventingRecorder = eventingProvider.TeamRecorder()
+
+	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("hello"),
+	})
+
+	result, err := team.ExecuteA2A(context.Background(), userInput, nil, nil, nil)
+	require.Error(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.A2AMessages, 1)
+	assert.Equal(t, "partial response", ExtractA2ATextFromMessage(result.A2AMessages[0]))
 }
