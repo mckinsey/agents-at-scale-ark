@@ -71,14 +71,15 @@ Default `ExecutionEngine` in `ark-system`, points to the controller itself.
 - Engine receives full agent spec via A2A metadata — can read annotations like "this agent needs GPU."
 - We can do more with workspaces now, per session or per agent mount into pods
 
-## Ark Tools from External Engines
+## Tools
 
-Engines manage their own tools — Claude Code has Bash, Read, Write, etc. But external engines can also use Ark-managed tools (MCP servers, Tool CRDs) via two paths:
+Three ways an engine gets tools:
 
-1. **`input-required` callback** (Drew's proposal) — the engine pauses via A2A `input-required` state, asks the controller to execute a tool, controller runs it via ToolRegistry and sends the result back. Engine stays in control of the agent loop, controller stays in control of tool execution.
-2. **Direct MCP connection** — the engine connects to Ark MCP servers over the network. No controller involvement. The engine adds Ark MCP as a tool source alongside its own tools.
+1. **Call out to Ark tools** — the engine uses A2A `input-required` to ask the controller to execute an Ark-managed tool (MCP servers, Tool CRDs). This is what the Ark completions engine does today. Drew's proposal formalises this as the standard callback pattern.
+2. **Embedded tools** — the engine has its own tools built in. Claude Code has Bash, Read, Write, etc. These don't involve the controller at all.
+3. **Agent annotations** — an agent specifies additional tools via annotations that the engine reads. E.g., a Responses API engine might pick up a Responses-specific tool from an annotation that other engines would ignore.
 
-Both are additive. An engine can host its own tools AND call Ark tools. The controller's ToolRegistry becomes a tool source that engines can opt into, not a bottleneck.
+All three compose. An engine can call Ark tools, embed its own, and read agent annotations for extras.
 
 ## ExecutionEngine CRD
 
@@ -91,4 +92,4 @@ One new field: **`spec.config`** (`map[string]string`) passed to the engine via 
 3. Engines can reject queries they can't execute.
 4. Engines manage themselves. Controller doesn't know about pods, sessions, or Claude Code.
 5. An engine is a router and optional scheduler.
-6. Engines can use Ark tools via `input-required` or direct MCP — they don't have to, but the path exists.
+6. Tools come from three sources: Ark callbacks, embedded in the engine, or agent annotations.
