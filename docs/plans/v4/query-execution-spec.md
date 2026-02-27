@@ -81,6 +81,14 @@ Tools work as they do now — but any engine, even non-Ark-native, can use Ark t
 
 All three compose. A Claude engine can call Ark MCP tools via `input-required`, use its own embedded tools, and read agent annotations for extras — all in the same query.
 
+## Engine Capabilities
+
+Engines use annotations on the ExecutionEngine CR to declare what they support — e.g., whether they respect MCP servers, whether they support streaming, what tool modes they handle. The controller and dashboard can read these to surface compatibility information to users.
+
+## Observability
+
+Container logs are visible in Ark. Engines must emit OTEL traces and send to the broker, so all engines — Ark-native or external — report through the same observability channel.
+
 ## ExecutionEngine CRD
 
 One new field: **`spec.config`** (`map[string]string`) passed to the engine via A2A metadata. Controller does not interpret it. Agents override via annotations (`executors.ark.mckinsey.com/<engine>.<key>`).
