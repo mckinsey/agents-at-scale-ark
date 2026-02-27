@@ -85,25 +85,17 @@ No ExecutionEngine CRD, Service, or Deployment needed. This is what Ark does tod
  │                          ┌──────────────────────────────────┐   │
  │                          │     Ark Execution Engine          │   │
  │                          │                                   │   │
- │                          │  ┌─────────────────────────────┐  │   │
- │                          │  │ prompt → LLM → tool calls   │  │   │
- │                          │  │ → execute tools → repeat    │  │   │
- │                          │  │ → final response            │  │   │
- │                          │  └─────────────────────────────┘  │   │
- │                          │                                   │   │
- │                          │  Supports:                        │   │
- │                          │  • OpenAI, Azure, Bedrock models  │   │
- │                          │  • MCP tools, inline tools        │   │
- │                          │  • Streaming responses            │   │
- │                          │  • Teams, memory                  │   │
+ │                          │  prompt → LLM → tool calls        │   │
+ │                          │  → execute tools → repeat         │   │
+ │                          │  → final response                 │   │
  │                          └──────────────────────────────────┘   │
  │                                                                 │
  └─────────────────────────────────────────────────────────────────┘
 ```
 
-The Ark Execution Engine is a module within the controller. It's the same code that runs today — the agent loop in `genai/agent.go:executeLocally()`. It calls LLM providers (OpenAI, Azure, Bedrock) via the completions API, executes tools via the ToolRegistry, and manages the prompt → model → tools → repeat cycle.
+The Ark Execution Engine is a module within the controller. It runs the completions agent loop: calls LLM providers (OpenAI, Azure, Bedrock), executes tools via the ToolRegistry, and manages the prompt → model → tools → repeat cycle. Supports MCP tools, inline tools, streaming, teams, and memory.
 
-This engine is independently deployable. A cluster admin could package it as a standalone service and deploy it per namespace (Scenario 2). It's bundled in the controller for convenience.
+This engine is independently deployable — a cluster admin could package it as a standalone service per namespace (Scenario 2).
 
 ### Scenario 2: Per-Namespace Completions Engine
 
@@ -181,21 +173,9 @@ This follows the pattern established by the [`claude-code-agent`](https://github
  └──────────────────────┘               └─────────────────────────────────────┘
 ```
 
-Each A2A message arriving at the Claude SDK server triggers a Claude Code CLI process. The server maintains an in-memory map of `contextId → claudeSessionId`. First message starts a fresh Claude Code process. Subsequent messages resume the session with `--resume`. The Claude Code process handles its own tools (Bash, Read, Write, Edit, Grep, Glob) — the Ark controller's ToolRegistry is not involved.
+Each A2A message triggers a Claude Code CLI process. The server maps `contextId → claudeSessionId` in memory — first message starts fresh, subsequent messages use `--resume`. Claude Code handles its own tools; the Ark controller's ToolRegistry is not involved.
 
-```yaml
-apiVersion: ark.mckinsey.com/v1
-kind: ExecutionEngine
-metadata:
-  name: claude-sdk
-  namespace: team-alpha
-spec:
-  address:
-    value: "http://claude-sdk.team-alpha.svc:8080"
-  description: "Claude SDK execution engine (shared)"
-```
-
-This is simple to deploy and sufficient for light workloads. Sessions share the pod's resources. State is lost if the pod restarts.
+Simple to deploy and sufficient for light workloads. Sessions share the pod's resources. State is lost on pod restart.
 
 ### Scenario 4: Session-Isolated Claude SDK Execution Engine
 
@@ -246,13 +226,7 @@ The engine's Deployment runs a **router** — an A2A server that doesn't execute
 3. **Session idle** (no messages for N minutes): Deletes the pod and its workspace PVC.
 4. **Session explicitly closed**: Deletes the pod and workspace.
 
-Each session pod runs the same Claude Code A2A server from Scenario 3, but in isolation. Each pod gets:
-- Its own CPU and memory limits
-- Its own workspace PVC (persistent storage for files created during the session)
-- Its own security context (can run as a different user, with different capabilities)
-- Its own Claude Code process with `--resume` for multi-turn
-
-This is the most sophisticated form of an execution engine. It functions as a **mini-scheduler within a namespace** — creating and managing pods the way a Deployment controller does, but with session affinity instead of replica count.
+Each session pod runs the same Claude Code A2A server from Scenario 3, but in full isolation — its own CPU/memory limits, workspace PVC, and security context. This is the most sophisticated form of an execution engine: a **mini-scheduler within a namespace**.
 
 The engine's `config` holds session lifecycle settings. Pod specifications come from **PodTemplate resources** in the namespace — standard Kubernetes objects that engines reference when creating session pods.
 
@@ -299,7 +273,7 @@ spec:
   prompt: "Review code for correctness and style."
 ```
 
-The PodTemplates themselves are standard Kubernetes resources managed by the cluster admin:
+PodTemplates are standard Kubernetes resources managed by the cluster admin:
 
 ```yaml
 apiVersion: v1
@@ -320,72 +294,17 @@ template:
           limits:   { cpu: "8", memory: "16Gi", nvidia.com/gpu: "1" }
     nodeSelector:
       gpu: "true"
-    tolerations:
-      - key: "nvidia.com/gpu"
-        operator: "Exists"
-        effect: "NoSchedule"
----
-apiVersion: v1
-kind: PodTemplate
-metadata:
-  name: lightweight
-  namespace: team-alpha
-template:
-  spec:
-    containers:
-      - name: engine
-        image: ghcr.io/mckinsey/ark-claude-sdk:latest
-        ports:
-          - containerPort: 8080
-            name: a2a
-        resources:
-          requests: { cpu: "500m", memory: "512Mi" }
-          limits:   { cpu: "1", memory: "1Gi" }
 ```
 
-Each session pod runs an A2A endpoint — the same Claude Code A2A server from Scenario 3. The router forwards A2A messages to the session pod, which handles them the same way a shared engine would. The pod template just determines the resources and environment the session gets.
-
-If an agent doesn't specify a pod template annotation, the engine falls back to the `defaultPodTemplate` from its config.
+Each session pod runs an A2A endpoint. The router forwards messages to it. If an agent doesn't specify a pod template annotation, the engine falls back to `defaultPodTemplate` from its config.
 
 ---
 
 ## The ExecutionEngine CRD
 
-The existing CRD is a named pointer to a service. It is namespace-scoped.
+The existing CRD is a namespace-scoped named pointer. It stores `spec.address` (a direct value, Secret reference, ConfigMap reference, or ServiceRef) and `spec.description`.
 
-```yaml
-apiVersion: ark.mckinsey.com/v1
-kind: ExecutionEngine
-metadata:
-  name: claude-sdk
-  namespace: team-alpha
-spec:
-  # Where the engine's A2A server listens
-  address:
-    value: "http://claude-sdk.team-alpha.svc:8080"
-    # Can also reference a Secret, ConfigMap, or ServiceRef
-
-  description: "Claude SDK execution engine"
-
-  # Engine-specific configuration (new, optional)
-  # Passed to the engine via A2A metadata. Controller does not interpret it.
-  config:
-    isolation: "per-session"
-    maxTurns: "50"
-    thinking: "enabled"
-
-status:
-  lastResolvedAddress: "http://claude-sdk.team-alpha.svc:8080"
-  phase: Ready
-```
-
-### What the controller does with an ExecutionEngine
-
-1. **ExecutionEngine Controller** watches ExecutionEngine CRDs. It resolves the `spec.address` (which can be a direct value, a Secret reference, a ConfigMap reference, or a ServiceRef) and writes the resolved URL to `status.lastResolvedAddress`. That's all it does.
-
-2. **Query Controller** reads the resolved address at query time. It sends an A2A message containing the agent's prompt, tools, history, and the engine's config map. The engine handles it.
-
-The controller doesn't know what framework runs behind the address. It doesn't know about Claude Code, LangChain, or CrewAI. It just sends A2A and gets a response.
+The **ExecutionEngine Controller** resolves the address and writes it to `status.lastResolvedAddress`. The **Query Controller** reads that address at query time and sends an A2A message containing the agent's prompt, tools, history, and the engine's config. The controller doesn't know what framework runs behind the address.
 
 ### New field: `spec.config`
 
@@ -479,15 +398,7 @@ spec:
   executionEngine:
     name: claude-sdk        # routes to the claude-sdk ExecutionEngine in the same namespace
   prompt: "Review code."
----
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Agent
-metadata:
-  name: chatbot
-spec:
-  modelRef: { name: gpt-4o }
-  prompt: "Chat with users."
-  # No executionEngine → Ark Execution Engine handles it
+# No executionEngine field → Ark Execution Engine handles it (default)
 ```
 
 ---
@@ -512,24 +423,21 @@ Teams work across engines because all engines return A2A responses.
        Returns text response directly
 ```
 
-The team orchestrator always runs in the Ark Execution Engine (in-process). It dispatches to each member independently. Members on external engines receive their queries via A2A and return responses via A2A. The orchestrator passes text-only history between members — tool call details and engine-internal artifacts are not portable across engines.
+The team orchestrator runs in-process and dispatches to each member independently. Members on external engines communicate via A2A. The orchestrator passes text-only history between members — tool call details are not portable across engines.
 
 ---
 
 ## What the Claude SDK Engine Looks Like
 
-Inspired by the [`claude-code-agent`](https://github.com/dwmkerr/claude-code-agent) open source project, the Claude SDK Execution Engine is:
+Inspired by the [`claude-code-agent`](https://github.com/dwmkerr/claude-code-agent) open source project, the Claude SDK Execution Engine is an A2A server that:
 
-1. **An A2A server** built on the A2A SDK (`@a2a-js/sdk` or Go equivalent)
-2. **Exposes an Agent Card** at `/.well-known/agent-card.json` declaring capabilities (streaming, skills)
-3. **Spawns Claude Code CLI** per message: `claude -p "user text" --output-format stream-json --resume <sessionId>`
-4. **Streams responses** — Claude Code's NDJSON output is parsed and published as A2A StatusUpdate events
-5. **Manages sessions** — maps A2A `contextId` to Claude Code `sessionId` for multi-turn conversations
-6. **Runs init scripts** — per-session initialization (MCP servers, plugins, CLAUDE.md) via `.init-session.sh`
+- Exposes an Agent Card at `/.well-known/agent-card.json`
+- Spawns Claude Code CLI per message: `claude -p "text" --output-format stream-json --resume <sessionId>`
+- Streams NDJSON output as A2A StatusUpdate events
+- Maps A2A `contextId` to Claude Code `sessionId` for multi-turn
+- Runs per-session init scripts (MCP servers, plugins, CLAUDE.md)
 
-In the **shared** deployment (Scenario 3), all of this runs in a single pod. Sessions share memory. State is lost on pod restart.
-
-In the **session-isolated** deployment (Scenario 4), the A2A server in the main pod acts as a router. It creates a separate pod per session, each running its own Claude Code A2A server with its own workspace volume. The router manages pod lifecycle: creation on new sessions, routing on existing sessions, cleanup on idle timeout.
+See Scenarios 3 and 4 for shared vs. session-isolated deployment.
 
 ### Marketplace installation
 
