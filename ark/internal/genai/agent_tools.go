@@ -467,7 +467,6 @@ func parseDelegatedInvocation(arguments map[string]any, targetType, targetName s
 }
 
 func applyDelegationContext(ctx context.Context, contextID string) context.Context {
-	ctx = WithA2APayloadMode(ctx, A2APayloadModeNative)
 	if contextID == "" {
 		return ctx
 	}

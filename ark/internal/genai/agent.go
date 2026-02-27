@@ -4,12 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/openai/openai-go"
-	"github.com/openai/openai-go/packages/param"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
@@ -111,27 +108,7 @@ func (a *Agent) ExecuteA2A(ctx context.Context, userInput protocol.Message, hist
 	return result, nil
 }
 
-func (a *Agent) executeWithExecutionEngine(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
-	engineClient := NewExecutionEngineA2AClient(a.client, a.eventing.ExecutionEngineRecorder())
-
-	agentConfig, err := buildAgentConfig(a)
-	if err != nil {
-		return nil, err
-	}
-
-	resolvedPrompt, err := a.resolvePrompt(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("agent %s prompt resolution failed: %w", a.FullName(), err)
-	}
-	agentConfig.Prompt = resolvedPrompt
-
-	toolDefinitions := buildToolDefinitions(a.Tools)
-
-	return engineClient.Execute(ctx, a.ExecutionEngine, agentConfig, userInput, history, toolDefinitions)
-}
-
 func (a *Agent) executeWithA2AExecutionEngineNative(ctx context.Context, userInput protocol.Message, history []protocol.Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
-	ctx = WithA2APayloadMode(ctx, A2APayloadModeNative)
 	a2aEngine := NewA2AExecutionEngine(a.client, a.eventing.A2aRecorder())
 	contextID := GetA2AContextID(ctx)
 	return a2aEngine.ExecuteNative(ctx, a.Name, a.Namespace, a.Annotations, contextID, userInput, history, eventStream)
@@ -152,144 +129,6 @@ func (a *Agent) executeAgentA2A(ctx context.Context, userInput protocol.Message,
 		return a.executeLocallyA2ANative(ctx, userInput, history, memory, eventStream)
 	default:
 		return nil, fmt.Errorf("agent %s has unsupported execution capability %s", a.FullName(), capability)
-	}
-}
-
-func (a *Agent) prepareMessages(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
-	resolvedPrompt, err := a.resolvePrompt(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("agent %s prompt resolution failed: %w", a.FullName(), err)
-	}
-
-	systemMessage := NewSystemMessage(resolvedPrompt)
-	agentMessages := append([]Message{systemMessage}, history...)
-	agentMessages = append(agentMessages, userInput)
-	return agentMessages, nil
-}
-
-// executeModelCall executes a single model call with optional streaming support.
-func (a *Agent) executeModelCall(ctx context.Context, agentMessages []Message, tools []openai.ChatCompletionToolParam, eventStream EventStreamInterface) (*openai.ChatCompletion, error) {
-	// Set schema information on the model
-	a.Model.OutputSchema = a.OutputSchema
-	// Truncate schema name to 64 chars for OpenAI API compatibility - name is purely an identifier
-	a.Model.SchemaName = fmt.Sprintf("%.64s", fmt.Sprintf("namespace-%s-agent-%s", a.Namespace, a.Name))
-
-	response, err := a.Model.ChatCompletion(ctx, agentMessages, eventStream, 1, tools)
-	if err != nil {
-		return nil, fmt.Errorf("agent %s execution failed: %w", a.FullName(), err)
-	}
-
-	if len(response.Choices) == 0 {
-		return nil, fmt.Errorf("agent %s received empty response", a.FullName())
-	}
-
-	return response, nil
-}
-
-func (a *Agent) processAssistantMessage(choice openai.ChatCompletionChoice) Message {
-	assistantMessage := openai.AssistantMessage(choice.Message.Content)
-	if assistantMessage.OfAssistant != nil {
-		assistantMessage.OfAssistant.Name = param.Opt[string]{Value: a.Name}
-	}
-	// NOTE: call.ToParam() uses param.Override with json.RawMessage internally,
-	// which can produce empty RawMessage on A2A metadata round-trips. The A2A
-	// path defends against this in recoverToolCalls/rebuildToolCallParams. If
-	// this path also exhibits MarshalJSON errors, apply the same explicit field
-	// construction here instead of ToParam().
-	if len(choice.Message.ToolCalls) > 0 {
-		toolCalls := make([]openai.ChatCompletionMessageToolCallParam, len(choice.Message.ToolCalls))
-		for i, call := range choice.Message.ToolCalls {
-			args := call.Function.Arguments
-			if args == "" {
-				args = "{}"
-			}
-			toolCalls[i] = openai.ChatCompletionMessageToolCallParam{
-				ID: call.ID,
-				Function: openai.ChatCompletionMessageToolCallFunctionParam{
-					Name:      call.Function.Name,
-					Arguments: args,
-				},
-			}
-		}
-		assistantMessage.OfAssistant.ToolCalls = toolCalls
-	}
-	return assistantMessage
-}
-
-func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) (Message, error) {
-	result, err := a.Tools.ExecuteTool(ctx, toolCall)
-	toolMessage := ToolMessage(result.Content, result.ID)
-
-	if err != nil {
-		return toolMessage, err
-	}
-
-	return toolMessage, nil
-}
-
-func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCompletionMessageToolCall, eventStream EventStreamInterface, agentMessages, newMessages *[]Message) error {
-	execCtx := WithToolEventStream(ctx, eventStream)
-	for _, tc := range toolCalls {
-		if execCtx.Err() != nil {
-			return execCtx.Err()
-		}
-
-		toolMessage, err := a.executeToolCall(execCtx, tc)
-		*agentMessages = append(*agentMessages, toolMessage)
-		*newMessages = append(*newMessages, toolMessage)
-
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// executeLocally executes the agent using the built-in OpenAI-compatible engine
-func (a *Agent) executeLocally(ctx context.Context, userInput Message, history []Message, _ MemoryInterface, eventStream EventStreamInterface) ([]Message, error) {
-	var tools []openai.ChatCompletionToolParam
-	if a.Tools != nil {
-		tools = a.Tools.ToOpenAITools()
-	}
-
-	agentMessages, err := a.prepareMessages(ctx, userInput, history)
-	if err != nil {
-		return nil, err
-	}
-
-	if a.Model == nil {
-		return nil, fmt.Errorf("agent %s has no model configured", a.FullName())
-	}
-
-	newMessages := []Message{}
-
-	for {
-		if ctx.Err() != nil {
-			return newMessages, ctx.Err()
-		}
-
-		response, err := a.executeModelCall(ctx, agentMessages, tools, eventStream)
-		if err != nil {
-			return nil, err
-		}
-
-		choice := response.Choices[0]
-		assistantMessage := a.processAssistantMessage(choice)
-
-		agentMessages = append(agentMessages, assistantMessage)
-		newMessages = append(newMessages, assistantMessage)
-
-		if len(choice.Message.ToolCalls) == 0 {
-			return newMessages, nil
-		}
-
-		if err := a.executeToolCalls(ctx, choice.Message.ToolCalls, eventStream, &agentMessages, &newMessages); err != nil {
-			logger := logf.FromContext(ctx)
-			if !IsTerminateTeam(err) {
-				logger.Error(err, "Tool execution failed", "agent", a.FullName())
-			}
-			return newMessages, err
-		}
 	}
 }
 

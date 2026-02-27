@@ -110,43 +110,7 @@ func TestStreamA2AAgentIntegrationCompat(t *testing.T) {
 
 	engine := &A2AExecutionEngine{}
 	stream := &fakeEventStream{}
-	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeCompat, "agent/test", "completion-1", "agent", "default", "query", nil)
-	require.NoError(t, err)
-
-	assert.Contains(t, response.Content, "delta")
-	foundArtifact := false
-	foundStatus := false
-	for _, chunk := range stream.chunks {
-		wrapped, ok := chunk.(ChunkWithMetadata)
-		if !ok || wrapped.Ark == nil {
-			continue
-		}
-		if _, ok := wrapped.Ark.A2A.(*protocol.TaskArtifactUpdateEvent); ok {
-			foundArtifact = true
-		}
-		if status, ok := wrapped.Ark.A2A.(*protocol.TaskStatusUpdateEvent); ok && status.Status.State == protocol.TaskStateWorking {
-			foundStatus = true
-		}
-	}
-	assert.True(t, foundArtifact)
-	assert.True(t, foundStatus)
-}
-
-func TestStreamA2AAgentIntegrationNative(t *testing.T) {
-	testServer := startStreamingTestServer(t)
-	defer testServer.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	userInput, convErr := OpenAIToA2AMessage(NewUserMessage("hello"))
-	require.NoError(t, convErr)
-	events, err := StreamA2AAgent(ctx, nil, testServer.URL, nil, "", userInput, nil, "test-agent", "", nil)
-	require.NoError(t, err)
-
-	engine := &A2AExecutionEngine{}
-	stream := &fakeEventStream{}
-	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, A2APayloadModeNative, "agent/test", "completion-1", "agent", "default", "query", nil)
+	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, "agent", "default", "query", nil)
 	require.NoError(t, err)
 
 	assert.Contains(t, response.Content, "delta")
