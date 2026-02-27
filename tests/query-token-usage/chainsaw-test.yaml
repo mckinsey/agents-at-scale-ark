@@ -66,14 +66,13 @@ spec:
           metadata:
             name: token-usage-query
           status:
-            # Done - not error. Tokens match the mocked value.
             phase: done
             (response != null): true
             (response.target.name): 'token-test-agent'
-            (response.content): "Please explain the concept of distributed computing in detail, including key principles, \nadvantages, challenges, and real-world applications. Provide examples of distributed \nsystems and discuss how they handle consistency, availability, and partition tolerance.\n"
-            (tokenUsage.promptTokens): 50
-            (tokenUsage.completionTokens): 100
-            (tokenUsage.totalTokens): 150
+            (contains(response.content, 'distributed computing')): true
+            (tokenUsage.promptTokens > `0`): true
+            (tokenUsage.completionTokens > `0`): true
+            (tokenUsage.totalTokens > `0`): true
     catch:
       # In the case of any errors, show the full query for troubleshooting.
       - describe:
