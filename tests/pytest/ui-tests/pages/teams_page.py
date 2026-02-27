@@ -44,7 +44,8 @@ class TeamsPage(BasePage):
             try:
                 self.page.get_by_text(team_name, exact=False).first.wait_for(state="visible", timeout=10000)
                 return True
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Team {team_name} not visible on attempt {attempt + 1}/{retries}: {e}")
                 if attempt < retries - 1:
                     logger.info(f"Team {team_name} not found, retrying ({attempt + 1}/{retries})...")
                     self.page.reload()
