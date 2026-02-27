@@ -3,8 +3,8 @@
 import { Bot, ChevronLeft, ChevronRight, Filter, Search, Server, Workflow } from 'lucide-react';
 import { useState } from 'react';
 
+import { MarketplaceItemCard } from '@/components/cards/marketplace-item-card';
 import { PageHeader } from '@/components/common/page-header';
-import { MarketplaceSection } from '@/components/sections/marketplace-section';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -23,9 +23,9 @@ export default function MarketplacePage() {
   const [selectedTab, setSelectedTab] = useState<'public' | 'internal'>('public');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 9;
+  const itemsPerPage = 6;
 
-  const { data } = useGetMarketplaceItems(filters);
+  const { data, isPending } = useGetMarketplaceItems(filters);
 
   const totalItems = data?.items.length || 0;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
@@ -37,6 +37,7 @@ export default function MarketplacePage() {
 
   const handleSearch = (value: string) => {
     setSearchQuery(value);
+    setCurrentPage(1); // Reset to first page on search
     setFilters(prev => ({
       ...prev,
       search: value || undefined,
@@ -45,6 +46,7 @@ export default function MarketplacePage() {
 
   const handleCategoryChange = (category: string) => {
     setSelectedCategory(category);
+    setCurrentPage(1); // Reset to first page on category change
     if (category === 'all') {
       setFilters(prev => ({
         ...prev,
@@ -171,11 +173,30 @@ export default function MarketplacePage() {
           </Button>
         </div>
 
-        <MarketplaceSection
-          filters={filters}
-          showHeader={false}
-          limit={undefined}
-        />
+        {/* Loading state */}
+        {isPending && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className="h-64 animate-pulse rounded-lg bg-muted" />
+            ))}
+          </div>
+        )}
+
+        {/* Marketplace Items Grid */}
+        {!isPending && data && data.items.length > 0 && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {currentItems.map(item => (
+              <MarketplaceItemCard key={item.id} item={item} />
+            ))}
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!isPending && data && data.items.length === 0 && (
+          <div className="py-12 text-center">
+            <p className="text-muted-foreground">No marketplace items found</p>
+          </div>
+        )}
 
         {/* Pagination Controls */}
         {totalPages > 1 && (
