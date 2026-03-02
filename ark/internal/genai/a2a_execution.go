@@ -248,24 +248,31 @@ func buildA2AMessagesFromResponse(response *A2AResponse) []protocol.Message {
 	if response == nil {
 		return nil
 	}
+
+	messageText := ""
+	if response.Message != nil {
+		messageText = extractTextFromParts(response.Message.Parts)
+	}
+
+	if response.Content != "" && response.Content != messageText {
+		var contextRef *string
+		if response.ContextID != "" {
+			contextRef = &response.ContextID
+		}
+		var taskRef *string
+		if response.TaskID != "" {
+			taskRef = &response.TaskID
+		}
+		message := protocol.NewMessageWithContext(protocol.MessageRoleAgent, []protocol.Part{
+			protocol.NewTextPart(response.Content),
+		}, taskRef, contextRef)
+		return []protocol.Message{message}
+	}
+
 	if response.Message != nil {
 		return []protocol.Message{*response.Message}
 	}
-	if response.Content == "" {
-		return nil
-	}
-	var contextRef *string
-	if response.ContextID != "" {
-		contextRef = &response.ContextID
-	}
-	var taskRef *string
-	if response.TaskID != "" {
-		taskRef = &response.TaskID
-	}
-	message := protocol.NewMessageWithContext(protocol.MessageRoleAgent, []protocol.Part{
-		protocol.NewTextPart(response.Content),
-	}, taskRef, contextRef)
-	return []protocol.Message{message}
+	return nil
 }
 
 func emitA2ABlockingResponse(ctx context.Context, eventStream EventStreamInterface, agentName string, a2aResponse *A2AResponse) error {
@@ -296,16 +303,24 @@ func streamA2ANativeBlockingResponse(ctx context.Context, eventStream EventStrea
 }
 
 type a2aStreamState struct {
-	response     *A2AResponse
-	finalContent strings.Builder
-	latestTask   *protocol.Task
-	lastStatus   *protocol.TaskStatus
-	received     bool
-	done         bool
+	response          *A2AResponse
+	finalContent      strings.Builder
+	statusContent     strings.Builder
+	latestTask        *protocol.Task
+	lastStatus        *protocol.TaskStatus
+	received          bool
+	done              bool
+	hasMessageContent bool
 }
 
 func (s *a2aStreamState) finalize() *A2AResponse {
-	s.applyLatestTaskContent()
+	if s.finalContent.Len() == 0 {
+		if s.statusContent.Len() > 0 {
+			s.finalContent.WriteString(s.statusContent.String())
+		} else {
+			s.applyLatestTaskContent()
+		}
+	}
 	s.response.Content = s.finalContent.String()
 	if s.response.Message == nil && s.response.Content != "" {
 		message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
@@ -317,14 +332,13 @@ func (s *a2aStreamState) finalize() *A2AResponse {
 }
 
 func (s *a2aStreamState) applyLatestTaskContent() {
-	if s.latestTask == nil {
+	if s.latestTask == nil || s.finalContent.Len() > 0 {
 		return
 	}
 	text, err := extractTextFromTask(s.latestTask)
 	if err != nil || text == "" {
 		return
 	}
-	s.finalContent.Reset()
 	s.finalContent.WriteString(text)
 }
 
@@ -346,6 +360,7 @@ func (s *a2aStreamState) handleMessageEvent(ctx context.Context, eventStream Eve
 	text := extractTextFromParts(message.Parts)
 	if text != "" {
 		s.finalContent.WriteString(text)
+		s.hasMessageContent = true
 	}
 	s.response.Message = message
 	if message.ContextID != nil && *message.ContextID != "" {
@@ -382,10 +397,11 @@ func (s *a2aStreamState) handleTaskStatusUpdateEvent(ctx context.Context, k8sCli
 	maybeUpsertA2ATask(ctx, k8sClient, task, agentName, namespace, queryName, a2aServer)
 	if update.Status.Message != nil {
 		s.response.Message = update.Status.Message
-	}
-	if update.Final && update.Status.Message != nil && s.finalContent.Len() == 0 {
 		if text := extractTextFromParts(update.Status.Message.Parts); text != "" {
-			s.finalContent.WriteString(text)
+			if s.statusContent.Len() > 0 {
+				s.statusContent.WriteString("\n")
+			}
+			s.statusContent.WriteString(text)
 		}
 	}
 	if err := streamA2AEvent(ctx, eventStream, update); err != nil {
