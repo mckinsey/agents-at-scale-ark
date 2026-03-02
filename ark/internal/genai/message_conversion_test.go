@@ -279,6 +279,21 @@ func TestA2AToOpenAIMessageFallsBackToLegacyRoleMetadataTool(t *testing.T) {
 	assert.Equal(t, "call-legacy-2", recovered.OfTool.ToolCallID)
 }
 
+func TestA2AToOpenAIMessageToolWithEmptyToolCallIDConvertsToAssistant(t *testing.T) {
+	message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("orphaned tool output"),
+	})
+	message.Metadata = map[string]interface{}{
+		MetadataRoleKey: RoleTool,
+	}
+
+	recovered, err := A2AToOpenAIMessage(message)
+	require.NoError(t, err)
+	require.NotNil(t, recovered.OfAssistant, "tool message without ToolCallID should convert to assistant")
+	assert.Equal(t, "orphaned tool output", recovered.OfAssistant.Content.OfString.Value)
+	assert.Nil(t, recovered.OfTool, "should not be a tool message")
+}
+
 func TestA2AToOpenAIMessageMultimodalPreservesImageFileParts(t *testing.T) {
 	message := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
 		protocol.NewTextPart("describe image"),

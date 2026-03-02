@@ -35,6 +35,10 @@ func (b *delegatedToolStreamBridge) StreamChunk(ctx context.Context, chunk inter
 			message := *value.Status.Message
 			appendPayloadPartToMessage(&message, payload)
 			update.Status.Message = &message
+		} else {
+			msg := protocol.NewMessage(protocol.MessageRoleAgent, nil)
+			appendPayloadPartToMessage(&msg, payload)
+			update.Status.Message = &msg
 		}
 		return b.base.StreamChunk(ctx, &update)
 	case *protocol.TaskArtifactUpdateEvent:
@@ -63,6 +67,10 @@ func (b *delegatedToolStreamBridge) StreamChunk(ctx context.Context, chunk inter
 			message := *value.Status.Message
 			appendPayloadPartToMessage(&message, payload)
 			task.Status.Message = &message
+		} else {
+			msg := protocol.NewMessage(protocol.MessageRoleAgent, nil)
+			appendPayloadPartToMessage(&msg, payload)
+			task.Status.Message = &msg
 		}
 		return b.base.StreamChunk(ctx, &task)
 	default:

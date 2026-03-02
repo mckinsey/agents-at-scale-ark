@@ -505,3 +505,35 @@ func TestConvertA2AMessagesToCompatMultimodalMatchesLegacyForTextOnlyTraffic(t *
 	require.NoError(t, err)
 	assert.JSONEq(t, string(legacyJSON), string(multimodalJSON))
 }
+
+func TestA2ATurnPopulatesUsageOnChatCompletionsPath(t *testing.T) {
+	provider := &adapterTestChatProvider{
+		response: &openai.ChatCompletion{
+			Choices: []openai.ChatCompletionChoice{
+				{Message: openai.ChatCompletionMessage{Role: "assistant", Content: "result"}},
+			},
+			Usage: openai.CompletionUsage{
+				PromptTokens:     100,
+				CompletionTokens: 50,
+				TotalTokens:      150,
+			},
+		},
+	}
+	adapter := &openAIA2AModelAdapter{
+		provider:          provider,
+		modelName:         "test-model",
+		modelType:         "openai",
+		agentName:         "test-agent",
+		telemetryRecorder: telemetrynoop.NewModelRecorder(),
+		eventingRecorder:  eventingnoop.NewModelRecorder(),
+	}
+
+	userMessage := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{protocol.NewTextPart("hello")})
+	result, err := adapter.A2ATurn(context.Background(), []protocol.Message{userMessage}, nil, nil, nil)
+
+	require.NoError(t, err)
+	require.NotNil(t, result.Usage, "Usage should be populated on ChatCompletions path")
+	assert.Equal(t, int64(100), result.Usage.PromptTokens)
+	assert.Equal(t, int64(50), result.Usage.CompletionTokens)
+	assert.Equal(t, int64(150), result.Usage.TotalTokens)
+}
