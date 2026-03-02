@@ -196,10 +196,10 @@ func TestSendFinalToolCallChunk(t *testing.T) {
 				toolCall := chunk.Choices[0].Delta.ToolCalls[0]
 				assert.Equal(t, int64(0), toolCall.Index)
 				assert.Equal(t, "call_1", toolCall.ID)
-				assert.Equal(t, "function", string(toolCall.Type))
+				assert.Equal(t, "function", toolCall.Type)
 				assert.Equal(t, "get_weather", toolCall.Function.Name)
 				assert.Equal(t, `{"location":"New York"}`, toolCall.Function.Arguments)
-				assert.Equal(t, "tool_calls", string(chunk.Choices[0].FinishReason))
+				assert.Equal(t, "tool_calls", chunk.Choices[0].FinishReason)
 			},
 		},
 		{
@@ -274,7 +274,7 @@ func TestSendFinalToolCallChunk(t *testing.T) {
 			expectError: false,
 			validateFunc: func(t *testing.T, chunk *openai.ChatCompletionChunk) {
 				assert.Len(t, chunk.Choices[0].Delta.ToolCalls, 0)
-				assert.Equal(t, "stop", string(chunk.Choices[0].FinishReason))
+				assert.Equal(t, "stop", chunk.Choices[0].FinishReason)
 			},
 		},
 	}

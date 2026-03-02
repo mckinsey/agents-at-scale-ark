@@ -212,8 +212,8 @@ func TestAzureProvider_FinalizeToolCalls(t *testing.T) {
 
 func TestAzureProvider_EnsureUsageData(t *testing.T) {
 	tests := []struct {
-		name         string
-		fullResponse *openai.ChatCompletion
+		name          string
+		fullResponse  *openai.ChatCompletion
 		expectedUsage openai.CompletionUsage
 	}{
 		{
