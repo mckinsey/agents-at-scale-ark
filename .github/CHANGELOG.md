@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.1.55](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.54...v0.1.55) (2026-02-27)
+
+
+### Features
+
+* a2a protocol for execution engine, move langchain to marketplace ([#1215](https://github.com/mckinsey/agents-at-scale-ark/issues/1215)) ([b0a3873](https://github.com/mckinsey/agents-at-scale-ark/commit/b0a3873ce4f5f9fa11713f33a10081f2d3a77228))
+* add export functionality for dashboard resources ([#1029](https://github.com/mckinsey/agents-at-scale-ark/issues/1029)) ([8182a19](https://github.com/mckinsey/agents-at-scale-ark/commit/8182a19cfc27b36ca54b2a1007c6445024e8b0bd))
+
+
+### Bug Fixes
+
+* CVE-2026-27903 in minimatch ([#1234](https://github.com/mckinsey/agents-at-scale-ark/issues/1234)) ([28ebf2c](https://github.com/mckinsey/agents-at-scale-ark/commit/28ebf2c9b5a5241cf9bd6a849b9068a5891b62b2))
+* dashboard qemu build issues ([#1229](https://github.com/mckinsey/agents-at-scale-ark/issues/1229)) ([4f89ccb](https://github.com/mckinsey/agents-at-scale-ark/commit/4f89ccb64e028a6f011363c5cf16e43f1ae1be8d))
+* gate npm/pypi/helm publish on container deploy success ([#1231](https://github.com/mckinsey/agents-at-scale-ark/issues/1231)) ([a215b76](https://github.com/mckinsey/agents-at-scale-ark/commit/a215b76c0cf68999e4f1a4e7a244092310cff275))
+* Race condition in evaluator tests ([#1192](https://github.com/mckinsey/agents-at-scale-ark/issues/1192)) ([83bc0ea](https://github.com/mckinsey/agents-at-scale-ark/commit/83bc0ea9cf398f8a70887eec4c990f49d488b8b9))
+* SonarQube Docker security hotspots: permissions and explicit copy ([#1157](https://github.com/mckinsey/agents-at-scale-ark/issues/1157)) ([9e6810e](https://github.com/mckinsey/agents-at-scale-ark/commit/9e6810ef189b22b138b7103404ec505a3f0f5210))
+
 ## [0.1.54](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.53...v0.1.54) (2026-02-25)
 
 
