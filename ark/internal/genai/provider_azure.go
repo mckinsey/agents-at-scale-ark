@@ -125,6 +125,9 @@ func (ap *AzureProvider) prepareStreamParams(messages []openai.ChatCompletionMes
 		Model:    ap.Model,
 		Messages: messages,
 		N:        openai.Int(n),
+		StreamOptions: openai.ChatCompletionStreamOptionsParam{
+			IncludeUsage: openai.Bool(true),
+		},
 	}
 
 	applyPropertiesToParams(ap.Properties, &params)
@@ -157,6 +160,14 @@ func (ap *AzureProvider) ChatCompletionStream(ctx context.Context, messages []op
 		}
 
 		accumulateStreamChunk(&chunk, &fullResponse, toolCallsMap)
+
+		if chunk.Usage.TotalTokens > 0 {
+			fullResponse.Usage = openai.CompletionUsage{
+				PromptTokens:     chunk.Usage.PromptTokens,
+				CompletionTokens: chunk.Usage.CompletionTokens,
+				TotalTokens:      chunk.Usage.TotalTokens,
+			}
+		}
 	}
 
 	ap.finalizeToolCalls(fullResponse, toolCallsMap, streamFunc)
@@ -174,7 +185,6 @@ func (ap *AzureProvider) ChatCompletionStream(ctx context.Context, messages []op
 	return fullResponse, nil
 }
 
-// finalizeToolCalls assembles and sends final tool calls from the tool calls map
 func (ap *AzureProvider) finalizeToolCalls(fullResponse *openai.ChatCompletion, toolCallsMap map[int64]*openai.ChatCompletionMessageToolCall, streamFunc func(*openai.ChatCompletionChunk) error) {
 	if len(toolCallsMap) == 0 || fullResponse == nil || len(fullResponse.Choices) == 0 {
 		return
@@ -195,13 +205,11 @@ func (ap *AzureProvider) finalizeToolCalls(fullResponse *openai.ChatCompletion, 
 	}
 	fullResponse.Choices[0].Message.ToolCalls = toolCalls
 
-	// Send final chunk with tool calls in delta for frontend visibility
 	if err := SendFinalToolCallChunk(fullResponse, toolCalls, streamFunc); err != nil {
 		logf.Log.Error(err, "Failed to send final tool call chunk")
 	}
 }
 
-// ensureUsageData ensures the response has usage data
 func (ap *AzureProvider) ensureUsageData(fullResponse *openai.ChatCompletion) {
 	if fullResponse.Usage.TotalTokens == 0 {
 		fullResponse.Usage = openai.CompletionUsage{
