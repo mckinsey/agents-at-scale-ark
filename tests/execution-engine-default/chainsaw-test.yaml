@@ -1,0 +1,114 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: execution-engine-default
+spec:
+  description: >
+    Validates that Ark deploys a default ExecutionEngine in ark-system
+    and that queries fail when no ExecutionEngine exists.
+    Spec: docs/specs/ark-query-engine.md
+  steps:
+  - name: default-engine-exists-in-ark-system
+    try:
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1prealpha1
+          kind: ExecutionEngine
+          metadata:
+            name: ark-default
+            namespace: ark-system
+          status:
+            phase: Ready
+
+  - name: query-executes-with-default-engine
+    try:
+    - script:
+        skipLogOutput: true
+        content: |
+          ../scripts/setup-model-provider.sh auto
+        outputs:
+        - name: provider
+          value: (json_parse($stdout))
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - apply:
+        resource:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: test-model-token
+          type: Opaque
+          data:
+            token: (base64_encode($provider.token))
+    - apply:
+        file: (join('', ['manifests/model-', $provider.type, '.yaml']))
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+    - apply:
+        file: manifests/agent.yaml
+    - apply:
+        file: manifests/query.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query
+          status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query
+          status:
+            (response != null): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query
+
+  - name: delete-default-engine
+    try:
+    - script:
+        content: |
+          kubectl delete executionengine ark-default -n ark-system
+
+  - name: query-fails-without-engine
+    try:
+    - apply:
+        file: manifests/query-after-delete.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-query-no-engine
+          status:
+            phase: error
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-no-engine
+
+  - name: restore-default-engine
+    try:
+    - apply:
+        file: manifests/default-engine.yaml

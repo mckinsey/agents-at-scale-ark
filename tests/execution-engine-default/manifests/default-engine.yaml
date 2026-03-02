@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: ExecutionEngine
+metadata:
+  name: ark-default
+  namespace: ark-system
+spec:
+  address:
+    value: "http://localhost:8282"
+  description: "Default Ark query engine"

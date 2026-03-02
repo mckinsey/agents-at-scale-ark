@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-query
+spec:
+  input: "Confirm you are working."
+  target:
+    type: agent
+    name: test-agent

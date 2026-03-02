@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-query-no-engine
+spec:
+  input: "This query should fail because no ExecutionEngine exists."
+  target:
+    type: agent
+    name: test-agent
