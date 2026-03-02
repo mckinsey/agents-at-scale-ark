@@ -42,6 +42,7 @@ type A2AResponse struct {
 	Content   string
 	ContextID string
 	TaskID    string
+	Partial   bool
 	Message   *protocol.Message   `json:"-"`
 	Artifacts []protocol.Artifact `json:"-"`
 }

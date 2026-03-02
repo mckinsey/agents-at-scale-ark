@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	eventingnoop "mckinsey.com/ark/internal/eventing/noop"
 	telemetrynoop "mckinsey.com/ark/internal/telemetry/noop"
 )
@@ -218,4 +219,53 @@ func TestTeamStreamingNilEventStreamDoesNotPanic(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Len(t, result.A2AMessages, 1)
+}
+
+func TestGraphA2ACancelledContextReturnsEarly(t *testing.T) {
+	member := &a2aStreamingTeamMember{
+		name: "agent-a",
+		output: []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{protocol.NewTextPart("done")}),
+		},
+	}
+	memberB := &a2aStreamingTeamMember{
+		name: "agent-b",
+		output: []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{protocol.NewTextPart("should not run")}),
+		},
+	}
+
+	team := newTestTeam(StrategyGraph, []TeamMember{member, memberB}, nil)
+	team.Graph = &arkv1alpha1.TeamGraphSpec{
+		Edges: []arkv1alpha1.TeamGraphEdge{{From: "agent-a", To: "agent-b"}},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{protocol.NewTextPart("go")})
+	_, err := team.ExecuteA2A(ctx, userInput, nil, nil, &collectingEventStream{})
+
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
+}
+
+func TestSelectorA2ACancelledContextReturnsEarly(t *testing.T) {
+	member := &a2aStreamingTeamMember{
+		name: "selector-member",
+		output: []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{protocol.NewTextPart("done")}),
+		},
+	}
+
+	team := newTestTeam(StrategySelector, []TeamMember{member}, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{protocol.NewTextPart("go")})
+	_, err := team.ExecuteA2A(ctx, userInput, nil, nil, &collectingEventStream{})
+
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
 }

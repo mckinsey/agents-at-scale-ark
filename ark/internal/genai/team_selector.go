@@ -363,6 +363,9 @@ func (t *Team) executeSelectorA2A(ctx context.Context, userInput protocol.Messag
 	previousMember := ""
 
 	for turn := 0; ; turn++ {
+		if ctx.Err() != nil {
+			return newMessages, ctx.Err()
+		}
 		nextMember, err := t.determineNextMemberA2A(ctx, messages, tmpl, previousMember, legalTransitions)
 		if err != nil {
 			if IsTerminateTeam(err) {

@@ -194,6 +194,23 @@ func TestUnmarshalMessageRobustFutureRoles(t *testing.T) {
 	}
 }
 
+func TestSimpleMessageStructParsesToolCallID(t *testing.T) {
+	var s simpleMessage
+	err := json.Unmarshal([]byte(`{"role":"tool","content":"x","tool_call_id":"call_789"}`), &s)
+	require.NoError(t, err)
+	assert.Equal(t, "tool", s.Role)
+	assert.Equal(t, "x", s.Content)
+	assert.Equal(t, "call_789", s.ToolCallID)
+}
+
+func TestSimpleMessageStructOmitsToolCallIDWhenAbsent(t *testing.T) {
+	var s simpleMessage
+	err := json.Unmarshal([]byte(`{"role":"tool","content":"x"}`), &s)
+	require.NoError(t, err)
+	assert.Equal(t, "tool", s.Role)
+	assert.Equal(t, "", s.ToolCallID)
+}
+
 func setupMemoryTestClient(objects []client.Object) client.Client {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)

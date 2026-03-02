@@ -3,6 +3,7 @@ package genai
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/openai/openai-go"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
@@ -76,6 +77,7 @@ func convertA2AToolMessage(parts []protocol.Part, metadata map[string]interface{
 		}
 	}
 	if toolCallID == "" {
+		slog.Warn("tool message missing ToolCallID, converting to assistant message")
 		return openai.AssistantMessage(ensureNonEmptyTextContent(content))
 	}
 	return openai.ToolMessage(ensureNonEmptyToolContent(content), toolCallID)

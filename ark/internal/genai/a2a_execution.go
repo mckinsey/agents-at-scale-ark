@@ -103,7 +103,9 @@ func (e *A2AExecutionEngine) executeA2A(ctx context.Context, agentName, namespac
 		return nil, err
 	}
 
-	emitA2ABlockingResponse(ctx, eventStream, agentName, a2aResponse)
+	if streamErr := emitA2ABlockingResponse(ctx, eventStream, agentName, a2aResponse); streamErr != nil {
+		logf.FromContext(ctx).Error(streamErr, "failed to stream A2A blocking response", "agent", agentName)
+	}
 
 	e.eventingRecorder.Complete(ctx, "A2AExecution", "A2A execution completed successfully", operationData)
 
@@ -173,15 +175,20 @@ func (e *A2AExecutionEngine) consumeA2AStreamEvents(ctx context.Context, events 
 				if state.done {
 					return state.finalize(), nil
 				}
-				if resub != nil && !resubscribeAttempted && state.response.TaskID != "" {
+				// After resubscription, clients may receive duplicate or reordered events
+			// because the resumed stream replays from the server's last checkpoint.
+			// This is consistent with SSE replay semantics; clients should tolerate duplicates.
+			if resub != nil && !resubscribeAttempted && state.response.TaskID != "" {
 					resubscribeAttempted = true
 					log := logf.FromContext(ctx)
 					log.Info("stream closed before terminal state, attempting resubscribe", "taskId", state.response.TaskID, "agent", agentName)
-					resumed, resubErr := resub.ResubscribeToTask(ctx, state.response.TaskID)
-					if resubErr != nil {
-						log.Error(resubErr, "resubscribe failed, returning partial result", "taskId", state.response.TaskID)
-						return state.finalize(), nil
-					}
+				resumed, resubErr := resub.ResubscribeToTask(ctx, state.response.TaskID)
+				if resubErr != nil {
+					log.Error(resubErr, "resubscribe failed, returning partial result", "taskId", state.response.TaskID)
+					result := state.finalize()
+					result.Partial = true
+					return result, nil
+				}
 					currentEvents = resumed
 					continue
 				}
@@ -261,21 +268,18 @@ func buildA2AMessagesFromResponse(response *A2AResponse) []protocol.Message {
 	return []protocol.Message{message}
 }
 
-func emitA2ABlockingResponse(ctx context.Context, eventStream EventStreamInterface, agentName string, a2aResponse *A2AResponse) {
+func emitA2ABlockingResponse(ctx context.Context, eventStream EventStreamInterface, agentName string, a2aResponse *A2AResponse) error {
 	if eventStream == nil || a2aResponse == nil {
-		return
+		return nil
 	}
 	completionID := getQueryID(ctx)
 	modelID := fmt.Sprintf("agent/%s", agentName)
-	streamA2ANativeBlockingResponse(ctx, eventStream, modelID, completionID, a2aResponse)
+	return streamA2ANativeBlockingResponse(ctx, eventStream, modelID, completionID, a2aResponse)
 }
 
-func streamA2ANativeBlockingResponse(ctx context.Context, eventStream EventStreamInterface, modelID, completionID string, a2aResponse *A2AResponse) {
+func streamA2ANativeBlockingResponse(ctx context.Context, eventStream EventStreamInterface, modelID, completionID string, a2aResponse *A2AResponse) error {
 	if a2aResponse.Message != nil {
-		if err := streamA2AEvent(ctx, eventStream, a2aResponse.Message); err != nil {
-			logf.FromContext(ctx).Error(err, "failed to stream native A2A blocking message")
-		}
-		return
+		return streamA2AEvent(ctx, eventStream, a2aResponse.Message)
 	}
 	var contextRef *string
 	if a2aResponse.ContextID != "" {
@@ -288,9 +292,7 @@ func streamA2ANativeBlockingResponse(ctx context.Context, eventStream EventStrea
 	a2aMessage := protocol.NewMessageWithContext(protocol.MessageRoleAgent, []protocol.Part{
 		protocol.NewTextPart(a2aResponse.Content),
 	}, taskRef, contextRef)
-	if err := streamA2AEvent(ctx, eventStream, &a2aMessage); err != nil {
-		logf.FromContext(ctx).Error(err, "failed to stream native A2A blocking synthesized message")
-	}
+	return streamA2AEvent(ctx, eventStream, &a2aMessage)
 }
 
 type a2aStreamState struct {

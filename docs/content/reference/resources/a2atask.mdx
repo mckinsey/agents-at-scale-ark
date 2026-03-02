@@ -218,12 +218,12 @@ apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
 metadata:
   name: weather-agent
+  annotations:
+    ark.mckinsey.com/a2a-server-name: langchain-agents
 spec:
   description: "Weather forecasting via LangChain"
   executionEngine:
-    type: a2a
-    a2aServerRef:
-      name: langchain-agents
+    name: a2a
 ```
 
 ## Task Lifecycle

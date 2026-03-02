@@ -97,6 +97,10 @@ func TestDelegatedStreamBridgeMessageValue(t *testing.T) {
 	err := bridge.StreamChunk(context.Background(), msg)
 	require.NoError(t, err)
 	require.Len(t, stream.chunks, 1)
+
+	forwarded := stream.chunks[0].(protocol.Message)
+	payload := findStepEventPayload(t, forwarded.Parts)
+	assert.Equal(t, "tc-4", payload.ToolCallID)
 }
 
 func TestDelegatedStreamBridgeTask(t *testing.T) {
@@ -121,6 +125,30 @@ func TestDelegatedStreamBridgeTask(t *testing.T) {
 	assert.Equal(t, "tc-5", payload.ToolCallID)
 	assert.Equal(t, "task-5", payload.DelegatedTaskID)
 	assert.Equal(t, "ctx-5", payload.DelegatedContextID)
+}
+
+func TestDelegatedStreamBridgeStatusUpdateNilMessageSynthesizesPayload(t *testing.T) {
+	stream := &fakeEventStream{}
+	ext := A2ADelegatedToolExtension{ToolCallID: "tc-nil", ToolName: "search"}
+	bridge := newDelegatedToolStreamBridge(stream, ext)
+
+	evt := &protocol.TaskStatusUpdateEvent{
+		Kind:      "status-update",
+		TaskID:    "task-nil-msg",
+		ContextID: "ctx-nil",
+		Status:    protocol.TaskStatus{State: protocol.TaskStateWorking},
+	}
+
+	err := bridge.StreamChunk(context.Background(), evt)
+	require.NoError(t, err)
+	require.Len(t, stream.chunks, 1)
+
+	forwarded := stream.chunks[0].(*protocol.TaskStatusUpdateEvent)
+	require.NotNil(t, forwarded.Status.Message, "should synthesize message for step metadata")
+	payload := findStepEventPayload(t, forwarded.Status.Message.Parts)
+	assert.Equal(t, "tc-nil", payload.ToolCallID)
+	assert.Equal(t, "search", payload.ToolName)
+	assert.Equal(t, "task-nil-msg", payload.DelegatedTaskID)
 }
 
 func TestDelegatedStreamBridgeSequenceIncrementsAcrossEvents(t *testing.T) {

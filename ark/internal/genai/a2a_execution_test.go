@@ -401,6 +401,7 @@ func TestConsumeA2AStreamEventsResubscribeFailureReturnsPartial(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, "partial-content", response.Content)
+	assert.True(t, response.Partial, "response should be marked as partial when resubscribe fails")
 }
 
 func TestConsumeA2AStreamEventsNoResubscribeWhenDone(t *testing.T) {
@@ -425,4 +426,24 @@ func TestConsumeA2AStreamEventsNoResubscribeWhenDone(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "", resub.taskID, "resubscribe should not be called when stream completes normally")
 	assert.Contains(t, response.Content, "final")
+}
+
+func TestStreamA2ANativeBlockingResponseReturnsError(t *testing.T) {
+	ctx := context.Background()
+	stream := &failingA2AEventStream{failOnCall: 1}
+
+	a2aResponse := &A2AResponse{Content: "hello"}
+	err := streamA2ANativeBlockingResponse(ctx, stream, "model-1", "comp-1", a2aResponse)
+	assert.Error(t, err, "should propagate stream error")
+}
+
+func TestStreamA2ANativeBlockingResponseSucceeds(t *testing.T) {
+	ctx := context.Background()
+	stream := &fakeEventStream{}
+
+	msg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{protocol.NewTextPart("done")})
+	a2aResponse := &A2AResponse{Message: &msg}
+	err := streamA2ANativeBlockingResponse(ctx, stream, "model-1", "comp-1", a2aResponse)
+	assert.NoError(t, err)
+	assert.Len(t, stream.chunks, 1)
 }
