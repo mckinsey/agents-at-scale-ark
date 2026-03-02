@@ -2,6 +2,8 @@ package genai
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
 type contextKey string
@@ -11,16 +13,13 @@ const (
 	sessionIDKey    contextKey = "sessionId"
 	queryNameKey    contextKey = "queryName"
 	a2aContextIDKey contextKey = "a2aContextId"
-	// QueryContextKey is used to pass the Query resource through context to agents
 	QueryContextKey contextKey = "queryContext"
-	// Execution metadata keys for streaming
-	// These values are sent back with streaming chunks in the 'ark' metadata field,
-	// allowing callers to differentiate the source of chunks (e.g., specific agents in a team query)
-	targetKey          contextKey = "target" // Original query target (e.g., "team/my-team")
-	teamKey            contextKey = "team"   // Current team name
-	agentKey           contextKey = "agent"  // Current agent name
-	modelKey           contextKey = "model"  // Current model name
+	targetKey          contextKey = "target"
+	teamKey            contextKey = "team"
+	agentKey           contextKey = "agent"
+	modelKey           contextKey = "model"
 	toolEventStreamKey contextKey = "toolEventStream"
+	streamCorrelationIDKey contextKey = "streamCorrelationId"
 )
 
 func WithQueryContext(ctx context.Context, queryID, sessionID, queryName string) context.Context {
@@ -123,4 +122,17 @@ func GetToolEventStream(ctx context.Context) EventStreamInterface {
 		}
 	}
 	return nil
+}
+
+func WithStreamCorrelationID(ctx context.Context) context.Context {
+	return context.WithValue(ctx, streamCorrelationIDKey, uuid.New().String())
+}
+
+func GetStreamCorrelationID(ctx context.Context) string {
+	if val := ctx.Value(streamCorrelationIDKey); val != nil {
+		if id, ok := val.(string); ok {
+			return id
+		}
+	}
+	return ""
 }

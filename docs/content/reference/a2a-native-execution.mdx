@@ -24,6 +24,10 @@ As of the payload-only cutover, Ark treats A2A `parts` as the only transport for
 - Extension metadata is still valid, but only under URI-attributed keys declared in `message.extensions` and negotiated via `A2A-Extensions`.
 - Non-extension metadata keys are preserved for passthrough between A2A agents.
 
+### Protocol Naming Note
+
+Ark may use SDK-level aliases such as `message/send` and `message/stream` in internal/client abstractions. For external interoperability, use canonical A2A operation naming and binding mappings from the A2A specification, and document alias mapping explicitly where used.
+
 ## Executive Summary
 
 Ark uses **A2A as its canonical internal transport format**, with protocol conversion happening at system edges.
@@ -509,6 +513,9 @@ Native delegated execution is task-first and event-first:
 
 This keeps the internal native path aligned with A2A task lifecycle semantics while retaining explicit adapter behavior for providers that need OpenAI tool messages.
 
+- Message history should not be treated as a guaranteed critical-delivery channel across disconnect/reconnect boundaries.
+- Durable tool lifecycle state should be anchored in task state and artifact/event handling, with Ark replay/recovery guarantees validated by tests.
+
 ---
 
 ## Part 9: Implementation Status
@@ -530,21 +537,31 @@ This keeps the internal native path aligned with A2A task lifecycle semantics wh
 - [x] TaskStatusUpdateEvent handling (`handleTaskStatusUpdateEvent`, `BuildNativeStreamCompletionEvent`)
 - [x] Direct event forwarding in native mode (no OpenAI chunk conversion)
 - [x] Strict streaming with error propagation (`streamNativeA2AMessageStrict`)
-- [ ] End-to-end streaming validation across all team strategies
-- [ ] Streaming resumption after network interruption
+- [x] End-to-end streaming validation across all team strategies (`team_streaming_test.go`)
+- [x] Streaming resumption after network interruption (`StreamResubscriber` in `a2a_execution.go`)
+
+### Interruption and Resume Behavior (Planned)
+
+- [ ] Implement recoverable state-machine for `input-required` and `auth-required` interruptions
+- [ ] Subscribe/recovery paths for stream continuity after interruption
+- [ ] Deterministic state persistence (`taskId`, `contextId`, pending request key)
+
+Target behavior: when an interruption state occurs, Ark treats stream continuity as a recoverable state-machine concern rather than assuming a single binding-specific close behavior. Recovery will use subscribe/recovery paths and deterministic state persistence.
+
+Current state: `input-required` and `auth-required` are recognized as non-terminal phases (`IsTerminalPhase` returns false) and `taskId`/`contextId` are persisted to `query.status.response.a2a`, but the controller does not yet implement a callback-resume flow. See [pluggable-execution-plan](https://github.com/mckinsey/agents-at-scale-ark/issues/1219) for the full design.
 
 ### Edge Adapters (Planned)
-- [ ] Response API adapter (#965)
-- [ ] Formalize ChatCompletions adapter as explicit boundary
-- [ ] Claude/Gemini model boundary adapters (currently: conversion at model call)
+- [x] Response API adapter (#965) — `ResponseAPIAdapter` in `edge_adapter.go`
+- [x] Formalize ChatCompletions adapter as explicit boundary — `ChatCompletionsAdapter` in `edge_adapter.go`
+- [x] Claude/Gemini model boundary adapters (`claudeA2AModelAdapter`, `geminiA2AModelAdapter`)
 
 ### Composability (In Progress)
 - [x] Structured agent-as-tool delegation (#1082) — Schema exposed for `message`, `history`, `contextId`
 - [x] Delegated invocation payload contract (`https://ark.mckinsey.com/payloads/delegated-invocation/v1`)
 - [x] Task-first delegated stream forwarding (status/artifact/message passthrough + typed step-event parts)
 - [x] Structured native tool outcomes (`A2AToolOutcome`) replacing synthetic tool-result message dependency
-- [ ] History propagation extension
-- [ ] Identity/permissions extension
+- [x] History propagation extension (`HistoryExtensionV1` with truncation signaling, AgentCard negotiation)
+- [x] Identity/permissions extension (JWT/JWS token types, `A2ADelegationHop` chain, `A2AAuditEntry`)
 
 ### Multimodal Boundary
 
