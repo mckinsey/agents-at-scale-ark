@@ -10,12 +10,28 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	a2aclient "trpc.group/trpc-go/trpc-a2a-go/client"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	arkann "mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/eventing"
 )
+
+type StreamResubscriber interface {
+	ResubscribeToTask(ctx context.Context, taskID string) (<-chan protocol.StreamingMessageEvent, error)
+}
+
+type a2aClientResubscriber struct {
+	client *a2aclient.A2AClient
+}
+
+func (r *a2aClientResubscriber) ResubscribeToTask(ctx context.Context, taskID string) (<-chan protocol.StreamingMessageEvent, error) {
+	return r.client.ResubscribeTask(ctx, protocol.TaskIDParams{
+		RPCID: protocol.GenerateRPCID(),
+		ID:    taskID,
+	})
+}
 
 type A2AExecutionEngine struct {
 	client           client.Client
@@ -102,12 +118,24 @@ func (e *A2AExecutionEngine) executeA2A(ctx context.Context, agentName, namespac
 }
 
 func (e *A2AExecutionEngine) streamA2AExecution(ctx context.Context, address string, headers []arkv1prealpha1.Header, namespace, agentName, queryName, contextID string, userInput protocol.Message, metadata map[string]interface{}, eventStream EventStreamInterface, a2aServer *arkv1prealpha1.A2AServer, includeOpenAIMessages bool) (*ExecutionResult, error) {
+	ctx = WithStreamCorrelationID(ctx)
+	log := logf.FromContext(ctx)
+	correlationID := GetStreamCorrelationID(ctx)
+	log.V(1).Info("starting A2A streaming execution", "correlationId", correlationID, "agent", agentName, "address", address)
+
 	events, err := StreamA2AAgent(ctx, e.client, address, headers, namespace, userInput, metadata, agentName, contextID, e.eventingRecorder)
 	if err != nil {
 		return nil, err
 	}
 
-	response, err := e.consumeA2AStreamEvents(ctx, events, eventStream, agentName, namespace, queryName, a2aServer)
+	rpcURL := strings.TrimSuffix(address, "/")
+	a2aClient, clientErr := CreateA2AClient(ctx, e.client, rpcURL, headers, namespace, agentName, e.eventingRecorder)
+	var resubscriber StreamResubscriber
+	if clientErr == nil && a2aClient != nil {
+		resubscriber = &a2aClientResubscriber{client: a2aClient}
+	}
+
+	response, err := e.consumeA2AStreamEvents(ctx, events, eventStream, agentName, namespace, queryName, a2aServer, resubscriber)
 	if err != nil {
 		return nil, err
 	}
@@ -121,18 +149,41 @@ func (e *A2AExecutionEngine) streamA2AExecution(ctx context.Context, address str
 	return result, nil
 }
 
-func (e *A2AExecutionEngine) consumeA2AStreamEvents(ctx context.Context, events <-chan protocol.StreamingMessageEvent, eventStream EventStreamInterface, agentName, namespace, queryName string, a2aServer *arkv1prealpha1.A2AServer) (*A2AResponse, error) {
+func (e *A2AExecutionEngine) consumeA2AStreamEvents(ctx context.Context, events <-chan protocol.StreamingMessageEvent, eventStream EventStreamInterface, agentName, namespace, queryName string, a2aServer *arkv1prealpha1.A2AServer, resubscriber ...StreamResubscriber) (*A2AResponse, error) {
 	state := &a2aStreamState{
 		response: &A2AResponse{},
 	}
+	var resub StreamResubscriber
+	if len(resubscriber) > 0 {
+		resub = resubscriber[0]
+	}
+
+	currentEvents := events
+	resubscribeAttempted := false
+
 	for {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case event, ok := <-events:
+		case event, ok := <-currentEvents:
 			if !ok {
 				if !state.received {
 					return nil, fmt.Errorf("a2a streaming returned no events")
+				}
+				if state.done {
+					return state.finalize(), nil
+				}
+				if resub != nil && !resubscribeAttempted && state.response.TaskID != "" {
+					resubscribeAttempted = true
+					log := logf.FromContext(ctx)
+					log.Info("stream closed before terminal state, attempting resubscribe", "taskId", state.response.TaskID, "agent", agentName)
+					resumed, resubErr := resub.ResubscribeToTask(ctx, state.response.TaskID)
+					if resubErr != nil {
+						log.Error(resubErr, "resubscribe failed, returning partial result", "taskId", state.response.TaskID)
+						return state.finalize(), nil
+					}
+					currentEvents = resumed
+					continue
 				}
 				return state.finalize(), nil
 			}

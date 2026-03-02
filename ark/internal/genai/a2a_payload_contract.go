@@ -15,6 +15,12 @@ const (
 	A2APayloadSchemaRoleHintV1            = "https://ark.mckinsey.com/payloads/role-hint/v1"
 )
 
+type HistoryExtensionV1 struct {
+	Messages  []protocol.Message `json:"messages"`
+	Truncated bool               `json:"truncated"`
+	MaxWindow int                `json:"maxWindow,omitempty"`
+}
+
 type DelegatedInvocationPayloadV1 struct {
 	Schema     string            `json:"schema"`
 	Parameters map[string]string `json:"parameters,omitempty"`

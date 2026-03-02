@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkann "mckinsey.com/ark/internal/annotations"
@@ -294,10 +295,12 @@ func TestBuildA2AMetadataWithHistory(t *testing.T) {
 	assert.NotNil(t, metadata)
 	rawHistory, ok := metadata[a2aHistoryExtensionKey]
 	assert.True(t, ok)
-	historyList, ok := rawHistory.([]protocol.Message)
+	historyExt, ok := rawHistory.(HistoryExtensionV1)
 	assert.True(t, ok)
-	assert.Len(t, historyList, 1)
-	assert.Equal(t, protocol.MessageRoleAgent, historyList[0].Role)
+	assert.Len(t, historyExt.Messages, 1)
+	assert.Equal(t, protocol.MessageRoleAgent, historyExt.Messages[0].Role)
+	assert.True(t, historyExt.Truncated, "should be truncated because limit=1 and history had 2 items")
+	assert.Equal(t, 1, historyExt.MaxWindow)
 }
 
 func TestBuildA2AMetadataPermissions(t *testing.T) {
@@ -449,4 +452,59 @@ func TestBuildA2ASendMessageParamsMergesURIExtensionsAndPreservesMetadata(t *tes
 		"https://example.com/ext/base/v1",
 		"https://example.com/ext/custom/v1",
 	}, params.Message.Extensions)
+}
+
+func TestAppendDelegationHop(t *testing.T) {
+	perms := &A2APermissions{Subject: "user-123"}
+	AppendDelegationHop(perms, "agent-a", "default", "delegate")
+
+	require.NotNil(t, perms.Delegation)
+	assert.Equal(t, "user-123", perms.Delegation.Subject)
+	require.Len(t, perms.Delegation.Chain, 1)
+	assert.Equal(t, "agent-a", perms.Delegation.Chain[0].Agent)
+	assert.Equal(t, "default", perms.Delegation.Chain[0].Namespace)
+	assert.Equal(t, "delegate", perms.Delegation.Chain[0].Action)
+	assert.NotEmpty(t, perms.Delegation.Chain[0].Timestamp)
+
+	AppendDelegationHop(perms, "agent-b", "prod", "execute")
+	require.Len(t, perms.Delegation.Chain, 2)
+	assert.Equal(t, "agent-b", perms.Delegation.Chain[1].Agent)
+}
+
+func TestAppendDelegationHopNilPermissions(t *testing.T) {
+	AppendDelegationHop(nil, "agent-a", "default", "delegate")
+}
+
+func TestValidateTokenTypeJWT(t *testing.T) {
+	perms := A2APermissions{Subject: "user", Token: "eyJ...", TokenType: TokenTypeJWT}
+	assert.NoError(t, ValidateTokenType(perms))
+}
+
+func TestValidateTokenTypeJWS(t *testing.T) {
+	perms := A2APermissions{Subject: "user", Token: "eyJ...", TokenType: TokenTypeJWS}
+	assert.NoError(t, ValidateTokenType(perms))
+}
+
+func TestValidateTokenTypeBearer(t *testing.T) {
+	perms := A2APermissions{Subject: "user", Token: "abc", TokenType: "bearer"}
+	assert.NoError(t, ValidateTokenType(perms))
+}
+
+func TestValidateTokenTypeUnsupported(t *testing.T) {
+	perms := A2APermissions{Subject: "user", Token: "abc", TokenType: "custom"}
+	err := ValidateTokenType(perms)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported tokenType")
+}
+
+func TestValidateTokenTypeMissingWhenTokenPresent(t *testing.T) {
+	perms := A2APermissions{Subject: "user", Token: "abc", TokenType: ""}
+	err := ValidateTokenType(perms)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "tokenType is required")
+}
+
+func TestValidateTokenTypeNoToken(t *testing.T) {
+	perms := A2APermissions{Subject: "user"}
+	assert.NoError(t, ValidateTokenType(perms))
 }
