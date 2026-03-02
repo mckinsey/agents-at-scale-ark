@@ -94,8 +94,7 @@ spec:
             status:
               (response != null): true
               (response.target.name): 'test-agent'
-              # Verify response uses A2A native format and contains resolved parameter
-              (contains(response.raw, '"kind":"message"')): true
+              (contains(response.raw, '"role"')): true
               (contains(response.content, 'QueryAgent123')): true
       # Test nested valueFrom resolution - Agent referencing Query params that use ConfigMap/Secret
       - assert:

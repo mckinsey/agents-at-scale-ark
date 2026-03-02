@@ -1,9 +1,12 @@
 package genai
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
@@ -26,4 +29,18 @@ func TestResolveA2AExecutionCapabilityNamedEngineDefaultsToNative(t *testing.T) 
 func TestResolveA2AExecutionCapabilityUnknownEngineDefaultsToNative(t *testing.T) {
 	capability := resolveA2AExecutionCapability(&arkv1alpha1.ExecutionEngineRef{Name: "custom-engine"})
 	assert.Equal(t, executionCapabilityA2ANativeExternalEngine, capability)
+}
+
+func TestExecuteAgentA2ARejectsUnsupportedCapability(t *testing.T) {
+	agent := &Agent{
+		resolvedCapability: executionCapability("bogus-capability"),
+		Name:               "test-agent",
+		Namespace:          "default",
+	}
+	userMsg := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{protocol.NewTextPart("hi")})
+	result, err := agent.executeAgentA2A(context.Background(), userMsg, nil, nil, nil)
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "unsupported execution capability")
+	assert.Contains(t, err.Error(), "bogus-capability")
 }

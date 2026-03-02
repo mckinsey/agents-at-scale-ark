@@ -736,13 +736,6 @@ func extractTextFromTask(task *protocol.Task) (string, error) {
 
 	switch task.Status.State {
 	case TaskStateCompleted:
-		if task.Status.Message != nil && len(task.Status.Message.Parts) > 0 {
-			if statusText := extractTextFromParts(task.Status.Message.Parts); statusText != "" {
-				return statusText, nil
-			}
-		}
-
-		// Extract all agent messages from history
 		var text strings.Builder
 		for _, msg := range task.History {
 			if msg.Role == protocol.MessageRoleAgent && len(msg.Parts) > 0 {
@@ -755,8 +748,17 @@ func extractTextFromTask(task *protocol.Task) (string, error) {
 				}
 			}
 		}
+		if text.Len() > 0 {
+			return text.String(), nil
+		}
 
-		return text.String(), nil
+		if task.Status.Message != nil && len(task.Status.Message.Parts) > 0 {
+			if statusText := extractTextFromParts(task.Status.Message.Parts); statusText != "" {
+				return statusText, nil
+			}
+		}
+
+		return "", nil
 
 	case TaskStateFailed:
 		// Extract error message from status.message
