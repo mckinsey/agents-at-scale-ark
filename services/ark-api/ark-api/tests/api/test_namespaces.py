@@ -86,7 +86,7 @@ class TestNamespacesAPI(unittest.TestCase):
         data = response.json()
         self.assertEqual(data["namespace"], "default")
         self.assertEqual(data["cluster"], "test-cluster")
-        self.assertEqual(data["read_only_mode"], False)
+        self.assertFalse(data["read_only_mode"])
 
     @patch('ark_api.api.v1.namespaces.get_current_context')
     @patch('ark_api.api.v1.namespaces.ApiClient')
@@ -112,7 +112,7 @@ class TestNamespacesAPI(unittest.TestCase):
         data = response.json()
         self.assertEqual(data["namespace"], "custom-ns")
         self.assertEqual(data["cluster"], "test-cluster")
-        self.assertEqual(data["read_only_mode"], False)
+        self.assertFalse(data["read_only_mode"])
 
     @patch('ark_api.api.v1.namespaces.get_current_context')
     @patch('ark_api.api.v1.namespaces.ApiClient')
@@ -137,7 +137,7 @@ class TestNamespacesAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["namespace"], "demo-ns")
-        self.assertEqual(data["read_only_mode"], True)
+        self.assertTrue(data["read_only_mode"])
 
     @patch('ark_api.api.v1.namespaces.get_current_context')
     @patch('ark_api.api.v1.namespaces.ApiClient')
@@ -161,7 +161,7 @@ class TestNamespacesAPI(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["read_only_mode"], False)
+        self.assertFalse(data["read_only_mode"])
 
     @patch.dict(os.environ, {"READ_ONLY_MODE": "false"}, clear=False)
     @patch('ark_api.api.v1.namespaces.get_current_context')
@@ -184,7 +184,7 @@ class TestNamespacesAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["namespace"], "default")
-        self.assertEqual(data["read_only_mode"], False)
+        self.assertFalse(data["read_only_mode"])
 
     @patch.dict(os.environ, {"READ_ONLY_MODE": "true"}, clear=False)
     @patch('ark_api.api.v1.namespaces.get_current_context')
@@ -207,4 +207,4 @@ class TestNamespacesAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["namespace"], "default")
-        self.assertEqual(data["read_only_mode"], True)
+        self.assertTrue(data["read_only_mode"])
