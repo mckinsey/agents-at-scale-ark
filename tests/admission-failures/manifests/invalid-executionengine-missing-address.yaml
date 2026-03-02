@@ -4,4 +4,4 @@ metadata:
   name: invalid-executionengine-missing-address
 spec:
   # Missing required address field - should fail admission
-  type: autogen
+  description: "engine without address"

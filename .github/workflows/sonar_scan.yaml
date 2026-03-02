@@ -165,12 +165,12 @@ jobs:
           else
             BRANCH="${GITHUB_REF#refs/heads/}"
           fi
-          docker run -i --user $(id -u) --rm \
+          docker run -i --user 1000 --rm \
             -e SONAR_TOKEN \
             -e SONAR_HOST_URL \
             -v $(pwd):/app \
             -w /app \
-            sonarsource/sonar-scanner-cli:5.0.1 \
+            sonarsource/sonar-scanner-cli:12.0 \
               -Dsonar.projectKey=$PROJECT_KEY \
               -Dsonar.branch.name=$BRANCH \
               -Dsonar.qualitygate.wait=true
@@ -182,12 +182,12 @@ jobs:
           PR_BRANCH: ${{ github.head_ref }}
           PR_BASE: ${{ github.base_ref }}
         run: |
-          docker run -i --user $(id -u) --rm \
+          docker run -i --user 1000 --rm \
             -e SONAR_TOKEN \
             -e SONAR_HOST_URL \
             -v $(pwd):/app \
             -w /app \
-            sonarsource/sonar-scanner-cli:5.0.1 \
+            sonarsource/sonar-scanner-cli:12.0 \
               -Dsonar.projectKey=$PROJECT_KEY \
               -Dsonar.pullrequest.key=$PR_KEY \
               -Dsonar.pullrequest.branch=$PR_BRANCH \

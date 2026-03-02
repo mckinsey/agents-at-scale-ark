@@ -22,6 +22,7 @@ spec:
         {{- end }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.create }}
       {{- if .Values.app.podSecurityContext }}
       securityContext:
         {{- toYaml .Values.app.podSecurityContext | nindent 8 }}

@@ -304,7 +304,7 @@ spec:
 
 ## Execution Engines
 
-Execution Engines provide custom runtime environments for specialized agent execution.
+Execution Engines provide custom runtime environments for specialized agent execution via the A2A protocol.
 
 ### Specification
 ```yaml
@@ -313,8 +313,12 @@ kind: ExecutionEngine
 metadata:
   name: custom-engine
 spec:
-  type: external
-  endpoint: "http://custom-engine-service:8080"
+  address:
+    valueFrom:
+      serviceRef:
+        name: custom-engine-service
+        port: "8080"
+  description: "Custom A2A execution engine"
 ```
 
 ## Resource Relationships
