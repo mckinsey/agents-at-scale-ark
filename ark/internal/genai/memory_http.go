@@ -466,17 +466,21 @@ func unmarshalMessageRobust(rawJSON json.RawMessage) (protocol.Message, error) {
 		}
 		return message, nil
 	case RoleTool:
-		message.Metadata = map[string]interface{}{
+		meta := map[string]interface{}{
 			MetadataRoleKey: RoleTool,
 		}
+		if simple.ToolCallID != "" {
+			meta[MetadataToolCallIDKey] = simple.ToolCallID
+		}
+		message.Metadata = meta
 		return message, nil
 	default:
 		return message, nil
 	}
 }
 
-// Simple message structure for fallback parsing
 type simpleMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content,omitempty"`
+	Role       string `json:"role"`
+	Content    string `json:"content,omitempty"`
+	ToolCallID string `json:"tool_call_id,omitempty"`
 }

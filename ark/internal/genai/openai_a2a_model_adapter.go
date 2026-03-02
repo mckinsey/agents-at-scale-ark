@@ -135,7 +135,16 @@ func (a *openAIA2AModelAdapter) a2aTurnViaChatCompletionsEdge(ctx context.Contex
 	}
 
 	choice := response.Choices[0]
-	return a.buildA2ATurnResult(choice)
+	result, err := a.buildA2ATurnResult(choice)
+	if err != nil {
+		return nil, err
+	}
+	result.Usage = &A2ATurnUsage{
+		PromptTokens:     response.Usage.PromptTokens,
+		CompletionTokens: response.Usage.CompletionTokens,
+		TotalTokens:      response.Usage.TotalTokens,
+	}
+	return result, nil
 }
 
 func (a *openAIA2AModelAdapter) cacheToolOutcomes(outcomes []A2AToolOutcome) {

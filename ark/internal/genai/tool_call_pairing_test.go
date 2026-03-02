@@ -40,7 +40,7 @@ func TestNormalizeAssistantToolCallMessagesOrdersExplicitToolsByToolCallOrder(t 
 	assert.Equal(t, "call-2", normalized[3].OfTool.ToolCallID)
 }
 
-func TestNormalizeAssistantToolCallMessagesDropsUnpairedCallsWithoutFallback(t *testing.T) {
+func TestNormalizeAssistantToolCallMessagesPreservesUnpairedCallsWithSyntheticError(t *testing.T) {
 	messages := []Message{
 		openai.UserMessage("hi"),
 		assistantWithToolCalls("call-1", "call-2"),
@@ -48,11 +48,14 @@ func TestNormalizeAssistantToolCallMessagesDropsUnpairedCallsWithoutFallback(t *
 	}
 
 	normalized := normalizeAssistantToolCallMessages(messages, nil)
-	require.Len(t, normalized, 3)
+	require.Len(t, normalized, 4)
 	require.NotNil(t, normalized[1].OfAssistant)
-	require.Len(t, normalized[1].OfAssistant.ToolCalls, 1)
+	require.Len(t, normalized[1].OfAssistant.ToolCalls, 2)
 	assert.Equal(t, "call-1", normalized[1].OfAssistant.ToolCalls[0].ID)
+	assert.Equal(t, "call-2", normalized[1].OfAssistant.ToolCalls[1].ID)
 	assert.Equal(t, "call-1", normalized[2].OfTool.ToolCallID)
+	assert.Equal(t, "call-2", normalized[3].OfTool.ToolCallID)
+	assert.Contains(t, normalized[3].OfTool.Content.OfString.Value, "error")
 }
 
 func TestNormalizeAssistantToolCallMessagesUsesFallbackForMissingToolResult(t *testing.T) {

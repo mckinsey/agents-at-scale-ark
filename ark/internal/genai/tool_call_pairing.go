@@ -61,12 +61,15 @@ func normalizeAssistantToolCallMessages(messages []Message, fallbackByID map[str
 				pairedToolCalls = append(pairedToolCalls, toolCall)
 				continue
 			}
-			if fallbackByID != nil {
-				if content, ok := fallbackByID[toolCallID]; ok {
-					out = append(out, openai.ToolMessage(content, toolCallID))
-					pairedToolCalls = append(pairedToolCalls, toolCall)
-				}
+		if fallbackByID != nil {
+			if content, ok := fallbackByID[toolCallID]; ok {
+				out = append(out, openai.ToolMessage(content, toolCallID))
+				pairedToolCalls = append(pairedToolCalls, toolCall)
+				continue
 			}
+		}
+		out = append(out, openai.ToolMessage(`{"error":"tool execution did not produce a result"}`, toolCallID))
+		pairedToolCalls = append(pairedToolCalls, toolCall)
 		}
 
 		assistantMessage := out[assistantIndex]
