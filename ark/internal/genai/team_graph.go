@@ -31,6 +31,9 @@ func (t *Team) executeGraphA2A(ctx context.Context, userInput protocol.Message, 
 	currentMemberName := t.Members[0].GetName()
 
 	for turns := 0; ; turns++ {
+		if ctx.Err() != nil {
+			return newMessages, ctx.Err()
+		}
 		member, exists := memberMap[currentMemberName]
 		if !exists {
 			return newMessages, fmt.Errorf("member %s not found in team %s", currentMemberName, t.FullName())

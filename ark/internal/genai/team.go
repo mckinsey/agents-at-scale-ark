@@ -272,6 +272,8 @@ func (t *Team) executeWithTrackingA2A(execFunc func(context.Context, protocol.Me
 	t.eventingRecorder.Complete(teamctx, "TeamExecution", "Team execution completed successfully", operationData)
 
 	t.telemetryRecorder.RecordTokenUsage(span, usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens)
+	// Intentionally uses parent ctx (not teamctx) to bubble the team's aggregated
+	// token usage up to the enclosing scope (e.g., query-level token collection).
 	t.eventingRecorder.AddTokenUsage(ctx, usage)
 	return result, err
 }

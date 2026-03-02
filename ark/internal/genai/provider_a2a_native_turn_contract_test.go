@@ -347,13 +347,16 @@ func TestOpenAIProviderA2ATurnNativeDropsUnpairedAssistantToolCalls(t *testing.T
 	)
 	require.NoError(t, err)
 
-	require.Len(t, captured, 4)
+	require.Len(t, captured, 5)
 	assistant := decodeMessageObject(t, captured[2])
-	tool := decodeMessageObject(t, captured[3])
+	tool1 := decodeMessageObject(t, captured[3])
+	tool2 := decodeMessageObject(t, captured[4])
 
-	assert.Equal(t, []string{"call-1"}, extractToolCallIDs(t, assistant))
-	assert.Equal(t, "tool", tool["role"])
-	assert.Equal(t, "call-1", tool["tool_call_id"])
+	assert.Equal(t, []string{"call-1", "call-2"}, extractToolCallIDs(t, assistant))
+	assert.Equal(t, "tool", tool1["role"])
+	assert.Equal(t, "call-1", tool1["tool_call_id"])
+	assert.Equal(t, "tool", tool2["role"])
+	assert.Equal(t, "call-2", tool2["tool_call_id"])
 }
 
 func TestAzureProviderA2ATurnNativeDropsUnpairedAssistantToolCalls(t *testing.T) {
@@ -407,13 +410,16 @@ func TestAzureProviderA2ATurnNativeDropsUnpairedAssistantToolCalls(t *testing.T)
 	)
 	require.NoError(t, err)
 
-	require.Len(t, captured, 4)
+	require.Len(t, captured, 5)
 	assistant := decodeMessageObject(t, captured[2])
-	tool := decodeMessageObject(t, captured[3])
+	tool1 := decodeMessageObject(t, captured[3])
+	tool2 := decodeMessageObject(t, captured[4])
 
-	assert.Equal(t, []string{"call-1"}, extractToolCallIDs(t, assistant))
-	assert.Equal(t, "tool", tool["role"])
-	assert.Equal(t, "call-1", tool["tool_call_id"])
+	assert.Equal(t, []string{"call-1", "call-2"}, extractToolCallIDs(t, assistant))
+	assert.Equal(t, "tool", tool1["role"])
+	assert.Equal(t, "call-1", tool1["tool_call_id"])
+	assert.Equal(t, "tool", tool2["role"])
+	assert.Equal(t, "call-2", tool2["tool_call_id"])
 }
 
 func TestOpenAIProviderA2ATurnNativeNormalizesEmptyAssistantContent(t *testing.T) {
