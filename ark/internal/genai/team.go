@@ -8,6 +8,7 @@ import (
 	"github.com/openai/openai-go"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
@@ -48,7 +49,9 @@ func (t *Team) FullName() string {
 	return t.Namespace + "/" + t.Name
 }
 
+// Deprecated: use ExecuteA2A for native A2A message input. This compat path will be removed after two minor releases.
 func (t *Team) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	logf.FromContext(ctx).V(0).Info("using deprecated v0.3 compat execution path; migrate to ExecuteA2A", "team", t.FullName())
 	if len(t.Members) == 0 {
 		return nil, fmt.Errorf("team %s has no members configured", t.FullName())
 	}

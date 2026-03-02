@@ -323,3 +323,106 @@ func TestConsumeA2AStreamEventsArtifactStreamFailure(t *testing.T) {
 	assert.Error(t, err)
 	assert.ErrorContains(t, err, "failed to stream A2A event")
 }
+
+type fakeResubscriber struct {
+	taskID string
+	events <-chan protocol.StreamingMessageEvent
+	err    error
+}
+
+func (f *fakeResubscriber) ResubscribeToTask(_ context.Context, taskID string) (<-chan protocol.StreamingMessageEvent, error) {
+	f.taskID = taskID
+	return f.events, f.err
+}
+
+func TestConsumeA2AStreamEventsResubscribesOnUnexpectedClose(t *testing.T) {
+	ctx := context.Background()
+	stream := &fakeEventStream{}
+
+	initialEvents := make(chan protocol.StreamingMessageEvent, 2)
+	initialEvents <- protocol.StreamingMessageEvent{
+		Result: &protocol.TaskStatusUpdateEvent{
+			TaskID:    "task-resub",
+			ContextID: "ctx-resub",
+			Status:    protocol.TaskStatus{State: protocol.TaskStateWorking},
+		},
+	}
+	initialEvents <- protocol.StreamingMessageEvent{
+		Result: &protocol.TaskArtifactUpdateEvent{
+			TaskID: "task-resub",
+			Artifact: protocol.Artifact{
+				ArtifactID: "a1",
+				Parts:      []protocol.Part{protocol.NewTextPart("partial")},
+			},
+		},
+	}
+	close(initialEvents)
+
+	resumedEvents := make(chan protocol.StreamingMessageEvent, 1)
+	finalMsg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{protocol.NewTextPart("completed")})
+	resumedEvents <- protocol.StreamingMessageEvent{
+		Result: &protocol.TaskStatusUpdateEvent{
+			TaskID: "task-resub",
+			Final:  true,
+			Status: protocol.TaskStatus{State: protocol.TaskStateCompleted, Message: &finalMsg},
+		},
+	}
+	close(resumedEvents)
+
+	resub := &fakeResubscriber{events: resumedEvents}
+	engine := &A2AExecutionEngine{}
+	response, err := engine.consumeA2AStreamEvents(ctx, initialEvents, stream, "agent", "default", "query", nil, resub)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "task-resub", resub.taskID)
+	assert.Equal(t, "task-resub", response.TaskID)
+	assert.NotEmpty(t, response.Content, "should have content from initial and resumed streams")
+}
+
+func TestConsumeA2AStreamEventsResubscribeFailureReturnsPartial(t *testing.T) {
+	ctx := context.Background()
+	stream := &fakeEventStream{}
+
+	initialEvents := make(chan protocol.StreamingMessageEvent, 1)
+	initialEvents <- protocol.StreamingMessageEvent{
+		Result: &protocol.TaskArtifactUpdateEvent{
+			TaskID: "task-fail-resub",
+			Artifact: protocol.Artifact{
+				ArtifactID: "a1",
+				Parts:      []protocol.Part{protocol.NewTextPart("partial-content")},
+			},
+		},
+	}
+	close(initialEvents)
+
+	resub := &fakeResubscriber{err: errors.New("resubscribe failed")}
+	engine := &A2AExecutionEngine{}
+	response, err := engine.consumeA2AStreamEvents(ctx, initialEvents, stream, "agent", "default", "query", nil, resub)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "partial-content", response.Content)
+}
+
+func TestConsumeA2AStreamEventsNoResubscribeWhenDone(t *testing.T) {
+	ctx := context.Background()
+	stream := &fakeEventStream{}
+
+	events := make(chan protocol.StreamingMessageEvent, 1)
+	msg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{protocol.NewTextPart("final")})
+	events <- protocol.StreamingMessageEvent{
+		Result: &protocol.TaskStatusUpdateEvent{
+			TaskID: "task-done",
+			Final:  true,
+			Status: protocol.TaskStatus{State: protocol.TaskStateCompleted, Message: &msg},
+		},
+	}
+	close(events)
+
+	resub := &fakeResubscriber{}
+	engine := &A2AExecutionEngine{}
+	response, err := engine.consumeA2AStreamEvents(ctx, events, stream, "agent", "default", "query", nil, resub)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "", resub.taskID, "resubscribe should not be called when stream completes normally")
+	assert.Contains(t, response.Content, "final")
+}
