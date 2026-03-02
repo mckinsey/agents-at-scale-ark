@@ -60,9 +60,30 @@ type A2APermissions struct {
 }
 
 type A2ADelegation struct {
-	Subject string   `json:"subject,omitempty"`
-	Chain   []string `json:"chain,omitempty"`
+	Subject string             `json:"subject,omitempty"`
+	Chain   []A2ADelegationHop `json:"chain,omitempty"`
 }
+
+type A2ADelegationHop struct {
+	Agent     string `json:"agent"`
+	Namespace string `json:"namespace,omitempty"`
+	Timestamp string `json:"timestamp,omitempty"`
+	Action    string `json:"action,omitempty"`
+}
+
+type A2AAuditEntry struct {
+	Agent     string `json:"agent"`
+	Namespace string `json:"namespace,omitempty"`
+	Action    string `json:"action"`
+	Timestamp string `json:"timestamp"`
+	TaskID    string `json:"taskId,omitempty"`
+	ContextID string `json:"contextId,omitempty"`
+}
+
+const (
+	TokenTypeJWT = "jwt"
+	TokenTypeJWS = "jws"
+)
 
 func isA2AStreamingSupported(agentAnnotations map[string]string) bool {
 	if agentAnnotations == nil {
@@ -284,16 +305,54 @@ func addA2APermissionsMetadata(metadata map[string]interface{}, agentAnnotations
 	return metadata, nil
 }
 
+func AppendDelegationHop(permissions *A2APermissions, agentName, namespace, action string) {
+	if permissions == nil {
+		return
+	}
+	if permissions.Delegation == nil {
+		permissions.Delegation = &A2ADelegation{Subject: permissions.Subject}
+	}
+	permissions.Delegation.Chain = append(permissions.Delegation.Chain, A2ADelegationHop{
+		Agent:     agentName,
+		Namespace: namespace,
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Action:    action,
+	})
+}
+
+func ValidateTokenType(permissions A2APermissions) error {
+	if permissions.Token == "" {
+		return nil
+	}
+	switch permissions.TokenType {
+	case TokenTypeJWT, TokenTypeJWS:
+		return nil
+	case "bearer":
+		return nil
+	case "":
+		return fmt.Errorf("tokenType is required when token is provided")
+	default:
+		return fmt.Errorf("unsupported tokenType %q; supported: jwt, jws, bearer", permissions.TokenType)
+	}
+}
+
 func addA2AHistoryMetadata(metadata map[string]interface{}, history []protocol.Message, include bool, agentAnnotations map[string]string) map[string]interface{} {
 	if !include || len(history) == 0 {
 		return metadata
 	}
 	limit := getA2AHistoryLimit(agentAnnotations)
+	truncated := false
 	if limit > 0 && len(history) > limit {
 		history = history[len(history)-limit:]
+		truncated = true
 	}
+	converted := convertToA2AHistory(history)
 	metadata = ensureA2AMetadata(metadata)
-	metadata[a2aHistoryExtensionKey] = convertToA2AHistory(history)
+	metadata[a2aHistoryExtensionKey] = HistoryExtensionV1{
+		Messages:  converted,
+		Truncated: truncated,
+		MaxWindow: limit,
+	}
 	return metadata
 }
 

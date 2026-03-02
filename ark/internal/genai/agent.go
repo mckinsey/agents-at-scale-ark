@@ -7,6 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
@@ -38,8 +39,10 @@ func (a *Agent) FullName() string {
 	return a.Namespace + "/" + a.Name
 }
 
-// Execute executes the agent with optional event emission for tool calls
+// Execute executes the agent with optional event emission for tool calls.
+// Deprecated: use ExecuteA2A for native A2A message input. This compat path will be removed after two minor releases.
 func (a *Agent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	logf.FromContext(ctx).V(0).Info("using deprecated v0.3 compat execution path; migrate to ExecuteA2A", "agent", a.FullName())
 	ctx, span := a.telemetryRecorder.StartAgentExecution(ctx, a.Name, a.Namespace)
 	defer span.End()
 
@@ -75,6 +78,9 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 	return result, nil
 }
 
+// Deprecated: convertCompatInputToA2A converts v0.3-era OpenAI-shaped messages to A2A native format.
+// This compat path will be removed after two minor releases from the V1 native default.
+// Callers should migrate to ExecuteA2A entry points that accept protocol.Message directly.
 func convertCompatInputToA2A(userInput Message, history []Message) (protocol.Message, []protocol.Message, error) {
 	a2aUserInput, err := OpenAIToA2AMessageMultimodal(userInput)
 	if err != nil {
