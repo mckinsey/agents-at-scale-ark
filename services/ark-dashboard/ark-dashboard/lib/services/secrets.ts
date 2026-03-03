@@ -1,5 +1,5 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient } from '@/lib/api/client';
+import { apiClient, withNamespace } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
 // Use the generated type from OpenAPI
@@ -14,10 +14,9 @@ export type SecretDetailResponse =
 export const secretsService = {
   // Get all secrets for a given namespace
   async getAll(namespace?: string): Promise<Secret[]> {
-    const params = namespace ? { namespace } : undefined;
     const response = await apiClient.get<SecretListResponse>(
       `/api/v1/secrets`,
-      params ? { params } : undefined,
+      withNamespace(namespace),
     );
     return response.items;
   },

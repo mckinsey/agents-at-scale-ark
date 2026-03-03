@@ -1,4 +1,4 @@
-import { apiClient } from '@/lib/api/client';
+import { apiClient, withNamespace } from '@/lib/api/client';
 
 // Memory message interface - represents individual query messages
 export interface MemoryMessage {
@@ -61,11 +61,9 @@ export const memoryService = {
   // Get all memory resources in a namespace
   async getMemoryResources(namespace?: string): Promise<MemoryResource[]> {
     try {
-      const params = namespace ? { namespace } : undefined;
-      const url = `/api/v1/memories`;
       const response = await apiClient.get<MemoryListResponse>(
-        url,
-        params ? { params } : undefined,
+        `/api/v1/memories`,
+        withNamespace(namespace),
       );
 
       return response?.items || [];

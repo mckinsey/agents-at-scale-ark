@@ -1,4 +1,4 @@
-import { apiClient } from '@/lib/api/client';
+import { apiClient, withNamespace } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
 // Helper type for axios errors
@@ -23,10 +23,9 @@ export type Memory = MemoryDetailResponse & { id: string };
 export const memoriesService = {
   // Get all memories
   async getAll(namespace?: string): Promise<Memory[]> {
-    const params = namespace ? { namespace } : undefined;
     const response = await apiClient.get<MemoryListResponse>(
       `/api/v1/memories`,
-      params ? { params } : undefined,
+      withNamespace(namespace),
     );
 
     // Map the response items to include id for UI compatibility
@@ -44,10 +43,9 @@ export const memoriesService = {
   // Get a single memory by name
   async getByName(name: string, namespace?: string): Promise<Memory | null> {
     try {
-      const params = namespace ? { namespace } : undefined;
       const response = await apiClient.get<MemoryDetailResponse>(
         `/api/v1/memories/${name}`,
-        params ? { params } : undefined,
+        withNamespace(namespace),
       );
       return {
         ...response,

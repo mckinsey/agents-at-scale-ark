@@ -1,5 +1,5 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient } from '@/lib/api/client';
+import { apiClient, withNamespace } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
 // Helper type for API errors
@@ -143,10 +143,9 @@ export const evaluationsService = {
    * Get all evaluations in a namespace with optional filtering
    */
   async getAll(namespace?: string): Promise<Evaluation[]> {
-    const params = namespace ? { namespace } : undefined;
     const response = await apiClient.get<EvaluationListResponse>(
       `/api/v1/evaluations`,
-      params ? { params } : undefined,
+      withNamespace(namespace),
     );
 
     // For now, just use the response items directly

@@ -1,5 +1,5 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient } from '@/lib/api/client';
+import { apiClient, withNamespace } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
 // Helper type for axios errors
@@ -24,10 +24,9 @@ export type Team = TeamDetailResponse & { id: string };
 export const teamsService = {
   // Get all teams
   async getAll(namespace?: string): Promise<Team[]> {
-    const params = namespace ? { namespace } : undefined;
     const response = await apiClient.get<TeamListResponse>(
       `/api/v1/teams`,
-      params ? { params } : undefined,
+      withNamespace(namespace),
     );
 
     // Map the response items to include id for UI compatibility
@@ -45,10 +44,9 @@ export const teamsService = {
   // Get a single team by name
   async getByName(name: string, namespace?: string): Promise<Team | null> {
     try {
-      const params = namespace ? { namespace } : undefined;
       const response = await apiClient.get<TeamDetailResponse>(
         `/api/v1/teams/${name}`,
-        params ? { params } : undefined,
+        withNamespace(namespace),
       );
       return {
         ...response,

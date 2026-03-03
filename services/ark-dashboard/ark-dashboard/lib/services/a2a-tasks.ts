@@ -2,7 +2,7 @@ import type {
   A2ATaskDetailResponse,
   A2ATaskListResponse,
 } from '@/lib/api/a2a-tasks-types';
-import { apiClient } from '@/lib/api/client';
+import { apiClient, withNamespace } from '@/lib/api/client';
 
 export enum A2ATaskPhase {
   COMPLETED = 'completed',
@@ -24,10 +24,9 @@ export type A2ATask = A2ATaskDetailResponse & {
 
 export const a2aTasksService = {
   async getAll(namespace?: string): Promise<A2ATask[]> {
-    const params = namespace ? { namespace } : undefined;
     const response = await apiClient.get<A2ATaskListResponse>(
       '/api/v1/a2a-tasks',
-      params ? { params } : undefined,
+      withNamespace(namespace),
     );
 
     return response.items.map(item => ({
@@ -36,10 +35,9 @@ export const a2aTasksService = {
     })) as A2ATask[];
   },
   async get(id: string, namespace?: string): Promise<A2ATaskDetailResponse> {
-    const params = namespace ? { namespace } : undefined;
     const response = await apiClient.get<A2ATaskDetailResponse>(
       `/api/v1/a2a-tasks/${id}`,
-      params ? { params } : undefined,
+      withNamespace(namespace),
     );
     return {
       ...response,

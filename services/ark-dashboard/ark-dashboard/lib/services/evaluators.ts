@@ -1,5 +1,5 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient } from '@/lib/api/client';
+import { apiClient, withNamespace } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
 // Helper type for API errors
@@ -25,10 +25,9 @@ export const evaluatorsService = {
    * Get all evaluators in a namespace
    */
   async getAll(namespace?: string): Promise<Evaluator[]> {
-    const params = namespace ? { namespace } : undefined;
     const response = await apiClient.get<EvaluatorListResponse>(
       `/api/v1/evaluators`,
-      params ? { params } : undefined,
+      withNamespace(namespace),
     );
 
     return response.items || [];
@@ -39,10 +38,9 @@ export const evaluatorsService = {
    */
   async getByName(name: string, namespace?: string): Promise<Evaluator | null> {
     try {
-      const params = namespace ? { namespace } : undefined;
       const response = await apiClient.get<EvaluatorResponse>(
         `/api/v1/evaluators/${name}`,
-        params ? { params } : undefined,
+        withNamespace(namespace),
       );
       return response;
     } catch (error) {

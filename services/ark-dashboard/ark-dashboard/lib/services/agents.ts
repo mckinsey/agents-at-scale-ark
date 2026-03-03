@@ -1,5 +1,5 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient } from '@/lib/api/client';
+import { apiClient, withNamespace } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
 // Helper type for axios errors
@@ -50,10 +50,9 @@ export type Agent = AgentDetailResponseWithA2A & { id: string };
 export const agentsService = {
   // Get all agents
   async getAll(namespace?: string): Promise<Agent[]> {
-    const params = namespace ? { namespace } : undefined;
     const response = await apiClient.get<AgentListResponse>(
       `/api/v1/agents`,
-      params ? { params } : undefined,
+      withNamespace(namespace),
     );
 
     // Map the response items to include id for UI compatibility
@@ -71,10 +70,9 @@ export const agentsService = {
   // Get a single agent by name
   async getByName(name: string, namespace?: string): Promise<Agent | null> {
     try {
-      const params = namespace ? { namespace } : undefined;
       const response = await apiClient.get<AgentDetailResponse>(
         `/api/v1/agents/${name}`,
-        params ? { params } : undefined,
+        withNamespace(namespace),
       );
       return {
         ...response,
