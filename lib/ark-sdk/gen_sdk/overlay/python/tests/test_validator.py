@@ -1,8 +1,9 @@
 """Tests for token validator."""
+import asyncio
 import unittest
 from unittest.mock import patch, Mock, AsyncMock, MagicMock
-from jose import jwt
-from jose.exceptions import JWTError, ExpiredSignatureError, JWTClaimsError
+import jwt
+from jwt.exceptions import InvalidTokenError as JWTInvalidTokenError, ExpiredSignatureError, InvalidAudienceError
 from ark_sdk.auth.validator import TokenValidator
 from ark_sdk.auth.config import AuthConfig
 from ark_sdk.auth.exceptions import (
@@ -60,13 +61,10 @@ class TestTokenValidator(unittest.TestCase):
         mock_response.json.return_value = {"keys": [{"kid": "test-key-id"}]}
         mock_get.return_value = mock_response
         
-        # First call
         result1 = self.validator._get_jwks()
-        # Second call
         result2 = self.validator._get_jwks()
         
         self.assertEqual(result1, result2)
-        # Should only be called once due to caching
         mock_get.assert_called_once()
 
     @patch('ark_sdk.auth.validator.requests.get')
@@ -84,16 +82,13 @@ class TestTokenValidator(unittest.TestCase):
     @patch.object(TokenValidator, '_get_signing_key')
     def test_validate_token_success(self, mock_get_signing_key, mock_decode):
         """Test successful token validation."""
-        # Setup mocks
         mock_get_signing_key.return_value = "test-key"
         
         mock_payload = {"sub": "test-user", "aud": "okta-audience", "iss": "https://test.okta.com/oauth2/default"}
         mock_decode.return_value = mock_payload
         
-        # Test
-        result = self.validator.validate_token("test-token")
+        result = asyncio.run(self.validator.validate_token("test-token"))
         
-        # Verify
         self.assertEqual(result, mock_payload)
         mock_get_signing_key.assert_called_once_with("test-token")
         mock_decode.assert_called_once_with(
@@ -114,7 +109,6 @@ class TestTokenValidator(unittest.TestCase):
     @patch.object(TokenValidator, '_get_signing_key')
     def test_validate_token_fallback_to_jwt_config(self, mock_get_signing_key, mock_decode):
         """Test token validation falls back to JWT config when OKTA is not set."""
-        # Setup config without audience/issuer values
         config = AuthConfig(
             jwt_algorithm="RS256",
             audience="jwt-audience",
@@ -123,22 +117,19 @@ class TestTokenValidator(unittest.TestCase):
         )
         validator = TokenValidator(config)
         
-        # Setup mocks
         mock_get_signing_key.return_value = "test-key"
         
         mock_payload = {"sub": "test-user"}
         mock_decode.return_value = mock_payload
         
-        # Test
-        result = validator.validate_token("test-token")
+        result = asyncio.run(validator.validate_token("test-token"))
         
-        # Verify JWT values are used as fallback
         mock_decode.assert_called_once_with(
             "test-token",
             "test-key",
             algorithms=["RS256"],
-            audience="jwt-audience",  # Should use JWT audience as fallback
-            issuer="jwt-issuer",  # Should use JWT issuer as fallback
+            audience="jwt-audience",
+            issuer="jwt-issuer",
             options={
                 "verify_signature": True,
                 "verify_exp": True,
@@ -151,7 +142,6 @@ class TestTokenValidator(unittest.TestCase):
     @patch.object(TokenValidator, '_get_signing_key')
     def test_validate_token_no_audience_issuer(self, mock_get_signing_key, mock_decode):
         """Test token validation when no audience/issuer is configured."""
-        # Setup config without audience/issuer
         config = AuthConfig(
             jwt_algorithm="RS256",
             audience=None,
@@ -160,16 +150,13 @@ class TestTokenValidator(unittest.TestCase):
         )
         validator = TokenValidator(config)
         
-        # Setup mocks
         mock_get_signing_key.return_value = "test-key"
         
         mock_payload = {"sub": "test-user"}
         mock_decode.return_value = mock_payload
         
-        # Test
-        result = validator.validate_token("test-token")
+        result = asyncio.run(validator.validate_token("test-token"))
         
-        # Verify audience/issuer verification is disabled
         mock_decode.assert_called_once_with(
             "test-token",
             "test-key",
@@ -179,8 +166,8 @@ class TestTokenValidator(unittest.TestCase):
             options={
                 "verify_signature": True,
                 "verify_exp": True,
-                "verify_aud": False,  # Should be False when no audience
-                "verify_iss": False,  # Should be False when no issuer
+                "verify_aud": False,
+                "verify_iss": False,
             }
         )
 
@@ -193,7 +180,7 @@ class TestTokenValidator(unittest.TestCase):
         mock_get_signing_key.side_effect = TokenValidationError("JWKS URL not configured")
         
         with self.assertRaises(TokenValidationError) as context:
-            validator.validate_token("test-token")
+            asyncio.run(validator.validate_token("test-token"))
         
         self.assertIn("JWKS URL not configured", str(context.exception))
 
@@ -201,12 +188,11 @@ class TestTokenValidator(unittest.TestCase):
     @patch.object(TokenValidator, '_get_signing_key')
     def test_validate_token_expired_signature(self, mock_get_signing_key, mock_decode):
         """Test token validation with expired signature."""
-        # Setup mocks
         mock_get_signing_key.return_value = "test-key"
         mock_decode.side_effect = ExpiredSignatureError("Token has expired")
         
         with self.assertRaises(ExpiredTokenError) as context:
-            self.validator.validate_token("expired-token")
+            asyncio.run(self.validator.validate_token("expired-token"))
         
         self.assertIn("Token has expired", str(context.exception))
 
@@ -214,12 +200,11 @@ class TestTokenValidator(unittest.TestCase):
     @patch.object(TokenValidator, '_get_signing_key')
     def test_validate_token_invalid_token(self, mock_get_signing_key, mock_decode):
         """Test token validation with invalid token."""
-        # Setup mocks
         mock_get_signing_key.return_value = "test-key"
-        mock_decode.side_effect = JWTError("Invalid token")
+        mock_decode.side_effect = JWTInvalidTokenError("Invalid token")
         
         with self.assertRaises(InvalidTokenError) as context:
-            self.validator.validate_token("invalid-token")
+            asyncio.run(self.validator.validate_token("invalid-token"))
         
         self.assertIn("Invalid token", str(context.exception))
 
@@ -227,12 +212,11 @@ class TestTokenValidator(unittest.TestCase):
     @patch.object(TokenValidator, '_get_signing_key')
     def test_validate_token_decode_error(self, mock_get_signing_key, mock_decode):
         """Test token validation with JWT claims error."""
-        # Setup mocks
         mock_get_signing_key.return_value = "test-key"
-        mock_decode.side_effect = JWTClaimsError("Invalid claims")
+        mock_decode.side_effect = InvalidAudienceError("Invalid claims")
         
         with self.assertRaises(InvalidTokenError) as context:
-            self.validator.validate_token("malformed-token")
+            asyncio.run(self.validator.validate_token("malformed-token"))
         
         self.assertIn("Invalid token claims", str(context.exception))
 
@@ -240,12 +224,11 @@ class TestTokenValidator(unittest.TestCase):
     @patch.object(TokenValidator, '_get_signing_key')
     def test_validate_token_general_exception(self, mock_get_signing_key, mock_decode):
         """Test token validation with general exception."""
-        # Setup mocks
         mock_get_signing_key.return_value = "test-key"
         mock_decode.side_effect = Exception("Unexpected error")
         
         with self.assertRaises(TokenValidationError) as context:
-            self.validator.validate_token("bad-token")
+            asyncio.run(self.validator.validate_token("bad-token"))
         
         self.assertIn("Token validation failed", str(context.exception))
 
@@ -255,24 +238,22 @@ class TestTokenValidator(unittest.TestCase):
         mock_get_signing_key.side_effect = TokenValidationError("Failed to fetch JWKS")
         
         with self.assertRaises(TokenValidationError) as context:
-            self.validator.validate_token("test-token")
+            asyncio.run(self.validator.validate_token("test-token"))
         
         self.assertIn("Failed to fetch JWKS", str(context.exception))
 
     @patch.object(TokenValidator, '_get_signing_key')
     def test_validate_token_signing_key_exception(self, mock_get_signing_key):
         """Test token validation when getting signing key raises exception."""
-        # Setup mocks
         mock_get_signing_key.side_effect = TokenValidationError("Unable to find key")
         
         with self.assertRaises(TokenValidationError) as context:
-            self.validator.validate_token("test-token")
+            asyncio.run(self.validator.validate_token("test-token"))
         
         self.assertIn("Unable to find key", str(context.exception))
 
     def test_validate_token_config_values(self):
         """Test that config values are set correctly."""
-        # This test verifies the config values
         self.assertEqual(self.config.audience, "okta-audience")
         self.assertEqual(self.config.issuer, "https://test.okta.com/oauth2/default")
         self.assertEqual(self.config.jwks_url, "https://test.okta.com/.well-known/jwks.json")

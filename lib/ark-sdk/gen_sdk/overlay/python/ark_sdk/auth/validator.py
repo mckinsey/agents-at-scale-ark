@@ -4,8 +4,15 @@ import logging
 import os
 import json
 from typing import Optional, Dict, Any
-from jose import jwt, jwk
-from jose.exceptions import JWTError, ExpiredSignatureError, JWTClaimsError
+import jwt
+from jwt import PyJWK
+from jwt.exceptions import (
+    InvalidTokenError,
+    ExpiredSignatureError,
+    InvalidAudienceError,
+    InvalidIssuerError,
+    MissingRequiredClaimError,
+)
 import requests
 
 from .exceptions import TokenValidationError, InvalidTokenError as AuthInvalidTokenError, ExpiredTokenError
@@ -63,7 +70,7 @@ class TokenValidator:
             self._jwks_cache = self._fetch_jwks()
         return self._jwks_cache
     
-    def _get_signing_key(self, token: str) -> str:
+    def _get_signing_key(self, token: str) -> Any:
         """Get the signing key for a JWT token from JWKS."""
         try:
             # Decode header to get kid (key ID)
@@ -80,7 +87,7 @@ class TokenValidator:
             for key in jwks.get('keys', []):
                 if key.get('kid') == kid:
                     # Construct the key
-                    return jwk.construct(key).to_pem().decode('utf-8')
+                    return PyJWK(key).key
             
             raise TokenValidationError(f"Unable to find key with kid: {kid}")
             
@@ -132,10 +139,10 @@ class TokenValidator:
         except ExpiredSignatureError as e:
             logger.warning(f"Token expired: {e}")
             raise ExpiredTokenError("Token has expired")
-        except JWTClaimsError as e:
+        except (InvalidAudienceError, InvalidIssuerError, MissingRequiredClaimError) as e:
             logger.warning(f"Invalid token claims: {e}")
             raise AuthInvalidTokenError("Invalid token claims")
-        except JWTError as e:
+        except InvalidTokenError as e:
             logger.warning(f"JWT error: {e}")
             raise AuthInvalidTokenError("Invalid token")
         except Exception as e:
