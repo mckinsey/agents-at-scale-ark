@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/openai/openai-go"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -390,17 +389,6 @@ func loadTeamMember(ctx context.Context, k8sClient client.Client, memberSpec ark
 	default:
 		return nil, nil, fmt.Errorf("unsupported member type %s for member %s in team %s", memberSpec.Type, memberSpec.Name, teamName)
 	}
-}
-
-func addAgentNameToMessages(messages []Message, agentName string) []Message {
-	result := make([]Message, len(messages))
-	copy(result, messages)
-	for i := range result {
-		if result[i].OfAssistant != nil {
-			result[i].OfAssistant.Name = openai.String(agentName)
-		}
-	}
-	return result
 }
 
 func shouldIncludeMemberAnnotationsForA2A(agentAnnotations map[string]string) bool {

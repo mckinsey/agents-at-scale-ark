@@ -61,65 +61,37 @@ func IsTerminalPhase(phase string) bool {
 func convertPartFromProtocol(part interface{}) arkv1alpha1.A2ATaskPart {
 	switch p := part.(type) {
 	case *protocol.TextPart:
-		return arkv1alpha1.A2ATaskPart{
-			Kind: PartKindText,
-			Text: p.Text,
-		}
+		return convertPartFromProtocol(*p)
 	case protocol.TextPart:
-		return arkv1alpha1.A2ATaskPart{
-			Kind: PartKindText,
-			Text: p.Text,
-		}
+		return arkv1alpha1.A2ATaskPart{Kind: PartKindText, Text: p.Text}
 	case *protocol.DataPart:
-		return arkv1alpha1.A2ATaskPart{
-			Kind: PartKindData,
-			Data: fmt.Sprintf("%v", p.Data),
-		}
+		return convertPartFromProtocol(*p)
 	case protocol.DataPart:
-		return arkv1alpha1.A2ATaskPart{
-			Kind: PartKindData,
-			Data: fmt.Sprintf("%v", p.Data),
-		}
+		return arkv1alpha1.A2ATaskPart{Kind: PartKindData, Data: fmt.Sprintf("%v", p.Data)}
 	case *protocol.FilePart:
-		taskPart := arkv1alpha1.A2ATaskPart{
-			Kind: PartKindFile,
-		}
-		if fileWithURI, ok := p.File.(*protocol.FileWithURI); ok {
-			taskPart.URI = fileWithURI.URI
-			if fileWithURI.MimeType != nil {
-				taskPart.MimeType = *fileWithURI.MimeType
-			}
-		}
-		if fileWithBytes, ok := p.File.(*protocol.FileWithBytes); ok {
-			taskPart.Data = fileWithBytes.Bytes
-			if fileWithBytes.MimeType != nil {
-				taskPart.MimeType = *fileWithBytes.MimeType
-			}
-		}
-		return taskPart
+		return convertFilePartFromProtocol(p.File)
 	case protocol.FilePart:
-		taskPart := arkv1alpha1.A2ATaskPart{
-			Kind: PartKindFile,
-		}
-		if fileWithURI, ok := p.File.(*protocol.FileWithURI); ok {
-			taskPart.URI = fileWithURI.URI
-			if fileWithURI.MimeType != nil {
-				taskPart.MimeType = *fileWithURI.MimeType
-			}
-		}
-		if fileWithBytes, ok := p.File.(*protocol.FileWithBytes); ok {
-			taskPart.Data = fileWithBytes.Bytes
-			if fileWithBytes.MimeType != nil {
-				taskPart.MimeType = *fileWithBytes.MimeType
-			}
-		}
-		return taskPart
+		return convertFilePartFromProtocol(p.File)
 	default:
-		return arkv1alpha1.A2ATaskPart{
-			Kind: PartKindText,
-			Text: "unknown part type",
+		return arkv1alpha1.A2ATaskPart{Kind: PartKindText, Text: "unknown part type"}
+	}
+}
+
+func convertFilePartFromProtocol(file protocol.FileUnion) arkv1alpha1.A2ATaskPart {
+	taskPart := arkv1alpha1.A2ATaskPart{Kind: PartKindFile}
+	if fileWithURI, ok := file.(*protocol.FileWithURI); ok {
+		taskPart.URI = fileWithURI.URI
+		if fileWithURI.MimeType != nil {
+			taskPart.MimeType = *fileWithURI.MimeType
 		}
 	}
+	if fileWithBytes, ok := file.(*protocol.FileWithBytes); ok {
+		taskPart.Data = fileWithBytes.Bytes
+		if fileWithBytes.MimeType != nil {
+			taskPart.MimeType = *fileWithBytes.MimeType
+		}
+	}
+	return taskPart
 }
 
 func convertArtifactsFromProtocol(protocolArtifacts []protocol.Artifact) []arkv1alpha1.A2ATaskArtifact {

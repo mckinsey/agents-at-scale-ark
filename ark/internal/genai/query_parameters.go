@@ -173,6 +173,26 @@ func GetQueryInputMessages(ctx context.Context, query arkv1alpha1.Query, k8sClie
 	return []Message{NewUserMessage(resolvedInput)}, nil
 }
 
+func tryParseInputMessagesFromOpenAIOrA2A(spec *arkv1alpha1.QuerySpec) ([]protocol.Message, error) {
+	openAIMessages, openAIParseErr := spec.GetInputMessages()
+	if openAIParseErr == nil {
+		messages, convErr := convertOpenAIInputToA2AMessages(openAIMessages)
+		if convErr == nil {
+			return messages, nil
+		}
+		openAIParseErr = fmt.Errorf("failed to convert OpenAI messages to A2A: %w", convErr)
+	}
+
+	var messages []protocol.Message
+	if err := json.Unmarshal(spec.Input.Raw, &messages); err != nil {
+		return nil, fmt.Errorf("failed to parse input messages as OpenAI (%v) or A2A (%w)", openAIParseErr, err)
+	}
+	if err := validateA2AInputMessages(messages); err != nil {
+		return nil, fmt.Errorf("failed to parse input messages as OpenAI (%v) or valid A2A (%w)", openAIParseErr, err)
+	}
+	return messages, nil
+}
+
 // GetQueryInputA2AMessages returns A2A-native input messages.
 func GetQueryInputA2AMessages(ctx context.Context, query arkv1alpha1.Query, k8sClient client.Client) ([]protocol.Message, error) {
 	queryType := query.Spec.Type
@@ -181,21 +201,9 @@ func GetQueryInputA2AMessages(ctx context.Context, query arkv1alpha1.Query, k8sC
 	}
 
 	if queryType != RoleUser {
-		openAIMessages, openAIParseErr := query.Spec.GetInputMessages()
-		if openAIParseErr == nil {
-			messages, convErr := convertOpenAIInputToA2AMessages(openAIMessages)
-			if convErr == nil {
-				return messages, nil
-			}
-			openAIParseErr = fmt.Errorf("failed to convert OpenAI messages to A2A: %w", convErr)
-		}
-
-		var messages []protocol.Message
-		if err := json.Unmarshal(query.Spec.Input.Raw, &messages); err != nil {
-			return nil, fmt.Errorf("failed to parse input messages as OpenAI (%v) or A2A (%w)", openAIParseErr, err)
-		}
-		if err := validateA2AInputMessages(messages); err != nil {
-			return nil, fmt.Errorf("failed to parse input messages as OpenAI (%v) or valid A2A (%w)", openAIParseErr, err)
+		messages, err := tryParseInputMessagesFromOpenAIOrA2A(&query.Spec)
+		if err != nil {
+			return nil, err
 		}
 		return messages, nil
 	}

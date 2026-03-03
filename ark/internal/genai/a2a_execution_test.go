@@ -88,7 +88,7 @@ func TestStreamA2AError(t *testing.T) {
 	ctx = WithQueryContext(ctx, "query-err", "session-1", "query-name")
 	stream := &fakeEventStream{}
 
-	streamA2AError(ctx, stream, "agent/test", errors.New("boom"))
+	streamA2AError(ctx, stream, errors.New("boom"))
 
 	assert.Len(t, stream.chunks, 1)
 	event, ok := stream.chunks[0].(*protocol.TaskStatusUpdateEvent)
@@ -433,7 +433,7 @@ func TestStreamA2ANativeBlockingResponseReturnsError(t *testing.T) {
 	stream := &failingA2AEventStream{failOnCall: 1}
 
 	a2aResponse := &A2AResponse{Content: "hello"}
-	err := streamA2ANativeBlockingResponse(ctx, stream, "model-1", "comp-1", a2aResponse)
+	err := streamA2ANativeBlockingResponse(ctx, stream, a2aResponse)
 	assert.Error(t, err, "should propagate stream error")
 }
 
@@ -443,7 +443,7 @@ func TestStreamA2ANativeBlockingResponseSucceeds(t *testing.T) {
 
 	msg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{protocol.NewTextPart("done")})
 	a2aResponse := &A2AResponse{Message: &msg}
-	err := streamA2ANativeBlockingResponse(ctx, stream, "model-1", "comp-1", a2aResponse)
+	err := streamA2ANativeBlockingResponse(ctx, stream, a2aResponse)
 	assert.NoError(t, err)
 	assert.Len(t, stream.chunks, 1)
 }

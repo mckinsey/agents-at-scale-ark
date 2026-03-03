@@ -4,6 +4,7 @@ metadata:
   name: agent-structured-output
   labels:
     multi-provider: "true"
+    llm: "true"
 spec:
   description: Test agent structured output with JSON schema
   timeouts:

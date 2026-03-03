@@ -50,7 +50,7 @@ func (s *collectingEventStream) StreamChunk(_ context.Context, chunk interface{}
 }
 
 func (s *collectingEventStream) NotifyCompletion(_ context.Context) error { return nil }
-func (s *collectingEventStream) Close() error                            { return nil }
+func (s *collectingEventStream) Close() error                             { return nil }
 
 func newTestTeam(strategy string, members []TeamMember, maxTurns *int) *Team {
 	tp := telemetrynoop.NewProvider()

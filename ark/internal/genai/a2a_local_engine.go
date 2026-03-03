@@ -43,8 +43,6 @@ func (e *A2ALocalEngine) Execute(ctx context.Context, userInput protocol.Message
 		if err != nil {
 			return nil, err
 		}
-		toolOutcomes = nil
-
 		a2aAssistantMsg := stampA2AMessageMetadata(turnResult.Message, contextID, taskID)
 		agentMessages = append(agentMessages, a2aAssistantMsg)
 		newMessages = append(newMessages, a2aAssistantMsg)
@@ -89,11 +87,7 @@ func (e *A2ALocalEngine) buildToolDefinitions() []A2AToolDefinition {
 	defs := e.tools.GetToolDefinitions()
 	a2aDefs := make([]A2AToolDefinition, len(defs))
 	for i, d := range defs {
-		a2aDefs[i] = A2AToolDefinition{
-			Name:        d.Name,
-			Description: d.Description,
-			Parameters:  d.Parameters,
-		}
+		a2aDefs[i] = A2AToolDefinition(d)
 	}
 	return a2aDefs
 }

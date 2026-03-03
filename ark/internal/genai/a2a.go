@@ -35,7 +35,7 @@ const (
 	AgentCardPathVersion3      = "/.well-known/agent-card.json"
 	a2aHistoryExtensionKey     = "https://ark.mckinsey.com/extensions/history/v1"
 	a2aPermissionsExtensionKey = "https://ark.mckinsey.com/extensions/permissions/v1"
-	a2aExtensionsHeader = "A2A-Extensions"
+	a2aExtensionsHeader        = "A2A-Extensions"
 )
 
 type A2AResponse struct {
@@ -364,7 +364,7 @@ func ensureA2AMetadata(metadata map[string]interface{}) map[string]interface{} {
 	return map[string]interface{}{}
 }
 
-func buildA2ASendMessageParams(userInput protocol.Message, contextID string, metadata map[string]interface{}, blocking bool) (protocol.SendMessageParams, error) {
+func buildA2ASendMessageParams(userInput protocol.Message, contextID string, metadata map[string]interface{}, blocking bool) protocol.SendMessageParams {
 	message := userInput
 	message.Role = protocol.MessageRoleUser
 	// A2A requires message.messageId on Message payloads.
@@ -412,7 +412,7 @@ func buildA2ASendMessageParams(userInput protocol.Message, contextID string, met
 		sort.Strings(extensions)
 		params.Message.Extensions = extensions
 	}
-	return params, nil
+	return params
 }
 
 // DiscoverA2AAgents discovers agents from an A2A server using simplified HTTP approach
@@ -474,10 +474,7 @@ func StreamA2AAgent(ctx context.Context, k8sClient client.Client, address string
 	if err != nil {
 		return nil, err
 	}
-	params, err := buildA2ASendMessageParams(userInput, contextID, metadata, false)
-	if err != nil {
-		return nil, err
-	}
+	params := buildA2ASendMessageParams(userInput, contextID, metadata, false)
 	events, streamErr := a2aClient.StreamMessage(ctx, params)
 	if streamErr == nil {
 		return events, nil
@@ -566,10 +563,7 @@ func CreateA2AClient(ctx context.Context, k8sClient client.Client, rpcURL string
 
 // executeA2AAgentMessage sends message to A2A agent and processes response
 func executeA2AAgentMessage(ctx context.Context, k8sClient client.Client, a2aClient *a2aclient.A2AClient, userInput protocol.Message, metadata map[string]interface{}, agentName, namespace, queryName, contextID string, obj client.Object, a2aRecorder eventing.A2aRecorder, blocking bool) (*A2AResponse, error) {
-	params, err := buildA2ASendMessageParams(userInput, contextID, metadata, blocking)
-	if err != nil {
-		return nil, err
-	}
+	params := buildA2ASendMessageParams(userInput, contextID, metadata, blocking)
 	result, err := a2aClient.SendMessage(ctx, params)
 	if err != nil {
 		if a2aRecorder != nil {
