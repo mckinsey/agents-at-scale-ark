@@ -21,9 +21,12 @@ from .executor import (
     AgentConfig,
     BaseExecutor,
     ExecutionEngineRequest,
+    ExecutionProfile,
     Message,
     Model,
     Parameter,
+    ToolCallRequest,
+    ToolCallResult,
     ToolDefinition,
 )
 
@@ -110,10 +113,12 @@ class ExecutorApp:
         engine_name: str,
         description: str = "",
         skills: List[AgentSkill] | None = None,
+        execution_profile: ExecutionProfile | None = None,
     ):
         self.executor = executor
         self.engine_name = engine_name.lower()
         self.description = description or f"{engine_name} execution engine"
+        self.execution_profile = execution_profile or executor.get_execution_profile()
         self.skills = skills or [
             AgentSkill(
                 id=f"{self.engine_name}-execute",
@@ -158,7 +163,22 @@ class ExecutorApp:
         async def health_check(request: Request) -> JSONResponse:
             return JSONResponse({"status": "healthy", "engine": self.engine_name})
 
+        profile = self.execution_profile
+        card_data = self.agent_card.model_dump()
+        if profile:
+            card_data["executionProfile"] = profile.to_card_dict()
+
+        async def agent_card_with_profile(request: Request) -> JSONResponse:
+            return JSONResponse(card_data)
+
         app.routes.insert(0, Route("/health", health_check, methods=["GET"]))
+        for i, route in enumerate(app.routes):
+            if hasattr(route, "path") and route.path == "/.well-known/agent-card.json":
+                app.routes[i] = Route("/.well-known/agent-card.json", agent_card_with_profile, methods=["GET"])
+                break
+        else:
+            app.routes.insert(0, Route("/.well-known/agent-card.json", agent_card_with_profile, methods=["GET"]))
+
         return app
 
     def run(self, host: str = "0.0.0.0", port: int = 8000) -> None:

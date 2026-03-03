@@ -66,27 +66,51 @@ class ExecutionEngineResponse(BaseModel):
     error: str = ""
 
 
+class ExecutionProfile(BaseModel):
+    """Execution profile declared in the Agent Card."""
+    schema_url: str = "https://ark.mckinsey.com/extensions/execution-profile/v1"
+    tool_mode: str = "callback"
+    memory_mode: str = "inline"
+    structured_output: bool = False
+    streaming: bool = True
+    supported_models: List[str] = []
+
+    def to_card_dict(self) -> Dict[str, Any]:
+        return {
+            "schema": self.schema_url,
+            "toolMode": self.tool_mode,
+            "memoryMode": self.memory_mode,
+            "structuredOutput": self.structured_output,
+            "streaming": self.streaming,
+            "supportedModels": self.supported_models,
+        }
+
+
+class ToolCallRequest(BaseModel):
+    """A tool call request from the engine to the controller."""
+    tool_call_id: str
+    tool_name: str
+    arguments: str
+
+
+class ToolCallResult(BaseModel):
+    """A tool call result from the controller back to the engine."""
+    tool_call_id: str
+    tool_name: str
+    content: str = ""
+    error: str = ""
+
+
 class BaseExecutor(ABC):
     """Abstract base class for execution engines."""
 
     def __init__(self, engine_name: str):
-        """Initialize the executor with a name."""
         self.engine_name = engine_name
         logger.info(f"{engine_name} executor initialized")
 
     @abstractmethod
     async def execute_agent(self, request: ExecutionEngineRequest) -> List[Message]:
-        """Execute an agent with the given request.
-        
-        Args:
-            request: The execution request containing agent config and user input
-            
-        Returns:
-            List of response messages from the agent execution
-            
-        Raises:
-            Exception: If execution fails
-        """
+        """Execute an agent with the given request."""
         pass
 
     def _resolve_prompt(self, agent_config, base_prompt: str = None) -> str:
@@ -98,3 +122,7 @@ class BaseExecutor(ABC):
             prompt = prompt.replace(placeholder, param.value)
 
         return prompt
+
+    def get_execution_profile(self) -> ExecutionProfile:
+        """Override to declare engine capabilities."""
+        return ExecutionProfile()

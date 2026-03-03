@@ -1,0 +1,171 @@
+# Building Execution Engines
+
+An execution engine is an A2A-compatible service that runs LLM workloads on behalf of the Ark controller. Instead of the controller calling LLM providers directly, it delegates execution to an engine via the Agent-to-Agent (A2A) protocol.
+
+## How It Works
+
+1. Controller receives a Query and resolves the agent's execution engine
+2. Controller sends the agent config, tools, and history as A2A metadata
+3. Engine runs the LLM turn loop and streams results back
+4. For tool calls, the engine signals `input-required` with a `tool-request/v1` payload
+5. Controller executes tools and sends results back, then resubscribes to the stream
+
+## Agent Card Requirements
+
+Every engine must serve an Agent Card at `/.well-known/agent-card.json` with an `executionProfile` field:
+
+```json
+{
+  "name": "my-engine",
+  "version": "v1",
+  "executionProfile": {
+    "schema": "https://ark.mckinsey.com/extensions/execution-profile/v1",
+    "toolMode": "callback",
+    "memoryMode": "inline",
+    "structuredOutput": true,
+    "streaming": true,
+    "supportedModels": ["openai", "azure"]
+  }
+}
+```
+
+### Profile Fields
+
+| Field | Values | Description |
+|-------|--------|-------------|
+| `toolMode` | `callback`, `delegated`, `none` | How tools are executed |
+| `memoryMode` | `inline`, `reference`, `stateful` | How conversation history is managed |
+| `structuredOutput` | `true`/`false` | Whether structured JSON output is supported |
+| `streaming` | `true`/`false` | Whether SSE streaming is supported |
+| `supportedModels` | string array | Provider types the engine supports |
+
+## Message Flow
+
+The controller sends agent configuration in the A2A message metadata under the `ark.mckinsey.com/execution-engine` key:
+
+```json
+{
+  "metadata": {
+    "ark.mckinsey.com/execution-engine": {
+      "agent": {
+        "name": "my-agent",
+        "namespace": "default",
+        "prompt": "You are a helpful assistant.",
+        "model": { "name": "gpt-4.1", "type": "openai", "config": {} }
+      },
+      "tools": [
+        { "name": "search", "description": "Search the web", "parameters": {} }
+      ],
+      "history": []
+    }
+  }
+}
+```
+
+## Tool Callbacks
+
+When `toolMode` is `callback`, the engine signals tool calls by setting the task state to `input-required` with a `tool-request/v1` data part:
+
+```json
+{
+  "schema": "https://ark.mckinsey.com/payloads/tool-request/v1",
+  "calls": [
+    { "toolCallId": "call_1", "toolName": "search", "arguments": "{\"query\": \"weather\"}" }
+  ]
+}
+```
+
+The controller executes the tools and responds with `tool-result/v1`, then resubscribes to the task stream.
+
+## Error Contract
+
+Engines should return structured errors using these codes:
+
+| Code | Description |
+|------|-------------|
+| `unsupported-model` | Engine doesn't support the requested model type |
+| `provider-error` | Upstream LLM provider returned an error |
+| `invalid-config` | Agent configuration is invalid |
+| `rate-limited` | Request was rate limited |
+| `context-length-exceeded` | Input exceeds model's context window |
+
+## Conformance Tests
+
+Run the conformance suite against your engine:
+
+```bash
+ENGINE_URL=http://localhost:9090 go test -v ./tests/engine-conformance/...
+```
+
+Or use the CLI runner:
+
+```bash
+ark-engine-conformance --engine-url http://localhost:9090 -v
+```
+
+## Go Quickstart
+
+Use the template at `templates/execution-engine-go/`:
+
+```bash
+cp -r templates/execution-engine-go/ my-engine/
+cd my-engine/
+# Edit internal/engine/engine.go — add your LLM logic
+make run
+```
+
+## Python Quickstart
+
+Use the Ark SDK:
+
+```python
+from ark_sdk.executor import BaseExecutor, ExecutionEngineRequest, ExecutionProfile, Message
+from ark_sdk.executor_app import ExecutorApp
+
+
+class MyExecutor(BaseExecutor):
+    async def execute_agent(self, request: ExecutionEngineRequest) -> list[Message]:
+        prompt = self._resolve_prompt(request.agent)
+        # Call your LLM here
+        return [Message(role="assistant", content="Hello!")]
+
+    def get_execution_profile(self) -> ExecutionProfile:
+        return ExecutionProfile(
+            tool_mode="callback",
+            supported_models=["openai"],
+        )
+
+
+app = ExecutorApp(MyExecutor("my-engine"), "my-engine")
+app.run()
+```
+
+## Registering with Ark
+
+Create an `ExecutionEngine` CR pointing to your service:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: ExecutionEngine
+metadata:
+  name: my-engine
+spec:
+  description: My custom execution engine
+  address:
+    value: http://my-engine-service:9090
+```
+
+Then reference it from an agent:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: my-agent
+spec:
+  executionEngine:
+    name: my-engine
+  prompt: You are a helpful assistant.
+  modelRef:
+    name: my-model
+```
