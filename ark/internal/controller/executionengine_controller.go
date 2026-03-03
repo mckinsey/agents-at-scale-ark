@@ -4,7 +4,10 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -83,12 +86,39 @@ func (r *ExecutionEngineReconciler) processExecutionEngine(ctx context.Context, 
 
 	executionEngine.Status.LastResolvedAddress = resolvedAddress
 
+	if cardErr := r.fetchAgentCard(ctx, resolvedAddress, executionEngine.Name); cardErr != nil {
+		log.Info("Agent Card health check failed (non-fatal)", "executionEngine", executionEngine.Name, "error", cardErr)
+	}
+
 	if err := r.updateStatus(ctx, executionEngine, statusReady, "ExecutionEngine address resolved successfully"); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	log.Info("ExecutionEngine processed successfully", "executionEngine", executionEngine.Name, "resolvedAddress", resolvedAddress)
 	return ctrl.Result{}, nil
+}
+
+func (r *ExecutionEngineReconciler) fetchAgentCard(ctx context.Context, address, engineName string) error {
+	cardURL := fmt.Sprintf("%s/.well-known/agent-card.json", address)
+	httpClient := &http.Client{Timeout: 5 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cardURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create agent card request: %w", err)
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("agent card fetch failed for %s: %w", engineName, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("agent card returned status %d for %s", resp.StatusCode, engineName)
+	}
+	var card map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&card); err != nil {
+		return fmt.Errorf("failed to decode agent card for %s: %w", engineName, err)
+	}
+	logf.FromContext(ctx).Info("Agent Card fetched successfully", "executionEngine", engineName, "agentName", card["name"])
+	return nil
 }
 
 func (r *ExecutionEngineReconciler) updateStatus(ctx context.Context, executionEngine arkv1prealpha1.ExecutionEngine, status, message string) error {

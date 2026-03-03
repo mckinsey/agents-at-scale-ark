@@ -47,6 +47,26 @@ controllerManager:
   terminationGracePeriodSeconds: 10
   serviceAccountName: ark-controller
 
+# [EXECUTION ENGINE]: Built-in execution engine sidecar
+executionEngine:
+  sidecar:
+    enabled: false
+    image:
+      repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-query-engine
+      tag: latest
+      pullPolicy: IfNotPresent
+    port: 8080
+    resources:
+      limits:
+        cpu: 500m
+        memory: 256Mi
+      requests:
+        cpu: 50m
+        memory: 128Mi
+  defaultCR:
+    enabled: false
+    address: "http://localhost:8080"
+
 # [RBAC]: To enable RBAC (Permissions) configurations
 rbac:
   enable: true

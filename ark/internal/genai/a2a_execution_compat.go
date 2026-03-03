@@ -22,8 +22,9 @@ func (a *Agent) executeWithExternalA2ANativeExecutionEngine(ctx context.Context,
 	agentConfig.Prompt = resolvedPrompt
 
 	toolDefinitions := buildToolDefinitions(a.Tools)
+	effectiveEngineRef := resolveEffectiveEngineRef(a.ExecutionEngine, a.Namespace)
 
-	resultMessages, err := engineClient.ExecuteA2A(ctx, a.ExecutionEngine, agentConfig, userInput, history, toolDefinitions)
+	resultMessages, err := engineClient.ExecuteA2AWithToolCallback(ctx, effectiveEngineRef, agentConfig, userInput, history, toolDefinitions, a.Tools, eventStream)
 	if err != nil {
 		return nil, err
 	}

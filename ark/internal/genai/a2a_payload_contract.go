@@ -13,6 +13,7 @@ const (
 	A2APayloadSchemaToolCallsV1           = "https://ark.mckinsey.com/payloads/tool-calls/v1"
 	A2APayloadSchemaToolResultV1          = "https://ark.mckinsey.com/payloads/tool-result/v1"
 	A2APayloadSchemaRoleHintV1            = "https://ark.mckinsey.com/payloads/role-hint/v1"
+	A2APayloadSchemaToolRequestV1         = "https://ark.mckinsey.com/payloads/tool-request/v1"
 )
 
 type HistoryExtensionV1 struct {
@@ -137,4 +138,64 @@ func buildToolResultPayloadContent(payload ToolResultPayloadV1) (string, error) 
 		return "", fmt.Errorf("failed to serialize tool-result payload: %w", err)
 	}
 	return string(raw), nil
+}
+
+type ToolRequestPayloadV1 struct {
+	Schema string             `json:"schema"`
+	Calls  []ToolRequestCall  `json:"calls"`
+}
+
+type ToolRequestCall struct {
+	ToolCallID string `json:"toolCallId"`
+	ToolName   string `json:"toolName"`
+	Arguments  string `json:"arguments"`
+}
+
+type ToolResultPayloadV2 struct {
+	Schema  string              `json:"schema"`
+	Results []ToolResultEntryV2 `json:"results"`
+}
+
+type ToolResultEntryV2 struct {
+	ToolCallID string `json:"toolCallId"`
+	ToolName   string `json:"toolName"`
+	Content    string `json:"content"`
+	Error      string `json:"error,omitempty"`
+}
+
+func parseToolRequestPayload(msg *protocol.Message) *ToolRequestPayloadV1 {
+	if msg == nil {
+		return nil
+	}
+	for _, part := range msg.Parts {
+		dp, ok := part.(*protocol.DataPart)
+		if !ok || dp.Data == nil {
+			continue
+		}
+		data, err := json.Marshal(dp.Data)
+		if err != nil {
+			continue
+		}
+		var payload ToolRequestPayloadV1
+		if err := json.Unmarshal(data, &payload); err != nil {
+			continue
+		}
+		if payload.Schema == A2APayloadSchemaToolRequestV1 {
+			return &payload
+		}
+	}
+	return nil
+}
+
+func buildToolResultV2Message(results []ToolResultEntryV2) protocol.Message {
+	payload := ToolResultPayloadV2{
+		Schema:  A2APayloadSchemaToolRequestV1,
+		Results: results,
+	}
+	return protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		&protocol.DataPart{
+			Kind: protocol.KindData,
+			Data: payload,
+		},
+	})
 }

@@ -13,7 +13,7 @@ import (
 
 func TestResolveA2AExecutionCapabilityNilEngine(t *testing.T) {
 	capability := resolveA2AExecutionCapability(nil)
-	assert.Equal(t, executionCapabilityA2ANativeLocal, capability)
+	assert.Equal(t, executionCapabilityA2ANativeExternalEngine, capability)
 }
 
 func TestResolveA2AExecutionCapabilityReservedA2AEngine(t *testing.T) {
@@ -43,4 +43,17 @@ func TestExecuteAgentA2ARejectsUnsupportedCapability(t *testing.T) {
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "unsupported execution capability")
 	assert.Contains(t, err.Error(), "bogus-capability")
+}
+
+func TestResolveEffectiveEngineRef_NilRef(t *testing.T) {
+	ref := resolveEffectiveEngineRef(nil, "test-ns")
+	require.NotNil(t, ref)
+	assert.Equal(t, DefaultExecutionEngineName, ref.Name)
+	assert.Equal(t, "test-ns", ref.Namespace)
+}
+
+func TestResolveEffectiveEngineRef_ExistingRef(t *testing.T) {
+	existing := &arkv1alpha1.ExecutionEngineRef{Name: "custom", Namespace: "my-ns"}
+	ref := resolveEffectiveEngineRef(existing, "default")
+	assert.Equal(t, existing, ref)
 }

@@ -26,6 +26,37 @@ spec:
         {{- end }}
     spec:
       containers:
+        {{- if .Values.executionEngine.sidecar.enabled }}
+        - name: query-engine
+          image: {{ .Values.executionEngine.sidecar.image.repository }}:{{ .Values.executionEngine.sidecar.image.tag | default "latest" }}
+          imagePullPolicy: {{ .Values.executionEngine.sidecar.image.pullPolicy | default "IfNotPresent" }}
+          ports:
+            - containerPort: {{ .Values.executionEngine.sidecar.port | default 8080 }}
+              name: engine
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /.well-known/agent-card.json
+              port: {{ .Values.executionEngine.sidecar.port | default 8080 }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /.well-known/agent-card.json
+              port: {{ .Values.executionEngine.sidecar.port | default 8080 }}
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          env:
+            - name: PORT
+              value: {{ .Values.executionEngine.sidecar.port | default 8080 | quote }}
+          resources:
+            {{- toYaml .Values.executionEngine.sidecar.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+        {{- end }}
         - name: manager
           args:
             {{- range .Values.controllerManager.container.args }}

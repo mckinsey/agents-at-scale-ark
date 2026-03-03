@@ -140,8 +140,6 @@ func (a *Agent) executeAgentA2A(ctx context.Context, userInput protocol.Message,
 		return a.executeWithA2AExecutionEngineNative(ctx, userInput, history, eventStream)
 	case executionCapabilityA2ANativeExternalEngine:
 		return a.executeWithExternalA2ANativeExecutionEngine(ctx, userInput, history, memory, eventStream)
-	case executionCapabilityA2ANativeLocal:
-		return a.executeLocallyA2ANative(ctx, userInput, history, memory, eventStream)
 	default:
 		return nil, fmt.Errorf("agent %s has unsupported execution capability %s", a.FullName(), capability)
 	}

@@ -1,0 +1,11 @@
+{{- if .Values.executionEngine.defaultCR.enabled }}
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: ExecutionEngine
+metadata:
+  name: default
+  namespace: {{ .Release.Namespace }}
+spec:
+  description: "Built-in Ark execution engine"
+  address:
+    value: {{ .Values.executionEngine.defaultCR.address | quote }}
+{{- end }}
