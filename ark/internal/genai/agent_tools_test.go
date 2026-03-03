@@ -29,33 +29,34 @@ func setupTestClientForTools(objects []client.Object) client.Client {
 		Build()
 }
 
+func tryDataPayloadForSchema(data interface{}, schema string) (map[string]interface{}, bool) {
+	raw, err := json.Marshal(data)
+	if err != nil {
+		return nil, false
+	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil, false
+	}
+	if payload["schema"] == schema {
+		return payload, true
+	}
+	return nil, false
+}
+
 func extractDataPayloadBySchema(parts []protocol.Part, schema string) (map[string]interface{}, bool) {
 	for _, part := range parts {
+		var data interface{}
 		switch typed := part.(type) {
 		case *protocol.DataPart:
-			raw, err := json.Marshal(typed.Data)
-			if err != nil {
-				continue
-			}
-			var payload map[string]interface{}
-			if err := json.Unmarshal(raw, &payload); err != nil {
-				continue
-			}
-			if payload["schema"] == schema {
-				return payload, true
-			}
+			data = typed.Data
 		case protocol.DataPart:
-			raw, err := json.Marshal(typed.Data)
-			if err != nil {
-				continue
-			}
-			var payload map[string]interface{}
-			if err := json.Unmarshal(raw, &payload); err != nil {
-				continue
-			}
-			if payload["schema"] == schema {
-				return payload, true
-			}
+			data = typed.Data
+		default:
+			continue
+		}
+		if payload, ok := tryDataPayloadForSchema(data, schema); ok {
+			return payload, true
 		}
 	}
 	return nil, false

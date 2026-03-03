@@ -76,11 +76,11 @@ type ResponseAPIContent struct {
 func mapA2ARoleToResponseAPI(role protocol.MessageRole) string {
 	switch role {
 	case protocol.MessageRoleAgent:
-		return "assistant"
+		return RoleAssistant
 	case protocol.MessageRoleUser:
-		return "user"
+		return RoleUser
 	default:
-		return "assistant"
+		return RoleAssistant
 	}
 }
 

@@ -76,6 +76,44 @@ func convertA2AToolsToBedrockNative(tools []A2AToolDefinition) []bedrockTool {
 	return result
 }
 
+func convertA2APartsToBedrockContent(message protocol.Message, outcomesByID map[string]string, usedOutcomes map[string]bool) ([]bedrockMessage, string) {
+	role := resolveA2AMessageRole(message)
+	content := extractTextFromParts(message.Parts)
+	var result []bedrockMessage
+	systemPrompt := ""
+
+	switch role {
+	case RoleSystem:
+		if content != "" {
+			systemPrompt = content
+		}
+	case RoleUser:
+		if content != "" {
+			result = append(result, bedrockMessage{Role: RoleUser, Content: content})
+		}
+	case RoleAssistant:
+		if content != "" {
+			result = append(result, bedrockMessage{Role: RoleAssistant, Content: content})
+		}
+		for _, call := range extractToolCallPayloadsFromParts(message.Parts) {
+			if call.ID == "" {
+				continue
+			}
+			outcomeContent, ok := outcomesByID[call.ID]
+			if !ok {
+				continue
+			}
+			usedOutcomes[call.ID] = true
+			result = append(result, bedrockMessage{Role: RoleUser, Content: outcomeContent})
+		}
+	case RoleTool:
+		if content != "" {
+			result = append(result, bedrockMessage{Role: RoleUser, Content: content})
+		}
+	}
+	return result, systemPrompt
+}
+
 func convertA2AMessagesToBedrockNative(messages []protocol.Message, toolOutcomes []A2AToolOutcome) ([]bedrockMessage, string) {
 	outcomesByID := buildA2AToolOutcomeContentByID(toolOutcomes)
 	usedOutcomes := map[string]bool{}
@@ -83,37 +121,10 @@ func convertA2AMessagesToBedrockNative(messages []protocol.Message, toolOutcomes
 	systemPrompt := ""
 
 	for _, message := range messages {
-		role := resolveA2AMessageRole(message)
-		content := extractTextFromParts(message.Parts)
-
-		switch role {
-		case RoleSystem:
-			if content != "" {
-				systemPrompt = content
-			}
-		case RoleUser:
-			if content != "" {
-				result = append(result, bedrockMessage{Role: RoleUser, Content: content})
-			}
-		case RoleAssistant:
-			if content != "" {
-				result = append(result, bedrockMessage{Role: RoleAssistant, Content: content})
-			}
-			for _, call := range extractToolCallPayloadsFromParts(message.Parts) {
-				if call.ID == "" {
-					continue
-				}
-				outcomeContent, ok := outcomesByID[call.ID]
-				if !ok {
-					continue
-				}
-				usedOutcomes[call.ID] = true
-				result = append(result, bedrockMessage{Role: RoleUser, Content: outcomeContent})
-			}
-		case RoleTool:
-			if content != "" {
-				result = append(result, bedrockMessage{Role: RoleUser, Content: content})
-			}
+		msgs, sys := convertA2APartsToBedrockContent(message, outcomesByID, usedOutcomes)
+		result = append(result, msgs...)
+		if sys != "" {
+			systemPrompt = sys
 		}
 	}
 
@@ -190,7 +201,7 @@ func convertBedrockResponseToA2ATurnResult(response bedrockResponse) *A2ATurnRes
 		switch item.Type {
 		case "text":
 			content = item.Text
-		case "tool_use":
+		case BedrockContentTypeToolUse:
 			arguments := mustMarshalJSON(item.Input)
 			toolCalls = append(toolCalls, A2AToolCall{
 				ID:        item.ID,

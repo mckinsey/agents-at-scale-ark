@@ -254,7 +254,7 @@ func (bm *BedrockModel) convertResponse(response bedrockResponse) *openai.ChatCo
 		switch c.Type {
 		case "text":
 			content = c.Text
-		case "tool_use":
+		case BedrockContentTypeToolUse:
 			toolCall := openai.ChatCompletionMessageToolCall{
 				ID:   c.ID,
 				Type: "function",
@@ -271,7 +271,7 @@ func (bm *BedrockModel) convertResponse(response bedrockResponse) *openai.ChatCo
 	switch response.StopReason {
 	case "max_tokens":
 		finishReason = "length"
-	case "tool_use":
+	case BedrockContentTypeToolUse:
 		finishReason = "tool_calls"
 	}
 

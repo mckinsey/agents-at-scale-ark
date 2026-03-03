@@ -73,6 +73,11 @@ const (
 	A2ADelegatedToolKindStatus = "status"
 )
 
+// Bedrock content type constants
+const (
+	BedrockContentTypeToolUse = "tool_use"
+)
+
 // Tool type constants
 const (
 	ToolTypeHTTP    = "http"

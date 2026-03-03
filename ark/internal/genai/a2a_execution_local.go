@@ -70,7 +70,3 @@ func convertA2AMessagesToCompatMultimodal(messages []protocol.Message) ([]Messag
 	}
 	return compatMessages, nil
 }
-
-func convertCompatMessageToA2A(msg Message) (protocol.Message, error) {
-	return OpenAIToA2AMessageMultimodal(msg)
-}

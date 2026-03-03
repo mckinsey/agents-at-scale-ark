@@ -4,7 +4,6 @@ description: ARK API service with Gateway API HTTPRoute integration
 type: application
 version: 0.1.55
 appVersion: 0.1.55
->>>>>>> 56b75ae0 (refactor: remove experimental naming, dead code, and fix docs)
 annotations:
   ark.mckinsey.com/service: ark-api
   ark.mckinsey.com/resources: service

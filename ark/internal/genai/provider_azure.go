@@ -71,29 +71,7 @@ func (ap *AzureProvider) A2ATurnNative(
 	tools []A2AToolDefinition,
 	_ EventStreamInterface,
 ) (*A2ATurnResult, error) {
-	compatMessages, err := convertA2AMessagesToCompatMultimodal(messages)
-	if err != nil {
-		return nil, fmt.Errorf("azure native turn: failed to convert A2A messages: %w", err)
-	}
-	compatMessages = normalizeAssistantToolCallMessages(compatMessages, buildToolOutcomeContentByID(toolOutcomes))
-	openAITools := a2aToolDefsToOpenAI(tools)
-	response, err := ap.ChatCompletion(ctx, compatMessages, 1, openAITools)
-	if err != nil {
-		return nil, err
-	}
-	if len(response.Choices) == 0 {
-		return nil, fmt.Errorf("azure native turn: model returned empty response")
-	}
-	result, err := buildA2ATurnResultFromChatChoice(response.Choices[0], "")
-	if err != nil {
-		return nil, err
-	}
-	result.Usage = &A2ATurnUsage{
-		PromptTokens:     response.Usage.PromptTokens,
-		CompletionTokens: response.Usage.CompletionTokens,
-		TotalTokens:      response.Usage.TotalTokens,
-	}
-	return result, nil
+	return executeChatCompletionNativeTurn(ctx, ap, "azure", messages, toolOutcomes, tools)
 }
 
 func (ap *AzureProvider) ChatCompletion(ctx context.Context, messages []openai.ChatCompletionMessageParamUnion, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
