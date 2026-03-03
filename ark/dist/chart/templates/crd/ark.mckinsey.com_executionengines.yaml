@@ -145,13 +145,26 @@ spec:
           status:
             properties:
               lastResolvedAddress:
-                description: LastResolvedAddress contains the actual resolved address
-                  value
                 type: string
               message:
                 type: string
               phase:
                 type: string
+              profile:
+                properties:
+                  memoryMode:
+                    type: string
+                  streaming:
+                    type: boolean
+                  structuredOutput:
+                    type: boolean
+                  supportedModels:
+                    items:
+                      type: string
+                    type: array
+                  toolMode:
+                    type: string
+                type: object
             type: object
         type: object
     served: true

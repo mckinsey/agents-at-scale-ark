@@ -19,12 +19,20 @@ type ExecutionEngineSpec struct {
 	Description string `json:"description,omitempty"`
 }
 
+type ExecutionProfile struct {
+	ToolMode         string   `json:"toolMode,omitempty"`
+	MemoryMode       string   `json:"memoryMode,omitempty"`
+	StructuredOutput bool     `json:"structuredOutput,omitempty"`
+	Streaming        bool     `json:"streaming,omitempty"`
+	SupportedModels  []string `json:"supportedModels,omitempty"`
+}
+
 type ExecutionEngineStatus struct {
 	// +kubebuilder:validation:Optional
-	// LastResolvedAddress contains the actual resolved address value
-	LastResolvedAddress string `json:"lastResolvedAddress,omitempty"`
-	Phase               string `json:"phase,omitempty"`
-	Message             string `json:"message,omitempty"`
+	LastResolvedAddress string            `json:"lastResolvedAddress,omitempty"`
+	Phase               string            `json:"phase,omitempty"`
+	Message             string            `json:"message,omitempty"`
+	Profile             *ExecutionProfile `json:"profile,omitempty"`
 }
 
 // +kubebuilder:object:root=true

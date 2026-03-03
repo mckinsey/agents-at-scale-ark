@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark/internal/genai"
 )
 
@@ -37,16 +38,35 @@ func (v *Validator) ValidateTeam(ctx context.Context, team *arkv1alpha1.Team) ([
 		}
 	}
 
-	if err := v.validateNoMixedTeam(ctx, team); err != nil {
+	if err := v.validateTeamCapabilityCompatibility(ctx, team); err != nil {
 		return nil, err
 	}
 
 	return nil, nil
 }
 
-func (v *Validator) validateNoMixedTeam(ctx context.Context, team *arkv1alpha1.Team) error {
-	var hasInternalAgents, hasExternalAgents bool
+func (v *Validator) resolveEngineProfile(ctx context.Context, agent *arkv1alpha1.Agent, namespace string) (*arkv1prealpha1.ExecutionProfile, string, error) {
+	engineName := genai.DefaultExecutionEngineName
+	if agent.Spec.ExecutionEngine != nil && agent.Spec.ExecutionEngine.Name != "" && agent.Spec.ExecutionEngine.Name != genai.ExecutionEngineA2A {
+		engineName = agent.Spec.ExecutionEngine.Name
+	}
+	obj, err := v.Lookup.GetResource(ctx, "ExecutionEngine", namespace, engineName)
+	if err != nil {
+		return nil, engineName, nil
+	}
+	engine := obj.(*arkv1prealpha1.ExecutionEngine)
+	return engine.Status.Profile, engineName, nil
+}
 
+func (v *Validator) validateTeamCapabilityCompatibility(ctx context.Context, team *arkv1alpha1.Team) error {
+	type memberProfile struct {
+		index      int
+		agentName  string
+		engineName string
+		profile    *arkv1prealpha1.ExecutionProfile
+	}
+
+	var profiles []memberProfile
 	for i, member := range team.Spec.Members {
 		if member.Type != MemberTypeAgent {
 			continue
@@ -56,17 +76,47 @@ func (v *Validator) validateNoMixedTeam(ctx context.Context, team *arkv1alpha1.T
 			return fmt.Errorf("team member %d: failed to load agent '%s': %v", i, member.Name, err)
 		}
 		agent := obj.(*arkv1alpha1.Agent)
-		isExternal := agent.Spec.ExecutionEngine != nil && agent.Spec.ExecutionEngine.Name != "" && agent.Spec.ExecutionEngine.Name != genai.ExecutionEngineA2A
-		if isExternal {
-			hasExternalAgents = true
-		} else {
-			hasInternalAgents = true
+		profile, engineName, _ := v.resolveEngineProfile(ctx, agent, team.Namespace)
+		profiles = append(profiles, memberProfile{
+			index:      i,
+			agentName:  member.Name,
+			engineName: engineName,
+			profile:    profile,
+		})
+	}
+
+	if len(profiles) == 0 {
+		return nil
+	}
+
+	var referenceToolMode string
+	for _, mp := range profiles {
+		if mp.profile == nil {
+			continue
 		}
-		if hasInternalAgents && hasExternalAgents {
-			return fmt.Errorf("mixed teams are not allowed: team contains both internal and external agents. Team member %d: agent '%s' uses external execution engine '%s'",
-				i, member.Name, agent.Spec.ExecutionEngine.Name)
+		if mp.profile.ToolMode == "" {
+			continue
+		}
+		if referenceToolMode == "" {
+			referenceToolMode = mp.profile.ToolMode
+			continue
+		}
+		if mp.profile.ToolMode != referenceToolMode {
+			return fmt.Errorf("incompatible engines in team: member %d (agent '%s', engine '%s') has toolMode '%s', expected '%s'",
+				mp.index, mp.agentName, mp.engineName, mp.profile.ToolMode, referenceToolMode)
 		}
 	}
+
+	requiresStreaming := team.Spec.Strategy == "graph" || team.Spec.Strategy == "selector"
+	if requiresStreaming {
+		for _, mp := range profiles {
+			if mp.profile != nil && !mp.profile.Streaming {
+				return fmt.Errorf("engine '%s' for agent '%s' (member %d) does not support streaming, required by team strategy '%s'",
+					mp.engineName, mp.agentName, mp.index, team.Spec.Strategy)
+			}
+		}
+	}
+
 	return nil
 }
 

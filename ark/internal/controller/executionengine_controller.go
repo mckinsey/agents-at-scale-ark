@@ -50,7 +50,9 @@ func (r *ExecutionEngineReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	switch executionEngine.Status.Phase {
-	case statusReady, statusError:
+	case statusReady:
+		return r.refreshExecutionEngine(ctx, executionEngine)
+	case statusError:
 		return ctrl.Result{}, nil
 	case statusRunning:
 		return r.processExecutionEngine(ctx, executionEngine)
@@ -69,6 +71,8 @@ func (r *ExecutionEngineReconciler) getResolver() *common.ValueSourceResolverV1P
 	return r.resolver
 }
 
+const profileRefreshInterval = 5 * time.Minute
+
 func (r *ExecutionEngineReconciler) processExecutionEngine(ctx context.Context, executionEngine arkv1prealpha1.ExecutionEngine) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 	log.Info("Processing execution engine", "executionEngine", executionEngine.Name)
@@ -86,8 +90,12 @@ func (r *ExecutionEngineReconciler) processExecutionEngine(ctx context.Context, 
 
 	executionEngine.Status.LastResolvedAddress = resolvedAddress
 
-	if cardErr := r.fetchAgentCard(ctx, resolvedAddress, executionEngine.Name); cardErr != nil {
+	profile, cardErr := r.fetchAgentCard(ctx, resolvedAddress, executionEngine.Name)
+	if cardErr != nil {
 		log.Info("Agent Card health check failed (non-fatal)", "executionEngine", executionEngine.Name, "error", cardErr)
+	}
+	if profile != nil {
+		executionEngine.Status.Profile = profile
 	}
 
 	if err := r.updateStatus(ctx, executionEngine, statusReady, "ExecutionEngine address resolved successfully"); err != nil {
@@ -95,7 +103,25 @@ func (r *ExecutionEngineReconciler) processExecutionEngine(ctx context.Context, 
 	}
 
 	log.Info("ExecutionEngine processed successfully", "executionEngine", executionEngine.Name, "resolvedAddress", resolvedAddress)
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: profileRefreshInterval}, nil
+}
+
+func (r *ExecutionEngineReconciler) refreshExecutionEngine(ctx context.Context, executionEngine arkv1prealpha1.ExecutionEngine) (ctrl.Result, error) {
+	if executionEngine.Status.LastResolvedAddress == "" {
+		return ctrl.Result{RequeueAfter: profileRefreshInterval}, nil
+	}
+	profile, err := r.fetchAgentCard(ctx, executionEngine.Status.LastResolvedAddress, executionEngine.Name)
+	if err != nil {
+		logf.FromContext(ctx).Info("Profile refresh failed (non-fatal)", "executionEngine", executionEngine.Name, "error", err)
+		return ctrl.Result{RequeueAfter: profileRefreshInterval}, nil
+	}
+	if profile != nil {
+		executionEngine.Status.Profile = profile
+		if err := r.Status().Update(ctx, &executionEngine); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+	return ctrl.Result{RequeueAfter: profileRefreshInterval}, nil
 }
 
 type agentCardResponse struct {
@@ -111,24 +137,24 @@ type executionProfileEntry struct {
 	SupportedModels  []string `json:"supportedModels,omitempty"`
 }
 
-func (r *ExecutionEngineReconciler) fetchAgentCard(ctx context.Context, address, engineName string) error {
+func (r *ExecutionEngineReconciler) fetchAgentCard(ctx context.Context, address, engineName string) (*arkv1prealpha1.ExecutionProfile, error) {
 	cardURL := fmt.Sprintf("%s/.well-known/agent-card.json", address)
 	httpClient := &http.Client{Timeout: 5 * time.Second}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cardURL, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create agent card request: %w", err)
+		return nil, fmt.Errorf("failed to create agent card request: %w", err)
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("agent card fetch failed for %s: %w", engineName, err)
+		return nil, fmt.Errorf("agent card fetch failed for %s: %w", engineName, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("agent card returned status %d for %s", resp.StatusCode, engineName)
+		return nil, fmt.Errorf("agent card returned status %d for %s", resp.StatusCode, engineName)
 	}
 	var card agentCardResponse
 	if err := json.NewDecoder(resp.Body).Decode(&card); err != nil {
-		return fmt.Errorf("failed to decode agent card for %s: %w", engineName, err)
+		return nil, fmt.Errorf("failed to decode agent card for %s: %w", engineName, err)
 	}
 	log := logf.FromContext(ctx)
 	if card.ExecutionProfile != nil {
@@ -141,10 +167,16 @@ func (r *ExecutionEngineReconciler) fetchAgentCard(ctx context.Context, address,
 			"structuredOutput", card.ExecutionProfile.StructuredOutput,
 			"supportedModels", card.ExecutionProfile.SupportedModels,
 		)
-	} else {
-		log.Info("Agent Card fetched (no execution profile)", "executionEngine", engineName, "agentName", card.Name)
+		return &arkv1prealpha1.ExecutionProfile{
+			ToolMode:         card.ExecutionProfile.ToolMode,
+			MemoryMode:       card.ExecutionProfile.MemoryMode,
+			StructuredOutput: card.ExecutionProfile.StructuredOutput,
+			Streaming:        card.ExecutionProfile.Streaming,
+			SupportedModels:  card.ExecutionProfile.SupportedModels,
+		}, nil
 	}
-	return nil
+	log.Info("Agent Card fetched (no execution profile)", "executionEngine", engineName, "agentName", card.Name)
+	return nil, nil
 }
 
 func (r *ExecutionEngineReconciler) updateStatus(ctx context.Context, executionEngine arkv1prealpha1.ExecutionEngine, status, message string) error {

@@ -3,11 +3,13 @@ package validation
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 )
 
 func TestValidateTeam(t *testing.T) { //nolint:gocognit
@@ -298,6 +300,154 @@ func TestValidateTeam(t *testing.T) { //nolint:gocognit
 					},
 				},
 				MaxTurns: &maxTurns,
+			},
+		}
+		_, err := v.ValidateTeam(ctx, team)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestValidateTeamCapabilityCompatibility(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("compatible engines pass validation", func(t *testing.T) {
+		lookup := newMockLookup()
+		lookup.addResource("Agent", "default", "a1", &arkv1alpha1.Agent{
+			Spec: arkv1alpha1.AgentSpec{
+				ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "engine-a"},
+			},
+		})
+		lookup.addResource("Agent", "default", "a2", &arkv1alpha1.Agent{
+			Spec: arkv1alpha1.AgentSpec{
+				ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "engine-b"},
+			},
+		})
+		lookup.addResource("ExecutionEngine", "default", "engine-a", &arkv1prealpha1.ExecutionEngine{
+			Status: arkv1prealpha1.ExecutionEngineStatus{
+				Profile: &arkv1prealpha1.ExecutionProfile{ToolMode: "callback", Streaming: true},
+			},
+		})
+		lookup.addResource("ExecutionEngine", "default", "engine-b", &arkv1prealpha1.ExecutionEngine{
+			Status: arkv1prealpha1.ExecutionEngineStatus{
+				Profile: &arkv1prealpha1.ExecutionProfile{ToolMode: "callback", Streaming: true},
+			},
+		})
+		v := NewValidator(lookup)
+		team := &arkv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default"},
+			Spec: arkv1alpha1.TeamSpec{
+				Strategy: "sequential",
+				Members: []arkv1alpha1.TeamMember{
+					{Name: "a1", Type: "agent"},
+					{Name: "a2", Type: "agent"},
+				},
+			},
+		}
+		_, err := v.ValidateTeam(ctx, team)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("incompatible toolMode rejected", func(t *testing.T) {
+		lookup := newMockLookup()
+		lookup.addResource("Agent", "default", "a1", &arkv1alpha1.Agent{
+			Spec: arkv1alpha1.AgentSpec{
+				ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "engine-a"},
+			},
+		})
+		lookup.addResource("Agent", "default", "a2", &arkv1alpha1.Agent{
+			Spec: arkv1alpha1.AgentSpec{
+				ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "engine-b"},
+			},
+		})
+		lookup.addResource("ExecutionEngine", "default", "engine-a", &arkv1prealpha1.ExecutionEngine{
+			Status: arkv1prealpha1.ExecutionEngineStatus{
+				Profile: &arkv1prealpha1.ExecutionProfile{ToolMode: "callback"},
+			},
+		})
+		lookup.addResource("ExecutionEngine", "default", "engine-b", &arkv1prealpha1.ExecutionEngine{
+			Status: arkv1prealpha1.ExecutionEngineStatus{
+				Profile: &arkv1prealpha1.ExecutionProfile{ToolMode: "delegated"},
+			},
+		})
+		v := NewValidator(lookup)
+		team := &arkv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default"},
+			Spec: arkv1alpha1.TeamSpec{
+				Strategy: "sequential",
+				Members: []arkv1alpha1.TeamMember{
+					{Name: "a1", Type: "agent"},
+					{Name: "a2", Type: "agent"},
+				},
+			},
+		}
+		_, err := v.ValidateTeam(ctx, team)
+		if err == nil {
+			t.Fatal("expected error for incompatible toolMode")
+		}
+		if !strings.Contains(err.Error(), "toolMode") {
+			t.Fatalf("expected toolMode error, got: %v", err)
+		}
+	})
+
+	t.Run("selector strategy rejects non-streaming engine", func(t *testing.T) {
+		lookup := newMockLookup()
+		lookup.addResource("Agent", "default", "a1", &arkv1alpha1.Agent{
+			Spec: arkv1alpha1.AgentSpec{
+				ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "engine-a"},
+			},
+		})
+		lookup.addResource("Agent", "default", "coordinator", &arkv1alpha1.Agent{})
+		lookup.addResource("ExecutionEngine", "default", "engine-a", &arkv1prealpha1.ExecutionEngine{
+			Status: arkv1prealpha1.ExecutionEngineStatus{
+				Profile: &arkv1prealpha1.ExecutionProfile{ToolMode: "callback", Streaming: false},
+			},
+		})
+		lookup.addResource("ExecutionEngine", "default", "default", &arkv1prealpha1.ExecutionEngine{
+			Status: arkv1prealpha1.ExecutionEngineStatus{
+				Profile: &arkv1prealpha1.ExecutionProfile{ToolMode: "callback", Streaming: true},
+			},
+		})
+		v := NewValidator(lookup)
+		team := &arkv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default"},
+			Spec: arkv1alpha1.TeamSpec{
+				Strategy: "selector",
+				Selector: &arkv1alpha1.TeamSelectorSpec{Agent: "coordinator"},
+				Members: []arkv1alpha1.TeamMember{
+					{Name: "a1", Type: "agent"},
+				},
+			},
+		}
+		_, err := v.ValidateTeam(ctx, team)
+		if err == nil {
+			t.Fatal("expected error for non-streaming engine in selector team")
+		}
+		if !strings.Contains(err.Error(), "streaming") {
+			t.Fatalf("expected streaming error, got: %v", err)
+		}
+	})
+
+	t.Run("missing engine profile allows validation to pass", func(t *testing.T) {
+		lookup := newMockLookup()
+		lookup.addResource("Agent", "default", "a1", &arkv1alpha1.Agent{
+			Spec: arkv1alpha1.AgentSpec{
+				ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "engine-missing"},
+			},
+		})
+		lookup.addResource("Agent", "default", "a2", &arkv1alpha1.Agent{})
+		v := NewValidator(lookup)
+		team := &arkv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default"},
+			Spec: arkv1alpha1.TeamSpec{
+				Strategy: "sequential",
+				Members: []arkv1alpha1.TeamMember{
+					{Name: "a1", Type: "agent"},
+					{Name: "a2", Type: "agent"},
+				},
 			},
 		}
 		_, err := v.ValidateTeam(ctx, team)
