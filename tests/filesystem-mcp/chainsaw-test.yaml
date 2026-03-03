@@ -4,6 +4,7 @@ metadata:
   name: filesystem-mcp-workspace-isolation
   labels:
     requires-images: "true"
+    llm: "true"
 spec:
   timeouts:
     exec: 300s
