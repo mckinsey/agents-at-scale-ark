@@ -23,6 +23,43 @@ func buildToolOutcomeContentByID(outcomes []A2AToolOutcome) map[string]string {
 	return contentByID
 }
 
+func pairToolCallsForAssistantMessage(current Message, messages []Message, startIdx int, fallbackByID map[string]string) (out []Message, nextIdx int, pairedToolCalls []openai.ChatCompletionMessageToolCallParam) {
+	out = append(out, current)
+	j := startIdx + 1
+	explicitByID := map[string]Message{}
+	for j < len(messages) && messages[j].OfTool != nil {
+		toolMsg := messages[j]
+		toolCallID := toolMsg.OfTool.ToolCallID
+		if toolCallID != "" {
+			explicitByID[toolCallID] = toolMsg
+		}
+		j++
+	}
+
+	pairedToolCalls = make([]openai.ChatCompletionMessageToolCallParam, 0, len(current.OfAssistant.ToolCalls))
+	for _, toolCall := range current.OfAssistant.ToolCalls {
+		toolCallID := toolCall.ID
+		if toolCallID == "" {
+			continue
+		}
+		if explicit, ok := explicitByID[toolCallID]; ok {
+			out = append(out, explicit)
+			pairedToolCalls = append(pairedToolCalls, toolCall)
+			continue
+		}
+		if fallbackByID != nil {
+			if content, ok := fallbackByID[toolCallID]; ok {
+				out = append(out, openai.ToolMessage(content, toolCallID))
+				pairedToolCalls = append(pairedToolCalls, toolCall)
+				continue
+			}
+		}
+		out = append(out, openai.ToolMessage(`{"error":"tool execution did not produce a result"}`, toolCallID))
+		pairedToolCalls = append(pairedToolCalls, toolCall)
+	}
+	return out, j, pairedToolCalls
+}
+
 func normalizeAssistantToolCallMessages(messages []Message, fallbackByID map[string]string) []Message {
 	if len(messages) == 0 {
 		return messages
@@ -37,47 +74,15 @@ func normalizeAssistantToolCallMessages(messages []Message, fallbackByID map[str
 		}
 
 		assistantIndex := len(out)
-		out = append(out, current)
-
-		j := i + 1
-		explicitByID := map[string]Message{}
-		for j < len(messages) && messages[j].OfTool != nil {
-			toolMsg := messages[j]
-			toolCallID := toolMsg.OfTool.ToolCallID
-			if toolCallID != "" {
-				explicitByID[toolCallID] = toolMsg
-			}
-			j++
-		}
-
-		pairedToolCalls := make([]openai.ChatCompletionMessageToolCallParam, 0, len(current.OfAssistant.ToolCalls))
-		for _, toolCall := range current.OfAssistant.ToolCalls {
-			toolCallID := toolCall.ID
-			if toolCallID == "" {
-				continue
-			}
-			if explicit, ok := explicitByID[toolCallID]; ok {
-				out = append(out, explicit)
-				pairedToolCalls = append(pairedToolCalls, toolCall)
-				continue
-			}
-		if fallbackByID != nil {
-			if content, ok := fallbackByID[toolCallID]; ok {
-				out = append(out, openai.ToolMessage(content, toolCallID))
-				pairedToolCalls = append(pairedToolCalls, toolCall)
-				continue
-			}
-		}
-		out = append(out, openai.ToolMessage(`{"error":"tool execution did not produce a result"}`, toolCallID))
-		pairedToolCalls = append(pairedToolCalls, toolCall)
-		}
+		pairedOut, nextIdx, pairedToolCalls := pairToolCallsForAssistantMessage(current, messages, i, fallbackByID)
+		out = append(out, pairedOut...)
 
 		assistantMessage := out[assistantIndex]
 		if assistantMessage.OfAssistant != nil {
 			assistantMessage.OfAssistant.ToolCalls = pairedToolCalls
 		}
 		out[assistantIndex] = assistantMessage
-		i = j
+		i = nextIdx
 	}
 	return out
 }

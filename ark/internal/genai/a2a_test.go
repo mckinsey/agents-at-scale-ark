@@ -380,8 +380,7 @@ func TestBuildA2ASendMessageParamsAssignsMessageIDWhenMissing(t *testing.T) {
 		},
 	}
 
-	params, err := buildA2ASendMessageParams(userInput, "ctx-123", nil, false)
-	assert.NoError(t, err)
+	params := buildA2ASendMessageParams(userInput, "ctx-123", nil, false)
 
 	assert.NotEmpty(t, params.Message.MessageID)
 	assert.Equal(t, protocol.MessageRoleUser, params.Message.Role)
@@ -399,8 +398,7 @@ func TestBuildA2ASendMessageParamsPreservesExistingMessageID(t *testing.T) {
 		},
 	}
 
-	params, err := buildA2ASendMessageParams(userInput, "", nil, true)
-	assert.NoError(t, err)
+	params := buildA2ASendMessageParams(userInput, "", nil, true)
 
 	assert.Equal(t, "msg-existing", params.Message.MessageID)
 }
@@ -413,11 +411,10 @@ func TestBuildA2ASendMessageParamsPreservesNonURIMetadataWithoutRejecting(t *tes
 		},
 	}
 
-	params, err := buildA2ASendMessageParams(userInput, "", map[string]interface{}{
+	params := buildA2ASendMessageParams(userInput, "", map[string]interface{}{
 		"ark.mckinsey.com/tool-call-id": "call-1",
 	}, true)
 
-	assert.NoError(t, err)
 	if assert.NotNil(t, params.Metadata) {
 		assert.Equal(t, "call-1", params.Metadata["ark.mckinsey.com/tool-call-id"])
 	}
@@ -435,14 +432,13 @@ func TestBuildA2ASendMessageParamsMergesURIExtensionsAndPreservesMetadata(t *tes
 		},
 	}
 
-	params, err := buildA2ASendMessageParams(userInput, "", map[string]interface{}{
+	params := buildA2ASendMessageParams(userInput, "", map[string]interface{}{
 		"https://example.com/ext/custom/v1": map[string]interface{}{
 			"enabled": true,
 		},
 		"ark.mckinsey.com/tool-call-id": "call-1",
 	}, true)
 
-	assert.NoError(t, err)
 	if assert.NotNil(t, params.Metadata) {
 		assert.Equal(t, "call-1", params.Metadata["ark.mckinsey.com/tool-call-id"])
 		_, hasCustomExtension := params.Metadata["https://example.com/ext/custom/v1"]

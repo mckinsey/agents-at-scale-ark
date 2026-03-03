@@ -282,13 +282,10 @@ type AgentToolExecutor struct {
 }
 
 type delegatedInvocation struct {
-	userInput    Message
-	history      []Message
 	a2aUserInput protocol.Message
 	a2aHistory   []protocol.Message
 	contextID    string
 }
-
 
 func parseA2AMessageArgument(rawValue any) (protocol.Message, error) {
 	rawJSON, err := json.Marshal(rawValue)
@@ -330,6 +327,45 @@ func ensureMessageHasExtension(message *protocol.Message, extensionURI string) {
 	message.Extensions = append(message.Extensions, extensionURI)
 }
 
+func parseMessageOrInput(arguments map[string]any, invocationArgs map[string]string, contextID, targetType, targetName string) (protocol.Message, string, error) {
+	rawMessage, hasMessage := arguments["message"]
+	if hasMessage {
+		message, err := parseA2AMessageArgument(rawMessage)
+		if err != nil {
+			return protocol.Message{}, "message parameter is invalid", err
+		}
+		if len(invocationArgs) > 0 {
+			appendPayloadPartToMessage(&message, DelegatedInvocationPayloadV1{
+				Schema:     A2APayloadSchemaDelegatedInvocationV1,
+				Parameters: invocationArgs,
+				ContextID:  contextID,
+			})
+			ensureMessageHasExtension(&message, A2ADelegatedToolExtensionKey)
+		}
+		return message, "", nil
+	}
+	rawInput, hasInput := arguments["input"]
+	if !hasInput {
+		return protocol.Message{}, "message parameter is required", fmt.Errorf("message parameter is required for %s tool %s", targetType, targetName)
+	}
+	inputStr, ok := rawInput.(string)
+	if !ok {
+		return protocol.Message{}, "input parameter must be a string", fmt.Errorf("input parameter must be a string for %s tool %s", targetType, targetName)
+	}
+	message := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart(inputStr),
+	})
+	if len(invocationArgs) > 0 {
+		appendPayloadPartToMessage(&message, DelegatedInvocationPayloadV1{
+			Schema:     A2APayloadSchemaDelegatedInvocationV1,
+			Parameters: invocationArgs,
+			ContextID:  contextID,
+		})
+		ensureMessageHasExtension(&message, A2ADelegatedToolExtensionKey)
+	}
+	return message, "", nil
+}
+
 func extractDelegationInvocationArgs(arguments map[string]any) map[string]string {
 	rawValue, exists := arguments[A2ADelegationInvocationArgsKey]
 	if !exists || rawValue == nil {
@@ -366,34 +402,6 @@ func extractDelegationInvocationArgs(arguments map[string]any) map[string]string
 	return result
 }
 
-func applyDelegatedInvocationExtension(message *protocol.Message, arguments map[string]any) error {
-	if message == nil {
-		return nil
-	}
-	invocationArgs := extractDelegationInvocationArgs(arguments)
-	if len(invocationArgs) == 0 {
-		return nil
-	}
-
-	extension := A2ADelegatedToolExtension{}
-	if existing, ok := parseA2ADelegatedToolExtension(message.Metadata); ok {
-		extension = existing
-	}
-	if extension.InvocationArgs == nil {
-		extension.InvocationArgs = map[string]string{}
-	}
-	for key, value := range invocationArgs {
-		if _, exists := extension.InvocationArgs[key]; exists {
-			continue
-		}
-		extension.InvocationArgs[key] = value
-	}
-
-	message.Metadata = withA2ADelegatedToolExtension(message.Metadata, extension)
-	ensureMessageHasExtension(message, A2ADelegatedToolExtensionKey)
-	return nil
-}
-
 func parseNativeDelegationInput(arguments map[string]any, targetType, targetName string) (delegatedInvocation, string, error) {
 	invocation := delegatedInvocation{
 		a2aHistory: []protocol.Message{},
@@ -417,44 +425,11 @@ func parseNativeDelegationInput(arguments map[string]any, targetType, targetName
 		invocation.a2aHistory = history
 	}
 	invocationArgs := extractDelegationInvocationArgs(arguments)
-	rawMessage, hasMessage := arguments["message"]
-	switch {
-	case hasMessage:
-		message, err := parseA2AMessageArgument(rawMessage)
-		if err != nil {
-			return delegatedInvocation{}, "message parameter is invalid", err
-		}
-		if len(invocationArgs) > 0 {
-			appendPayloadPartToMessage(&message, DelegatedInvocationPayloadV1{
-				Schema:     A2APayloadSchemaDelegatedInvocationV1,
-				Parameters: invocationArgs,
-				ContextID:  invocation.contextID,
-			})
-			ensureMessageHasExtension(&message, A2ADelegatedToolExtensionKey)
-		}
-		invocation.a2aUserInput = message
-	default:
-		rawInput, hasInput := arguments["input"]
-		if !hasInput {
-			return delegatedInvocation{}, "message parameter is required", fmt.Errorf("message parameter is required for %s tool %s", targetType, targetName)
-		}
-		inputStr, ok := rawInput.(string)
-		if !ok {
-			return delegatedInvocation{}, "input parameter must be a string", fmt.Errorf("input parameter must be a string for %s tool %s", targetType, targetName)
-		}
-		message := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
-			protocol.NewTextPart(inputStr),
-		})
-		if len(invocationArgs) > 0 {
-			appendPayloadPartToMessage(&message, DelegatedInvocationPayloadV1{
-				Schema:     A2APayloadSchemaDelegatedInvocationV1,
-				Parameters: invocationArgs,
-				ContextID:  invocation.contextID,
-			})
-			ensureMessageHasExtension(&message, A2ADelegatedToolExtensionKey)
-		}
-		invocation.a2aUserInput = message
+	message, userError, err := parseMessageOrInput(arguments, invocationArgs, invocation.contextID, targetType, targetName)
+	if err != nil {
+		return delegatedInvocation{}, userError, err
 	}
+	invocation.a2aUserInput = message
 	if invocation.contextID != "" && (invocation.a2aUserInput.ContextID == nil || *invocation.a2aUserInput.ContextID == "") {
 		contextIDCopy := invocation.contextID
 		invocation.a2aUserInput.ContextID = &contextIDCopy
