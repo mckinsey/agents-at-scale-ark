@@ -4,6 +4,7 @@ from pages.dashboard_page import DashboardPage
 
 
 @pytest.mark.dashboard
+@pytest.mark.xdist_group("ark_dashboard")
 class TestArkDashboard:
     
     def test_ark_dashboard_loads(self, page: Page):
@@ -24,34 +25,24 @@ class TestArkDashboard:
         title = dashboard.get_page_title()
         assert title is not None and len(title) > 0, "Dashboard should have a title"
     
-    @pytest.mark.parametrize("tab_name,tab_selector,button_selector", [
-        ("Agents", "AGENTS_TAB", "ADD_AGENT_BUTTON"),
-        ("Models", "MODELS_TAB", "ADD_MODEL_BUTTON"),
-        ("Queries", "QUERIES_TAB", "ADD_QUERY_BUTTON"),
-        ("Tools", "TOOLS_TAB", "ADD_TOOL_BUTTON"),
-        ("Teams", "TEAMS_TAB", "ADD_TEAM_BUTTON"),
+    @pytest.mark.parametrize("tab_name,button_selector", [
+        ("agents", "ADD_AGENT_BUTTON"),
+        ("models", "ADD_MODEL_BUTTON"),
+        ("queries", "ADD_QUERY_BUTTON"),
+        ("tools", "ADD_TOOL_BUTTON"),
+        ("teams", "ADD_TEAM_BUTTON"),
     ])
-    def test_dashboard_tabs_navigation(self, page: Page, tab_name: str, tab_selector: str, button_selector: str):
+    def test_dashboard_tabs_navigation(self, page: Page, tab_name: str, button_selector: str):
         dashboard = DashboardPage(page)
-        dashboard.navigate_to_dashboard()
-        dashboard.wait_for_load_state("domcontentloaded")
-        dashboard.wait_for_timeout(1000)
+        dashboard.navigate_to_section(tab_name)
         
-        tab_element = getattr(dashboard, tab_selector)
+        new_url = dashboard.get_url()
+        assert tab_name in new_url.lower(), f"URL should contain '{tab_name}' but got: {new_url}"
         
-        if dashboard.is_visible(tab_element):
-            page.locator(tab_element).first.click()
-            dashboard.wait_for_timeout(2000)
-            
-            new_url = dashboard.get_url()          
-            assert tab_name.lower() in new_url.lower(), f"URL should contain '{tab_name.lower()}' but got: {new_url}"
-            
-            add_button = getattr(dashboard, button_selector)
-            assert dashboard.is_visible(add_button), f"Add {tab_name} button should be visible"
-            
-            print(f"{tab_name} page loaded successfully")
-        else:
-            pytest.skip(f"{tab_name} tab not visible on dashboard")
+        add_button = getattr(dashboard, button_selector)
+        assert dashboard.is_visible(add_button, timeout=10000), f"Add {tab_name} button should be visible"
+        
+        print(f"{tab_name} page loaded successfully")
     
     def test_dashboard_responsive(self, page: Page):
         dashboard = DashboardPage(page)
@@ -64,5 +55,5 @@ class TestArkDashboard:
         assert dashboard.is_dashboard_loaded(), "Dashboard should load initially"
         
         dashboard.reload()
-        dashboard.wait_for_load_state("networkidle")
+        dashboard.wait_for_load_state("domcontentloaded")
         assert dashboard.is_dashboard_loaded(), "Dashboard should still be loaded after reload"

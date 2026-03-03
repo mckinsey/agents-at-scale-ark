@@ -765,6 +765,15 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: tests/pytest/ui-tests/requirements.txt
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('tests/pytest/ui-tests/requirements.txt') }}
 
       - name: Install UI test dependencies
         run: |
@@ -795,7 +804,7 @@ jobs:
         run: |
           cd tests/pytest/ui-tests
           mkdir -p screenshots
-          pytest tests/ -v --tb=short
+          pytest tests/ -n 4 --dist loadgroup -v --tb=short
 
       - name: Upload test screenshots
         if: always()
@@ -875,7 +884,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
         run: |
           cd tests/pytest/cli-tests/tests
-          pytest test_file_gateway.py -v --tb=short
+          pytest test_file_gateway.py -n 2 --dist loadscope -v --tb=short
 
       - name: Upload CLI test logs
         if: always()
