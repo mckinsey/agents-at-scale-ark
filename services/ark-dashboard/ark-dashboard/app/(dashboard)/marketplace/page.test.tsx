@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import { useGetMarketplaceItems } from '@/lib/services/marketplace-hooks';
-import type { MarketplaceResponse } from '@/lib/api/generated/marketplace-types';
+import type { MarketplaceItem, MarketplaceResponse } from '@/lib/api/generated/marketplace-types';
 
 import MarketplacePage from './page';
 
@@ -47,7 +47,7 @@ const mockMarketplaceData: MarketplaceResponse = {
       name: 'Test Agent',
       description: 'A test agent item',
       category: 'agents',
-      type: 'agent',
+      type: 'template',
       version: '1.0.0',
       status: 'available',
       author: 'Test Author',
@@ -78,10 +78,10 @@ const mockMarketplaceData: MarketplaceResponse = {
       icon: '⚙️',
       featured: true,
     },
-  ],
+  ] as MarketplaceItem[],
   total: 3,
   page: 1,
-  limit: 10,
+  pageSize: 10,
 };
 
 function renderWithProviders(ui: React.ReactElement) {
@@ -225,7 +225,7 @@ describe('MarketplacePage', () => {
 
   it('should display empty state when no items', () => {
     mockUseGetMarketplaceItems.mockReturnValue({
-      data: { items: [], total: 0, page: 1, limit: 10 },
+      data: { items: [], total: 0, page: 1, pageSize: 10 },
       isPending: false,
       isError: false,
       error: null,
@@ -253,7 +253,7 @@ describe('MarketplacePage', () => {
       })),
       total: 15,
       page: 1,
-      limit: 10,
+      pageSize: 10,
     };
 
     mockUseGetMarketplaceItems.mockReturnValue({

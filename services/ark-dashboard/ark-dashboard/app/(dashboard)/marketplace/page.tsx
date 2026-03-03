@@ -1,6 +1,13 @@
 'use client';
 
-import { Bot, ChevronLeft, ChevronRight, Filter, Search, Server, Workflow } from 'lucide-react';
+import {
+  Bot,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  Server,
+  Workflow
+} from 'lucide-react';
 import { useState } from 'react';
 
 import { MarketplaceItemCard } from '@/components/cards/marketplace-item-card';
@@ -89,9 +96,6 @@ export default function MarketplacePage() {
                 className="w-[300px] pl-10"
               />
             </div>
-            <Button variant="outline" size="icon">
-              <Filter className="h-4 w-4" />
-            </Button>
           </div>
         }
       />
