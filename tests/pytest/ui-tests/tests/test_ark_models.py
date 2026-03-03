@@ -4,16 +4,22 @@ from pages.secrets_page import SecretsPage
 from pages.models_page import ModelsPage
 
 
+@pytest.fixture(scope="class")
+def model_test_resources():
+    return {
+        "secrets": {},
+        "models": {}
+    }
+
+
 @pytest.mark.models
+@pytest.mark.xdist_group("ark_models")
 class TestArkModels:
-    created_secrets = {}
-    created_models = {}
     
     @pytest.mark.parametrize("prefix,env_key,model_type,model_name,base_url_key", [
         ("openai", "CICD_OPENAI_API_KEY", "openai", "gpt-4o-mini", "CICD_OPENAI_BASE_URL"),
     ])
-    @pytest.mark.dependency(name="create_model_openai")
-    def test_create_model_with_secret(self, page: Page, prefix: str, env_key: str, model_type: str, model_name: str, base_url_key: str):
+    def test_create_model_with_secret(self, page: Page, prefix: str, env_key: str, model_type: str, model_name: str, base_url_key: str, model_test_resources: dict):
         secrets = SecretsPage(page)
         models = ModelsPage(page)
         
@@ -28,7 +34,7 @@ class TestArkModels:
         assert secret_result["in_table"], "Secret should be visible in table"
         
         secret_name = secret_result['name']
-        TestArkModels.created_secrets[prefix] = secret_name
+        model_test_resources["secrets"][prefix] = secret_name
         print(f"{prefix} secret created: {secret_name}")
         
         models.navigate_to_models_tab()
@@ -50,17 +56,18 @@ class TestArkModels:
         assert model_result["popup_visible"], "Model creation popup should be visible"
         assert model_result["is_available"], "Model should show Available status"
         
-        TestArkModels.created_models[prefix] = model_result['name']
+        model_test_resources["models"][prefix] = model_result['name']
     
     @pytest.mark.parametrize("prefix", [
         "openai",
     ])
-    @pytest.mark.dependency(depends=["create_model_openai"])
-    def test_delete_model(self, page: Page, prefix: str):
+    def test_delete_model(self, page: Page, prefix: str, model_test_resources: dict):
         models = ModelsPage(page)
         models.navigate_to_models_tab()
         
-        model_name = TestArkModels.created_models.get(prefix)
+        model_name = model_test_resources["models"].get(prefix)
+        if not model_name:
+            pytest.skip("Model was not created, skipping delete")
         result = models.delete_model_with_verification(model_name)
         
         if not result["delete_available"]:
