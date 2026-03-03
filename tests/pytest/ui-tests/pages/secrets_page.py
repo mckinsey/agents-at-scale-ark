@@ -23,6 +23,7 @@ class SecretsPage(BasePage):
     DELETE_ICON_TEMPLATE = "tr:has-text('{secret_name}') svg, tr:has-text('{secret_name}') button[aria-label='Delete'], tr:has-text('{secret_name}') [data-testid='delete-icon']"
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
     CONFIRM_DELETE_BUTTON = "button:has-text('Delete'), button:has-text('Confirm'), button:has-text('Yes')"
+    LOADING_INDICATOR = "[data-testid='loading'], [aria-busy='true'], .skeleton, [class*='skeleton'], [class*='loading'], [class*='spinner']"
     
     def __init__(self, page: Page):
         super().__init__(page)
@@ -46,6 +47,7 @@ class SecretsPage(BasePage):
         dashboard = DashboardPage(self.page)
         dashboard.navigate_to_section("secrets")
         self.wait_for_element(self.ADD_SECRET_BUTTON, timeout=10000)
+        self.wait_for_element_hidden(self.LOADING_INDICATOR, timeout=10000)
         self._close_dialog_if_open()
     
     def _close_dialog_if_open(self) -> None:
@@ -65,7 +67,7 @@ class SecretsPage(BasePage):
     def is_secret_in_table(self, secret_name: str, retries: int = 3) -> bool:
         for attempt in range(retries):
             try:
-                self.page.get_by_text(secret_name, exact=False).first.wait_for(state="visible", timeout=10000)
+                self.page.get_by_text(secret_name, exact=False).first.wait_for(state="visible", timeout=15000)
                 return True
             except Exception as e:
                 logger.debug(f"Secret {secret_name} not visible on attempt {attempt + 1}/{retries}: {e}")
@@ -74,6 +76,7 @@ class SecretsPage(BasePage):
                     self.page.reload()
                     self.wait_for_navigation_complete()
                     self.wait_for_element(self.ADD_SECRET_BUTTON, timeout=10000)
+                    self.wait_for_element_hidden(self.LOADING_INDICATOR, timeout=10000)
         return False
     
     def create_secret_with_verification(self, prefix: str, env_key: str) -> dict:
