@@ -1,17 +1,10 @@
 import { Sparkles } from 'lucide-react';
 import Image from 'next/image';
 import qbLogoLight from './img/qb-logo-light.svg';
-import * as k8s from '@kubernetes/client-node';
+import { fetchDemos, type Demo } from './lib/demos';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-
-interface Demo {
-  name: string;
-  displayName: string;
-  description: string;
-  url: string;
-}
 
 function getDemoUrl(demoName: string): string {
   const dashboardUrl = process.env.NEXT_PUBLIC_ARK_DASHBOARD_URL || 'https://dashboard-demo.dev.agents-at-scale.com';
@@ -21,49 +14,14 @@ function getDemoUrl(demoName: string): string {
   return url.toString();
 }
 
-async function getDemos(): Promise<Demo[]> {
+export default async function LandingPage() {
+  let demos: (Demo & { url: string })[] = [];
   try {
-    const kc = new k8s.KubeConfig();
-    kc.loadFromDefault();
-
-    const coreApi = kc.makeApiClient(k8s.CoreV1Api);
-    const customApi = kc.makeApiClient(k8s.CustomObjectsApi);
-
-    const namespacesResponse = await coreApi.listNamespace();
-    const demoNamespaces = namespacesResponse.body.items.filter(ns => {
-      const labels = ns.metadata?.labels || {};
-      return labels['ark.mckinsey.com/demo'] === 'true';
-    });
-
-    const httpRoutesResponse = await customApi.listClusterCustomObject(
-      'gateway.networking.k8s.io',
-      'v1',
-      'httproutes'
-    ) as { body: { items: Array<{ metadata?: { namespace?: string } }> } };
-
-    const namespacesWithRoutes = new Set(
-      httpRoutesResponse.body.items.map(route => route.metadata?.namespace).filter(Boolean)
-    );
-
-    const availableDemos = demoNamespaces
-      .filter(ns => namespacesWithRoutes.has(ns.metadata?.name || ''))
-      .map(ns => ({
-        name: ns.metadata?.name || '',
-        displayName: ns.metadata?.annotations?.['ark.mckinsey.com/demo-name'] || ns.metadata?.name || '',
-        description: ns.metadata?.annotations?.['ark.mckinsey.com/demo-description'] || '',
-        url: getDemoUrl(ns.metadata?.name || ''),
-      }))
-      .sort((a, b) => a.displayName.localeCompare(b.displayName));
-
-    return availableDemos;
+    const baseDemos = await fetchDemos();
+    demos = baseDemos.map(d => ({ ...d, url: getDemoUrl(d.name) }));
   } catch (error) {
     console.error('Error fetching demos:', error);
-    return [];
   }
-}
-
-export default async function LandingPage() {
-  const demos = await getDemos();
 
   return (
     <main className="min-h-screen bg-background">
