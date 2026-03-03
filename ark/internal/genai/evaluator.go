@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -114,8 +115,24 @@ func callEvaluatorHTTPEndpoint(ctx context.Context, address, endpoint string, re
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		bodyBytes, readErr := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
-		return nil, fmt.Errorf("evaluator returned status %d", resp.StatusCode)
+
+		if readErr != nil {
+			return nil, fmt.Errorf("evaluator returned status %d (failed to read error response: %w)", resp.StatusCode, readErr)
+		}
+
+		var errorDetail string
+		var httpError struct {
+			Detail string `json:"detail"`
+		}
+		if err := json.Unmarshal(bodyBytes, &httpError); err == nil && httpError.Detail != "" {
+			errorDetail = httpError.Detail
+		} else {
+			errorDetail = string(bodyBytes)
+		}
+
+		return nil, fmt.Errorf("evaluator returned status %d: %s", resp.StatusCode, errorDetail)
 	}
 
 	return resp, nil
