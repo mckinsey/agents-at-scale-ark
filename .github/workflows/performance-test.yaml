@@ -1,7 +1,7 @@
 # Verifies acceptance criteria from docs/specs/linear-query-scaling.md
 # Jobs map to spec stages 1-6. Stages that are not yet implemented fail
 # with a clear message — they turn green as features land.
-name: Performance Test
+name: Verification - Performance
 
 on:
   workflow_dispatch:
