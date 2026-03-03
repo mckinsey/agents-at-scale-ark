@@ -82,7 +82,8 @@ class TestTokenValidator(unittest.TestCase):
     @patch.object(TokenValidator, '_get_signing_key')
     def test_validate_token_success(self, mock_get_signing_key, mock_decode):
         """Test successful token validation."""
-        mock_get_signing_key.return_value = "test-key"
+        mock_jwk = Mock(key="test-key")
+        mock_get_signing_key.return_value = mock_jwk
         
         mock_payload = {"sub": "test-user", "aud": "okta-audience", "iss": "https://test.okta.com/oauth2/default"}
         mock_decode.return_value = mock_payload
@@ -117,7 +118,8 @@ class TestTokenValidator(unittest.TestCase):
         )
         validator = TokenValidator(config)
         
-        mock_get_signing_key.return_value = "test-key"
+        mock_jwk = Mock(key="test-key")
+        mock_get_signing_key.return_value = mock_jwk
         
         mock_payload = {"sub": "test-user"}
         mock_decode.return_value = mock_payload
@@ -150,7 +152,8 @@ class TestTokenValidator(unittest.TestCase):
         )
         validator = TokenValidator(config)
         
-        mock_get_signing_key.return_value = "test-key"
+        mock_jwk = Mock(key="test-key")
+        mock_get_signing_key.return_value = mock_jwk
         
         mock_payload = {"sub": "test-user"}
         mock_decode.return_value = mock_payload
@@ -188,7 +191,7 @@ class TestTokenValidator(unittest.TestCase):
     @patch.object(TokenValidator, '_get_signing_key')
     def test_validate_token_expired_signature(self, mock_get_signing_key, mock_decode):
         """Test token validation with expired signature."""
-        mock_get_signing_key.return_value = "test-key"
+        mock_get_signing_key.return_value = Mock(key="test-key")
         mock_decode.side_effect = ExpiredSignatureError("Token has expired")
         
         with self.assertRaises(ExpiredTokenError) as context:
@@ -200,7 +203,7 @@ class TestTokenValidator(unittest.TestCase):
     @patch.object(TokenValidator, '_get_signing_key')
     def test_validate_token_invalid_token(self, mock_get_signing_key, mock_decode):
         """Test token validation with invalid token."""
-        mock_get_signing_key.return_value = "test-key"
+        mock_get_signing_key.return_value = Mock(key="test-key")
         mock_decode.side_effect = JWTInvalidTokenError("Invalid token")
         
         with self.assertRaises(InvalidTokenError) as context:
@@ -212,7 +215,7 @@ class TestTokenValidator(unittest.TestCase):
     @patch.object(TokenValidator, '_get_signing_key')
     def test_validate_token_decode_error(self, mock_get_signing_key, mock_decode):
         """Test token validation with JWT claims error."""
-        mock_get_signing_key.return_value = "test-key"
+        mock_get_signing_key.return_value = Mock(key="test-key")
         mock_decode.side_effect = InvalidAudienceError("Invalid claims")
         
         with self.assertRaises(InvalidTokenError) as context:
@@ -224,7 +227,7 @@ class TestTokenValidator(unittest.TestCase):
     @patch.object(TokenValidator, '_get_signing_key')
     def test_validate_token_general_exception(self, mock_get_signing_key, mock_decode):
         """Test token validation with general exception."""
-        mock_get_signing_key.return_value = "test-key"
+        mock_get_signing_key.return_value = Mock(key="test-key")
         mock_decode.side_effect = Exception("Unexpected error")
         
         with self.assertRaises(TokenValidationError) as context:
