@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 # Constants
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 BROKER_CONNECT_TIMEOUT = float(os.getenv('BROKER_CONNECT_TIMEOUT', '10.0'))
+DEFAULT_QUERY_TIMEOUT = os.getenv('DEFAULT_QUERY_TIMEOUT', '5m')
 
 
 def _parse_timestamp(metadata: dict) -> int:
@@ -243,9 +244,9 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
             await ark_client.queries.a_create(query_resource)
             logger.info(f"Created query: {query_name}")
 
-            # Extract timeout from query spec
-            query_timeout_str = query_resource.spec.timeout
-            timeout_seconds = parse_duration_to_seconds(query_timeout_str) or 300
+            # Extract timeout from query spec, falling back to the CRD default
+            query_timeout_str = query_resource.spec.timeout or DEFAULT_QUERY_TIMEOUT
+            timeout_seconds = parse_duration_to_seconds(query_timeout_str)
 
             # If the caller didn't request streaming, we can simply poll for
             # the response.
