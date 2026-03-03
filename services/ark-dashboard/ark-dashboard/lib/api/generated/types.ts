@@ -838,6 +838,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/export/last-export-time": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Last Export Time
+         * @description Get the timestamp of the last export.
+         *
+         *     Returns:
+         *         Export history with last export timestamp
+         */
+        get: operations["get_last_export_time_v1_export_last_export_time_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/export/resources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export Resources
+         * @description Export Ark resources as a ZIP file.
+         *
+         *     Args:
+         *         body: Export request with optional resource types, IDs, and namespace
+         *             - If resource_types is not specified or empty, exports all resource types
+         *             - If resource_ids is specified, exports only those specific resources
+         *         namespace: Namespace to export from (overrides body.namespace)
+         *
+         *     Returns:
+         *         ZIP file containing YAML files organized by resource type
+         */
+        post: operations["export_resources_v1_export_resources_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/file-preview/health": {
         parameters: {
             query?: never;
@@ -3702,6 +3754,46 @@ export interface components {
             name: string;
             /** Namespace */
             namespace?: string | null;
+        };
+        /**
+         * ExportHistoryResponse
+         * @description Response model for export history.
+         */
+        ExportHistoryResponse: {
+            /**
+             * Export Count
+             * @description Total number of exports performed
+             * @default 0
+             */
+            export_count: number;
+            /**
+             * Last Export
+             * @description Timestamp of the last export
+             */
+            last_export?: string | null;
+        };
+        /**
+         * ExportRequest
+         * @description Request model for exporting resources.
+         */
+        ExportRequest: {
+            /**
+             * Namespace
+             * @description Namespace to export from (defaults to current context)
+             */
+            namespace?: string | null;
+            /**
+             * Resource Ids
+             * @description Optional map of resource type to specific resource IDs to export
+             */
+            resource_ids?: {
+                [key: string]: string[];
+            } | null;
+            /**
+             * Resource Types
+             * @description List of resource types to export. If not specified, exports all resource types
+             */
+            resource_types?: ("agents" | "teams" | "models" | "queries" | "a2a" | "mcpservers" | "workflows" | "evaluators" | "evaluations")[] | null;
         };
         /**
          * File
@@ -6626,6 +6718,60 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["EventResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_last_export_time_v1_export_last_export_time_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportHistoryResponse"];
+                };
+            };
+        };
+    };
+    export_resources_v1_export_resources_post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request */
+                namespace?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
