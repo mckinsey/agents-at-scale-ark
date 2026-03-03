@@ -1,0 +1,83 @@
+# Verifies acceptance criteria from docs/specs/linear-query-scaling.md
+# Jobs map to spec stages 1-6. Stages that are not yet implemented fail
+# with a clear message — they turn green as features land.
+name: Performance Test
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * *'
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Stage 1 — Vanilla Ark Install
+  vanilla-ark-install:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-e2e
+
+      - name: Install chainsaw
+        run: |
+          curl -s -L "https://github.com/kyverno/chainsaw/releases/download/v0.2.12/chainsaw_linux_amd64.tar.gz" | \
+            tar xz -C /tmp
+          sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
+          sudo chmod +x /usr/local/bin/chainsaw
+
+      - name: Run standard E2E tests
+        run: |
+          cd tests
+          mkdir -p /tmp/chainsaw-report
+          chainsaw test --config .chainsaw.yaml --selector '!evaluated,!llm'
+
+  # Stage 2 — PostgreSQL Storage Backend Deployment
+  postgres-backend-deployment:
+    needs: vanilla-ark-install
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "Required: Maximum of one 'helm install' command." && exit 1
+          echo "Required: Maximum of one additional configuration or restart command." && exit 1
+          exit 1
+
+  # Stage 3 — Load Test: Vanilla Baseline
+  load-test-vanilla-baseline:
+    needs: vanilla-ark-install
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "Stage 3: Vanilla baseline load test not implemented"
+          exit 1
+
+  # Stage 4 — Load Test: PostgreSQL Storage Backend (Developer Workstation)
+  load-test-postgres-workstation:
+    needs: postgres-backend-deployment
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "Stage 4: PostgreSQL storage backend load test not implemented"
+          exit 1
+
+  # Stage 5 — Load Test: PostgreSQL Storage Backend (AWS) — placeholder
+  # load-test-postgres-aws:
+
+  # Stage 6 — Results Analysis
+  results-analysis:
+    needs: [load-test-vanilla-baseline, load-test-postgres-workstation]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "Stage 6: Results analysis not implemented"
+          exit 1
