@@ -212,10 +212,10 @@ var _ = Describe("Query Controller Message Serialization", func() {
 	Context("When serializing messages", func() {
 		It("should serialize all message types correctly", func() {
 			messages := []genai.Message{
-				genai.Message(openai.AssistantMessage("hello")),
-				genai.Message(openai.UserMessage("hi")),
-				genai.Message(openai.SystemMessage("sys")),
-				genai.Message(openai.ToolMessage("tool-content", "tool-1")),
+				openai.AssistantMessage("hello"),
+				openai.UserMessage("hi"),
+				openai.SystemMessage("sys"),
+				openai.ToolMessage("tool-content", "tool-1"),
 			}
 
 			jsonStr, err := serializeMessages(messages)

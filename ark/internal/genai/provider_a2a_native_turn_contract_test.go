@@ -297,7 +297,8 @@ func TestAzureProviderA2ATurnNativeSendsCompatMessages(t *testing.T) {
 	assert.Contains(t, tool["content"], `"tool result"`)
 }
 
-func TestOpenAIProviderA2ATurnNativeDropsUnpairedAssistantToolCalls(t *testing.T) {
+func newCaptureServer(t *testing.T, answer string) (*httptest.Server, *[]any) {
+	t.Helper()
 	var captured []any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request map[string]any
@@ -318,7 +319,7 @@ func TestOpenAIProviderA2ATurnNativeDropsUnpairedAssistantToolCalls(t *testing.T
 					"index": 0,
 					"message": map[string]any{
 						"role":    "assistant",
-						"content": "final answer",
+						"content": answer,
 					},
 					"finish_reason": "stop",
 				},
@@ -330,6 +331,11 @@ func TestOpenAIProviderA2ATurnNativeDropsUnpairedAssistantToolCalls(t *testing.T
 			},
 		})
 	}))
+	return server, &captured
+}
+
+func TestOpenAIProviderA2ATurnNativeDropsUnpairedAssistantToolCalls(t *testing.T) {
+	server, capturedPtr := newCaptureServer(t, "final answer")
 	defer server.Close()
 
 	provider := &OpenAIProvider{
@@ -347,6 +353,7 @@ func TestOpenAIProviderA2ATurnNativeDropsUnpairedAssistantToolCalls(t *testing.T
 	)
 	require.NoError(t, err)
 
+	captured := *capturedPtr
 	require.Len(t, captured, 5)
 	assistant := decodeMessageObject(t, captured[2])
 	tool1 := decodeMessageObject(t, captured[3])
@@ -360,38 +367,7 @@ func TestOpenAIProviderA2ATurnNativeDropsUnpairedAssistantToolCalls(t *testing.T
 }
 
 func TestAzureProviderA2ATurnNativeDropsUnpairedAssistantToolCalls(t *testing.T) {
-	var captured []any
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var request map[string]any
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
-		rawMessages, ok := request["messages"].([]any)
-		require.True(t, ok)
-		captured = rawMessages
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"id":      "chatcmpl-test",
-			"object":  "chat.completion",
-			"created": 1234567890,
-			"model":   "gpt-4",
-			"choices": []map[string]any{
-				{
-					"index": 0,
-					"message": map[string]any{
-						"role":    "assistant",
-						"content": "azure answer",
-					},
-					"finish_reason": "stop",
-				},
-			},
-			"usage": map[string]any{
-				"prompt_tokens":     10,
-				"completion_tokens": 5,
-				"total_tokens":      15,
-			},
-		})
-	}))
+	server, capturedPtr := newCaptureServer(t, "azure answer")
 	defer server.Close()
 
 	provider := &AzureProvider{
@@ -410,6 +386,7 @@ func TestAzureProviderA2ATurnNativeDropsUnpairedAssistantToolCalls(t *testing.T)
 	)
 	require.NoError(t, err)
 
+	captured := *capturedPtr
 	require.Len(t, captured, 5)
 	assistant := decodeMessageObject(t, captured[2])
 	tool1 := decodeMessageObject(t, captured[3])
@@ -423,38 +400,7 @@ func TestAzureProviderA2ATurnNativeDropsUnpairedAssistantToolCalls(t *testing.T)
 }
 
 func TestOpenAIProviderA2ATurnNativeNormalizesEmptyAssistantContent(t *testing.T) {
-	var captured []any
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var request map[string]any
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
-		rawMessages, ok := request["messages"].([]any)
-		require.True(t, ok)
-		captured = rawMessages
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"id":      "chatcmpl-test",
-			"object":  "chat.completion",
-			"created": 1234567890,
-			"model":   "gpt-4",
-			"choices": []map[string]any{
-				{
-					"index": 0,
-					"message": map[string]any{
-						"role":    "assistant",
-						"content": "final answer",
-					},
-					"finish_reason": "stop",
-				},
-			},
-			"usage": map[string]any{
-				"prompt_tokens":     10,
-				"completion_tokens": 5,
-				"total_tokens":      15,
-			},
-		})
-	}))
+	server, capturedPtr := newCaptureServer(t, "final answer")
 	defer server.Close()
 
 	provider := &OpenAIProvider{
@@ -471,6 +417,7 @@ func TestOpenAIProviderA2ATurnNativeNormalizesEmptyAssistantContent(t *testing.T
 		nil,
 	)
 	require.NoError(t, err)
+	captured := *capturedPtr
 	require.Len(t, captured, 4)
 	assistant := decodeMessageObject(t, captured[2])
 	assert.Equal(t, "assistant", assistant["role"])
@@ -478,38 +425,7 @@ func TestOpenAIProviderA2ATurnNativeNormalizesEmptyAssistantContent(t *testing.T
 }
 
 func TestAzureProviderA2ATurnNativeNormalizesEmptyAssistantContent(t *testing.T) {
-	var captured []any
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var request map[string]any
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
-		rawMessages, ok := request["messages"].([]any)
-		require.True(t, ok)
-		captured = rawMessages
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"id":      "chatcmpl-test",
-			"object":  "chat.completion",
-			"created": 1234567890,
-			"model":   "gpt-4",
-			"choices": []map[string]any{
-				{
-					"index": 0,
-					"message": map[string]any{
-						"role":    "assistant",
-						"content": "azure answer",
-					},
-					"finish_reason": "stop",
-				},
-			},
-			"usage": map[string]any{
-				"prompt_tokens":     10,
-				"completion_tokens": 5,
-				"total_tokens":      15,
-			},
-		})
-	}))
+	server, capturedPtr := newCaptureServer(t, "azure answer")
 	defer server.Close()
 
 	provider := &AzureProvider{
@@ -527,6 +443,7 @@ func TestAzureProviderA2ATurnNativeNormalizesEmptyAssistantContent(t *testing.T)
 		nil,
 	)
 	require.NoError(t, err)
+	captured := *capturedPtr
 	require.Len(t, captured, 4)
 	assistant := decodeMessageObject(t, captured[2])
 	assert.Equal(t, "assistant", assistant["role"])

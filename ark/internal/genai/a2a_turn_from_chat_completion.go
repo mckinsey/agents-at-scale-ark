@@ -38,7 +38,7 @@ func buildA2ATurnResultFromChatChoice(choice openai.ChatCompletionChoice, assist
 		return nil, fmt.Errorf("failed to convert assistant message to A2A: %w", err)
 	}
 
-	var a2aToolCalls []A2AToolCall
+	a2aToolCalls := make([]A2AToolCall, 0, len(choice.Message.ToolCalls))
 	for _, tc := range choice.Message.ToolCalls {
 		a2aToolCalls = append(a2aToolCalls, A2AToolCall{
 			ID:        tc.ID,

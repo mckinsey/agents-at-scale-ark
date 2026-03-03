@@ -166,6 +166,42 @@ func (a *openAIA2AModelAdapter) cacheToolOutcomes(outcomes []A2AToolOutcome) {
 	}
 }
 
+func pairToolCallsForAssistantMessageAdapter(current Message, messages []Message, startIdx int, toolOutcomeByID map[string]string) (out []Message, nextIdx int) {
+	out = append(out, current)
+	j := startIdx + 1
+	explicitByID := make(map[string]Message)
+	explicitOrder := make([]Message, 0)
+	for j < len(messages) && messages[j].OfTool != nil {
+		toolMsg := messages[j]
+		explicitOrder = append(explicitOrder, toolMsg)
+		explicitByID[toolMsg.OfTool.ToolCallID] = toolMsg
+		j++
+	}
+
+	usedExplicit := make(map[string]bool)
+	for _, toolCall := range current.OfAssistant.ToolCalls {
+		toolCallID := toolCall.ID
+		if toolCallID == "" {
+			continue
+		}
+		if explicit, ok := explicitByID[toolCallID]; ok {
+			out = append(out, explicit)
+			usedExplicit[toolCallID] = true
+			continue
+		}
+		if content, ok := toolOutcomeByID[toolCallID]; ok {
+			out = append(out, openai.ToolMessage(content, toolCallID))
+		}
+	}
+
+	for _, explicit := range explicitOrder {
+		if !usedExplicit[explicit.OfTool.ToolCallID] {
+			out = append(out, explicit)
+		}
+	}
+	return out, j
+}
+
 func (a *openAIA2AModelAdapter) ensureAssistantToolCallsArePaired(messages []Message) []Message {
 	if len(messages) == 0 {
 		return messages
@@ -179,41 +215,9 @@ func (a *openAIA2AModelAdapter) ensureAssistantToolCallsArePaired(messages []Mes
 			continue
 		}
 
-		out = append(out, current)
-		j := i + 1
-		explicitByID := make(map[string]Message)
-		explicitOrder := make([]Message, 0)
-		for j < len(messages) && messages[j].OfTool != nil {
-			toolMsg := messages[j]
-			explicitOrder = append(explicitOrder, toolMsg)
-			explicitByID[toolMsg.OfTool.ToolCallID] = toolMsg
-			j++
-		}
-
-		usedExplicit := make(map[string]bool)
-		for _, toolCall := range current.OfAssistant.ToolCalls {
-			toolCallID := toolCall.ID
-			if toolCallID == "" {
-				continue
-			}
-			if explicit, ok := explicitByID[toolCallID]; ok {
-				out = append(out, explicit)
-				usedExplicit[toolCallID] = true
-				continue
-			}
-			if content, ok := a.toolOutcomeByID[toolCallID]; ok {
-				out = append(out, openai.ToolMessage(content, toolCallID))
-			}
-		}
-
-		// Preserve any explicit tool messages we couldn't map to assistant calls.
-		for _, explicit := range explicitOrder {
-			if !usedExplicit[explicit.OfTool.ToolCallID] {
-				out = append(out, explicit)
-			}
-		}
-
-		i = j
+		pairedOut, nextIdx := pairToolCallsForAssistantMessageAdapter(current, messages, i, a.toolOutcomeByID)
+		out = append(out, pairedOut...)
+		i = nextIdx
 	}
 	return out
 }

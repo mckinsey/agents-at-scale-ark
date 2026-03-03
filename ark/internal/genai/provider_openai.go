@@ -38,29 +38,7 @@ func (op *OpenAIProvider) A2ATurnNative(
 	tools []A2AToolDefinition,
 	_ EventStreamInterface,
 ) (*A2ATurnResult, error) {
-	compatMessages, err := convertA2AMessagesToCompatMultimodal(messages)
-	if err != nil {
-		return nil, fmt.Errorf("openai native turn: failed to convert A2A messages: %w", err)
-	}
-	compatMessages = normalizeAssistantToolCallMessages(compatMessages, buildToolOutcomeContentByID(toolOutcomes))
-	openAITools := a2aToolDefsToOpenAI(tools)
-	response, err := op.ChatCompletion(ctx, compatMessages, 1, openAITools)
-	if err != nil {
-		return nil, err
-	}
-	if len(response.Choices) == 0 {
-		return nil, fmt.Errorf("openai native turn: model returned empty response")
-	}
-	result, err := buildA2ATurnResultFromChatChoice(response.Choices[0], "")
-	if err != nil {
-		return nil, err
-	}
-	result.Usage = &A2ATurnUsage{
-		PromptTokens:     response.Usage.PromptTokens,
-		CompletionTokens: response.Usage.CompletionTokens,
-		TotalTokens:      response.Usage.TotalTokens,
-	}
-	return result, nil
+	return executeChatCompletionNativeTurn(ctx, op, "openai", messages, toolOutcomes, tools)
 }
 
 func (op *OpenAIProvider) HealthCheck(ctx context.Context) error {

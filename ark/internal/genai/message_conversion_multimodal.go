@@ -15,36 +15,7 @@ func A2AToOpenAIMessageMultimodal(msg protocol.Message) (openai.ChatCompletionMe
 		return A2AToOpenAIMessage(msg)
 	}
 
-	contentParts := make([]openai.ChatCompletionContentPartUnionParam, 0, len(msg.Parts))
-	for _, part := range msg.Parts {
-		switch p := part.(type) {
-		case protocol.TextPart:
-			if p.Text != "" {
-				contentParts = append(contentParts, openai.TextContentPart(p.Text))
-			}
-		case *protocol.TextPart:
-			if p.Text != "" {
-				contentParts = append(contentParts, openai.TextContentPart(p.Text))
-			}
-		case protocol.DataPart:
-			if p.Data != nil {
-				if raw, err := json.Marshal(p.Data); err == nil {
-					contentParts = append(contentParts, openai.TextContentPart(string(raw)))
-				}
-			}
-		case *protocol.DataPart:
-			if p.Data != nil {
-				if raw, err := json.Marshal(p.Data); err == nil {
-					contentParts = append(contentParts, openai.TextContentPart(string(raw)))
-				}
-			}
-		case protocol.FilePart:
-			contentParts = append(contentParts, a2aFileToOpenAIContentPart(p.File)...)
-		case *protocol.FilePart:
-			contentParts = append(contentParts, a2aFileToOpenAIContentPart(p.File)...)
-		}
-	}
-
+	contentParts := a2aPartsToOpenAIContentParts(msg.Parts)
 	if len(contentParts) == 0 {
 		return openai.UserMessage(ensureNonEmptyTextContent(extractTextFromParts(msg.Parts))), nil
 	}
@@ -52,6 +23,40 @@ func A2AToOpenAIMessageMultimodal(msg protocol.Message) (openai.ChatCompletionMe
 		return openai.UserMessage(ensureNonEmptyTextContent(contentParts[0].OfText.Text)), nil
 	}
 	return openai.UserMessage(contentParts), nil
+}
+
+func a2aPartsToOpenAIContentParts(parts []protocol.Part) []openai.ChatCompletionContentPartUnionParam {
+	contentParts := make([]openai.ChatCompletionContentPartUnionParam, 0, len(parts))
+	for _, part := range parts {
+		if converted := convertA2APartToOpenAIContent(part); converted != nil {
+			contentParts = append(contentParts, converted...)
+		}
+	}
+	return contentParts
+}
+
+func convertA2APartToOpenAIContent(part protocol.Part) []openai.ChatCompletionContentPartUnionParam {
+	switch p := part.(type) {
+	case *protocol.TextPart:
+		return convertA2APartToOpenAIContent(*p)
+	case protocol.TextPart:
+		if p.Text != "" {
+			return []openai.ChatCompletionContentPartUnionParam{openai.TextContentPart(p.Text)}
+		}
+	case *protocol.DataPart:
+		return convertA2APartToOpenAIContent(*p)
+	case protocol.DataPart:
+		if p.Data != nil {
+			if raw, err := json.Marshal(p.Data); err == nil {
+				return []openai.ChatCompletionContentPartUnionParam{openai.TextContentPart(string(raw))}
+			}
+		}
+	case *protocol.FilePart:
+		return a2aFileToOpenAIContentPart(p.File)
+	case protocol.FilePart:
+		return a2aFileToOpenAIContentPart(p.File)
+	}
+	return nil
 }
 
 func OpenAIToA2AMessageMultimodal(msg openai.ChatCompletionMessageParamUnion) (protocol.Message, error) {

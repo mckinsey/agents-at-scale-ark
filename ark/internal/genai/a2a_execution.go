@@ -97,13 +97,12 @@ func (e *A2AExecutionEngine) executeA2A(ctx context.Context, agentName, namespac
 
 	a2aResponse, err := ExecuteA2AAgent(ctx, e.client, a2aAddress, a2aServer.Spec.Headers, namespace, userInput, metadata, agentName, queryName, contextID, e.eventingRecorder, &a2aServer)
 	if err != nil {
-		modelID := fmt.Sprintf("agent/%s", agentName)
-		streamA2AError(ctx, eventStream, modelID, err)
+		streamA2AError(ctx, eventStream, err)
 		e.eventingRecorder.Fail(ctx, "A2AExecution", fmt.Sprintf("A2A execution failed: %v", err), err, operationData)
 		return nil, err
 	}
 
-	if streamErr := emitA2ABlockingResponse(ctx, eventStream, agentName, a2aResponse); streamErr != nil {
+	if streamErr := emitA2ABlockingResponse(ctx, eventStream, a2aResponse); streamErr != nil {
 		logf.FromContext(ctx).Error(streamErr, "failed to stream A2A blocking response", "agent", agentName)
 	}
 
@@ -168,44 +167,59 @@ func (e *A2AExecutionEngine) consumeA2AStreamEvents(ctx context.Context, events 
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case event, ok := <-currentEvents:
-			if !ok {
-				if !state.received {
-					return nil, fmt.Errorf("a2a streaming returned no events")
-				}
-				if state.done {
-					return state.finalize(), nil
-				}
-				// After resubscription, clients may receive duplicate or reordered events
-			// because the resumed stream replays from the server's last checkpoint.
-			// This is consistent with SSE replay semantics; clients should tolerate duplicates.
-			if resub != nil && !resubscribeAttempted && state.response.TaskID != "" {
-					resubscribeAttempted = true
-					log := logf.FromContext(ctx)
-					log.Info("stream closed before terminal state, attempting resubscribe", "taskId", state.response.TaskID, "agent", agentName)
-				resumed, resubErr := resub.ResubscribeToTask(ctx, state.response.TaskID)
-				if resubErr != nil {
-					log.Error(resubErr, "resubscribe failed, returning partial result", "taskId", state.response.TaskID)
-					result := state.finalize()
-					result.Partial = true
-					return result, nil
-				}
-					currentEvents = resumed
-					continue
-				}
-				return state.finalize(), nil
-			}
-			state.received = true
-			if event.Result == nil {
-				continue
-			}
-			if err := state.handleEvent(ctx, e.client, event, eventStream, agentName, namespace, queryName, a2aServer); err != nil {
+			response, resumed, err := e.handleStreamMessage(ctx, state, event, ok, resub, resubscribeAttempted, eventStream, agentName, namespace, queryName, a2aServer)
+			if err != nil {
 				return nil, err
 			}
-			if state.done {
-				return state.finalize(), nil
+			if resumed != nil {
+				resubscribeAttempted = true
+				currentEvents = resumed
+				continue
+			}
+			if response != nil {
+				return response, nil
 			}
 		}
 	}
+}
+
+func (e *A2AExecutionEngine) handleStreamMessage(ctx context.Context, state *a2aStreamState, event protocol.StreamingMessageEvent, ok bool, resub StreamResubscriber, resubscribeAttempted bool, eventStream EventStreamInterface, agentName, namespace, queryName string, a2aServer *arkv1prealpha1.A2AServer) (*A2AResponse, <-chan protocol.StreamingMessageEvent, error) {
+	if !ok {
+		return e.handleStreamClose(ctx, state, resub, resubscribeAttempted, agentName)
+	}
+	state.received = true
+	if event.Result == nil {
+		return nil, nil, nil
+	}
+	if err := state.handleEvent(ctx, e.client, event, eventStream, agentName, namespace, queryName, a2aServer); err != nil {
+		return nil, nil, err
+	}
+	if state.done {
+		return state.finalize(), nil, nil
+	}
+	return nil, nil, nil
+}
+
+func (e *A2AExecutionEngine) handleStreamClose(ctx context.Context, state *a2aStreamState, resub StreamResubscriber, resubscribeAttempted bool, agentName string) (*A2AResponse, <-chan protocol.StreamingMessageEvent, error) {
+	if !state.received {
+		return nil, nil, fmt.Errorf("a2a streaming returned no events")
+	}
+	if state.done {
+		return state.finalize(), nil, nil
+	}
+	if resub != nil && !resubscribeAttempted && state.response.TaskID != "" {
+		log := logf.FromContext(ctx)
+		log.Info("stream closed before terminal state, attempting resubscribe", "taskId", state.response.TaskID, "agent", agentName)
+		resumed, resubErr := resub.ResubscribeToTask(ctx, state.response.TaskID)
+		if resubErr != nil {
+			log.Error(resubErr, "resubscribe failed, returning partial result", "taskId", state.response.TaskID)
+			result := state.finalize()
+			result.Partial = true
+			return result, nil, nil
+		}
+		return nil, resumed, nil
+	}
+	return state.finalize(), nil, nil
 }
 
 func getA2AServerRouting(agentAnnotations map[string]string) (string, string, error) {
@@ -275,16 +289,14 @@ func buildA2AMessagesFromResponse(response *A2AResponse) []protocol.Message {
 	return nil
 }
 
-func emitA2ABlockingResponse(ctx context.Context, eventStream EventStreamInterface, agentName string, a2aResponse *A2AResponse) error {
+func emitA2ABlockingResponse(ctx context.Context, eventStream EventStreamInterface, a2aResponse *A2AResponse) error {
 	if eventStream == nil || a2aResponse == nil {
 		return nil
 	}
-	completionID := getQueryID(ctx)
-	modelID := fmt.Sprintf("agent/%s", agentName)
-	return streamA2ANativeBlockingResponse(ctx, eventStream, modelID, completionID, a2aResponse)
+	return streamA2ANativeBlockingResponse(ctx, eventStream, a2aResponse)
 }
 
-func streamA2ANativeBlockingResponse(ctx context.Context, eventStream EventStreamInterface, modelID, completionID string, a2aResponse *A2AResponse) error {
+func streamA2ANativeBlockingResponse(ctx context.Context, eventStream EventStreamInterface, a2aResponse *A2AResponse) error {
 	if a2aResponse.Message != nil {
 		return streamA2AEvent(ctx, eventStream, a2aResponse.Message)
 	}
@@ -409,6 +421,13 @@ func (s *a2aStreamState) handleTaskStatusUpdateEvent(ctx context.Context, k8sCli
 	}
 	if update.Final {
 		s.done = true
+		if update.Status.State == protocol.TaskStateFailed {
+			errMsg := "task failed"
+			if update.Status.Message != nil && len(update.Status.Message.Parts) > 0 {
+				errMsg = extractTextFromParts(update.Status.Message.Parts)
+			}
+			return fmt.Errorf("%s", errMsg)
+		}
 	}
 	return nil
 }
@@ -460,7 +479,7 @@ func streamA2AEvent(ctx context.Context, eventStream EventStreamInterface, paylo
 	return nil
 }
 
-func streamA2AError(ctx context.Context, eventStream EventStreamInterface, modelID string, err error) {
+func streamA2AError(ctx context.Context, eventStream EventStreamInterface, err error) {
 	if eventStream == nil || err == nil {
 		return
 	}

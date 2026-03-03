@@ -9,16 +9,16 @@ import (
 type contextKey string
 
 const (
-	queryIDKey      contextKey = "queryId"
-	sessionIDKey    contextKey = "sessionId"
-	queryNameKey    contextKey = "queryName"
-	a2aContextIDKey contextKey = "a2aContextId"
-	QueryContextKey contextKey = "queryContext"
-	targetKey          contextKey = "target"
-	teamKey            contextKey = "team"
-	agentKey           contextKey = "agent"
-	modelKey           contextKey = "model"
-	toolEventStreamKey contextKey = "toolEventStream"
+	queryIDKey             contextKey = "queryId"
+	sessionIDKey           contextKey = "sessionId"
+	queryNameKey           contextKey = "queryName"
+	a2aContextIDKey        contextKey = "a2aContextId"
+	QueryContextKey        contextKey = "queryContext"
+	targetKey              contextKey = "target"
+	teamKey                contextKey = "team"
+	agentKey               contextKey = "agent"
+	modelKey               contextKey = "model"
+	toolEventStreamKey     contextKey = "toolEventStream"
 	streamCorrelationIDKey contextKey = "streamCorrelationId"
 )
 
