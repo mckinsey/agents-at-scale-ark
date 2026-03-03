@@ -176,36 +176,9 @@ func (op *OpenAIProvider) processToolCalls(toolCallsMap map[int64]*openai.ChatCo
 
 	// Send final accumulated message if needed
 	if streamFunc != nil && len(toolCalls) > 0 {
-		return op.sendFinalToolCallChunk(fullResponse, toolCalls, streamFunc)
+		return SendFinalToolCallChunk(fullResponse, toolCalls, streamFunc)
 	}
 
-	return nil
-}
-
-// sendFinalToolCallChunk sends the final chunk with accumulated tool calls
-func (op *OpenAIProvider) sendFinalToolCallChunk(fullResponse *openai.ChatCompletion, toolCalls []openai.ChatCompletionMessageToolCall, streamFunc func(*openai.ChatCompletionChunk) error) error {
-	finalChunk := &openai.ChatCompletionChunk{
-		ID:      fullResponse.ID,
-		Object:  "chat.completion.chunk",
-		Created: fullResponse.Created,
-		Model:   fullResponse.Model,
-		Choices: []openai.ChatCompletionChunkChoice{
-			{
-				Index:        0,
-				Delta:        openai.ChatCompletionChunkChoiceDelta{},
-				FinishReason: fullResponse.Choices[0].FinishReason,
-			},
-		},
-	}
-
-	// Send complete accumulated message as final update
-	// This is a special chunk that contains the full message with tool calls
-	// It's marked with a special field so memory can handle it appropriately
-	logf.Log.Info("Sending final accumulated message with tool calls", "toolCount", len(toolCalls))
-	if err := streamFunc(finalChunk); err != nil {
-		logf.Log.Error(err, "Failed to send final accumulated message")
-		return err
-	}
 	return nil
 }
 

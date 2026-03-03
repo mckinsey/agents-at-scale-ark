@@ -1,6 +1,6 @@
 import { AlertCircle } from 'lucide-react';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import type { RefObject } from 'react';
 
 import { ChatMessage } from '@/components/chat/chat-message';
@@ -189,6 +189,7 @@ export function ChatMessageList({
     return result;
   }, [messages, debugMode]);
 
+
   const lastAssistantName = useMemo(() => {
     if (!isGraphStrategy) return undefined;
     for (let i = processedMessages.length - 1; i >= 0; i--) {
@@ -281,23 +282,26 @@ export function ChatMessageList({
           <div key={pm.index} className="flex flex-col gap-2">
             {transitionElement}
             {pm.hasToolCalls &&
-              pm.toolCallsWithResults!.map((toolCall, toolIndex) => (
-                <div key={`${pm.index}-tool-${toolIndex}`}>
-                  <ChatMessage
-                    role="assistant"
-                    content=""
-                    viewMode={viewMode}
-                    toolCalls={[
-                      toolCall as {
-                        id: string;
-                        type: 'function';
-                        function: { name: string; arguments: string };
-                        result?: string;
-                      },
-                    ]}
-                  />
-                </div>
-              ))}
+              pm.toolCallsWithResults!.map((toolCall, toolIndex) => {
+                const toolKey = `${pm.index}-tool-${toolIndex}`;
+                return (
+                  <div key={toolKey}>
+                    <ChatMessage
+                      role="assistant"
+                      content=""
+                      viewMode={viewMode}
+                      toolCalls={[
+                        toolCall as {
+                          id: string;
+                          type: 'function';
+                          function: { name: string; arguments: string };
+                          result?: string;
+                        },
+                      ]}
+                    />
+                  </div>
+                );
+              })}
             {pm.hasContent && (
               <ChatMessage
                 role={pm.msg.role as 'user' | 'assistant' | 'system'}
