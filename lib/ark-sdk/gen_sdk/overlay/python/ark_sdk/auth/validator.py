@@ -70,24 +70,20 @@ class TokenValidator:
             self._jwks_cache = self._fetch_jwks()
         return self._jwks_cache
     
-    def _get_signing_key(self, token: str) -> Any:
+    def _get_signing_key(self, token: str) -> PyJWK:
         """Get the signing key for a JWT token from JWKS."""
         try:
-            # Decode header to get kid (key ID)
             unverified_header = jwt.get_unverified_header(token)
             kid = unverified_header.get('kid')
             
             if not kid:
                 raise TokenValidationError("Token header does not contain 'kid'")
             
-            # Get JWKS
             jwks = self._get_jwks()
             
-            # Find the key with matching kid
             for key in jwks.get('keys', []):
                 if key.get('kid') == kid:
-                    # Construct the key
-                    return PyJWK(key).key
+                    return PyJWK(key)
             
             raise TokenValidationError(f"Unable to find key with kid: {kid}")
             
@@ -110,13 +106,11 @@ class TokenValidator:
         """
         try:
             # Get the signing key
-            signing_key = self._get_signing_key(token)
+            jwk = self._get_signing_key(token)
 
-            # Use issuer and audience from configuration
             audience = self.config.audience
             issuer = self.config.issuer
 
-            # Build options for validation
             options = {
                 "verify_signature": True,
                 "verify_exp": True,
@@ -124,10 +118,9 @@ class TokenValidator:
                 "verify_iss": issuer is not None,
             }
 
-            # Decode and validate the token
             payload = jwt.decode(
                 token,
-                signing_key,
+                jwk.key,
                 algorithms=[self.config.jwt_algorithm],
                 audience=audience,
                 issuer=issuer,
