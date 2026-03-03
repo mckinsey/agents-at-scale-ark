@@ -4,14 +4,18 @@ import { apiClient } from '@/lib/api/client'
 import type { AgentDetailResponse, AgentListResponse } from '@/lib/services/agents'
 
 // Mock the API client
-vi.mock('@/lib/api/client', () => ({
-  apiClient: {
-    get: vi.fn(),
-    post: vi.fn(),
-    put: vi.fn(),
-    delete: vi.fn(),
-  },
-}))
+vi.mock('@/lib/api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api/client')>()
+  return {
+    ...actual,
+    apiClient: {
+      get: vi.fn(),
+      post: vi.fn(),
+      put: vi.fn(),
+      delete: vi.fn(),
+    },
+  }
+})
 
 describe('agentsService', () => {
   const mockAgent: AgentDetailResponse = {
