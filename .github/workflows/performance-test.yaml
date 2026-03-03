@@ -11,7 +11,7 @@ on:
   # to it passing. Performance tests also run nightly.
   pull_request:
     paths:
-      - 'docs/specs/performance/linear-query-scaling-targets.yaml'
+      - 'docs/specs/performance/**'
 
 permissions:
   contents: read
