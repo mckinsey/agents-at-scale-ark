@@ -1,5 +1,5 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient } from '@/lib/api/client';
+import { apiClient, withNamespace } from '@/lib/api/client';
 
 // A2A Server interface for UI compatibility
 export interface A2AServer {
@@ -62,10 +62,9 @@ export interface A2AServerConfiguration {
 export const A2AServersService = {
   // Get all A2A servers in a namespace
   async getAll(namespace?: string): Promise<A2AServer[]> {
-    const params = namespace ? { namespace } : undefined;
     const response = await apiClient.get<A2AServerListResponse>(
       `/api/v1/a2a-servers`,
-      params ? { params } : undefined,
+      withNamespace(namespace),
     );
     console.log('A2A Servers:', response.items);
     return response.items.map(item => ({
@@ -75,10 +74,9 @@ export const A2AServersService = {
   },
 
   async get(A2AServerName: string, namespace?: string): Promise<A2AServer> {
-    const params = namespace ? { namespace } : undefined;
     const response = await apiClient.get<A2AServer>(
       `/api/v1/a2a-servers/${A2AServerName}`,
-      params ? { params } : undefined,
+      withNamespace(namespace),
     );
     return {
       ...response,

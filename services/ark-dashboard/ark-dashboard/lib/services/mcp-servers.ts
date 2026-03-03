@@ -1,5 +1,5 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient } from '@/lib/api/client';
+import { apiClient, withNamespace } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
 export type MCPServerResponse = components['schemas']['MCPServerResponse'];
@@ -40,10 +40,9 @@ export type ValueFrom = {
 export const mcpServersService = {
   // Get all MCP servers in a namespace
   async getAll(namespace?: string): Promise<MCPServer[]> {
-    const params = namespace ? { namespace } : undefined;
     const response = await apiClient.get<MCPServerListResponse>(
       `/api/v1/mcp-servers`,
-      params ? { params } : undefined,
+      withNamespace(namespace),
     );
 
     const mcpservers = await Promise.all(
@@ -66,10 +65,9 @@ export const mcpServersService = {
     namespace?: string,
   ): Promise<MCPServerDetail | null> {
     try {
-      const params = namespace ? { namespace } : undefined;
       const response = await apiClient.get<MCPServerDetailResponse>(
         `/api/v1/mcp-servers/${mcpServerName}`,
-        params ? { params } : undefined,
+        withNamespace(namespace),
       );
       return {
         ...response,

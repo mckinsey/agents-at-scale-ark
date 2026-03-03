@@ -209,6 +209,12 @@ class APIClient {
   }
 }
 
+export function withNamespace(
+  namespace?: string,
+): RequestOptions | undefined {
+  return namespace ? { params: { namespace } } : undefined;
+}
+
 // Create and export a singleton instance
 export const apiClient = new APIClient(
   API_CONFIG.baseURL,

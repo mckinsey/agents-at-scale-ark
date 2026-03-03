@@ -1,5 +1,5 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient } from '@/lib/api/client';
+import { apiClient, withNamespace } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
 // Use the generated type from OpenAPI
@@ -29,12 +29,11 @@ export const namespacesService = {
     cluster: string | null;
     read_only_mode: boolean;
   }> {
-    const params = namespace ? { namespace } : undefined;
     const response = await apiClient.get<{
       namespace: string;
       cluster: string | null;
       read_only_mode: boolean;
-    }>('/api/v1/context', params ? { params } : undefined);
+    }>('/api/v1/context', withNamespace(namespace));
     return response;
   },
 

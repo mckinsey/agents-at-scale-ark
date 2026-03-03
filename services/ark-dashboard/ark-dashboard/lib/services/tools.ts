@@ -1,5 +1,5 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient } from '@/lib/api/client';
+import { apiClient, withNamespace } from '@/lib/api/client';
 
 // Tool interface for UI compatibility
 export interface Tool {
@@ -36,20 +36,18 @@ interface ToolListResponse {
 export const toolsService = {
   // Get all tools in a namespace
   async getAll(namespace?: string): Promise<Tool[]> {
-    const params = namespace ? { namespace } : undefined;
     const response = await apiClient.get<ToolListResponse>(
       `/api/v1/tools`,
-      params ? { params } : undefined,
+      withNamespace(namespace),
     );
     return response.items.map(item => ({ ...item, id: item.name }));
   },
 
   // Get detailed tool information including schema
   async getDetail(toolName: string, namespace?: string): Promise<ToolDetail> {
-    const params = namespace ? { namespace } : undefined;
     const response = await apiClient.get<ToolDetail>(
       `/api/v1/tools/${toolName}`,
-      params ? { params } : undefined,
+      withNamespace(namespace),
     );
     return response;
   },

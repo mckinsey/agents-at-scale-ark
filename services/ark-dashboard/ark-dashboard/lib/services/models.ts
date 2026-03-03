@@ -1,5 +1,5 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient } from '@/lib/api/client';
+import { apiClient, withNamespace } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
 // Helper type for axios errors
@@ -23,10 +23,9 @@ export type Model = ModelDetailResponse & { id: string };
 export const modelsService = {
   // Get all models
   async getAll(namespace?: string): Promise<Model[]> {
-    const params = namespace ? { namespace } : undefined;
     const response = await apiClient.get<ModelListResponse>(
       `/api/v1/models`,
-      params ? { params } : undefined,
+      withNamespace(namespace),
     );
 
     // Map the response items to include id for UI compatibility
@@ -44,10 +43,9 @@ export const modelsService = {
   // Get a single model by name
   async getByName(name: string, namespace?: string): Promise<Model | null> {
     try {
-      const params = namespace ? { namespace } : undefined;
       const response = await apiClient.get<ModelDetailResponse>(
         `/api/v1/models/${name}`,
-        params ? { params } : undefined,
+        withNamespace(namespace),
       );
       return {
         ...response,
