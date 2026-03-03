@@ -85,22 +85,16 @@ Verification: TODO
 
 **Status: Red** — results analysis not yet built.
 
-## Scaling Threshold
+## Scaling Targets
 
-The scaling threshold is a single value: the minimum ratio of actual throughput
-increase to expected throughput increase when concurrency doubles.
+Performance targets are defined in
+[`performance/linear-query-scaling-targets.yaml`](performance/linear-query-scaling-targets.yaml).
+Any change to that file triggers the performance test workflow on the PR.
 
-| Metric | Threshold |
-|---|---|
-| **Scaling ratio** | >= 0.8 |
-
-For example, if throughput at concurrency 2 is `T₂` and at concurrency 4 is
-`T₄`, the scaling ratio is `T₄ / (2 × T₂)`. A ratio of 1.0 is perfect linear
-scaling. The threshold of 0.8 allows for overhead while still demonstrating
-near-linear behaviour.
-
-The load test measures throughput at 3 concurrency levels (e.g. 1, 2, 4) and
-asserts that each step meets the threshold.
+The key target is the **scaling ratio**: the minimum ratio of actual throughput
+increase to expected throughput increase when concurrency doubles. A ratio of
+1.0 is perfect linear scaling. For example, if throughput at concurrency 2 is
+`T₂` and at concurrency 4 is `T₄`, the scaling ratio is `T₄ / (2 × T₂)`.
 
 ## Background
 

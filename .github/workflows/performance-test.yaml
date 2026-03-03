@@ -7,6 +7,11 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '0 3 * * *'
+  # We cannot change the query scaling targets without a pull request
+  # to it passing. Performance tests also run nightly.
+  pull_request:
+    paths:
+      - 'docs/specs/performance/linear-query-scaling-targets.yaml'
 
 permissions:
   contents: read

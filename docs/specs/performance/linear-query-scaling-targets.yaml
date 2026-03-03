@@ -1,0 +1,3 @@
+scaling_ratio_min: 0.8
+concurrency_levels: [1, 2, 4]
+backends: [etcd, postgresql]
