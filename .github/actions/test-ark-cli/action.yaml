@@ -93,20 +93,6 @@ runs:
       shell: bash
       run: ark status
 
-    - name: Build ark-controller image
-      shell: bash
-      run: |
-        set -x
-        cd ark
-
-        # Build controller Docker image with CI tag
-        docker build -t ark-controller:ci-test -f Dockerfile .
-
-        # Load image into K3s
-        docker save ark-controller:ci-test -o /tmp/ark-controller-ci.tar
-        sudo k3s ctr images import /tmp/ark-controller-ci.tar
-        rm /tmp/ark-controller-ci.tar
-
     - name: Login to Docker Registry
       if: ${{ inputs.is-fork-pr == 'false' }}
       shell: bash
@@ -125,13 +111,13 @@ runs:
           --wait --timeout=5m
 
         # Install ark-controller from local chart (includes CRDs)
-        # Use the locally built controller image
+        # Use pre-built controller image from registry cache
         helm upgrade --install ark-controller ark/dist/chart \
           --namespace ark-system \
           --create-namespace \
-          --set controllerManager.container.image.repository=ark-controller \
-          --set controllerManager.container.image.tag=ci-test \
-          --set controllerManager.container.image.pullPolicy=Never \
+          --set controllerManager.container.image.repository="${{ inputs.ci-cache-registry }}/ark-controller" \
+          --set controllerManager.container.image.tag="${{ inputs.ark-image-tag }}" \
+          --set controllerManager.container.image.pullPolicy=Always \
           --wait --timeout=5m
 
         # Install ark-tenant from local chart
