@@ -21,6 +21,24 @@ func TestNewDefaultCard(t *testing.T) {
 	if card.Capabilities.PushNotifications {
 		t.Error("expected push notifications to be false")
 	}
+	if card.ExecutionProfile == nil {
+		t.Fatal("expected execution profile to be set")
+	}
+	if card.ExecutionProfile.ToolMode != "callback" {
+		t.Errorf("unexpected tool mode: %s", card.ExecutionProfile.ToolMode)
+	}
+	if card.ExecutionProfile.MemoryMode != "inline" {
+		t.Errorf("unexpected memory mode: %s", card.ExecutionProfile.MemoryMode)
+	}
+	if !card.ExecutionProfile.StructuredOutput {
+		t.Error("expected structured output to be true")
+	}
+	if !card.ExecutionProfile.Streaming {
+		t.Error("expected streaming to be true")
+	}
+	if len(card.ExecutionProfile.SupportedModels) != 3 {
+		t.Fatalf("expected 3 supported models, got %d", len(card.ExecutionProfile.SupportedModels))
+	}
 }
 
 func TestHandler(t *testing.T) {
@@ -44,5 +62,11 @@ func TestHandler(t *testing.T) {
 	}
 	if result.Name != "ark-query-engine" {
 		t.Errorf("unexpected name in response: %s", result.Name)
+	}
+	if result.ExecutionProfile == nil {
+		t.Fatal("expected execution profile in response")
+	}
+	if result.ExecutionProfile.Schema != "https://ark.mckinsey.com/extensions/execution-profile/v1" {
+		t.Errorf("unexpected execution profile schema: %s", result.ExecutionProfile.Schema)
 	}
 }

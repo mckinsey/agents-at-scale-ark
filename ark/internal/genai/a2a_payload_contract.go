@@ -14,6 +14,13 @@ const (
 	A2APayloadSchemaToolResultV1          = "https://ark.mckinsey.com/payloads/tool-result/v1"
 	A2APayloadSchemaRoleHintV1            = "https://ark.mckinsey.com/payloads/role-hint/v1"
 	A2APayloadSchemaToolRequestV1         = "https://ark.mckinsey.com/payloads/tool-request/v1"
+
+	A2AExtensionSchemaExecutionProfileV1 = "https://ark.mckinsey.com/extensions/execution-profile/v1"
+
+	A2APayloadSchemaHistoryV1           = "https://ark.mckinsey.com/payloads/history/v1"
+	A2APayloadSchemaUserInputRequestV1  = "https://ark.mckinsey.com/payloads/user-input-request/v1"
+	A2APayloadSchemaUserInputResponseV1 = "https://ark.mckinsey.com/payloads/user-input-response/v1"
+	A2APayloadSchemaAuthCallbackV1      = "https://ark.mckinsey.com/payloads/auth-callback/v1"
 )
 
 type HistoryExtensionV1 struct {
@@ -198,4 +205,83 @@ func buildToolResultV2Message(results []ToolResultEntryV2) protocol.Message {
 			Data: payload,
 		},
 	})
+}
+
+type HistoryPayloadV1 struct {
+	Schema    string             `json:"schema"`
+	Strategy  string             `json:"strategy"`
+	Messages  []protocol.Message `json:"messages,omitempty"`
+	Truncated bool               `json:"truncated"`
+	MaxWindow int                `json:"maxWindow,omitempty"`
+	MemoryRef string             `json:"memoryRef,omitempty"`
+}
+
+type UserInputRequestPayloadV1 struct {
+	Schema    string   `json:"schema"`
+	Prompt    string   `json:"prompt"`
+	InputType string   `json:"inputType"`
+	Options   []string `json:"options,omitempty"`
+	Timeout   int      `json:"timeout,omitempty"`
+}
+
+type UserInputResponsePayloadV1 struct {
+	Schema    string `json:"schema"`
+	Value     string `json:"value"`
+	Cancelled bool   `json:"cancelled"`
+}
+
+type AuthCallbackPayloadV1 struct {
+	Schema    string   `json:"schema"`
+	Reason    string   `json:"reason"`
+	Provider  string   `json:"provider"`
+	Scopes    []string `json:"scopes,omitempty"`
+	ExpiresAt string   `json:"expiresAt,omitempty"`
+}
+
+func parseUserInputRequestPayload(msg *protocol.Message) *UserInputRequestPayloadV1 {
+	if msg == nil {
+		return nil
+	}
+	for _, part := range msg.Parts {
+		dp, ok := part.(*protocol.DataPart)
+		if !ok || dp.Data == nil {
+			continue
+		}
+		data, err := json.Marshal(dp.Data)
+		if err != nil {
+			continue
+		}
+		var payload UserInputRequestPayloadV1
+		if err := json.Unmarshal(data, &payload); err != nil {
+			continue
+		}
+		if payload.Schema == A2APayloadSchemaUserInputRequestV1 {
+			return &payload
+		}
+	}
+	return nil
+}
+
+func parseAuthCallbackPayload(msg *protocol.Message) *AuthCallbackPayloadV1 {
+	if msg == nil {
+		return nil
+	}
+	for _, part := range msg.Parts {
+		dp, ok := part.(*protocol.DataPart)
+		if !ok || dp.Data == nil {
+			continue
+		}
+		data, err := json.Marshal(dp.Data)
+		if err != nil {
+			continue
+		}
+		var payload AuthCallbackPayloadV1
+		if err := json.Unmarshal(data, &payload); err != nil {
+			continue
+		}
+		if payload.Schema == A2APayloadSchemaAuthCallbackV1 {
+			return &payload
+		}
+	}
+	return nil
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -17,6 +19,39 @@ import (
 )
 
 const ArkMetadataKey = "ark.mckinsey.com/execution-engine"
+
+type ExecutionProfile struct {
+	Schema           string   `json:"schema,omitempty"`
+	ToolMode         string   `json:"toolMode,omitempty"`
+	MemoryMode       string   `json:"memoryMode,omitempty"`
+	StructuredOutput bool     `json:"structuredOutput,omitempty"`
+	Streaming        bool     `json:"streaming,omitempty"`
+	SupportedModels  []string `json:"supportedModels,omitempty"`
+}
+
+func FetchExecutionProfile(ctx context.Context, address string) (*ExecutionProfile, error) {
+	cardURL := fmt.Sprintf("%s/.well-known/agent-card.json", address)
+	httpClient := &http.Client{Timeout: 5 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cardURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create agent card request: %w", err)
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("agent card fetch failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("agent card returned status %d", resp.StatusCode)
+	}
+	var card struct {
+		ExecutionProfile *ExecutionProfile `json:"executionProfile"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&card); err != nil {
+		return nil, fmt.Errorf("failed to decode agent card: %w", err)
+	}
+	return card.ExecutionProfile, nil
+}
 
 type ExecutionEngineMessage struct {
 	Role    string `json:"role"`
@@ -257,41 +292,55 @@ func (c *ExecutionEngineA2AClient) consumeEngineStreamWithToolCallback(ctx conte
 					contextID = result.ContextID
 				}
 
-				if result.Status.State == protocol.TaskStateInputRequired {
-					toolRequest := parseToolRequestPayload(result.Status.Message)
-					if toolRequest != nil && toolRegistry != nil {
-						toolResults, err := c.executeToolCallbacks(ctx, toolRequest, toolRegistry, eventStream, contextID, taskID)
-						if err != nil {
-							return nil, fmt.Errorf("tool callback execution failed: %w", err)
-						}
-
-						resultMsg := buildToolResultV2Message(toolResults)
-						if taskID != "" {
-							resultMsg.TaskID = &taskID
-						}
-						if contextID != "" {
-							resultMsg.ContextID = &contextID
-						}
-
-						_, err = a2aClient.SendMessage(ctx, protocol.SendMessageParams{
-							RPCID:   protocol.GenerateRPCID(),
-							Message: resultMsg,
-						})
-						if err != nil {
-							return nil, fmt.Errorf("failed to send tool results to engine: %w", err)
-						}
-
-						resumed, err := a2aClient.ResubscribeTask(ctx, protocol.TaskIDParams{
-							RPCID: protocol.GenerateRPCID(),
-							ID:    taskID,
-						})
-						if err != nil {
-							return nil, fmt.Errorf("failed to resubscribe after tool callback: %w", err)
-						}
-						currentEvents = resumed
-						continue
+			if result.Status.State == protocol.TaskStateInputRequired {
+				toolRequest := parseToolRequestPayload(result.Status.Message)
+				if toolRequest != nil && toolRegistry != nil {
+					toolResults, err := c.executeToolCallbacks(ctx, toolRequest, toolRegistry, eventStream, contextID, taskID)
+					if err != nil {
+						return nil, fmt.Errorf("tool callback execution failed: %w", err)
 					}
+
+					resultMsg := buildToolResultV2Message(toolResults)
+					if taskID != "" {
+						resultMsg.TaskID = &taskID
+					}
+					if contextID != "" {
+						resultMsg.ContextID = &contextID
+					}
+
+					_, err = a2aClient.SendMessage(ctx, protocol.SendMessageParams{
+						RPCID:   protocol.GenerateRPCID(),
+						Message: resultMsg,
+					})
+					if err != nil {
+						return nil, fmt.Errorf("failed to send tool results to engine: %w", err)
+					}
+
+					resumed, err := a2aClient.ResubscribeTask(ctx, protocol.TaskIDParams{
+						RPCID: protocol.GenerateRPCID(),
+						ID:    taskID,
+					})
+					if err != nil {
+						return nil, fmt.Errorf("failed to resubscribe after tool callback: %w", err)
+					}
+					currentEvents = resumed
+					continue
 				}
+
+				if userInputReq := parseUserInputRequestPayload(result.Status.Message); userInputReq != nil {
+					if err := streamA2AEvent(ctx, eventStream, result); err != nil {
+						return nil, err
+					}
+					continue
+				}
+
+				if authCallback := parseAuthCallbackPayload(result.Status.Message); authCallback != nil {
+					if err := streamA2AEvent(ctx, eventStream, result); err != nil {
+						return nil, err
+					}
+					continue
+				}
+			}
 
 				if result.Status.Message != nil {
 					if text := extractTextFromParts(result.Status.Message.Parts); text != "" {

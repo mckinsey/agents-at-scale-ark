@@ -30,8 +30,15 @@ type ToolDefinition struct {
 	Parameters  map[string]any `json:"parameters,omitempty"`
 }
 
+type HistoryConfig struct {
+	Strategy  string `json:"strategy,omitempty"`
+	MaxWindow int    `json:"maxWindow,omitempty"`
+	MemoryRef string `json:"memoryRef,omitempty"`
+}
+
 type EngineMetadata struct {
-	Agent   AgentConfig      `json:"agent"`
-	Tools   []ToolDefinition `json:"tools,omitempty"`
-	History []any            `json:"history,omitempty"`
+	Agent         AgentConfig      `json:"agent"`
+	Tools         []ToolDefinition `json:"tools,omitempty"`
+	History       []any            `json:"history,omitempty"`
+	HistoryConfig *HistoryConfig   `json:"historyConfig,omitempty"`
 }

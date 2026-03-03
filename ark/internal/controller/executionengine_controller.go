@@ -98,6 +98,19 @@ func (r *ExecutionEngineReconciler) processExecutionEngine(ctx context.Context, 
 	return ctrl.Result{}, nil
 }
 
+type agentCardResponse struct {
+	Name             string                 `json:"name"`
+	ExecutionProfile *executionProfileEntry `json:"executionProfile,omitempty"`
+}
+
+type executionProfileEntry struct {
+	ToolMode         string   `json:"toolMode,omitempty"`
+	MemoryMode       string   `json:"memoryMode,omitempty"`
+	StructuredOutput bool     `json:"structuredOutput,omitempty"`
+	Streaming        bool     `json:"streaming,omitempty"`
+	SupportedModels  []string `json:"supportedModels,omitempty"`
+}
+
 func (r *ExecutionEngineReconciler) fetchAgentCard(ctx context.Context, address, engineName string) error {
 	cardURL := fmt.Sprintf("%s/.well-known/agent-card.json", address)
 	httpClient := &http.Client{Timeout: 5 * time.Second}
@@ -113,11 +126,24 @@ func (r *ExecutionEngineReconciler) fetchAgentCard(ctx context.Context, address,
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("agent card returned status %d for %s", resp.StatusCode, engineName)
 	}
-	var card map[string]interface{}
+	var card agentCardResponse
 	if err := json.NewDecoder(resp.Body).Decode(&card); err != nil {
 		return fmt.Errorf("failed to decode agent card for %s: %w", engineName, err)
 	}
-	logf.FromContext(ctx).Info("Agent Card fetched successfully", "executionEngine", engineName, "agentName", card["name"])
+	log := logf.FromContext(ctx)
+	if card.ExecutionProfile != nil {
+		log.Info("Agent Card fetched with execution profile",
+			"executionEngine", engineName,
+			"agentName", card.Name,
+			"toolMode", card.ExecutionProfile.ToolMode,
+			"memoryMode", card.ExecutionProfile.MemoryMode,
+			"streaming", card.ExecutionProfile.Streaming,
+			"structuredOutput", card.ExecutionProfile.StructuredOutput,
+			"supportedModels", card.ExecutionProfile.SupportedModels,
+		)
+	} else {
+		log.Info("Agent Card fetched (no execution profile)", "executionEngine", engineName, "agentName", card.Name)
+	}
 	return nil
 }
 
