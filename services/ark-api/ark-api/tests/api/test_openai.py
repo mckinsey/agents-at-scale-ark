@@ -262,3 +262,34 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         self.assertEqual(session_id, "test-session-123")
         self.assertEqual(conversation_id, "conv-456-789")
 
+    @patch('ark_api.api.v1.openai.with_ark_client')
+    @patch('ark_api.api.v1.openai.get_namespace')
+    @patch('ark_api.api.v1.openai.parse_model_to_query_target')
+    @patch('ark_api.api.v1.openai.watch_query_completion')
+    def test_default_timeout_used_when_not_specified(self, mock_watch, mock_parse_target, mock_get_namespace, mock_with_ark_client):
+        """Test that DEFAULT_QUERY_TIMEOUT_SECONDS is used when no timeout in query spec."""
+        from ark_api.api.v1.openai import DEFAULT_QUERY_TIMEOUT_SECONDS
+
+        mock_get_namespace.return_value = "default"
+        mock_parse_target.return_value = {"name": "test-agent", "type": "agent"}
+        mock_client = AsyncMock()
+        mock_with_ark_client.return_value.__aenter__.return_value = mock_client
+        mock_client.queries.a_create = AsyncMock()
+        mock_watch.return_value = mock_completion
+
+        request_data = {
+            "model": "agent/test-agent",
+            "messages": [{"role": "user", "content": "Hello"}],
+        }
+        response = self.client.post("/openai/v1/chat/completions", json=request_data)
+
+        self.assertEqual(response.status_code, 200)
+        mock_watch.assert_called_once()
+        timeout_used = mock_watch.call_args[0][4]
+        self.assertEqual(timeout_used, DEFAULT_QUERY_TIMEOUT_SECONDS)
+
+    def test_default_query_timeout_constant(self):
+        """Test that DEFAULT_QUERY_TIMEOUT_SECONDS parses to the expected value."""
+        from ark_api.api.v1.openai import DEFAULT_QUERY_TIMEOUT_SECONDS
+        self.assertEqual(DEFAULT_QUERY_TIMEOUT_SECONDS, 300)
+
