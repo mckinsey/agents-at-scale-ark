@@ -1,3 +1,4 @@
+import type { QueryKey } from '@tanstack/react-query';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
@@ -29,25 +30,20 @@ export const useCreateSecret = (props: UseCreateSecretProps) => {
       return secretsService.create(name, password);
     },
     onMutate: async newSecret => {
-      // Cancel any outgoing refetches
-      // (so they don't overwrite our optimistic update)
       await queryClient.cancelQueries({
         queryKey: [GET_ALL_SECRETS_QUERY_KEY],
       });
-      // Snapshot the previous value
-      const previousTodos: Secret[] | undefined = queryClient.getQueryData([
-        GET_ALL_SECRETS_QUERY_KEY,
-      ]);
-      // Optimistically update to the new value
-      queryClient.setQueryData(
-        [GET_ALL_SECRETS_QUERY_KEY],
-        (old: Secret[]): Secret[] => [
-          ...old,
+      const previousSecrets = queryClient.getQueriesData<Secret[]>({
+        queryKey: [GET_ALL_SECRETS_QUERY_KEY],
+      });
+      queryClient.setQueriesData<Secret[]>(
+        { queryKey: [GET_ALL_SECRETS_QUERY_KEY] },
+        (old): Secret[] => [
+          ...(old ?? []),
           { id: newSecret.name, name: newSecret.name },
         ],
       );
-      // Return a result with the snapshotted value
-      return { previousTodos };
+      return { previousSecrets };
     },
     onSuccess: data => {
       toast.success('Secret Created', {
@@ -58,12 +54,11 @@ export const useCreateSecret = (props: UseCreateSecretProps) => {
         props.onSuccess(data);
       }
     },
-    onError: (error, data, onMutateResult) => {
-      // If the mutation fails,
-      // use the result returned from onMutate to roll back
-      queryClient.setQueryData(
-        [GET_ALL_SECRETS_QUERY_KEY],
-        onMutateResult?.previousTodos,
+    onError: (error, data, context) => {
+      context?.previousSecrets?.forEach(
+        ([queryKey, data]: [QueryKey, Secret[] | undefined]) => {
+          queryClient.setQueryData(queryKey, data);
+        },
       );
 
       const getMessage = () => {
@@ -80,7 +75,6 @@ export const useCreateSecret = (props: UseCreateSecretProps) => {
         description: getMessage(),
       });
     },
-    // Always refetch after error or success:
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: [GET_ALL_SECRETS_QUERY_KEY] });
     },
