@@ -11,6 +11,7 @@ RUN npm run build
 
 FROM node:25.4.0-alpine AS runner
 WORKDIR /app
+ENV NODE_ENV=production
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs
