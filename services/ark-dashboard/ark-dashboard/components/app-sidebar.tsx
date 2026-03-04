@@ -25,7 +25,7 @@ import {
   Zap,
 } from 'lucide-react';
 import Image from 'next/image';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import {
@@ -149,6 +149,7 @@ function CollapsibleSection({
 export function AppSidebar() {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { user } = useUser();
   const { state: sidebarState, setOpen: setSidebarOpen } = useSidebar();
   const isExperimentalDarkModeEnabled = useAtomValue(
@@ -218,7 +219,6 @@ export function AppSidebar() {
         fromSection: pathname.split('/')[1],
       },
     });
-    const searchParams = new URLSearchParams(window.location.search);
     const queryString = searchParams.toString();
     const path = sectionKey ? `/${sectionKey}` : '/';
     router.push(queryString ? `${path}?${queryString}` : path);
