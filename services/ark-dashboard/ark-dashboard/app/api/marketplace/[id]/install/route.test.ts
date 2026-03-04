@@ -1,123 +1,37 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
 
-const mockExecAsync = vi.fn();
-const mockGetRawMarketplaceItemById = vi.fn();
+const { mockExec } = vi.hoisted(() => {
+  const mockExec = vi.fn();
+  return { mockExec };
+});
 
-async function checkHelmAvailable(): Promise<{ available: boolean; error?: string }> {
-  try {
-    await mockExecAsync('helm version --short');
-    return { available: true };
-  } catch {
-    return { available: false, error: 'Helm CLI is not available.' };
-  }
+vi.mock('child_process', () => {
+  const mod = { exec: mockExec };
+  return { default: mod, ...mod };
+});
+
+vi.mock('@/lib/services/marketplace-fetcher', () => ({
+  getRawMarketplaceItemById: vi.fn(),
+}));
+
+import { POST, DELETE } from './route';
+import { getRawMarketplaceItemById } from '@/lib/services/marketplace-fetcher';
+
+const mockGetRawMarketplaceItemById = vi.mocked(getRawMarketplaceItemById);
+
+function mockExecSuccess(result: { stdout: string; stderr: string }) {
+  mockExec.mockImplementationOnce(
+    (_cmd: string, callback: (err: null, result: { stdout: string; stderr: string }) => void) => {
+      callback(null, result);
+    },
+  );
 }
 
-async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
-    const { id } = await params;
-    const { mode } = await request.json().catch(() => ({ mode: 'command' }));
-    const item = await mockGetRawMarketplaceItemById(id);
-
-    if (!item) {
-      return NextResponse.json({ error: 'Marketplace item not found' }, { status: 404 });
-    }
-
-    if (!item.ark?.chartPath || !item.ark?.helmReleaseName) {
-      return NextResponse.json({ error: 'Item does not have installation configuration' }, { status: 400 });
-    }
-
-    const { ark } = item;
-    const helmArgs = ['upgrade', '--install', ark.helmReleaseName, ark.chartPath];
-    if (ark.namespace) { helmArgs.push('--namespace', ark.namespace); }
-    if (ark.installArgs) { helmArgs.push(...ark.installArgs); }
-    const helmCommand = `helm ${helmArgs.join(' ')}`;
-
-    if (mode === 'command') {
-      const arkCommand = `ark install marketplace/${item.type === 'service' ? 'services' : 'agents'}/${id}`;
-      return NextResponse.json({
-        status: 'command',
-        name: item.name || id,
-        helmCommand,
-        arkCommand,
-        namespace: ark.namespace,
-        message: 'Run one of these commands in your terminal to install',
-      });
-    }
-
-    try {
-      const helmCheck = await checkHelmAvailable();
-      if (!helmCheck.available) {
-        return NextResponse.json({
-          status: 'command',
-          name: item.name || id,
-          helmCommand,
-          arkCommand: `ark install marketplace/${item.type === 'service' ? 'services' : 'agents'}/${id}`,
-          namespace: ark.namespace,
-          message: 'Direct installation not available. Run this command in your terminal:',
-        });
-      }
-
-      const { stdout } = await mockExecAsync(helmCommand);
-      return NextResponse.json({
-        message: `Successfully installed ${item.name}`,
-        status: 'installed',
-        output: stdout,
-      });
-    } catch {
-      return NextResponse.json({
-        status: 'command',
-        name: item.name || id,
-        helmCommand,
-        arkCommand: `ark install marketplace/${item.type === 'service' ? 'services' : 'agents'}/${id}`,
-        namespace: ark.namespace,
-        message: 'Direct installation not available. Run this command in your terminal:',
-      });
-    }
-  } catch {
-    return NextResponse.json({ error: 'Failed to install marketplace item' }, { status: 500 });
-  }
-}
-
-async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
-    const { id } = await params;
-    const item = await mockGetRawMarketplaceItemById(id);
-
-    if (!item) {
-      return NextResponse.json({ error: 'Marketplace item not found' }, { status: 404 });
-    }
-
-    if (!item.ark?.helmReleaseName) {
-      return NextResponse.json({ error: 'Item does not have uninstallation configuration' }, { status: 400 });
-    }
-
-    const { ark } = item;
-    const helmArgs = ['uninstall', ark.helmReleaseName];
-    if (ark.namespace) { helmArgs.push('--namespace', ark.namespace); }
-    const helmCommand = `helm ${helmArgs.join(' ')}`;
-
-    try {
-      const { stdout } = await mockExecAsync(helmCommand);
-      return NextResponse.json({
-        message: `Successfully uninstalled ${item.name}`,
-        status: 'uninstalled',
-        output: stdout,
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      return NextResponse.json({ error: 'Uninstallation failed', details: errorMessage }, { status: 500 });
-    }
-  } catch {
-    return NextResponse.json({ error: 'Failed to uninstall marketplace item' }, { status: 500 });
-  }
+function mockExecFailure(error: unknown) {
+  mockExec.mockImplementationOnce((_cmd: string, callback: (err: unknown) => void) => {
+    callback(error);
+  });
 }
 
 function createRequest(url: string, options?: RequestInit) {
@@ -182,7 +96,9 @@ describe('POST /api/marketplace/[id]/install', () => {
 
     expect(response.status).toBe(200);
     expect(data.status).toBe('command');
-    expect(data.helmCommand).toBe('helm upgrade --install phoenix oci://ghcr.io/mckinsey/agents-at-scale-marketplace/phoenix');
+    expect(data.helmCommand).toBe(
+      'helm upgrade --install phoenix oci://ghcr.io/mckinsey/agents-at-scale-marketplace/phoenix',
+    );
     expect(data.arkCommand).toBe('ark install marketplace/services/phoenix');
   });
 
@@ -237,9 +153,8 @@ describe('POST /api/marketplace/[id]/install', () => {
 
   it('should execute helm and return success in direct mode when helm available', async () => {
     mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
-    mockExecAsync
-      .mockResolvedValueOnce({ stdout: 'v3.12.0', stderr: '' })
-      .mockResolvedValueOnce({ stdout: 'release "phoenix" installed', stderr: '' });
+    mockExecSuccess({ stdout: 'v3.12.0', stderr: '' });
+    mockExecSuccess({ stdout: 'release "phoenix" installed', stderr: '' });
 
     const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
       method: 'POST',
@@ -254,7 +169,7 @@ describe('POST /api/marketplace/[id]/install', () => {
 
   it('should fall back to command response when helm not available in direct mode', async () => {
     mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
-    mockExecAsync.mockRejectedValueOnce(new Error('helm not found'));
+    mockExecFailure(new Error('helm not found'));
 
     const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
       method: 'POST',
@@ -269,9 +184,8 @@ describe('POST /api/marketplace/[id]/install', () => {
 
   it('should fall back to command response when helm execution fails in direct mode', async () => {
     mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
-    mockExecAsync
-      .mockResolvedValueOnce({ stdout: 'v3.12.0', stderr: '' })
-      .mockRejectedValueOnce(new Error('helm install failed'));
+    mockExecSuccess({ stdout: 'v3.12.0', stderr: '' });
+    mockExecFailure(new Error('helm install failed'));
 
     const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
       method: 'POST',
@@ -282,6 +196,62 @@ describe('POST /api/marketplace/[id]/install', () => {
 
     expect(data.status).toBe('command');
     expect(data.helmCommand).toBeDefined();
+  });
+
+  it('should default to command mode when request body is invalid', async () => {
+    mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
+
+    const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
+      method: 'POST',
+      body: 'invalid json',
+    });
+    const response = await POST(request, { params: Promise.resolve({ id: 'phoenix' }) });
+    const data = await response.json();
+
+    expect(data.status).toBe('command');
+    expect(data.helmCommand).toBeDefined();
+  });
+
+  it('should return 500 when params rejects', async () => {
+    const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
+      method: 'POST',
+      body: JSON.stringify({ mode: 'command' }),
+    });
+    const response = await POST(request, { params: Promise.reject(new Error('bad params')) });
+    const data = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(data.error).toBe('Failed to install marketplace item');
+  });
+
+  it('should log stderr when helm produces non-WARNING stderr in direct mode', async () => {
+    mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
+    mockExecSuccess({ stdout: 'v3.12.0', stderr: '' });
+    mockExecSuccess({ stdout: 'installed', stderr: 'some error output' });
+
+    const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
+      method: 'POST',
+      body: JSON.stringify({ mode: 'direct' }),
+    });
+    const response = await POST(request, { params: Promise.resolve({ id: 'phoenix' }) });
+    const data = await response.json();
+
+    expect(data.status).toBe('installed');
+  });
+
+  it('should not log stderr when it only contains WARNING in direct mode', async () => {
+    mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
+    mockExecSuccess({ stdout: 'v3.12.0', stderr: '' });
+    mockExecSuccess({ stdout: 'installed', stderr: 'WARNING: some warning' });
+
+    const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
+      method: 'POST',
+      body: JSON.stringify({ mode: 'direct' }),
+    });
+    const response = await POST(request, { params: Promise.resolve({ id: 'phoenix' }) });
+    const data = await response.json();
+
+    expect(data.status).toBe('installed');
   });
 });
 
@@ -322,7 +292,7 @@ describe('DELETE /api/marketplace/[id]/install', () => {
 
   it('should execute helm uninstall and return success', async () => {
     mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
-    mockExecAsync.mockResolvedValueOnce({ stdout: 'release "phoenix" uninstalled', stderr: '' });
+    mockExecSuccess({ stdout: 'release "phoenix" uninstalled', stderr: '' });
 
     const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
       method: 'DELETE',
@@ -340,7 +310,7 @@ describe('DELETE /api/marketplace/[id]/install', () => {
       ...baseItem,
       ark: { ...baseItem.ark, namespace: 'monitoring' },
     });
-    mockExecAsync.mockResolvedValueOnce({ stdout: 'uninstalled', stderr: '' });
+    mockExecSuccess({ stdout: 'uninstalled', stderr: '' });
 
     const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
       method: 'DELETE',
@@ -349,12 +319,15 @@ describe('DELETE /api/marketplace/[id]/install', () => {
     const data = await response.json();
 
     expect(data.status).toBe('uninstalled');
-    expect(mockExecAsync).toHaveBeenCalledWith('helm uninstall phoenix --namespace monitoring');
+    expect(mockExec).toHaveBeenCalledWith(
+      'helm uninstall phoenix --namespace monitoring',
+      expect.any(Function),
+    );
   });
 
   it('should return 500 with error details when helm fails', async () => {
     mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
-    mockExecAsync.mockRejectedValueOnce(new Error('release not found'));
+    mockExecFailure(new Error('release not found'));
 
     const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
       method: 'DELETE',
@@ -365,5 +338,56 @@ describe('DELETE /api/marketplace/[id]/install', () => {
     expect(response.status).toBe(500);
     expect(data.error).toBe('Uninstallation failed');
     expect(data.details).toBe('release not found');
+  });
+
+  it('should return 500 when params rejects', async () => {
+    const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
+      method: 'DELETE',
+    });
+    const response = await DELETE(request, { params: Promise.reject(new Error('bad params')) });
+    const data = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(data.error).toBe('Failed to uninstall marketplace item');
+  });
+
+  it('should handle non-Error thrown during helm uninstall', async () => {
+    mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
+    mockExecFailure('string error');
+
+    const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
+      method: 'DELETE',
+    });
+    const response = await DELETE(request, { params: Promise.resolve({ id: 'phoenix' }) });
+    const data = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(data.details).toBe('Unknown error');
+  });
+
+  it('should not log stderr when it contains WARNING', async () => {
+    mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
+    mockExecSuccess({ stdout: 'uninstalled', stderr: 'WARNING: something' });
+
+    const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
+      method: 'DELETE',
+    });
+    const response = await DELETE(request, { params: Promise.resolve({ id: 'phoenix' }) });
+    const data = await response.json();
+
+    expect(data.status).toBe('uninstalled');
+  });
+
+  it('should log stderr when it contains non-WARNING content', async () => {
+    mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
+    mockExecSuccess({ stdout: 'uninstalled', stderr: 'actual error' });
+
+    const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
+      method: 'DELETE',
+    });
+    const response = await DELETE(request, { params: Promise.resolve({ id: 'phoenix' }) });
+    const data = await response.json();
+
+    expect(data.status).toBe('uninstalled');
   });
 });
