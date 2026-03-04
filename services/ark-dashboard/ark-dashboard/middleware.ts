@@ -12,7 +12,13 @@ async function middleware(request: NextRequest) {
 
   // Proxy anything starting with /api/ to the backend, stripping the /api prefix
   // This includes: /api/v1/*, /api/docs, /api/openapi.json
+  // BUT exclude Next.js API routes like /api/marketplace
   const apiPath = `${basePath}/api/`;
+
+  // Check if this is a marketplace route (handled by Next.js, not proxied)
+  if (request.nextUrl.pathname.startsWith(`${basePath}/api/marketplace`)) {
+    return NextResponse.next();
+  }
 
   if (request.nextUrl.pathname.startsWith(apiPath)) {
     const token = await getToken({

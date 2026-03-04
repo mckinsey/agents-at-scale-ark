@@ -58,6 +58,47 @@ func NewContentChunk(id, model, content string) *openai.ChatCompletionChunk {
 	}
 }
 
+// SendFinalToolCallChunk sends the final chunk with accumulated tool calls.
+// This is used by providers to send tool calls in streaming mode.
+func SendFinalToolCallChunk(fullResponse *openai.ChatCompletion, toolCalls []openai.ChatCompletionMessageToolCall, streamFunc func(*openai.ChatCompletionChunk) error) error {
+	// Convert tool calls to delta format for streaming
+	deltaToolCalls := make([]openai.ChatCompletionChunkChoiceDeltaToolCall, len(toolCalls))
+	for i, tc := range toolCalls {
+		deltaToolCalls[i] = openai.ChatCompletionChunkChoiceDeltaToolCall{
+			Index: int64(i),
+			ID:    tc.ID,
+			Type:  "function",
+			Function: openai.ChatCompletionChunkChoiceDeltaToolCallFunction{
+				Name:      tc.Function.Name,
+				Arguments: tc.Function.Arguments,
+			},
+		}
+	}
+
+	finalChunk := &openai.ChatCompletionChunk{
+		ID:      fullResponse.ID,
+		Object:  "chat.completion.chunk",
+		Created: fullResponse.Created,
+		Model:   fullResponse.Model,
+		Choices: []openai.ChatCompletionChunkChoice{
+			{
+				Index: 0,
+				Delta: openai.ChatCompletionChunkChoiceDelta{
+					ToolCalls: deltaToolCalls,
+				},
+				FinishReason: fullResponse.Choices[0].FinishReason,
+			},
+		},
+	}
+
+	logf.Log.Info("Sending final accumulated message with tool calls", "toolCount", len(toolCalls))
+	if err := streamFunc(finalChunk); err != nil {
+		logf.Log.Error(err, "Failed to send final accumulated message")
+		return err
+	}
+	return nil
+}
+
 // StreamingError represents an OpenAI-compatible error format for streaming
 type StreamingError struct {
 	Error struct {

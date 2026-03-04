@@ -11,11 +11,12 @@ describe('settingsSections', () => {
     const general = settingsSections.find(s => s.sectionKey === 'general');
     expect(general).toBeDefined();
     expect(general!.sectionLabel).toBe('General');
-    expect(general!.items).toHaveLength(4);
+    expect(general!.items).toHaveLength(5);
     expect(general!.items.map(i => i.key)).toEqual([
       'a2a-servers',
       'ark-services',
       'memory',
+      'manage-marketplace',
       'experimental-features',
     ]);
   });

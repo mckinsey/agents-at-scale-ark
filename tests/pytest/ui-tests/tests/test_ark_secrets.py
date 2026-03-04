@@ -4,15 +4,19 @@ from pages.dashboard_page import DashboardPage
 from pages.secrets_page import SecretsPage
 
 
+@pytest.fixture(scope="class")
+def secret_test_resources():
+    return {"secrets": {}}
+
+
 @pytest.mark.secrets
+@pytest.mark.xdist_group("ark_secrets")
 class TestArkSecrets:
-    created_secrets = {}
     
     @pytest.mark.parametrize("prefix,env_key", [
         ("openai", "CICD_OPENAI_API_KEY"),
     ])
-    @pytest.mark.dependency(name="create_secret_openai")
-    def test_create_secret(self, page: Page, prefix: str, env_key: str):
+    def test_create_secret(self, page: Page, prefix: str, env_key: str, secret_test_resources: dict):
         secrets = SecretsPage(page)
         secrets.navigate_to_secrets_tab()
         
@@ -24,18 +28,19 @@ class TestArkSecrets:
         assert result["popup_visible"], f"Success popup should be visible"
         assert result["in_table"], f"Secret should be visible in table"
         
-        TestArkSecrets.created_secrets[prefix] = result['name']
+        secret_test_resources["secrets"][prefix] = result['name']
         print(f"{prefix} secret created: {result['name']}")
     
     @pytest.mark.parametrize("prefix", [
         "openai",
     ])
-    @pytest.mark.dependency(depends=["create_secret_openai"])
-    def test_delete_secret(self, page: Page, prefix: str):
+    def test_delete_secret(self, page: Page, prefix: str, secret_test_resources: dict):
         secrets = SecretsPage(page)
         secrets.navigate_to_secrets_tab()
         
-        secret_name = TestArkSecrets.created_secrets.get(prefix)
+        secret_name = secret_test_resources["secrets"].get(prefix)
+        if not secret_name:
+            pytest.skip("Secret was not created, skipping delete")
         result = secrets.delete_secret_with_verification(secret_name)
         
         if not result["delete_available"]:
@@ -46,4 +51,5 @@ class TestArkSecrets:
         assert result["popup_visible"], "Success popup should be visible"
         
         print(f"{prefix} secret deleted: {secret_name}")
+
 

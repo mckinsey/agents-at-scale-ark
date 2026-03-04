@@ -2,6 +2,11 @@ import { apiClient } from '@/lib/api/client';
 import { API_CONFIG } from '@/lib/api/config';
 import type { components } from '@/lib/api/generated/types';
 import { workflowTemplatesService } from '@/lib/services/workflow-templates';
+import {
+  processResourceResponses,
+  downloadBlob,
+  generateExportFilename,
+} from '@/lib/services/export-utils';
 
 // Resource types from the API
 export type AgentListResponse = components['schemas']['AgentListResponse'];
@@ -90,17 +95,7 @@ export const exportService = {
 
   // Fetch all resources for export selection
   async fetchAllResources(): Promise<ResourceExportData> {
-    const [
-      agents,
-      teams,
-      models,
-      queries,
-      a2aServers,
-      mcpServers,
-      evaluators,
-      evaluations,
-      workflowTemplates,
-    ] = await Promise.allSettled([
+    const results = await Promise.allSettled([
       apiClient.get<AgentListResponse>('/api/v1/agents'),
       apiClient.get<TeamListResponse>('/api/v1/teams'),
       apiClient.get<ModelListResponse>('/api/v1/models'),
@@ -112,82 +107,7 @@ export const exportService = {
       workflowTemplatesService.list(),
     ]);
 
-    const data: ResourceExportData = {};
-
-    if (agents.status === 'fulfilled' && agents.value?.items) {
-      data.agents = agents.value.items.map(agent => ({
-        id: agent.name || '',
-        name: agent.name || '',
-        type: 'agent',
-      }));
-    }
-
-    if (teams.status === 'fulfilled' && teams.value?.items) {
-      data.teams = teams.value.items.map(team => ({
-        id: team.name || '',
-        name: team.name || '',
-        type: 'team',
-      }));
-    }
-
-    if (models.status === 'fulfilled' && models.value?.items) {
-      data.models = models.value.items.map(model => ({
-        id: model.name || '',
-        name: model.name || '',
-        type: 'model',
-      }));
-    }
-
-    if (queries.status === 'fulfilled' && queries.value?.items) {
-      data.queries = queries.value.items.map(query => ({
-        id: query.name || '',
-        name: query.name || '',
-        type: 'query',
-      }));
-    }
-
-    if (a2aServers.status === 'fulfilled' && a2aServers.value?.items) {
-      data.a2a = a2aServers.value.items.map(server => ({
-        id: server.name || '',
-        name: server.name || '',
-        type: 'a2a',
-      }));
-    }
-
-    if (mcpServers.status === 'fulfilled' && mcpServers.value?.items) {
-      data.mcpservers = mcpServers.value.items.map(server => ({
-        id: server.name || '',
-        name: server.name || '',
-        type: 'mcpservers',
-      }));
-    }
-
-    if (evaluators.status === 'fulfilled' && evaluators.value?.items) {
-      data.evaluators = evaluators.value.items.map(evaluator => ({
-        id: evaluator.name || '',
-        name: evaluator.name || '',
-        type: 'evaluator',
-      }));
-    }
-
-    // Fetch WorkflowTemplates
-    if (workflowTemplates.status === 'fulfilled' && workflowTemplates.value) {
-      data.workflows = workflowTemplates.value.map(template => ({
-        id: template.metadata.name || '',
-        name: template.metadata.name || '',
-        type: 'workflow',
-      }));
-    }
-
-    if (evaluations.status === 'fulfilled' && evaluations.value?.items) {
-      data.evaluations = evaluations.value.items.map(evaluation => ({
-        id: evaluation.name || '',
-        name: evaluation.name || '',
-        type: 'evaluation',
-      }));
-    }
-
-    return data;
+    return processResourceResponses(results, true);
   },
 
   // Export selected resources using new backend endpoint
@@ -231,20 +151,7 @@ export const exportService = {
     }
 
     const blob = await response.blob();
-
-    // Download the file
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `ark-export-${timestamp}.zip`;
-
-    // Create a download link
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', filename);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
+    downloadBlob(blob, generateExportFilename('ark-export'));
   },
 
   // Export all resources using the unified export endpoint
@@ -263,19 +170,6 @@ export const exportService = {
     }
 
     const blob = await response.blob();
-
-    // Download the file
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `ark-export-all-${timestamp}.zip`;
-
-    // Create a download link
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', filename);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
+    downloadBlob(blob, generateExportFilename('ark-export-all'));
   },
 };
