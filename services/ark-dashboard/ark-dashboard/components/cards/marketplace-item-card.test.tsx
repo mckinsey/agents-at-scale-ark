@@ -125,7 +125,7 @@ describe('MarketplaceItemCard', () => {
       <MarketplaceItemCard item={makeItem()} />,
     );
 
-    await user.click(screen.getByRole('button', { name: /install/i }));
+    await user.click(screen.getByRole('button', { name: /get/i }));
 
     expect(mockMutateAsync).toHaveBeenCalledWith('test-item');
   });
@@ -143,7 +143,7 @@ describe('MarketplaceItemCard', () => {
       <MarketplaceItemCard item={makeItem()} />,
     );
 
-    await user.click(screen.getByRole('button', { name: /install/i }));
+    await user.click(screen.getByRole('button', { name: /get/i }));
 
     expect(screen.getByText('Installing...')).toBeInTheDocument();
 
@@ -162,7 +162,7 @@ describe('MarketplaceItemCard', () => {
       <MarketplaceItemCard item={makeItem()} />,
     );
 
-    await user.click(screen.getByRole('button', { name: /install/i }));
+    await user.click(screen.getByRole('button', { name: /get/i }));
 
     await waitFor(() => {
       expect(screen.getByText('Installed')).toBeInTheDocument();
@@ -183,7 +183,7 @@ describe('MarketplaceItemCard', () => {
       <MarketplaceItemCard item={makeItem()} />,
     );
 
-    await user.click(screen.getByRole('button', { name: /install/i }));
+    await user.click(screen.getByRole('button', { name: /get/i }));
 
     await waitFor(() => {
       expect(screen.getByText('helm install test')).toBeInTheDocument();
@@ -205,7 +205,7 @@ describe('MarketplaceItemCard', () => {
       <MarketplaceItemCard item={makeItem()} />,
     );
 
-    await user.click(screen.getByRole('button', { name: /install/i }));
+    await user.click(screen.getByRole('button', { name: /get/i }));
 
     await waitFor(() => {
       expect(screen.getByText('helm install error-test')).toBeInTheDocument();
@@ -227,7 +227,7 @@ describe('MarketplaceItemCard', () => {
       <MarketplaceItemCard item={makeItem()} />,
     );
 
-    await user.click(screen.getByRole('button', { name: /install/i }));
+    await user.click(screen.getByRole('button', { name: /get/i }));
 
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith(
@@ -248,7 +248,7 @@ describe('MarketplaceItemCard', () => {
       <MarketplaceItemCard item={makeItem()} />,
     );
 
-    await user.click(screen.getByRole('button', { name: /install/i }));
+    await user.click(screen.getByRole('button', { name: /get/i }));
 
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith(
@@ -277,7 +277,7 @@ describe('InstallCommandDialog', () => {
     mockMutateAsync.mockResolvedValue({ status: 'command', ...commands });
 
     renderWithProviders(<MarketplaceItemCard item={makeItem()} />);
-    await user.click(screen.getByRole('button', { name: /install/i }));
+    await user.click(screen.getByRole('button', { name: /get/i }));
 
     const commandText = commands.arkCommand || commands.helmCommand!;
     await waitFor(() => {

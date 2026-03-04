@@ -206,7 +206,7 @@ export function MarketplaceItemCard({
                 Installing...
               </>
             ) : (
-              'Install'
+              'Get'
             )}
           </Button>
         </div>
