@@ -19,6 +19,7 @@
     <a href="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/deploy.yml"><img src="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/deploy.yml/badge.svg" alt="Deploy"></a>
     <a href="https://www.npmjs.com/package/@agents-at-scale/ark"><img src="https://img.shields.io/npm/v/@agents-at-scale/ark.svg" alt="npm version"></a>
     <a href="https://pypi.org/project/ark-sdk/"><img src="https://img.shields.io/pypi/v/ark-sdk.svg" alt="PyPI version"></a>
+    <a href="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/agent-actions.yml"><img src="https://img.shields.io/badge/Agent_Actions-Running-blue?logo=github-actions&logoColor=white" alt="Agent Actions - Running"></a>
   </p>
 </div>
 
