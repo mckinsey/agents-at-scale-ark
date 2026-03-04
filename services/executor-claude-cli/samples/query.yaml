@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: fix-auth-bug
+spec:
+  agentRef:
+    name: code-assistant
+  userInput:
+    content: "Fix the authentication bug in src/auth/validator.py"

@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: ExecutionEngine
+metadata:
+  name: claude-cli
+spec:
+  description: "Claude CLI execution engine using Claude Code SDK"
+  address:
+    valueFrom:
+      serviceRef:
+        name: executor-claude-cli
+        port: "8000"

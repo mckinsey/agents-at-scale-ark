@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: code-assistant
+spec:
+  prompt: |
+    You are an expert software engineer. Write clean, tested, well-documented code.
+    Follow existing patterns in the codebase.
+  executionEngine:
+    name: claude-cli
