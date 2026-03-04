@@ -24,40 +24,44 @@ spec:
             env:
             - name: NAMESPACE
               value: ($namespace)
+        - script:
+            content: bash ../helpers/wait-for-evaluator.sh
         - apply:
             file: manifests/a00-evaluator-llm-rbac.yaml
         - apply:
             file: manifests/a01-secret.yaml
         - apply:
             file: manifests/a02-model.yaml
-        - assert:
-            resource:
-              apiVersion: ark.mckinsey.com/v1alpha1
-              kind: Model
-              metadata:
-                name: selector-model
-              status:
-                conditions:
-                - type: ModelAvailable
-                  status: "True"
+        - wait:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Model
+            name: selector-model
+            timeout: 3m
+            for:
+              condition:
+                name: ModelAvailable
+                value: 'True' 
         - apply:
             file: manifests/a03-evaluator-with-selector.yaml
             timeout: 30s
-        - assert:
-            resource:
-              apiVersion: ark.mckinsey.com/v1alpha1
-              kind: Evaluator
-              metadata:
-                name: production-evaluator
-              status:
-                phase: ready
+        - wait:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Evaluator
+            timeout: 3m
+            name: production-evaluator
+            for:
+              jsonPath:
+                path: '{.status.phase}'
+                value: 'ready'
 
-    - name: test-matching-query
-      description: Create query that matches evaluator selector
+    - name: create-evaluations
+      description: Create query and manual evaluation to run evaluations in parallel
       try:
         - apply:
             file: manifests/a04-query-matching.yaml
             timeout: 60s
+        - apply:
+            file: manifests/a06-manual-evaluation-override.yaml
         # Wait for automatic evaluation to be created
         - assert:
             resource:
@@ -68,6 +72,10 @@ spec:
                 labels:
                   ark.mckinsey.com/auto: "true"
             timeout: 30s
+        # Assert manual evaluation exists
+        - assert:
+            file: manifests/a06-manual-evaluation-override.yaml
+            timeout: 60s
 
     - name: test-non-matching-query
       description: Create query that doesn't match evaluator selector
@@ -86,18 +94,29 @@ spec:
                 name: production-evaluator-non-matching-query-eval
             timeout: 15s
 
-    - name: test-manual-evaluation-override
-      description: Create manual evaluation with parameter overrides
-      try:
-        - apply:
-            file: manifests/a06-manual-evaluation-override.yaml
-        - assert:
-            file: manifests/a06-manual-evaluation-override.yaml
-            timeout: 60s
-
     - name: verify-evaluations
       description: Verify all evaluations have expected parameters and status
       try:
+        - wait:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Evaluation
+            name: production-evaluator-matching-query-eval
+            timeout: 10m
+            for:
+              condition:
+                name: Completed
+                value: 'True'
+
+        - wait:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Evaluation
+            name: manual-override-evaluation
+            timeout: 10m
+            for:
+              condition:
+                name: Completed
+                value: 'True'
+
         - assert:
             resource:
               apiVersion: ark.mckinsey.com/v1alpha1
@@ -106,17 +125,7 @@ spec:
                 name: production-evaluator-matching-query-eval
               status:
                 phase: done
-            timeout: 180s
-
-        - wait:
-            apiVersion: ark.mckinsey.com/v1alpha1
-            kind: Evaluation
-            name: manual-override-evaluation
-            timeout: 10m
-            for:
-              jsonPath:
-                path: '{.status.phase}'
-                value: 'done'
+            timeout: 30s
 
         - assert:
             resource:
@@ -127,4 +136,4 @@ spec:
                 namespace: ($namespace)
               status:
                 phase: done
-            timeout: 180s
+            timeout: 30s

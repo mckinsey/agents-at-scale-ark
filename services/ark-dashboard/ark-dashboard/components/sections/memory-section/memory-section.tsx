@@ -219,7 +219,7 @@ export function MemorySection() {
   }
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="mt-3">
       <div className="flex flex-wrap items-center gap-4">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

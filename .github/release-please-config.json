@@ -33,11 +33,6 @@
         },
         {
           "type": "toml",
-          "path": "services/langchain-execution-engine/pyproject.toml",
-          "jsonpath": "project.version"
-        },
-        {
-          "type": "toml",
           "path": "services/autogen-execution-engine/pyproject.toml",
           "jsonpath": "project.version"
         },
@@ -147,16 +142,6 @@
         {
           "type": "yaml",
           "path": "mcp/filesystem-mcp/chart/Chart.yaml",
-          "jsonpath": "$.appVersion"
-        },
-        {
-          "type": "yaml",
-          "path": "services/executor-langchain/chart/Chart.yaml",
-          "jsonpath": "$.version"
-        },
-        {
-          "type": "yaml",
-          "path": "services/executor-langchain/chart/Chart.yaml",
           "jsonpath": "$.appVersion"
         },
         {

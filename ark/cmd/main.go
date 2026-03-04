@@ -357,6 +357,7 @@ func setupEmbeddedApiserver(mgr ctrl.Manager) {
 	if cfg.PostgresSSL == "" {
 		cfg.PostgresSSL = "disable"
 	}
+	cfg.K8sClient = mgr.GetClient()
 
 	server := apiserver.New(cfg)
 	if err := mgr.Add(server); err != nil {

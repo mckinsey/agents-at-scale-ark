@@ -137,7 +137,7 @@ export function WorkflowTemplatesSection() {
 
   return (
     <div className="flex h-full flex-col">
-      <main className="flex-1 overflow-auto px-6 py-6">
+      <main className="mt-4 flex-1 overflow-auto">
         <div className="flex flex-col gap-3">
           {templates.map(template => {
             const flow = mapWorkflowTemplateToFlow(template);

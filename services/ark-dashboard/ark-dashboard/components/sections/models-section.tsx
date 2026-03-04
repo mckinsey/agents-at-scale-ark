@@ -142,14 +142,14 @@ export const ModelsSection = function ModelsSection({
   return (
     <>
       <div className="flex h-full flex-col">
-        <div className="flex items-center justify-end px-6 py-3">
+        <div className="mt-3 flex items-center justify-end">
           <ToggleSwitch
             options={viewOptions}
             onChange={id => setShowCompactView(id === 'card')}
           />
         </div>
 
-        <main className="flex-1 overflow-auto px-6 py-0">
+        <main className="mt-4 flex-1 overflow-auto">
           {showCompactView && (
             <div className="grid gap-6 pb-6 md:grid-cols-2 lg:grid-cols-3">
               {models.map(model => (

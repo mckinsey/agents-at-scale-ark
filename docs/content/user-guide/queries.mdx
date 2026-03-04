@@ -9,11 +9,11 @@ Queries are how you interact with models, tools, agents and teams in ARK. A quer
 
 ## What is a Query?
 
-A query is a request to execute a task using an agent or team. It contains:
+A query is a request to execute a task using an agent, team, model, or tool. It contains:
 
 - **Input**: The prompt or question you want to ask
-- **Target**: Which agent or team should process the request
-- **Output**: The response from the agent or team
+- **Target**: Which agent, team, model, or tool should process the request
+- **Output**: The response from the target
 
 Queries support [overrides](/user-guide/overrides) to dynamically inject headers when interacting with models and MCP servers.
 
@@ -109,6 +109,12 @@ Query a team:
 
 ```bash
 fark team team-seq "Analyze this data and provide recommendations"
+```
+
+Query a tool directly:
+
+```bash
+fark tool get_weather '{"location": "New York"}'
 ```
 
 Create a named query:
@@ -226,6 +232,42 @@ Response:
     "prompt_tokens": 18,
     "completion_tokens": 45,
     "total_tokens": 63
+  }
+}
+```
+
+### Query a Tool
+
+```bash
+curl -X POST http://ark-api.default.127.0.0.1.nip.io:8080/openai/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "tool/get_weather",
+    "messages": [
+      {"role": "user", "content": "{\"location\": \"New York\"}"}
+    ]
+  }'
+```
+
+Response:
+```json
+{
+  "id": "query-ghi789",
+  "object": "chat.completion",
+  "model": "tool/get_weather",
+  "choices": [
+    {
+      "message": {
+        "role": "assistant",
+        "content": "{\"temperature\": 72, \"condition\": \"partly cloudy\"}"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 10,
+    "completion_tokens": 15,
+    "total_tokens": 25
   }
 }
 ```
