@@ -473,10 +473,54 @@ func streamA2AEvent(ctx context.Context, eventStream EventStreamInterface, paylo
 	if eventStream == nil {
 		return nil
 	}
-	if err := eventStream.StreamChunk(ctx, payload); err != nil {
+	streamPayload := wrapA2AEventForStreaming(ctx, payload)
+	if err := eventStream.StreamChunk(ctx, streamPayload); err != nil {
 		return fmt.Errorf("failed to stream A2A event: %w", err)
 	}
 	return nil
+}
+
+func wrapA2AEventForStreaming(ctx context.Context, payload interface{}) interface{} {
+	content := extractStreamingContentFromA2AEvent(payload)
+	chunkID := getQueryID(ctx)
+	if chunkID == "" {
+		chunkID = "a2a-stream"
+	}
+	chunk := NewContentChunk(chunkID, "", content)
+	return WrapChunkWithA2A(ctx, chunk, "", nil, payload)
+}
+
+func extractStreamingContentFromA2AEvent(payload interface{}) string {
+	switch typed := payload.(type) {
+	case *protocol.Message:
+		if typed == nil {
+			return ""
+		}
+		return extractTextFromParts(typed.Parts)
+	case protocol.Message:
+		return extractTextFromParts(typed.Parts)
+	case *protocol.TaskArtifactUpdateEvent:
+		if typed == nil {
+			return ""
+		}
+		return extractTextFromParts(typed.Artifact.Parts)
+	case *protocol.TaskStatusUpdateEvent:
+		if typed == nil || typed.Status.Message == nil {
+			return ""
+		}
+		return extractTextFromParts(typed.Status.Message.Parts)
+	case *protocol.Task:
+		if typed == nil {
+			return ""
+		}
+		content, err := extractTextFromTask(typed)
+		if err != nil {
+			return ""
+		}
+		return content
+	default:
+		return ""
+	}
 }
 
 func streamA2AError(ctx context.Context, eventStream EventStreamInterface, err error) {

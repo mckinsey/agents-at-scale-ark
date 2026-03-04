@@ -68,7 +68,7 @@ func (e *A2ALocalEngine) Execute(ctx context.Context, userInput protocol.Message
 			return nil, err
 		}
 
-		outcomes, err := e.executeA2AToolCalls(ctx, turnResult.ToolCalls, eventStream, contextID, taskID)
+		outcomes, err := e.executeA2AToolCalls(ctx, turnResult.ToolCalls, eventStream, contextID, taskID, agentMessages)
 		if err != nil {
 			logger := logf.FromContext(ctx)
 			if !IsTerminateTeam(err) {
@@ -92,8 +92,9 @@ func (e *A2ALocalEngine) buildToolDefinitions() []A2AToolDefinition {
 	return a2aDefs
 }
 
-func (e *A2ALocalEngine) executeA2AToolCalls(ctx context.Context, toolCalls []A2AToolCall, eventStream EventStreamInterface, contextID, taskID string) ([]A2AToolOutcome, error) {
+func (e *A2ALocalEngine) executeA2AToolCalls(ctx context.Context, toolCalls []A2AToolCall, eventStream EventStreamInterface, contextID, taskID string, callerHistory []protocol.Message) ([]A2AToolOutcome, error) {
 	execCtx := WithToolEventStream(ctx, eventStream)
+	execCtx = WithDelegationCallerHistory(execCtx, callerHistory)
 	outcomes := make([]A2AToolOutcome, 0, len(toolCalls))
 	for _, tc := range toolCalls {
 		if execCtx.Err() != nil {
@@ -118,7 +119,7 @@ func streamNativeA2AMessageStrict(ctx context.Context, eventStream EventStreamIn
 	if eventStream == nil {
 		return nil
 	}
-	if err := eventStream.StreamChunk(ctx, &message); err != nil {
+	if err := eventStream.StreamChunk(ctx, wrapA2AEventForStreaming(ctx, &message)); err != nil {
 		return fmt.Errorf("failed to stream %s A2A message: %w", phase, err)
 	}
 	return nil

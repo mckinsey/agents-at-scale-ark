@@ -81,6 +81,30 @@ func buildRoles(members []TeamMember) string {
 	return strings.Join(roles, ", ")
 }
 
+func resolveSelectedMemberName(raw string, members []TeamMember) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	for _, member := range members {
+		if member.GetName() == trimmed {
+			return member.GetName()
+		}
+	}
+	for _, member := range members {
+		if strings.EqualFold(member.GetName(), trimmed) {
+			return member.GetName()
+		}
+	}
+	lower := strings.ToLower(trimmed)
+	for _, member := range members {
+		if strings.Contains(lower, strings.ToLower(member.GetName())) {
+			return member.GetName()
+		}
+	}
+	return ""
+}
+
 func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, error) {
 	// Check for override selector agent first (used in tests)
 	if t.mockSelectorAgent != nil {
@@ -153,7 +177,10 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 		membersToSearch = candidateMembers
 	}
 
-	// Find selected member
+	selectedName = resolveSelectedMemberName(selectedName, membersToSearch)
+	if selectedName == "" {
+		selectedName = strings.TrimSpace(ExtractTextFromMessage(lastMsg))
+	}
 	for _, member := range membersToSearch {
 		if member.GetName() == selectedName {
 			return member, nil
@@ -224,6 +251,10 @@ func (t *Team) selectMemberA2A(ctx context.Context, messages []protocol.Message,
 	if candidateMembers != nil {
 		membersToSearch = candidateMembers
 	}
+	selectedName = resolveSelectedMemberName(selectedName, membersToSearch)
+	if selectedName == "" {
+		selectedName = strings.TrimSpace(ExtractA2ATextFromMessage(resultMessages[len(resultMessages)-1]))
+	}
 	for _, member := range membersToSearch {
 		if member.GetName() == selectedName {
 			return member, nil
@@ -256,7 +287,12 @@ func (t *Team) determineNextMember(ctx context.Context, messages []Message, tmpl
 func (t *Team) determineNextMemberA2A(ctx context.Context, messages []protocol.Message, tmpl *template.Template, previousMember string, legalTransitions map[string][]TeamMember) (TeamMember, error) {
 	switch {
 	case previousMember == "":
-		return t.Members[0], nil
+		if len(legalTransitions) == 0 {
+			participantsList := buildParticipants(t.Members)
+			rolesList := buildRoles(t.Members)
+			return t.selectMemberA2A(ctx, messages, tmpl, participantsList, rolesList, previousMember, nil)
+		}
+		return t.selectFromGraphConstraintsA2A(ctx, messages, tmpl, previousMember, legalTransitions)
 	case len(legalTransitions) == 0:
 		participantsList := buildParticipants(t.Members)
 		rolesList := buildRoles(t.Members)
@@ -303,6 +339,12 @@ func (t *Team) selectFromGraphConstraintsA2A(ctx context.Context, messages []pro
 	memberLookup := make(map[string]TeamMember, len(t.Members))
 	for _, member := range t.Members {
 		memberLookup[member.GetName()] = member
+	}
+
+	if previousMember == "" {
+		participantsList := buildParticipants(t.Members)
+		rolesList := buildRoles(t.Members)
+		return t.selectMemberA2A(ctx, messages, tmpl, participantsList, rolesList, previousMember, nil)
 	}
 
 	previousMemberObj := memberLookup[previousMember]
@@ -395,10 +437,12 @@ func (t *Team) executeSelectorTurnA2A(ctx context.Context, turn int, member Team
 	}
 	turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s", turn, t.Name), operationData)
 
+	beforeCount := len(*newMessages)
 	err := t.executeMemberAndAccumulateA2A(turnCtx, member, userInput, messages, newMessages, turn)
 
-	if len(*newMessages) > 0 {
-		t.telemetryRecorder.RecordTurnOutput(turnSpan, nil, len(*newMessages))
+	turnMessages := (*newMessages)[beforeCount:]
+	if len(turnMessages) > 0 {
+		t.telemetryRecorder.RecordTurnOutput(turnSpan, turnMessages, len(turnMessages))
 	}
 
 	if err != nil {

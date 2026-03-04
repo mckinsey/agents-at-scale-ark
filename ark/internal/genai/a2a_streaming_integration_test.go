@@ -117,10 +117,13 @@ func TestStreamA2AAgentIntegrationCompat(t *testing.T) {
 	foundArtifact := false
 	foundStatus := false
 	for _, chunk := range stream.chunks {
-		if _, ok := chunk.(*protocol.TaskArtifactUpdateEvent); ok {
+		wrapped, ok := chunk.(ChunkWithMetadata)
+		require.True(t, ok)
+		require.NotNil(t, wrapped.Ark)
+		if _, ok := wrapped.Ark.A2A.(*protocol.TaskArtifactUpdateEvent); ok {
 			foundArtifact = true
 		}
-		if status, ok := chunk.(*protocol.TaskStatusUpdateEvent); ok && status.Status.State == protocol.TaskStateWorking {
+		if status, ok := wrapped.Ark.A2A.(*protocol.TaskStatusUpdateEvent); ok && status.Status.State == protocol.TaskStateWorking {
 			foundStatus = true
 		}
 	}

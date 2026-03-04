@@ -6,9 +6,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/openai/openai-go"
 	"mckinsey.com/ark/internal/telemetry"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
 type modelRecorder struct {
@@ -60,6 +62,10 @@ func (r *modelRecorder) RecordInput(span telemetry.Span, messages any) {
 		for i, msg := range msgs {
 			prefix := fmt.Sprintf("llm.input_messages.%d.message", i)
 			recordMessage(span, msg, prefix)
+		}
+	case []protocol.Message:
+		for i, msg := range msgs {
+			recordProtocolMessage(span, msg, fmt.Sprintf("llm.input_messages.%d.message", i))
 		}
 	default:
 		// Fallback: just marshal to JSON string
@@ -144,6 +150,8 @@ func (r *modelRecorder) RecordOutput(span telemetry.Span, output any) {
 				)
 			}
 		}
+	case protocol.Message:
+		recordProtocolMessage(span, out, "llm.output_messages.0.message")
 	default:
 		outputJSON, err := json.Marshal(output)
 		if err != nil {
@@ -151,6 +159,42 @@ func (r *modelRecorder) RecordOutput(span telemetry.Span, output any) {
 		}
 		span.SetAttributes(telemetry.String(telemetry.AttrMessagesOutput, string(outputJSON)))
 	}
+}
+
+func recordProtocolMessage(span telemetry.Span, msg protocol.Message, prefix string) {
+	span.SetAttributes(
+		telemetry.String(prefix+".role", protocolRoleToTelemetryRole(msg.Role)),
+	)
+	content := extractProtocolText(msg.Parts)
+	if content != "" {
+		span.SetAttributes(telemetry.String(prefix+".content", content))
+	}
+}
+
+func protocolRoleToTelemetryRole(role protocol.MessageRole) string {
+	switch role {
+	case protocol.MessageRoleUser:
+		return "user"
+	case protocol.MessageRoleAgent:
+		return "assistant"
+	default:
+		return "assistant"
+	}
+}
+
+func extractProtocolText(parts []protocol.Part) string {
+	var builder strings.Builder
+	for _, part := range parts {
+		switch typed := part.(type) {
+		case protocol.TextPart:
+			builder.WriteString(typed.Text)
+		case *protocol.TextPart:
+			if typed != nil {
+				builder.WriteString(typed.Text)
+			}
+		}
+	}
+	return builder.String()
 }
 
 func (r *modelRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, completionTokens, totalTokens int64) {

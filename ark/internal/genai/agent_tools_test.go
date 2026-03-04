@@ -888,6 +888,35 @@ func TestNormalizeContextIDRejectsExceedsMaxLength(t *testing.T) {
 	require.Contains(t, err.Error(), "exceeds max length")
 }
 
+func TestMergeDelegationHistoryMergesCallerAndInvocationHistory(t *testing.T) {
+	callerMsg := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("caller"),
+	})
+	callerMsg.MessageID = "msg-1"
+	invocationMsg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("invocation"),
+	})
+	invocationMsg.MessageID = "msg-2"
+	merged := mergeDelegationHistory([]protocol.Message{callerMsg}, []protocol.Message{invocationMsg})
+	require.Len(t, merged, 2)
+	require.Equal(t, "msg-1", merged[0].MessageID)
+	require.Equal(t, "msg-2", merged[1].MessageID)
+}
+
+func TestMergeDelegationHistoryDeduplicatesByMessageID(t *testing.T) {
+	callerMsg := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("caller"),
+	})
+	callerMsg.MessageID = "same-id"
+	invocationMsg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("invocation"),
+	})
+	invocationMsg.MessageID = "same-id"
+	merged := mergeDelegationHistory([]protocol.Message{callerMsg}, []protocol.Message{invocationMsg})
+	require.Len(t, merged, 1)
+	require.Equal(t, "same-id", merged[0].MessageID)
+}
+
 func TestGetDelegationEventStreamReturnsStreamWhenAvailable(t *testing.T) {
 	ctx := WithToolEventStream(context.Background(), &testToolEventStream{})
 	call := ToolCall{
@@ -1057,7 +1086,7 @@ func TestDelegatedStreamBridgeAnnotatesDownstreamEvents(t *testing.T) {
 	require.NoError(t, stream.StreamChunk(ctx, artifactEvent))
 
 	require.Len(t, baseStream.chunks, 2)
-	statusChunk, ok := baseStream.chunks[0].(*protocol.TaskStatusUpdateEvent)
+	statusChunk, ok := unwrapDelegatedChunk(t, baseStream.chunks[0]).(*protocol.TaskStatusUpdateEvent)
 	require.True(t, ok)
 	statusPayload, hasStatusPayload := extractDataPayloadBySchema(
 		statusChunk.Status.Message.Parts,
@@ -1071,7 +1100,7 @@ func TestDelegatedStreamBridgeAnnotatesDownstreamEvents(t *testing.T) {
 	require.Equal(t, "ctx-1", statusPayload["delegatedContextId"])
 	require.Equal(t, float64(1), statusPayload["sequence"])
 
-	artifactChunk, ok := baseStream.chunks[1].(*protocol.TaskArtifactUpdateEvent)
+	artifactChunk, ok := unwrapDelegatedChunk(t, baseStream.chunks[1]).(*protocol.TaskArtifactUpdateEvent)
 	require.True(t, ok)
 	artifactPayload, hasArtifactPayload := extractDataPayloadBySchema(
 		artifactChunk.Artifact.Parts,
@@ -1100,7 +1129,7 @@ func TestDelegatedStreamBridgeAnnotatesMessageEvents(t *testing.T) {
 	require.NoError(t, stream.StreamChunk(ctx, &message))
 
 	require.Len(t, baseStream.chunks, 1)
-	chunk, ok := baseStream.chunks[0].(*protocol.Message)
+	chunk, ok := unwrapDelegatedChunk(t, baseStream.chunks[0]).(*protocol.Message)
 	require.True(t, ok)
 	payload, hasPayload := extractDataPayloadBySchema(chunk.Parts, A2APayloadSchemaStepEventV1)
 	require.True(t, hasPayload)
@@ -1125,7 +1154,7 @@ func TestDelegatedStreamBridgeWithEmptyToolCallIDOmitStepID(t *testing.T) {
 	require.NoError(t, stream.StreamChunk(ctx, &message))
 	require.Len(t, baseStream.chunks, 1)
 
-	chunk, ok := baseStream.chunks[0].(*protocol.Message)
+	chunk, ok := unwrapDelegatedChunk(t, baseStream.chunks[0]).(*protocol.Message)
 	require.True(t, ok)
 	payload, hasPayload := extractDataPayloadBySchema(chunk.Parts, A2APayloadSchemaStepEventV1)
 	require.True(t, hasPayload)
@@ -1282,4 +1311,12 @@ func TestTeamToolExecutor_NativeMessageDelegationWithoutInput(t *testing.T) {
 	require.Contains(t, err.Error(), "has no members configured")
 	require.Contains(t, result.Error, "failed to execute team")
 	require.NotContains(t, result.Error, "input parameter is required")
+}
+
+func unwrapDelegatedChunk(t *testing.T, chunk interface{}) interface{} {
+	t.Helper()
+	wrapped, ok := chunk.(ChunkWithMetadata)
+	require.True(t, ok)
+	require.NotNil(t, wrapped.Ark)
+	return wrapped.Ark.A2A
 }

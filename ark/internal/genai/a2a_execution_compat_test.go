@@ -48,7 +48,10 @@ func TestStreamNativeA2AMessageStrict(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, stream.chunks, 1)
-	streamedMessage, ok := stream.chunks[0].(*protocol.Message)
+	wrapped, ok := stream.chunks[0].(ChunkWithMetadata)
+	require.True(t, ok)
+	require.NotNil(t, wrapped.Ark)
+	streamedMessage, ok := wrapped.Ark.A2A.(*protocol.Message)
 	require.True(t, ok)
 	assert.Equal(t, "done", ExtractA2ATextFromMessage(*streamedMessage))
 }

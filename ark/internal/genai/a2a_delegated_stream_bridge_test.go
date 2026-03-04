@@ -36,7 +36,7 @@ func TestDelegatedStreamBridgeTaskStatusUpdateEvent(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, stream.chunks, 1)
 
-	forwarded := stream.chunks[0].(*protocol.TaskStatusUpdateEvent)
+	forwarded := unwrapDelegatedA2AChunk(t, stream.chunks[0]).(*protocol.TaskStatusUpdateEvent)
 	assert.Equal(t, protocol.TaskStateWorking, forwarded.Status.State)
 	require.NotNil(t, forwarded.Status.Message)
 
@@ -66,7 +66,7 @@ func TestDelegatedStreamBridgeTaskArtifactUpdateEvent(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, stream.chunks, 1)
 
-	forwarded := stream.chunks[0].(*protocol.TaskArtifactUpdateEvent)
+	forwarded := unwrapDelegatedA2AChunk(t, stream.chunks[0]).(*protocol.TaskArtifactUpdateEvent)
 	assert.Equal(t, "task-2", forwarded.TaskID)
 	payload := findStepEventPayload(t, forwarded.Artifact.Parts)
 	assert.Equal(t, "tc-2", payload.ToolCallID)
@@ -83,7 +83,7 @@ func TestDelegatedStreamBridgeMessagePointer(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, stream.chunks, 1)
 
-	forwarded := stream.chunks[0].(*protocol.Message)
+	forwarded := unwrapDelegatedA2AChunk(t, stream.chunks[0]).(*protocol.Message)
 	payload := findStepEventPayload(t, forwarded.Parts)
 	assert.Equal(t, "tc-3", payload.ToolCallID)
 }
@@ -98,7 +98,7 @@ func TestDelegatedStreamBridgeMessageValue(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, stream.chunks, 1)
 
-	forwarded := stream.chunks[0].(protocol.Message)
+	forwarded := unwrapDelegatedA2AChunk(t, stream.chunks[0]).(protocol.Message)
 	payload := findStepEventPayload(t, forwarded.Parts)
 	assert.Equal(t, "tc-4", payload.ToolCallID)
 }
@@ -119,7 +119,7 @@ func TestDelegatedStreamBridgeTask(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, stream.chunks, 1)
 
-	forwarded := stream.chunks[0].(*protocol.Task)
+	forwarded := unwrapDelegatedA2AChunk(t, stream.chunks[0]).(*protocol.Task)
 	assert.Equal(t, "task-5", forwarded.ID)
 	payload := findStepEventPayload(t, forwarded.Status.Message.Parts)
 	assert.Equal(t, "tc-5", payload.ToolCallID)
@@ -143,7 +143,7 @@ func TestDelegatedStreamBridgeStatusUpdateNilMessageSynthesizesPayload(t *testin
 	require.NoError(t, err)
 	require.Len(t, stream.chunks, 1)
 
-	forwarded := stream.chunks[0].(*protocol.TaskStatusUpdateEvent)
+	forwarded := unwrapDelegatedA2AChunk(t, stream.chunks[0]).(*protocol.TaskStatusUpdateEvent)
 	require.NotNil(t, forwarded.Status.Message, "should synthesize message for step metadata")
 	payload := findStepEventPayload(t, forwarded.Status.Message.Parts)
 	assert.Equal(t, "tc-nil", payload.ToolCallID)
@@ -170,7 +170,7 @@ func TestDelegatedStreamBridgeSequenceIncrementsAcrossEvents(t *testing.T) {
 
 	require.Len(t, stream.chunks, 3)
 	for i, chunk := range stream.chunks {
-		forwarded := chunk.(*protocol.TaskArtifactUpdateEvent)
+		forwarded := unwrapDelegatedA2AChunk(t, chunk).(*protocol.TaskArtifactUpdateEvent)
 		payload := findStepEventPayload(t, forwarded.Artifact.Parts)
 		require.NotNil(t, payload.Sequence, "event %d should have sequence", i)
 		assert.Equal(t, i+1, *payload.Sequence, "sequence should increment from 1")
@@ -220,4 +220,12 @@ func findStepEventPayload(t *testing.T, parts []protocol.Part) StepEventPayloadV
 	}
 	t.Fatal("no StepEventPayloadV1 found in parts")
 	return StepEventPayloadV1{}
+}
+
+func unwrapDelegatedA2AChunk(t *testing.T, chunk interface{}) interface{} {
+	t.Helper()
+	wrapped, ok := chunk.(ChunkWithMetadata)
+	require.True(t, ok)
+	require.NotNil(t, wrapped.Ark)
+	return wrapped.Ark.A2A
 }

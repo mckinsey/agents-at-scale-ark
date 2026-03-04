@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
 type contextKey string
@@ -20,6 +21,7 @@ const (
 	modelKey               contextKey = "model"
 	toolEventStreamKey     contextKey = "toolEventStream"
 	streamCorrelationIDKey contextKey = "streamCorrelationId"
+	delegationHistoryKey   contextKey = "delegationCallerHistory"
 )
 
 func WithQueryContext(ctx context.Context, queryID, sessionID, queryName string) context.Context {
@@ -119,6 +121,23 @@ func GetToolEventStream(ctx context.Context) EventStreamInterface {
 	if val := ctx.Value(toolEventStreamKey); val != nil {
 		if eventStream, ok := val.(EventStreamInterface); ok {
 			return eventStream
+		}
+	}
+	return nil
+}
+
+func WithDelegationCallerHistory(ctx context.Context, history []protocol.Message) context.Context {
+	if len(history) == 0 {
+		return ctx
+	}
+	copied := append([]protocol.Message(nil), history...)
+	return context.WithValue(ctx, delegationHistoryKey, copied)
+}
+
+func GetDelegationCallerHistory(ctx context.Context) []protocol.Message {
+	if val := ctx.Value(delegationHistoryKey); val != nil {
+		if history, ok := val.([]protocol.Message); ok {
+			return append([]protocol.Message(nil), history...)
 		}
 	}
 	return nil

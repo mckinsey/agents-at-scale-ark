@@ -9,9 +9,9 @@ import (
 	"mckinsey.com/ark/internal/telemetry"
 )
 
-func (t *Team) finishGraphTurn(err error, turnSpan telemetry.Span, turnCtx context.Context, turns int, operationData map[string]string, newMessages []protocol.Message) ([]protocol.Message, error) {
-	if len(newMessages) > 0 {
-		t.telemetryRecorder.RecordTurnOutput(turnSpan, nil, len(newMessages))
+func (t *Team) finishGraphTurn(err error, turnSpan telemetry.Span, turnCtx context.Context, turns int, operationData map[string]string, newMessages []protocol.Message, turnMessages []protocol.Message) ([]protocol.Message, error) {
+	if len(turnMessages) > 0 {
+		t.telemetryRecorder.RecordTurnOutput(turnSpan, turnMessages, len(turnMessages))
 	}
 	if err != nil {
 		t.telemetryRecorder.RecordError(turnSpan, err)
@@ -69,9 +69,11 @@ func (t *Team) executeGraphA2A(ctx context.Context, userInput protocol.Message, 
 		}
 		turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s", turns, t.Name), operationData)
 
+		beforeCount := len(newMessages)
 		err := t.executeMemberAndAccumulateA2A(turnCtx, member, userInput, &messages, &newMessages, turns)
+		turnMessages := newMessages[beforeCount:]
 
-		retMsgs, retErr := t.finishGraphTurn(err, turnSpan, turnCtx, turns, operationData, newMessages)
+		retMsgs, retErr := t.finishGraphTurn(err, turnSpan, turnCtx, turns, operationData, newMessages, turnMessages)
 		if retMsgs != nil {
 			return retMsgs, retErr
 		}
