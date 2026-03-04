@@ -69,22 +69,41 @@ class ModelsPage(BasePage):
         except Exception as e:
             return False
     
+    def _select_from_combobox(self, trigger_selector: str, option_text: str) -> None:
+        trigger = self.page.locator(trigger_selector).first
+        trigger.wait_for(state="visible", timeout=5000)
+        trigger.click()
+        self.wait_for_dropdown_options()
+        self.page.locator(f"[role='option']:has-text('{option_text}')").first.click()
+        self.wait_for_element_hidden("[role='listbox'], [data-slot='select-content']", timeout=3000)
+
     def create_model_with_verification(self, model_name: str, model_type: str, model: str, secret_name: str, base_url: str) -> dict:
         logger.info(f"Creating {model_type} model: {model_name}")
         
         self.page.locator(self.ADD_MODEL_BUTTON).first.click()
-        self.wait_for_form_ready()
+        self.wait_for_load_state("domcontentloaded")
         
-        self.page.locator(self.MODEL_NAME_INPUT).first.wait_for(state="visible")
-        self.page.locator(self.MODEL_NAME_INPUT).first.fill(model_name)
-        self.page.locator("select").first.select_option(value=model_type.lower().replace(" ", ""))
-        self.page.locator(self.MODEL_INPUT).first.fill(model)
-        self.page.locator("select").nth(1).select_option(value=secret_name)
-        self.page.locator(self.BASE_URL_INPUT).first.fill(base_url)
-        self.page.locator(self.SAVE_BUTTON).first.wait_for(state="visible")
-        self.page.locator(self.SAVE_BUTTON).first.click()
+        name_input = self.page.locator("input[name='name']").first
+        name_input.wait_for(state="visible", timeout=10000)
+        name_input.fill(model_name)
         
-        self.wait_for_modal_close()
+        if model_type.lower() not in ("openai", ""):
+            self._select_from_combobox("[role='combobox']", model_type)
+        
+        model_input = self.page.locator(self.MODEL_INPUT).first
+        model_input.wait_for(state="visible", timeout=5000)
+        model_input.fill(model)
+        
+        self._select_from_combobox("[role='combobox']:has-text('Select a secret'), [role='combobox']:has-text('Select secret')", secret_name)
+        
+        base_url_input = self.page.locator(self.BASE_URL_INPUT).first
+        base_url_input.wait_for(state="visible", timeout=5000)
+        base_url_input.fill(base_url)
+        
+        submit_button = self.page.locator("button:has-text('Create Model'), button[type='submit']:has-text('Create')").first
+        submit_button.wait_for(state="visible", timeout=5000)
+        submit_button.click()
+        
         self.wait_for_navigation_complete()
         
         try:
