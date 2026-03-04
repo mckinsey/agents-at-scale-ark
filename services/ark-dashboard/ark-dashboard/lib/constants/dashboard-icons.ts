@@ -11,6 +11,7 @@ import {
   Key,
   Lock,
   type LucideIcon,
+  Package,
   Play,
   Search,
   Server,

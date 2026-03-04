@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.workflows
+@pytest.mark.xdist_group("ark_workflows")
 class TestWorkflowIntegration:
     
     def test_engineering_workflow_full_cycle(self, page: Page):
@@ -135,8 +136,6 @@ class TestWorkflowIntegration:
             workflows_page.close_modal_if_present()
             logger.info("Opened workflow details in Argo")
 
-            page.wait_for_timeout(2000)
-            
             argo_status = workflows_page.get_workflow_status()
             logger.info(f"Workflow status in Argo UI: {argo_status}")
             
