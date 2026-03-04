@@ -90,7 +90,7 @@ class TeamsPage(BasePage):
 
         logger.info(f"Selecting member: {member_name}")
         try:
-            member_checkbox = self.page.locator(f"label:has-text('{member_name}') >> xpath=../preceding-sibling::button[@role='checkbox'], div:has-text('{member_name}') button[role='checkbox']").first
+            member_checkbox = self.page.locator(f"div:has-text('{member_name}') input[type='checkbox'], label:has-text('{member_name}') input[type='checkbox']").first
             member_checkbox.wait_for(state="visible", timeout=10000)
             if member_checkbox.is_visible():
                 member_checkbox.click()
