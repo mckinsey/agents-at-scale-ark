@@ -9,7 +9,7 @@ import (
 	"mckinsey.com/ark/internal/telemetry"
 )
 
-func (t *Team) finishGraphTurn(err error, turnSpan telemetry.Span, turnCtx context.Context, turns int, operationData map[string]string, newMessages []protocol.Message, turnMessages []protocol.Message) ([]protocol.Message, error) {
+func (t *Team) finishGraphTurn(err error, turnSpan telemetry.Span, turnCtx context.Context, turns int, operationData map[string]string, newMessages, turnMessages []protocol.Message) ([]protocol.Message, error) {
 	if len(turnMessages) > 0 {
 		t.telemetryRecorder.RecordTurnOutput(turnSpan, turnMessages, len(turnMessages))
 	}
