@@ -22,10 +22,10 @@ type jsonRPCRequest struct {
 }
 
 type jsonRPCResponse struct {
-	JSONRPC string           `json:"jsonrpc"`
-	ID      interface{}      `json:"id,omitempty"`
-	Result  json.RawMessage  `json:"result,omitempty"`
-	Error   *jsonRPCError    `json:"error,omitempty"`
+	JSONRPC string          `json:"jsonrpc"`
+	ID      interface{}     `json:"id,omitempty"`
+	Result  json.RawMessage `json:"result,omitempty"`
+	Error   *jsonRPCError   `json:"error,omitempty"`
 }
 
 type jsonRPCError struct {
@@ -34,15 +34,19 @@ type jsonRPCError struct {
 	Data    interface{} `json:"data,omitempty"`
 }
 
-func postJSONRPC(t *testing.T, serverURL string, body string) *http.Response {
+func postAndDecodeJSONRPC(t *testing.T, serverURL, body string) jsonRPCResponse {
 	t.Helper()
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Post(serverURL+"/", "application/json", strings.NewReader(body))
 	require.NoError(t, err)
-	return resp
+	defer func() { _ = resp.Body.Close() }()
+
+	var rpcResp jsonRPCResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&rpcResp))
+	return rpcResp
 }
 
-func postRawJSONRPC(t *testing.T, serverURL string, body string, contentType string) *http.Response {
+func postRawAndDecodeJSONRPC(t *testing.T, serverURL, body, contentType string) jsonRPCResponse {
 	t.Helper()
 	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequest(http.MethodPost, serverURL+"/", strings.NewReader(body))
@@ -50,15 +54,10 @@ func postRawJSONRPC(t *testing.T, serverURL string, body string, contentType str
 	req.Header.Set("Content-Type", contentType)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	return resp
-}
+	defer func() { _ = resp.Body.Close() }()
 
-func decodeJSONRPCResponse(t *testing.T, resp *http.Response) jsonRPCResponse {
-	t.Helper()
-	defer resp.Body.Close()
 	var rpcResp jsonRPCResponse
-	err := json.NewDecoder(resp.Body).Decode(&rpcResp)
-	require.NoError(t, err)
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&rpcResp))
 	return rpcResp
 }
 
@@ -69,7 +68,7 @@ func TestA2AComplianceAgentCardDiscovery(t *testing.T) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(testServer.URL + "/.well-known/agent.json")
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Contains(t, resp.Header.Get("Content-Type"), "application/json")
@@ -103,8 +102,7 @@ func TestA2AComplianceJSONRPCParseError(t *testing.T) {
 	testServer := startStreamingTestServer(t)
 	defer testServer.Close()
 
-	resp := postRawJSONRPC(t, testServer.URL, `{invalid json`, "application/json")
-	rpcResp := decodeJSONRPCResponse(t, resp)
+	rpcResp := postRawAndDecodeJSONRPC(t, testServer.URL, `{invalid json`, "application/json")
 
 	require.NotNil(t, rpcResp.Error, "must return JSON-RPC error for invalid JSON")
 	assert.Equal(t, -32700, rpcResp.Error.Code, "parse error code must be -32700")
@@ -120,8 +118,7 @@ func TestA2AComplianceJSONRPCMethodNotFound(t *testing.T) {
 		ID:      "test-mnf",
 		Method:  "nonexistent/method",
 	})
-	resp := postJSONRPC(t, testServer.URL, string(reqBody))
-	rpcResp := decodeJSONRPCResponse(t, resp)
+	rpcResp := postAndDecodeJSONRPC(t, testServer.URL, string(reqBody))
 
 	require.NotNil(t, rpcResp.Error, "must return JSON-RPC error for unknown method")
 	assert.Equal(t, -32601, rpcResp.Error.Code, "method not found code must be -32601")
@@ -147,9 +144,7 @@ func TestA2AComplianceMessageSend(t *testing.T) {
 		},
 	})
 
-	resp := postJSONRPC(t, testServer.URL, string(reqBody))
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	rpcResp := decodeJSONRPCResponse(t, resp)
+	rpcResp := postAndDecodeJSONRPC(t, testServer.URL, string(reqBody))
 
 	assert.Equal(t, "2.0", rpcResp.JSONRPC)
 	assert.Equal(t, "test-send", rpcResp.ID)
@@ -186,7 +181,7 @@ func TestA2AComplianceMessageStream(t *testing.T) {
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Post(testServer.URL+"/", "application/json", bytes.NewReader(reqBody))
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Contains(t, resp.Header.Get("Content-Type"), "text/event-stream")
@@ -199,15 +194,17 @@ func TestA2AComplianceMessageStream(t *testing.T) {
 
 	for scanner.Scan() {
 		line := scanner.Text()
-		if strings.HasPrefix(line, "event:") {
+
+		switch {
+		case strings.HasPrefix(line, "event:"):
 			currentEventType = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
-		} else if strings.HasPrefix(line, "data:") {
+		case strings.HasPrefix(line, "data:"):
 			dataChunk := strings.TrimPrefix(line, "data:")
 			if len(dataChunk) > 0 && dataChunk[0] == ' ' {
 				dataChunk = dataChunk[1:]
 			}
 			dataBuffer.WriteString(dataChunk)
-		} else if line == "" && dataBuffer.Len() > 0 {
+		case line == "" && dataBuffer.Len() > 0:
 			var sseResp jsonRPCResponse
 			err := json.Unmarshal(dataBuffer.Bytes(), &sseResp)
 			require.NoError(t, err, "SSE data must be valid JSON-RPC: %s", dataBuffer.String())
@@ -262,7 +259,7 @@ func TestA2AComplianceCapabilityHonesty(t *testing.T) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	cardResp, err := client.Get(testServer.URL + "/.well-known/agent.json")
 	require.NoError(t, err)
-	defer cardResp.Body.Close()
+	defer func() { _ = cardResp.Body.Close() }()
 
 	var card map[string]interface{}
 	err = json.NewDecoder(cardResp.Body).Decode(&card)
@@ -288,7 +285,7 @@ func TestA2AComplianceCapabilityHonesty(t *testing.T) {
 
 	streamResp, err := client.Post(testServer.URL+"/", "application/json", bytes.NewReader(reqBody))
 	require.NoError(t, err)
-	defer streamResp.Body.Close()
+	defer func() { _ = streamResp.Body.Close() }()
 
 	if declaresStreaming {
 		assert.Equal(t, http.StatusOK, streamResp.StatusCode, "declared streaming agent must accept stream requests")
