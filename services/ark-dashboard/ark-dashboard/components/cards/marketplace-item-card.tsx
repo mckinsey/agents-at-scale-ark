@@ -203,7 +203,7 @@ export function MarketplaceItemCard({
             ) : isInstalling ? (
               <>
                 <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                Installing...
+                Loading...
               </>
             ) : (
               'Get'
