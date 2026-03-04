@@ -187,57 +187,38 @@ spec:
           condition:
             name: Completed
             value: 'True'
-    # Wait for structured events to be available before creating evaluation
+    # Wait for events to propagate before creating evaluation
     - script:
         content: |
-          echo "Waiting for structured query execution events..."
+          echo "Waiting for query events to propagate..."
 
-          MAX_ATTEMPTS=30
-          SLEEP_INTERVAL=2
+          # Poll for events
+          MAX_ATTEMPTS=10
+          ATTEMPT=0
+          MIN_EVENTS=1
 
-          for i in $(seq 1 $MAX_ATTEMPTS); do
-            echo "Attempt $i/$MAX_ATTEMPTS: Checking for structured execution events..."
-
-            # Check for events with tool execution data
-            # The evaluator needs ToolCallComplete events with structured data
-            TOOL_EVENTS=$(kubectl get events -n $NAMESPACE \
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            EVENT_COUNT=$(kubectl get events -n $NAMESPACE \
               --field-selector involvedObject.name=chicago-weather-query,involvedObject.kind=Query \
-              -o json 2>/dev/null | \
-              jq '[.items[] | select(.reason=="ToolCallComplete" or .reason=="ToolExecutionComplete")] | length')
+              -o json | jq '.items | length')
 
-            echo "Found $TOOL_EVENTS tool execution events"
+            echo "Attempt $((ATTEMPT+1))/$MAX_ATTEMPTS: Found $EVENT_COUNT events"
 
-            # We expect at least 2 tool executions (get-coordinates and get-forecast)
-            if [ "$TOOL_EVENTS" -ge 2 ]; then
-              echo "✓ Tool execution events available"
-
-              # Additional check: verify at least one event has structured data
-              HAS_STRUCTURED=$(kubectl get events -n $NAMESPACE \
-                --field-selector involvedObject.name=chicago-weather-query,involvedObject.kind=Query \
-                -o json 2>/dev/null | \
-                jq '[.items[] | select(.message != null and (.message | startswith("{")))] | length')
-
-              echo "Found $HAS_STRUCTURED events with structured data"
-
-              if [ "$HAS_STRUCTURED" -ge 1 ]; then
-                echo "✓ Structured event data confirmed"
-                exit 0
-              else
-                echo "⚠ Events exist but lack structured data, waiting..."
-              fi
+            if [ "$EVENT_COUNT" -ge $MIN_EVENTS ]; then
+              echo "✓ Events available ($EVENT_COUNT >= $MIN_EVENTS)"
+              exit 0
             fi
 
-            if [ $i -lt $MAX_ATTEMPTS ]; then
-              sleep $SLEEP_INTERVAL
-            fi
+            ATTEMPT=$((ATTEMPT+1))
+            sleep 1
           done
 
-          echo "⚠ Timeout waiting for structured events, but continuing anyway..."
-          exit 0
+          echo "Warning: Only found $EVENT_COUNT events after $MAX_ATTEMPTS attempts (expected >= $MIN_EVENTS)"
+          echo "Proceeding anyway..."
         env:
         - name: NAMESPACE
           value: ($namespace)
-        timeout: 90s
+        timeout: 30s
     - apply:
         file: manifests/weather-tools-event-evaluation.yaml
     - wait:
