@@ -181,7 +181,10 @@ func TestExecuteLocallyA2ANativeSimpleResponse(t *testing.T) {
 	assert.Equal(t, "ctx-1", *result.A2AMessages[0].ContextID)
 	assert.Equal(t, "task-1", *result.A2AMessages[0].TaskID)
 	require.Len(t, stream.chunks, 1)
-	_, ok := stream.chunks[0].(*protocol.Message)
+	wrapped, ok := stream.chunks[0].(ChunkWithMetadata)
+	require.True(t, ok)
+	require.NotNil(t, wrapped.Ark)
+	_, ok = wrapped.Ark.A2A.(*protocol.Message)
 	assert.True(t, ok)
 }
 
@@ -335,7 +338,10 @@ func TestExecuteLocallyA2ANativeEventStreamEmitsA2AMessages(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, stream.chunks, 2)
 	for _, chunk := range stream.chunks {
-		_, ok := chunk.(*protocol.Message)
+		wrapped, ok := chunk.(ChunkWithMetadata)
+		require.True(t, ok)
+		require.NotNil(t, wrapped.Ark)
+		_, ok = wrapped.Ark.A2A.(*protocol.Message)
 		assert.True(t, ok)
 	}
 }

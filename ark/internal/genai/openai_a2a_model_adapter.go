@@ -78,6 +78,7 @@ func (a *openAIA2AModelAdapter) a2aTurnViaNativeProvider(ctx context.Context, me
 		"modelType": a.modelType,
 	}
 	ctx = a.eventingRecorder.Start(ctx, "LLMCall", fmt.Sprintf("Calling model %s", a.modelName), operationData)
+	a.telemetryRecorder.RecordInput(span, messages)
 
 	result, err := a.nativeProvider.A2ATurnNative(ctx, messages, toolOutcomes, tools, eventStream)
 	if err != nil {

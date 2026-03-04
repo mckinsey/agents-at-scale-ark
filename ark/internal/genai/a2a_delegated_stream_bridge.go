@@ -40,7 +40,7 @@ func (b *delegatedToolStreamBridge) StreamChunk(ctx context.Context, chunk inter
 			appendPayloadPartToMessage(&msg, payload)
 			update.Status.Message = &msg
 		}
-		return b.base.StreamChunk(ctx, &update)
+		return b.base.StreamChunk(ctx, wrapA2AEventForStreaming(ctx, &update))
 	case *protocol.TaskArtifactUpdateEvent:
 		update := *value
 		payload := b.nextStepPayload()
@@ -49,15 +49,15 @@ func (b *delegatedToolStreamBridge) StreamChunk(ctx context.Context, chunk inter
 		artifact := value.Artifact
 		artifact.Parts = appendPayloadPart(artifact.Parts, payload)
 		update.Artifact = artifact
-		return b.base.StreamChunk(ctx, &update)
+		return b.base.StreamChunk(ctx, wrapA2AEventForStreaming(ctx, &update))
 	case *protocol.Message:
 		message := *value
 		appendPayloadPartToMessage(&message, b.nextStepPayload())
-		return b.base.StreamChunk(ctx, &message)
+		return b.base.StreamChunk(ctx, wrapA2AEventForStreaming(ctx, &message))
 	case protocol.Message:
 		message := value
 		appendPayloadPartToMessage(&message, b.nextStepPayload())
-		return b.base.StreamChunk(ctx, message)
+		return b.base.StreamChunk(ctx, wrapA2AEventForStreaming(ctx, message))
 	case *protocol.Task:
 		task := *value
 		payload := b.nextStepPayload()
@@ -72,7 +72,7 @@ func (b *delegatedToolStreamBridge) StreamChunk(ctx context.Context, chunk inter
 			appendPayloadPartToMessage(&msg, payload)
 			task.Status.Message = &msg
 		}
-		return b.base.StreamChunk(ctx, &task)
+		return b.base.StreamChunk(ctx, wrapA2AEventForStreaming(ctx, &task))
 	default:
 		return b.base.StreamChunk(ctx, chunk)
 	}
