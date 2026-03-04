@@ -15,6 +15,8 @@ images:
     image: ark-broker
     dockerfile: ./ark-broker/Dockerfile
     context: ./ark-broker
+    docker:
+      useBuildKit: true
 
 deployments:
   ark-broker:
