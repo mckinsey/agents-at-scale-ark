@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider as JotaiProvider } from 'jotai';
 import { toast } from 'sonner';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, type Mock } from 'vitest';
 
 import { ManageMarketplaceSettings } from './manage-marketplace-settings';
 
@@ -15,6 +15,22 @@ vi.mock('sonner', () => ({
 }));
 
 const mockToast = vi.mocked(toast);
+const mockFetch = vi.fn() as Mock;
+global.fetch = mockFetch;
+
+function mockValidateSuccess() {
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({ valid: true, itemCount: 1 }),
+  });
+}
+
+function mockValidateFailure(error: string) {
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({ valid: false, error }),
+  });
+}
 
 function renderWithProviders(ui: React.ReactElement) {
   const queryClient = new QueryClient({
@@ -94,6 +110,7 @@ describe('ManageMarketplaceSettings', () => {
   });
 
   it('should add a new marketplace source immediately without a save step', async () => {
+    mockValidateSuccess();
     renderWithProviders(<ManageMarketplaceSettings />);
 
     await userEvent.click(screen.getByRole('button', { name: /Add new marketplace/i }));
@@ -154,6 +171,7 @@ describe('ManageMarketplaceSettings', () => {
   });
 
   it('should accept a valid HTTPS marketplace.json URL', async () => {
+    mockValidateSuccess();
     renderWithProviders(<ManageMarketplaceSettings />);
 
     await userEvent.click(screen.getByRole('button', { name: /Add new marketplace/i }));
@@ -166,6 +184,40 @@ describe('ManageMarketplaceSettings', () => {
     await waitFor(() => {
       expect(screen.queryByText(/Only HTTPS URLs are allowed/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/must point to a marketplace.json/i)).not.toBeInTheDocument();
+    });
+  });
+
+  it('should show schema error with reference link when URL does not match marketplace schema', async () => {
+    mockValidateFailure('JSON does not match the marketplace schema');
+    renderWithProviders(<ManageMarketplaceSettings />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Add new marketplace/i }));
+    await userEvent.type(
+      screen.getByPlaceholderText(/https:\/\/raw\.githubusercontent\.com/i),
+      'https://example.com/marketplace.json'
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('JSON does not match the marketplace schema')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /See the public marketplace\.json/i })).toBeInTheDocument();
+    });
+  });
+
+  it('should show fetch error with reference link when URL cannot be fetched', async () => {
+    mockValidateFailure('Could not fetch the URL (HTTP 404)');
+    renderWithProviders(<ManageMarketplaceSettings />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Add new marketplace/i }));
+    await userEvent.type(
+      screen.getByPlaceholderText(/https:\/\/raw\.githubusercontent\.com/i),
+      'https://example.com/marketplace.json'
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Could not fetch the URL (HTTP 404)')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /See the public marketplace\.json/i })).toBeInTheDocument();
     });
   });
 
@@ -262,6 +314,7 @@ describe('ManageMarketplaceSettings', () => {
   });
 
   it('should invalidate queries when adding a new source', async () => {
+    mockValidateSuccess();
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },

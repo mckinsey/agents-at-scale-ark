@@ -2,7 +2,7 @@
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useAtom } from 'jotai';
-import { Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Loader2, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -10,6 +10,9 @@ import { marketplaceSourcesAtom, type MarketplaceSource } from '@/atoms/marketpl
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+
+const PUBLIC_MARKETPLACE_URL =
+  'https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json';
 
 function validateMarketplaceUrl(url: string): string | null {
   if (!url) {
@@ -24,11 +27,25 @@ function validateMarketplaceUrl(url: string): string | null {
   return null;
 }
 
+async function validateMarketplaceSchema(url: string): Promise<string | null> {
+  const response = await fetch('/api/marketplace/validate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+  const result = (await response.json()) as { valid: boolean; error?: string };
+  if (!result.valid) {
+    return result.error ?? 'Invalid marketplace JSON';
+  }
+  return null;
+}
+
 export function ManageMarketplaceSettings() {
   const queryClient = useQueryClient();
   const [sources, setSources] = useAtom(marketplaceSourcesAtom);
 
   const [isAdding, setIsAdding] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
   const [newSource, setNewSource] = useState<Partial<MarketplaceSource>>({
     url: '',
     displayName: '',
@@ -36,10 +53,22 @@ export function ManageMarketplaceSettings() {
   const [urlError, setUrlError] = useState<string | null>(null);
 
   const handleAddSource = async () => {
-    const error = validateMarketplaceUrl(newSource.url || '');
-    if (error) {
-      setUrlError(error);
+    const staticError = validateMarketplaceUrl(newSource.url || '');
+    if (staticError) {
+      setUrlError(staticError);
       return;
+    }
+
+    setIsValidating(true);
+    setUrlError(null);
+    try {
+      const schemaError = await validateMarketplaceSchema(newSource.url!);
+      if (schemaError) {
+        setUrlError(schemaError);
+        return;
+      }
+    } finally {
+      setIsValidating(false);
     }
 
     const source: MarketplaceSource = {
@@ -166,7 +195,16 @@ export function ManageMarketplaceSettings() {
                 className={`mt-1.5 font-mono text-sm${urlError ? ' border-destructive' : ''}`}
               />
               {urlError && (
-                <p className="mt-1 text-xs text-destructive">{urlError}</p>
+                <p className="mt-1 text-xs text-destructive">
+                  {urlError}{' '}
+                  <a
+                    href={PUBLIC_MARKETPLACE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline">
+                    See the public marketplace.json for reference.
+                  </a>
+                </p>
               )}
             </div>
 
@@ -187,11 +225,18 @@ export function ManageMarketplaceSettings() {
           </div>
 
           <div className="mt-4 flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={handleCancelAdd}>
+            <Button variant="outline" size="sm" onClick={handleCancelAdd} disabled={isValidating}>
               Cancel
             </Button>
-            <Button size="sm" onClick={handleAddSource}>
-              Add
+            <Button size="sm" onClick={handleAddSource} disabled={isValidating}>
+              {isValidating ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Validating…
+                </>
+              ) : (
+                'Add'
+              )}
             </Button>
           </div>
         </div>
