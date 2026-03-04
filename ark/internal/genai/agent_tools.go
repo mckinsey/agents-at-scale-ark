@@ -441,6 +441,35 @@ func parseDelegatedInvocation(arguments map[string]any, targetType, targetName s
 	return parseNativeDelegationInput(arguments, targetType, targetName)
 }
 
+func mergeDelegationHistory(callerHistory, invocationHistory []protocol.Message) []protocol.Message {
+	if len(callerHistory) == 0 && len(invocationHistory) == 0 {
+		return nil
+	}
+	merged := make([]protocol.Message, 0, len(callerHistory)+len(invocationHistory))
+	seen := make(map[string]struct{}, len(callerHistory)+len(invocationHistory))
+	appendUnique := func(messages []protocol.Message) {
+		for _, msg := range messages {
+			key := msg.MessageID
+			if key == "" {
+				raw, err := json.Marshal(msg)
+				if err != nil {
+					merged = append(merged, msg)
+					continue
+				}
+				key = string(raw)
+			}
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			merged = append(merged, msg)
+		}
+	}
+	appendUnique(callerHistory)
+	appendUnique(invocationHistory)
+	return merged
+}
+
 func applyDelegationContext(ctx context.Context, contextID string) context.Context {
 	if contextID == "" {
 		return ctx
@@ -625,7 +654,8 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolRes
 
 	execCtx := applyDelegationContext(ctx, invocation.contextID)
 	eventStream := getDelegationEventStream(ctx, call)
-	result, err := agent.ExecuteA2A(execCtx, invocation.a2aUserInput, invocation.a2aHistory, nil, eventStream)
+	history := mergeDelegationHistory(GetDelegationCallerHistory(ctx), invocation.a2aHistory)
+	result, err := agent.ExecuteA2A(execCtx, invocation.a2aUserInput, history, nil, eventStream)
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,
@@ -708,7 +738,8 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResu
 
 	execCtx := applyDelegationContext(ctx, invocation.contextID)
 	eventStream := getDelegationEventStream(ctx, call)
-	result, err := team.ExecuteA2A(execCtx, invocation.a2aUserInput, invocation.a2aHistory, nil, eventStream)
+	history := mergeDelegationHistory(GetDelegationCallerHistory(ctx), invocation.a2aHistory)
+	result, err := team.ExecuteA2A(execCtx, invocation.a2aUserInput, history, nil, eventStream)
 	if err != nil {
 		return ToolResult{
 			ID:    call.ID,

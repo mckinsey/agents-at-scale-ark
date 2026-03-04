@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"mckinsey.com/ark/internal/telemetry"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
 type teamRecorder struct {
@@ -52,11 +53,23 @@ func (r *teamRecorder) StartTurn(ctx context.Context, turn int, memberName, memb
 }
 
 func (r *teamRecorder) RecordTurnOutput(span telemetry.Span, messages any, messageCount int) {
+	span.SetAttributes(telemetry.Int("turn.output_message_count", messageCount))
 	if messages == nil {
 		return
 	}
 
-	span.SetAttributes(telemetry.Int("turn.output_message_count", messageCount))
+	switch typed := messages.(type) {
+	case []protocol.Message:
+		if len(typed) == 0 {
+			return
+		}
+		last := typed[len(typed)-1]
+		content := extractTextFromProtocolParts(last.Parts)
+		if content != "" {
+			span.SetAttributes(telemetry.String("turn.output", content))
+		}
+		return
+	}
 
 	if slice, ok := messages.([]interface{}); ok && len(slice) > 0 {
 		lastMessage := slice[len(slice)-1]
@@ -66,6 +79,21 @@ func (r *teamRecorder) RecordTurnOutput(span telemetry.Span, messages any, messa
 			}
 		}
 	}
+}
+
+func extractTextFromProtocolParts(parts []protocol.Part) string {
+	result := ""
+	for _, part := range parts {
+		switch typed := part.(type) {
+		case protocol.TextPart:
+			result += typed.Text
+		case *protocol.TextPart:
+			if typed != nil {
+				result += typed.Text
+			}
+		}
+	}
+	return result
 }
 
 func (r *teamRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, completionTokens, totalTokens int64) {

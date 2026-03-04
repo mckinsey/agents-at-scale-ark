@@ -114,10 +114,12 @@ func (t *Team) executeSequentialA2A(ctx context.Context, userInput protocol.Mess
 		}
 		turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s", i, t.Name), operationData)
 
+		beforeCount := len(newMessages)
 		err := t.executeMemberAndAccumulateA2A(turnCtx, member, userInput, &messages, &newMessages, i)
 
-		if len(newMessages) > 0 {
-			t.telemetryRecorder.RecordTurnOutput(turnSpan, nil, len(newMessages))
+		turnMessages := newMessages[beforeCount:]
+		if len(turnMessages) > 0 {
+			t.telemetryRecorder.RecordTurnOutput(turnSpan, turnMessages, len(turnMessages))
 		}
 
 		if err != nil {
@@ -164,10 +166,12 @@ func (t *Team) executeRoundRobinA2A(ctx context.Context, userInput protocol.Mess
 		}
 		turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s", messageCount, t.Name), operationData)
 
+		beforeCount := len(newMessages)
 		err := t.executeMemberAndAccumulateA2A(turnCtx, member, userInput, &messages, &newMessages, messageCount)
 
-		if len(newMessages) > 0 {
-			t.telemetryRecorder.RecordTurnOutput(turnSpan, nil, len(newMessages))
+		turnMessages := newMessages[beforeCount:]
+		if len(turnMessages) > 0 {
+			t.telemetryRecorder.RecordTurnOutput(turnSpan, turnMessages, len(turnMessages))
 		}
 
 		if err != nil {

@@ -191,17 +191,22 @@ func (m *mockTeamMember) Execute(ctx context.Context, userInput Message, history
 	return &ExecutionResult{}, nil
 }
 
-// mockSelectorAgent implements SelectorAgentInterface for testing selector logic
-type mockSelectorAgent struct{}
+type mockSelectorAgent struct {
+	response string
+}
 
-func newMockSelectorAgent() *mockSelectorAgent {
-	return &mockSelectorAgent{}
+func newMockSelectorAgent(response ...string) *mockSelectorAgent {
+	selected := "selected"
+	if len(response) > 0 {
+		selected = response[0]
+	}
+	return &mockSelectorAgent{response: selected}
 }
 
 func (m *mockSelectorAgent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	return &ExecutionResult{
 		Messages: []Message{
-			NewAssistantMessage("selected"),
+			NewAssistantMessage(m.response),
 		},
 	}, nil
 }
@@ -214,7 +219,7 @@ func (m *mockSelectorAgent) ExecuteA2A(ctx context.Context, userInput protocol.M
 	return &ExecutionResult{
 		A2AMessages: []protocol.Message{
 			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
-				protocol.NewTextPart("selected"),
+				protocol.NewTextPart(m.response),
 			}),
 		},
 	}, nil
@@ -291,6 +296,41 @@ func TestDetermineNextMember(t *testing.T) {
 			assert.Equal(t, tt.wantMember, member.GetName())
 		})
 	}
+}
+
+func TestDetermineNextMemberA2AUsesSelectorOnFirstTurn(t *testing.T) {
+	members := []TeamMember{
+		&mockTeamMember{name: "researcher"},
+		&mockTeamMember{name: "analyst"},
+		&mockTeamMember{name: "selected"},
+	}
+	team := &Team{Members: members}
+	team.mockSelectorAgent = newMockSelectorAgent("selected")
+
+	tmpl, err := template.New("test").Parse("test template")
+	require.NoError(t, err)
+
+	member, err := team.determineNextMemberA2A(context.Background(), nil, tmpl, "", map[string][]TeamMember{})
+	require.NoError(t, err)
+	require.NotNil(t, member)
+	assert.Equal(t, "selected", member.GetName())
+}
+
+func TestSelectMemberA2AParsesNonExactSelectorOutput(t *testing.T) {
+	members := []TeamMember{
+		&mockTeamMember{name: "researcher"},
+		&mockTeamMember{name: "analyst"},
+	}
+	team := &Team{Members: members}
+	team.mockSelectorAgent = newMockSelectorAgent("The next participant should be: ANALYST")
+
+	tmpl, err := template.New("test").Parse("test template")
+	require.NoError(t, err)
+
+	member, err := team.selectMemberA2A(context.Background(), nil, tmpl, buildParticipants(members), buildRoles(members), "", nil)
+	require.NoError(t, err)
+	require.NotNil(t, member)
+	assert.Equal(t, "analyst", member.GetName())
 }
 
 func TestSelectFromGraphConstraints(t *testing.T) {

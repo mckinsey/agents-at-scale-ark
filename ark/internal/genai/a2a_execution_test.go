@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
@@ -47,6 +48,16 @@ func (f *failingA2AEventStream) Close() error {
 	return nil
 }
 
+func extractWrappedA2APayload(t *testing.T, chunk interface{}) interface{} {
+	t.Helper()
+	wrapped, ok := chunk.(ChunkWithMetadata)
+	assert.True(t, ok)
+	if !ok || wrapped.Ark == nil {
+		return nil
+	}
+	return wrapped.Ark.A2A
+}
+
 func TestStreamA2AEventNative(t *testing.T) {
 	ctx := context.Background()
 	stream := &fakeEventStream{}
@@ -62,7 +73,13 @@ func TestStreamA2AEventNative(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Len(t, stream.chunks, 1)
-	assert.Equal(t, payload, stream.chunks[0])
+	wrapped, ok := stream.chunks[0].(ChunkWithMetadata)
+	assert.True(t, ok)
+	assert.Len(t, wrapped.Choices, 1)
+	assert.Equal(t, "hello", wrapped.Choices[0].Delta.Content)
+	a2aPayload, ok := extractWrappedA2APayload(t, stream.chunks[0]).(*protocol.Message)
+	assert.True(t, ok)
+	assert.Equal(t, payload, a2aPayload)
 }
 
 func TestStreamA2AEventFailure(t *testing.T) {
@@ -82,6 +99,33 @@ func TestStreamA2AEventFailure(t *testing.T) {
 	assert.ErrorContains(t, err, "failed to stream A2A event")
 }
 
+func TestStreamA2AEventIncludesExecutionMetadata(t *testing.T) {
+	ctx := WithExecutionMetadata(context.Background(), map[string]interface{}{
+		"agent": "agent-one",
+		"team":  "team-one",
+		"model": "model-one",
+	})
+	stream := &fakeEventStream{}
+	payload := &protocol.Message{
+		Kind: protocol.KindMessage,
+		Role: protocol.MessageRoleAgent,
+		Parts: []protocol.Part{
+			protocol.TextPart{Kind: protocol.KindText, Text: "hello"},
+		},
+	}
+
+	err := streamA2AEvent(ctx, stream, payload)
+	assert.NoError(t, err)
+	require.Len(t, stream.chunks, 1)
+
+	wrapped, ok := stream.chunks[0].(ChunkWithMetadata)
+	require.True(t, ok)
+	require.NotNil(t, wrapped.Ark)
+	assert.Equal(t, "agent-one", wrapped.Ark.Agent)
+	assert.Equal(t, "team-one", wrapped.Ark.Team)
+	assert.Equal(t, "model-one", wrapped.Ark.Model)
+}
+
 func TestStreamA2AError(t *testing.T) {
 	ctx := context.Background()
 	ctx = WithA2AContextID(ctx, "ctx-err")
@@ -91,7 +135,7 @@ func TestStreamA2AError(t *testing.T) {
 	streamA2AError(ctx, stream, errors.New("boom"))
 
 	assert.Len(t, stream.chunks, 1)
-	event, ok := stream.chunks[0].(*protocol.TaskStatusUpdateEvent)
+	event, ok := extractWrappedA2APayload(t, stream.chunks[0]).(*protocol.TaskStatusUpdateEvent)
 	assert.True(t, ok)
 	assert.Equal(t, protocol.TaskStateFailed, event.Status.State)
 	assert.True(t, event.Final)
@@ -124,7 +168,7 @@ func TestConsumeA2AStreamEventsMessage(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "hello", response.Content)
 	assert.Len(t, stream.chunks, 1)
-	streamedMessage, ok := stream.chunks[0].(*protocol.Message)
+	streamedMessage, ok := extractWrappedA2APayload(t, stream.chunks[0]).(*protocol.Message)
 	assert.True(t, ok)
 	assert.Equal(t, "hello", extractTextFromParts(streamedMessage.Parts))
 }
