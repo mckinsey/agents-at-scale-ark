@@ -1,0 +1,18 @@
+🚀 Ark Production Benchmark Suite
+==================================
+
+📊 Scenario 3: Mixed Workload Simulation
+----------------------------------------
+Production-like traffic: 60% create, 20% get, 10% list, 10% delete
+
+🔄 Running for 1m0s at ~100 ops/sec...
+
+   Results over 1m0s:
+   Create: 775 ops (12.9/s), P50=74ms, P99=126ms, errors=0
+   Get: 167 ops (2.8/s), P50=76ms, P99=179ms, errors=578
+   List: 604 ops (10.1/s), P50=85ms, P99=182ms, errors=0
+   Delete: 599 ops (10.0/s), P50=82ms, P99=151ms, errors=0
+
+   Total: 2145 ops, 35.7 ops/sec
+
+✅ Benchmark complete

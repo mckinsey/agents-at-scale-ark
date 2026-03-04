@@ -1,0 +1,117 @@
+Running benchmark: 100 objects, 10 concurrency
+
+=== create ===
+Count:      100
+Duration:   1.225s
+Throughput: 81.66 ops/sec
+Latency P50: 105.382ms
+Latency P95: 190.185ms
+Latency P99: 212.861ms
+Latency Mean: 118.077ms
+Errors:     0
+
+=== get ===
+Count:      1000
+Duration:   10.346s
+Throughput: 96.66 ops/sec
+Latency P50: 93.52ms
+Latency P95: 167.51ms
+Latency P99: 265.29ms
+Latency Mean: 102.982ms
+Errors:     0
+
+=== list ===
+Count:      100
+Duration:   2.045s
+Throughput: 48.90 ops/sec
+Latency P50: 198.836ms
+Latency P95: 244.187ms
+Latency P99: 259.523ms
+Latency Mean: 194.126ms
+Errors:     0
+
+=== watch ===
+Count:      50
+Duration:   4.35s
+Throughput: 11.50 ops/sec
+Latency P50: 0s
+Latency P95: 0s
+Latency P99: 0s
+Latency Mean: 0s
+Errors:     0
+
+=== delete ===
+Count:      100
+Duration:   1.24s
+Throughput: 80.62 ops/sec
+Latency P50: 115.868ms
+Latency P95: 152.044ms
+Latency P99: 178.782ms
+Latency Mean: 119.304ms
+Errors:     0
+
+--- JSON Results ---
+{
+  "results": [
+    {
+      "operation": "create",
+      "count": 100,
+      "duration_ns": 1224532003,
+      "throughput_per_sec": 81.66385178583201,
+      "latency_p50_ns": 105381887,
+      "latency_p95_ns": 190185471,
+      "latency_p99_ns": 212860927,
+      "latency_mean_ns": 118076538,
+      "errors": 0
+    },
+    {
+      "operation": "get",
+      "count": 1000,
+      "duration_ns": 10345884003,
+      "throughput_per_sec": 96.65679604662391,
+      "latency_p50_ns": 93519871,
+      "latency_p95_ns": 167510015,
+      "latency_p99_ns": 265289727,
+      "latency_mean_ns": 102982123,
+      "errors": 0
+    },
+    {
+      "operation": "list",
+      "count": 100,
+      "duration_ns": 2044921424,
+      "throughput_per_sec": 48.90163447179964,
+      "latency_p50_ns": 198836223,
+      "latency_p95_ns": 244187135,
+      "latency_p99_ns": 259522559,
+      "latency_mean_ns": 194126151,
+      "errors": 0
+    },
+    {
+      "operation": "watch",
+      "count": 50,
+      "duration_ns": 4349686973,
+      "throughput_per_sec": 11.49508006216704,
+      "latency_p50_ns": 0,
+      "latency_p95_ns": 0,
+      "latency_p99_ns": 0,
+      "latency_mean_ns": 0,
+      "errors": 0
+    },
+    {
+      "operation": "delete",
+      "count": 100,
+      "duration_ns": 1240440975,
+      "throughput_per_sec": 80.61649205033717,
+      "latency_p50_ns": 115867647,
+      "latency_p95_ns": 152043519,
+      "latency_p99_ns": 178782207,
+      "latency_mean_ns": 119304028,
+      "errors": 0
+    }
+  ],
+  "config": {
+    "namespace": "ark-benchmark",
+    "object_count": 100,
+    "concurrency": 10
+  }
+}
