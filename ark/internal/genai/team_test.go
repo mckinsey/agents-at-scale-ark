@@ -197,6 +197,220 @@ func TestTeamExecuteA2ASequentialPreservesPriorMemberToolPairing(t *testing.T) {
 	assert.Equal(t, "call-1", toolAsCompat.OfTool.ToolCallID)
 }
 
+func TestTeamExecuteA2ASequentialFullHistoryHandoff(t *testing.T) {
+	msg1 := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("first response"),
+	})
+	msg2 := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("second response"),
+	})
+	msg3 := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("third response"),
+	})
+
+	memberOne := &a2aRecordingTeamMember{
+		name:   "member-one",
+		output: []protocol.Message{msg1, msg2, msg3},
+	}
+	memberTwo := &a2aRecordingTeamMember{
+		name: "member-two",
+		output: []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("final"),
+			}),
+		},
+	}
+
+	team := &Team{
+		Name:      "team",
+		Namespace: "default",
+		Strategy:  StrategySequential,
+		Members:   []TeamMember{memberOne, memberTwo},
+	}
+	telemetryProvider := telemetrynoop.NewProvider()
+	eventingProvider := eventingnoop.NewProvider()
+	team.telemetryRecorder = telemetryProvider.TeamRecorder()
+	team.eventingRecorder = eventingProvider.TeamRecorder()
+
+	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("hello"),
+	})
+
+	result, err := team.ExecuteA2A(context.Background(), userInput, nil, nil, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.A2AMessages, 4, "total messages = 3 from member-one + 1 from member-two")
+
+	require.Len(t, memberTwo.seenHistory, 3, "member-two must see all 3 messages from member-one")
+	assert.Equal(t, ExtractA2ATextFromMessage(memberTwo.seenHistory[0]), "first response")
+	assert.Equal(t, ExtractA2ATextFromMessage(memberTwo.seenHistory[1]), "second response")
+	assert.Equal(t, ExtractA2ATextFromMessage(memberTwo.seenHistory[2]), "third response")
+}
+
+func TestTeamExecuteA2ASequentialToolCallPairIntegrity(t *testing.T) {
+	memberOne := &a2aRecordingTeamMember{
+		name: "member-one",
+		output: []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, appendPayloadPart(
+				[]protocol.Part{protocol.NewTextPart("calling tools")},
+				ToolCallsPayloadV1{
+					Schema: A2APayloadSchemaToolCallsV1,
+					ToolCalls: []ToolCallPayloadV1{
+						{ID: "call-1", Name: "lookup", Arguments: `{"city":"london"}`},
+						{ID: "call-2", Name: "weather", Arguments: `{"city":"paris"}`},
+					},
+				},
+			)),
+			protocol.NewMessage(protocol.MessageRoleAgent, appendPayloadPart(
+				[]protocol.Part{protocol.NewTextPart(`{"city":"london"}`)},
+				ToolResultPayloadV1{
+					Schema:     A2APayloadSchemaToolResultV1,
+					ToolCallID: "call-1",
+					Content:    `{"city":"london"}`,
+				},
+			)),
+			protocol.NewMessage(protocol.MessageRoleAgent, appendPayloadPart(
+				[]protocol.Part{protocol.NewTextPart(`{"city":"paris"}`)},
+				ToolResultPayloadV1{
+					Schema:     A2APayloadSchemaToolResultV1,
+					ToolCallID: "call-2",
+					Content:    `{"city":"paris"}`,
+				},
+			)),
+		},
+	}
+	memberTwo := &a2aRecordingTeamMember{
+		name: "member-two",
+		output: []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("done"),
+			}),
+		},
+	}
+
+	team := &Team{
+		Name:      "team",
+		Namespace: "default",
+		Strategy:  StrategySequential,
+		Members:   []TeamMember{memberOne, memberTwo},
+	}
+	telemetryProvider := telemetrynoop.NewProvider()
+	eventingProvider := eventingnoop.NewProvider()
+	team.telemetryRecorder = telemetryProvider.TeamRecorder()
+	team.eventingRecorder = eventingProvider.TeamRecorder()
+
+	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("hello"),
+	})
+
+	result, err := team.ExecuteA2A(context.Background(), userInput, nil, nil, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.A2AMessages, 4)
+
+	require.Len(t, memberTwo.seenHistory, 3, "member-two must see tool-call + 2 tool-results from member-one")
+
+	assistantAsCompat, err := A2AToOpenAIMessage(memberTwo.seenHistory[0])
+	require.NoError(t, err)
+	require.NotNil(t, assistantAsCompat.OfAssistant)
+	require.Len(t, assistantAsCompat.OfAssistant.ToolCalls, 2)
+	assert.Equal(t, "call-1", assistantAsCompat.OfAssistant.ToolCalls[0].ID)
+	assert.Equal(t, "call-2", assistantAsCompat.OfAssistant.ToolCalls[1].ID)
+
+	tool1AsCompat, err := A2AToOpenAIMessage(memberTwo.seenHistory[1])
+	require.NoError(t, err)
+	require.NotNil(t, tool1AsCompat.OfTool)
+	assert.Equal(t, "call-1", tool1AsCompat.OfTool.ToolCallID)
+
+	tool2AsCompat, err := A2AToOpenAIMessage(memberTwo.seenHistory[2])
+	require.NoError(t, err)
+	require.NotNil(t, tool2AsCompat.OfTool)
+	assert.Equal(t, "call-2", tool2AsCompat.OfTool.ToolCallID)
+}
+
+func TestTeamExecuteA2ASequentialMultiTurnAccumulation(t *testing.T) {
+	turn1MemberOne := &a2aRecordingTeamMember{
+		name: "member-one",
+		output: []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("turn1-m1"),
+			}),
+		},
+	}
+	turn1MemberTwo := &a2aRecordingTeamMember{
+		name: "member-two",
+		output: []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("turn1-m2"),
+			}),
+		},
+	}
+
+	team1 := &Team{
+		Name:      "team",
+		Namespace: "default",
+		Strategy:  StrategySequential,
+		Members:   []TeamMember{turn1MemberOne, turn1MemberTwo},
+	}
+	tp1 := telemetrynoop.NewProvider()
+	ep1 := eventingnoop.NewProvider()
+	team1.telemetryRecorder = tp1.TeamRecorder()
+	team1.eventingRecorder = ep1.TeamRecorder()
+
+	userInput1 := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("turn one"),
+	})
+
+	result1, err := team1.ExecuteA2A(context.Background(), userInput1, nil, nil, nil)
+	require.NoError(t, err)
+	require.Len(t, result1.A2AMessages, 2, "turn 1 produces 2 messages")
+
+	turn2MemberOne := &a2aRecordingTeamMember{
+		name: "member-one",
+		output: []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("turn2-m1"),
+			}),
+		},
+	}
+	turn2MemberTwo := &a2aRecordingTeamMember{
+		name: "member-two",
+		output: []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("turn2-m2"),
+			}),
+		},
+	}
+
+	team2 := &Team{
+		Name:      "team",
+		Namespace: "default",
+		Strategy:  StrategySequential,
+		Members:   []TeamMember{turn2MemberOne, turn2MemberTwo},
+	}
+	tp2 := telemetrynoop.NewProvider()
+	ep2 := eventingnoop.NewProvider()
+	team2.telemetryRecorder = tp2.TeamRecorder()
+	team2.eventingRecorder = ep2.TeamRecorder()
+
+	userInput2 := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("turn two"),
+	})
+
+	result2, err := team2.ExecuteA2A(context.Background(), userInput2, result1.A2AMessages, nil, nil)
+	require.NoError(t, err)
+	require.Len(t, result2.A2AMessages, 2, "turn 2 produces 2 new messages")
+
+	require.Len(t, turn2MemberOne.seenHistory, 2, "turn 2 member-one sees full turn 1 output as history")
+	assert.Equal(t, "turn1-m1", ExtractA2ATextFromMessage(turn2MemberOne.seenHistory[0]))
+	assert.Equal(t, "turn1-m2", ExtractA2ATextFromMessage(turn2MemberOne.seenHistory[1]))
+
+	require.Len(t, turn2MemberTwo.seenHistory, 3, "turn 2 member-two sees turn 1 output + turn 2 member-one output")
+	assert.Equal(t, "turn1-m1", ExtractA2ATextFromMessage(turn2MemberTwo.seenHistory[0]))
+	assert.Equal(t, "turn1-m2", ExtractA2ATextFromMessage(turn2MemberTwo.seenHistory[1]))
+	assert.Equal(t, "turn2-m1", ExtractA2ATextFromMessage(turn2MemberTwo.seenHistory[2]))
+}
+
 func TestTeamExecuteA2ASequentialPreservesPartialMessagesOnError(t *testing.T) {
 	member := &a2aErroringTeamMember{
 		name: "member-one",
