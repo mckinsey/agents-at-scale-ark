@@ -985,14 +985,11 @@ jobs:
           cd tools/ark-cli
           npm test
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+      - uses: ./.github/actions/collect-coverage
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          slug: ${{ github.repository }}
-          directory: tools/ark-cli/artifacts/coverage
-          name: ark-cli
-          flags: ark-cli
+          source-path: tools/ark-cli/artifacts/coverage/
+          artifact-folder: ark-cli/unit-tests
+          artifact-suffix: ark-cli-unit
 
       - name: Create NPM package tarball
         run: |
@@ -1086,7 +1083,7 @@ jobs:
           directory: ./coverage-artifacts
           fail_ci_if_error: false
           verbose: true
-          flags: combined-coverage
+          flags: ark-cli,combined-coverage
 
   check-release:
     needs:
