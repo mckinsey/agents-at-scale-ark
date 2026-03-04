@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider as JotaiProvider } from 'jotai';
 import { toast } from 'sonner';
-import { describe, expect, it, vi, beforeEach, type Mock } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import { ManageMarketplaceSettings } from './manage-marketplace-settings';
 
@@ -15,8 +15,7 @@ vi.mock('sonner', () => ({
 }));
 
 const mockToast = vi.mocked(toast);
-const mockFetch = vi.fn() as Mock;
-global.fetch = mockFetch;
+const mockFetch = vi.fn();
 
 function mockValidateSuccess() {
   mockFetch.mockResolvedValueOnce({
@@ -50,6 +49,7 @@ function renderWithProviders(ui: React.ReactElement) {
 describe('ManageMarketplaceSettings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal('fetch', mockFetch);
     localStorage.clear();
     localStorage.setItem('marketplace-sources', JSON.stringify([
       {
