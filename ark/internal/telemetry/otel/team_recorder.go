@@ -58,8 +58,7 @@ func (r *teamRecorder) RecordTurnOutput(span telemetry.Span, messages any, messa
 		return
 	}
 
-	switch typed := messages.(type) {
-	case []protocol.Message:
+	if typed, ok := messages.([]protocol.Message); ok {
 		if len(typed) == 0 {
 			return
 		}
