@@ -1,7 +1,10 @@
 import logging
+import random
+import pytest
+from datetime import datetime
 from playwright.sync_api import Page
 from .base_page import BasePage
-from datetime import datetime
+from .dashboard_page import DashboardPage
 
 logger = logging.getLogger(__name__)
 
@@ -29,33 +32,28 @@ class ModelsPage(BasePage):
     }
     
     def navigate_to_models_tab(self) -> None:
-        from .dashboard_page import DashboardPage
         dashboard = DashboardPage(self.page)
-        
-        # Navigate directly to /models URL instead of clicking tabs
         self.page.goto(f"{dashboard.base_url}/models")
         self.wait_for_navigation_complete()
-        
-        # Wait for Add Model button to appear
         self.wait_for_element(self.ADD_MODEL_BUTTON, timeout=10000)
     
     def generate_model_name(self, prefix: str = "model") -> str:
         date_str = datetime.now().strftime("%d%m%y%H%M%S")
-        return f"{prefix}-{date_str}"
+        rand = random.randint(100, 999)
+        return f"{prefix}-{date_str}{rand}"
     
     def is_model_in_table(self, model_name: str, retries: int = 3) -> bool:
-        """Check if model is in table with retry logic"""
         for attempt in range(retries):
             try:
-                if self.page.get_by_text(model_name, exact=False).count() > 0:
-                    return True
+                self.page.get_by_text(model_name, exact=False).first.wait_for(state="visible", timeout=10000)
+                return True
+            except Exception as e:
+                logger.debug(f"Model {model_name} not visible on attempt {attempt + 1}/{retries}: {e}")
                 if attempt < retries - 1:
-                    logger.info(f"Model {model_name} not found, retrying... ({attempt + 1}/{retries})")
+                    logger.info(f"Model {model_name} not found, retrying ({attempt + 1}/{retries})...")
                     self.page.reload()
                     self.wait_for_navigation_complete()
                     self.wait_for_element(self.ADD_MODEL_BUTTON, timeout=10000)
-            except Exception as e:
-                logger.warning(f"Error checking model in table: {e}")
         return False
     
     def is_model_available(self, model_name: str) -> bool:
@@ -86,6 +84,7 @@ class ModelsPage(BasePage):
         self.page.locator(self.SAVE_BUTTON).first.wait_for(state="visible")
         self.page.locator(self.SAVE_BUTTON).first.click()
         
+        self.wait_for_modal_close()
         self.wait_for_navigation_complete()
         
         try:
@@ -96,7 +95,6 @@ class ModelsPage(BasePage):
         
         logger.info(f"Navigating back to models list...")
         self.navigate_to_models_tab()
-        self.wait_for_table_content()
         
         in_table = self.is_model_in_table(model_name)
         
@@ -114,7 +112,6 @@ class ModelsPage(BasePage):
             logger.warning(f"Model not yet available, retry {retry + 1}/2...")
             self.reload()
             self.wait_for_navigation_complete()
-            self.wait_for_table_content()
             is_available = self.is_model_available(model_name)
         
         return {
@@ -125,21 +122,22 @@ class ModelsPage(BasePage):
             "model_type": model_type
         }
     
-    def delete_model_with_verification(self, model_name: str) -> dict:        
+    def delete_model_with_verification(self, model_name: str) -> dict:
+        if not self.is_model_in_table(model_name):
+            logger.warning("Model '%s' not found in table after retries", model_name)
+            return self._delete_not_available(model_name)
         try:
             name_element = self.page.get_by_text(model_name, exact=True).first
+            name_element.wait_for(state="visible", timeout=10000)
             name_element.scroll_into_view_if_needed()
-            row_container = name_element.locator("../../..").first
-            buttons = row_container.locator("button").all()
-            
-            if len(buttons) < 2:
-                return self._delete_not_available(model_name)
-            
-            buttons[-1].click()
-        except:
+            card = name_element.locator("xpath=ancestor::div[.//button[@aria-label='Delete model'] or .//button[.//*[contains(@class,'lucide-trash')]]  ][1]")
+            delete_btn = card.locator("button[aria-label='Delete model'], button:has(svg.lucide-trash-2)").first
+            delete_btn.wait_for(state="visible", timeout=5000)
+            delete_btn.click(force=True)
+        except Exception as e:
+            logger.warning("Delete button not accessible for model '%s': %s", model_name, e)
             return self._delete_not_available(model_name)
         
-        # Wait for confirmation dialog to appear
         self.wait_for_modal_open()
         confirm_dialog_visible = self.page.locator(self.CONFIRM_DELETE_DIALOG).first.is_visible()
         confirm_button_visible = self.page.locator(self.CONFIRM_DELETE_BUTTON).first.is_visible()
@@ -149,9 +147,6 @@ class ModelsPage(BasePage):
         
         self.wait_for_navigation_complete()
         popup_visible = self._check_success_popup()
-        
-        # Wait for table to refresh
-        self.wait_for_table_content()
         deleted_from_table = not self.is_model_in_table(model_name)
         
         return {
@@ -181,8 +176,6 @@ class ModelsPage(BasePage):
             return False
     
     def create_model_for_test(self, prefix: str, secret_name: str, secrets_page):
-        import pytest
-        
         model_data = self.TEST_DATA["openai"]
         
         self.navigate_to_models_tab()

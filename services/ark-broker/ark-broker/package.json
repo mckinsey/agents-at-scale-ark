@@ -49,9 +49,7 @@
     "minimatch": "^10.2.3",
     "qs": "^6.15.0",
     "swagger-jsdoc": {
-      "glob": {
-        "minimatch": "^10.2.3"
-      }
+      "glob": "^7.2.3"
     }
   }
 }
