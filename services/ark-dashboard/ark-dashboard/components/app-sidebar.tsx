@@ -18,6 +18,7 @@ import {
   MoreHorizontal,
   Server,
   Settings,
+  Store,
   Sun,
   Workflow,
   Wrench,
@@ -350,6 +351,15 @@ export function AppSidebar() {
               isNamespaceResolved={isNamespaceResolved}
               loading={loading}
             />
+
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={() => navigateToSection('marketplace')}
+                isActive={getCurrentSection() === 'marketplace'}>
+                <Store />
+                <span>Marketplace</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
 
             <SidebarMenuItem>
               <Popover open={morePopoverOpen} onOpenChange={setMorePopoverOpen}>

@@ -11,6 +11,7 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 import { ApiKeysSettings } from './api-keys-settings';
 import { ArkServicesSettings } from './ark-services-settings';
 import { ExperimentalFeaturesSettings } from './experimental-features-settings';
+import { ManageMarketplaceSettings } from './manage-marketplace-settings';
 
 type SettingsContentProps = {
   activePage: SettingPage;
@@ -37,6 +38,10 @@ export function SettingsContent({ activePage }: SettingsContentProps) {
       memory: {
         title: 'Memory',
         component: <MemorySection />,
+      },
+      'manage-marketplace': {
+        title: 'Manage marketplace',
+        component: <ManageMarketplaceSettings />,
       },
       'service-api-keys': {
         title: 'Service API Keys',
