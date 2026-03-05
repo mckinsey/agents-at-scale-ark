@@ -63,7 +63,7 @@ func NewOpenAIA2AModelAdapter(model *Model, agentName, agentNamespace string) A2
 }
 
 func (a *openAIA2AModelAdapter) A2ATurn(ctx context.Context, messages []protocol.Message, toolOutcomes []A2AToolOutcome, tools []A2AToolDefinition, eventStream EventStreamInterface) (*A2ATurnResult, error) {
-	if a.nativeProvider != nil && eventStream == nil {
+	if a.nativeProvider != nil {
 		return a.a2aTurnViaNativeProvider(ctx, messages, toolOutcomes, tools, eventStream)
 	}
 	return a.a2aTurnViaChatCompletionsEdge(ctx, messages, toolOutcomes, tools, eventStream)

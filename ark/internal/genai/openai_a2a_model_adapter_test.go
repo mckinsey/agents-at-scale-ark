@@ -538,7 +538,7 @@ func TestA2ATurnPopulatesUsageOnChatCompletionsPath(t *testing.T) {
 	assert.Equal(t, int64(150), result.Usage.TotalTokens)
 }
 
-func TestA2ATurnFallsBackToStreamingWhenNativeProviderAndEventStream(t *testing.T) {
+func TestA2ATurnUsesNativeProviderEvenWithEventStream(t *testing.T) {
 	provider := &adapterTestNativeProvider{
 		adapterTestChatProvider: adapterTestChatProvider{
 			response: &openai.ChatCompletion{
@@ -546,7 +546,7 @@ func TestA2ATurnFallsBackToStreamingWhenNativeProviderAndEventStream(t *testing.
 					{
 						Message: openai.ChatCompletionMessage{
 							Role:    "assistant",
-							Content: "streamed-response",
+							Content: "should-not-be-used",
 						},
 					},
 				},
@@ -569,10 +569,9 @@ func TestA2ATurnFallsBackToStreamingWhenNativeProviderAndEventStream(t *testing.
 	result, err := adapter.A2ATurn(context.Background(), []protocol.Message{userMessage}, nil, nil, stream)
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, "streamed-response", result.Content)
-	assert.Equal(t, 0, provider.nativeCalls, "native provider should NOT be called when streaming")
-	assert.Equal(t, 1, provider.streamCalls, "should use ChatCompletionStream path")
-	require.Len(t, stream.chunks, 1, "stream should receive chunks")
+	assert.Equal(t, "native-response", extractTextFromParts(result.Message.Parts))
+	assert.Equal(t, 1, provider.nativeCalls, "native provider should be called regardless of eventStream")
+	assert.Equal(t, 0, provider.streamCalls, "ChatCompletionStream should not be used")
 }
 
 func TestA2ATurnUsesNativeProviderWhenNoEventStream(t *testing.T) {

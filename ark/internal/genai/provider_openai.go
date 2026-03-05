@@ -11,7 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"mckinsey.com/ark/internal/common"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
 type OpenAIProvider struct {
@@ -24,21 +23,9 @@ type OpenAIProvider struct {
 	schemaName   string
 }
 
-var _ A2ANativeTurnProvider = (*OpenAIProvider)(nil)
-
 func (op *OpenAIProvider) SetOutputSchema(schema *runtime.RawExtension, schemaName string) {
 	op.outputSchema = schema
 	op.schemaName = schemaName
-}
-
-func (op *OpenAIProvider) A2ATurnNative(
-	ctx context.Context,
-	messages []protocol.Message,
-	toolOutcomes []A2AToolOutcome,
-	tools []A2AToolDefinition,
-	_ EventStreamInterface,
-) (*A2ATurnResult, error) {
-	return executeChatCompletionNativeTurn(ctx, op, "openai", messages, toolOutcomes, tools)
 }
 
 func (op *OpenAIProvider) HealthCheck(ctx context.Context) error {
