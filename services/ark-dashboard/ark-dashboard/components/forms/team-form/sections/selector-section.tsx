@@ -1,7 +1,8 @@
-import { ChevronDown, ChevronRight, Maximize2, Minimize2, RotateCcw, Settings2, Zap } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronRight, Maximize2, Minimize2, RotateCcw, Settings2, Zap } from 'lucide-react';
 import { useState } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
   Collapsible,
@@ -175,6 +176,13 @@ export function SelectorSection({
                   </div>
                 )}
                 <FormMessage />
+                <Alert variant="warning" className="mt-2">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Changing the prompt will affect team turn order and can worsen performance.
+                    Use the reset button to restore the default prompt.
+                  </AlertDescription>
+                </Alert>
                 <Button
                   type="button"
                   variant="outline"
