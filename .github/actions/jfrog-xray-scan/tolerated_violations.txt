@@ -23,3 +23,4 @@ XRAY-944492 - CVE-2026-26996
 - Not exploitable in our context: swagger-jsdoc only uses glob at startup to scan for JSDoc annotations using hardcoded patterns (`./dist/**/*.js`, `./src/**/*.ts`). No user-controlled input reaches the minimatch pattern argument. The CVE requires attacker-controlled patterns with many consecutive `*` wildcards.
 - Cannot upgrade: swagger-jsdoc@6.x depends on glob@7.x which requires minimatch@3.x API. minimatch@10.x is a complete rewrite with breaking API changes and cannot be used as a drop-in replacement. swagger-jsdoc has not released a version compatible with minimatch@10.x.
 - Used in services/ark-broker/ark-broker only.
+XRAY-589047
