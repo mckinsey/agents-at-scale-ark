@@ -70,6 +70,50 @@ type ToolResultPayloadV1 struct {
 	Artifacts          []map[string]interface{} `json:"artifacts,omitempty"`
 }
 
+type TeamExtensionV1 struct {
+	AgentName string `json:"agentName,omitempty"`
+	TeamName  string `json:"teamName,omitempty"`
+}
+
+func setTeamExtension(msg *protocol.Message, ext TeamExtensionV1) {
+	if msg.Metadata == nil {
+		msg.Metadata = make(map[string]interface{})
+	}
+	msg.Metadata[A2ATeamExtensionKey] = ext
+	ensureMessageHasExtension(msg, A2ATeamExtensionKey)
+}
+
+func getTeamExtension(msg protocol.Message) (TeamExtensionV1, bool) {
+	if msg.Metadata == nil {
+		return TeamExtensionV1{}, false
+	}
+	raw, ok := msg.Metadata[A2ATeamExtensionKey]
+	if !ok {
+		return TeamExtensionV1{}, false
+	}
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return TeamExtensionV1{}, false
+	}
+	var ext TeamExtensionV1
+	if err := json.Unmarshal(data, &ext); err != nil {
+		return TeamExtensionV1{}, false
+	}
+	return ext, true
+}
+
+func getAgentNameFromMessage(msg protocol.Message) string {
+	if ext, ok := getTeamExtension(msg); ok && ext.AgentName != "" {
+		return ext.AgentName
+	}
+	if msg.Metadata != nil {
+		if name, ok := msg.Metadata[MetadataAgentNameKey].(string); ok {
+			return name
+		}
+	}
+	return ""
+}
+
 func appendPayloadPart(parts []protocol.Part, payload interface{}) []protocol.Part {
 	return append(parts, &protocol.DataPart{
 		Kind: protocol.KindData,

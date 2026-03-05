@@ -443,3 +443,123 @@ func TestTeamExecuteA2ASequentialPreservesPartialMessagesOnError(t *testing.T) {
 	require.Len(t, result.A2AMessages, 1)
 	assert.Equal(t, "partial response", ExtractA2ATextFromMessage(result.A2AMessages[0]))
 }
+
+func TestStampAgentNameOnMessages(t *testing.T) {
+	messages := []protocol.Message{
+		protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+			protocol.NewTextPart("hello"),
+		}),
+		protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+			protocol.NewTextPart("world"),
+		}),
+	}
+
+	stampAgentNameOnMessages(messages, "researcher")
+
+	for _, msg := range messages {
+		require.Contains(t, msg.Extensions, A2ATeamExtensionKey)
+		ext, ok := getTeamExtension(msg)
+		require.True(t, ok)
+		assert.Equal(t, "researcher", ext.AgentName)
+	}
+}
+
+func TestStampAgentNameOnMessagesPreservesExistingMetadata(t *testing.T) {
+	msg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("hello"),
+	})
+	msg.Metadata = map[string]interface{}{"existing": "value"}
+	messages := []protocol.Message{msg}
+
+	stampAgentNameOnMessages(messages, "writer")
+
+	ext, ok := getTeamExtension(messages[0])
+	require.True(t, ok)
+	assert.Equal(t, "writer", ext.AgentName)
+	assert.Equal(t, "value", messages[0].Metadata["existing"])
+}
+
+func TestStampAgentNameOnMessagesSkipsEmptyName(t *testing.T) {
+	msg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("hello"),
+	})
+	messages := []protocol.Message{msg}
+
+	stampAgentNameOnMessages(messages, "")
+
+	assert.Nil(t, messages[0].Metadata)
+}
+
+func TestTeamExecuteA2ASequentialStampsAgentNames(t *testing.T) {
+	memberOne := &a2aRecordingTeamMember{
+		name: "researcher",
+		output: []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("research results"),
+			}),
+		},
+	}
+	memberTwo := &a2aRecordingTeamMember{
+		name: "writer",
+		output: []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("written content"),
+			}),
+		},
+	}
+
+	team := &Team{
+		Name:      "team",
+		Namespace: "default",
+		Strategy:  StrategySequential,
+		Members:   []TeamMember{memberOne, memberTwo},
+	}
+	tp := telemetrynoop.NewProvider()
+	ep := eventingnoop.NewProvider()
+	team.telemetryRecorder = tp.TeamRecorder()
+	team.eventingRecorder = ep.TeamRecorder()
+
+	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("hello"),
+	})
+
+	result, err := team.ExecuteA2A(context.Background(), userInput, nil, nil, nil)
+	require.NoError(t, err)
+	require.Len(t, result.A2AMessages, 2)
+
+	assert.Equal(t, "researcher", getAgentNameFromMessage(result.A2AMessages[0]))
+	assert.Equal(t, "writer", getAgentNameFromMessage(result.A2AMessages[1]))
+}
+
+func TestTeamExecuteA2ASequentialStampsAgentNamesOnPartialError(t *testing.T) {
+	member := &a2aErroringTeamMember{
+		name: "failing-agent",
+		output: []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("partial"),
+			}),
+		},
+		err: errors.New("member failure"),
+	}
+
+	team := &Team{
+		Name:      "team",
+		Namespace: "default",
+		Strategy:  StrategySequential,
+		Members:   []TeamMember{member},
+	}
+	tp := telemetrynoop.NewProvider()
+	ep := eventingnoop.NewProvider()
+	team.telemetryRecorder = tp.TeamRecorder()
+	team.eventingRecorder = ep.TeamRecorder()
+
+	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("hello"),
+	})
+
+	result, err := team.ExecuteA2A(context.Background(), userInput, nil, nil, nil)
+	require.Error(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.A2AMessages, 1)
+	assert.Equal(t, "failing-agent", getAgentNameFromMessage(result.A2AMessages[0]))
+}

@@ -56,7 +56,11 @@ func buildA2AHistory(messages []protocol.Message) string {
 			history = append(history, fmt.Sprintf("# user:\n%s\n", text))
 			continue
 		}
-		history = append(history, fmt.Sprintf("# assistant:\n%s\n", text))
+		label := "assistant"
+		if name := getAgentNameFromMessage(msg); name != "" {
+			label = name
+		}
+		history = append(history, fmt.Sprintf("# %s:\n%s\n", label, text))
 	}
 	return strings.Join(history, "\n")
 }
