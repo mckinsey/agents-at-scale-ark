@@ -1,20 +1,22 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import type { MarketplaceItem } from '@/lib/api/generated/marketplace-types';
 
 interface MarketplaceManifest {
-  version?: unknown;
-  marketplace?: unknown;
-  items?: unknown;
+  version: string;
+  marketplace: string;
+  items: MarketplaceItem[];
 }
 
-function isValidManifest(data: unknown): data is Required<MarketplaceManifest> {
+function isValidManifest(data: unknown): data is MarketplaceManifest {
   if (typeof data !== 'object' || data === null) return false;
-  const d = data as MarketplaceManifest;
+  const d = data as Record<string, unknown>;
   if (typeof d.version !== 'string') return false;
   if (typeof d.marketplace !== 'string') return false;
   if (!Array.isArray(d.items)) return false;
   return d.items.every(
-    item => typeof item === 'object' && item !== null && typeof (item as Record<string, unknown>).name === 'string',
+    (item): item is MarketplaceItem =>
+      typeof item === 'object' && item !== null && typeof (item as Record<string, unknown>).name === 'string',
   );
 }
 
@@ -27,7 +29,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ valid: false, error: 'URL is required' }, { status: 400 });
     }
 
-    let data: unknown;
+    let data: MarketplaceManifest;
     try {
       const response = await fetch(url, {
         headers: { Accept: 'application/json' },
@@ -55,7 +57,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ valid: true, itemCount: (data as Required<MarketplaceManifest>).items.length });
+    return NextResponse.json({ valid: true, itemCount: data.items.length });
   } catch {
     return NextResponse.json({ valid: false, error: 'Invalid request' }, { status: 400 });
   }

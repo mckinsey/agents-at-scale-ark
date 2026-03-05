@@ -14,6 +14,11 @@ import { Label } from '@/components/ui/label';
 const PUBLIC_MARKETPLACE_URL =
   'https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json';
 
+type MarketplaceSourceProps = {
+  url: string;
+  displayName?: string;
+}
+
 function validateMarketplaceUrl(url: string): string | null {
   if (!url) {
     return 'Marketplace URL is required';
@@ -46,14 +51,14 @@ export function ManageMarketplaceSettings() {
 
   const [isAdding, setIsAdding] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
-  const [newSource, setNewSource] = useState<Partial<MarketplaceSource>>({
+  const [newSource, setNewSource] = useState<MarketplaceSourceProps>({
     url: '',
     displayName: '',
   });
   const [urlError, setUrlError] = useState<string | null>(null);
 
   const handleAddSource = async () => {
-    const staticError = validateMarketplaceUrl(newSource.url || '');
+    const staticError = validateMarketplaceUrl(newSource.url);
     if (staticError) {
       setUrlError(staticError);
       return;
@@ -62,7 +67,7 @@ export function ManageMarketplaceSettings() {
     setIsValidating(true);
     setUrlError(null);
     try {
-      const schemaError = await validateMarketplaceSchema(newSource.url!);
+      const schemaError = await validateMarketplaceSchema(newSource.url);
       if (schemaError) {
         setUrlError(schemaError);
         return;
@@ -74,9 +79,8 @@ export function ManageMarketplaceSettings() {
     const source: MarketplaceSource = {
       id: Date.now().toString(),
       name: newSource.displayName || 'Marketplace JSON URL',
-      url: newSource.url!,
+      url: newSource.url,
       displayName: newSource.displayName,
-      enabled: true,
     };
 
     const updated = [...sources, source];
@@ -186,7 +190,7 @@ export function ManageMarketplaceSettings() {
               </Label>
               <Input
                 id="new-url"
-                value={newSource.url || ''}
+                value={newSource.url}
                 onChange={e => {
                   setNewSource({ ...newSource, url: e.target.value });
                   setUrlError(null);
