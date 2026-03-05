@@ -2,6 +2,9 @@ apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   name: team-graph-selector
+  labels:
+    # LLM tests call real language model APIs
+    llm: "true"
 spec:
   description: Test selector team strategy with graph constraints
   # Graph-constrained selector combines AI-driven selection with workflow constraints
@@ -78,6 +81,8 @@ spec:
                 to: analyzer
               - from: analyzer
                 to: writer
+              - from: writer
+                to: coordinator
   - name: wait-for-query-completion
     try:
     - assert:
