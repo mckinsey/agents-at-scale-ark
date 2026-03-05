@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Maximize2, Minimize2, Settings2, Zap } from 'lucide-react';
+import { ChevronDown, ChevronRight, Maximize2, Minimize2, RotateCcw, Settings2, Zap } from 'lucide-react';
 import { useState } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 
@@ -26,7 +26,7 @@ import { Textarea } from '@/components/ui/textarea';
 import type { Agent } from '@/lib/services';
 import { cn } from '@/lib/utils';
 
-import type { TeamFormValues } from '../use-team-form';
+import { DEFAULT_SELECTOR_PROMPT, type TeamFormValues } from '../use-team-form';
 
 interface SelectorSectionProps {
   form: UseFormReturn<TeamFormValues>;
@@ -175,6 +175,16 @@ export function SelectorSection({
                   </div>
                 )}
                 <FormMessage />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => form.setValue('selectorPrompt', DEFAULT_SELECTOR_PROMPT, { shouldDirty: true })}
+                  disabled={disabled}
+                  className="mt-2">
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Reset to Default Prompt
+                </Button>
               </FormItem>
             )}
           />
