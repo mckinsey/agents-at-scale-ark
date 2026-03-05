@@ -69,6 +69,15 @@ fi
 echo "=== Installing Gateway API CRDs ==="
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
 
+echo "=== Installing ARK Broker ==="
+helm upgrade --install ark-broker "${REPO_ROOT}/services/ark-broker/chart" \
+  --namespace default \
+  --set app.image.repository="${REGISTRY}/ark-broker" \
+  --set app.image.tag="${ARK_IMAGE_TAG}" \
+  --set app.image.pullPolicy=IfNotPresent \
+  --set restartController.enabled=false \
+  --wait --timeout=90s
+
 echo "=== Installing ARK Controller ==="
 cd "${REPO_ROOT}/ark"
 
@@ -99,18 +108,18 @@ kubectl -n ark-system wait --for=condition=available --timeout=300s deployment/a
 # Create default model for evaluator if requested
 if [ "${INSTALL_EVALUATOR}" = "true" ]; then
   echo "=== Setting up Evaluator ==="
-  
+
   # Require environment variables for evaluator
   if [ -z "${AZURE_OPENAI_KEY:-}" ] || [ -z "${AZURE_OPENAI_BASE_URL:-}" ]; then
     echo "Error: AZURE_OPENAI_KEY and AZURE_OPENAI_BASE_URL environment variables required for evaluator setup"
     exit 1
   fi
-  
+
   # Create secret for default model
   kubectl create secret generic default-model-token \
     --from-literal=token="${AZURE_OPENAI_KEY}" \
     --dry-run=client -o yaml | kubectl apply -f -
-  
+
   # Create default model
   cat <<EOF | kubectl apply -f -
 apiVersion: ark.mckinsey.com/v1alpha1

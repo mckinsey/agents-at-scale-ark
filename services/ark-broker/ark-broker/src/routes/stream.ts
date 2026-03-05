@@ -115,17 +115,36 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
   router.get('/:query_name', async (req, res) => {
     try {
       const { query_name } = req.params;
+      const watch = req.query['watch'] === 'true';
+
+      if (!watch) {
+        try {
+          const params = parsePaginationParams(req.query as Record<string, unknown>);
+          const result = chunks.paginate(params, query_name);
+          res.json(result);
+        } catch (error) {
+          if (error instanceof PaginationError) {
+            res.status(400).json({ error: error.message });
+            return;
+          }
+          console.error(`[STREAM] Failed to get chunks for query ${query_name}:`, error);
+          const err = error as Error;
+          res.status(500).json({ error: err.message });
+        }
+        return;
+      }
+
       const fromBeginning = req.query['from-beginning'] === 'true';
       // Parse wait-for-query parameter - timeout value (e.g., "30s")
       const waitForQueryParam = req.query['wait-for-query'] as string;
       let waitForQuery = false;
       let timeout = 30000; // default 30 seconds
-      
+
       if (waitForQueryParam) {
         waitForQuery = true;
         timeout = parseTimeout(waitForQueryParam, 30000);
       }
-      
+
       // Parse max chunk size, default to 50 characters
       let maxChunkSize = 50;
       if (req.query['max-chunk-size']) {
@@ -135,7 +154,7 @@ export function createStreamRouter(chunks: CompletionChunkBroker): Router {
         }
       }
 
-      console.log(`[STREAM] GET /stream/${query_name} - from-beginning=${fromBeginning}, wait-for-query=${waitForQueryParam}, timeout=${timeout}ms, max-chunk-size=${maxChunkSize}`);
+      console.log(`[STREAM] GET /stream/${query_name}?watch=true - from-beginning=${fromBeginning}, wait-for-query=${waitForQueryParam}, timeout=${timeout}ms, max-chunk-size=${maxChunkSize}`);
 
       // Set SSE headers
       res.setHeader('Content-Type', 'text/event-stream');

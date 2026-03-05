@@ -9,25 +9,27 @@ Chainsaw tests validate Query CR status but cannot observe streaming chunks. moc
 ## Goals / Non-Goals
 
 **Goals:**
-- Validate the full streaming metadata contract end-to-end: chunks arrive at ark-broker with correct `ark` metadata for model, agent, team, and error paths
+- Validate the full streaming metadata contract end-to-end: chunks arrive at ark-broker with correct `ark` metadata for model, agent, and team paths
 - Expose per-query paginated chunk retrieval in ark-broker so tests (and future consumers) can inspect stored chunks
 - Run within existing chainsaw CI infrastructure using mock-llm and Hurl
+- Assume ark-broker with streaming is pre-deployed in default namespace (by CI setup)
 
 **Non-Goals:**
 - Testing streaming latency or throughput
 - Testing SSE consumer behavior (dashboard, SDK clients)
 - Modifying the controller's streaming implementation
 - Adding streaming tests to every existing query test
+- Error chunk metadata testing (deferred to a follow-up)
 
 ## Decisions
 
 ### 1. Single test directory with sequential query scenarios
 
-**Decision:** One `tests/streaming-metadata/` directory with a single `chainsaw-test.yaml` that creates model, agent, team, and error queries sequentially, validating chunks after each.
+**Decision:** One `tests/streaming-metadata/` directory with a single `chainsaw-test.yaml` that creates model, agent, and team queries sequentially, validating chunks after each.
 
-**Alternative:** Separate test directories per scenario (`streaming-model-metadata/`, `streaming-agent-metadata/`, etc.).
+**Alternative:** Separate test directories per scenario.
 
-**Rationale:** Each test requires helm-installing mock-llm + ark-broker + ark-tenant (~3 helm installs). A single test amortizes this setup cost. Sequential steps within one test still give clear failure identification per scenario via named steps and separate Hurl files.
+**Rationale:** A single test amortizes mock-llm setup cost. Sequential steps within one test still give clear failure identification per scenario via named steps and separate Hurl files.
 
 ### 2. Hurl for chunk assertions
 
@@ -35,7 +37,7 @@ Chainsaw tests validate Query CR status but cannot observe streaming chunks. moc
 
 **Alternative:** Shell scripts with `kubectl exec curl | jq`.
 
-**Rationale:** Hurl is already established in the broker's own test (`services/ark-broker/test/`). Its `jsonpath` assertions are declarative, readable, and sufficient for validating metadata fields, counts, and ordering. Separate `.hurl` files per scenario keep assertions focused.
+**Rationale:** Hurl is already established in the broker's own test (`services/ark-broker/test/`). Its `jsonpath` assertions are declarative, readable, and sufficient for validating metadata fields, counts, and ordering.
 
 ### 3. Add paginated JSON mode to `GET /stream/:query_name`
 
@@ -53,17 +55,16 @@ Chainsaw tests validate Query CR status but cannot observe streaming chunks. moc
 
 **Rationale:** When `eventStream != nil`, the controller calls `ChatCompletionStream` which sends `stream: true` to the LLM. mock-llm must return SSE format in this case. mock-llm natively supports this via `streaming` config.
 
-### 5. Error scenario via mock-llm HTTP 500
+### 5. Pre-deployed ark-broker in default namespace
 
-**Decision:** Add a mock-llm rule that returns HTTP 500 for a specific input pattern (e.g., `contains(body.messages[-1].content, 'trigger-error')`). The controller catches this, creates a `StreamingError`, wraps it with `WrapErrorWithMetadata`, and sends to broker.
+**Decision:** The test assumes ark-broker with streaming enabled is already deployed. It does not helm-install the broker itself.
 
-**Alternative:** Use an invalid model reference to trigger controller-level errors.
+**Alternative:** Helm-install ark-broker within the test.
 
-**Rationale:** mock-llm HTTP 500 exercises the exact error-streaming code path in `StreamError()` at `streaming.go:161-173`. An invalid model reference would fail before streaming is set up.
+**Rationale:** In CI, ark-broker is deployed during cluster setup. Installing it per-test adds complexity (image building, pull policies). The test only needs to assert the broker deployment and streaming ConfigMap exist.
 
 ## Risks / Trade-offs
 
 - **[Risk] mock-llm streaming chunk count is non-deterministic** — The number of chunks depends on response length / chunkSize. → Mitigation: Assert `>= N` not `== N` for chunk counts. Assert metadata on first and last chunks rather than all.
-- **[Risk] Helm install overhead** — Three helm installs add ~60-90s to test setup. → Mitigation: Acceptable for a single test. The streaming-metadata test is not in the fast-feedback loop.
 - **[Risk] Broker route change could affect SSE consumers** — Adding JSON mode to `GET /stream/:query_name` changes default behavior from SSE to JSON. → Mitigation: Existing SSE consumers always send `?watch=true`. The new behavior matches `/events/:query_id` exactly. Existing broker unit tests cover SSE path.
 - **[Risk] Team query metadata depends on which agent the team selects** — Cannot assert exact agent name for team queries. → Mitigation: Assert `ark.team` is set and `ark.agent` is non-empty, rather than a specific agent name.

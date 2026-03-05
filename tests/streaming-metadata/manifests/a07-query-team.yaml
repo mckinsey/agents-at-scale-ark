@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: streaming-team-query
+  annotations:
+    ark.mckinsey.com/streaming-enabled: "true"
+spec:
+  input: "Summarize the benefits of cloud computing."
+  target:
+    type: team
+    name: streaming-test-team

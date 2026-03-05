@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: streaming-model-query
+  annotations:
+    ark.mckinsey.com/streaming-enabled: "true"
+spec:
+  input: "What is two plus two?"
+  target:
+    type: model
+    name: test-model

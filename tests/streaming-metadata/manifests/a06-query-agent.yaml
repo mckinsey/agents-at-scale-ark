@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: streaming-agent-query
+  annotations:
+    ark.mckinsey.com/streaming-enabled: "true"
+spec:
+  input: "What is the capital of France?"
+  target:
+    type: agent
+    name: streaming-test-agent

@@ -1,0 +1,245 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: streaming-metadata
+spec:
+  description: Validate streaming chunk metadata across model, agent, and team query scenarios
+  namespace: default
+  timeouts:
+    apply: 30s
+    assert: 240s
+    exec: 120s
+  steps:
+  - name: setup
+    try:
+    - script:
+        content: |
+          helm upgrade --install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.28 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml \
+            --wait --timeout=120s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: ark-config-streaming
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+    - script:
+        skipLogOutput: true
+        content: cat test-model.hurl
+        outputs:
+        - name: test_model_script
+          value: ($stdout)
+    - script:
+        skipLogOutput: true
+        content: cat test-agent.hurl
+        outputs:
+        - name: test_agent_script
+          value: ($stdout)
+    - script:
+        skipLogOutput: true
+        content: cat test-team.hurl
+        outputs:
+        - name: test_team_script
+          value: ($stdout)
+    - apply:
+        resource:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: hurl-test-files
+          data:
+            test-model.hurl: ($test_model_script)
+            test-agent.hurl: ($test_agent_script)
+            test-team.hurl: ($test_team_script)
+    - apply:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: streaming-test-client
+          spec:
+            containers:
+            - name: hurl
+              image: ghcr.io/orange-opensource/hurl:6.1.1
+              command: ["sleep", "600"]
+              volumeMounts:
+              - name: test-files
+                mountPath: /tests
+            volumes:
+            - name: test-files
+              configMap:
+                name: hurl-test-files
+            restartPolicy: Never
+            terminationGracePeriodSeconds: 0
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: streaming-test-client
+          status:
+            phase: Running
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: v1
+        kind: Pod
+        selector: app.kubernetes.io/name=mock-llm
+
+  - name: test-model-streaming
+    try:
+    - apply:
+        file: manifests/a05-query-model.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: streaming-model-query
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: streaming-model-query
+          status:
+            phase: done
+            (response != null): true
+    - script:
+        content: |
+          kubectl exec streaming-test-client -c hurl -n $NAMESPACE -- hurl --test /tests/test-model.hurl
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        timeout: 30s
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: streaming-model-query
+
+  - name: test-agent-streaming
+    try:
+    - apply:
+        file: manifests/a03-agent.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: streaming-test-agent
+          status:
+            conditions:
+            - type: Available
+              status: "True"
+    - apply:
+        file: manifests/a06-query-agent.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: streaming-agent-query
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: streaming-agent-query
+          status:
+            phase: done
+            (response != null): true
+            (response.target.name): 'streaming-test-agent'
+    - script:
+        content: |
+          kubectl exec streaming-test-client -c hurl -n $NAMESPACE -- hurl --test /tests/test-agent.hurl
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        timeout: 30s
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: streaming-agent-query
+
+  - name: test-team-streaming
+    try:
+    - apply:
+        file: manifests/a04-team.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Team
+          metadata:
+            name: streaming-test-team
+          status:
+            conditions:
+            - type: Available
+              status: "True"
+    - apply:
+        file: manifests/a07-query-team.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: streaming-team-query
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: streaming-team-query
+          status:
+            phase: done
+            (response != null): true
+    - script:
+        content: |
+          kubectl exec streaming-test-client -c hurl -n $NAMESPACE -- hurl --test /tests/test-team.hurl
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        timeout: 30s
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: streaming-team-query
+
+  - name: cleanup
+    try:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=30s || true
+          kubectl delete pod streaming-test-client -n $NAMESPACE --ignore-not-found
+          kubectl delete configmap hurl-test-files -n $NAMESPACE --ignore-not-found
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

@@ -4,7 +4,7 @@ import app from '../src/server.js';
 describe('Stream Timeout', () => {
   test('should send SSE error event with [DONE] on timeout', async () => {
     const response = await request(app)
-      .get('/stream/nonexistent-query?wait-for-query=1')  // 1 second timeout
+      .get('/stream/nonexistent-query?watch=true&wait-for-query=1')  // 1 second timeout
       .set('Accept', 'text/event-stream');
 
     expect(response.status).toBe(200);

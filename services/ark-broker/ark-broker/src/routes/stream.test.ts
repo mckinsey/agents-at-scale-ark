@@ -77,8 +77,8 @@ describe('Streaming API', () => {
         req.abort();
       }, options.timeout || 1000);
 
-      let url = `/stream/${queryId}`;
-      if (options.fromBeginning) url += '?from-beginning=true';
+      let url = `/stream/${queryId}?watch=true`;
+      if (options.fromBeginning) url += '&from-beginning=true';
 
       const req = request(app)
         .get(url)
@@ -111,6 +111,81 @@ describe('Streaming API', () => {
         });
     });
   };
+
+  describe('Per-query paginated retrieval', () => {
+    it('should return chunks for a specific query as JSON', async () => {
+      const queryId = 'paginated-query-1';
+      const testChunks = [
+        createTextChunk('Hello'),
+        createTextChunk(' world'),
+        createFinishChunk()
+      ];
+
+      await sendChunks(queryId, testChunks);
+
+      const response = await request(app).get(`/stream/${queryId}`);
+      expect(response.status).toBe(200);
+      expect(response.body.items).toHaveLength(3);
+      expect(response.body.total).toBe(3);
+      expect(response.body.items[0].data.chunk.choices[0].delta.content).toBe('Hello');
+      expect(response.body.items[0].data.queryId).toBe(queryId);
+    });
+
+    it('should respect pagination parameters', async () => {
+      const queryId = 'paginated-query-2';
+      const testChunks = [
+        createTextChunk('A'),
+        createTextChunk('B'),
+        createTextChunk('C'),
+        createFinishChunk()
+      ];
+
+      await sendChunks(queryId, testChunks);
+
+      const response = await request(app).get(`/stream/${queryId}?limit=2`);
+      expect(response.status).toBe(200);
+      expect(response.body.items).toHaveLength(2);
+      expect(response.body.total).toBe(4);
+      expect(response.body.hasMore).toBe(true);
+      expect(response.body.nextCursor).toBeDefined();
+    });
+
+    it('should return empty list for nonexistent query', async () => {
+      const response = await request(app).get('/stream/nonexistent-query');
+      expect(response.status).toBe(200);
+      expect(response.body.items).toHaveLength(0);
+      expect(response.body.total).toBe(0);
+    });
+
+    it('should return SSE when watch=true', async () => {
+      const queryId = 'paginated-query-sse';
+      const testChunks = [
+        createTextChunk('Test'),
+        createFinishChunk()
+      ];
+
+      await sendChunks(queryId, testChunks);
+
+      const streamPromise = consumeStream(queryId, { fromBeginning: true });
+      await request(app).post(`/stream/${queryId}/complete`);
+
+      const events = await streamPromise;
+      expect(events.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should not include chunks from other queries', async () => {
+      const queryA = 'paginated-isolated-a';
+      const queryB = 'paginated-isolated-b';
+
+      await sendChunks(queryA, [createTextChunk('From A')]);
+      await sendChunks(queryB, [createTextChunk('From B')]);
+
+      const responseA = await request(app).get(`/stream/${queryA}`);
+      expect(responseA.status).toBe(200);
+      expect(responseA.body.items).toHaveLength(1);
+      expect(responseA.body.items[0].data.chunk.choices[0].delta.content).toBe('From A');
+    });
+  });
 
   describe('Basic streaming', () => {
     it('should stream text chunks in real-time', async () => {

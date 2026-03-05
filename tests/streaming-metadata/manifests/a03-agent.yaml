@@ -1,0 +1,8 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: streaming-test-agent
+spec:
+  prompt: You are a helpful assistant for streaming metadata tests.
+  modelRef:
+    name: test-model

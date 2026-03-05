@@ -1,0 +1,51 @@
+terminationGracePeriodSeconds: 3
+ark:
+  model:
+    enabled: true
+    name: test-model
+    type: completions
+    provider: openai
+    model: gpt-4
+    apiKey: mock-api-key
+
+streaming:
+  chunkSize: 20
+  chunkIntervalMs: 10
+
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {"id": "gpt-4", "object": "model", "created": 1687882411, "owned_by": "openai"},
+            {"id": "gpt-4o-mini", "object": "model", "created": 1687882411, "owned_by": "openai"}
+          ]
+        }
+
+  - path: "/v1/chat/completions"
+    match: "@"
+    response:
+      status: 200
+      content: |
+        {
+          "id": "mock-{{timestamp}}",
+          "object": "chat.completion",
+          "model": "gpt-4",
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "content": "This is a deterministic streaming test response from mock-llm."
+            },
+            "finish_reason": "stop"
+          }],
+          "usage": {
+            "prompt_tokens": 10,
+            "completion_tokens": 20,
+            "total_tokens": 30
+          }
+        }
