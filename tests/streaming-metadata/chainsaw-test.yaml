@@ -14,7 +14,9 @@ spec:
     try:
     - script:
         content: |
-          helm upgrade --install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=30s 2>/dev/null || true
+          kubectl delete svc mock-llm -n $NAMESPACE --ignore-not-found
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
             --version 0.1.28 \
             --namespace $NAMESPACE \
             --values mock-llm-values.yaml \
