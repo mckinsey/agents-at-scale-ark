@@ -4,6 +4,7 @@ metadata:
   name: filesystem-mcp-workspace-isolation
   labels:
     requires-images: "true"
+    llm: "true"
 spec:
   timeouts:
     exec: 300s
@@ -127,7 +128,7 @@ spec:
           metadata:
             name: filesystem-agent-b
 
-  - name: test-agent-a-write
+  - name: test-both-agents-write
     try:
     - script:
         skipLogOutput: true
@@ -138,6 +139,16 @@ spec:
           echo "{\"${NAMESPACE}/mcp-filesystem\": {\"toolCalls\": [{\"name\": \"set_base_directory\", \"arguments\": {\"path\": \"workspace-a\"}}]}}"
         outputs:
         - name: mcp_settings_a
+          value: ($stdout)
+    - script:
+        skipLogOutput: true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: |
+          echo "{\"${NAMESPACE}/mcp-filesystem\": {\"toolCalls\": [{\"name\": \"set_base_directory\", \"arguments\": {\"path\": \"workspace-b\"}}]}}"
+        outputs:
+        - name: mcp_settings_b
           value: ($stdout)
     - apply:
         resource:
@@ -156,42 +167,6 @@ spec:
             target:
               type: agent
               name: filesystem-agent-a
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: filesystem-write-a
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: filesystem-write-a
-          status:
-            (response != null): true
-    catch:
-    - events: {}
-    - describe:
-        apiVersion: ark.mckinsey.com/v1alpha1
-        kind: Query
-        name: filesystem-write-a
-
-  - name: test-agent-b-write
-    try:
-    - script:
-        skipLogOutput: true
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-        content: |
-          echo "{\"${NAMESPACE}/mcp-filesystem\": {\"toolCalls\": [{\"name\": \"set_base_directory\", \"arguments\": {\"path\": \"workspace-b\"}}]}}"
-        outputs:
-        - name: mcp_settings_b
-          value: ($stdout)
     - apply:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -214,6 +189,23 @@ spec:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
           metadata:
+            name: filesystem-write-a
+          status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: filesystem-write-a
+          status:
+            (response != null): true
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
             name: filesystem-write-b
           status:
             (conditions[?type == 'Completed']):
@@ -228,6 +220,10 @@ spec:
             (response != null): true
     catch:
     - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: filesystem-write-a
     - describe:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
@@ -294,7 +290,7 @@ spec:
           echo ""
           echo "✅ File isolation verified - workspaces are properly separated"
 
-  - name: test-agent-a-read
+  - name: test-both-agents-read
     try:
     - script:
         skipLogOutput: true
@@ -305,6 +301,16 @@ spec:
           echo "{\"${NAMESPACE}/mcp-filesystem\": {\"toolCalls\": [{\"name\": \"set_base_directory\", \"arguments\": {\"path\": \"workspace-a\"}}]}}"
         outputs:
         - name: mcp_settings_a_read
+          value: ($stdout)
+    - script:
+        skipLogOutput: true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        content: |
+          echo "{\"${NAMESPACE}/mcp-filesystem\": {\"toolCalls\": [{\"name\": \"set_base_directory\", \"arguments\": {\"path\": \"workspace-b\"}}]}}"
+        outputs:
+        - name: mcp_settings_b_read
           value: ($stdout)
     - apply:
         resource:
@@ -326,42 +332,6 @@ spec:
             target:
               type: agent
               name: filesystem-agent-a
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: filesystem-read-a
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: filesystem-read-a
-          status:
-            (response != null): true
-    catch:
-    - events: {}
-    - describe:
-        apiVersion: ark.mckinsey.com/v1alpha1
-        kind: Query
-        name: filesystem-read-a
-
-  - name: test-agent-b-read
-    try:
-    - script:
-        skipLogOutput: true
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-        content: |
-          echo "{\"${NAMESPACE}/mcp-filesystem\": {\"toolCalls\": [{\"name\": \"set_base_directory\", \"arguments\": {\"path\": \"workspace-b\"}}]}}"
-        outputs:
-        - name: mcp_settings_b_read
-          value: ($stdout)
     - apply:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -387,6 +357,23 @@ spec:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
           metadata:
+            name: filesystem-read-a
+          status:
+            (conditions[?type == 'Completed']):
+            - status: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: filesystem-read-a
+          status:
+            (response != null): true
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
             name: filesystem-read-b
           status:
             (conditions[?type == 'Completed']):
@@ -401,6 +388,10 @@ spec:
             (response != null): true
     catch:
     - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: filesystem-read-a
     - describe:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query

@@ -1,4 +1,9 @@
+import logging
+
 from playwright.sync_api import Page
+
+
+logger = logging.getLogger(__name__)
 
 
 class BasePage:
@@ -33,8 +38,8 @@ class BasePage:
     def wait_for_element_hidden(self, selector: str, timeout: int = 10000) -> None:
         try:
             self.page.locator(selector).first.wait_for(state="hidden", timeout=timeout)
-        except:
-            pass
+        except Exception as e:
+            logger.info(f"Selector {selector} not hidden: {e}")
     
     def wait_for_dropdown_options(self, timeout: int = 5000) -> None:
         self.page.locator("[role='option'], [role='listbox'], [data-slot='select-content']").first.wait_for(state="visible", timeout=timeout)
