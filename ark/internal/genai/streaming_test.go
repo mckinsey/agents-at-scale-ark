@@ -153,3 +153,183 @@ func TestStreamMetadata_Empty(t *testing.T) {
 	nonEmptyMeta := StreamMetadata{Query: "test"}
 	assert.Equal(t, "test", nonEmptyMeta.Query)
 }
+
+func TestSendFinalToolCallChunk(t *testing.T) {
+	tests := []struct {
+		name         string
+		fullResponse *openai.ChatCompletion
+		toolCalls    []openai.ChatCompletionMessageToolCall
+		expectError  bool
+		validateFunc func(*testing.T, *openai.ChatCompletionChunk)
+	}{
+		{
+			name: "single tool call",
+			fullResponse: &openai.ChatCompletion{
+				ID:      "completion-123",
+				Created: 1234567890,
+				Model:   "gpt-4",
+				Choices: []openai.ChatCompletionChoice{
+					{
+						FinishReason: "tool_calls",
+					},
+				},
+			},
+			toolCalls: []openai.ChatCompletionMessageToolCall{
+				{
+					ID:   "call_1",
+					Type: "function",
+					Function: openai.ChatCompletionMessageToolCallFunction{
+						Name:      "get_weather",
+						Arguments: `{"location":"New York"}`,
+					},
+				},
+			},
+			expectError: false,
+			validateFunc: func(t *testing.T, chunk *openai.ChatCompletionChunk) {
+				assert.Equal(t, "completion-123", chunk.ID)
+				assert.Equal(t, "chat.completion.chunk", string(chunk.Object))
+				assert.Equal(t, int64(1234567890), chunk.Created)
+				assert.Equal(t, "gpt-4", chunk.Model)
+				assert.Len(t, chunk.Choices, 1)
+				assert.Len(t, chunk.Choices[0].Delta.ToolCalls, 1)
+
+				toolCall := chunk.Choices[0].Delta.ToolCalls[0]
+				assert.Equal(t, int64(0), toolCall.Index)
+				assert.Equal(t, "call_1", toolCall.ID)
+				assert.Equal(t, "function", toolCall.Type)
+				assert.Equal(t, "get_weather", toolCall.Function.Name)
+				assert.Equal(t, `{"location":"New York"}`, toolCall.Function.Arguments)
+				assert.Equal(t, "tool_calls", chunk.Choices[0].FinishReason)
+			},
+		},
+		{
+			name: "multiple tool calls",
+			fullResponse: &openai.ChatCompletion{
+				ID:      "completion-456",
+				Created: 1234567891,
+				Model:   "gpt-4-turbo",
+				Choices: []openai.ChatCompletionChoice{
+					{
+						FinishReason: "tool_calls",
+					},
+				},
+			},
+			toolCalls: []openai.ChatCompletionMessageToolCall{
+				{
+					ID:   "call_1",
+					Type: "function",
+					Function: openai.ChatCompletionMessageToolCallFunction{
+						Name:      "get_weather",
+						Arguments: `{"location":"New York"}`,
+					},
+				},
+				{
+					ID:   "call_2",
+					Type: "function",
+					Function: openai.ChatCompletionMessageToolCallFunction{
+						Name:      "get_time",
+						Arguments: `{"timezone":"EST"}`,
+					},
+				},
+				{
+					ID:   "call_3",
+					Type: "function",
+					Function: openai.ChatCompletionMessageToolCallFunction{
+						Name:      "calculate",
+						Arguments: `{"expression":"2+2"}`,
+					},
+				},
+			},
+			expectError: false,
+			validateFunc: func(t *testing.T, chunk *openai.ChatCompletionChunk) {
+				assert.Len(t, chunk.Choices[0].Delta.ToolCalls, 3)
+
+				// Verify all tool calls are present in order
+				assert.Equal(t, int64(0), chunk.Choices[0].Delta.ToolCalls[0].Index)
+				assert.Equal(t, "call_1", chunk.Choices[0].Delta.ToolCalls[0].ID)
+				assert.Equal(t, "get_weather", chunk.Choices[0].Delta.ToolCalls[0].Function.Name)
+
+				assert.Equal(t, int64(1), chunk.Choices[0].Delta.ToolCalls[1].Index)
+				assert.Equal(t, "call_2", chunk.Choices[0].Delta.ToolCalls[1].ID)
+				assert.Equal(t, "get_time", chunk.Choices[0].Delta.ToolCalls[1].Function.Name)
+
+				assert.Equal(t, int64(2), chunk.Choices[0].Delta.ToolCalls[2].Index)
+				assert.Equal(t, "call_3", chunk.Choices[0].Delta.ToolCalls[2].ID)
+				assert.Equal(t, "calculate", chunk.Choices[0].Delta.ToolCalls[2].Function.Name)
+			},
+		},
+		{
+			name: "empty tool calls",
+			fullResponse: &openai.ChatCompletion{
+				ID:      "completion-789",
+				Created: 1234567892,
+				Model:   "gpt-4",
+				Choices: []openai.ChatCompletionChoice{
+					{
+						FinishReason: "stop",
+					},
+				},
+			},
+			toolCalls:   []openai.ChatCompletionMessageToolCall{},
+			expectError: false,
+			validateFunc: func(t *testing.T, chunk *openai.ChatCompletionChunk) {
+				assert.Len(t, chunk.Choices[0].Delta.ToolCalls, 0)
+				assert.Equal(t, "stop", chunk.Choices[0].FinishReason)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var capturedChunk *openai.ChatCompletionChunk
+			streamFunc := func(chunk *openai.ChatCompletionChunk) error {
+				capturedChunk = chunk
+				return nil
+			}
+
+			err := SendFinalToolCallChunk(tt.fullResponse, tt.toolCalls, streamFunc)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, capturedChunk, "chunk should be sent to stream function")
+				if tt.validateFunc != nil {
+					tt.validateFunc(t, capturedChunk)
+				}
+			}
+		})
+	}
+}
+
+func TestSendFinalToolCallChunk_StreamFunctionError(t *testing.T) {
+	fullResponse := &openai.ChatCompletion{
+		ID:      "completion-error",
+		Created: 1234567890,
+		Model:   "gpt-4",
+		Choices: []openai.ChatCompletionChoice{
+			{
+				FinishReason: "tool_calls",
+			},
+		},
+	}
+	toolCalls := []openai.ChatCompletionMessageToolCall{
+		{
+			ID:   "call_1",
+			Type: "function",
+			Function: openai.ChatCompletionMessageToolCallFunction{
+				Name:      "test_function",
+				Arguments: `{}`,
+			},
+		},
+	}
+
+	expectedError := assert.AnError
+	streamFunc := func(chunk *openai.ChatCompletionChunk) error {
+		return expectedError
+	}
+
+	err := SendFinalToolCallChunk(fullResponse, toolCalls, streamFunc)
+	assert.Error(t, err)
+	assert.Equal(t, expectedError, err)
+}

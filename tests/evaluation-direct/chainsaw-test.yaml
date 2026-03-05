@@ -27,6 +27,19 @@ spec:
         content: bash ../helpers/wait-for-evaluator.sh
     - apply:
         file: manifests/a0[0-4]-*.yaml
+    - assert:
+        resource:
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: RoleBinding
+          metadata:
+            name: evaluator-llm-test-access
+        timeout: 15s
+    - script:
+        content: bash ../helpers/wait-for-rbac.sh evaluator-llm-test-access $NAMESPACE
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        timeout: 30s
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Model
