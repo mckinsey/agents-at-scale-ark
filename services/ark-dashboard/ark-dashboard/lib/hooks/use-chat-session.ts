@@ -1,10 +1,7 @@
 'use client';
 
 import { useAtom, useAtomValue } from 'jotai';
-import type {
-  ChatCompletionChunk,
-  ChatCompletionMessageParam,
-} from 'openai/resources/chat/completions';
+import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import type { RefObject } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -21,7 +18,10 @@ import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { hashPromptSync } from '@/lib/analytics/utils';
 import { chatService } from '@/lib/services';
-import type { ExtendedChatMessage } from '@/lib/types/chat-message';
+import type {
+  ArkExtendedChunk,
+  ExtendedChatMessage,
+} from '@/lib/types/chat-message';
 
 type ChatType = 'model' | 'team' | 'agent';
 
@@ -221,40 +221,17 @@ export function useChatSession({
         sessionId,
         queryTimeout,
       )) {
-        if ('error' in chunk && chunk.error) {
+        const typedChunk = chunk as unknown as ArkExtendedChunk;
+
+        if (typedChunk.error) {
           hasError = true;
-          const errorObj = chunk.error as {
-            message?: string;
-            code?: string;
-          };
-          errorMessage = errorObj.message || 'An error occurred';
-          if ('ark' in chunk) {
-            const arkData = chunk.ark as { query?: string };
-            queryName = arkData.query || '';
-          }
+          errorMessage = typedChunk.error.message || 'An error occurred';
+          queryName = typedChunk.ark?.query || '';
           break;
         }
 
-        const typedChunk = chunk as unknown as ChatCompletionChunk;
-
-        if (typedChunk?.id === 'chatcmpl-final' && 'ark' in chunk) {
-          const arkData = chunk.ark as {
-            completedQuery?: {
-              metadata?: { name?: string };
-              status?: {
-                phase?: string;
-                response?: {
-                  content?: string;
-                  raw?: string;
-                };
-                tokenUsage?: {
-                  promptTokens?: number;
-                  completionTokens?: number;
-                  totalTokens?: number;
-                };
-              };
-            };
-          };
+        if (typedChunk?.id === 'chatcmpl-final' && typedChunk.ark) {
+          const arkData = typedChunk.ark;
           if (arkData.completedQuery?.status?.phase === 'error') {
             hasError = true;
             errorMessage =
@@ -271,16 +248,6 @@ export function useChatSession({
             }
           }
 
-          if (typedChunk?.usage) {
-            const usage: TokenUsage = {
-              prompt_tokens: typedChunk.usage.prompt_tokens ?? 0,
-              completion_tokens: typedChunk.usage.completion_tokens ?? 0,
-              total_tokens: typedChunk.usage.total_tokens ?? 0,
-            };
-            messageTokenUsage = usage;
-            updateTokenUsage(usage);
-          }
-
           const arkTokenUsage =
             arkData.completedQuery?.status?.tokenUsage;
           if (arkTokenUsage) {
@@ -291,12 +258,19 @@ export function useChatSession({
             };
             messageTokenUsage = usage;
             updateTokenUsage(usage);
+          } else if (typedChunk?.usage) {
+            const usage: TokenUsage = {
+              prompt_tokens: typedChunk.usage.prompt_tokens ?? 0,
+              completion_tokens: typedChunk.usage.completion_tokens ?? 0,
+              total_tokens: typedChunk.usage.total_tokens ?? 0,
+            };
+            messageTokenUsage = usage;
+            updateTokenUsage(usage);
           }
         }
 
-        if ('ark' in chunk) {
-          const arkData = chunk.ark as { agent?: string };
-          const chunkAgent = arkData.agent;
+        if (typedChunk.ark) {
+          const chunkAgent = typedChunk.ark.agent;
 
           if (chunkAgent && chunkAgent !== currentAgent) {
             if (currentAgent) {
