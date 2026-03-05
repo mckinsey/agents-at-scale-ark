@@ -11,7 +11,7 @@ import {
 import type { SettingPage } from '@/atoms/settings-modal';
 import { cn } from '@/lib/utils';
 
-import { settingsSections } from './settings-types';
+import { MANAGE_MARKETPLACE_KEY, settingsSections } from './settings-types';
 
 export function SettingsSidebar() {
   const setActiveSettingPage = useSetAtom(activeSettingPageAtom);
@@ -45,7 +45,7 @@ export function SettingsSidebar() {
                 {section.sectionLabel}
               </div>
               <div className="space-y-1 pl-2">
-                {section.items.filter(item => item.key !== 'manage-marketplace' || isMarketplaceEnabled).map(item => {
+                {section.items.filter(item => item.key !== MANAGE_MARKETPLACE_KEY || isMarketplaceEnabled).map(item => {
                   const Icon = item.icon;
                   return (
                     <button
