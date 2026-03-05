@@ -76,6 +76,7 @@ helm upgrade --install ark-broker "${REPO_ROOT}/services/ark-broker/chart" \
   --set app.image.tag="${ARK_IMAGE_TAG}" \
   --set app.image.pullPolicy=IfNotPresent \
   --set restartController.enabled=false \
+  --set memory.createMemoryCRD=false \
   --wait --timeout=90s
 
 echo "=== Installing ARK Controller ==="

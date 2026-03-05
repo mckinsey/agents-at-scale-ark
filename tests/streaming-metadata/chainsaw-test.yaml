@@ -28,6 +28,27 @@ spec:
           kind: ConfigMap
           metadata:
             name: ark-config-streaming
+    - apply:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Memory
+          metadata:
+            name: ark-broker
+          spec:
+            address:
+              valueFrom:
+                serviceRef:
+                  name: ark-broker
+                  namespace: default
+                  port: http
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Memory
+          metadata:
+            name: ark-broker
+          status:
+            phase: ready
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Model
