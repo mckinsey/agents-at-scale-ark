@@ -118,6 +118,13 @@ customCACert:
   secretName: "custom-ca-cert"
   key: "ca.crt"
 
+# [MODEL-URL-WHITELIST]: Model URL whitelist configuration                                                                                                                                                                                                                                
+# When enabled, restricts model BaseURLs to only permitted domains 
+modelUrlWhitelist:
+  enabled: true
+  configMapName: "model-url-whitelist"
+  configMapKey: "whitelisted-domains"
+
 # [TELEMETRY]: Telemetry and tracing configuration
 telemetry:
   tenantRouting:

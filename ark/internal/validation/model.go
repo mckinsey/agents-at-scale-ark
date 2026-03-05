@@ -3,10 +3,101 @@ package validation
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/url"
+	"os"
+	"strings"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/genai"
 )
+
+func getWhitelistedModelProviderDomains() []string {
+	if domains := os.Getenv("WHITELISTED_MODEL_DOMAINS"); domains != "" {
+		return strings.Split(domains, "\n")
+	}
+	return []string{} // deny all if not configured
+}
+
+func ValidateBaseURL(baseURL string) error {
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL format: %w", err)
+	}
+
+	// Reject file:// and other non-network schemes
+	if parsed.Scheme == "file" || parsed.Scheme == "data" || parsed.Scheme == "javascript" {
+		return fmt.Errorf("invalid URL format: unsupported scheme %s://", parsed.Scheme)
+	}
+
+	host := parsed.Hostname()
+	if host == "" {
+		// If there's no scheme and no host, it's malformed
+		if parsed.Scheme == "" {
+			return fmt.Errorf("invalid URL format: missing scheme")
+		}
+		return fmt.Errorf("URL must contain a hostname")
+	}
+
+	// Enforce HTTPS for all URLs
+	if parsed.Scheme != "https" {
+		return fmt.Errorf("all URLs must use HTTPS; got %s://", parsed.Scheme)
+	}
+
+	// Block private IP addresses
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.IsLoopback() {
+			return fmt.Errorf("loopback IP addresses are not allowed: %s", host)
+		}
+
+		if ip.IsPrivate() {
+			return fmt.Errorf("private IP addresses are not allowed: %s", host)
+		}
+
+		if strings.HasPrefix(ip.String(), "169.254.") {
+			return fmt.Errorf("metadata service IP range is not allowed: %s", host)
+		}
+	}
+
+	// Whitelist check for domain names
+	if !isWhitelistedDomain(host) {
+		return fmt.Errorf("domain not in whitelist: %s (whitelisted domains: %s)",
+			host, strings.Join(getWhitelistedModelProviderDomains(), ", "))
+	}
+
+	return nil
+}
+
+func isWhitelistedDomain(hostname string) bool {
+	hostname = strings.ToLower(strings.TrimSpace(hostname))
+
+	for _, whitelisted := range getWhitelistedModelProviderDomains() {
+		whitelisted = strings.ToLower(strings.TrimSpace(whitelisted))
+
+		// Special case: AWS Bedrock regional endpoints only
+		// bedrock-runtime.us-east-1.amazonaws.com should match amazonaws.com
+		// But NOT s3.amazonaws.com or other AWS services
+		if whitelisted == "amazonaws.com" {
+			if strings.Contains(hostname, "bedrock-runtime") && strings.HasSuffix(hostname, ".amazonaws.com") {
+				return true
+			}
+			// Don't do general subdomain matching for amazonaws.com
+			continue
+		}
+
+		// Exact match
+		if hostname == whitelisted {
+			return true
+		}
+
+		// Subdomain match (e.g., "xyz.openai.azure.com" matches "openai.azure.com")
+		if strings.HasSuffix(hostname, "."+whitelisted) {
+			return true
+		}
+	}
+
+	return false
+}
 
 func (v *Validator) ValidateModel(ctx context.Context, model *arkv1alpha1.Model) ([]string, error) {
 	if err := v.ValidateValueSource(ctx, &model.Spec.Model, model.GetNamespace(), "spec.model"); err != nil {
@@ -96,8 +187,12 @@ func (v *Validator) validateAzureConfig(ctx context.Context, model *arkv1alpha1.
 	if err := v.validateAzureAuth(ctx, azure, ns); err != nil {
 		return err
 	}
-	if _, err := v.ResolveValueSource(ctx, azure.BaseURL, ns); err != nil {
+	baseURLValue, err := v.ResolveValueSource(ctx, azure.BaseURL, ns)
+	if err != nil {
 		return fmt.Errorf("failed to resolve Azure BaseURL: %w", err)
+	}
+	if err := ValidateBaseURL(baseURLValue); err != nil {
+		return fmt.Errorf("spec.config.azure.baseUrl validation failed: %w", err)
 	}
 	for i, header := range azure.Headers {
 		contextPrefix := fmt.Sprintf("spec.config.azure.headers[%d]", i)
@@ -121,8 +216,12 @@ func (v *Validator) validateOpenAIConfig(ctx context.Context, model *arkv1alpha1
 		return err
 	}
 
-	if _, err := v.ResolveValueSource(ctx, model.Spec.Config.OpenAI.BaseURL, ns); err != nil {
+	baseURLValue, err := v.ResolveValueSource(ctx, model.Spec.Config.OpenAI.BaseURL, ns)
+	if err != nil {
 		return fmt.Errorf("failed to resolve OpenAI BaseURL: %w", err)
+	}
+	if err := ValidateBaseURL(baseURLValue); err != nil {
+		return fmt.Errorf("spec.config.openai.baseUrl validation failed: %w", err)
 	}
 
 	for i, header := range model.Spec.Config.OpenAI.Headers {
@@ -141,28 +240,43 @@ func (v *Validator) validateBedrockConfig(ctx context.Context, model *arkv1alpha
 	}
 
 	ns := model.GetNamespace()
-	if model.Spec.Config.Bedrock.Region != nil {
-		if err := v.ValidateValueSource(ctx, model.Spec.Config.Bedrock.Region, ns, "spec.config.bedrock.region"); err != nil {
+	bedrock := model.Spec.Config.Bedrock
+
+	if bedrock.BaseURL != nil {
+		if err := v.ValidateValueSource(ctx, bedrock.BaseURL, ns, "spec.config.bedrock.baseUrl"); err != nil {
+			return err
+		}
+		baseURLValue, err := v.ResolveValueSource(ctx, *bedrock.BaseURL, ns)
+		if err != nil {
+			return fmt.Errorf("failed to resolve Bedrock BaseURL: %w", err)
+		}
+		if err := ValidateBaseURL(baseURLValue); err != nil {
+			return fmt.Errorf("spec.config.bedrock.baseUrl validation failed: %w", err)
+		}
+	}
+
+	if bedrock.Region != nil {
+		if err := v.ValidateValueSource(ctx, bedrock.Region, ns, "spec.config.bedrock.region"); err != nil {
 			return err
 		}
 	}
-	if model.Spec.Config.Bedrock.AccessKeyID != nil {
-		if err := v.ValidateValueSource(ctx, model.Spec.Config.Bedrock.AccessKeyID, ns, "spec.config.bedrock.accessKeyId"); err != nil {
+	if bedrock.AccessKeyID != nil {
+		if err := v.ValidateValueSource(ctx, bedrock.AccessKeyID, ns, "spec.config.bedrock.accessKeyId"); err != nil {
 			return err
 		}
 	}
-	if model.Spec.Config.Bedrock.SecretAccessKey != nil {
-		if err := v.ValidateValueSource(ctx, model.Spec.Config.Bedrock.SecretAccessKey, ns, "spec.config.bedrock.secretAccessKey"); err != nil {
+	if bedrock.SecretAccessKey != nil {
+		if err := v.ValidateValueSource(ctx, bedrock.SecretAccessKey, ns, "spec.config.bedrock.secretAccessKey"); err != nil {
 			return err
 		}
 	}
-	if model.Spec.Config.Bedrock.SessionToken != nil {
-		if err := v.ValidateValueSource(ctx, model.Spec.Config.Bedrock.SessionToken, ns, "spec.config.bedrock.sessionToken"); err != nil {
+	if bedrock.SessionToken != nil {
+		if err := v.ValidateValueSource(ctx, bedrock.SessionToken, ns, "spec.config.bedrock.sessionToken"); err != nil {
 			return err
 		}
 	}
-	if model.Spec.Config.Bedrock.ModelArn != nil {
-		if err := v.ValidateValueSource(ctx, model.Spec.Config.Bedrock.ModelArn, ns, "spec.config.bedrock.modelArn"); err != nil {
+	if bedrock.ModelArn != nil {
+		if err := v.ValidateValueSource(ctx, bedrock.ModelArn, ns, "spec.config.bedrock.modelArn"); err != nil {
 			return err
 		}
 	}

@@ -1,0 +1,16 @@
+{{- if .Values.modelUrlWhitelist.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.modelUrlWhitelist.configMapName | default "model-url-whitelist" }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+data:
+  {{ .Values.modelUrlWhitelist.configMapKey | default "whitelisted-domains" }}: |
+    api.openai.com
+    openai.azure.com
+    api.anthropic.com
+    generativelanguage.googleapis.com
+    amazonaws.com
+{{- end }}

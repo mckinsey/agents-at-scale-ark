@@ -48,6 +48,14 @@ spec:
           - name: SSL_CERT_FILE
             value: "/etc/ssl/certs/custom-ca/{{ .Values.customCACert.key }}"
           {{- end }}
+          {{- if .Values.modelUrlWhitelist.enabled }}
+          - name: WHITELISTED_MODEL_DOMAINS
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Values.modelUrlWhitelist.configMapName | default "model-url-whitelist" }}
+                key: {{ .Values.modelUrlWhitelist.configMapKey | default "whitelisted-domains" }}
+                optional: false
+          {{- end }}
           {{- if and .Values.storage (ne .Values.storage.backend "etcd") }}
           - name: ARK_STORAGE_BACKEND
             value: {{ .Values.storage.backend | quote }}
