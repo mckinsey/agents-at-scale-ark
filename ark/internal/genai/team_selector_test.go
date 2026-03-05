@@ -508,3 +508,34 @@ func TestBuildRoles(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildA2AHistoryWithAgentNames(t *testing.T) {
+	msg1 := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("what is the weather?"),
+	})
+	msg2 := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("checking weather data"),
+	})
+	setTeamExtension(&msg2, TeamExtensionV1{AgentName: "researcher"})
+	msg3 := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("the weather is sunny"),
+	})
+	setTeamExtension(&msg3, TeamExtensionV1{AgentName: "writer"})
+
+	history := buildA2AHistory([]protocol.Message{msg1, msg2, msg3})
+
+	assert.Contains(t, history, "# user:\nwhat is the weather?")
+	assert.Contains(t, history, "# researcher:\nchecking weather data")
+	assert.Contains(t, history, "# writer:\nthe weather is sunny")
+	assert.NotContains(t, history, "# assistant:")
+}
+
+func TestBuildA2AHistoryFallsBackToAssistantWithoutMetadata(t *testing.T) {
+	msg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("response without name"),
+	})
+
+	history := buildA2AHistory([]protocol.Message{msg})
+
+	assert.Contains(t, history, "# assistant:\nresponse without name")
+}

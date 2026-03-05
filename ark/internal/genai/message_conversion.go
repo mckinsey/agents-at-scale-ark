@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/packages/param"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
@@ -36,7 +37,7 @@ func A2AToOpenAIMessage(msg protocol.Message) (openai.ChatCompletionMessageParam
 	case RoleTool:
 		return convertA2AToolMessage(msg.Parts, msg.Metadata, content), nil
 	case RoleAssistant:
-		return convertA2AAssistantMessage(msg.Parts, content), nil
+		return convertA2AAssistantMessage(msg.Parts, msg, content), nil
 	default:
 		return openai.UserMessage(ensureNonEmptyTextContent(content)), nil
 	}
@@ -83,9 +84,12 @@ func convertA2AToolMessage(parts []protocol.Part, metadata map[string]interface{
 	return openai.ToolMessage(ensureNonEmptyToolContent(content), toolCallID)
 }
 
-func convertA2AAssistantMessage(parts []protocol.Part, content string) openai.ChatCompletionMessageParamUnion {
+func convertA2AAssistantMessage(parts []protocol.Part, msg protocol.Message, content string) openai.ChatCompletionMessageParamUnion {
 	assistant := openai.AssistantMessage(ensureNonEmptyTextContent(content))
 	if assistant.OfAssistant != nil {
+		if name := getAgentNameFromMessage(msg); name != "" {
+			assistant.OfAssistant.Name = param.Opt[string]{Value: name}
+		}
 		toolCalls := extractToolCallsFromParts(parts)
 		if len(toolCalls) > 0 {
 			assistant.OfAssistant.ToolCalls = toolCalls

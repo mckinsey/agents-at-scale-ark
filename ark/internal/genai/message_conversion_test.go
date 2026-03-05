@@ -462,3 +462,57 @@ func TestA2AToOpenAIMessageMultimodalUserWithEmptyTextUsesFallbackContent(t *tes
 	require.NotNil(t, recovered.OfUser)
 	assert.Equal(t, emptyTextContentFallback, recovered.OfUser.Content.OfString.Value)
 }
+
+func TestConvertA2AAssistantMessageWithAgentName(t *testing.T) {
+	message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("hello from researcher"),
+	})
+	setTeamExtension(&message, TeamExtensionV1{AgentName: "researcher"})
+
+	converted, err := A2AToOpenAIMessage(message)
+	require.NoError(t, err)
+	require.NotNil(t, converted.OfAssistant)
+	assert.Equal(t, "researcher", converted.OfAssistant.Name.Value)
+	assert.Equal(t, "hello from researcher", converted.OfAssistant.Content.OfString.Value)
+}
+
+func TestConvertA2AAssistantMessageWithoutMetadataOmitsName(t *testing.T) {
+	message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("hello"),
+	})
+
+	converted, err := A2AToOpenAIMessage(message)
+	require.NoError(t, err)
+	require.NotNil(t, converted.OfAssistant)
+	assert.Empty(t, converted.OfAssistant.Name.Value)
+}
+
+func TestConvertA2AAssistantMessageNameSurvivesRoundTrip(t *testing.T) {
+	message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("content"),
+	})
+	setTeamExtension(&message, TeamExtensionV1{AgentName: "writer"})
+
+	converted, err := A2AToOpenAIMessage(message)
+	require.NoError(t, err)
+	require.NotNil(t, converted.OfAssistant)
+	assert.Equal(t, "writer", converted.OfAssistant.Name.Value)
+
+	serialized, jsonErr := json.Marshal(converted.OfAssistant)
+	require.NoError(t, jsonErr)
+	assert.Contains(t, string(serialized), `"name":"writer"`)
+}
+
+func TestConvertA2AAssistantMessageLegacyMetadataFallback(t *testing.T) {
+	message := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("legacy message"),
+	})
+	message.Metadata = map[string]interface{}{
+		MetadataAgentNameKey: "legacy-agent",
+	}
+
+	converted, err := A2AToOpenAIMessage(message)
+	require.NoError(t, err)
+	require.NotNil(t, converted.OfAssistant)
+	assert.Equal(t, "legacy-agent", converted.OfAssistant.Name.Value)
+}
