@@ -8,6 +8,7 @@ OBJECTS="100,1000"
 CONCURRENCY="10"
 SCENARIOS="all"
 CHART_PATH=""
+IMAGE_REPO=""
 IMAGE_TAG=""
 OUTPUT_DIR="results"
 HELM_RELEASE="ark-controller"
@@ -33,6 +34,8 @@ Options:
   --concurrency N       Worker count (default: 10)
   --scenarios WHICH     Production scenarios: all|concurrent|watch-density|mixed|saturation|none (default: all)
   --chart-path PATH     Path to ark Helm chart (default: auto-detect)
+  --image-repo REPO     Controller image repository (default: auto-detect from current release)
+                        For GKE: europe-west4-docker.pkg.dev/PROJECT/REPO/ark-controller
   --image-tag TAG       Controller image tag (default: auto-detect from current release)
   --output-dir DIR      Results output directory (default: results)
   -h, --help            Show this help
@@ -49,6 +52,7 @@ while [[ $# -gt 0 ]]; do
         --concurrency) CONCURRENCY="$2"; shift 2 ;;
         --scenarios) SCENARIOS="$2"; shift 2 ;;
         --chart-path) CHART_PATH="$2"; shift 2 ;;
+        --image-repo) IMAGE_REPO="$2"; shift 2 ;;
         --image-tag) IMAGE_TAG="$2"; shift 2 ;;
         --output-dir) OUTPUT_DIR="$2"; shift 2 ;;
         -h|--help) usage ;;
@@ -87,6 +91,13 @@ detect_image_tag() {
     IMAGE_TAG=$(helm get values "$HELM_RELEASE" -n "$HELM_NAMESPACE" -o json 2>/dev/null \
         | python3 -c "import sys,json; print(json.load(sys.stdin)['controllerManager']['container']['image']['tag'])" 2>/dev/null || true)
     [[ -n "$IMAGE_TAG" ]] || err "cannot detect image tag. Use --image-tag"
+}
+
+detect_image_repo() {
+    if [[ -n "$IMAGE_REPO" ]]; then return; fi
+    IMAGE_REPO=$(helm get values "$HELM_RELEASE" -n "$HELM_NAMESPACE" -o json 2>/dev/null \
+        | python3 -c "import sys,json; print(json.load(sys.stdin)['controllerManager']['container']['image']['repository'])" 2>/dev/null || true)
+    [[ -n "$IMAGE_REPO" ]] || IMAGE_REPO="ark-controller"
 }
 
 detect_storage_chart_path() {
@@ -131,7 +142,7 @@ ensure_postgres() {
 }
 
 helm_common_values() {
-    echo "--set controllerManager.container.image.repository=ark-controller"
+    echo "--set controllerManager.container.image.repository=$IMAGE_REPO"
     echo "--set controllerManager.container.image.tag=$IMAGE_TAG"
     echo "--set controllerManager.container.resources.requests.cpu=200m"
     echo "--set controllerManager.container.resources.requests.memory=512Mi"
@@ -144,6 +155,7 @@ helm_common_values() {
 deploy_etcd() {
     log "Deploying etcd mode..."
     detect_chart_path
+    detect_image_repo
     detect_image_tag
     ensure_cert_manager
 
@@ -163,6 +175,7 @@ deploy_etcd() {
 deploy_postgres() {
     log "Deploying PostgreSQL mode..."
     detect_chart_path
+    detect_image_repo
     detect_image_tag
     ensure_cert_manager
     ensure_postgres
