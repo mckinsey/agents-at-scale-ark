@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useForm } from 'react-hook-form';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as z from 'zod';
 
 import { SelectorSection } from '@/components/forms/team-form/sections/selector-section';
@@ -35,10 +35,10 @@ function Wrapper({
   disabled = false,
   initialSelectorPrompt = 'test prompt',
 }: {
-  strategy?: string;
-  unavailableAgents?: string[];
-  disabled?: boolean;
-  initialSelectorPrompt?: string;
+  readonly strategy?: string;
+  readonly unavailableAgents?: string[];
+  readonly disabled?: boolean;
+  readonly initialSelectorPrompt?: string;
 }) {
   const form = useForm({
     resolver: zodResolver(schema),
@@ -189,7 +189,9 @@ describe('SelectorSection', () => {
         'Enter the selector prompt...',
       );
       expect(textarea).toHaveValue(MOCK_DEFAULT_PROMPT);
-      expect(MOCK_DEFAULT_PROMPT).toBe('This is the mocked default prompt for testing');
+      expect(MOCK_DEFAULT_PROMPT).toBe(
+        'This is the mocked default prompt for testing',
+      );
     });
   });
 });
