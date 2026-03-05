@@ -11,15 +11,21 @@ import (
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 )
 
-// A2ATurnNative executes a single native A2A turn without routing through
-// ChatCompletions-shaped transport.
+// A2ATurnNative converts A2A messages directly to Bedrock's native format
+// and calls InvokeModel. This bypasses the ChatCompletions-shaped transport
+// because Bedrock uses a fundamentally different message schema.
+//
+// eventStream is accepted but unused: Bedrock's InvokeModel API is unary.
+// Streaming would require InvokeModelWithResponseStream, which is not yet
+// implemented.
 func (bm *BedrockModel) A2ATurnNative(
 	ctx context.Context,
 	messages []protocol.Message,
 	toolOutcomes []A2AToolOutcome,
 	tools []A2AToolDefinition,
-	_ EventStreamInterface,
+	eventStream EventStreamInterface,
 ) (*A2ATurnResult, error) {
+	_ = eventStream
 	if err := bm.initClient(ctx); err != nil {
 		return nil, err
 	}
