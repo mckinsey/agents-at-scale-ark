@@ -62,6 +62,7 @@ const (
 
 const (
 	A2ADelegatedToolExtensionKey = "https://ark.mckinsey.com/extensions/delegated-tool/v1"
+	A2ATeamExtensionKey          = "https://ark.mckinsey.com/extensions/team/v1"
 )
 
 const (

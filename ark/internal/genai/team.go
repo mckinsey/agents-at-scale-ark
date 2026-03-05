@@ -301,6 +301,7 @@ func (t *Team) executeMemberAndAccumulateA2A(ctx context.Context, member TeamMem
 		if result != nil {
 			memberMessages, extractErr := extractA2AMessages(result)
 			if extractErr == nil {
+				stampAgentNameOnMessages(memberMessages, member.GetName())
 				*messages = append(*messages, memberMessages...)
 				*newMessages = append(*newMessages, memberMessages...)
 			}
@@ -314,10 +315,20 @@ func (t *Team) executeMemberAndAccumulateA2A(ctx context.Context, member TeamMem
 		t.eventingRecorder.Fail(ctx, "TeamMember", fmt.Sprintf("Team member returned invalid A2A result: %v", err), err, operationData)
 		return err
 	}
+	stampAgentNameOnMessages(memberMessages, member.GetName())
 	*messages = append(*messages, memberMessages...)
 	*newMessages = append(*newMessages, memberMessages...)
 	t.eventingRecorder.Complete(ctx, "TeamMember", "Team member execution completed successfully", operationData)
 	return nil
+}
+
+func stampAgentNameOnMessages(messages []protocol.Message, agentName string) {
+	if agentName == "" {
+		return
+	}
+	for i := range messages {
+		setTeamExtension(&messages[i], TeamExtensionV1{AgentName: agentName})
+	}
 }
 
 type a2aTeamMember interface {

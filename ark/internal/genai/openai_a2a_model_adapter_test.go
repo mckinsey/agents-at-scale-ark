@@ -537,3 +537,75 @@ func TestA2ATurnPopulatesUsageOnChatCompletionsPath(t *testing.T) {
 	assert.Equal(t, int64(50), result.Usage.CompletionTokens)
 	assert.Equal(t, int64(150), result.Usage.TotalTokens)
 }
+
+func TestA2ATurnFallsBackToStreamingWhenNativeProviderAndEventStream(t *testing.T) {
+	provider := &adapterTestNativeProvider{
+		adapterTestChatProvider: adapterTestChatProvider{
+			response: &openai.ChatCompletion{
+				Choices: []openai.ChatCompletionChoice{
+					{
+						Message: openai.ChatCompletionMessage{
+							Role:    "assistant",
+							Content: "streamed-response",
+						},
+					},
+				},
+			},
+		},
+	}
+	model := &Model{
+		Model:             "test-model",
+		Type:              "native",
+		Provider:          provider,
+		telemetryRecorder: telemetrynoop.NewModelRecorder(),
+		eventingRecorder:  eventingnoop.NewModelRecorder(),
+	}
+	adapter := NewOpenAIA2AModelAdapter(model, "test-agent", "default")
+	stream := &fakeEventStream{}
+	userMessage := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("hello"),
+	})
+
+	result, err := adapter.A2ATurn(context.Background(), []protocol.Message{userMessage}, nil, nil, stream)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "streamed-response", result.Content)
+	assert.Equal(t, 0, provider.nativeCalls, "native provider should NOT be called when streaming")
+	assert.Equal(t, 1, provider.streamCalls, "should use ChatCompletionStream path")
+	require.Len(t, stream.chunks, 1, "stream should receive chunks")
+}
+
+func TestA2ATurnUsesNativeProviderWhenNoEventStream(t *testing.T) {
+	provider := &adapterTestNativeProvider{
+		adapterTestChatProvider: adapterTestChatProvider{
+			response: &openai.ChatCompletion{
+				Choices: []openai.ChatCompletionChoice{
+					{
+						Message: openai.ChatCompletionMessage{
+							Role:    "assistant",
+							Content: "should-not-be-used",
+						},
+					},
+				},
+			},
+		},
+	}
+	model := &Model{
+		Model:             "test-model",
+		Type:              "native",
+		Provider:          provider,
+		telemetryRecorder: telemetrynoop.NewModelRecorder(),
+		eventingRecorder:  eventingnoop.NewModelRecorder(),
+	}
+	adapter := NewOpenAIA2AModelAdapter(model, "test-agent", "default")
+	userMessage := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("hello"),
+	})
+
+	result, err := adapter.A2ATurn(context.Background(), []protocol.Message{userMessage}, nil, nil, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "native-response", result.Content)
+	assert.Equal(t, 1, provider.nativeCalls, "native provider should be used without streaming")
+	assert.Equal(t, 0, provider.chatCalls, "chat completions should not be called")
+}
