@@ -66,7 +66,7 @@ func (a *openAIA2AModelAdapter) A2ATurn(ctx context.Context, messages []protocol
 	if a.nativeProvider != nil {
 		return a.a2aTurnViaNativeProvider(ctx, messages, toolOutcomes, tools, eventStream)
 	}
-	return a.a2aTurnViaChatCompletionsEdge(ctx, messages, toolOutcomes, tools, eventStream)
+	return a.a2aTurnViaChatCompletion(ctx, messages, toolOutcomes, tools, eventStream)
 }
 
 func (a *openAIA2AModelAdapter) a2aTurnViaNativeProvider(ctx context.Context, messages []protocol.Message, toolOutcomes []A2AToolOutcome, tools []A2AToolDefinition, eventStream EventStreamInterface) (*A2ATurnResult, error) {
@@ -107,7 +107,7 @@ func (a *openAIA2AModelAdapter) a2aTurnViaNativeProvider(ctx context.Context, me
 	return result, nil
 }
 
-func (a *openAIA2AModelAdapter) a2aTurnViaChatCompletionsEdge(ctx context.Context, messages []protocol.Message, toolOutcomes []A2AToolOutcome, tools []A2AToolDefinition, eventStream EventStreamInterface) (*A2ATurnResult, error) {
+func (a *openAIA2AModelAdapter) a2aTurnViaChatCompletion(ctx context.Context, messages []protocol.Message, toolOutcomes []A2AToolOutcome, tools []A2AToolDefinition, eventStream EventStreamInterface) (*A2ATurnResult, error) {
 	compatMessages, err := convertA2AMessagesToCompatMultimodal(messages)
 	if err != nil {
 		return nil, fmt.Errorf("adapter: failed to convert A2A messages to compat: %w", err)
