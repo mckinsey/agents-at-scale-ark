@@ -15,7 +15,9 @@ spec:
     - script:
         content: |
           helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=30s 2>/dev/null || true
+          kubectl delete deploy mock-llm -n $NAMESPACE --ignore-not-found
           kubectl delete svc mock-llm -n $NAMESPACE --ignore-not-found
+          kubectl delete pod -l app.kubernetes.io/name=mock-llm -n $NAMESPACE --ignore-not-found
           helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
             --version 0.1.28 \
             --namespace $NAMESPACE \
