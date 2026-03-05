@@ -242,42 +242,51 @@ func (v *Validator) validateBedrockConfig(ctx context.Context, model *arkv1alpha
 	ns := model.GetNamespace()
 	bedrock := model.Spec.Config.Bedrock
 
-	if bedrock.BaseURL != nil {
-		if err := v.ValidateValueSource(ctx, bedrock.BaseURL, ns, "spec.config.bedrock.baseUrl"); err != nil {
-			return err
-		}
-		baseURLValue, err := v.ResolveValueSource(ctx, *bedrock.BaseURL, ns)
-		if err != nil {
-			return fmt.Errorf("failed to resolve Bedrock BaseURL: %w", err)
-		}
-		if err := ValidateBaseURL(baseURLValue); err != nil {
-			return fmt.Errorf("spec.config.bedrock.baseUrl validation failed: %w", err)
-		}
+	if err := v.validateBedrockBaseURL(ctx, bedrock, ns); err != nil {
+		return err
 	}
 
-	if bedrock.Region != nil {
-		if err := v.ValidateValueSource(ctx, bedrock.Region, ns, "spec.config.bedrock.region"); err != nil {
-			return err
-		}
+	return v.validateBedrockFields(ctx, bedrock, ns)
+}
+
+func (v *Validator) validateBedrockBaseURL(ctx context.Context, bedrock *arkv1alpha1.BedrockModelConfig, ns string) error {
+	if bedrock.BaseURL == nil {
+		return nil
 	}
-	if bedrock.AccessKeyID != nil {
-		if err := v.ValidateValueSource(ctx, bedrock.AccessKeyID, ns, "spec.config.bedrock.accessKeyId"); err != nil {
-			return err
-		}
+
+	if err := v.ValidateValueSource(ctx, bedrock.BaseURL, ns, "spec.config.bedrock.baseUrl"); err != nil {
+		return err
 	}
-	if bedrock.SecretAccessKey != nil {
-		if err := v.ValidateValueSource(ctx, bedrock.SecretAccessKey, ns, "spec.config.bedrock.secretAccessKey"); err != nil {
-			return err
-		}
+
+	baseURLValue, err := v.ResolveValueSource(ctx, *bedrock.BaseURL, ns)
+	if err != nil {
+		return fmt.Errorf("failed to resolve Bedrock BaseURL: %w", err)
 	}
-	if bedrock.SessionToken != nil {
-		if err := v.ValidateValueSource(ctx, bedrock.SessionToken, ns, "spec.config.bedrock.sessionToken"); err != nil {
-			return err
-		}
+
+	if err := ValidateBaseURL(baseURLValue); err != nil {
+		return fmt.Errorf("spec.config.bedrock.baseUrl validation failed: %w", err)
 	}
-	if bedrock.ModelArn != nil {
-		if err := v.ValidateValueSource(ctx, bedrock.ModelArn, ns, "spec.config.bedrock.modelArn"); err != nil {
-			return err
+
+	return nil
+}
+
+func (v *Validator) validateBedrockFields(ctx context.Context, bedrock *arkv1alpha1.BedrockModelConfig, ns string) error {
+	fields := []struct {
+		value *arkv1alpha1.ValueSource
+		path  string
+	}{
+		{bedrock.Region, "spec.config.bedrock.region"},
+		{bedrock.AccessKeyID, "spec.config.bedrock.accessKeyId"},
+		{bedrock.SecretAccessKey, "spec.config.bedrock.secretAccessKey"},
+		{bedrock.SessionToken, "spec.config.bedrock.sessionToken"},
+		{bedrock.ModelArn, "spec.config.bedrock.modelArn"},
+	}
+
+	for _, field := range fields {
+		if field.value != nil {
+			if err := v.ValidateValueSource(ctx, field.value, ns, field.path); err != nil {
+				return err
+			}
 		}
 	}
 

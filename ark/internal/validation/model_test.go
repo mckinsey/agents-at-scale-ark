@@ -12,7 +12,7 @@ import (
 	"mckinsey.com/ark/internal/genai"
 )
 
-func TestValidateModel(t *testing.T) { //nolint:gocognit
+func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 	lookup := newMockLookup()
 	v := NewValidator(lookup)
 	ctx := context.Background()

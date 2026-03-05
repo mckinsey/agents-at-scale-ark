@@ -51,11 +51,11 @@ var _ = BeforeSuite(func() {
 
 	// Set default whitelist for model validation tests
 	// This is required because webhook validation calls internal/validation code
-	os.Setenv("WHITELISTED_MODEL_DOMAINS", `api.openai.com
+	Expect(os.Setenv("WHITELISTED_MODEL_DOMAINS", `api.openai.com
 		openai.azure.com
 		api.anthropic.com
 		generativelanguage.googleapis.com
-		amazonaws.com`)
+		amazonaws.com`)).To(Succeed())
 
 	// nolint:fatcontext
 	ctx, cancel = context.WithCancel(context.TODO())

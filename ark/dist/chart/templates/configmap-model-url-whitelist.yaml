@@ -13,4 +13,5 @@ data:
     api.anthropic.com
     generativelanguage.googleapis.com
     amazonaws.com
+    azure.prod.ai-gateway.quantumblack.com
 {{- end }}
