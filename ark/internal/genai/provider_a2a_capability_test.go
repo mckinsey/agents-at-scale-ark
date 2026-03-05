@@ -2,16 +2,14 @@ package genai
 
 import "testing"
 
-func TestBuiltInProvidersSupportA2ANativeTurns(t *testing.T) {
-	providers := []any{
-		&OpenAIProvider{},
-		&AzureProvider{},
-		&BedrockModel{},
+func TestOnlyBedrockImplementsA2ANativeTurnProvider(t *testing.T) {
+	if _, ok := any(&BedrockModel{}).(A2ANativeTurnProvider); !ok {
+		t.Fatal("BedrockModel must implement A2ANativeTurnProvider")
 	}
-
-	for _, provider := range providers {
-		if _, ok := provider.(A2ANativeTurnProvider); !ok {
-			t.Fatalf("provider %T must implement A2ANativeTurnProvider", provider)
-		}
+	if _, ok := any(&OpenAIProvider{}).(A2ANativeTurnProvider); ok {
+		t.Fatal("OpenAIProvider must NOT implement A2ANativeTurnProvider")
+	}
+	if _, ok := any(&AzureProvider{}).(A2ANativeTurnProvider); ok {
+		t.Fatal("AzureProvider must NOT implement A2ANativeTurnProvider")
 	}
 }

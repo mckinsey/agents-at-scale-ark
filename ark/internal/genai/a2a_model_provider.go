@@ -47,36 +47,3 @@ type A2AToolDefinition struct {
 }
 
 var ErrA2AModelProviderNotSupported = fmt.Errorf("provider does not support A2A model interface")
-
-func executeChatCompletionNativeTurn(
-	ctx context.Context,
-	provider ChatCompletionProvider,
-	providerLabel string,
-	messages []protocol.Message,
-	toolOutcomes []A2AToolOutcome,
-	tools []A2AToolDefinition,
-) (*A2ATurnResult, error) {
-	compatMessages, err := convertA2AMessagesToCompatMultimodal(messages)
-	if err != nil {
-		return nil, fmt.Errorf("%s native turn: failed to convert A2A messages: %w", providerLabel, err)
-	}
-	compatMessages = normalizeAssistantToolCallMessages(compatMessages, buildToolOutcomeContentByID(toolOutcomes))
-	openAITools := a2aToolDefsToOpenAI(tools)
-	response, err := provider.ChatCompletion(ctx, compatMessages, 1, openAITools)
-	if err != nil {
-		return nil, err
-	}
-	if len(response.Choices) == 0 {
-		return nil, fmt.Errorf("%s native turn: model returned empty response", providerLabel)
-	}
-	result, err := buildA2ATurnResultFromChatChoice(response.Choices[0], "")
-	if err != nil {
-		return nil, err
-	}
-	result.Usage = &A2ATurnUsage{
-		PromptTokens:     response.Usage.PromptTokens,
-		CompletionTokens: response.Usage.CompletionTokens,
-		TotalTokens:      response.Usage.TotalTokens,
-	}
-	return result, nil
-}
