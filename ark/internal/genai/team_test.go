@@ -413,7 +413,7 @@ func TestTeamExecuteA2ASequentialMultiTurnAccumulation(t *testing.T) {
 
 func TestTeamExecuteA2ASequentialPreservesPartialMessagesOnError(t *testing.T) {
 	member := &a2aErroringTeamMember{
-		name: "member-one",
+		name: "failing-agent",
 		output: []protocol.Message{
 			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
 				protocol.NewTextPart("partial response"),
@@ -428,10 +428,10 @@ func TestTeamExecuteA2ASequentialPreservesPartialMessagesOnError(t *testing.T) {
 		Strategy:  StrategySequential,
 		Members:   []TeamMember{member},
 	}
-	telemetryProvider := telemetrynoop.NewProvider()
-	eventingProvider := eventingnoop.NewProvider()
-	team.telemetryRecorder = telemetryProvider.TeamRecorder()
-	team.eventingRecorder = eventingProvider.TeamRecorder()
+	tp := telemetrynoop.NewProvider()
+	ep := eventingnoop.NewProvider()
+	team.telemetryRecorder = tp.TeamRecorder()
+	team.eventingRecorder = ep.TeamRecorder()
 
 	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
 		protocol.NewTextPart("hello"),
@@ -442,6 +442,7 @@ func TestTeamExecuteA2ASequentialPreservesPartialMessagesOnError(t *testing.T) {
 	require.NotNil(t, result)
 	require.Len(t, result.A2AMessages, 1)
 	assert.Equal(t, "partial response", ExtractA2ATextFromMessage(result.A2AMessages[0]))
+	assert.Equal(t, "failing-agent", getAgentNameFromMessage(result.A2AMessages[0]))
 }
 
 func TestStampAgentNameOnMessages(t *testing.T) {
@@ -529,37 +530,4 @@ func TestTeamExecuteA2ASequentialStampsAgentNames(t *testing.T) {
 
 	assert.Equal(t, "researcher", getAgentNameFromMessage(result.A2AMessages[0]))
 	assert.Equal(t, "writer", getAgentNameFromMessage(result.A2AMessages[1]))
-}
-
-func TestTeamExecuteA2ASequentialStampsAgentNamesOnPartialError(t *testing.T) {
-	member := &a2aErroringTeamMember{
-		name: "failing-agent",
-		output: []protocol.Message{
-			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
-				protocol.NewTextPart("partial"),
-			}),
-		},
-		err: errors.New("member failure"),
-	}
-
-	team := &Team{
-		Name:      "team",
-		Namespace: "default",
-		Strategy:  StrategySequential,
-		Members:   []TeamMember{member},
-	}
-	tp := telemetrynoop.NewProvider()
-	ep := eventingnoop.NewProvider()
-	team.telemetryRecorder = tp.TeamRecorder()
-	team.eventingRecorder = ep.TeamRecorder()
-
-	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
-		protocol.NewTextPart("hello"),
-	})
-
-	result, err := team.ExecuteA2A(context.Background(), userInput, nil, nil, nil)
-	require.Error(t, err)
-	require.NotNil(t, result)
-	require.Len(t, result.A2AMessages, 1)
-	assert.Equal(t, "failing-agent", getAgentNameFromMessage(result.A2AMessages[0]))
 }
