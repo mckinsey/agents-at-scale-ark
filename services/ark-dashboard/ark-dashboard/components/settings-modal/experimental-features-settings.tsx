@@ -2,12 +2,11 @@
 
 import { useAtom } from 'jotai';
 
-import {
-  storedIsBrokerEnabledAtom,
-  storedIsChatStreamingEnabledAtom,
-  storedIsExperimentalExecutionEngineEnabledAtom,
-  storedQueryTimeoutSettingAtom,
-} from '@/atoms/experimental-features';
+import { experimentalFeatureGroups } from '@/components/experimental-features-dialog/experimental-features';
+import type {
+  BooleanSetting,
+  SelectSetting,
+} from '@/components/experimental-features-dialog/types';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -18,95 +17,68 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 
-export function ExperimentalFeaturesSettings() {
-  const [isExecutionEngineEnabled, setIsExecutionEngineEnabled] = useAtom(
-    storedIsExperimentalExecutionEngineEnabledAtom,
+function BooleanFeatureRow({ feature }: { feature: BooleanSetting }) {
+  const [value, setValue] = useAtom(feature.atom);
+  return (
+    <div className="flex flex-row items-center justify-between rounded-lg border p-4">
+      <div className="space-y-0.5">
+        <Label>{feature.feature}</Label>
+        {feature.description && (
+          <div className="text-muted-foreground text-sm">
+            {feature.description}
+          </div>
+        )}
+      </div>
+      <Switch checked={value} onCheckedChange={setValue} />
+    </div>
   );
-  const [isBrokerEnabled, setIsBrokerEnabled] = useAtom(
-    storedIsBrokerEnabledAtom,
-  );
-  const [isChatStreamingEnabled, setIsChatStreamingEnabled] = useAtom(
-    storedIsChatStreamingEnabledAtom,
-  );
-  const [queryTimeout, setQueryTimeout] = useAtom(
-    storedQueryTimeoutSettingAtom,
-  );
+}
 
+function SelectFeatureRow({ feature }: { feature: SelectSetting }) {
+  const [value, setValue] = useAtom(feature.atom);
+  return (
+    <div className="flex flex-row items-center justify-between rounded-lg border p-4">
+      <div className="flex-1 space-y-0.5">
+        <Label>{feature.feature}</Label>
+        {feature.description && (
+          <div className="text-muted-foreground text-sm">
+            {feature.description}
+          </div>
+        )}
+      </div>
+      <Select value={value} onValueChange={setValue}>
+        <SelectTrigger className="w-[180px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {feature.options.map(option => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+export function ExperimentalFeaturesSettings() {
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="mb-4 text-lg font-semibold">Agents</h2>
-        <div className="flex flex-row items-center justify-between rounded-lg border p-4">
-          <div className="space-y-0.5">
-            <Label>Experimental Execution Engine Field</Label>
-            <div className="text-muted-foreground text-sm">
-              Enables the experimental{' '}
-              <span className="font-bold">Execution Engine</span> field on
-              Agents
-            </div>
-          </div>
-          <Switch
-            checked={isExecutionEngineEnabled}
-            onCheckedChange={setIsExecutionEngineEnabled}
-          />
+      {experimentalFeatureGroups.map(group => (
+        <div key={group.groupKey}>
+          {group.groupLabel && (
+            <h2 className="mb-4 text-lg font-semibold">{group.groupLabel}</h2>
+          )}
+          {group.features.map(feature =>
+            feature.type === 'boolean' ? (
+              <BooleanFeatureRow key={feature.feature} feature={feature} />
+            ) : (
+              <SelectFeatureRow key={feature.feature} feature={feature} />
+            ),
+          )}
         </div>
-      </div>
-
-      <div>
-        <h2 className="mb-4 text-lg font-semibold">Observability</h2>
-        <div className="flex flex-row items-center justify-between rounded-lg border p-4">
-          <div className="space-y-0.5">
-            <Label>Broker</Label>
-            <div className="text-muted-foreground text-sm">
-              Enables the experimental <span className="font-bold">Broker</span>{' '}
-              diagnostic page for viewing real-time OTEL traces, messages, and
-              LLM chunks
-            </div>
-          </div>
-          <Switch
-            checked={isBrokerEnabled}
-            onCheckedChange={setIsBrokerEnabled}
-          />
-        </div>
-      </div>
-
-      <div>
-        <h2 className="mb-4 text-lg font-semibold">Chat</h2>
-        <div className="flex flex-row items-center justify-between rounded-lg border p-4">
-          <div className="space-y-0.5">
-            <Label>Chat Streaming</Label>
-            <div className="text-muted-foreground text-sm">
-              Enables streaming responses in the chat
-            </div>
-          </div>
-          <Switch
-            checked={isChatStreamingEnabled}
-            onCheckedChange={setIsChatStreamingEnabled}
-          />
-        </div>
-      </div>
-
-      <div>
-        <h2 className="mb-4 text-lg font-semibold">Queries</h2>
-        <div className="flex flex-row items-center justify-between rounded-lg border p-4">
-          <div className="flex-1 space-y-0.5">
-            <Label>Query Timeout</Label>
-            <div className="text-muted-foreground text-sm">
-              Default timeout for query execution
-            </div>
-          </div>
-          <Select value={queryTimeout} onValueChange={setQueryTimeout}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="5m">5m (default)</SelectItem>
-              <SelectItem value="10m">10m</SelectItem>
-              <SelectItem value="15m">15m</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+      ))}
     </div>
   );
 }

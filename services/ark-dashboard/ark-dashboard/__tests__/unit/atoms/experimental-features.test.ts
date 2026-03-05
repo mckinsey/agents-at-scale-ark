@@ -3,10 +3,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
   CHAT_STREAMING_FEATURE_KEY,
+  MARKETPLACE_FEATURE_KEY,
   QUERY_TIMEOUT_SETTING_KEY,
   isChatStreamingEnabledAtom,
+  isMarketplaceEnabledAtom,
   queryTimeoutSettingAtom,
   storedIsChatStreamingEnabledAtom,
+  storedIsMarketplaceEnabledAtom,
   storedQueryTimeoutSettingAtom,
 } from '@/atoms/experimental-features';
 
@@ -16,6 +19,26 @@ describe('Experimental Features', () => {
   beforeEach(() => {
     store = createStore();
     localStorage.clear();
+  });
+
+  describe('experimental-marketplace', () => {
+    it('should default to false', () => {
+      expect(MARKETPLACE_FEATURE_KEY).toBe('experimental-marketplace');
+      expect(store.get(storedIsMarketplaceEnabledAtom)).toBe(false);
+    });
+
+    it('should return true when storedIsMarketplaceEnabledAtom is set to true', () => {
+      store.set(storedIsMarketplaceEnabledAtom, true);
+      const value = store.get(storedIsMarketplaceEnabledAtom);
+      expect(value).toBe(true);
+    });
+
+    it('should be read-only (derived atom)', () => {
+      expect(() => {
+        // @ts-expect-error derived atoms are read-only
+        store.set(isMarketplaceEnabledAtom, true);
+      }).toThrow();
+    });
   });
 
   describe('experimental-chat-streaming', () => {
