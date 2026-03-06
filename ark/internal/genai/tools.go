@@ -560,7 +560,42 @@ func getToolParameters(toolCRD *arkv1alpha1.Tool) map[string]any {
 		}
 	}
 
-	return parameters
+	return NormalizeToolParametersSchema(parameters)
+}
+
+func NormalizeToolParametersSchema(parameters map[string]any) map[string]any {
+	if parameters == nil {
+		return nil
+	}
+	normalized, ok := normalizeSchemaNode(parameters).(map[string]any)
+	if !ok {
+		return parameters
+	}
+	return normalized
+}
+
+func normalizeSchemaNode(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		normalized := make(map[string]any, len(typed))
+		for key, nested := range typed {
+			normalized[key] = normalizeSchemaNode(nested)
+		}
+		if schemaType, ok := normalized["type"].(string); ok && schemaType == "array" {
+			if _, exists := normalized["items"]; !exists {
+				normalized["items"] = map[string]any{}
+			}
+		}
+		return normalized
+	case []any:
+		normalized := make([]any, len(typed))
+		for idx, item := range typed {
+			normalized[idx] = normalizeSchemaNode(item)
+		}
+		return normalized
+	default:
+		return value
+	}
 }
 
 func CreateHTTPTool(toolCRD *arkv1alpha1.Tool) ToolDefinition {

@@ -556,7 +556,7 @@ Current state: `input-required` and `auth-required` are recognized as non-termin
 - [x] Claude/Gemini model boundary adapters (`claudeA2AModelAdapter`, `geminiA2AModelAdapter`)
 
 ### Composability (In Progress)
-- [x] Structured agent-as-tool delegation (#1082) — Schema exposed for `message`, `history`, `contextId`
+- [x] Structured agent-as-tool delegation (#1082) — Schema exposed for `message`, `contextId`
 - [x] Delegated invocation payload contract (`https://ark.mckinsey.com/payloads/delegated-invocation/v1`)
 - [x] Task-first delegated stream forwarding (status/artifact/message passthrough + typed step-event parts)
 - [x] Structured native tool outcomes (`A2AToolOutcome`) replacing synthetic tool-result message dependency
@@ -612,9 +612,8 @@ inputSchema:
         parts:
           type: array
           description: "Message content parts (text, file, or data)"
-    history:
-      type: array
-      description: "Previous messages for context"
+          items:
+            type: object
     contextId:
       type: string
       description: "Context ID for stateful conversations"
@@ -657,7 +656,7 @@ This section tracks related GitHub issues and how A2A-native execution plus file
 | [#869](https://github.com/mckinsey/agents-at-scale-ark/issues/869) | rfc: Claude Code A2A integration | A2A boundary model supports heterogeneous external agents while preserving internal execution semantics. |
 | [#1101](https://github.com/mckinsey/agents-at-scale-ark/issues/1101) | Reference implementation - Claude agent execution behind A2A | Directly enabled by stable A2A transport boundaries and delegated tool/event contracts. |
 | [#877](https://github.com/mckinsey/agents-at-scale-ark/issues/877) | rfc: Standalone Agent Runtime | A2A transport separation supports runtime portability by isolating provider-specific edge adapters from core execution flow. |
-| [#1082](https://github.com/mckinsey/agents-at-scale-ark/issues/1082) | feat: enable runtime parameter passing for agents-as-tools and team members | Complements A2A composability by enabling structured parameter passing alongside native message/history/context surfaces; parity coverage now includes `message`-only, `message + history + contextId`, and legacy `input` fallback scenarios. |
+| [#1082](https://github.com/mckinsey/agents-at-scale-ark/issues/1082) | feat: enable runtime parameter passing for agents-as-tools and team members | Complements A2A composability by enabling structured parameter passing alongside native message/context surfaces; parity coverage now includes `message`-only, `message + contextId`, and legacy `input` fallback scenarios. |
 | [#1116](https://github.com/mckinsey/agents-at-scale-ark/issues/1116) | Add conversation id for quries so user can call tools deterministically and pass outputs to agents | Aligns with A2A `contextId`/task correlation direction and improves deterministic multi-turn tool orchestration. |
 | [#557](https://github.com/mckinsey/agents-at-scale-ark/issues/557) | fix: partial tool parameters should support valueFrom | Parameter-sourcing capability is related to the broader tools/params track and complements A2A-native composability. |
 | [#558](https://github.com/mckinsey/agents-at-scale-ark/issues/558) | fix: agent-as-tool should not require input parameter when using partial | Related to agent-as-tool ergonomics; improves adoption of structured params and partial tool usage in A2A-enabled workflows. |
