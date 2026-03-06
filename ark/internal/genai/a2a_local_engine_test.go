@@ -370,6 +370,159 @@ func TestA2ALocalEngineNoToolsConfigured(t *testing.T) {
 	assert.Nil(t, result)
 }
 
+func TestFilterCallerHistoryForDelegationStripsToolCallsAndResults(t *testing.T) {
+	systemMsg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("you are a coordinator"),
+		&protocol.DataPart{Kind: protocol.KindData, Data: RoleHintPayloadV1{Schema: A2APayloadSchemaRoleHintV1, Role: RoleSystem}},
+	})
+	userMsg := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("hello"),
+	})
+	assistantWithToolCalls := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("calling tool"),
+		&protocol.DataPart{Kind: protocol.KindData, Data: ToolCallsPayloadV1{
+			Schema:    A2APayloadSchemaToolCallsV1,
+			ToolCalls: []ToolCallPayloadV1{{ID: "call-1", Name: "lookup", Arguments: `{}`}},
+		}},
+	})
+	toolResultMsg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("result"),
+		&protocol.DataPart{Kind: protocol.KindData, Data: ToolResultPayloadV1{Schema: A2APayloadSchemaToolResultV1, ToolCallID: "call-1"}},
+	})
+	plainAssistant := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("final answer"),
+	})
+
+	history := []protocol.Message{systemMsg, userMsg, assistantWithToolCalls, toolResultMsg, plainAssistant}
+	filtered := filterCallerHistoryForDelegation(history)
+
+	require.Len(t, filtered, 3)
+	assert.Equal(t, "you are a coordinator", ExtractA2ATextFromMessage(filtered[0]))
+	assert.Equal(t, "hello", ExtractA2ATextFromMessage(filtered[1]))
+	assert.Equal(t, "final answer", ExtractA2ATextFromMessage(filtered[2]))
+}
+
+func TestFilterCallerHistoryForDelegationPreservesEmptyHistory(t *testing.T) {
+	filtered := filterCallerHistoryForDelegation(nil)
+	assert.Empty(t, filtered)
+
+	filtered = filterCallerHistoryForDelegation([]protocol.Message{})
+	assert.Empty(t, filtered)
+}
+
+func TestFilterCallerHistoryForDelegationPreservesPlainMessages(t *testing.T) {
+	msgs := []protocol.Message{
+		protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+			protocol.NewTextPart("system prompt"),
+			&protocol.DataPart{Kind: protocol.KindData, Data: RoleHintPayloadV1{Schema: A2APayloadSchemaRoleHintV1, Role: RoleSystem}},
+		}),
+		protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{protocol.NewTextPart("user query")}),
+		protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{protocol.NewTextPart("agent reply")}),
+	}
+
+	filtered := filterCallerHistoryForDelegation(msgs)
+	require.Len(t, filtered, 3)
+	assert.Equal(t, "system prompt", ExtractA2ATextFromMessage(filtered[0]))
+	assert.Equal(t, "user query", ExtractA2ATextFromMessage(filtered[1]))
+	assert.Equal(t, "agent reply", ExtractA2ATextFromMessage(filtered[2]))
+}
+
+func TestFilterCallerHistoryMatchesSelectorTeamBugScenario(t *testing.T) {
+	coordSystem := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("You are a coordinator"),
+		&protocol.DataPart{Kind: protocol.KindData, Data: RoleHintPayloadV1{Schema: A2APayloadSchemaRoleHintV1, Role: RoleSystem}},
+	})
+	selectorSystem := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("Select the next participant"),
+		&protocol.DataPart{Kind: protocol.KindData, Data: RoleHintPayloadV1{Schema: A2APayloadSchemaRoleHintV1, Role: RoleSystem}},
+	})
+	userMsg := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("Research quantum computing"),
+	})
+	assistantCallAnalysis := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("I'll delegate to the analysis agent"),
+		&protocol.DataPart{Kind: protocol.KindData, Data: ToolCallsPayloadV1{
+			Schema: A2APayloadSchemaToolCallsV1,
+			ToolCalls: []ToolCallPayloadV1{
+				{ID: "call_ABC123", Name: "call-analysis-agent-a2a", Arguments: `{"message":"analyze quantum computing"}`},
+			},
+		}},
+	})
+
+	callerHistory := []protocol.Message{coordSystem, selectorSystem, userMsg, assistantCallAnalysis}
+	filtered := filterCallerHistoryForDelegation(callerHistory)
+
+	require.Len(t, filtered, 3, "should strip the assistant(tool_calls) message")
+	assert.Equal(t, "You are a coordinator", ExtractA2ATextFromMessage(filtered[0]))
+	assert.Equal(t, "Select the next participant", ExtractA2ATextFromMessage(filtered[1]))
+	assert.Equal(t, "Research quantum computing", ExtractA2ATextFromMessage(filtered[2]))
+}
+
+type delegationHistoryCapturingExecutor struct {
+	result      ToolResult
+	err         error
+	calls       []ToolCall
+	lastHistory []protocol.Message
+}
+
+func (e *delegationHistoryCapturingExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
+	e.calls = append(e.calls, call)
+	history := GetDelegationCallerHistory(ctx)
+	e.lastHistory = append([]protocol.Message(nil), history...)
+	result := e.result
+	if result.ID == "" {
+		result.ID = call.ID
+	}
+	if result.Name == "" {
+		result.Name = call.Function.Name
+	}
+	return result, e.err
+}
+
+func TestExecuteA2AToolCallsPassesFilteredHistoryToDelegatedExecutor(t *testing.T) {
+	leakedToolCallMessage := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("leaked internal tool call"),
+		&protocol.DataPart{Kind: protocol.KindData, Data: ToolCallsPayloadV1{
+			Schema:    A2APayloadSchemaToolCallsV1,
+			ToolCalls: []ToolCallPayloadV1{{ID: "call-old", Name: "lookup", Arguments: `{}`}},
+		}},
+	})
+	systemMsg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("system prompt"),
+		&protocol.DataPart{Kind: protocol.KindData, Data: RoleHintPayloadV1{Schema: A2APayloadSchemaRoleHintV1, Role: RoleSystem}},
+	})
+	userMsg := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("hello"),
+	})
+	preparedMessages := []protocol.Message{systemMsg, userMsg, leakedToolCallMessage}
+	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("hello"),
+	})
+
+	provider := &testA2AModelProvider{
+		results: []*A2ATurnResult{
+			a2aToolCallResult("calling tool", []A2AToolCall{{ID: "call-1", Name: "lookup", Arguments: `{}`}}),
+			a2aAssistantResult("done"),
+		},
+	}
+	executor := &delegationHistoryCapturingExecutor{
+		result: ToolResult{Content: "ok"},
+	}
+	registry := newTestToolRegistry(executor)
+	engine := NewA2ALocalEngine(provider, registry, "test/agent")
+
+	result, err := engine.Execute(context.Background(), userInput, preparedMessages, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	require.Len(t, executor.calls, 1)
+	require.Len(t, executor.lastHistory, 2)
+	assert.Equal(t, "system prompt", ExtractA2ATextFromMessage(executor.lastHistory[0]))
+	assert.Equal(t, "hello", ExtractA2ATextFromMessage(executor.lastHistory[1]))
+	assert.False(t, messageContainsToolCallPayload(executor.lastHistory[0]))
+	assert.False(t, messageContainsToolCallPayload(executor.lastHistory[1]))
+}
+
 func TestExecuteToolA2ADelegatesToExecuteTool(t *testing.T) {
 	executor := &testToolExecutor{
 		result: ToolResult{Content: "a2a tool result"},

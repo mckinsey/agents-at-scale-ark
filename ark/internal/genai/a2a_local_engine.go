@@ -94,7 +94,7 @@ func (e *A2ALocalEngine) buildToolDefinitions() []A2AToolDefinition {
 
 func (e *A2ALocalEngine) executeA2AToolCalls(ctx context.Context, toolCalls []A2AToolCall, eventStream EventStreamInterface, contextID, taskID string, callerHistory []protocol.Message) ([]A2AToolOutcome, error) {
 	execCtx := WithToolEventStream(ctx, eventStream)
-	execCtx = WithDelegationCallerHistory(execCtx, callerHistory)
+	execCtx = WithDelegationCallerHistory(execCtx, filterCallerHistoryForDelegation(callerHistory))
 	outcomes := make([]A2AToolOutcome, 0, len(toolCalls))
 	for _, tc := range toolCalls {
 		if execCtx.Err() != nil {
@@ -175,4 +175,62 @@ func buildA2AToolOutcome(call A2AToolCall, result ToolResult, toolErr error, con
 		outcome.Content = payloadContent
 	}
 	return outcome
+}
+
+func filterCallerHistoryForDelegation(messages []protocol.Message) []protocol.Message {
+	filtered := make([]protocol.Message, 0, len(messages))
+	for _, msg := range messages {
+		if messageContainsToolCallPayload(msg) || messageContainsToolResultPayload(msg) {
+			continue
+		}
+		filtered = append(filtered, msg)
+	}
+	return filtered
+}
+
+func messageContainsToolCallPayload(msg protocol.Message) bool {
+	if msg.Metadata != nil {
+		if rawCalls, exists := msg.Metadata[MetadataToolCallsKey]; exists && rawCalls != nil {
+			switch typed := rawCalls.(type) {
+			case []A2AToolCall:
+				if len(typed) > 0 {
+					return true
+				}
+			case []ToolCallPayloadV1:
+				if len(typed) > 0 {
+					return true
+				}
+			case []any:
+				if len(typed) > 0 {
+					return true
+				}
+			default:
+				return true
+			}
+		}
+	}
+
+	for _, part := range msg.Parts {
+		data, ok := decodePartData(part)
+		if !ok {
+			continue
+		}
+		if schema, _ := data["schema"].(string); schema == A2APayloadSchemaToolCallsV1 {
+			return true
+		}
+	}
+	return false
+}
+
+func messageContainsToolResultPayload(msg protocol.Message) bool {
+	for _, part := range msg.Parts {
+		data, ok := decodePartData(part)
+		if !ok {
+			continue
+		}
+		if schema, _ := data["schema"].(string); schema == A2APayloadSchemaToolResultV1 {
+			return true
+		}
+	}
+	return false
 }
