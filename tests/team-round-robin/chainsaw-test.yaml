@@ -3,7 +3,7 @@ kind: Test
 metadata:
   name: team-round-robin
 spec:
-  description: Test round-robin team execution with brainstormer, critic, and coordinator using terminate tool
+  description: Test sequential team with loops execution with brainstormer, critic, and coordinator using terminate tool
   steps:
   - name: setup-resources
     try:

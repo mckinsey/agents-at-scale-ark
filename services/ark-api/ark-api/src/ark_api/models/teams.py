@@ -56,6 +56,7 @@ class TeamCreateRequest(BaseModel):
     members: List[TeamMember]
     strategy: str
     graph: Optional[Graph] = None
+    loops: Optional[bool] = None
     maxTurns: Optional[int] = None
     selector: Optional[Selector] = None
 
@@ -66,6 +67,7 @@ class TeamUpdateRequest(BaseModel):
     members: Optional[List[TeamMember]] = None
     strategy: Optional[str] = None
     graph: Optional[Graph] = None
+    loops: Optional[bool] = None
     maxTurns: Optional[int] = None
     selector: Optional[Selector] = None
 
@@ -78,6 +80,7 @@ class TeamDetailResponse(BaseModel):
     members: List[TeamMember]
     strategy: str
     graph: Optional[Graph] = None
+    loops: Optional[bool] = None
     maxTurns: Optional[int] = None
     selector: Optional[Selector] = None
     available: Optional[AvailabilityStatus] = None

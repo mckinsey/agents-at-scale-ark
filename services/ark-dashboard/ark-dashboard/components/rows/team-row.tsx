@@ -45,15 +45,15 @@ export function TeamRow({
 
   const memberCount = team.members?.length || 0;
   const strategyDisplay =
-    team.strategy === 'round-robin'
-      ? 'Round Robin'
+    team.strategy === 'sequential'
+      ? team.loops
+        ? 'Sequential (Loops)'
+        : 'Sequential'
       : team.strategy === 'selector'
         ? 'Selector'
         : team.strategy === 'graph'
           ? 'Graph'
-          : team.strategy === 'sequential'
-            ? 'Sequential'
-            : team.strategy || 'No strategy';
+          : team.strategy || 'No strategy';
 
   return (
     <>

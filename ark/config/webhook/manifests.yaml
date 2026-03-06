@@ -24,6 +24,26 @@ webhooks:
     resources:
     - models
   sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /mutate-ark-mckinsey-com-v1alpha1-team
+  failurePolicy: Fail
+  name: mteam-v1.kb.io
+  rules:
+  - apiGroups:
+    - ark.mckinsey.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - teams
+  sideEffects: None
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration

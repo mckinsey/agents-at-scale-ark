@@ -28,6 +28,7 @@ const teamFormSchema = z.object({
   name: kubernetesNameSchema,
   description: z.string().optional(),
   strategy: z.string().min(1, 'Strategy is required'),
+  loops: z.boolean().optional(),
   maxTurns: z.string().optional(),
   selectorAgent: z.string().optional(),
   selectorPrompt: z.string().optional(),
@@ -64,7 +65,8 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
     defaultValues: {
       name: '',
       description: '',
-      strategy: 'round-robin',
+      strategy: 'sequential',
+      loops: false,
       maxTurns: '',
       selectorAgent: '',
       selectorPrompt: '',
@@ -104,7 +106,8 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
           form.reset({
             name: teamData.name,
             description: teamData.description || '',
-            strategy: teamData.strategy || 'round-robin',
+            strategy: teamData.strategy || 'sequential',
+            loops: teamData.loops ?? false,
             maxTurns: teamData.maxTurns ? String(teamData.maxTurns) : '',
             selectorAgent: teamData.selector?.agent || '',
             selectorPrompt:
@@ -150,6 +153,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
             description: values.description || undefined,
             members: selectedMembers.length > 0 ? selectedMembers : undefined,
             strategy: values.strategy || undefined,
+            loops: values.loops || undefined,
             maxTurns: values.maxTurns ? parseInt(values.maxTurns) : undefined,
             selector:
               values.selectorAgent || values.selectorPrompt
@@ -173,6 +177,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
             description: values.description || undefined,
             members: selectedMembers,
             strategy: values.strategy,
+            loops: values.loops || undefined,
             maxTurns: values.maxTurns ? parseInt(values.maxTurns) : undefined,
             selector:
               values.selectorAgent || values.selectorPrompt

@@ -41,7 +41,7 @@ func (v *Validator) ValidateTeam(ctx context.Context, team *arkv1alpha1.Team) ([
 		return nil, err
 	}
 
-	return nil, nil
+	return CollectMigrationWarnings(team.Annotations), nil
 }
 
 func (v *Validator) validateNoMixedTeam(ctx context.Context, team *arkv1alpha1.Team) error {
@@ -72,9 +72,14 @@ func (v *Validator) validateNoMixedTeam(ctx context.Context, team *arkv1alpha1.T
 
 func (v *Validator) validateStrategy(ctx context.Context, team *arkv1alpha1.Team) error {
 	switch team.Spec.Strategy {
-	case "sequential", "round-robin":
+	case "sequential":
+		return validateSequentialStrategy(team)
+	case "round-robin":
 		return nil
 	case StrategySelector:
+		if team.Spec.Loops != nil && *team.Spec.Loops {
+			return fmt.Errorf("loops can only be used with the 'sequential' strategy")
+		}
 		if err := v.validateSelectorAgent(ctx, team); err != nil {
 			return err
 		}
@@ -83,10 +88,24 @@ func (v *Validator) validateStrategy(ctx context.Context, team *arkv1alpha1.Team
 		}
 		return nil
 	case "graph":
+		if team.Spec.Loops != nil && *team.Spec.Loops {
+			return fmt.Errorf("loops can only be used with the 'sequential' strategy")
+		}
 		return validateGraphStrategy(team)
 	default:
 		return fmt.Errorf("unsupported strategy '%s': must be 'sequential', 'round-robin', 'selector', or 'graph'", team.Spec.Strategy)
 	}
+}
+
+func validateSequentialStrategy(team *arkv1alpha1.Team) error {
+	loops := team.Spec.Loops != nil && *team.Spec.Loops
+	if loops && team.Spec.MaxTurns == nil {
+		return fmt.Errorf("maxTurns is required when loops is enabled")
+	}
+	if !loops && team.Spec.MaxTurns != nil {
+		return fmt.Errorf("maxTurns can only be set when loops is enabled")
+	}
+	return nil
 }
 
 func (v *Validator) validateSelectorAgent(ctx context.Context, team *arkv1alpha1.Team) error {

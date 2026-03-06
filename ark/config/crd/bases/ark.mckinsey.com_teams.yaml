@@ -66,6 +66,8 @@ spec:
                 required:
                 - edges
                 type: object
+              loops:
+                type: boolean
               maxTurns:
                 type: integer
               members:

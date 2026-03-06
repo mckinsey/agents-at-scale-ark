@@ -3,7 +3,7 @@ kind: Test
 metadata:
   name: team-round-robin-max-turns
 spec:
-  description: Test round-robin team execution with maxTurns limit
+  description: Test sequential team with loops execution with maxTurns limit
   steps:
   - name: step-1
     try:
@@ -57,6 +57,8 @@ spec:
           metadata:
             name: round-robin-max-turns-team
           spec:
+            strategy: sequential
+            loops: true
             maxTurns: 2
     - assert:
         resource:

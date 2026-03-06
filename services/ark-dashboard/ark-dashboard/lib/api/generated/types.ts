@@ -4811,6 +4811,8 @@ export interface components {
             /** Description */
             description?: string | null;
             graph?: components["schemas"]["Graph"] | null;
+            /** Loops */
+            loops?: boolean | null;
             /** Maxturns */
             maxTurns?: number | null;
             /** Members */
@@ -4830,6 +4832,8 @@ export interface components {
             /** Description */
             description?: string | null;
             graph?: components["schemas"]["Graph"] | null;
+            /** Loops */
+            loops?: boolean | null;
             /** Maxturns */
             maxTurns?: number | null;
             /** Members */
@@ -4873,6 +4877,8 @@ export interface components {
         TeamResponse: {
             /** Description */
             description?: string | null;
+            /** Loops */
+            loops?: boolean | null;
             /** Members Count */
             members_count?: number | null;
             /** Name */
@@ -4892,6 +4898,8 @@ export interface components {
             /** Description */
             description?: string | null;
             graph?: components["schemas"]["Graph"] | null;
+            /** Loops */
+            loops?: boolean | null;
             /** Maxturns */
             maxTurns?: number | null;
             /** Members */

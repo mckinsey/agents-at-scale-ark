@@ -63,6 +63,7 @@ def team_to_detail_response(team: dict) -> TeamDetailResponse:
         members=spec.get("members", []),
         strategy=spec.get("strategy", ""),
         graph=spec.get("graph"),
+        loops=spec.get("loops"),
         maxTurns=spec.get("maxTurns"),
         selector=spec.get("selector"),
         available=availability,
@@ -102,8 +103,7 @@ async def create_team(body: TeamCreateRequest, namespace: Optional[str] = Query(
     Create a new Team CR.
     
     Supports various execution strategies:
-    - sequential: Members execute in order
-    - round-robin: Members take turns
+    - sequential: Members execute in order (set loops=true with maxTurns for cycling)
     - graph: Custom workflow defined by graph edges
     - selector: AI-powered member selection (can be combined with graph constraints)
     
@@ -130,12 +130,15 @@ async def create_team(body: TeamCreateRequest, namespace: Optional[str] = Query(
             graph_dict = body.graph.model_dump(exclude_none=True, by_alias=True)
             team_spec["graph"] = graph_dict
         
+        if body.loops is not None:
+            team_spec["loops"] = body.loops
+
         if body.maxTurns is not None:
             team_spec["maxTurns"] = body.maxTurns
-        
+
         if body.selector is not None:
             team_spec["selector"] = body.selector.model_dump(exclude_none=True)
-        
+
         # Create the team object
         team = TeamV1alpha1(
             metadata={"name": body.name, "namespace": namespace},
@@ -199,13 +202,16 @@ async def update_team(team_name: str, body: TeamUpdateRequest, namespace: Option
             # Handle graph edges with from_ field conversion
             graph_dict = body.graph.model_dump(exclude_none=True, by_alias=True)
             existing_spec["graph"] = graph_dict
-        
+
+        if body.loops is not None:
+            existing_spec["loops"] = body.loops
+
         if body.maxTurns is not None:
             existing_spec["maxTurns"] = body.maxTurns
-        
+
         if body.selector is not None:
             existing_spec["selector"] = body.selector.model_dump(exclude_none=True)
-        
+
         # Update the team
         # Get the full existing team object and update its spec
         existing_team_dict = existing_team.to_dict()
