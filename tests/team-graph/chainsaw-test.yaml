@@ -31,9 +31,30 @@ spec:
           metadata:
             name: test-graph-team
           status:
+            phase: done
+        timeout: 180s
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-graph-team
+          status:
             (conditions[?type == 'Completed']):
             - status: 'True'
-        timeout: 180s
+        timeout: 60s
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-graph-team
+    - script:
+        content: |
+          echo "Query status snapshot:"
+          kubectl get query test-graph-team -n $NAMESPACE -o yaml || true
+          echo "Recent query events:"
+          kubectl get events -n $NAMESPACE --field-selector involvedObject.kind=Query,involvedObject.name=test-graph-team || true
 
   - name: validate-graph-execution
     try:
@@ -54,6 +75,12 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: test-graph-team
+    - script:
+        content: |
+          echo "Validation failure query status snapshot:"
+          kubectl get query test-graph-team -n $NAMESPACE -o yaml || true
+          echo "Recent query events:"
+          kubectl get events -n $NAMESPACE --field-selector involvedObject.kind=Query,involvedObject.name=test-graph-team || true
     cleanup:
     - script:
         content: |

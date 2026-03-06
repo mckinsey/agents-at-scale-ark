@@ -92,9 +92,30 @@ spec:
           metadata:
             name: test-graph-selector-team
           status:
+            phase: done
+        timeout: 360s
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-graph-selector-team
+          status:
             (conditions[?type == 'Completed']):
             - status: 'True'
-        timeout: 360s
+        timeout: 60s
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-graph-selector-team
+    - script:
+        content: |
+          echo "Query status snapshot:"
+          kubectl get query test-graph-selector-team -n $NAMESPACE -o yaml || true
+          echo "Recent query events:"
+          kubectl get events -n $NAMESPACE --field-selector involvedObject.kind=Query,involvedObject.name=test-graph-selector-team || true
   - name: validate-graph-selector-execution
     try:
     - assert:
@@ -114,6 +135,12 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: test-graph-selector-team
+    - script:
+        content: |
+          echo "Validation failure query status snapshot:"
+          kubectl get query test-graph-selector-team -n $NAMESPACE -o yaml || true
+          echo "Recent query events:"
+          kubectl get events -n $NAMESPACE --field-selector involvedObject.kind=Query,involvedObject.name=test-graph-selector-team || true
     - script:
         content: |
           echo "Validating graph-constrained selector execution..."
