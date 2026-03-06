@@ -1,10 +1,10 @@
 'use client';
 
 import { AlertTriangleIcon, ArrowRight } from 'lucide-react';
-import Link from 'next/link';
 import React, { useEffect } from 'react';
 import { toast } from 'sonner';
 
+import { NamespacedLink } from '@/components/namespaced-link';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useGetAllModels } from '@/lib/services/models-hooks';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -26,7 +26,7 @@ export function NoDefaultModelAlert() {
 
   if (models && !models.some(m => m.name === 'default')) {
     return (
-      <Link href="/models/new?name=default">
+      <NamespacedLink href="/models/new?name=default">
         <Alert variant="warning" className="flex flex-row flex-wrap gap-2">
           <div className="flex items-center gap-1">
             <AlertTriangleIcon className="h-4 w-4" />
@@ -37,7 +37,7 @@ export function NoDefaultModelAlert() {
             <ArrowRight className="h-4 w-4" />
           </AlertDescription>
         </Alert>
-      </Link>
+      </NamespacedLink>
     );
   }
 

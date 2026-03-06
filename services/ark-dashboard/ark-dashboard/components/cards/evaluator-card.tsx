@@ -1,9 +1,8 @@
 'use client';
 
 import { Globe, Pencil, Settings, Trash2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-
 import { DASHBOARD_SECTIONS } from '@/lib/constants/dashboard-icons';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import type { Evaluator } from '@/lib/services';
 
 import { BaseCard, type BaseCardAction } from './base-card';
@@ -14,13 +13,13 @@ interface EvaluatorCardProps {
 }
 
 export function EvaluatorCard({ evaluator, onDelete }: EvaluatorCardProps) {
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
 
   const actions: BaseCardAction[] = [
     {
       icon: Pencil,
       label: 'Edit evaluator',
-      onClick: () => router.push(`/evaluators/${evaluator.name}/edit`),
+      onClick: () => push(`/evaluators/${evaluator.name}/edit`),
     },
   ];
 

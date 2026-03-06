@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -10,6 +10,7 @@ import {
 } from '@/components/common/page-header';
 import { EvaluatorEditForm } from '@/components/forms/evaluator-edit-form';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import {
   type EvaluatorDetailResponse,
   evaluatorsService,
@@ -24,7 +25,7 @@ function EvaluatorEditContent({
   namespace,
   evaluatorName,
 }: EvaluatorEditContentProps) {
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
   const [evaluator, setEvaluator] = useState<EvaluatorDetailResponse | null>(
     null,
   );
@@ -43,14 +44,14 @@ function EvaluatorEditContent({
               ? error.message
               : 'An unexpected error occurred',
         });
-        router.push(`/evaluators`);
+        push(`/evaluators`);
       } finally {
         setLoading(false);
       }
     };
 
     loadEvaluator();
-  }, [namespace, evaluatorName, router]);
+  }, [namespace, evaluatorName, push]);
 
   const handleSave = async (data: Record<string, unknown>) => {
     setSaving(true);
@@ -59,7 +60,7 @@ function EvaluatorEditContent({
       toast.success('Evaluator Updated', {
         description: 'Successfully updated the evaluator',
       });
-      router.push(`/evaluators`);
+      push(`/evaluators`);
     } catch (error) {
       toast.error('Failed to Update Evaluator', {
         description:
@@ -73,7 +74,7 @@ function EvaluatorEditContent({
   };
 
   const handleCancel = () => {
-    router.push(`/evaluators`);
+    push(`/evaluators`);
   };
 
   if (loading) {

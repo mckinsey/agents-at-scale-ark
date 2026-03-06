@@ -3,7 +3,6 @@
 import { useAtomValue } from 'jotai';
 import { Copy } from 'lucide-react';
 import { useParams, useSearchParams } from 'next/navigation';
-import { useRouter } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -31,6 +30,7 @@ import {
 import type { components } from '@/lib/api/generated/types';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { useMarkdownProcessor } from '@/lib/hooks/use-markdown-processor';
 import {
   agentsService,
@@ -349,7 +349,7 @@ function QueryStreamingField({
 function QueryDetailContent() {
   const params = useParams();
   const searchParams = useSearchParams();
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
   const queryId = params.id as string;
   const targetTool = searchParams.get('target_tool');
   const isNew = queryId === 'new';
@@ -503,7 +503,7 @@ function QueryDetailContent() {
       });
 
       // Navigate to the created query
-      router.push(`/query/${savedQuery.name}`);
+      push(`/query/${savedQuery.name}`);
     } catch (error) {
       console.error('Failed to save query:', error);
       toast.error('Failed to Execute Query', {
@@ -675,7 +675,7 @@ function QueryDetailContent() {
       <div className="flex h-screen items-center justify-center">
         <div className="text-center">
           <h1 className="mb-2 text-xl font-semibold">Query Not Found</h1>
-          <Button variant="outline" onClick={() => router.back()}>
+          <Button variant="outline" onClick={() => push('/queries')}>
             ← Back to Queries
           </Button>
         </div>
@@ -703,7 +703,7 @@ function QueryDetailContent() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => router.push(`/query/new`)}>
+                  onClick={() => push(`/query/new`)}>
                   New Query
                 </Button>
                 <Button
@@ -719,7 +719,7 @@ function QueryDetailContent() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => router.push(`/query/new`)}>
+                onClick={() => push(`/query/new`)}>
                 New Query
               </Button>
             )}

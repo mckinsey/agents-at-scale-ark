@@ -25,7 +25,7 @@ import {
   Zap,
 } from 'lucide-react';
 import Image from 'next/image';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import {
@@ -66,6 +66,7 @@ import {
 } from '@/components/ui/sidebar';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { signout } from '@/lib/auth/signout';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import {
   AGENT_BUILDER_SECTIONS,
   type DashboardSection,
@@ -147,9 +148,8 @@ function CollapsibleSection({
 }
 
 export function AppSidebar() {
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const { user } = useUser();
   const { state: sidebarState, setOpen: setSidebarOpen } = useSidebar();
   const isExperimentalDarkModeEnabled = useAtomValue(
@@ -219,9 +219,8 @@ export function AppSidebar() {
         fromSection: pathname.split('/')[1],
       },
     });
-    const queryString = searchParams.toString();
     const path = sectionKey ? `/${sectionKey}` : '/';
-    router.push(queryString ? `${path}?${queryString}` : path);
+    push(path);
   };
 
   const getCurrentSection = () => pathname.split('/')[1];

@@ -10,7 +10,6 @@ import {
   StopCircle,
   Trash2,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import {
   forwardRef,
   useCallback,
@@ -43,6 +42,7 @@ import {
 } from '@/components/ui/tooltip';
 import type { components } from '@/lib/api/generated/types';
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import type { Evaluation, EvaluationDetailResponse } from '@/lib/services';
 import { evaluationsService } from '@/lib/services/evaluations';
 import { useGetAllEvaluationsWithDetails } from '@/lib/services/evaluations-hooks';
@@ -124,7 +124,7 @@ export const EvaluationsSection = forwardRef<
     scoreMax: '',
     evaluationType: [],
   });
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
 
   const handleOpenAddEditor = useCallback(() => {
     setEditingEvaluation(null);
@@ -756,7 +756,7 @@ export const EvaluationsSection = forwardRef<
                     key={evaluation.name}
                     className="cursor-pointer border-b border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900/30"
                     onClick={() => {
-                      router.push(`/evaluation/${evaluation.name}`);
+                      push(`/evaluation/${evaluation.name}`);
                     }}>
                     <td className="px-3 py-3 font-mono text-sm text-gray-900 dark:text-gray-100">
                       {evaluation.name}
