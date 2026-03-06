@@ -1,8 +1,9 @@
 'use client';
 
-import { useAtom, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { X } from 'lucide-react';
 
+import { isMarketplaceEnabledAtom } from '@/atoms/experimental-features';
 import {
   activeSettingPageAtom,
   settingsModalOpenAtom,
@@ -10,11 +11,12 @@ import {
 import type { SettingPage } from '@/atoms/settings-modal';
 import { cn } from '@/lib/utils';
 
-import { settingsSections } from './settings-types';
+import { MANAGE_MARKETPLACE_KEY, settingsSections } from './settings-types';
 
 export function SettingsSidebar() {
   const setActiveSettingPage = useSetAtom(activeSettingPageAtom);
   const [, setIsModalOpen] = useAtom(settingsModalOpenAtom);
+  const isMarketplaceEnabled = useAtomValue(isMarketplaceEnabledAtom);
 
   const handleSettingClick = (settingKey: SettingPage) => {
     setActiveSettingPage(settingKey);
@@ -43,7 +45,7 @@ export function SettingsSidebar() {
                 {section.sectionLabel}
               </div>
               <div className="space-y-1 pl-2">
-                {section.items.map(item => {
+                {section.items.filter(item => item.key !== MANAGE_MARKETPLACE_KEY || isMarketplaceEnabled).map(item => {
                   const Icon = item.icon;
                   return (
                     <button
