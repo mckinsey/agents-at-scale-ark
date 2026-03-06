@@ -370,7 +370,6 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
-
 }
 
 func TestValidateBaseURL(t *testing.T) { //nolint:gocognit
@@ -638,9 +637,8 @@ func TestIsWhitelistedDomain(t *testing.T) {
 	}{
 		{"Exact match", "api.openai.com", true},
 		{"Subdomain", "my.openai.azure.com", true},
-		{"Bedrock special case", "bedrock-runtime.us-east-1.amazonaws.com", true},
+		{"AWS subdomain bedrock", "bedrock-runtime.us-east-1.amazonaws.com", true},
 		{"Not in list", "evil.com", false},
-		{"S3 not bedrock", "s3.amazonaws.com", false},
 	}
 
 	for _, tt := range tests {

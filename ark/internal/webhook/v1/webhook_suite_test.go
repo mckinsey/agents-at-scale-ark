@@ -49,8 +49,8 @@ func TestAPIs(t *testing.T) {
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
-	os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
-	os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
+	_ = os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
+	_ = os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
 
 	// nolint:fatcontext
 	ctx, cancel = context.WithCancel(context.TODO())

@@ -161,13 +161,6 @@ func matchDomainPattern(hostname, pattern string) bool {
 		return matchWildcard(hostname, pattern)
 	}
 
-	if pattern == "amazonaws.com" {
-		if strings.Contains(hostname, "bedrock-runtime") && strings.HasSuffix(hostname, ".amazonaws.com") {
-			return true
-		}
-		return false
-	}
-
 	if hostname == pattern {
 		return true
 	}
