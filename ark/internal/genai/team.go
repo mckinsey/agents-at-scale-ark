@@ -72,7 +72,7 @@ func (t *Team) Execute(ctx context.Context, userInput Message, history []Message
 }
 
 func (t *Team) executeSequential(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
-	loops := t.Loops != nil && *t.Loops
+	loops := (t.Loops != nil && *t.Loops) || t.Strategy == "round-robin"
 
 	if loops {
 		return t.executeSequentialWithLoops(ctx, userInput, history)
