@@ -373,10 +373,10 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 
 }
 
-func TestValidateBaseURL(t *testing.T) {
+func TestValidateBaseURL(t *testing.T) { //nolint:gocognit
 	t.Run("Block non-network schemes (file://, ftp://, etc.)", func(t *testing.T) {
-		os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
-		os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
+		_ = os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
+		_ = os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
 
 		tests := []struct {
 			name   string
@@ -403,8 +403,8 @@ func TestValidateBaseURL(t *testing.T) {
 	})
 
 	t.Run("Validate scheme is present and well-formed", func(t *testing.T) {
-		os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
-		os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
+		_ = os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
+		_ = os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
 
 		tests := []struct {
 			name string
@@ -429,8 +429,8 @@ func TestValidateBaseURL(t *testing.T) {
 	})
 
 	t.Run("Validate hostname (reject malformed URLs like https:///api/v1)", func(t *testing.T) {
-		os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
-		os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
+		_ = os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
+		_ = os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
 
 		tests := []struct {
 			name string
@@ -455,8 +455,8 @@ func TestValidateBaseURL(t *testing.T) {
 	})
 
 	t.Run("Enforce HTTPS-only", func(t *testing.T) {
-		os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
-		os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
+		_ = os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
+		_ = os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
 
 		tests := []struct {
 			name string
@@ -486,8 +486,8 @@ func TestValidateBaseURL(t *testing.T) {
 	})
 
 	t.Run("Block loopback addresses (127.0.0.1, ::1)", func(t *testing.T) {
-		os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
-		os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
+		_ = os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
+		_ = os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
 
 		tests := []struct {
 			name string
@@ -513,8 +513,8 @@ func TestValidateBaseURL(t *testing.T) {
 	})
 
 	t.Run("Block private IP ranges (RFC 1918)", func(t *testing.T) {
-		os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
-		os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
+		_ = os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
+		_ = os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
 
 		tests := []struct {
 			name    string
@@ -543,8 +543,8 @@ func TestValidateBaseURL(t *testing.T) {
 	})
 
 	t.Run("Block cloud metadata service IPs (169.254.169.254)", func(t *testing.T) {
-		os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
-		os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
+		_ = os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
+		_ = os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
 
 		tests := []struct {
 			name string
@@ -569,8 +569,8 @@ func TestValidateBaseURL(t *testing.T) {
 	})
 
 	t.Run("Support wildcard/glob patterns (*.prod.example.com)", func(t *testing.T) {
-		os.Setenv("WHITELISTED_MODEL_DOMAINS", "*.prod.example.com\n*.staging.example.com\napi.openai.com")
-		defer os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
+		_ = os.Setenv("WHITELISTED_MODEL_DOMAINS", "*.prod.example.com\n*.staging.example.com\napi.openai.com")
+		defer func() { _ = os.Unsetenv("WHITELISTED_MODEL_DOMAINS") }()
 
 		tests := []struct {
 			name      string
@@ -597,9 +597,9 @@ func TestValidateBaseURL(t *testing.T) {
 	})
 
 	t.Run("Allow specific private IP ranges when configured", func(t *testing.T) {
-		os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
-		os.Setenv("ALLOWED_PRIVATE_IP_RANGES", "10.100.0.0/16\n192.168.50.0/24\n172.16.1.0/24")
-		defer os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
+		_ = os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
+		_ = os.Setenv("ALLOWED_PRIVATE_IP_RANGES", "10.100.0.0/16\n192.168.50.0/24\n172.16.1.0/24")
+		defer func() { _ = os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES") }()
 
 		tests := []struct {
 			name      string

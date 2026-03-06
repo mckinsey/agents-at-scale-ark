@@ -36,7 +36,7 @@ func getAllowedPrivateIPRanges() []*net.IPNet {
 	}
 
 	lines := strings.Split(ranges, "\n")
-	var cidrs []*net.IPNet
+	cidrs := make([]*net.IPNet, 0, len(lines))
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
