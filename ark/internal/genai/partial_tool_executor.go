@@ -96,7 +96,6 @@ func extractDelegationArgsFromMergedParams(params map[string]any) map[string]str
 	}
 	excluded := map[string]struct{}{
 		"message":                      {},
-		"history":                      {},
 		"contextId":                    {},
 		"input":                        {},
 		A2ADelegationInvocationArgsKey: {},

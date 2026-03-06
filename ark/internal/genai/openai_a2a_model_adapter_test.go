@@ -143,6 +143,37 @@ func TestA2AToolOutcomesToOpenAISkipsOutcomesWithoutToolCallID(t *testing.T) {
 	assert.Equal(t, "kept", messages[0].OfTool.Content.OfString.Value)
 }
 
+func TestA2AToolDefsToOpenAIPassesThroughNormalizedSchema(t *testing.T) {
+	normalized := NormalizeToolParametersSchema(map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"entries": map[string]any{
+				"type": "array",
+			},
+		},
+	})
+	tools := a2aToolDefsToOpenAI([]A2AToolDefinition{
+		{
+			Name:        "call-research-agent-a2a",
+			Description: "delegates to research",
+			Parameters:  normalized,
+		},
+	})
+
+	require.Len(t, tools, 1)
+	raw, err := json.Marshal(tools[0].Function.Parameters)
+	require.NoError(t, err)
+	var schema map[string]any
+	require.NoError(t, json.Unmarshal(raw, &schema))
+
+	properties, ok := schema["properties"].(map[string]any)
+	require.True(t, ok)
+	entries, ok := properties["entries"].(map[string]any)
+	require.True(t, ok)
+	_, hasItems := entries["items"]
+	require.True(t, hasItems, "normalized schema should have items added by NormalizeToolParametersSchema")
+}
+
 type adapterTestChatProvider struct {
 	response         *openai.ChatCompletion
 	chatCalls        int

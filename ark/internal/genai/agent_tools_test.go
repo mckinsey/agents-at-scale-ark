@@ -645,43 +645,6 @@ func TestParseDelegatedInvocationWithStringInput(t *testing.T) {
 	require.Equal(t, "hello", ExtractA2ATextFromMessage(invocation.a2aUserInput))
 }
 
-func TestParseDelegatedInvocationNativeMessageHistoryContext(t *testing.T) {
-	args := map[string]any{
-		"message": map[string]any{
-			"role": "user",
-			"parts": []map[string]any{
-				{
-					"kind": "text",
-					"text": "delegate this",
-				},
-			},
-		},
-		"history": []map[string]any{
-			{
-				"role": "agent",
-				"parts": []map[string]any{
-					{
-						"kind": "text",
-						"text": "previous response",
-					},
-				},
-			},
-		},
-		"contextId": "ctx-123",
-		A2ADelegationInvocationArgsKey: map[string]any{
-			"routingScope": "scope-123",
-		},
-	}
-	invocation, userError, err := parseDelegatedInvocation(args, "agent", "test-agent")
-	require.NoError(t, err)
-	require.Equal(t, "", userError)
-	require.Equal(t, "ctx-123", invocation.contextID)
-	require.Equal(t, protocol.MessageRoleUser, invocation.a2aUserInput.Role)
-	require.Equal(t, "delegate this", ExtractA2ATextFromMessage(invocation.a2aUserInput))
-	require.Len(t, invocation.a2aHistory, 1)
-	require.Equal(t, protocol.MessageRoleAgent, invocation.a2aHistory[0].Role)
-}
-
 func TestParseDelegatedInvocationNativeFallsBackToInput(t *testing.T) {
 	args := map[string]any{
 		"input": "fallback input",
@@ -726,7 +689,6 @@ func TestParseDelegatedInvocationNativeAppendsDelegatedInvocationPayload(t *test
 func TestExtractDelegationArgsFromMergedParams(t *testing.T) {
 	params := map[string]any{
 		"message":   map[string]any{"role": "user"},
-		"history":   []any{},
 		"contextId": "ctx-123",
 		"input":     "ignored",
 		"issueName": "01-generic-agent",
@@ -886,35 +848,6 @@ func TestNormalizeContextIDRejectsExceedsMaxLength(t *testing.T) {
 	_, err := normalizeContextID(tooLong)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "exceeds max length")
-}
-
-func TestMergeDelegationHistoryMergesCallerAndInvocationHistory(t *testing.T) {
-	callerMsg := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
-		protocol.NewTextPart("caller"),
-	})
-	callerMsg.MessageID = "msg-1"
-	invocationMsg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
-		protocol.NewTextPart("invocation"),
-	})
-	invocationMsg.MessageID = "msg-2"
-	merged := mergeDelegationHistory([]protocol.Message{callerMsg}, []protocol.Message{invocationMsg})
-	require.Len(t, merged, 2)
-	require.Equal(t, "msg-1", merged[0].MessageID)
-	require.Equal(t, "msg-2", merged[1].MessageID)
-}
-
-func TestMergeDelegationHistoryDeduplicatesByMessageID(t *testing.T) {
-	callerMsg := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
-		protocol.NewTextPart("caller"),
-	})
-	callerMsg.MessageID = "same-id"
-	invocationMsg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
-		protocol.NewTextPart("invocation"),
-	})
-	invocationMsg.MessageID = "same-id"
-	merged := mergeDelegationHistory([]protocol.Message{callerMsg}, []protocol.Message{invocationMsg})
-	require.Len(t, merged, 1)
-	require.Equal(t, "same-id", merged[0].MessageID)
 }
 
 func TestGetDelegationEventStreamReturnsStreamWhenAvailable(t *testing.T) {
@@ -1319,4 +1252,76 @@ func unwrapDelegatedChunk(t *testing.T, chunk interface{}) interface{} {
 	require.True(t, ok)
 	require.NotNil(t, wrapped.Ark)
 	return wrapped.Ark.A2A
+}
+
+func TestNormalizeToolParametersSchemaAddsItemsForArrayWithoutItems(t *testing.T) {
+	schema := NormalizeToolParametersSchema(map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"entries": map[string]any{
+				"type":        "array",
+				"description": "List of entries",
+			},
+			"tags": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
+		},
+	})
+
+	properties := schema["properties"].(map[string]any)
+
+	entries := properties["entries"].(map[string]any)
+	require.Contains(t, entries, "items", "array without items should get items added")
+	require.Equal(t, "List of entries", entries["description"])
+
+	tags := properties["tags"].(map[string]any)
+	items := tags["items"].(map[string]any)
+	require.Equal(t, "string", items["type"], "existing items should be preserved")
+}
+
+func TestNormalizeToolParametersSchemaHandlesNestedArrays(t *testing.T) {
+	schema := NormalizeToolParametersSchema(map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"message": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"parts": map[string]any{
+						"type": "array",
+					},
+				},
+			},
+		},
+	})
+
+	message := schema["properties"].(map[string]any)["message"].(map[string]any)
+	parts := message["properties"].(map[string]any)["parts"].(map[string]any)
+	require.Contains(t, parts, "items", "nested array without items should get items added")
+}
+
+func TestNormalizeToolParametersSchemaReturnsNilForNilInput(t *testing.T) {
+	require.Nil(t, NormalizeToolParametersSchema(nil))
+}
+
+func TestNormalizeToolParametersSchemaPreservesNonArrayTypes(t *testing.T) {
+	schema := NormalizeToolParametersSchema(map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"name": map[string]any{
+				"type": "string",
+			},
+			"count": map[string]any{
+				"type": "integer",
+			},
+		},
+	})
+
+	properties := schema["properties"].(map[string]any)
+	name := properties["name"].(map[string]any)
+	require.NotContains(t, name, "items", "string type should not get items")
+	count := properties["count"].(map[string]any)
+	require.NotContains(t, count, "items", "integer type should not get items")
 }

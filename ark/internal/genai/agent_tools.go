@@ -283,7 +283,6 @@ type AgentToolExecutor struct {
 
 type delegatedInvocation struct {
 	a2aUserInput protocol.Message
-	a2aHistory   []protocol.Message
 	contextID    string
 }
 
@@ -300,18 +299,6 @@ func parseA2AMessageArgument(rawValue any) (protocol.Message, error) {
 		return protocol.Message{}, fmt.Errorf("message argument must include at least one part")
 	}
 	return message, nil
-}
-
-func parseA2AHistoryArgument(rawValue any) ([]protocol.Message, error) {
-	rawJSON, err := json.Marshal(rawValue)
-	if err != nil {
-		return nil, fmt.Errorf("failed to serialize history argument: %w", err)
-	}
-	var history []protocol.Message
-	if err := json.Unmarshal(rawJSON, &history); err != nil {
-		return nil, fmt.Errorf("failed to parse history argument: %w", err)
-	}
-	return history, nil
 }
 
 func isA2AExtensionURI(value string) bool {
@@ -403,9 +390,7 @@ func extractDelegationInvocationArgs(arguments map[string]any) map[string]string
 }
 
 func parseNativeDelegationInput(arguments map[string]any, targetType, targetName string) (delegatedInvocation, string, error) {
-	invocation := delegatedInvocation{
-		a2aHistory: []protocol.Message{},
-	}
+	invocation := delegatedInvocation{}
 	if rawContextID, exists := arguments["contextId"]; exists {
 		contextID, ok := rawContextID.(string)
 		if !ok {
@@ -416,13 +401,6 @@ func parseNativeDelegationInput(arguments map[string]any, targetType, targetName
 			return delegatedInvocation{}, "contextId parameter is invalid", err
 		}
 		invocation.contextID = normalizedContextID
-	}
-	if rawHistory, exists := arguments["history"]; exists {
-		history, err := parseA2AHistoryArgument(rawHistory)
-		if err != nil {
-			return delegatedInvocation{}, "history parameter is invalid", err
-		}
-		invocation.a2aHistory = history
 	}
 	invocationArgs := extractDelegationInvocationArgs(arguments)
 	message, userError, err := parseMessageOrInput(arguments, invocationArgs, invocation.contextID, targetType, targetName)
@@ -439,35 +417,6 @@ func parseNativeDelegationInput(arguments map[string]any, targetType, targetName
 
 func parseDelegatedInvocation(arguments map[string]any, targetType, targetName string) (delegatedInvocation, string, error) {
 	return parseNativeDelegationInput(arguments, targetType, targetName)
-}
-
-func mergeDelegationHistory(callerHistory, invocationHistory []protocol.Message) []protocol.Message {
-	if len(callerHistory) == 0 && len(invocationHistory) == 0 {
-		return nil
-	}
-	merged := make([]protocol.Message, 0, len(callerHistory)+len(invocationHistory))
-	seen := make(map[string]struct{}, len(callerHistory)+len(invocationHistory))
-	appendUnique := func(messages []protocol.Message) {
-		for _, msg := range messages {
-			key := msg.MessageID
-			if key == "" {
-				raw, err := json.Marshal(msg)
-				if err != nil {
-					merged = append(merged, msg)
-					continue
-				}
-				key = string(raw)
-			}
-			if _, exists := seen[key]; exists {
-				continue
-			}
-			seen[key] = struct{}{}
-			merged = append(merged, msg)
-		}
-	}
-	appendUnique(callerHistory)
-	appendUnique(invocationHistory)
-	return merged
 }
 
 func applyDelegationContext(ctx context.Context, contextID string) context.Context {
@@ -654,7 +603,7 @@ func (a *AgentToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolRes
 
 	execCtx := applyDelegationContext(ctx, invocation.contextID)
 	eventStream := getDelegationEventStream(ctx, call)
-	history := mergeDelegationHistory(GetDelegationCallerHistory(ctx), invocation.a2aHistory)
+	history := GetDelegationCallerHistory(ctx)
 	result, err := agent.ExecuteA2A(execCtx, invocation.a2aUserInput, history, nil, eventStream)
 	if err != nil {
 		return ToolResult{
@@ -738,7 +687,7 @@ func (t *TeamToolExecutor) Execute(ctx context.Context, call ToolCall) (ToolResu
 
 	execCtx := applyDelegationContext(ctx, invocation.contextID)
 	eventStream := getDelegationEventStream(ctx, call)
-	history := mergeDelegationHistory(GetDelegationCallerHistory(ctx), invocation.a2aHistory)
+	history := GetDelegationCallerHistory(ctx)
 	result, err := team.ExecuteA2A(execCtx, invocation.a2aUserInput, history, nil, eventStream)
 	if err != nil {
 		return ToolResult{
