@@ -8,7 +8,6 @@ import {
   ExternalLink,
   XCircle,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +18,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import {
   type QueryEvaluationSummary,
   evaluationsService,
@@ -80,7 +80,7 @@ export function EvaluationStatusIndicator({
   const [summary, setSummary] = useState<QueryEvaluationSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
 
   const loadSummary = useCallback(async () => {
     try {
@@ -114,7 +114,7 @@ export function EvaluationStatusIndicator({
     e.stopPropagation();
     // Navigate to evaluations page with query filter
     const enhancedParam = enhanced ? '&enhanced=true' : '';
-    router.push(
+    push(
       `/evaluations?query=${encodeURIComponent(queryName)}${enhancedParam}`,
     );
   };

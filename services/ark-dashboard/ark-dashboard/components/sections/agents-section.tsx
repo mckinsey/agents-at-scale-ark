@@ -1,10 +1,10 @@
 'use client';
 
 import { ArrowUpRightIcon, Plus } from 'lucide-react';
-import Link from 'next/link';
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { toast } from 'sonner';
 
+import { NamespacedLink } from '@/components/namespaced-link';
 import { AgentCard } from '@/components/cards';
 import { AgentsAPIDialog } from '@/components/dialogs/agents-api-dialog';
 import { AgentRow } from '@/components/rows/agent-row';
@@ -125,10 +125,10 @@ export const AgentsSection = forwardRef<AgentsSectionHandle, object>(
                 trackingEvent="create_agent_clicked"
                 trackingProperties={{ source: 'empty_state' }}
                 asChild>
-                <Link href="/agents/new">
+                <NamespacedLink href="/agents/new">
                   <Plus className="h-4 w-4" />
                   Create Agent
-                </Link>
+                </NamespacedLink>
               </TrackedButton>
             )}
           </EmptyContent>

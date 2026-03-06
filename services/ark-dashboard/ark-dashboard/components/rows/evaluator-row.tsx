@@ -1,8 +1,6 @@
 'use client';
 
 import { Globe, Pencil, Settings, Trash2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,6 +9,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import type { Evaluator } from '@/lib/services';
 
 interface EvaluatorRowProps {
@@ -19,7 +18,7 @@ interface EvaluatorRowProps {
 }
 
 export function EvaluatorRow({ evaluator, onDelete }: EvaluatorRowProps) {
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
 
   const getAddressDisplay = () => {
     return evaluator.address || 'Not configured';
@@ -81,7 +80,7 @@ export function EvaluatorRow({ evaluator, onDelete }: EvaluatorRowProps) {
                   variant="ghost"
                   size="sm"
                   onClick={() =>
-                    router.push(`/evaluators/${evaluator.name}/edit`)
+                    push(`/evaluators/${evaluator.name}/edit`)
                   }
                   className="h-8 w-8 p-0">
                   <Pencil className="h-3 w-3" />
