@@ -13,10 +13,43 @@ import (
 )
 
 func getWhitelistedModelProviderDomains() []string {
-	if domains := os.Getenv("WHITELISTED_MODEL_DOMAINS"); domains != "" {
-		return strings.Split(domains, "\n")
+	domains := os.Getenv("WHITELISTED_MODEL_DOMAINS")
+	if domains == "" {
+		return nil
 	}
-	return []string{} // deny all if not configured
+
+	lines := strings.Split(domains, "\n")
+	var filtered []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+			filtered = append(filtered, trimmed)
+		}
+	}
+	return filtered
+}
+
+func getAllowedPrivateIPRanges() []*net.IPNet {
+	ranges := os.Getenv("ALLOWED_PRIVATE_IP_RANGES")
+	if ranges == "" {
+		return nil
+	}
+
+	lines := strings.Split(ranges, "\n")
+	var cidrs []*net.IPNet
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+
+		_, ipNet, err := net.ParseCIDR(trimmed)
+		if err != nil {
+			continue
+		}
+		cidrs = append(cidrs, ipNet)
+	}
+	return cidrs
 }
 
 func ValidateBaseURL(baseURL string) error {
@@ -25,78 +58,148 @@ func ValidateBaseURL(baseURL string) error {
 		return fmt.Errorf("invalid URL format: %w", err)
 	}
 
-	// Reject file:// and other non-network schemes
-	if parsed.Scheme == "file" || parsed.Scheme == "data" || parsed.Scheme == "javascript" {
+	// Block non-network schemes (file://, ftp://, etc.)
+	if parsed.Scheme == "file" || parsed.Scheme == "data" || parsed.Scheme == "javascript" || parsed.Scheme == "ftp" {
 		return fmt.Errorf("invalid URL format: unsupported scheme %s://", parsed.Scheme)
 	}
 
+	// Validate scheme is present
+	if parsed.Scheme == "" {
+		return fmt.Errorf("invalid URL format: missing scheme")
+	}
+
+	// Validate hostname exists (reject malformed URLs like https:///api/v1)
 	host := parsed.Hostname()
 	if host == "" {
-		// If there's no scheme and no host, it's malformed
-		if parsed.Scheme == "" {
-			return fmt.Errorf("invalid URL format: missing scheme")
-		}
 		return fmt.Errorf("URL must contain a hostname")
 	}
 
-	// Enforce HTTPS for all URLs
+	// Enforce HTTPS-only
 	if parsed.Scheme != "https" {
 		return fmt.Errorf("all URLs must use HTTPS; got %s://", parsed.Scheme)
 	}
 
-	// Block private IP addresses
+	// Validate IP addresses (block loopback, private IPs, metadata services)
 	if ip := net.ParseIP(host); ip != nil {
-		if ip.IsLoopback() {
-			return fmt.Errorf("loopback IP addresses are not allowed: %s", host)
-		}
-
-		if ip.IsPrivate() {
-			return fmt.Errorf("private IP addresses are not allowed: %s", host)
-		}
-
-		if strings.HasPrefix(ip.String(), "169.254.") {
-			return fmt.Errorf("metadata service IP range is not allowed: %s", host)
+		if err := validateIPAddress(ip); err != nil {
+			return err
 		}
 	}
 
-	// Whitelist check for domain names
-	if !isWhitelistedDomain(host) {
-		return fmt.Errorf("domain not in whitelist: %s (whitelisted domains: %s)",
-			host, strings.Join(getWhitelistedModelProviderDomains(), ", "))
+	// Domain whitelist (only enforced if configured)
+	whitelist := getWhitelistedModelProviderDomains()
+	if len(whitelist) > 0 {
+		if !isWhitelistedDomain(host, whitelist) {
+			return fmt.Errorf("domain not in whitelist: %s (allowed domains: %s)",
+				host, strings.Join(whitelist, ", "))
+		}
 	}
 
 	return nil
 }
 
-func isWhitelistedDomain(hostname string) bool {
+func validateIPAddress(ip net.IP) error {
+	// Check private IP allowlist first (if configured)
+	allowedRanges := getAllowedPrivateIPRanges()
+	if len(allowedRanges) > 0 {
+		for _, allowedRange := range allowedRanges {
+			if allowedRange.Contains(ip) {
+				return nil
+			}
+		}
+	}
+
+	// Block loopback addresses (127.0.0.1, ::1)
+	if ip.IsLoopback() {
+		return fmt.Errorf("loopback IP addresses are not allowed: %s", ip.String())
+	}
+
+	// Block private IP ranges (RFC 1918: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
+	if ip.IsPrivate() {
+		return fmt.Errorf("private IP addresses are not allowed: %s (use ALLOWED_PRIVATE_IP_RANGES to allow specific ranges)", ip.String())
+	}
+
+	// Block cloud metadata service IPs (169.254.169.254)
+	if strings.HasPrefix(ip.String(), "169.254.") {
+		return fmt.Errorf("metadata service IP range is not allowed: %s", ip.String())
+	}
+
+	return nil
+}
+
+func isWhitelistedDomain(hostname string, whitelist []string) bool {
 	hostname = strings.ToLower(strings.TrimSpace(hostname))
 
-	for _, whitelisted := range getWhitelistedModelProviderDomains() {
-		whitelisted = strings.ToLower(strings.TrimSpace(whitelisted))
-
-		// Special case: AWS Bedrock regional endpoints only
-		// bedrock-runtime.us-east-1.amazonaws.com should match amazonaws.com
-		// But NOT s3.amazonaws.com or other AWS services
-		if whitelisted == "amazonaws.com" {
-			if strings.Contains(hostname, "bedrock-runtime") && strings.HasSuffix(hostname, ".amazonaws.com") {
-				return true
-			}
-			// Don't do general subdomain matching for amazonaws.com
-			continue
-		}
-
-		// Exact match
-		if hostname == whitelisted {
-			return true
-		}
-
-		// Subdomain match (e.g., "xyz.openai.azure.com" matches "openai.azure.com")
-		if strings.HasSuffix(hostname, "."+whitelisted) {
+	for _, pattern := range whitelist {
+		if matchDomainPattern(hostname, pattern) {
 			return true
 		}
 	}
 
 	return false
+}
+
+func matchDomainPattern(hostname, pattern string) bool {
+	pattern = strings.ToLower(strings.TrimSpace(pattern))
+
+	if pattern == "" {
+		return false
+	}
+
+	if strings.HasPrefix(pattern, "*.") {
+		suffix := pattern[2:]
+		if hostname == suffix {
+			return true
+		}
+		if strings.HasSuffix(hostname, "."+suffix) {
+			return true
+		}
+		return false
+	}
+
+	if strings.Contains(pattern, "*") {
+		return matchWildcard(hostname, pattern)
+	}
+
+	if pattern == "amazonaws.com" {
+		if strings.Contains(hostname, "bedrock-runtime") && strings.HasSuffix(hostname, ".amazonaws.com") {
+			return true
+		}
+		return false
+	}
+
+	if hostname == pattern {
+		return true
+	}
+
+	if strings.HasSuffix(hostname, "."+pattern) {
+		return true
+	}
+
+	return false
+}
+
+func matchWildcard(hostname, pattern string) bool {
+	if !strings.Contains(pattern, "*") {
+		return hostname == pattern
+	}
+
+	parts := strings.Split(pattern, "*")
+	if len(parts) != 2 {
+		return false
+	}
+
+	prefix, suffix := parts[0], parts[1]
+
+	if !strings.HasPrefix(hostname, prefix) {
+		return false
+	}
+
+	if !strings.HasSuffix(hostname, suffix) {
+		return false
+	}
+
+	return len(hostname) >= len(prefix)+len(suffix)
 }
 
 func (v *Validator) ValidateModel(ctx context.Context, model *arkv1alpha1.Model) ([]string, error) {

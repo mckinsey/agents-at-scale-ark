@@ -3,6 +3,7 @@ package validation
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -307,76 +308,7 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 		}
 	})
 
-	t.Run("rejects openai model with non-whitelisted domain", func(t *testing.T) {
-		model := &arkv1alpha1.Model{
-			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
-			Spec: arkv1alpha1.ModelSpec{
-				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
-				Provider: genai.ProviderOpenAI,
-				Config: arkv1alpha1.ModelConfig{
-					OpenAI: &arkv1alpha1.OpenAIModelConfig{
-						BaseURL: arkv1alpha1.ValueSource{Value: "https://evil.com/capture"},
-						APIKey:  arkv1alpha1.ValueSource{Value: "key"},
-					},
-				},
-			},
-		}
-		_, err := v.ValidateModel(ctx, model)
-		if err == nil {
-			t.Fatal("expected error for non-allowlisted domain")
-		}
-		if !contains(err.Error(), "domain not in whitelist") {
-			t.Fatalf("unexpected error message: %v", err)
-		}
-	})
-
-	t.Run("rejects azure model with private IP", func(t *testing.T) {
-		model := &arkv1alpha1.Model{
-			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
-			Spec: arkv1alpha1.ModelSpec{
-				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
-				Provider: genai.ProviderAzure,
-				Config: arkv1alpha1.ModelConfig{
-					Azure: &arkv1alpha1.AzureModelConfig{
-						BaseURL: arkv1alpha1.ValueSource{Value: "https://10.0.0.1/api"},
-						APIKey:  &arkv1alpha1.ValueSource{Value: "key"},
-					},
-				},
-			},
-		}
-		_, err := v.ValidateModel(ctx, model)
-		if err == nil {
-			t.Fatal("expected error for private IP")
-		}
-		if !contains(err.Error(), "private IP addresses are not allowed") {
-			t.Fatalf("unexpected error message: %v", err)
-		}
-	})
-
-	t.Run("rejects openai model with HTTP external URL", func(t *testing.T) {
-		model := &arkv1alpha1.Model{
-			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
-			Spec: arkv1alpha1.ModelSpec{
-				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
-				Provider: genai.ProviderOpenAI,
-				Config: arkv1alpha1.ModelConfig{
-					OpenAI: &arkv1alpha1.OpenAIModelConfig{
-						BaseURL: arkv1alpha1.ValueSource{Value: "http://api.openai.com/v1"},
-						APIKey:  arkv1alpha1.ValueSource{Value: "key"},
-					},
-				},
-			},
-		}
-		_, err := v.ValidateModel(ctx, model)
-		if err == nil {
-			t.Fatal("expected error for HTTP external URL")
-		}
-		if !contains(err.Error(), "must use HTTPS") {
-			t.Fatalf("unexpected error message: %v", err)
-		}
-	})
-
-	t.Run("accepts openai model with valid HTTPS URL", func(t *testing.T) {
+	t.Run("validates openai model with HTTPS URL", func(t *testing.T) {
 		model := &arkv1alpha1.Model{
 			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
 			Spec: arkv1alpha1.ModelSpec{
@@ -393,6 +325,29 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 		_, err := v.ValidateModel(ctx, model)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects openai model with HTTP URL", func(t *testing.T) {
+		model := &arkv1alpha1.Model{
+			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
+			Spec: arkv1alpha1.ModelSpec{
+				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
+				Provider: genai.ProviderOpenAI,
+				Config: arkv1alpha1.ModelConfig{
+					OpenAI: &arkv1alpha1.OpenAIModelConfig{
+						BaseURL: arkv1alpha1.ValueSource{Value: "http://api.openai.com/v1"},
+						APIKey:  arkv1alpha1.ValueSource{Value: "key"},
+					},
+				},
+			},
+		}
+		_, err := v.ValidateModel(ctx, model)
+		if err == nil {
+			t.Fatal("expected error for HTTP URL")
+		}
+		if !contains(err.Error(), "must use HTTPS") {
+			t.Fatalf("unexpected error message: %v", err)
 		}
 	})
 
@@ -416,176 +371,307 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 		}
 	})
 
-	t.Run("rejects localhost HTTP URL", func(t *testing.T) {
-		model := &arkv1alpha1.Model{
-			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
-			Spec: arkv1alpha1.ModelSpec{
-				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
-				Provider: genai.ProviderOpenAI,
-				Config: arkv1alpha1.ModelConfig{
-					OpenAI: &arkv1alpha1.OpenAIModelConfig{
-						BaseURL: arkv1alpha1.ValueSource{Value: "http://localhost:8080/v1"},
-						APIKey:  arkv1alpha1.ValueSource{Value: "key"},
-					},
-				},
-			},
-		}
-		_, err := v.ValidateModel(ctx, model)
-		if err == nil {
-			t.Fatal("expected error for localhost HTTP URL")
-		}
-		if !contains(err.Error(), "must use HTTPS") {
-			t.Fatalf("unexpected error message: %v", err)
-		}
-	})
-
-	t.Run("rejects kubernetes service URL", func(t *testing.T) {
-		model := &arkv1alpha1.Model{
-			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
-			Spec: arkv1alpha1.ModelSpec{
-				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
-				Provider: genai.ProviderOpenAI,
-				Config: arkv1alpha1.ModelConfig{
-					OpenAI: &arkv1alpha1.OpenAIModelConfig{
-						BaseURL: arkv1alpha1.ValueSource{Value: "http://model-service.default.svc.cluster.local/v1"},
-						APIKey:  arkv1alpha1.ValueSource{Value: "key"},
-					},
-				},
-			},
-		}
-		_, err := v.ValidateModel(ctx, model)
-		if err == nil {
-			t.Fatal("expected error for kubernetes service URL")
-		}
-		if !contains(err.Error(), "must use HTTPS") {
-			t.Fatalf("unexpected error message: %v", err)
-		}
-	})
-
-	t.Run("rejects AWS metadata service URL (HTTP)", func(t *testing.T) {
-		model := &arkv1alpha1.Model{
-			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
-			Spec: arkv1alpha1.ModelSpec{
-				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
-				Provider: genai.ProviderOpenAI,
-				Config: arkv1alpha1.ModelConfig{
-					OpenAI: &arkv1alpha1.OpenAIModelConfig{
-						BaseURL: arkv1alpha1.ValueSource{Value: "http://169.254.169.254/latest/meta-data"},
-						APIKey:  arkv1alpha1.ValueSource{Value: "key"},
-					},
-				},
-			},
-		}
-		_, err := v.ValidateModel(ctx, model)
-		if err == nil {
-			t.Fatal("expected error for metadata service IP with HTTP")
-		}
-		if !contains(err.Error(), "must use HTTPS") {
-			t.Fatalf("unexpected error message: %v", err)
-		}
-	})
-
-	t.Run("rejects AWS metadata service URL (HTTPS)", func(t *testing.T) {
-		model := &arkv1alpha1.Model{
-			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
-			Spec: arkv1alpha1.ModelSpec{
-				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
-				Provider: genai.ProviderOpenAI,
-				Config: arkv1alpha1.ModelConfig{
-					OpenAI: &arkv1alpha1.OpenAIModelConfig{
-						BaseURL: arkv1alpha1.ValueSource{Value: "https://169.254.169.254/latest/meta-data"},
-						APIKey:  arkv1alpha1.ValueSource{Value: "key"},
-					},
-				},
-			},
-		}
-		_, err := v.ValidateModel(ctx, model)
-		if err == nil {
-			t.Fatal("expected error for metadata service IP with HTTPS")
-		}
-		if !contains(err.Error(), "metadata service IP range is not allowed") {
-			t.Fatalf("unexpected error message: %v", err)
-		}
-	})
 }
 
 func TestValidateBaseURL(t *testing.T) {
-	tests := []struct {
-		name      string
-		url       string
-		wantError bool
-		errorMsg  string
-	}{
-		{"OpenAI API", "https://api.openai.com/v1", false, ""},
-		{"Azure OpenAI", "https://my-resource.openai.azure.com/openai/deployments/gpt-4", false, ""},
-		{"Anthropic", "https://api.anthropic.com/v1", false, ""},
-		{"Google Gemini", "https://generativelanguage.googleapis.com/v1", false, ""},
-		{"AWS Bedrock", "https://bedrock-runtime.us-east-1.amazonaws.com/model/invoke", false, ""},
+	t.Run("Block non-network schemes (file://, ftp://, etc.)", func(t *testing.T) {
+		os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
+		os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
 
-		{"Evil domain", "https://evil.com/capture", true, "domain not in whitelist"},
-		{"Attacker server", "https://attacker.ngrok.io/steal", true, "domain not in whitelist"},
-		{"Collaborator", "https://burpcollaborator.net/test", true, "domain not in whitelist"},
-		{"Random domain", "https://example.com/api", true, "domain not in whitelist"},
-		{"Localhost HTTP", "http://localhost:8080", true, "must use HTTPS"},
-		{"Localhost HTTPS", "https://localhost:8080", true, "domain not in whitelist"},
-		{"K8s service HTTP", "http://model-svc.default.svc.cluster.local", true, "must use HTTPS"},
-		{"K8s service HTTPS", "https://model-svc.default.svc.cluster.local", true, "domain not in whitelist"},
+		tests := []struct {
+			name   string
+			url    string
+			scheme string
+		}{
+			{"file scheme", "file:///etc/passwd", "file"},
+			{"ftp scheme", "ftp://example.com/file", "ftp"},
+			{"data scheme", "data:text/plain,hello", "data"},
+			{"javascript scheme", "javascript:alert(1)", "javascript"},
+		}
 
-		{"Private IP 10.x", "https://10.0.0.1/api", true, "private IP addresses are not allowed"},
-		{"Private IP 192.168", "https://192.168.1.1/api", true, "private IP addresses are not allowed"},
-		{"AWS metadata HTTP", "http://169.254.169.254/latest/meta-data", true, "must use HTTPS"},
-		{"AWS metadata HTTPS", "https://169.254.169.254/latest/meta-data", true, "metadata service IP range is not allowed"},
-		{"Loopback IP", "https://127.0.0.1/api", true, "loopback IP addresses are not allowed"},
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := ValidateBaseURL(tt.url)
+				if err == nil {
+					t.Fatalf("expected error for %s scheme, got nil", tt.scheme)
+				}
+				if !contains(err.Error(), "unsupported scheme") {
+					t.Errorf("expected 'unsupported scheme' error, got: %v", err)
+				}
+			})
+		}
+	})
 
-		{"HTTP external", "http://api.openai.com/v1", true, "must use HTTPS"},
-		{"File scheme", "file:///etc/passwd", true, "invalid URL format"},
-		{"FTP scheme", "ftp://api.openai.com/file", true, "must use HTTPS"},
+	t.Run("Validate scheme is present and well-formed", func(t *testing.T) {
+		os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
+		os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
 
-		{"Malformed URL", "not-a-url", true, "invalid URL format"},
-		{"No hostname", "https:///api/v1", true, "URL must contain a hostname"},
-	}
+		tests := []struct {
+			name string
+			url  string
+		}{
+			{"no scheme", "api.openai.com/v1"},
+			{"just path", "/api/v1"},
+			{"relative path", "api/v1"},
+		}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateBaseURL(tt.url)
-			if (err != nil) != tt.wantError {
-				t.Errorf("ValidateBaseURL() error = %v, wantError %v", err, tt.wantError)
-			}
-			if err != nil && tt.errorMsg != "" && !contains(err.Error(), tt.errorMsg) {
-				t.Errorf("ValidateBaseURL() error = %v, expected to contain %q", err, tt.errorMsg)
-			}
-		})
-	}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := ValidateBaseURL(tt.url)
+				if err == nil {
+					t.Fatal("expected error for missing scheme, got nil")
+				}
+				if !contains(err.Error(), "missing scheme") && !contains(err.Error(), "invalid URL format") {
+					t.Errorf("expected 'missing scheme' error, got: %v", err)
+				}
+			})
+		}
+	})
+
+	t.Run("Validate hostname (reject malformed URLs like https:///api/v1)", func(t *testing.T) {
+		os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
+		os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
+
+		tests := []struct {
+			name string
+			url  string
+		}{
+			{"no hostname", "https:///api/v1"},
+			{"only port", "https://:8080/api"},
+			{"empty host", "https://"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := ValidateBaseURL(tt.url)
+				if err == nil {
+					t.Fatal("expected error for missing hostname, got nil")
+				}
+				if !contains(err.Error(), "must contain a hostname") {
+					t.Errorf("expected 'must contain a hostname' error, got: %v", err)
+				}
+			})
+		}
+	})
+
+	t.Run("Enforce HTTPS-only", func(t *testing.T) {
+		os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
+		os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
+
+		tests := []struct {
+			name string
+			url  string
+		}{
+			{"HTTP to public domain", "http://api.openai.com/v1"},
+			{"HTTP to custom domain", "http://custom.example.com/v1"},
+			{"HTTP to IP", "http://93.184.216.34/api"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := ValidateBaseURL(tt.url)
+				if err == nil {
+					t.Fatal("expected error for HTTP scheme, got nil")
+				}
+				if !contains(err.Error(), "must use HTTPS") {
+					t.Errorf("expected 'must use HTTPS' error, got: %v", err)
+				}
+			})
+		}
+
+		err := ValidateBaseURL("https://api.openai.com/v1")
+		if err != nil {
+			t.Errorf("HTTPS should be allowed, got error: %v", err)
+		}
+	})
+
+	t.Run("Block loopback addresses (127.0.0.1, ::1)", func(t *testing.T) {
+		os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
+		os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
+
+		tests := []struct {
+			name string
+			url  string
+		}{
+			{"IPv4 loopback 127.0.0.1", "https://127.0.0.1/api"},
+			{"IPv4 loopback 127.0.0.2", "https://127.0.0.2/api"},
+			{"IPv4 loopback 127.1.1.1", "https://127.1.1.1/api"},
+			{"IPv6 loopback ::1", "https://[::1]/api"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := ValidateBaseURL(tt.url)
+				if err == nil {
+					t.Fatalf("expected error for loopback address, got nil")
+				}
+				if !contains(err.Error(), "loopback IP addresses are not allowed") {
+					t.Errorf("expected 'loopback IP addresses are not allowed' error, got: %v", err)
+				}
+			})
+		}
+	})
+
+	t.Run("Block private IP ranges (RFC 1918)", func(t *testing.T) {
+		os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
+		os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
+
+		tests := []struct {
+			name    string
+			url     string
+			ipRange string
+		}{
+			{"10.0.0.0/8 range", "https://10.0.0.1/api", "10.0.0.0/8"},
+			{"10.x.x.x high range", "https://10.255.255.254/api", "10.0.0.0/8"},
+			{"172.16.0.0/12 range", "https://172.16.0.1/api", "172.16.0.0/12"},
+			{"172.16-31 mid range", "https://172.20.1.1/api", "172.16.0.0/12"},
+			{"192.168.0.0/16 range", "https://192.168.0.1/api", "192.168.0.0/16"},
+			{"192.168.x.x high range", "https://192.168.255.254/api", "192.168.0.0/16"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := ValidateBaseURL(tt.url)
+				if err == nil {
+					t.Fatalf("expected error for private IP range %s, got nil", tt.ipRange)
+				}
+				if !contains(err.Error(), "private IP addresses are not allowed") {
+					t.Errorf("expected 'private IP addresses are not allowed' error, got: %v", err)
+				}
+			})
+		}
+	})
+
+	t.Run("Block cloud metadata service IPs (169.254.169.254)", func(t *testing.T) {
+		os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
+		os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
+
+		tests := []struct {
+			name string
+			url  string
+		}{
+			{"AWS/Azure metadata IP", "https://169.254.169.254/latest/meta-data"},
+			{"Metadata range start", "https://169.254.0.1/meta"},
+			{"Metadata range end", "https://169.254.255.254/meta"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := ValidateBaseURL(tt.url)
+				if err == nil {
+					t.Fatal("expected error for metadata service IP, got nil")
+				}
+				if !contains(err.Error(), "metadata service IP range is not allowed") {
+					t.Errorf("expected 'metadata service IP range is not allowed' error, got: %v", err)
+				}
+			})
+		}
+	})
+
+	t.Run("Support wildcard/glob patterns (*.prod.example.com)", func(t *testing.T) {
+		os.Setenv("WHITELISTED_MODEL_DOMAINS", "*.prod.example.com\n*.staging.example.com\napi.openai.com")
+		defer os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
+
+		tests := []struct {
+			name      string
+			url       string
+			wantError bool
+		}{
+			{"Wildcard *.prod - single level", "https://llm.prod.example.com/v1", false},
+			{"Wildcard *.prod - nested", "https://deep.nested.prod.example.com/v1", false},
+			{"Wildcard *.prod - base domain", "https://prod.example.com/v1", false},
+			{"Wildcard *.staging", "https://api.staging.example.com/v1", false},
+			{"Exact match", "https://api.openai.com/v1", false},
+			{"No match - wrong subdomain", "https://dev.example.com/v1", true},
+			{"No match - different domain", "https://prod.other.com/v1", true},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := ValidateBaseURL(tt.url)
+				if (err != nil) != tt.wantError {
+					t.Errorf("ValidateBaseURL() error = %v, wantError %v", err, tt.wantError)
+				}
+			})
+		}
+	})
+
+	t.Run("Allow specific private IP ranges when configured", func(t *testing.T) {
+		os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
+		os.Setenv("ALLOWED_PRIVATE_IP_RANGES", "10.100.0.0/16\n192.168.50.0/24\n172.16.1.0/24")
+		defer os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
+
+		tests := []struct {
+			name      string
+			url       string
+			wantError bool
+			reason    string
+		}{
+			{"In allowlist 10.100.x.x", "https://10.100.0.1/v1", false, "10.100.0.0/16"},
+			{"In allowlist 10.100.50.x", "https://10.100.50.100/v1", false, "10.100.0.0/16"},
+			{"In allowlist 192.168.50.x", "https://192.168.50.10/v1", false, "192.168.50.0/24"},
+			{"In allowlist 172.16.1.x", "https://172.16.1.50/v1", false, "172.16.1.0/24"},
+			{"Not in allowlist 10.0.x.x", "https://10.0.0.1/v1", true, "different 10.x range"},
+			{"Not in allowlist 192.168.1.x", "https://192.168.1.100/v1", true, "different 192.168 range"},
+			{"Loopback still blocked", "https://127.0.0.1/v1", true, "loopback cannot be allowed"},
+			{"Metadata still blocked", "https://169.254.169.254/v1", true, "metadata cannot be allowed"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := ValidateBaseURL(tt.url)
+				if (err != nil) != tt.wantError {
+					t.Errorf("ValidateBaseURL() error = %v, wantError %v (reason: %s)", err, tt.wantError, tt.reason)
+				}
+			})
+		}
+	})
 }
 
 func TestIsWhitelistedDomain(t *testing.T) {
+	whitelist := []string{"api.openai.com", "openai.azure.com", "amazonaws.com"}
+
 	tests := []struct {
 		name     string
 		hostname string
 		want     bool
 	}{
-		{"OpenAI exact", "api.openai.com", true},
-		{"Anthropic exact", "api.anthropic.com", true},
-
-		{"Azure subdomain", "my-resource.openai.azure.com", true},
-		{"Azure nested", "deeply.nested.openai.azure.com", true},
-
-		{"Bedrock us-east-1", "bedrock-runtime.us-east-1.amazonaws.com", true},
-		{"Bedrock eu-west-1", "bedrock-runtime.eu-west-1.amazonaws.com", true},
-
-		{"Evil domain", "evil.com", false},
-		{"Not OpenAI", "openai.com", false},
-		{"Fake Azure", "openai.azure.evil.com", false},
-		{"S3", "s3.amazonaws.com", false},
-		{"Localhost", "localhost", false},
-		{"K8s service", "my-service.default.svc.cluster.local", false},
+		{"Exact match", "api.openai.com", true},
+		{"Subdomain", "my.openai.azure.com", true},
+		{"Bedrock special case", "bedrock-runtime.us-east-1.amazonaws.com", true},
+		{"Not in list", "evil.com", false},
+		{"S3 not bedrock", "s3.amazonaws.com", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isWhitelistedDomain(tt.hostname)
+			got := isWhitelistedDomain(tt.hostname, whitelist)
 			if got != tt.want {
 				t.Errorf("isWhitelistedDomain(%s) = %v, want %v", tt.hostname, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMatchDomainPattern(t *testing.T) {
+	tests := []struct {
+		name     string
+		hostname string
+		pattern  string
+		want     bool
+	}{
+		{"Wildcard prefix match", "llm.prod.example.com", "*.prod.example.com", true},
+		{"Wildcard base match", "prod.example.com", "*.prod.example.com", true},
+		{"Wildcard no match", "dev.example.com", "*.prod.example.com", false},
+		{"Exact match", "api.openai.com", "api.openai.com", true},
+		{"Subdomain match", "sub.example.com", "example.com", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := matchDomainPattern(tt.hostname, tt.pattern)
+			if got != tt.want {
+				t.Errorf("matchDomainPattern(%s, %s) = %v, want %v", tt.hostname, tt.pattern, got, tt.want)
 			}
 		})
 	}

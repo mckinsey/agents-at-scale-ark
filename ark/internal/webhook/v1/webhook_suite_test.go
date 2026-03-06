@@ -49,13 +49,8 @@ func TestAPIs(t *testing.T) {
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
-	// Set default whitelist for model validation tests
-	// This is required because webhook validation calls internal/validation code
-	Expect(os.Setenv("WHITELISTED_MODEL_DOMAINS", `api.openai.com
-		openai.azure.com
-		api.anthropic.com
-		generativelanguage.googleapis.com
-		amazonaws.com`)).To(Succeed())
+	os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
+	os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
 
 	// nolint:fatcontext
 	ctx, cancel = context.WithCancel(context.TODO())
