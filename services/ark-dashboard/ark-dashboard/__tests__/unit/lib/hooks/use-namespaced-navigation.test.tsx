@@ -61,6 +61,16 @@ describe('useNamespacedNavigation', () => {
     });
   });
 
+  it('handles null searchParams gracefully', () => {
+    vi.mocked(useSearchParams).mockReturnValue(null as any);
+
+    const { result } = renderHook(() => useNamespacedNavigation());
+
+    result.current.push('/agents');
+
+    expect(mockPush).toHaveBeenCalledWith('/agents');
+  });
+
   it('does not duplicate params already in the path', () => {
     const { result } = renderHook(() => useNamespacedNavigation());
 

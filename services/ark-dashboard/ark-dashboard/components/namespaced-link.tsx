@@ -18,7 +18,7 @@ function NamespacedLink({ href, ...props }: NamespacedLinkProps) {
   }
 
   const [pathname, pathQuery] = hrefString.split('?');
-  const merged = new URLSearchParams(searchParams.toString());
+  const merged = new URLSearchParams(searchParams?.toString() ?? '');
 
   if (pathQuery) {
     const pathParams = new URLSearchParams(pathQuery);

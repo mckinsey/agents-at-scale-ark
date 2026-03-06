@@ -12,7 +12,7 @@ export function useNamespacedNavigation() {
   const push = useCallback(
     (path: string, options?: NavigationOptions) => {
       const [pathname, pathQuery] = path.split('?');
-      const merged = new URLSearchParams(searchParams.toString());
+      const merged = new URLSearchParams(searchParams?.toString() ?? '');
 
       if (pathQuery) {
         const pathParams = new URLSearchParams(pathQuery);

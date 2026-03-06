@@ -10,7 +10,7 @@ import {
   Plus,
   XCircle,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { useEffect, useState } from 'react';
 
 import { EvaluationEditor } from '@/components/editors';
@@ -79,7 +79,7 @@ export function QueryEvaluationActions({
   const [loading, setLoading] = useState(true);
   const [editorOpen, setEditorOpen] = useState(false);
   const [selectedEvaluator, setSelectedEvaluator] = useState<string>('');
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
 
   useEffect(() => {
     const loadData = async () => {
@@ -102,7 +102,7 @@ export function QueryEvaluationActions({
   }, [queryName]);
 
   const handleViewEvaluations = () => {
-    router.push(`/evaluations?query=${encodeURIComponent(queryName)}`);
+    push(`/evaluations?query=${encodeURIComponent(queryName)}`);
   };
 
   const handleCreateEvaluation = (evaluatorName?: string) => {
