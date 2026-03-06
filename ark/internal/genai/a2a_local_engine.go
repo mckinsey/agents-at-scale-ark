@@ -188,28 +188,30 @@ func filterCallerHistoryForDelegation(messages []protocol.Message) []protocol.Me
 	return filtered
 }
 
-func messageContainsToolCallPayload(msg protocol.Message) bool {
-	if msg.Metadata != nil {
-		if rawCalls, exists := msg.Metadata[MetadataToolCallsKey]; exists && rawCalls != nil {
-			switch typed := rawCalls.(type) {
-			case []A2AToolCall:
-				if len(typed) > 0 {
-					return true
-				}
-			case []ToolCallPayloadV1:
-				if len(typed) > 0 {
-					return true
-				}
-			case []any:
-				if len(typed) > 0 {
-					return true
-				}
-			default:
-				return true
-			}
-		}
+func metadataContainsToolCalls(metadata map[string]any) bool {
+	if metadata == nil {
+		return false
 	}
+	rawCalls, exists := metadata[MetadataToolCallsKey]
+	if !exists || rawCalls == nil {
+		return false
+	}
+	switch typed := rawCalls.(type) {
+	case []A2AToolCall:
+		return len(typed) > 0
+	case []ToolCallPayloadV1:
+		return len(typed) > 0
+	case []any:
+		return len(typed) > 0
+	default:
+		return true
+	}
+}
 
+func messageContainsToolCallPayload(msg protocol.Message) bool {
+	if metadataContainsToolCalls(msg.Metadata) {
+		return true
+	}
 	for _, part := range msg.Parts {
 		data, ok := decodePartData(part)
 		if !ok {
