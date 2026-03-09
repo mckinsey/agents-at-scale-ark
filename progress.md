@@ -23,7 +23,10 @@
   - **Generated**: `ark/api/v1alpha1/zz_generated.deepcopy.go` contains Evaluation/Evaluator DeepCopy methods
 
 ## Remaining
-- [ ] Remove evaluation CRDs and related code
+- [x] Remove evaluation CRDs and related code
+  - Deleted 35+ files: CRD types, manifests, controllers, webhooks, validation, genai, RBAC roles, samples
+  - Edited 15+ files: removed evaluation/evaluator references from dispatch.go, lookup.go, resources.go, main.go, kustomization files, webhook manifests, RBAC controller roles, PROJECT file, deep copy generated code
+  - Cleaned up ark/config/, ark/dist/chart/, .github/k8s/ directories
 - [ ] Remove evaluation integration tests
 - [ ] Remove evaluation documentation
 - [ ] Remove evaluation references across codebase

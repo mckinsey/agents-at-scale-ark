@@ -14,7 +14,7 @@ func TestV1Alpha1Resources(t *testing.T) {
 
 	expectedKinds := []string{
 		"Query", "Agent", "Model", "Team", "Tool",
-		"Memory", "MCPServer", "Evaluation", "Evaluator", "A2ATask",
+		"Memory", "MCPServer", "A2ATask",
 	}
 
 	for _, kind := range expectedKinds {
