@@ -1,8 +1,14 @@
-import { Maximize2, Minimize2, Zap } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronRight, Maximize2, Minimize2, RotateCcw, Settings2, Zap } from 'lucide-react';
 import { useState } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import {
   FormControl,
   FormField,
@@ -21,7 +27,7 @@ import { Textarea } from '@/components/ui/textarea';
 import type { Agent } from '@/lib/services';
 import { cn } from '@/lib/utils';
 
-import type { TeamFormValues } from '../use-team-form';
+import { DEFAULT_SELECTOR_PROMPT, type TeamFormValues } from '../use-team-form';
 
 interface SelectorSectionProps {
   form: UseFormReturn<TeamFormValues>;
@@ -37,6 +43,7 @@ export function SelectorSection({
   disabled,
 }: Readonly<SelectorSectionProps>) {
   const [isPromptExpanded, setIsPromptExpanded] = useState(false);
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const selectedStrategy = form.watch('strategy');
 
   if (selectedStrategy !== 'selector') {
@@ -101,64 +108,96 @@ export function SelectorSection({
         )}
       />
 
-      <FormField
-        control={form.control}
-        name="selectorPrompt"
-        render={({ field }) => (
-          <FormItem>
-            <div className="flex items-center justify-between">
-              <FormLabel>Selector Prompt</FormLabel>
-              <div className="flex items-center gap-2">
-                {field.value && field.value.length > 0 && (
-                  <span className="text-muted-foreground text-xs">
-                    {field.value.length} characters
-                  </span>
+      <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>
+        <CollapsibleTrigger className="flex w-full items-center justify-start gap-2 px-0 hover:bg-transparent">
+          {isAdvancedOpen ? (
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          )}
+          <Settings2 className="h-4 w-4 text-muted-foreground" />
+          <span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+            Advanced Settings
+          </span>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-4 pt-4" style={{ marginLeft: 0 }}>
+          <FormField
+            control={form.control}
+            name="selectorPrompt"
+            render={({ field }) => (
+              <FormItem>
+                <div className="flex items-center justify-between">
+                  <FormLabel>Selector Prompt</FormLabel>
+                  <div className="flex items-center gap-2">
+                    {field.value && field.value.length > 0 && (
+                      <span className="text-muted-foreground text-xs">
+                        {field.value.length} characters
+                      </span>
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsPromptExpanded(!isPromptExpanded)}
+                      className="h-8 px-2">
+                      {isPromptExpanded ? (
+                        <>
+                          <Minimize2 className="mr-1 h-4 w-4" />
+                          Collapse
+                        </>
+                      ) : (
+                        <>
+                          <Maximize2 className="mr-1 h-4 w-4" />
+                          Expand
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+                <FormControl>
+                  <Textarea
+                    placeholder="Enter the selector prompt..."
+                    disabled={disabled}
+                    className={`resize-none transition-all duration-200 ${
+                      isPromptExpanded
+                        ? 'max-h-[500px] min-h-[400px] overflow-y-auto'
+                        : 'max-h-[150px] min-h-[100px]'
+                    }`}
+                    style={{
+                      whiteSpace: 'pre-wrap',
+                      wordWrap: 'break-word',
+                    }}
+                    {...field}
+                  />
+                </FormControl>
+                {isPromptExpanded && field.value && field.value.length > 0 && (
+                  <div className="text-muted-foreground text-xs">
+                    {field.value.split('\n').length} lines
+                  </div>
                 )}
+                <FormMessage />
+                <Alert variant="warning" className="mt-2">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Changing the prompt will affect team turn order and can worsen performance.
+                    Use the reset button to restore the default prompt.
+                  </AlertDescription>
+                </Alert>
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  onClick={() => setIsPromptExpanded(!isPromptExpanded)}
-                  className="h-8 px-2">
-                  {isPromptExpanded ? (
-                    <>
-                      <Minimize2 className="mr-1 h-4 w-4" />
-                      Collapse
-                    </>
-                  ) : (
-                    <>
-                      <Maximize2 className="mr-1 h-4 w-4" />
-                      Expand
-                    </>
-                  )}
+                  onClick={() => form.setValue('selectorPrompt', DEFAULT_SELECTOR_PROMPT, { shouldDirty: true })}
+                  disabled={disabled}
+                  className="mt-2">
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Reset to Default Prompt
                 </Button>
-              </div>
-            </div>
-            <FormControl>
-              <Textarea
-                placeholder="Enter the selector prompt..."
-                disabled={disabled}
-                className={`resize-none transition-all duration-200 ${
-                  isPromptExpanded
-                    ? 'max-h-[500px] min-h-[400px] overflow-y-auto'
-                    : 'max-h-[150px] min-h-[100px]'
-                }`}
-                style={{
-                  whiteSpace: 'pre-wrap',
-                  wordWrap: 'break-word',
-                }}
-                {...field}
-              />
-            </FormControl>
-            {isPromptExpanded && field.value && field.value.length > 0 && (
-              <div className="text-muted-foreground text-xs">
-                {field.value.split('\n').length} lines
-              </div>
+              </FormItem>
             )}
-            <FormMessage />
-          </FormItem>
-        )}
-      />
+          />
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }
