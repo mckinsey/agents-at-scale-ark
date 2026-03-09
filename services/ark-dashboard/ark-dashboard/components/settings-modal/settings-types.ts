@@ -2,6 +2,8 @@ import { Database, Key, Lock, Server, Store, Zap } from 'lucide-react';
 
 import type { SettingPage } from '@/atoms/settings-modal';
 
+export const MANAGE_MARKETPLACE_KEY = 'manage-marketplace' as const;
+
 export type SettingMenuItem = {
   key: SettingPage;
   label: string;
