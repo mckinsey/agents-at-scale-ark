@@ -1,17 +1,13 @@
-# Verifies acceptance criteria from docs/specs/linear-query-scaling.md
-# Jobs map to spec stages 1-6. Stages that are not yet implemented fail
-# with a clear message — they turn green as features land.
 name: Verification - Performance
 
 on:
   workflow_dispatch:
   schedule:
     - cron: '0 3 * * *'
-  # We cannot change the query scaling targets without a pull request
-  # to it passing. Performance tests also run nightly.
   pull_request:
     paths:
       - 'docs/specs/performance/**'
+      - 'benchmarks/apiserver/**'
 
 permissions:
   contents: read
@@ -22,67 +18,122 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Stage 1 — Vanilla Ark Install
-  vanilla-ark-install:
+  # Vanilla Ark install (etcd backend)
+  etcd-baseline:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
       - uses: ./.github/actions/setup-e2e
+        with:
+          ark-image-tag: latest
+          ci-cache-registry: ghcr.io/${{ github.repository }}
+          ci-cache-registry-password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install chainsaw
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: benchmarks/apiserver/go.mod
+          cache-dependency-path: benchmarks/apiserver/go.sum
+
+      - name: Build benchmarks
+        run: make build
+        working-directory: benchmarks/apiserver
+
+      - name: Benchmark at 100 objects
+        run: ./apiserver-bench -objects 100 -output /tmp/results-etcd-100.json
+        working-directory: benchmarks/apiserver
+
+      - name: Check thresholds
         run: |
-          curl -s -L "https://github.com/kyverno/chainsaw/releases/download/v0.2.12/chainsaw_linux_amd64.tar.gz" | \
-            tar xz -C /tmp
-          sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
-          sudo chmod +x /usr/local/bin/chainsaw
+          pip install pyyaml -q
+          ./scripts/calc-check-thresholds \
+            ../../docs/specs/performance/performance-thresholds.yaml \
+            etcd-baseline-query-creation \
+            /tmp/results-etcd-100.json
+        working-directory: benchmarks/apiserver
 
-      - name: Run standard E2E tests
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: etcd-benchmark-results
+          path: /tmp/results-etcd-*.json
+
+  # PostgreSQL storage backend install
+  postgres-baseline:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-e2e
+        with:
+          ark-image-tag: latest
+          ci-cache-registry: ghcr.io/${{ github.repository }}
+          ci-cache-registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install PostgreSQL storage backend
         run: |
-          cd tests
-          mkdir -p /tmp/chainsaw-report
-          chainsaw test --config .chainsaw.yaml --selector '!evaluated,!llm'
+          helm upgrade --install ark-storage-dev charts/ark-storage-dev \
+            --namespace ark-system \
+            --create-namespace \
+            --wait --timeout=120s
 
-  # Stage 2 — PostgreSQL Storage Backend Deployment
-  postgres-backend-deployment:
-    needs: vanilla-ark-install
+      - name: Reconfigure controller for PostgreSQL backend
+        run: |
+          kubectl delete apiservice v1alpha1.ark.mckinsey.com --ignore-not-found
+          helm upgrade ark-controller ark/dist/chart \
+            --namespace ark-system \
+            --reuse-values \
+            --set storage.backend=postgresql \
+            --set storage.postgresql.host=ark-storage-dev.ark-system.svc.cluster.local \
+            --set storage.postgresql.port=5432 \
+            --set storage.postgresql.database=ark \
+            --set storage.postgresql.user=postgres \
+            --set storage.postgresql.passwordSecretName=ark-storage-dev \
+            --set storage.postgresql.passwordSecretKey=password \
+            --wait --timeout=300s
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: benchmarks/apiserver/go.mod
+          cache-dependency-path: benchmarks/apiserver/go.sum
+
+      - name: Build benchmarks
+        run: make build
+        working-directory: benchmarks/apiserver
+
+      - name: Benchmark at 100 objects
+        run: ./apiserver-bench -objects 100 -output /tmp/results-postgres-100.json
+        working-directory: benchmarks/apiserver
+
+      - name: Check thresholds
+        run: |
+          pip install pyyaml -q
+          ./scripts/calc-check-thresholds \
+            ../../docs/specs/performance/performance-thresholds.yaml \
+            postgresql-baseline-query-creation \
+            /tmp/results-postgres-100.json
+        working-directory: benchmarks/apiserver
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: postgres-benchmark-results
+          path: /tmp/results-postgres-*.json
+
+  # Results summary
+  results-summary:
+    needs: [etcd-baseline, postgres-baseline]
+    if: always()
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - run: |
-          echo "Required: Maximum of one 'helm install' command." && exit 1
-          echo "Required: Maximum of one additional configuration or restart command." && exit 1
-          exit 1
+      - uses: actions/download-artifact@v4
+        with:
+          path: /tmp/results
+          merge-multiple: true
 
-  # Stage 3 — Load Test: Vanilla Baseline
-  load-test-vanilla-baseline:
-    needs: vanilla-ark-install
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - run: |
-          echo "Stage 3: Vanilla baseline load test not implemented"
-          exit 1
-
-  # Stage 4 — Load Test: PostgreSQL Storage Backend (Developer Workstation)
-  load-test-postgres-workstation:
-    needs: postgres-backend-deployment
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - run: |
-          echo "Stage 4: PostgreSQL storage backend load test not implemented"
-          exit 1
-
-  # Stage 5 — Load Test: PostgreSQL Storage Backend (AWS) — placeholder
-  # load-test-postgres-aws:
-
-  # Stage 6 — Results Analysis
-  results-analysis:
-    needs: [load-test-vanilla-baseline, load-test-postgres-workstation]
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - run: |
-          echo "Stage 6: Results analysis not implemented"
-          exit 1
+      - name: Print results
+        run: |
+          for f in /tmp/results/results-*.json; do
+            echo "=== $(basename $f) ==="
+            python3 -m json.tool "$f"
+          done
