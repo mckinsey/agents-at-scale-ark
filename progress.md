@@ -74,5 +74,12 @@
     - `.claude/skills/ark-sdk-development/SKILL.md` — removed `evaluators.py` row from naming pattern table
   - Verified remaining matches are benign (CHANGELOG history, generic "evaluate" verb usage in agent prompts, Langfuse description, disclaimer)
   - No additional cleanup tasks needed
-- [ ] Verify all integration tests pass
+- [x] Verify all integration tests pass
+  - Fixed stale reference: removed `Evaluations` line from `.claude/skills/documentation/SKILL.md`
+  - **Go controller**: `make manifests` and `go build` fail due to pre-existing `QueryRef` undefined error in `a2atask_types.go` (unrelated to evaluation cleanup — same error exists on `main`). No evaluation-related CRDs generated (confirmed `config/crd/bases/` has no evaluation YAML files).
+  - **ark-cli**: builds successfully, **452/452 tests pass** (49 test files)
+  - **ark-dashboard**: builds successfully with Next.js, **1233/1233 tests pass** (104 test files). No evaluation/evaluator pages in build output.
+  - **ark-api**: all edited Python files pass syntax validation. Full import test blocked by missing `ark_sdk` dependency (pre-existing, not related to cleanup).
+  - **docs site**: builds successfully, all 90 pages generated with no evaluation pages remaining.
+  - **Codebase grep**: only benign references remain (CHANGELOG history, generic "evaluate" verb, Langfuse description, progress.md itself)
 - [ ] Create evidence (screenshots, recordings, test results)
