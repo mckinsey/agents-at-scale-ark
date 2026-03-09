@@ -10,6 +10,7 @@ import type { components } from '@/lib/api/generated/types';
 import type { Agent, Team, TeamMember } from '@/lib/services';
 import { agentsService, teamsService } from '@/lib/services';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { TeamFormMode } from './types';
 
@@ -42,6 +43,7 @@ interface UseTeamFormOptions {
 }
 
 export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
+  const { namespace } = useNamespace();
   const onSuccessRef = useRef(onSuccess);
   onSuccessRef.current = onSuccess;
 
@@ -80,7 +82,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
         ) {
           const [teamData, agentsData] = await Promise.all([
             teamsService.getByName(teamName),
-            agentsService.getAll(),
+            agentsService.getAll(namespace),
           ]);
 
           if (!teamData) {
@@ -112,7 +114,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
               (teamData.strategy === 'selector' ? DEFAULT_SELECTOR_PROMPT : ''),
           });
         } else {
-          const agentsData = await agentsService.getAll();
+          const agentsData = await agentsService.getAll(namespace);
           setAgents(agentsData);
         }
       } catch (error) {
@@ -134,7 +136,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
     };
 
     loadData();
-  }, [mode, teamName, form]);
+  }, [mode, teamName, form, namespace]);
 
   const hasChanges =
     form.formState.isDirty ||
@@ -159,7 +161,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
                   }
                 : undefined,
             graph: graphEdges.length > 0 ? { edges: graphEdges } : undefined,
-          });
+          }, { namespace });
 
           const updatedTeam = await teamsService.getByName(teamName!);
           setTeam(updatedTeam);
@@ -182,7 +184,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
                   }
                 : undefined,
             graph: graphEdges.length > 0 ? { edges: graphEdges } : undefined,
-          });
+          }, { namespace });
           toast.success('Team created successfully');
           onSuccessRef.current?.();
         }
@@ -202,7 +204,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
         setSaving(false);
       }
     },
-    [mode, team, teamName, selectedMembers, graphEdges, form],
+    [mode, team, teamName, selectedMembers, graphEdges, form, namespace],
   );
 
   return {

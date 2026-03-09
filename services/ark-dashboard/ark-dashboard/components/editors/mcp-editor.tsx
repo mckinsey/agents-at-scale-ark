@@ -170,7 +170,7 @@ export function McpEditor({
 
   useEffect(() => {
     if (open && namespace) {
-      secretsService.getAll().then(setSecrets).catch(console.error);
+      secretsService.getAll(namespace).then(setSecrets).catch(console.error);
     }
   }, [open, namespace]);
 

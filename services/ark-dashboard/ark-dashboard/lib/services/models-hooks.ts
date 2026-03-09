@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { toast } from 'sonner';
 
-import type { ModelUpdateRequest } from './models';
+import type { ModelCreateRequest, ModelUpdateRequest } from './models';
 import { modelsService } from './models';
 
 export const GET_ALL_MODELS_QUERY_KEY = 'get-all-models';
@@ -23,7 +23,11 @@ export const useCreateModel = (props?: UseCreateModelProps) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: modelsService.create,
+    mutationFn: ({
+      namespace,
+      ...model
+    }: ModelCreateRequest & { namespace?: string }) =>
+      modelsService.create(model, { namespace }),
     onSuccess: model => {
       toast.success('Model Created', {
         description: `Successfully created ${model.name}`,
@@ -52,12 +56,13 @@ export const useCreateModel = (props?: UseCreateModelProps) => {
 
 type UseGetModelbyIdProps = {
   modelId: string | number;
+  namespace?: string;
 };
 
-export const useGetModelbyId = ({ modelId }: UseGetModelbyIdProps) => {
+export const useGetModelbyId = ({ modelId, namespace }: UseGetModelbyIdProps) => {
   const query = useQuery({
-    queryKey: [GET_MODEL_BY_ID_QUERY_KEY, modelId],
-    queryFn: () => modelsService.getById(modelId),
+    queryKey: [GET_MODEL_BY_ID_QUERY_KEY, modelId, namespace],
+    queryFn: () => modelsService.getById(modelId, { namespace }),
   });
 
   useEffect(() => {
@@ -78,8 +83,12 @@ export const useUpdateModelById = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, ...data }: ModelUpdateRequest & { id: string }) => {
-      return modelsService.updateById(id, data);
+    mutationFn: ({
+      id,
+      namespace,
+      ...data
+    }: ModelUpdateRequest & { id: string; namespace?: string }) => {
+      return modelsService.updateById(id, data, { namespace });
     },
     onSuccess: model => {
       toast.success('Model Updated', {

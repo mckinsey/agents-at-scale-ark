@@ -87,12 +87,12 @@ export const SecretsSection = forwardRef<
       const existingSecret = secrets.find(s => s.name === name);
 
       if (existingSecret) {
-        await secretsService.update(name, password);
+        await secretsService.update(name, password, { namespace });
         toast.success('Secret Updated', {
           description: `Successfully updated ${name}`,
         });
       } else {
-        await secretsService.create(name, password);
+        await secretsService.create(name, password, { namespace });
         toast.success('Secret Created', {
           description: `Successfully created ${name}`,
         });
@@ -120,7 +120,7 @@ export const SecretsSection = forwardRef<
       if (!secret) {
         throw new Error('Secret not found');
       }
-      await secretsService.delete(secret.name);
+      await secretsService.delete(secret.name, { namespace });
       toast.success('Secret Deleted', {
         description: 'Successfully deleted the secret',
       });

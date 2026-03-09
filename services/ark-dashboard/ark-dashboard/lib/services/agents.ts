@@ -1,5 +1,5 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient, withNamespace } from '@/lib/api/client';
+import { apiClient, withNamespace, type ServiceOptions } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
 // Helper type for axios errors
@@ -86,17 +86,22 @@ export const agentsService = {
     }
   },
 
-  // Get a single agent by ID (for UI compatibility - ID is actually the name)
-  async getById(id: number | string): Promise<Agent | null> {
-    // Convert numeric ID to string name
+  async getById(
+    id: number | string,
+    options?: ServiceOptions,
+  ): Promise<Agent | null> {
     const name = String(id);
-    return agentsService.getByName(name);
+    return agentsService.getByName(name, options?.namespace);
   },
 
-  async create(agent: AgentCreateRequest): Promise<Agent> {
+  async create(
+    agent: AgentCreateRequest,
+    options?: ServiceOptions,
+  ): Promise<Agent> {
     const response = await apiClient.post<AgentDetailResponse>(
       `/api/v1/agents`,
       agent,
+      withNamespace(options?.namespace),
     );
 
     trackEvent({
@@ -117,11 +122,13 @@ export const agentsService = {
   async update(
     name: string,
     updates: AgentUpdateRequest,
+    options?: ServiceOptions,
   ): Promise<Agent | null> {
     try {
       const response = await apiClient.put<AgentDetailResponse>(
         `/api/v1/agents/${name}`,
         updates,
+        withNamespace(options?.namespace),
       );
 
       trackEvent({
@@ -143,18 +150,21 @@ export const agentsService = {
     }
   },
 
-  // Update by ID (for UI compatibility)
   async updateById(
     id: number | string,
     updates: AgentUpdateRequest,
+    options?: ServiceOptions,
   ): Promise<Agent | null> {
     const name = String(id);
-    return agentsService.update(name, updates);
+    return agentsService.update(name, updates, options);
   },
 
-  async delete(name: string): Promise<boolean> {
+  async delete(name: string, options?: ServiceOptions): Promise<boolean> {
     try {
-      await apiClient.delete(`/api/v1/agents/${name}`);
+      await apiClient.delete(
+        `/api/v1/agents/${name}`,
+        withNamespace(options?.namespace),
+      );
 
       trackEvent({
         name: 'agent_deleted',
@@ -172,9 +182,11 @@ export const agentsService = {
     }
   },
 
-  // Delete by ID (for UI compatibility)
-  async deleteById(id: number | string): Promise<boolean> {
+  async deleteById(
+    id: number | string,
+    options?: ServiceOptions,
+  ): Promise<boolean> {
     const name = String(id);
-    return agentsService.delete(name);
+    return agentsService.delete(name, options);
   },
 };

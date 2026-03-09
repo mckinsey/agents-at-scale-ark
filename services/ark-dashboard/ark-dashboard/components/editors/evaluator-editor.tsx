@@ -42,6 +42,7 @@ import {
   evaluatorsService,
   modelsService,
 } from '@/lib/services';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 interface Parameter {
   name: string;
@@ -100,6 +101,7 @@ export function EvaluatorEditor({
   const [models, setModels] = useState<Model[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [evaluatorLoading, setEvaluatorLoading] = useState(false);
+  const { namespace } = useNamespace();
   const isEditing = !!evaluator;
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -117,7 +119,7 @@ export function EvaluatorEditor({
       const loadModels = async () => {
         setModelsLoading(true);
         try {
-          const modelsData = await modelsService.getAll();
+          const modelsData = await modelsService.getAll(namespace);
           setModels(modelsData);
         } catch (error) {
           toast.error('Failed to Load Models', {

@@ -31,7 +31,7 @@ function AgentFields({
       if (open) {
         setLoadingAgents(true);
         try {
-          const agentList = await agentsService.getAll();
+          const agentList = await agentsService.getAll(namespace);
           setAgents(agentList);
         } catch (error) {
           console.error('Failed to load agents:', error);

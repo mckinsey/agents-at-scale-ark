@@ -206,6 +206,8 @@ class APIClient {
   }
 }
 
+export type ServiceOptions = { namespace?: string };
+
 export function withNamespace(
   namespace?: string,
 ): RequestOptions | undefined {

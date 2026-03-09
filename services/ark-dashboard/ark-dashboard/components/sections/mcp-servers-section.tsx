@@ -65,7 +65,7 @@ export const McpServersSection = forwardRef<
 
   const handleDelete = async (identifier: string) => {
     try {
-      await mcpServersService.delete(identifier);
+      await mcpServersService.delete(identifier, { namespace });
       setMcpServers(
         mcpServers.filter(server => (server.name || server.id) !== identifier),
       );
@@ -94,14 +94,16 @@ export const McpServersSection = forwardRef<
   ) => {
     try {
       if (!edit) {
-        await mcpServersService.create(mcpServer);
+        await mcpServersService.create(mcpServer, { namespace });
         toast.success('Mcp Created', {
           description: `Successfully created ${mcpServer.name}`,
         });
       } else {
-        await mcpServersService.update(mcpServer.name, {
-          spec: mcpServer.spec,
-        });
+        await mcpServersService.update(
+          mcpServer.name,
+          { spec: mcpServer.spec },
+          { namespace },
+        );
         toast.success('Mcp Updated', {
           description: `Successfully updated ${mcpServer.name}`,
         });

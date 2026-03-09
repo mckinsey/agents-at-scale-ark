@@ -24,6 +24,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import type { Team } from '@/lib/services';
 import { teamsService } from '@/lib/services';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import {
   BasicInfoSection,
@@ -42,6 +43,7 @@ const breadcrumbs: BreadcrumbElement[] = [
 
 export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
   const { push } = useNamespacedNavigation();
+  const { namespace } = useNamespace();
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(false);
@@ -55,7 +57,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
     if (isViewing) {
       setTeamsLoading(true);
       teamsService
-        .getAll()
+        .getAll(namespace)
         .then(teams => setAllTeams(teams))
         .catch(console.error)
         .finally(() => setTeamsLoading(false));
@@ -143,7 +145,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
     if (!team) return;
 
     try {
-      await teamsService.deleteById(team.id);
+      await teamsService.deleteById(team.id, { namespace });
       toast.success('Team Deleted', {
         description: `Successfully deleted ${team.name}`,
       });

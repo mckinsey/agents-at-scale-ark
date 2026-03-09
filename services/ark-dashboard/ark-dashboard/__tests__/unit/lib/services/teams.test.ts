@@ -132,7 +132,8 @@ describe('teamsService', () => {
 
       expect(apiClient.post).toHaveBeenCalledWith(
         `/api/v1/teams`,
-        createRequest
+        createRequest,
+        undefined
       )
       expect(result).toMatchObject({
         id: 'new-team',
@@ -154,7 +155,8 @@ describe('teamsService', () => {
 
       expect(apiClient.put).toHaveBeenCalledWith(
         `/api/v1/teams/test-team`,
-        updates
+        updates,
+        undefined
       )
       expect(result).toMatchObject({
         id: 'test-team',
@@ -182,7 +184,8 @@ describe('teamsService', () => {
 
       expect(apiClient.put).toHaveBeenCalledWith(
         `/api/v1/teams/123`,
-        updates
+        updates,
+        undefined
       )
     })
   })
@@ -194,7 +197,8 @@ describe('teamsService', () => {
       const result = await teamsService.delete('test-team')
 
       expect(apiClient.delete).toHaveBeenCalledWith(
-        `/api/v1/teams/test-team`
+        `/api/v1/teams/test-team`,
+        undefined
       )
       expect(result).toBe(true)
     })
@@ -226,7 +230,8 @@ describe('teamsService', () => {
       const result = await teamsService.deleteById(123)
 
       expect(apiClient.delete).toHaveBeenCalledWith(
-        `/api/v1/teams/123`
+        `/api/v1/teams/123`,
+        undefined
       )
       expect(result).toBe(true)
     })

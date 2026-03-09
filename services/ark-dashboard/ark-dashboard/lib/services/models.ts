@@ -1,5 +1,5 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient, withNamespace } from '@/lib/api/client';
+import { apiClient, withNamespace, type ServiceOptions } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
 // Helper type for axios errors
@@ -60,16 +60,22 @@ export const modelsService = {
   },
 
   // Get a single model by ID (for UI compatibility - ID is actually the name)
-  async getById(id: number | string): Promise<Model | null> {
-    // Convert numeric ID to string name
+  async getById(
+    id: number | string,
+    options?: ServiceOptions,
+  ): Promise<Model | null> {
     const name = String(id);
-    return modelsService.getByName(name);
+    return modelsService.getByName(name, options?.namespace);
   },
 
-  async create(model: ModelCreateRequest): Promise<Model> {
+  async create(
+    model: ModelCreateRequest,
+    options?: ServiceOptions,
+  ): Promise<Model> {
     const response = await apiClient.post<ModelDetailResponse>(
       `/api/v1/models`,
       model,
+      withNamespace(options?.namespace),
     );
 
     trackEvent({
@@ -89,11 +95,13 @@ export const modelsService = {
   async update(
     name: string,
     updates: ModelUpdateRequest,
+    options?: ServiceOptions,
   ): Promise<Model | null> {
     try {
       const response = await apiClient.put<ModelDetailResponse>(
         `/api/v1/models/${name}`,
         updates,
+        withNamespace(options?.namespace),
       );
 
       trackEvent({
@@ -119,14 +127,18 @@ export const modelsService = {
   async updateById(
     id: number | string,
     updates: ModelUpdateRequest,
+    options?: ServiceOptions,
   ): Promise<Model | null> {
     const name = String(id);
-    return modelsService.update(name, updates);
+    return modelsService.update(name, updates, options);
   },
 
-  async delete(name: string): Promise<boolean> {
+  async delete(name: string, options?: ServiceOptions): Promise<boolean> {
     try {
-      await apiClient.delete(`/api/v1/models/${name}`);
+      await apiClient.delete(
+        `/api/v1/models/${name}`,
+        withNamespace(options?.namespace),
+      );
 
       trackEvent({
         name: 'model_deleted',
@@ -145,8 +157,11 @@ export const modelsService = {
   },
 
   // Delete by ID (for UI compatibility)
-  async deleteById(id: number | string): Promise<boolean> {
+  async deleteById(
+    id: number | string,
+    options?: ServiceOptions,
+  ): Promise<boolean> {
     const name = String(id);
-    return modelsService.delete(name);
+    return modelsService.delete(name, options);
   },
 };

@@ -31,7 +31,7 @@ function TeamFields({
       if (open) {
         setLoadingTeams(true);
         try {
-          const teamList = await teamsService.getAll();
+          const teamList = await teamsService.getAll(namespace);
           setTeams(teamList);
         } catch (error) {
           console.error('Failed to load teams:', error);

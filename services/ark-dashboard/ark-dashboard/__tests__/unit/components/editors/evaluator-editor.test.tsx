@@ -34,6 +34,14 @@ vi.mock('@/lib/services', () => ({
   },
 }));
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: vi.fn(() => ({
+    namespace: 'default',
+    readOnlyMode: false,
+    setNamespace: vi.fn(),
+  })),
+}));
+
 describe('EvaluatorEditor', () => {
   const defaultProps = {
     open: true,
