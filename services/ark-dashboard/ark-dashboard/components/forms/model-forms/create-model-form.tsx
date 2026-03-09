@@ -24,7 +24,7 @@ type CreateModelFormProps = {
 
 export function CreateModelForm({ defaultName }: CreateModelFormProps) {
   const { push } = useNamespacedNavigation();
-  const { readOnlyMode } = useNamespace();
+  const { readOnlyMode, namespace } = useNamespace();
   const form = useForm<FormValues>({
     mode: 'onChange',
     resolver: zodResolver(schema),
@@ -60,6 +60,7 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
       provider: formValues.provider,
       model: formValues.model,
       config,
+      namespace,
     });
   };
 
