@@ -26,8 +26,16 @@ export const useCreateSecret = (props: UseCreateSecretProps) => {
 
   return useMutation({
     mutationKey: [CREATE_SECRET_MUTATION_KEY],
-    mutationFn: ({ name, password }: { name: string; password: string }) => {
-      return secretsService.create(name, password);
+    mutationFn: ({
+      name,
+      password,
+      namespace,
+    }: {
+      name: string;
+      password: string;
+      namespace?: string;
+    }) => {
+      return secretsService.create(name, password, { namespace });
     },
     onMutate: async newSecret => {
       await queryClient.cancelQueries({

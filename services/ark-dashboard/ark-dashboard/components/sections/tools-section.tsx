@@ -115,7 +115,7 @@ export const ToolsSection = forwardRef<
       return;
     }
     try {
-      await toolsService.delete(identifier);
+      await toolsService.delete(identifier, { namespace });
       setTools(tools.filter(tool => (tool.name || tool.type) !== identifier));
       toast.success('Tool Deleted', {
         description: 'Successfully deleted tool',
@@ -150,7 +150,7 @@ export const ToolsSection = forwardRef<
         description: `Successfully created ${toolSpec.name}`,
       });
 
-      const updatedTools = await toolsService.getAll();
+      const updatedTools = await toolsService.getAll(namespace);
       setTools(updatedTools);
     } catch (error) {
       toast.error('Failed to Create Tool', {

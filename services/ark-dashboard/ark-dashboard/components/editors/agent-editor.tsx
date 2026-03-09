@@ -15,6 +15,7 @@ import * as z from 'zod';
 
 import { isExperimentalExecutionEngineEnabledAtom } from '@/atoms/experimental-features';
 import { Button } from '@/components/ui/button';
+import { useNamespace } from '@/providers/NamespaceProvider';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
@@ -95,6 +96,7 @@ export function AgentEditor({
   models,
   onSave,
 }: Readonly<AgentEditorProps>) {
+  const { namespace } = useNamespace();
   const [selectedTools, setSelectedTools] = useState<AgentTool[]>([]);
   const [isPromptExpanded, setIsPromptExpanded] = useState(false);
   const [availableTools, setAvailableTools] = useState<Tool[]>([]);
@@ -121,7 +123,7 @@ export function AgentEditor({
       const loadTools = async () => {
         setToolsLoading(true);
         try {
-          const tools = await toolsService.getAll();
+          const tools = await toolsService.getAll(namespace);
           const missingTools = agent?.tools?.filter(
             agentTool => !tools.some(t => t.name === agentTool.name),
           ) as Tool[];

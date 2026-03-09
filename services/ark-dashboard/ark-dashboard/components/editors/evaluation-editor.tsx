@@ -46,6 +46,7 @@ import {
   queriesService,
   teamsService,
 } from '@/lib/services';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 type EvaluationCreateRequest = components['schemas']['EvaluationCreateRequest'];
 type EvaluationUpdateRequest = components['schemas']['EvaluationUpdateRequest'];
@@ -152,6 +153,7 @@ export function EvaluationEditor({
   const [evaluatorsLoading, setEvaluatorsLoading] = useState(false);
   const [queriesLoading, setQueriesLoading] = useState(false);
   const [targetsLoading, setTargetsLoading] = useState(false);
+  const { namespace } = useNamespace();
   const isEditing = !!evaluation;
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -197,14 +199,14 @@ export function EvaluationEditor({
             teamsData,
             modelsData,
           ] = await Promise.all([
-            safe('evaluatorsGetAll', evaluatorsService.getAll(), []),
+            safe('evaluatorsGetAll', evaluatorsService.getAll(namespace), []),
             safe('queriesGetAll', queriesService.list(), {
               items: [],
               count: 0,
             }),
-            safe('agentsGetAll', agentsService.getAll(), []),
-            safe('teamsGetAll', teamsService.getAll(), []),
-            safe('modelsGetAll', modelsService.getAll(), []),
+            safe('agentsGetAll', agentsService.getAll(namespace), []),
+            safe('teamsGetAll', teamsService.getAll(namespace), []),
+            safe('modelsGetAll', modelsService.getAll(namespace), []),
           ]);
           setEvaluators(evaluatorsData);
           setQueries(queriesData.items);

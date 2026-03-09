@@ -74,11 +74,11 @@ export const AgentsSection = forwardRef<AgentsSectionHandle, object>(
         if (!agent) {
           throw new Error('Agent not found');
         }
-        await agentsService.deleteById(id);
+        await agentsService.deleteById(id, { namespace });
         toast.success('Agent Deleted', {
           description: `Successfully deleted ${agent.name}`,
         });
-        const updatedAgents = await agentsService.getAll();
+        const updatedAgents = await agentsService.getAll(namespace);
         setAgents(updatedAgents);
       } catch (error) {
         toast.error('Failed to Delete Agent', {

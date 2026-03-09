@@ -103,7 +103,7 @@ export function EvaluatorEditForm({
     const loadModels = async () => {
       setModelsLoading(true);
       try {
-        const modelsData = await modelsService.getAll();
+        const modelsData = await modelsService.getAll(namespace);
         setModels(modelsData);
       } catch (error) {
         toast.error('Failed to Load Models', {

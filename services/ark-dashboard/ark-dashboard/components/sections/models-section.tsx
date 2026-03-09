@@ -69,12 +69,11 @@ export const ModelsSection = function ModelsSection({
       if (!model) {
         throw new Error('Model not found');
       }
-      await modelsService.deleteById(id);
+      await modelsService.deleteById(id, { namespace });
       toast.success('Model Deleted', {
         description: `Successfully deleted ${model.name}`,
       });
-      // Reload data
-      const updatedModels = await modelsService.getAll();
+      const updatedModels = await modelsService.getAll(namespace);
       setModels(updatedModels);
     } catch (error) {
       toast.error('Failed to Delete Model', {

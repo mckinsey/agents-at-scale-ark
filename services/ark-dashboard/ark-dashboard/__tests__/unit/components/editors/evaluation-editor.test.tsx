@@ -28,6 +28,14 @@ vi.mock('@/lib/services', () => ({
   queriesService: { list: vi.fn().mockResolvedValue({ items: [], count: 0 }) },
 }));
 
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: vi.fn(() => ({
+    namespace: 'default',
+    readOnlyMode: false,
+    setNamespace: vi.fn(),
+  })),
+}));
+
 describe('EvaluationEditor', () => {
   const defaultProps = {
     open: true,

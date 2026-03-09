@@ -132,7 +132,8 @@ describe('agentsService', () => {
 
       expect(apiClient.post).toHaveBeenCalledWith(
         `/api/v1/agents`,
-        createRequest
+        createRequest,
+        undefined
       )
       expect(result).toMatchObject({
         id: 'new-agent',
@@ -154,7 +155,8 @@ describe('agentsService', () => {
 
       expect(apiClient.put).toHaveBeenCalledWith(
         `/api/v1/agents/test-agent`,
-        updates
+        updates,
+        undefined
       )
       expect(result).toMatchObject({
         id: 'test-agent',
@@ -182,7 +184,8 @@ describe('agentsService', () => {
 
       expect(apiClient.put).toHaveBeenCalledWith(
         `/api/v1/agents/123`,
-        updates
+        updates,
+        undefined
       )
     })
   })
@@ -194,7 +197,8 @@ describe('agentsService', () => {
       const result = await agentsService.delete('test-agent')
 
       expect(apiClient.delete).toHaveBeenCalledWith(
-        `/api/v1/agents/test-agent`
+        `/api/v1/agents/test-agent`,
+        undefined
       )
       expect(result).toBe(true)
     })
@@ -226,7 +230,8 @@ describe('agentsService', () => {
       const result = await agentsService.deleteById(123)
 
       expect(apiClient.delete).toHaveBeenCalledWith(
-        `/api/v1/agents/123`
+        `/api/v1/agents/123`,
+        undefined
       )
       expect(result).toBe(true)
     })

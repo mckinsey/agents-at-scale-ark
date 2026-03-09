@@ -82,20 +82,19 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
         if (team.id) {
           // This is an update
           const updateRequest = team as TeamUpdateRequest & { id: string };
-          await teamsService.updateById(updateRequest.id, updateRequest);
+          await teamsService.updateById(updateRequest.id, updateRequest, { namespace });
           toast.success('Team Updated', {
             description: 'Successfully updated the team',
           });
         } else {
-          // This is a create
           const createRequest = team as TeamCreateRequest;
-          await teamsService.create(createRequest);
+          await teamsService.create(createRequest, { namespace });
           toast.success('Team Created', {
             description: `Successfully created ${createRequest.name}`,
           });
         }
         // Reload data
-        const updatedTeams = await teamsService.getAll();
+        const updatedTeams = await teamsService.getAll(namespace);
         setTeams(updatedTeams);
       } catch (error) {
         toast.error(
@@ -116,12 +115,12 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
         if (!team) {
           throw new Error('Team not found');
         }
-        await teamsService.deleteById(id);
+        await teamsService.deleteById(id, { namespace });
         toast.success('Team Deleted', {
           description: `Successfully deleted ${team.name}`,
         });
         // Reload data
-        const updatedTeams = await teamsService.getAll();
+        const updatedTeams = await teamsService.getAll(namespace);
         setTeams(updatedTeams);
       } catch (error) {
         toast.error('Failed to Delete Team', {

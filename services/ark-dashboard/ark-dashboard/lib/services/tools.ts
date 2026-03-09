@@ -52,8 +52,14 @@ export const toolsService = {
     return response;
   },
 
-  async delete(identifier: string): Promise<void> {
-    await apiClient.delete(`/api/v1/tools/${identifier}`);
+  async delete(
+    identifier: string,
+    options?: { namespace?: string },
+  ): Promise<void> {
+    await apiClient.delete(
+      `/api/v1/tools/${identifier}`,
+      withNamespace(options?.namespace),
+    );
 
     trackEvent({
       name: 'tool_deleted',
@@ -106,11 +112,10 @@ export const toolsService = {
     };
     const payload = {
       name,
-      namespace: namespace || 'default',
       annotations,
       spec,
     };
-    await apiClient.post(`/api/v1/tools`, payload);
+    await apiClient.post(`/api/v1/tools`, payload, withNamespace(namespace));
 
     trackEvent({
       name: 'tool_created',

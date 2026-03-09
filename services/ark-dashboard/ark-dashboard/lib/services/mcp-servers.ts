@@ -1,5 +1,5 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient, withNamespace } from '@/lib/api/client';
+import { apiClient, withNamespace, type ServiceOptions } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
 export type MCPServerResponse = components['schemas']['MCPServerResponse'];
@@ -78,8 +78,11 @@ export const mcpServersService = {
     }
   },
 
-  async delete(identifier: string): Promise<void> {
-    await apiClient.delete(`/api/v1/mcp-servers/${identifier}`);
+  async delete(identifier: string, options?: ServiceOptions): Promise<void> {
+    await apiClient.delete(
+      `/api/v1/mcp-servers/${identifier}`,
+      withNamespace(options?.namespace),
+    );
 
     trackEvent({
       name: 'mcp_server_deleted',
@@ -89,10 +92,14 @@ export const mcpServersService = {
     });
   },
 
-  async create(mcpSever: MCPServerCreateRequest): Promise<MCPServer> {
+  async create(
+    mcpSever: MCPServerCreateRequest,
+    options?: ServiceOptions,
+  ): Promise<MCPServer> {
     const response = await apiClient.post<MCPServerDetailResponse>(
       `/api/v1/mcp-servers`,
       mcpSever,
+      withNamespace(options?.namespace),
     );
 
     trackEvent({
@@ -111,10 +118,12 @@ export const mcpServersService = {
   async update(
     mcpServerName: string,
     spec: { spec: MCPServerSpec },
+    options?: ServiceOptions,
   ): Promise<MCPServer> {
     const response = await apiClient.put<MCPServerDetailResponse>(
       `/api/v1/mcp-servers/${mcpServerName}`,
       spec,
+      withNamespace(options?.namespace),
     );
     return {
       ...response,

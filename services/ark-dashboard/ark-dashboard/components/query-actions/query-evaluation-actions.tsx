@@ -36,6 +36,7 @@ import {
   evaluationsService,
   evaluatorsService,
 } from '@/lib/services';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 type EvaluationCreateRequest = components['schemas']['EvaluationCreateRequest'];
 type EvaluationUpdateRequest = components['schemas']['EvaluationUpdateRequest'];
@@ -77,6 +78,7 @@ export function QueryEvaluationActions({
   const [summary, setSummary] = useState<QueryEvaluationSummary | null>(null);
   const [evaluators, setEvaluators] = useState<Evaluator[]>([]);
   const [loading, setLoading] = useState(true);
+  const { namespace } = useNamespace();
   const [editorOpen, setEditorOpen] = useState(false);
   const [selectedEvaluator, setSelectedEvaluator] = useState<string>('');
   const { push } = useNamespacedNavigation();
@@ -87,7 +89,7 @@ export function QueryEvaluationActions({
       try {
         const [summaryData, evaluatorsData] = await Promise.all([
           evaluationsService.getEvaluationSummary(queryName),
-          evaluatorsService.getAll(),
+          evaluatorsService.getAll(namespace),
         ]);
         setSummary(summaryData);
         setEvaluators(evaluatorsData);

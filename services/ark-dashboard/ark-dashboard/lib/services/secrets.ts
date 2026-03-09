@@ -1,5 +1,5 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient, withNamespace } from '@/lib/api/client';
+import { apiClient, withNamespace, type ServiceOptions } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
 // Use the generated type from OpenAPI
@@ -22,7 +22,11 @@ export const secretsService = {
   },
 
   // Create a new secret
-  async create(name: string, password: string): Promise<SecretDetailResponse> {
+  async create(
+    name: string,
+    password: string,
+    options?: ServiceOptions,
+  ): Promise<SecretDetailResponse> {
     const request: SecretCreateRequest = {
       name,
       string_data: {
@@ -33,6 +37,7 @@ export const secretsService = {
     const response = await apiClient.post<SecretDetailResponse>(
       `/api/v1/secrets`,
       request,
+      withNamespace(options?.namespace),
     );
     trackEvent({
       name: 'secret_created',
@@ -42,7 +47,11 @@ export const secretsService = {
   },
 
   // Update an existing secret
-  async update(name: string, password: string): Promise<SecretDetailResponse> {
+  async update(
+    name: string,
+    password: string,
+    options?: ServiceOptions,
+  ): Promise<SecretDetailResponse> {
     const request: SecretUpdateRequest = {
       string_data: {
         token: password,
@@ -51,6 +60,7 @@ export const secretsService = {
     const response = await apiClient.put<SecretDetailResponse>(
       `/api/v1/secrets/${name}`,
       request,
+      withNamespace(options?.namespace),
     );
     trackEvent({
       name: 'secret_updated',
@@ -60,8 +70,11 @@ export const secretsService = {
   },
 
   // Delete a secret
-  async delete(name: string): Promise<void> {
-    await apiClient.delete(`/api/v1/secrets/${name}`);
+  async delete(name: string, options?: ServiceOptions): Promise<void> {
+    await apiClient.delete(
+      `/api/v1/secrets/${name}`,
+      withNamespace(options?.namespace),
+    );
     trackEvent({
       name: 'secret_deleted',
       properties: { secretName: name },

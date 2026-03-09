@@ -19,6 +19,7 @@ import type {
 } from '@/lib/services';
 import { agentsService, modelsService, toolsService } from '@/lib/services';
 import { GET_ALL_AGENTS_QUERY_KEY } from '@/lib/services/agents-hooks';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { AgentFormMode, type AgentFormValues, agentFormSchema } from './types';
 import {
@@ -38,6 +39,7 @@ export function useAgentForm({
   onSuccess,
 }: UseAgentFormOptions) {
   const queryClient = useQueryClient();
+  const { namespace } = useNamespace();
   const onSuccessRef = useRef(onSuccess);
   onSuccessRef.current = onSuccess;
 
@@ -80,8 +82,8 @@ export function useAgentForm({
         ) {
           const [agentData, modelsData, toolsData] = await Promise.all([
             agentsService.getByName(agentName),
-            modelsService.getAll(),
-            toolsService.getAll(),
+            modelsService.getAll(namespace),
+            toolsService.getAll(namespace),
           ]);
 
           if (!agentData) {
@@ -116,8 +118,8 @@ export function useAgentForm({
           });
         } else {
           const [modelsData, toolsData] = await Promise.all([
-            modelsService.getAll(),
-            toolsService.getAll(),
+            modelsService.getAll(namespace),
+            toolsService.getAll(namespace),
           ]);
           setModels(modelsData);
           setAvailableTools(toolsData);
@@ -142,7 +144,7 @@ export function useAgentForm({
     };
 
     loadData();
-  }, [mode, agentName, form]);
+  }, [mode, agentName, form, namespace]);
 
   const mapParametersToApi = useCallback(() => {
     return transformFormParametersToApi(parameters);
@@ -173,7 +175,7 @@ export function useAgentForm({
             parameters: mapParametersToApi(),
           };
 
-          await agentsService.create(createData);
+          await agentsService.create(createData, { namespace });
           queryClient.invalidateQueries({
             queryKey: [GET_ALL_AGENTS_QUERY_KEY],
           });
@@ -199,7 +201,7 @@ export function useAgentForm({
             parameters: agent.isA2A ? undefined : mapParametersToApi(),
           };
 
-          await agentsService.update(agent.name, updateData);
+          await agentsService.update(agent.name, updateData, { namespace });
           toast.success('Agent updated successfully');
         }
 
@@ -216,7 +218,7 @@ export function useAgentForm({
         setSaving(false);
       }
     },
-    [mode, agent, selectedTools, mapParametersToApi, queryClient],
+    [mode, agent, selectedTools, mapParametersToApi, queryClient, namespace],
   );
 
   const handleToolToggle = useCallback((tool: Tool, checked: boolean) => {

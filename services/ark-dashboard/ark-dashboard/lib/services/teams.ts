@@ -1,5 +1,5 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient, withNamespace } from '@/lib/api/client';
+import { apiClient, withNamespace, type ServiceOptions } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
 // Helper type for axios errors
@@ -61,16 +61,22 @@ export const teamsService = {
   },
 
   // Get a single team by ID (for UI compatibility - ID is actually the name)
-  async getById(id: number | string): Promise<Team | null> {
-    // Convert numeric ID to string name
+  async getById(
+    id: number | string,
+    options?: ServiceOptions,
+  ): Promise<Team | null> {
     const name = String(id);
-    return teamsService.getByName(name);
+    return teamsService.getByName(name, options?.namespace);
   },
 
-  async create(team: TeamCreateRequest): Promise<Team> {
+  async create(
+    team: TeamCreateRequest,
+    options?: ServiceOptions,
+  ): Promise<Team> {
     const response = await apiClient.post<TeamDetailResponse>(
       `/api/v1/teams`,
       team,
+      withNamespace(options?.namespace),
     );
 
     trackEvent({
@@ -88,11 +94,16 @@ export const teamsService = {
     };
   },
 
-  async update(name: string, updates: TeamUpdateRequest): Promise<Team | null> {
+  async update(
+    name: string,
+    updates: TeamUpdateRequest,
+    options?: ServiceOptions,
+  ): Promise<Team | null> {
     try {
       const response = await apiClient.put<TeamDetailResponse>(
         `/api/v1/teams/${name}`,
         updates,
+        withNamespace(options?.namespace),
       );
 
       trackEvent({
@@ -118,14 +129,18 @@ export const teamsService = {
   async updateById(
     id: number | string,
     updates: TeamUpdateRequest,
+    options?: ServiceOptions,
   ): Promise<Team | null> {
     const name = String(id);
-    return teamsService.update(name, updates);
+    return teamsService.update(name, updates, options);
   },
 
-  async delete(name: string): Promise<boolean> {
+  async delete(name: string, options?: ServiceOptions): Promise<boolean> {
     try {
-      await apiClient.delete(`/api/v1/teams/${name}`);
+      await apiClient.delete(
+        `/api/v1/teams/${name}`,
+        withNamespace(options?.namespace),
+      );
 
       trackEvent({
         name: 'team_deleted',
@@ -144,8 +159,11 @@ export const teamsService = {
   },
 
   // Delete by ID (for UI compatibility)
-  async deleteById(id: number | string): Promise<boolean> {
+  async deleteById(
+    id: number | string,
+    options?: ServiceOptions,
+  ): Promise<boolean> {
     const name = String(id);
-    return teamsService.delete(name);
+    return teamsService.delete(name, options);
   },
 };
