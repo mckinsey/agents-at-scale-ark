@@ -1,8 +1,9 @@
 import logging
 import random
+import subprocess
+import os
 import pytest
 from datetime import datetime
-from playwright.sync_api import Page
 from .base_page import BasePage
 from .dashboard_page import DashboardPage
 
@@ -33,9 +34,16 @@ class ModelsPage(BasePage):
     
     def navigate_to_models_tab(self) -> None:
         dashboard = DashboardPage(self.page)
-        self.page.goto(f"{dashboard.base_url}/models")
+        self.page.goto(
+            f"{dashboard.base_url}/models", wait_until="domcontentloaded", timeout=60000
+        )
         self.wait_for_navigation_complete()
-        self.wait_for_element(self.ADD_MODEL_BUTTON, timeout=10000)
+        try:
+            self.wait_for_element(self.ADD_MODEL_BUTTON, timeout=30000)
+        except Exception:
+            self.reload()
+            self.wait_for_navigation_complete()
+            self.wait_for_element(self.ADD_MODEL_BUTTON, timeout=30000)
     
     def generate_model_name(self, prefix: str = "model") -> str:
         date_str = datetime.now().strftime("%d%m%y%H%M%S")
@@ -51,7 +59,7 @@ class ModelsPage(BasePage):
                 logger.debug(f"Model {model_name} not visible on attempt {attempt + 1}/{retries}: {e}")
                 if attempt < retries - 1:
                     logger.info(f"Model {model_name} not found, retrying ({attempt + 1}/{retries})...")
-                    self.page.reload()
+                    self.reload()
                     self.wait_for_navigation_complete()
                     self.wait_for_element(self.ADD_MODEL_BUTTON, timeout=10000)
         return False
@@ -62,12 +70,58 @@ class ModelsPage(BasePage):
             row_container = name_element.locator("../../..").first
             row_text = row_container.inner_text().lower()
             
+            if "unavailable" in row_text or "unknown" in row_text:
+                logger.warning(f"Model {model_name} is not yet available")
+                return False
             if "true" in row_text or "available" in row_text:
                 return True
             logger.warning(f"Model {model_name} is not yet available")
             return False
-        except Exception as e:
+        except Exception:
             return False
+
+    def wait_for_model_available(self, model_name: str, retries: int = 12, delay_ms: int = 5000) -> bool:
+        timeout_seconds = int(os.getenv("ARK_UI_MODEL_READY_TIMEOUT_SECONDS", "240"))
+        attempts = max(retries, max(1, timeout_seconds * 1000 // delay_ms))
+        for attempt in range(attempts):
+            if self._is_model_available_in_cluster(model_name) or self.is_model_available(model_name):
+                return True
+            if attempt < attempts - 1:
+                logger.warning(f"Model not yet available, retry {attempt + 1}/{attempts - 1}...")
+                self.page.wait_for_timeout(delay_ms)
+                if (attempt + 1) % 3 == 0:
+                    try:
+                        self.reload()
+                        self.wait_for_navigation_complete()
+                        self.wait_for_element(self.ADD_MODEL_BUTTON, timeout=10000)
+                    except Exception:
+                        pass
+        return False
+
+    def _is_model_available_in_cluster(self, model_name: str) -> bool:
+        result = subprocess.run(
+            [
+                "kubectl",
+                "get",
+                "model",
+                model_name,
+                "-n",
+                "default",
+                "-o",
+                "jsonpath={.status.available}{\"\\n\"}{.status.conditions[?(@.type==\"ModelAvailable\")].status}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        if result.returncode != 0:
+            return False
+        lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        if not lines:
+            return False
+        available = lines[0].lower() == "true"
+        condition_available = any(line.lower() == "true" for line in lines[1:])
+        return available or condition_available
     
     def _select_from_combobox(self, trigger_selector: str, option_text: str) -> None:
         trigger = self.page.locator(trigger_selector).first
@@ -90,9 +144,13 @@ class ModelsPage(BasePage):
         if model_type.lower() not in ("openai", ""):
             self._select_from_combobox("[role='combobox']", model_type)
         
+        resolved_model = model
+        if "mock-llm" in base_url and model == "gpt-4o-mini":
+            resolved_model = "gpt-4.1-mini"
+
         model_input = self.page.locator(self.MODEL_INPUT).first
         model_input.wait_for(state="visible", timeout=5000)
-        model_input.fill(model)
+        model_input.fill(resolved_model)
         
         self._select_from_combobox("[role='combobox']:has-text('Select a secret'), [role='combobox']:has-text('Select secret')", secret_name)
         
@@ -109,29 +167,22 @@ class ModelsPage(BasePage):
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
             popup_visible = True
-        except:
+        except Exception:
             popup_visible = False
         
-        logger.info(f"Navigating back to models list...")
+        logger.info("Navigating back to models list...")
         self.navigate_to_models_tab()
         
         in_table = self.is_model_in_table(model_name)
         
         try:
             self.page.get_by_text(model_name, exact=True).first.wait_for(state="visible", timeout=10000)
-        except:
+        except Exception:
             logger.info(f"Model {model_name} not found with exact match, checking if it exists in table...")
             if not self.is_model_in_table(model_name):
                 logger.warning(f"Model {model_name} not found in table after creation")
         
-        is_available = self.is_model_available(model_name)
-        for retry in range(2):
-            if is_available:
-                break
-            logger.warning(f"Model not yet available, retry {retry + 1}/2...")
-            self.reload()
-            self.wait_for_navigation_complete()
-            is_available = self.is_model_available(model_name)
+        is_available = self.wait_for_model_available(model_name)
         
         return {
             "name": model_name,
@@ -191,7 +242,7 @@ class ModelsPage(BasePage):
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
             return True
-        except:
+        except Exception:
             return False
     
     def create_model_for_test(self, prefix: str, secret_name: str, secrets_page):

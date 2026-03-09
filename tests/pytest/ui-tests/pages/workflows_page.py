@@ -125,7 +125,7 @@ class WorkflowsPage(BasePage):
             
             time.sleep(5)
             waited += 5
-            self.page.reload()
+            self.reload()
             self.wait_for_load_state("domcontentloaded")
         
         return False

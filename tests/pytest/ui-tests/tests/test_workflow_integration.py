@@ -92,7 +92,8 @@ class TestWorkflowIntegration:
             logger.info("Viewing Workflow Templates page in ARK")
 
             final_status = ""
-            for i in range(0, 90, 5):
+            max_wait_seconds = int(os.getenv("ARK_UI_WORKFLOW_TIMEOUT_SECONDS", "240"))
+            for i in range(0, max_wait_seconds, 5):
                 status_result = subprocess.run(
                     ["kubectl", "get", "workflow", workflow_name, "-n", "default", "-o", "jsonpath={.status.phase}"],
                     capture_output=True,

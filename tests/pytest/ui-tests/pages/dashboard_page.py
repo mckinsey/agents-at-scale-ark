@@ -1,4 +1,4 @@
-from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import Page
 from .base_page import BasePage
 import logging
 
@@ -29,15 +29,22 @@ class DashboardPage(BasePage):
     def __init__(self, page: Page):
         super().__init__(page)
         self.base_url = "http://localhost:3274"
+
+    def _goto_with_retry(self, url: str) -> None:
+        try:
+            self.page.goto(url, wait_until="domcontentloaded", timeout=60000)
+        except Exception:
+            self.page.wait_for_timeout(1000)
+            self.page.goto(url, wait_until="domcontentloaded", timeout=60000)
     
     def navigate_to_dashboard(self) -> None:
         if self.base_url not in self.page.url:
-            self.page.goto(self.base_url)
+            self._goto_with_retry(self.base_url)
         self.wait_for_load_state("domcontentloaded")
         self.wait_for_element(self.MAIN_CONTENT)
     
     def navigate_to_section(self, section: str) -> None:
-        self.page.goto(f"{self.base_url}/{section}")
+        self._goto_with_retry(f"{self.base_url}/{section}")
         self.wait_for_load_state("domcontentloaded")
     
     def expand_agent_builder(self) -> None:

@@ -140,7 +140,9 @@ export const SecretsSection = forwardRef<
   if (showLoading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="py-8 text-center">Loading...</div>
+        <div className="py-8 text-center" role="status" aria-live="polite">
+          Loading...
+        </div>
       </div>
     );
   }
@@ -172,7 +174,8 @@ export const SecretsSection = forwardRef<
             size="sm">
             <a
               href="https://mckinsey.github.io/agents-at-scale-ark/"
-              target="_blank">
+              target="_blank"
+              rel="noopener noreferrer">
               Learn More <ArrowUpRightIcon />
             </a>
           </Button>
@@ -204,7 +207,7 @@ export const SecretsSection = forwardRef<
           </Button>
         </div>
         <main className="mt-3 flex-1 overflow-auto">
-          <div className="flex flex-row flex-wrap gap-2 pb-6">
+          <div className="flex flex-row flex-wrap gap-2 pb-6" aria-label="Secrets list">
             {secrets.map(secret => (
               <SecretRow
                 key={secret.id}

@@ -28,7 +28,7 @@ interface SecretEditorProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   secret: Secret | null;
-  onSave: (name: string, password: string) => void;
+  onSave: (name: string, password: string) => Promise<void>;
   existingSecrets?: Secret[];
 }
 
@@ -76,8 +76,8 @@ export function SecretEditor({
     }
   }, [open, secret, form]);
 
-  const onSubmit = (values: z.infer<typeof formSchema>) => {
-    onSave(values.name, values.password);
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    await onSave(values.name, values.password);
     onOpenChange(false);
   };
 

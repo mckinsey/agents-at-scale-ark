@@ -74,7 +74,9 @@ export function SecretRow({
 
   return (
     <>
-      <div className="bg-card hover:bg-accent/5 flex w-full items-center gap-4 rounded-md border px-4 py-3 shadow-sm transition-colors xl:w-[49%]">
+      <div
+        className="bg-card hover:bg-accent/5 flex w-full items-center gap-4 rounded-md border px-4 py-3 shadow-sm transition-colors xl:w-[49%]"
+        aria-label={`Secret ${secret.name}`}>
         <div className="flex flex-grow items-center gap-3 overflow-hidden">
           <IconComponent className="text-muted-foreground h-5 w-5 flex-shrink-0" />
 
@@ -124,6 +126,7 @@ export function SecretRow({
                     variant="ghost"
                     size="sm"
                     className="h-8 w-8 p-0"
+                    aria-label={`Edit secret ${secret.name}`}
                     onClick={() => !readOnlyMode && onEdit(secret)}
                     disabled={readOnlyMode}>
                     <Pencil className="h-4 w-4" />
@@ -148,6 +151,7 @@ export function SecretRow({
                       (isInUse || readOnlyMode) &&
                         'cursor-not-allowed opacity-50',
                     )}
+                    aria-label={`Delete secret ${secret.name}`}
                     onClick={() =>
                       !isInUse && !readOnlyMode && setDeleteConfirmOpen(true)
                     }
