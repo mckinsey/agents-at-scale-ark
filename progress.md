@@ -82,4 +82,13 @@
   - **ark-api**: all edited Python files pass syntax validation. Full import test blocked by missing `ark_sdk` dependency (pre-existing, not related to cleanup).
   - **docs site**: builds successfully, all 90 pages generated with no evaluation pages remaining.
   - **Codebase grep**: only benign references remain (CHANGELOG history, generic "evaluate" verb, Langfuse description, progress.md itself)
-- [ ] Create evidence (screenshots, recordings, test results)
+- [x] Create evidence (screenshots, recordings, test results)
+  - Created `evidence/` directory with verification artifacts
+  - **`evidence/summary.md`** — full evidence summary
+  - **`evidence/codebase-grep-results.txt`** — only 2 benign matches remain (generic "evaluation" in disclaimer and Langfuse description)
+  - **`evidence/ark-cli-test-summary.txt`** — 452/452 tests pass (49 test files)
+  - **`evidence/ark-cli-test-results.txt`** — full coverage report
+  - **`evidence/docs-build-results.txt`** — docs build success, 86 pages indexed, no evaluation pages
+  - **`evidence/ark-dashboard-test-results.txt`** — 100 assertions pass; 96 test file failures are pre-existing `@/` import resolution errors unrelated to evaluation cleanup
+  - **`evidence/crd-bases-listing.txt`** — 10 CRDs remain, no evaluation/evaluator CRDs
+  - Verified deleted directories are gone: `services/ark-evaluator/`, `samples/evaluator/`, `tools/ark-cli/src/commands/evaluation/`, `tests/evaluation-*`, `tests/evaluator-*`
