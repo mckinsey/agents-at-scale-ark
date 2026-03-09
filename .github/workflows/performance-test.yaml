@@ -1,0 +1,120 @@
+name: Verification - Performance
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * *'
+  pull_request:
+    paths:
+      - 'docs/specs/performance/**'
+      - 'benchmarks/apiserver/**'
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Stage 1 — Vanilla Ark Install
+  vanilla-ark-install:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-e2e
+
+      - name: Install chainsaw
+        run: |
+          curl -s -L "https://github.com/kyverno/chainsaw/releases/download/v0.2.12/chainsaw_linux_amd64.tar.gz" | \
+            tar xz -C /tmp
+          sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
+          sudo chmod +x /usr/local/bin/chainsaw
+
+      - name: Run standard E2E tests
+        run: |
+          cd tests
+          mkdir -p /tmp/chainsaw-report
+          chainsaw test --config .chainsaw.yaml --selector '!evaluated,!llm'
+
+  # Stage 2 — PostgreSQL Storage Backend Deployment
+  postgres-backend-deployment:
+    needs: vanilla-ark-install
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "Stage 2: PostgreSQL backend deployment not implemented"
+          exit 1
+
+  # Stage 3 — Load Test: Vanilla Baseline (etcd)
+  load-test-vanilla-baseline:
+    needs: vanilla-ark-install
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-e2e
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: benchmarks/apiserver/go.mod
+          cache-dependency-path: benchmarks/apiserver/go.sum
+
+      - name: Build benchmarks
+        run: make build
+        working-directory: benchmarks/apiserver
+
+      - name: Run scaling benchmark
+        run: |
+          ./apiserver-bench \
+            -concurrency 1,2,4 \
+            -objects 100 \
+            -output /tmp/etcd-scaling.json
+        working-directory: benchmarks/apiserver
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: etcd-scaling-results
+          path: /tmp/etcd-scaling.json
+
+  # Stage 4 — Load Test: PostgreSQL Storage Backend
+  load-test-postgres-workstation:
+    needs: postgres-backend-deployment
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "Stage 4: PostgreSQL storage backend load test not implemented"
+          exit 1
+
+  # Stage 6 — Results Analysis & Gate
+  results-analysis:
+    needs: [load-test-vanilla-baseline]
+    if: always() && needs.load-test-vanilla-baseline.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: benchmarks/apiserver/go.mod
+          cache-dependency-path: benchmarks/apiserver/go.sum
+
+      - name: Build gate
+        run: make build
+        working-directory: benchmarks/apiserver
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: etcd-scaling-results
+          path: /tmp
+
+      - name: Check thresholds and scaling ratios
+        run: |
+          ./benchmark-gate \
+            -results /tmp/etcd-scaling.json \
+            -targets ../../docs/specs/performance/linear-query-scaling-targets.yaml
+        working-directory: benchmarks/apiserver

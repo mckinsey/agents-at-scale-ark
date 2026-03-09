@@ -1,0 +1,11 @@
+concurrency_levels: [1, 2, 4]
+scaling_ratio_min: 0.8
+operations:
+  create:
+    max_error_rate: 0.05
+    max_p99_ms: 1000
+    min_throughput: 10
+  get:
+    max_error_rate: 0.05
+    max_p99_ms: 500
+    min_throughput: 20

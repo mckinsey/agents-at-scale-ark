@@ -6,6 +6,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -16,7 +18,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -35,15 +36,15 @@ var agentGVR = schema.GroupVersionResource{
 const benchAgentName = "bench-agent"
 
 type BenchmarkResult struct {
-	Operation    string             `json:"operation"`
-	Count        int64              `json:"count"`
-	Duration     time.Duration      `json:"duration_ns"`
-	Throughput   float64            `json:"throughput_per_sec"`
-	LatencyP50   time.Duration      `json:"latency_p50_ns"`
-	LatencyP95   time.Duration      `json:"latency_p95_ns"`
-	LatencyP99   time.Duration      `json:"latency_p99_ns"`
-	LatencyMean  time.Duration      `json:"latency_mean_ns"`
-	Errors       int64              `json:"errors"`
+	Operation   string        `json:"operation"`
+	Count       int64         `json:"count"`
+	Duration    time.Duration `json:"duration_ns"`
+	Throughput  float64       `json:"throughput_per_sec"`
+	LatencyP50  time.Duration `json:"latency_p50_ns"`
+	LatencyP95  time.Duration `json:"latency_p95_ns"`
+	LatencyP99  time.Duration `json:"latency_p99_ns"`
+	LatencyMean time.Duration `json:"latency_mean_ns"`
+	Errors      int64         `json:"errors"`
 }
 
 type BenchmarkSuite struct {
@@ -57,24 +58,79 @@ type BenchmarkConfig struct {
 	Concurrency int    `json:"concurrency"`
 }
 
+type ScalingSuite struct {
+	Levels []BenchmarkSuite `json:"levels"`
+}
+
 func main() {
 	var namespace string
 	var objectCount int
-	var concurrency int
+	var concurrencyFlag string
 	var kubeconfig string
+	var outputPath string
 
-	flag.StringVar(&namespace, "namespace", "ark-benchmark", "Namespace for benchmark resources")
+	flag.StringVar(&namespace, "namespace", "", "Namespace (default: current context)")
 	flag.IntVar(&objectCount, "objects", 100, "Number of objects to create")
-	flag.IntVar(&concurrency, "concurrency", 10, "Number of concurrent workers")
-	flag.StringVar(&kubeconfig, "kubeconfig", "", "Path to kubeconfig (uses in-cluster if empty)")
+	flag.StringVar(&concurrencyFlag, "concurrency", "10", "Concurrency level(s), comma-separated (e.g. 1,2,4)")
+	flag.StringVar(&kubeconfig, "kubeconfig", "", "Path to kubeconfig")
+	flag.StringVar(&outputPath, "output", "", "Path to write JSON results (default: stdout)")
 	flag.Parse()
 
-	client, err := newClient(kubeconfig)
+	client, resolvedNamespace, err := newClient(kubeconfig)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create client: %v\n", err)
 		os.Exit(1)
 	}
+	if namespace == "" {
+		namespace = resolvedNamespace
+	}
 
+	levels := parseLevels(concurrencyFlag)
+
+	var result interface{}
+	if len(levels) > 1 {
+		result = runMultiLevel(client, namespace, objectCount, levels)
+	} else {
+		result = runLevel(client, namespace, objectCount, levels[0])
+	}
+
+	output, _ := json.MarshalIndent(result, "", "  ")
+	if outputPath != "" {
+		if err := os.WriteFile(outputPath, output, 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to write output: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Results written to %s\n", outputPath)
+	} else {
+		fmt.Println(string(output))
+	}
+}
+
+func parseLevels(s string) []int {
+	parts := strings.Split(s, ",")
+	levels := make([]int, 0, len(parts))
+	for _, p := range parts {
+		n, err := strconv.Atoi(strings.TrimSpace(p))
+		if err != nil || n < 1 {
+			fmt.Fprintf(os.Stderr, "invalid concurrency level: %q\n", p)
+			os.Exit(2)
+		}
+		levels = append(levels, n)
+	}
+	return levels
+}
+
+func runMultiLevel(client dynamic.Interface, namespace string, objectCount int, levels []int) ScalingSuite {
+	scaling := ScalingSuite{}
+	for _, level := range levels {
+		fmt.Printf("\n========== Concurrency level: %d ==========\n", level)
+		suite := runLevel(client, namespace, objectCount, level)
+		scaling.Levels = append(scaling.Levels, suite)
+	}
+	return scaling
+}
+
+func runLevel(client dynamic.Interface, namespace string, objectCount, concurrency int) BenchmarkSuite {
 	suite := BenchmarkSuite{
 		Config: BenchmarkConfig{
 			Namespace:   namespace,
@@ -108,28 +164,32 @@ func main() {
 	suite.Results = append(suite.Results, deleteResult)
 	printResult(deleteResult)
 
-	output, _ := json.MarshalIndent(suite, "", "  ")
-	fmt.Println("\n--- JSON Results ---")
-	fmt.Println(string(output))
+	return suite
 }
 
-func newClient(kubeconfig string) (dynamic.Interface, error) {
-	var config *rest.Config
-	var err error
-
+func newClient(kubeconfig string) (dynamic.Interface, string, error) {
+	rules := clientcmd.NewDefaultClientConfigLoadingRules()
 	if kubeconfig != "" {
-		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
-	} else {
-		config, err = rest.InClusterConfig()
+		rules.ExplicitPath = kubeconfig
 	}
+	clientConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		rules, &clientcmd.ConfigOverrides{})
+
+	namespace, _, err := clientConfig.Namespace()
 	if err != nil {
-		return nil, err
+		return nil, "", err
+	}
+
+	config, err := clientConfig.ClientConfig()
+	if err != nil {
+		return nil, "", err
 	}
 
 	config.QPS = 1000
 	config.Burst = 2000
 
-	return dynamic.NewForConfig(config)
+	client, err := dynamic.NewForConfig(config)
+	return client, namespace, err
 }
 
 func cleanup(client dynamic.Interface, namespace string) {
