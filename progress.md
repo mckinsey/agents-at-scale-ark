@@ -38,7 +38,16 @@
   - Removed evaluator admission test steps and manifests from `admission-failures/`
   - Updated `tests/README.md`: removed Evaluator from coverage gaps table, removed evaluator test roadmap items, removed evaluator complexity references
   - Updated READMEs for `weather-chicago/`, `weather-chicago-tools/`, `admission-failures/`
-- [ ] Remove evaluation documentation
+- [x] Remove evaluation documentation
+  - Deleted `docs/content/developer-guide/ark-evaluator.mdx`
+  - Deleted `docs/content/reference/evaluations/` directory (4 files: `_meta.js`, `evaluations.mdx`, `event-based-evaluations.mdx`, `event-types-reference.mdx`, `semantic-expressions.mdx`)
+  - Deleted `services/ark-evaluator/docs/` directory (8 core docs + 30+ example files)
+  - Removed evaluation entries from `docs/content/reference/_meta.js` (Evaluations separator and link)
+  - Removed `ark-evaluator` entry from `docs/content/developer-guide/_meta.js`
+  - Removed Evaluator/Evaluation CRD sections from `docs/content/reference/crds.mdx` (table rows + full spec sections)
+  - Removed Evaluator/Evaluation API sections from `docs/content/reference/ark-apis.mdx` (endpoint list + full API docs)
+  - Removed evaluator/evaluation API endpoints from `docs/content/developer-guide/services/ark-api.mdx`
+  - Removed evaluation references from `docs/content/index.mdx`, `core-concepts/index.mdx`, `developer-guide/services.mdx`, `developer-guide/ark-cli.mdx`, `developer-guide/testing/index.mdx`, `user-guide/starting-new-project.mdx`, `reference/utility-images.mdx`, `operations-guide/build-pipelines.mdx`
 - [ ] Remove evaluation references across codebase
 - [ ] Search for anything else we need to do, add it to this list here
 - [ ] Verify all integration tests pass
