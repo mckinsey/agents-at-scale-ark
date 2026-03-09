@@ -24,6 +24,9 @@ rules:
   - apiGroups: [""]
     resources: ["configmaps", "services", "pods", "pods/log", "namespaces"]
     verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["list", "create"]
   # Gateway API resources across namespaces
   - apiGroups: ["gateway.networking.k8s.io"]
     resources: ["httproutes", "gateways"]
