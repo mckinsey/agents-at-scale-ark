@@ -149,7 +149,7 @@ results/20260304-120000/
 
 JSON files contain per-operation throughput, latency percentiles, and error counts. These are consumed by `benchmark-gate` for threshold checks.
 
-Historical baseline data: `results/baseline-2026-01-27/`.
+Results are gitignored — each run generates its own.
 
 ## Running on GKE
 
