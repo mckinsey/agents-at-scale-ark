@@ -31,7 +31,7 @@ type UpdateModelFormProps = {
 
 export function UpdateModelForm({ model }: UpdateModelFormProps) {
   const { push } = useNamespacedNavigation();
-  const { readOnlyMode } = useNamespace();
+  const { readOnlyMode, namespace } = useNamespace();
 
   const defaultValues = getDefaultValuesForUpdate(model);
   const form = useForm<FormValues>({
@@ -52,6 +52,7 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
       id: model.id,
       model: formValues.model,
       config,
+      namespace,
     }).then(handleSuccess);
   };
 

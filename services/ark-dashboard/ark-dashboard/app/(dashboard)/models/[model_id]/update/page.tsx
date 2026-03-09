@@ -1,6 +1,7 @@
 'use client';
 
 import { use } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 import {
   type BreadcrumbElement,
@@ -17,7 +18,9 @@ type PageProps = {
 
 export default function ModelUpdatePage({ params }: PageProps) {
   const { model_id: modelId } = use(params);
-  const { data, isPending } = useGetModelbyId({ modelId });
+  const searchParams = useSearchParams();
+  const namespace = searchParams.get('namespace') || 'default';
+  const { data, isPending } = useGetModelbyId({ modelId, namespace });
 
   const breadcrumbs: BreadcrumbElement[] = [
     ...BASE_BREADCRUMBS,

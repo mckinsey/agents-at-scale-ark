@@ -31,7 +31,7 @@ rules:
   # Ark resources across all namespaces
   - apiGroups: ["ark.mckinsey.com"]
     resources: ["models", "agents", "queries", "teams", "tools", "workflows", "arktemplates", "mcpservers", "a2aservers", "memories", "evaluations", "evaluators", "a2atasks"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
   # Argo Workflows resources across namespaces
   - apiGroups: ["argoproj.io"]
     resources: ["workflows", "workflowtemplates", "cronworkflows", "clusterworkflowtemplates"]
