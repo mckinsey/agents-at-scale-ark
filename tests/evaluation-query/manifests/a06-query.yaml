@@ -1,9 +1,0 @@
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: test-evaluated-query
-spec:
-  input: "What is the capital of Japan and what is 12 × 8?"
-  target:
-    type: agent
-    name: test-evaluation-agent

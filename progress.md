@@ -27,7 +27,17 @@
   - Deleted 35+ files: CRD types, manifests, controllers, webhooks, validation, genai, RBAC roles, samples
   - Edited 15+ files: removed evaluation/evaluator references from dispatch.go, lookup.go, resources.go, main.go, kustomization files, webhook manifests, RBAC controller roles, PROJECT file, deep copy generated code
   - Cleaned up ark/config/, ark/dist/chart/, .github/k8s/ directories
-- [ ] Remove evaluation integration tests
+- [x] Remove evaluation integration tests
+  - Deleted 8 test directories: `evaluation-baseline`, `evaluation-direct`, `evaluation-direct-ragas`, `evaluation-event-basic`, `evaluation-parameters-priority`, `evaluation-query`, `evaluator-context-enhanced`, `evaluator-selector`
+  - Deleted `tests/helpers/wait-for-evaluator.sh`
+  - Deleted `tests/.chainsaw-evaluated.yaml` (evaluated test config no longer needed)
+  - Stripped evaluation steps from `weather-chicago/chainsaw-test.yaml` (removed evaluator RBAC, evaluator setup, evaluation creation/assertion, evaluator catch blocks)
+  - Stripped evaluation steps from `weather-chicago-tools/chainsaw-test.yaml` (removed evaluator RBAC, evaluator setup, event evaluation, evaluator catch blocks)
+  - Removed `evaluated: "true"` labels from both weather tests
+  - Deleted evaluation manifests from weather tests: `a00-evaluator-llm-rbac.yaml`, `a02-z-evaluator-llm.yaml`, `query-evaluation.yaml`, `weather-tools-event-evaluation.yaml`
+  - Removed evaluator admission test steps and manifests from `admission-failures/`
+  - Updated `tests/README.md`: removed Evaluator from coverage gaps table, removed evaluator test roadmap items, removed evaluator complexity references
+  - Updated READMEs for `weather-chicago/`, `weather-chicago-tools/`, `admission-failures/`
 - [ ] Remove evaluation documentation
 - [ ] Remove evaluation references across codebase
 - [ ] Search for anything else we need to do, add it to this list here
