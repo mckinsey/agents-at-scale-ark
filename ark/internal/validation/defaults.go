@@ -36,7 +36,7 @@ func DefaultAgent(agent *arkv1alpha1.Agent) {
 }
 
 func DefaultTeam(team *arkv1alpha1.Team) {
-	if team.Spec.Strategy != "round-robin" {
+	if team.Spec.Strategy != StrategyRoundRobin {
 		return
 	}
 
@@ -45,17 +45,13 @@ func DefaultTeam(team *arkv1alpha1.Team) {
 	}
 
 	if team.Spec.MaxTurns != nil {
-		team.Spec.Strategy = "sequential"
+		team.Spec.Strategy = StrategySequential
 		loops := true
 		team.Spec.Loops = &loops
-		team.Annotations[annotations.MigrationWarningPrefix+"round-robin"] = fmt.Sprintf(
-			"strategy 'round-robin' is deprecated - migrated to 'sequential' with loops: true. Will be removed in v1.0.0",
-		)
+		team.Annotations[annotations.MigrationWarningPrefix+"round-robin"] = "strategy 'round-robin' is deprecated - migrated to 'sequential' with loops: true. Will be removed in v1.0.0"
 	} else {
-		team.Spec.Strategy = "sequential"
-		team.Annotations[annotations.MigrationWarningPrefix+"round-robin"] = fmt.Sprintf(
-			"strategy 'round-robin' is deprecated - migrated to 'sequential'. Set loops: true and maxTurns to enable looping. Will be removed in v1.0.0",
-		)
+		team.Spec.Strategy = StrategySequential
+		team.Annotations[annotations.MigrationWarningPrefix+"round-robin"] = "strategy 'round-robin' is deprecated - migrated to 'sequential'. Set loops: true and maxTurns to enable looping. Will be removed in v1.0.0"
 	}
 }
 

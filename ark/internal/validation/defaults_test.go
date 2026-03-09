@@ -73,6 +73,7 @@ func TestDefaultAgent(t *testing.T) {
 	})
 }
 
+//nolint:gocognit
 func TestDefaultTeam(t *testing.T) {
 	t.Run("migrates round-robin with maxTurns to sequential with loops", func(t *testing.T) {
 		maxTurns := 5

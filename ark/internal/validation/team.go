@@ -9,9 +9,12 @@ import (
 )
 
 const (
-	MemberTypeAgent  = "agent"
-	MemberTypeTeam   = "team"
-	StrategySelector = "selector"
+	MemberTypeAgent    = "agent"
+	MemberTypeTeam     = "team"
+	StrategySequential = "sequential"
+	StrategyRoundRobin = "round-robin"
+	StrategySelector   = "selector"
+	StrategyGraph      = "graph"
 )
 
 func (v *Validator) ValidateTeam(ctx context.Context, team *arkv1alpha1.Team) ([]string, error) {
@@ -72,9 +75,9 @@ func (v *Validator) validateNoMixedTeam(ctx context.Context, team *arkv1alpha1.T
 
 func (v *Validator) validateStrategy(ctx context.Context, team *arkv1alpha1.Team) error {
 	switch team.Spec.Strategy {
-	case "sequential":
+	case StrategySequential:
 		return validateSequentialStrategy(team)
-	case "round-robin":
+	case StrategyRoundRobin:
 		return nil
 	case StrategySelector:
 		if team.Spec.Loops != nil && *team.Spec.Loops {
@@ -87,13 +90,13 @@ func (v *Validator) validateStrategy(ctx context.Context, team *arkv1alpha1.Team
 			return validateGraphForSelector(team)
 		}
 		return nil
-	case "graph":
+	case StrategyGraph:
 		if team.Spec.Loops != nil && *team.Spec.Loops {
 			return fmt.Errorf("loops can only be used with the 'sequential' strategy")
 		}
 		return validateGraphStrategy(team)
 	default:
-		return fmt.Errorf("unsupported strategy '%s': must be 'sequential', 'round-robin', 'selector', or 'graph'", team.Spec.Strategy)
+		return fmt.Errorf("unsupported strategy '%s': must be '%s', '%s', '%s', or '%s'", team.Spec.Strategy, StrategySequential, StrategyRoundRobin, StrategySelector, StrategyGraph)
 	}
 }
 

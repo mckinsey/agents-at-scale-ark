@@ -182,7 +182,7 @@ var _ = Describe("Team Webhook", func() {
 		It("Should accept sequential with loops and maxTurns", func() {
 			loops := true
 			maxTurns := 5
-			obj.Spec.Strategy = "sequential"
+			obj.Spec.Strategy = validation.StrategySequential
 			obj.Spec.Loops = &loops
 			obj.Spec.MaxTurns = &maxTurns
 			obj.Spec.Members = []arkv1alpha1.TeamMember{
@@ -195,7 +195,7 @@ var _ = Describe("Team Webhook", func() {
 
 		It("Should reject sequential with loops but no maxTurns", func() {
 			loops := true
-			obj.Spec.Strategy = "sequential"
+			obj.Spec.Strategy = validation.StrategySequential
 			obj.Spec.Loops = &loops
 			obj.Spec.Members = []arkv1alpha1.TeamMember{
 				{Name: "researcher", Type: "agent"},
@@ -208,7 +208,7 @@ var _ = Describe("Team Webhook", func() {
 
 		It("Should reject sequential with maxTurns but no loops", func() {
 			maxTurns := 5
-			obj.Spec.Strategy = "sequential"
+			obj.Spec.Strategy = validation.StrategySequential
 			obj.Spec.MaxTurns = &maxTurns
 			obj.Spec.Members = []arkv1alpha1.TeamMember{
 				{Name: "researcher", Type: "agent"},
