@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Local E2E Setup Script
 # Mirrors the GitHub Action setup-e2e for local testing
-# Usage: ./setup-local.sh [--install-coverage] [--install-evaluator]
+# Usage: ./setup-local.sh [--install-coverage]
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../" && pwd)"
@@ -14,7 +14,6 @@ REGISTRY_USERNAME="${DOCKER_CICD_CACHE_REGISTRY_USERNAME:?required}"
 REGISTRY_PASSWORD="${DOCKER_CICD_CACHE_REGISTRY_PASSWORD:?required}"
 ARK_IMAGE_TAG="${ARK_IMAGE_TAG:-local-test}"
 INSTALL_COVERAGE="false"
-INSTALL_EVALUATOR="false"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -23,14 +22,9 @@ while [[ $# -gt 0 ]]; do
       INSTALL_COVERAGE="true"
       shift
       ;;
-    --install-evaluator)
-      INSTALL_EVALUATOR="true"
-      shift
-      ;;
     -h|--help)
-      echo "Usage: $0 [--install-coverage] [--install-evaluator]"
+      echo "Usage: $0 [--install-coverage]"
       echo "  --install-coverage   Install coverage collection components"
-      echo "  --install-evaluator  Install ark-evaluator service"
       exit 0
       ;;
     *)
@@ -44,7 +38,6 @@ echo "=== Local ARK E2E Setup ==="
 echo "Registry: ${REGISTRY}"
 echo "ARK Image Tag: ${ARK_IMAGE_TAG}"
 echo "Install Coverage: ${INSTALL_COVERAGE}"
-echo "Install Evaluator: ${INSTALL_EVALUATOR}"
 echo
 
 # Check kubectl context
@@ -102,86 +95,6 @@ fi
 # Wait for ARK deployment to be ready
 echo "=== Waiting for ARK Deployment ==="
 kubectl -n ark-system wait --for=condition=available --timeout=300s deployment/ark-controller
-
-# Create default model for evaluator if requested
-if [ "${INSTALL_EVALUATOR}" = "true" ]; then
-  echo "=== Setting up Evaluator ==="
-  
-  # Require environment variables for evaluator
-  if [ -z "${AZURE_OPENAI_KEY:-}" ] || [ -z "${AZURE_OPENAI_BASE_URL:-}" ]; then
-    echo "Error: AZURE_OPENAI_KEY and AZURE_OPENAI_BASE_URL environment variables required for evaluator setup"
-    exit 1
-  fi
-  
-  # Create secret for default model
-  kubectl create secret generic default-model-token \
-    --from-literal=token="${AZURE_OPENAI_KEY}" \
-    --dry-run=client -o yaml | kubectl apply -f -
-  
-  # Create default model
-  cat <<EOF | kubectl apply -f -
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Model
-metadata:
-  name: default
-  namespace: default
-spec:
-  type: azure
-  model:
-    value: gpt-4.1-mini
-  config:
-    azure:
-      baseUrl:
-        value: "${AZURE_OPENAI_BASE_URL}"
-      apiKey:
-        valueFrom:
-          secretKeyRef:
-            name: default-model-token
-            key: token
-      apiVersion:
-        value: "2024-12-01-preview"
-EOF
-
-  # Apply RBAC for evaluator access
-  cat <<EOF | kubectl apply -f -
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: evaluator-access-default
-rules:
-- apiGroups: ["ark.mckinsey.com"]
-  resources: ["evaluators", "models"]
-  verbs: ["get", "list", "watch"]
-- apiGroups: [""]
-  resources: ["services", "secrets"]
-  verbs: ["get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: evaluator-access-default
-  namespace: default
-subjects:
-- kind: Group
-  name: system:serviceaccounts
-  apiGroup: rbac.authorization.k8s.io
-roleRef:
-  kind: ClusterRole
-  name: evaluator-access-default
-  apiGroup: rbac.authorization.k8s.io
-EOF
-
-  # Install ark-evaluator service
-  cd "${REPO_ROOT}/services/ark-evaluator/chart"
-
-  helm upgrade --install ark-evaluator . \
-    --set image.repository="${REGISTRY}/ark-evaluator" \
-    --set image.tag="${ARK_IMAGE_TAG}" \
-    --namespace default --create-namespace \
-    --wait \
-    --timeout=300s
-  kubectl -n default rollout status deployment/ark-evaluator --timeout=180s
-fi
 
 echo
 echo "=== Setup Complete! ==="

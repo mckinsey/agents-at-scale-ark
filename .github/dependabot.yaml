@@ -48,15 +48,6 @@ updates:
       interval: weekly
     open-pull-requests-limit: 1
 
-  # Python - ark-evaluator
-  - package-ecosystem: "pip"
-    directory: "services/ark-evaluator"
-    commit-message:
-      prefix: 'chore(python): '
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 1
-
   # Python - ark-api
   - package-ecosystem: "pip"
     directory: "services/ark-api"
@@ -81,7 +72,6 @@ updates:
       - "services/ark-api"
       - "services/ark-broker/ark-broker"
       - "services/ark-dashboard"
-      - "services/ark-evaluator"
       - "services/ark-cluster-memory"
       - "services/ark-mcp"
     commit-message:

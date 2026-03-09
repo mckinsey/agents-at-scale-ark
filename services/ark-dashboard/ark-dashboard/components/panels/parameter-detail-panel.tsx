@@ -229,17 +229,7 @@ export function ParameterDetailPanel({
                         )}
                       </div>
 
-                      {param.name === 'evaluator_role' && param.value && (
-                        <div className="bg-muted/50 rounded p-3 text-xs">
-                          <div className="mb-2 font-medium">
-                            Evaluator Role Preview:
-                          </div>
-                          <div className="text-muted-foreground leading-relaxed break-words whitespace-pre-wrap">
-                            {param.value.substring(0, 300)}
-                            {param.value.length > 300 && '...'}
-                          </div>
-                        </div>
-                      )}
+
                     </CardContent>
                   </CollapsibleContent>
                 </Collapsible>

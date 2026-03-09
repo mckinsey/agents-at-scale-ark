@@ -48,7 +48,24 @@
   - Removed Evaluator/Evaluation API sections from `docs/content/reference/ark-apis.mdx` (endpoint list + full API docs)
   - Removed evaluator/evaluation API endpoints from `docs/content/developer-guide/services/ark-api.mdx`
   - Removed evaluation references from `docs/content/index.mdx`, `core-concepts/index.mdx`, `developer-guide/services.mdx`, `developer-guide/ark-cli.mdx`, `developer-guide/testing/index.mdx`, `user-guide/starting-new-project.mdx`, `reference/utility-images.mdx`, `operations-guide/build-pipelines.mdx`
-- [ ] Remove evaluation references across codebase
+- [x] Remove evaluation references across codebase
+  - **Deleted directories/files**:
+    - `services/ark-evaluator/` (entire Python evaluator service)
+    - `samples/evaluator/`, `samples/evaluator-selector/`, `samples/agent-modernization/custom-evaluators/`, `samples/agent-modernization/perf-evaluators/`
+    - `tools/ark-cli/src/commands/evaluation/`, `tools/ark-cli/src/lib/executeEvaluation.ts`
+    - `services/ark-api/ark-api/src/ark_api/api/v1/evaluations.py`, `evaluators.py`, `models/evaluations.py`, `evaluators.py`, `evaluation_metadata.py`
+    - Dashboard: 5 pages (`evaluations/`, `evaluation/`, `evaluators/`, `evals/`), `evaluation/` components dir, evaluation editor/card/form/filter/row components
+    - Dashboard services: `evaluations.ts`, `evaluators.ts`, `evaluations-hooks.ts`
+    - Dashboard tests: `evaluation-editor.test.tsx`, `evaluator-editor.test.tsx`
+  - **ark-cli edits**: removed evaluation command from `index.tsx`, `EvaluationManifest`/`Evaluation` types from `types.ts`, `EvaluationFailed` from `errors.ts`, `evaluators` from export `RESOURCE_ORDER` and test, `evaluation` from bash/zsh completion scripts, `evaluators` from `.arkrc.yaml.sample`
+  - **ark-api edits**: removed evaluation/evaluator router imports and includes from `v1/__init__.py`, removed from `export.py` resources, `models/export.py` ResourceType, `models/queries.py` fields, `chart/templates/rbac.yaml` rules
+  - **ark-dashboard edits**: removed evaluation/evaluator exports from all barrel files (editors, sections, cards, forms, filtering, query-actions, services), removed sections from `dashboard-icons.ts`, cleaned `app-sidebar.tsx` (monitoring filter, evals section), removed annotations, removed `EvaluationStatusIndicator` from queries table, removed evaluator preview from `parameter-detail-panel.tsx`, changed evaluator text in `selector-detail-panel.tsx`, removed from export page/utils/server, proxy route templates, query detail page, marketplace fetcher, generated types
+  - **Dashboard tests**: removed evaluation assertions from `dashboard-icons.test.ts`, `dashboard-sections.test.ts`, `test-utils.ts`, `export/page.test.tsx`
+  - **CI/CD**: removed ark-evaluator from `cicd.yaml` (build matrix, container scan, e2e-tests-evaluated job, install-evaluator inputs), `deploy.yml` matrix, `dependabot.yaml`, `release-please-config.json`, `setup-e2e/action.yml` and `setup-local.sh`
+  - **Config**: removed ark-evaluator from `devspace.yaml`, `transfer-ark-containers.sh`, `chainsaw_summary.py`, `charts/ark-tenant/templates/role.yaml`
+  - **Docs**: updated walkthrough, argo-workflows, observability, design-principles, crd-design-guide, disclaimer, architecture diagrams
+  - **Samples**: removed `evaluation_required` labels from agent-modernization queries, cleaned `rag-external-vectordb` sample data
+  - **Other**: cleaned `ark-mcp/tools.py`, `ark-broker/test/manifests/a00-rbac.yaml`, `tests/helpers/wait-for-rbac.sh`
 - [ ] Search for anything else we need to do, add it to this list here
 - [ ] Verify all integration tests pass
 - [ ] Create evidence (screenshots, recordings, test results)

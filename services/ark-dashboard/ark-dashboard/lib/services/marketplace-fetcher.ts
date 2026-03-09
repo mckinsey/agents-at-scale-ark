@@ -300,14 +300,6 @@ async function getInstalledMarketplaceItems(): Promise<Set<string>> {
       }
     }
 
-    // Check evaluators
-    if (resources.evaluators) {
-      for (const evaluator of resources.evaluators) {
-        installedItems.add(evaluator.name.toLowerCase());
-        installedItems.add(generateItemIdFromName(evaluator.name));
-      }
-    }
-
     console.log('Found installed marketplace items:', installedItems.size);
     return installedItems;
   } catch (error) {
