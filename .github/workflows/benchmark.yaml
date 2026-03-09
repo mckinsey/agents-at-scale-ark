@@ -1,0 +1,126 @@
+name: Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Storage mode: auto|etcd|postgres|both'
+        required: false
+        default: 'auto'
+        type: choice
+        options: [auto, etcd, postgres, both]
+      objects:
+        description: 'Comma-separated object counts'
+        required: false
+        default: '100'
+      concurrency:
+        description: 'Worker concurrency'
+        required: false
+        default: '10'
+      thresholds:
+        description: 'Path to thresholds YAML (relative to benchmarks/apiserver/)'
+        required: false
+        default: 'thresholds.yaml'
+      gate_enabled:
+        description: 'Fail workflow if thresholds are breached'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: benchmarks/apiserver/go.mod
+          cache-dependency-path: benchmarks/apiserver/go.sum
+
+      - name: Setup E2E environment
+        uses: ./.github/actions/setup-e2e
+        with:
+          ark-image-tag: ${{ github.sha }}
+          ci-cache-registry: ghcr.io/${{ github.repository_owner }}
+          ci-cache-registry-username: ${{ github.actor }}
+          ci-cache-registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build benchmark binaries
+        working-directory: benchmarks/apiserver
+        run: |
+          go build -o apiserver-bench .
+          go build -o benchmark-gate ./cmd/gate/
+
+      - name: Run benchmark
+        working-directory: benchmarks/apiserver
+        run: |
+          ./run.sh \
+            --mode ${{ inputs.mode }} \
+            --objects ${{ inputs.objects }} \
+            --concurrency ${{ inputs.concurrency }} \
+            --scenarios none \
+            --output-dir results
+        env:
+          KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+      - name: Find result files
+        id: results
+        working-directory: benchmarks/apiserver
+        run: |
+          DIR=$(ls -td results/*/ | head -1)
+          echo "dir=${DIR}" >> "$GITHUB_OUTPUT"
+          echo "Results directory: ${DIR}"
+          ls -la "${DIR}"
+
+      - name: Check gates
+        if: inputs.gate_enabled
+        working-directory: benchmarks/apiserver
+        run: |
+          FAILED=0
+          for f in ${{ steps.results.outputs.dir }}/*.json; do
+            echo "--- Checking $(basename "$f") ---"
+            ./benchmark-gate -results "$f" -thresholds "${{ inputs.thresholds }}" || FAILED=1
+          done
+          exit $FAILED
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: benchmarks/apiserver/results/
+          retention-days: 30
+
+      - name: Summary
+        if: always()
+        working-directory: benchmarks/apiserver
+        run: |
+          echo "## Benchmark Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Mode | Objects | File |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------|---------|------|" >> "$GITHUB_STEP_SUMMARY"
+          for f in ${{ steps.results.outputs.dir }}/*.json; do
+            NAME=$(basename "$f" .json)
+            echo "| ${NAME%-*} | ${NAME##*-} | \`$f\` |" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ inputs.gate_enabled }}" = "true" ]; then
+            echo "### Gate Results" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            for f in ${{ steps.results.outputs.dir }}/*.json; do
+              echo "#### $(basename "$f")" >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              ./benchmark-gate -results "$f" -thresholds "${{ inputs.thresholds }}" >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+            done
+          fi

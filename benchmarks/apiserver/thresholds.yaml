@@ -1,0 +1,21 @@
+operations:
+  create:
+    max_error_rate: 0.01
+    max_p99_ms: 500
+    min_throughput: 50
+  get:
+    max_error_rate: 0.01
+    max_p99_ms: 200
+    min_throughput: 100
+  list:
+    max_error_rate: 0.01
+    max_p99_ms: 1000
+    min_throughput: 20
+  watch:
+    max_error_rate: 0.05
+    max_p99_ms: 2000
+    min_throughput: 5
+  delete:
+    max_error_rate: 0.01
+    max_p99_ms: 500
+    min_throughput: 50

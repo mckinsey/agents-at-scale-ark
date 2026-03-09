@@ -11,7 +11,7 @@ OUTPUT_DIR ?= results
 IMAGE_REPO_FLAG = $(if $(IMAGE_REPO),--image-repo $(IMAGE_REPO),)
 IMAGE_TAG_FLAG = $(if $(IMAGE_TAG),--image-tag $(IMAGE_TAG),)
 
-.PHONY: build clean run run-etcd run-postgres run-comparison help
+.PHONY: build clean run run-etcd run-postgres run-comparison gate help
 
 help:
 	@echo "Ark API Server Benchmark"
@@ -22,6 +22,7 @@ help:
 	@echo "  run-etcd        Deploy etcd mode and benchmark"
 	@echo "  run-postgres    Deploy PostgreSQL mode and benchmark"
 	@echo "  run-comparison  Run both modes and compare"
+	@echo "  gate            Check latest results against thresholds"
 	@echo "  clean           Remove built binaries"
 	@echo ""
 	@echo "Variables:"
@@ -37,9 +38,10 @@ help:
 build:
 	go build -o apiserver-bench .
 	go build -o production-bench ./cmd/production/
+	go build -o benchmark-gate ./cmd/gate/
 
 clean:
-	rm -f apiserver-bench production-bench
+	rm -f apiserver-bench production-bench benchmark-gate
 
 run: build
 	./run.sh --mode auto --kubeconfig $(KUBECONFIG) --namespace $(NAMESPACE) \
@@ -60,3 +62,15 @@ run-comparison: build
 	./run.sh --mode both --kubeconfig $(KUBECONFIG) --namespace $(NAMESPACE) \
 		--objects $(OBJECTS) --concurrency $(CONCURRENCY) --scenarios $(SCENARIOS) \
 		--chart-path $(CHART_PATH) $(IMAGE_REPO_FLAG) $(IMAGE_TAG_FLAG) --output-dir $(OUTPUT_DIR)
+
+THRESHOLDS ?= thresholds.yaml
+LATEST_DIR = $(shell ls -td $(OUTPUT_DIR)/*/ 2>/dev/null | head -1)
+
+gate: build
+	@if [ -z "$(LATEST_DIR)" ]; then echo "No results found in $(OUTPUT_DIR)/"; exit 1; fi
+	@FAILED=0; \
+	for f in $(LATEST_DIR)*.json; do \
+		echo "--- Checking $$(basename $$f) ---"; \
+		./benchmark-gate -results "$$f" -thresholds "$(THRESHOLDS)" || FAILED=1; \
+	done; \
+	exit $$FAILED
