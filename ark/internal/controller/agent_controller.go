@@ -100,6 +100,11 @@ func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alp
 		return false, "A2AServerNotReady", msg
 	}
 
+	// Non-A2A agents require a model. If no model is assigned, mark as unavailable.
+	if agent.Spec.ModelRef == nil && !r.isA2AAgent(agent) {
+		return false, "ModelNotAssigned", "No model has been assigned to this agent"
+	}
+
 	// Check the status of the agent's model. Some agents (such as A2A agents) have a 'nil' model, and their status is not associated with model availability.
 	if agent.Spec.ModelRef != nil {
 		if ok, msg := r.checkModelDependency(ctx, agent); !ok {

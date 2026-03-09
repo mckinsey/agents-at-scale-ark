@@ -35,7 +35,7 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
 
   const modelName = agent.modelRef?.name || 'No model assigned';
   const isA2A = agent.isA2A || false;
-
+  const availabilityStatus = !isA2A && !agent.modelRef ? 'False' : agent.available;
   const IconComponent = getCustomIcon(
     agent.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON],
     Bot,
@@ -75,7 +75,7 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
         </div>
 
         <AvailabilityStatusBadge
-          status={agent.available}
+          status={availabilityStatus}
           eventsLink={`/events?kind=Agent&name=${agent.name}&page=1`}
         />
 

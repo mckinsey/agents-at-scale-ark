@@ -29,7 +29,7 @@ export function AgentCard({ agent, onDelete }: AgentCardProps) {
 
   const modelName = agent.modelRef?.name || 'No model assigned';
   const isA2A = agent.isA2A || false;
-
+  const availabilityStatus = !isA2A && !agent.modelRef ? 'False' : agent.available;
   const IconComponent = getCustomIcon(
     agent.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON],
     Bot,
@@ -76,7 +76,7 @@ export function AgentCard({ agent, onDelete }: AgentCardProps) {
               {isA2A && <span>A2A Agent</span>}
             </div>
             <AvailabilityStatusBadge
-              status={agent.available}
+              status={availabilityStatus}
               eventsLink={{
                 href: '/events',
                 query: {
