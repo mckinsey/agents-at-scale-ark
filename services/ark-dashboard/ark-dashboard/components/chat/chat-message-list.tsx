@@ -7,6 +7,7 @@ import { ChatMessage } from '@/components/chat/chat-message';
 import { GraphEnd } from '@/components/chat/graph-end';
 import { GraphTransition } from '@/components/chat/graph-transition';
 import { MaxTurnsEvent } from '@/components/chat/max-turns-event';
+import { SelectorFailureEvent } from '@/components/chat/selector-failure-event';
 import { SelectorTransition } from '@/components/chat/selector-transition';
 import { StrategyIndicator } from '@/components/chat/strategy-indicator';
 import { TerminationEvent } from '@/components/chat/termination-event';
@@ -72,6 +73,7 @@ export function ChatMessageList({
       terminateToolCall: unknown;
       terminateMessage: string | undefined;
       isMaxTurnsMessage: boolean;
+      isSelectorFailureMessage: boolean;
       hasToolCalls: boolean;
       hasContent: boolean;
       hasTermination: boolean;
@@ -148,17 +150,24 @@ export function ChatMessageList({
       const isMaxTurnsMessage =
         msg.role === 'system' && content.includes('maximum turns limit');
 
+      const isSelectorFailureMessage =
+        msg.role === 'system' && content.includes('Selector did not choose valid agent');
+
       const hasToolCalls =
         debugMode && !!toolCallsWithResults && toolCallsWithResults.length > 0;
       const hasContent =
-        !!content && content.trim().length > 0 && !isMaxTurnsMessage;
+        !!content &&
+        content.trim().length > 0 &&
+        !isMaxTurnsMessage &&
+        !isSelectorFailureMessage;
       const hasTermination = terminateToolCall !== undefined;
 
       if (
         !hasToolCalls &&
         !hasContent &&
         !hasTermination &&
-        !isMaxTurnsMessage
+        !isMaxTurnsMessage &&
+        !isSelectorFailureMessage
       ) {
         return;
       }
@@ -180,6 +189,7 @@ export function ChatMessageList({
         terminateToolCall,
         terminateMessage,
         isMaxTurnsMessage,
+        isSelectorFailureMessage,
         hasToolCalls,
         hasContent,
         hasTermination,
@@ -335,6 +345,9 @@ export function ChatMessageList({
                   {pm.content}
                 </div>
               ))}
+            {pm.isSelectorFailureMessage && (
+              <SelectorFailureEvent message={pm.content} />
+            )}
           </div>
         );
       })}

@@ -3,6 +3,7 @@ package genai
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"text/template"
@@ -25,6 +26,14 @@ type SelectorTemplateData struct {
 	Roles        string
 	Participants string
 	History      string
+}
+
+type InvalidAgentError struct {
+	SelectedName string
+}
+
+func (e *InvalidAgentError) Error() string {
+	return fmt.Sprintf("selector did not choose valid agent: returned %s", e.SelectedName)
 }
 
 func buildHistory(messages []Message) string {
@@ -143,13 +152,15 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 
 	// Fallback to first member if not found
 	if len(membersToSearch) > 0 {
+	    // This error will allow us to message to the user that the selector's response doesn't match an agent
+		err := &InvalidAgentError{SelectedName: selectedName}
 		fallback := membersToSearch[0]
 
 		// Avoid repeating same member
 		if fallback.GetName() == previousMember && len(membersToSearch) > 1 {
 			fallback = membersToSearch[1]
 		}
-		return fallback, nil
+		return fallback, err
 	}
 
 	return nil, fmt.Errorf("no members available")
@@ -241,10 +252,17 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 		// Determine next member based on graph constraints (if any)
 		nextMember, err := t.determineNextMember(ctx, messages, tmpl, previousMember, legalTransitions)
 		if err != nil {
-			if IsTerminateTeam(err) {
+			// Handle InvalidAgentError by adding warning message
+			var invalidAgentErr *InvalidAgentError
+			switch {
+			case errors.As(err, &invalidAgentErr):
+				warningMessage := NewSystemMessage(fmt.Sprintf("Selector did not choose valid agent: returned %s", invalidAgentErr.SelectedName))
+				newMessages = append(newMessages, warningMessage)
+			case IsTerminateTeam(err):
 				return newMessages, nil
+			default:
+				return newMessages, err
 			}
-			return newMessages, err
 		}
 
 		// Start turn-level telemetry span
