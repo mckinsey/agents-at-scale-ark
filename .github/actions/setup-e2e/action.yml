@@ -34,6 +34,10 @@ inputs:
     description: 'Install ark-evaluator service for evaluation tests'
     required: false
     default: 'false'
+  install-broker:
+    description: 'Install ark-broker service for streaming tests'
+    required: false
+    default: 'false'
 
 runs:
   using: 'composite'
@@ -76,7 +80,8 @@ runs:
       run: |
         ./.github/actions/setup-e2e/setup-local.sh \
           ${{ inputs.install-coverage == 'true' && '--install-coverage' || '' }} \
-          ${{ inputs.install-evaluator == 'true' && '--install-evaluator' || '' }}
+          ${{ inputs.install-evaluator == 'true' && '--install-evaluator' || '' }} \
+          ${{ inputs.install-broker == 'true' && '--install-broker' || '' }}
       env:
         DOCKER_CICD_CACHE_REGISTRY: ${{ inputs.ci-cache-registry || format('ghcr.io/{0}', github.repository_owner) }}
         DOCKER_CICD_CACHE_REGISTRY_USERNAME: ${{ inputs.ci-cache-registry-username || github.actor }}

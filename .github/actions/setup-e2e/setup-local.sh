@@ -15,6 +15,7 @@ REGISTRY_PASSWORD="${DOCKER_CICD_CACHE_REGISTRY_PASSWORD:?required}"
 ARK_IMAGE_TAG="${ARK_IMAGE_TAG:-local-test}"
 INSTALL_COVERAGE="false"
 INSTALL_EVALUATOR="false"
+INSTALL_BROKER="false"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -27,10 +28,15 @@ while [[ $# -gt 0 ]]; do
       INSTALL_EVALUATOR="true"
       shift
       ;;
+    --install-broker)
+      INSTALL_BROKER="true"
+      shift
+      ;;
     -h|--help)
       echo "Usage: $0 [--install-coverage] [--install-evaluator]"
       echo "  --install-coverage   Install coverage collection components"
       echo "  --install-evaluator  Install ark-evaluator service"
+      echo "  --install-broker     Install ark-broker service for streaming tests"
       exit 0
       ;;
     *)
@@ -45,6 +51,7 @@ echo "Registry: ${REGISTRY}"
 echo "ARK Image Tag: ${ARK_IMAGE_TAG}"
 echo "Install Coverage: ${INSTALL_COVERAGE}"
 echo "Install Evaluator: ${INSTALL_EVALUATOR}"
+echo "Install Broker: ${INSTALL_BROKER}"
 echo
 
 # Check kubectl context
@@ -69,15 +76,17 @@ fi
 echo "=== Installing Gateway API CRDs ==="
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
 
-echo "=== Installing ARK Broker ==="
-helm upgrade --install ark-broker "${REPO_ROOT}/services/ark-broker/chart" \
-  --namespace default \
-  --set app.image.repository="${REGISTRY}/ark-broker" \
-  --set app.image.tag="${ARK_IMAGE_TAG}" \
-  --set app.image.pullPolicy=IfNotPresent \
-  --set restartController.enabled=false \
-  --set memory.createMemoryCRD=false \
-  --wait --timeout=90s
+if [ "${INSTALL_BROKER}" = "true" ]; then
+  echo "=== Installing ARK Broker ==="
+  helm upgrade --install ark-broker "${REPO_ROOT}/services/ark-broker/chart" \
+    --namespace default \
+    --set app.image.repository="${REGISTRY}/ark-broker" \
+    --set app.image.tag="${ARK_IMAGE_TAG}" \
+    --set app.image.pullPolicy=IfNotPresent \
+    --set restartController.enabled=false \
+    --set memory.createMemoryCRD=false \
+    --wait --timeout=90s
+fi
 
 echo "=== Installing ARK Controller ==="
 cd "${REPO_ROOT}/ark"
