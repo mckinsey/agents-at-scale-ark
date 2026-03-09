@@ -180,6 +180,16 @@ func (r *AgentReconciler) checkToolDependencies(ctx context.Context, agent *arkv
 	return true, ""
 }
 
+// isA2AAgent returns true if the agent is owned by an A2AServer
+func (r *AgentReconciler) isA2AAgent(agent *arkv1alpha1.Agent) bool {
+	for _, ownerRef := range agent.GetOwnerReferences() {
+		if ownerRef.Kind == "A2AServer" && ownerRef.APIVersion == "ark.mckinsey.com/v1prealpha1" {
+			return true
+		}
+	}
+	return false
+}
+
 // checkA2AServerDependency validates A2AServer dependency for agents owned by A2AServers
 func (r *AgentReconciler) checkA2AServerDependency(ctx context.Context, agent *arkv1alpha1.Agent) (bool, string) {
 	// Check if agent has an A2AServer owner
