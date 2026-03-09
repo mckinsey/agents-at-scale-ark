@@ -66,6 +66,13 @@
   - **Docs**: updated walkthrough, argo-workflows, observability, design-principles, crd-design-guide, disclaimer, architecture diagrams
   - **Samples**: removed `evaluation_required` labels from agent-modernization queries, cleaned `rag-external-vectordb` sample data
   - **Other**: cleaned `ark-mcp/tools.py`, `ark-broker/test/manifests/a00-rbac.yaml`, `tests/helpers/wait-for-rbac.sh`
-- [ ] Search for anything else we need to do, add it to this list here
+- [x] Search for anything else we need to do, add it to this list here
+  - Searched entire codebase for `evaluation`, `evaluator`, `evals`, `ark-evaluator` patterns
+  - Found and fixed 3 stale references:
+    - `CLAUDE.md` — removed `ark-evaluator/` from services list
+    - `.claude/skills/analysis/SKILL.md` — removed `ark-evaluator/` from services list
+    - `.claude/skills/ark-sdk-development/SKILL.md` — removed `evaluators.py` row from naming pattern table
+  - Verified remaining matches are benign (CHANGELOG history, generic "evaluate" verb usage in agent prompts, Langfuse description, disclaimer)
+  - No additional cleanup tasks needed
 - [ ] Verify all integration tests pass
 - [ ] Create evidence (screenshots, recordings, test results)
