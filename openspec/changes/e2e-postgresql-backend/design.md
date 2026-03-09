@@ -12,8 +12,8 @@ The three existing E2E jobs are: `e2e-tests-standard` (selector `!evaluated,!llm
 - Reuse existing `ark-storage-dev` chart for PostgreSQL deployment in CI
 
 **Non-Goals:**
-- Writing new tests specific to PostgreSQL behavior
-- Testing PostgreSQL-specific features (LISTEN/NOTIFY, connection pooling)
+- Writing tests for PostgreSQL-specific data semantics (LISTEN/NOTIFY timing, connection pooling, PG-native features)
+- Testing PostgreSQL-specific features beyond what the aggregated API server exposes
 - Changing the default deployment mode
 - Performance benchmarking between backends
 
@@ -58,3 +58,5 @@ The ark-controller Helm chart already conditionally skips CRDs when `storage.bac
 - **[PostgreSQL startup adds ~30s to setup]** → Minimal impact. The `helm install --wait` handles readiness.
 - **[Flaky PostgreSQL pod in CI]** → Mitigated by `--wait --timeout` on helm install. The `ark-storage-dev` chart uses a simple single-pod deployment with no complex dependencies.
 - **[Tests that assume etcd-specific behavior]** → Investigation shows no chainsaw tests reference Ark CRDs directly. Only `prometheus-tls-config` touches CRDs (cert-manager, not Ark).
+- **[LISTEN/NOTIFY latency vs etcd watches]** → etcd watches are native to Kubernetes; PostgreSQL watches are synthesized over LISTEN/NOTIFY with a different latency profile. Chainsaw asserts with tight timeouts may pass consistently on etcd but flake on PostgreSQL due to event delivery timing, not feature breakage. If PG matrix jobs show intermittent failures, investigate watch notification latency before assuming a regression.
+- **[Silent fallback to etcd]** → If the `storage.backend=postgresql` Helm value is dropped or misspelled, tests pass against etcd and give false confidence. A post-deploy verification step is required to confirm the controller is actually running with the PostgreSQL backend.

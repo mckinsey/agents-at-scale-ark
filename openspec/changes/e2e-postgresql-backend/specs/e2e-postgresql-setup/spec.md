@@ -13,6 +13,19 @@ The `setup-local.sh` script SHALL accept a `--storage-backend` flag with values 
 - **AND** wait for the PostgreSQL pod to be ready
 - **AND** install the ark-controller Helm chart with `storage.backend=postgresql` and PostgreSQL connection values matching the `ark-storage-dev` chart defaults
 
+### Requirement: PostgreSQL backend is verified after deploy
+After deploying with `--storage-backend postgresql`, the setup script SHALL verify the controller is actually running with the PostgreSQL backend.
+
+#### Scenario: Backend verification succeeds
+- **WHEN** `setup-local.sh` completes the ark-controller install with `--storage-backend postgresql`
+- **THEN** the script SHALL verify the active storage backend is PostgreSQL (e.g., by inspecting controller pod logs or a diagnostic endpoint)
+- **AND** fail the setup step if the verification does not confirm PostgreSQL is active
+
+#### Scenario: Backend verification prevents silent fallback
+- **WHEN** the `storage.backend=postgresql` Helm value is dropped or misspelled
+- **THEN** the verification step SHALL detect the controller is not using PostgreSQL
+- **AND** fail the setup with a clear error message
+
 ### Requirement: setup-e2e action exposes storage-backend input
 The `setup-e2e` composite action SHALL accept a `storage-backend` input parameter and forward it to `setup-local.sh`.
 
