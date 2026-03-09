@@ -40,4 +40,7 @@ spec:
       # Analyzer must go to writer
       - from: analyzer
         to: writer
+      # Writer can go back to coordinator to review
+      - from: writer
+        to: coordinator
 
