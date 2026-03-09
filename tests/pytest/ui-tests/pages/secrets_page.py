@@ -107,14 +107,14 @@ class SecretsPage(BasePage):
         save_button.wait_for(state="visible", timeout=5000)
         save_button.click(force=True)
         
-        self.wait_for_modal_close()
-        self.wait_for_load_state("domcontentloaded")
-        
         try:
-            self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
+            self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=10000)
             popup_visible = True
         except:
             popup_visible = False
+        
+        self.wait_for_modal_close()
+        self.wait_for_load_state("domcontentloaded")
         
         self.navigate_to_secrets_tab()
         in_table = self.is_secret_in_table(secret_name)
