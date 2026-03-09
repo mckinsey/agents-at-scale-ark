@@ -372,7 +372,7 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 	})
 }
 
-func TestValidateBaseURL(t *testing.T) { //nolint:gocognit
+func TestValidateBaseURL(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 	t.Run("Block non-network schemes (file://, ftp://, etc.)", func(t *testing.T) {
 		_ = os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
 		_ = os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
@@ -621,6 +621,35 @@ func TestValidateBaseURL(t *testing.T) { //nolint:gocognit
 				err := ValidateBaseURL(tt.url)
 				if (err != nil) != tt.wantError {
 					t.Errorf("ValidateBaseURL() error = %v, wantError %v (reason: %s)", err, tt.wantError, tt.reason)
+				}
+			})
+		}
+	})
+
+	t.Run("Loopback and metadata CANNOT be bypassed via allowlist", func(t *testing.T) {
+		_ = os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
+		_ = os.Setenv("ALLOWED_PRIVATE_IP_RANGES", "127.0.0.0/8\n169.254.0.0/16\n10.0.0.0/8")
+		defer func() { _ = os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES") }()
+
+		tests := []struct {
+			name string
+			url  string
+		}{
+			{"Loopback 127.0.0.1 in allowlist", "https://127.0.0.1/api"},
+			{"Loopback 127.1.1.1 in allowlist", "https://127.1.1.1/api"},
+			{"IPv6 loopback ::1 in allowlist", "https://[::1]/api"},
+			{"Metadata 169.254.169.254 in allowlist", "https://169.254.169.254/meta-data"},
+			{"Metadata 169.254.0.1 in allowlist", "https://169.254.0.1/meta"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := ValidateBaseURL(tt.url)
+				if err == nil {
+					t.Fatalf("expected error for %s even with allowlist, got nil", tt.url)
+				}
+				if !contains(err.Error(), "loopback") && !contains(err.Error(), "metadata") {
+					t.Errorf("expected loopback/metadata error, got: %v", err)
 				}
 			})
 		}

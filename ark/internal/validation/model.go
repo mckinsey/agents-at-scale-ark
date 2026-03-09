@@ -99,7 +99,17 @@ func ValidateBaseURL(baseURL string) error {
 }
 
 func validateIPAddress(ip net.IP) error {
-	// Check private IP allowlist first (if configured)
+	// Block loopback addresses (cannot be overridden by allowlist)
+	if ip.IsLoopback() {
+		return fmt.Errorf("loopback IP addresses are not allowed: %s", ip.String())
+	}
+
+	// Block cloud metadata service IPs (cannot be overridden by allowlist)
+	if strings.HasPrefix(ip.String(), "169.254.") {
+		return fmt.Errorf("metadata service IP range is not allowed: %s", ip.String())
+	}
+
+	// Check private IP allowlist (if configured)
 	allowedRanges := getAllowedPrivateIPRanges()
 	if len(allowedRanges) > 0 {
 		for _, allowedRange := range allowedRanges {
@@ -109,19 +119,9 @@ func validateIPAddress(ip net.IP) error {
 		}
 	}
 
-	// Block loopback addresses (127.0.0.1, ::1)
-	if ip.IsLoopback() {
-		return fmt.Errorf("loopback IP addresses are not allowed: %s", ip.String())
-	}
-
 	// Block private IP ranges (RFC 1918: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
 	if ip.IsPrivate() {
 		return fmt.Errorf("private IP addresses are not allowed: %s (use ALLOWED_PRIVATE_IP_RANGES to allow specific ranges)", ip.String())
-	}
-
-	// Block cloud metadata service IPs (169.254.169.254)
-	if strings.HasPrefix(ip.String(), "169.254.") {
-		return fmt.Errorf("metadata service IP range is not allowed: %s", ip.String())
 	}
 
 	return nil
