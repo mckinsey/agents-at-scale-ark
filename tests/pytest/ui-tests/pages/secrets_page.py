@@ -65,6 +65,10 @@ class SecretsPage(BasePage):
         self.page.keyboard.press("Escape")
     
     def is_secret_in_table(self, secret_name: str, retries: int = 3) -> bool:
+        self.page.reload()
+        self.wait_for_navigation_complete()
+        self.wait_for_element(self.ADD_SECRET_BUTTON, timeout=10000)
+        self.wait_for_element_hidden(self.LOADING_INDICATOR, timeout=10000)
         for attempt in range(retries):
             try:
                 self.page.get_by_text(secret_name, exact=False).first.wait_for(state="visible", timeout=15000)
