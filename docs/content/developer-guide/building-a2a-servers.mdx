@@ -166,6 +166,39 @@ devspace dev
 ark agent query langchain-weather-agent "What's the weather in Chicago?"
 ```
 
+## Declaring Extension Capabilities
+
+A2A servers can declare which Ark extensions they support via the AgentCard's `capabilities.extensions` field. When Ark discovers the AgentCard, it reads these URIs and writes them to the `ark.mckinsey.com/a2a-supported-extensions` annotation on the created Agent. This controls which extension metadata Ark includes when calling the agent.
+
+In your AgentCard response, add the `extensions` array:
+
+```json
+{
+  "name": "my-agent",
+  "description": "My custom agent",
+  "url": "http://my-agent:8000",
+  "version": "1.0.0",
+  "capabilities": {
+    "streaming": true,
+    "extensions": [
+      {
+        "uri": "https://ark.mckinsey.com/extensions/history/v1",
+        "description": "Accepts conversation history"
+      },
+      {
+        "uri": "https://ark.mckinsey.com/extensions/permissions/v1",
+        "description": "Accepts delegated permissions"
+      }
+    ]
+  },
+  "skills": []
+}
+```
+
+If your agent does not declare any extensions, Ark uses default behavior: conversation history is included and permissions are excluded. Explicitly declaring extensions gives you precise control over what metadata your agent receives.
+
+See [A2A Native Execution - Extension Negotiation](/reference/a2a-native-execution#extension-negotiation-and-gating) for the full gating rules and policy defaults.
+
 ## Timeout Configuration
 
 ARK provides flexible timeout configuration for A2A agent execution through multiple layers:

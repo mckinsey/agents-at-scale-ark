@@ -313,6 +313,33 @@ This enables external systems to invoke Ark agents using A2A without Ark-specifi
 
 ## Part 5: A2A Extensions
 
+### Extension Negotiation and Gating
+
+Ark uses a URI-driven extension policy model to determine which extension metadata is included in A2A calls. Each extension is identified by a URI key (e.g. `https://ark.mckinsey.com/extensions/history/v1`) and governed by a policy that declares its default behavior.
+
+**Discovery flow:**
+
+1. A2AServer controller discovers `capabilities.extensions` from the remote AgentCard.
+2. Extension URIs are normalized (trimmed, deduplicated, sorted) and written as a JSON array to `ark.mckinsey.com/a2a-supported-extensions` on the created Agent.
+3. At execution time, the annotation is parsed and each extension URI is checked against registered policies.
+
+**Gating rules:**
+
+| Condition | Behavior |
+|---|---|
+| `a2a-supported-extensions` annotation is **absent** | Each extension applies its registered default policy (`AllowedByDefault`). |
+| `a2a-supported-extensions` annotation is **present** | Only URIs explicitly listed are allowed. Unlisted URIs are excluded regardless of their default policy. |
+| Unknown URI in metadata but not registered | Excluded when annotation is absent. Included when explicitly declared. |
+
+**Registered extension policies:**
+
+| Extension URI | Default when undeclared |
+|---|---|
+| `https://ark.mckinsey.com/extensions/history/v1` | Allowed |
+| `https://ark.mckinsey.com/extensions/permissions/v1` | Denied |
+
+To add a new extension, register a policy entry with the URI and default behavior. No changes to core gating logic are needed.
+
 ### History Propagation
 
 **Purpose**: Conversation continuity across distributed agents without shared storage.

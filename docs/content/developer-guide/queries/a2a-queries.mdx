@@ -73,6 +73,15 @@ kubectl describe a2atask $(kubectl get a2atasks -l ark.mckinsey.com/query-name=e
 
 The A2ATask will show phase `completed` with the message history and artifacts from the A2A protocol interaction.
 
+## Extension Metadata
+
+When Ark sends a message to an A2A agent, it may include extension metadata keyed by URI (e.g. conversation history, delegated permissions). Which extensions are included depends on the agent's `ark.mckinsey.com/a2a-supported-extensions` annotation:
+
+- **No annotation**: History is included by default. Permissions are excluded unless explicitly declared.
+- **Annotation present**: Only URIs listed in the annotation receive metadata.
+
+This annotation is populated automatically from the AgentCard's `capabilities.extensions` during A2AServer discovery. See [Agent - Supported Extensions](/reference/resources/agent#a2a-supported-extensions-annotation) for the annotation format and [A2A Native Execution - Extension Negotiation](/reference/a2a-native-execution#extension-negotiation-and-gating) for the full gating rules.
+
 ## Stateful Messages
 
 A2A servers respond to messages with a `contextId`. ARK stores this ID in the query's `status.a2a.contextId` field. To provide continuity across a set of interactions, set the `ark.mckinsey.com/a2a-context-id` annotation when creating queries, as per the [A2A Protocol - Group Related Interactions documentation](https://a2a-protocol.org/latest/topics/life-of-a-task/#group-related-interactions).

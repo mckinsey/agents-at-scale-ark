@@ -138,6 +138,7 @@ func getA2ASupportedExtensions(agentAnnotations map[string]string) map[string]st
 	}
 	result := make(map[string]struct{}, len(values))
 	for _, value := range values {
+		value = strings.TrimSpace(value)
 		if value != "" {
 			result[value] = struct{}{}
 		}
@@ -148,16 +149,40 @@ func getA2ASupportedExtensions(agentAnnotations map[string]string) map[string]st
 	return result
 }
 
-func supportsA2AExtension(agentAnnotations map[string]string, extension string) bool {
-	if extension == "" {
+type a2aExtensionPolicy struct {
+	URI              string
+	AllowedByDefault bool
+}
+
+var a2aExtensionPolicies = []a2aExtensionPolicy{
+	{URI: a2aHistoryExtensionKey, AllowedByDefault: true},
+	{URI: a2aPermissionsExtensionKey, AllowedByDefault: false},
+}
+
+func isA2AExtensionAllowed(uri string, supported map[string]struct{}) bool {
+	if uri == "" {
 		return false
 	}
-	supported := getA2ASupportedExtensions(agentAnnotations)
-	if len(supported) == 0 {
+	if supported == nil {
+		for _, p := range a2aExtensionPolicies {
+			if p.URI == uri {
+				return p.AllowedByDefault
+			}
+		}
 		return false
 	}
-	_, ok := supported[extension]
+	_, ok := supported[uri]
 	return ok
+}
+
+func supportsA2AExtension(agentAnnotations map[string]string, extension string) bool {
+	supported := getA2ASupportedExtensions(agentAnnotations)
+	return isA2AExtensionAllowed(extension, supported)
+}
+
+func supportsA2AHistoryExtension(agentAnnotations map[string]string) bool {
+	supported := getA2ASupportedExtensions(agentAnnotations)
+	return isA2AExtensionAllowed(a2aHistoryExtensionKey, supported)
 }
 
 func parseA2APermissions(raw string) (map[string]interface{}, error) {
@@ -175,13 +200,14 @@ func parseA2APermissions(raw string) (map[string]interface{}, error) {
 }
 
 func buildA2AMetadata(agentAnnotations map[string]string, history []protocol.Message, includeHistory bool) (map[string]interface{}, error) {
-	supportsPermissions := supportsA2AExtension(agentAnnotations, a2aPermissionsExtensionKey)
-	supportsHistory := supportsA2AExtension(agentAnnotations, a2aHistoryExtensionKey)
+	supported := getA2ASupportedExtensions(agentAnnotations)
+	supportsPermissions := isA2AExtensionAllowed(a2aPermissionsExtensionKey, supported)
+	supportsHistory := isA2AExtensionAllowed(a2aHistoryExtensionKey, supported)
 	metadata, err := parseA2AExtensionsMetadata(agentAnnotations)
 	if err != nil {
 		return nil, err
 	}
-	metadata = filterUnsupportedA2AExtensions(metadata, supportsPermissions, supportsHistory)
+	metadata = filterUnsupportedA2AExtensions(metadata, supported)
 
 	metadata, err = addA2APermissionsMetadata(metadata, agentAnnotations, supportsPermissions)
 	if err != nil {
@@ -274,15 +300,17 @@ func parseA2AExtensionsMetadata(agentAnnotations map[string]string) (map[string]
 	return metadata, nil
 }
 
-func filterUnsupportedA2AExtensions(metadata map[string]interface{}, supportsPermissions, supportsHistory bool) map[string]interface{} {
+func filterUnsupportedA2AExtensions(metadata map[string]interface{}, supported map[string]struct{}) map[string]interface{} {
 	if metadata == nil {
 		return nil
 	}
-	if !supportsPermissions {
-		delete(metadata, a2aPermissionsExtensionKey)
-	}
-	if !supportsHistory {
-		delete(metadata, a2aHistoryExtensionKey)
+	for key := range metadata {
+		if !isA2AExtensionURI(key) {
+			continue
+		}
+		if !isA2AExtensionAllowed(key, supported) {
+			delete(metadata, key)
+		}
 	}
 	if len(metadata) == 0 {
 		return nil

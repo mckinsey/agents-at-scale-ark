@@ -352,19 +352,20 @@ export function useChatSession({
           const converted: ExtendedChatMessage[] = [];
 
           completedQueryMessages.forEach(msg => {
-            if (msg.role === 'system') {
+            const normalizedRole = msg.role === 'agent' ? 'assistant' : msg.role;
+            if (normalizedRole === 'system') {
               converted.push({
                 role: 'system',
                 content: msg.content || '',
               } as ExtendedChatMessage);
-            } else if (msg.role === 'tool') {
+            } else if (normalizedRole === 'tool') {
               converted.push({
                 role: 'tool',
                 content: msg.content || '',
                 tool_call_id:
                   (msg as { tool_call_id?: string }).tool_call_id || '',
               } as ExtendedChatMessage);
-            } else if (msg.role === 'assistant') {
+            } else if (normalizedRole === 'assistant') {
               const toolCalls = (
                 msg as {
                   tool_calls?: Array<{
@@ -434,13 +435,15 @@ export function useChatSession({
                 updateChatMessages(prev => [
                   ...prev,
                   ...result.messages!.map((msg): ExtendedChatMessage => {
-                    if (msg.role === 'tool') {
+                    const normalizedRole =
+                      msg.role === 'agent' ? 'assistant' : msg.role;
+                    if (normalizedRole === 'tool') {
                       return {
                         role: 'tool',
                         content: msg.content || '',
                         tool_call_id: msg.tool_call_id || '',
                       } as ExtendedChatMessage;
-                    } else if (msg.role === 'assistant') {
+                    } else if (normalizedRole === 'assistant') {
                       const baseMsg: {
                         role: 'assistant';
                         content: string;
@@ -465,7 +468,7 @@ export function useChatSession({
                         }));
                       }
                       return baseMsg as ExtendedChatMessage;
-                    } else if (msg.role === 'user') {
+                    } else if (normalizedRole === 'user') {
                       const baseMsg = {
                         role: 'user' as const,
                         content: msg.content || '',

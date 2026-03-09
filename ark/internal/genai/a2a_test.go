@@ -303,6 +303,28 @@ func TestBuildA2AMetadataWithHistory(t *testing.T) {
 	assert.Equal(t, 1, historyExt.MaxWindow)
 }
 
+func TestBuildA2AMetadataWithHistoryWithoutDeclaredSupportedExtensions(t *testing.T) {
+	annotations := map[string]string{
+		arkann.A2AHistoryEnabled: TrueString,
+	}
+	first, err := OpenAIToA2AMessage(NewUserMessage("first"))
+	assert.NoError(t, err)
+	second, err := OpenAIToA2AMessage(NewAssistantMessage("second"))
+	assert.NoError(t, err)
+	history := []protocol.Message{first, second}
+
+	metadata, err := buildA2AMetadata(annotations, history, true)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, metadata)
+	rawHistory, ok := metadata[a2aHistoryExtensionKey]
+	assert.True(t, ok)
+	historyExt, ok := rawHistory.(HistoryExtensionV1)
+	assert.True(t, ok)
+	assert.Len(t, historyExt.Messages, 2)
+	assert.False(t, historyExt.Truncated)
+}
+
 func TestBuildA2AMetadataPermissions(t *testing.T) {
 	permissions := `{"subject":"user-123","scopes":["agents:read"]}`
 	annotations := map[string]string{
@@ -503,4 +525,146 @@ func TestValidateTokenTypeMissingWhenTokenPresent(t *testing.T) {
 func TestValidateTokenTypeNoToken(t *testing.T) {
 	perms := A2APermissions{Subject: "user"}
 	assert.NoError(t, ValidateTokenType(perms))
+}
+
+func TestIsA2AExtensionAllowedNilSupportUsesPolicy(t *testing.T) {
+	assert.True(t, isA2AExtensionAllowed(a2aHistoryExtensionKey, nil), "history should be allowed by default")
+	assert.False(t, isA2AExtensionAllowed(a2aPermissionsExtensionKey, nil), "permissions should be denied by default")
+}
+
+func TestIsA2AExtensionAllowedUnknownURIDeniedByDefault(t *testing.T) {
+	assert.False(t, isA2AExtensionAllowed("https://example.com/extensions/custom/v1", nil))
+}
+
+func TestIsA2AExtensionAllowedStrictWhenDeclared(t *testing.T) {
+	supported := map[string]struct{}{
+		a2aPermissionsExtensionKey: {},
+	}
+	assert.True(t, isA2AExtensionAllowed(a2aPermissionsExtensionKey, supported))
+	assert.False(t, isA2AExtensionAllowed(a2aHistoryExtensionKey, supported), "history should be denied when not in declared set")
+}
+
+func TestIsA2AExtensionAllowedEmptyString(t *testing.T) {
+	assert.False(t, isA2AExtensionAllowed("", nil))
+	supported := map[string]struct{}{a2aHistoryExtensionKey: {}}
+	assert.False(t, isA2AExtensionAllowed("", supported))
+}
+
+func TestIsA2AExtensionAllowedCustomURIInDeclaredSet(t *testing.T) {
+	customURI := "https://example.com/extensions/future/v1"
+	supported := map[string]struct{}{
+		a2aHistoryExtensionKey: {},
+		customURI:              {},
+	}
+	assert.True(t, isA2AExtensionAllowed(customURI, supported))
+	assert.True(t, isA2AExtensionAllowed(a2aHistoryExtensionKey, supported))
+	assert.False(t, isA2AExtensionAllowed(a2aPermissionsExtensionKey, supported))
+}
+
+func TestGetA2ASupportedExtensionsMalformedJSON(t *testing.T) {
+	ann := map[string]string{
+		arkann.A2ASupportedExtensions: `not-json`,
+	}
+	result := getA2ASupportedExtensions(ann)
+	assert.Nil(t, result)
+}
+
+func TestGetA2ASupportedExtensionsEmptyArray(t *testing.T) {
+	ann := map[string]string{
+		arkann.A2ASupportedExtensions: `[]`,
+	}
+	result := getA2ASupportedExtensions(ann)
+	assert.Nil(t, result)
+}
+
+func TestGetA2ASupportedExtensionsBlankEntries(t *testing.T) {
+	ann := map[string]string{
+		arkann.A2ASupportedExtensions: `["", " ", "https://ark.mckinsey.com/extensions/history/v1"]`,
+	}
+	result := getA2ASupportedExtensions(ann)
+	require.Len(t, result, 1)
+	_, ok := result[a2aHistoryExtensionKey]
+	assert.True(t, ok)
+}
+
+func TestFilterUnsupportedA2AExtensionsGeneric(t *testing.T) {
+	metadata := map[string]interface{}{
+		a2aHistoryExtensionKey:     map[string]interface{}{"messages": []interface{}{}},
+		a2aPermissionsExtensionKey: map[string]interface{}{"subject": "user-1"},
+		"non-uri-key":              "kept",
+	}
+	supported := map[string]struct{}{
+		a2aHistoryExtensionKey: {},
+	}
+	result := filterUnsupportedA2AExtensions(metadata, supported)
+	assert.Contains(t, result, a2aHistoryExtensionKey)
+	assert.NotContains(t, result, a2aPermissionsExtensionKey)
+	assert.Contains(t, result, "non-uri-key")
+}
+
+func TestFilterUnsupportedA2AExtensionsNilSupported(t *testing.T) {
+	metadata := map[string]interface{}{
+		a2aHistoryExtensionKey:     map[string]interface{}{"messages": []interface{}{}},
+		a2aPermissionsExtensionKey: map[string]interface{}{"subject": "user-1"},
+	}
+	result := filterUnsupportedA2AExtensions(metadata, nil)
+	assert.Contains(t, result, a2aHistoryExtensionKey, "history allowed by default")
+	assert.NotContains(t, result, a2aPermissionsExtensionKey, "permissions denied by default")
+}
+
+func TestFilterUnsupportedA2AExtensionsNilMetadata(t *testing.T) {
+	assert.Nil(t, filterUnsupportedA2AExtensions(nil, nil))
+}
+
+func TestBuildA2AMetadataHistoryExplicitlyDisabledByDeclaration(t *testing.T) {
+	ann := map[string]string{
+		arkann.A2AHistoryEnabled:      TrueString,
+		arkann.A2ASupportedExtensions: `["https://ark.mckinsey.com/extensions/permissions/v1"]`,
+	}
+	msg, _ := OpenAIToA2AMessage(NewUserMessage("hello"))
+	metadata, err := buildA2AMetadata(ann, []protocol.Message{msg}, true)
+	assert.NoError(t, err)
+	if metadata != nil {
+		_, ok := metadata[a2aHistoryExtensionKey]
+		assert.False(t, ok, "history must be excluded when not in declared extensions")
+	}
+}
+
+func TestBuildA2AMetadataBothExtensionsDeclared(t *testing.T) {
+	permissions := `{"subject":"user-1","scopes":["read"]}`
+	ann := map[string]string{
+		arkann.A2AHistoryEnabled:      TrueString,
+		arkann.A2APermissions:         permissions,
+		arkann.A2ASupportedExtensions: `["https://ark.mckinsey.com/extensions/history/v1","https://ark.mckinsey.com/extensions/permissions/v1"]`,
+	}
+	msg, _ := OpenAIToA2AMessage(NewUserMessage("hello"))
+	metadata, err := buildA2AMetadata(ann, []protocol.Message{msg}, true)
+	assert.NoError(t, err)
+	require.NotNil(t, metadata)
+	_, hasHistory := metadata[a2aHistoryExtensionKey]
+	assert.True(t, hasHistory)
+	_, hasPerms := metadata[a2aPermissionsExtensionKey]
+	assert.True(t, hasPerms)
+}
+
+func TestFutureExtensionPolicyRegistration(t *testing.T) {
+	futureURI := "https://ark.mckinsey.com/extensions/audit/v1"
+
+	originalPolicies := make([]a2aExtensionPolicy, len(a2aExtensionPolicies))
+	copy(originalPolicies, a2aExtensionPolicies)
+	defer func() { a2aExtensionPolicies = originalPolicies }()
+
+	a2aExtensionPolicies = append(a2aExtensionPolicies, a2aExtensionPolicy{
+		URI:              futureURI,
+		AllowedByDefault: true,
+	})
+
+	assert.True(t, isA2AExtensionAllowed(futureURI, nil), "future extension with AllowedByDefault=true should be allowed when undeclared")
+	assert.True(t, isA2AExtensionAllowed(a2aHistoryExtensionKey, nil), "existing policies unaffected")
+	assert.False(t, isA2AExtensionAllowed(a2aPermissionsExtensionKey, nil), "existing policies unaffected")
+
+	declared := map[string]struct{}{
+		a2aHistoryExtensionKey: {},
+	}
+	assert.False(t, isA2AExtensionAllowed(futureURI, declared), "future extension not in declared set should be denied")
 }

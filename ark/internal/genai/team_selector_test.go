@@ -539,3 +539,17 @@ func TestBuildA2AHistoryFallsBackToAssistantWithoutMetadata(t *testing.T) {
 
 	assert.Contains(t, history, "# assistant:\nresponse without name")
 }
+
+func TestResolveSelectedMemberNamePrefersExplicitChoiceOverFirstMention(t *testing.T) {
+	members := []TeamMember{
+		&mockTeamMember{name: "researcher"},
+		&mockTeamMember{name: "analyzer"},
+	}
+
+	selected := resolveSelectedMemberName(
+		"I considered researcher, but I choose analyzer as the next respondent.",
+		members,
+	)
+
+	assert.Equal(t, "analyzer", selected)
+}

@@ -74,4 +74,6 @@ When an A2AServer is created:
    - Owner reference to the A2AServer
    - `executionEngine.name: a2a`
    - Annotations identifying the A2AServer
-3. **Status Updates**: Controller continuously monitors server health
+3. **Extension Capability Discovery**: If the AgentCard declares `capabilities.extensions`, the controller extracts the extension URIs, normalizes them (trim whitespace, deduplicate, sort), and writes them as a JSON array to the `ark.mckinsey.com/a2a-supported-extensions` annotation on the created Agent. If the AgentCard declares no extensions, the A2AServer's own `a2a-supported-extensions` annotation (if set) is inherited as a fallback.
+4. **Reconciliation**: The controller re-polls on each `pollInterval` cycle. If the discovered extension set changes, the Agent annotation is updated. If the AgentCard stops declaring extensions, the annotation is removed.
+5. **Status Updates**: Controller continuously monitors server health

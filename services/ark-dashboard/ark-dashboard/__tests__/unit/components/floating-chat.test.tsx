@@ -195,6 +195,52 @@ describe('FloatingChat', () => {
       });
     });
 
+    it('renders agent-role completedQuery messages as assistant chat output', async () => {
+      const user = userEvent.setup();
+      const rawMessages = JSON.stringify([
+        {
+          role: 'agent',
+          content: 'Delegated answer from team member',
+          name: 'researcher-agent',
+        },
+      ]);
+
+      vi.mocked(chatService.streamChatResponse).mockImplementation(
+        async function* () {
+          yield {
+            id: 'chatcmpl-final',
+            ark: {
+              completedQuery: {
+                status: {
+                  phase: 'done',
+                  response: {
+                    raw: rawMessages,
+                  },
+                },
+              },
+            },
+            choices: [{ delta: {} }],
+          };
+        },
+      );
+
+      renderFloatingChat(defaultProps);
+
+      const input = screen.getByPlaceholderText('Type your message...');
+      await user.type(input, 'Who should respond?');
+
+      const sendButton = screen.getByRole('button', { name: /send/i });
+      await user.click(sendButton);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText('Delegated answer from team member'),
+        ).toBeInTheDocument();
+      });
+
+      expect(screen.getByText('researcher-agent')).toBeInTheDocument();
+    });
+
     it('should disable input while streaming', async () => {
       const user = userEvent.setup();
 

@@ -275,6 +275,8 @@ metadata:
     ark.mckinsey.com/a2a-server-address: http://ark-agentcore-bridge.default.svc.cluster.local:80/a2a/agent/aws_operator_agent-jg0yD9Hv2n
     # Skills discovered from the A2A server
     ark.mckinsey.com/a2a-server-skills: '[{"name":"describe_ec2_instances","description":"List and describe EC2 instances"}]'
+    # Extensions discovered from the AgentCard capabilities (JSON array of URIs)
+    ark.mckinsey.com/a2a-supported-extensions: '["https://ark.mckinsey.com/extensions/history/v1","https://ark.mckinsey.com/extensions/permissions/v1"]'
 spec:
   description: AWS operations agent with read-only access to AWS services
   prompt: You are aws_operator_agent. AWS operations agent with read-only access to AWS services
@@ -285,6 +287,24 @@ spec:
   # When modelRef is set, the agent will only show as Available if both the model and A2A server are available.
   # Otherwise, only the A2A server availability is checked.
 ```
+
+### A2A Supported Extensions Annotation
+
+The `ark.mckinsey.com/a2a-supported-extensions` annotation controls which A2A extension metadata is included when Ark calls an A2A agent. The value is a JSON array of extension URIs:
+
+```yaml
+ark.mckinsey.com/a2a-supported-extensions: '["https://ark.mckinsey.com/extensions/history/v1"]'
+```
+
+**Runtime behavior:**
+
+| Annotation state | Effect |
+|---|---|
+| **Absent** | Each extension uses its default policy. History is included; permissions are excluded. |
+| **Present with URIs** | Only declared URIs receive metadata. Extensions not listed are excluded. |
+| **Present but empty `[]`** | All extensions are excluded. |
+
+This annotation is populated automatically by the [A2AServer](/reference/resources/a2aserver) controller from the AgentCard's `capabilities.extensions`. It can also be set manually on an Agent for agents not managed by an A2AServer.
 
 ## Reconciliation Behavior
 

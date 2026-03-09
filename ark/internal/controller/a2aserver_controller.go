@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -253,7 +254,6 @@ func (r *A2AServerReconciler) createAgentWithSkills(ctx context.Context, a2aServ
 }
 
 func (r *A2AServerReconciler) buildAgentWithSkills(a2aServer *arkv1prealpha1.A2AServer, agentCard *genai.A2AAgentCard, agentName string) *arkv1alpha1.Agent {
-	// Build skills annotation JSON
 	skillsJSON, _ := json.Marshal(agentCard.Skills)
 
 	streamingSupported := agentCard.Capabilities.Streaming != nil && *agentCard.Capabilities.Streaming
@@ -271,6 +271,10 @@ func (r *A2AServerReconciler) buildAgentWithSkills(a2aServer *arkv1prealpha1.A2A
 		if strings.HasPrefix(key, annotations.ARKPrefix) {
 			agentAnnotations[key] = value
 		}
+	}
+
+	if extensionsJSON := extractSupportedExtensions(agentCard); extensionsJSON != "" {
+		agentAnnotations[annotations.A2ASupportedExtensions] = extensionsJSON
 	}
 
 	agent := &arkv1alpha1.Agent{
@@ -295,6 +299,51 @@ func (r *A2AServerReconciler) buildAgentWithSkills(a2aServer *arkv1prealpha1.A2A
 	return agent
 }
 
+func extractSupportedExtensions(agentCard *genai.A2AAgentCard) string {
+	if len(agentCard.Capabilities.Extensions) == 0 {
+		return ""
+	}
+	seen := make(map[string]struct{})
+	uris := make([]string, 0, len(agentCard.Capabilities.Extensions))
+	for _, ext := range agentCard.Capabilities.Extensions {
+		uri := strings.TrimSpace(ext.URI)
+		if uri == "" {
+			continue
+		}
+		if _, exists := seen[uri]; exists {
+			continue
+		}
+		seen[uri] = struct{}{}
+		uris = append(uris, uri)
+	}
+	if len(uris) == 0 {
+		return ""
+	}
+	sort.Strings(uris)
+	data, err := json.Marshal(uris)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+var managedA2AAnnotationKeys = []string{
+	annotations.A2AServerName,
+	annotations.A2AServerAddress,
+	annotations.A2AServerSkills,
+	annotations.A2AStreamingSupported,
+	annotations.A2ASupportedExtensions,
+}
+
+func a2aAgentChanged(existing, desired *arkv1alpha1.Agent) bool {
+	for _, key := range managedA2AAnnotationKeys {
+		if existing.Annotations[key] != desired.Annotations[key] {
+			return true
+		}
+	}
+	return existing.Spec.Description != desired.Spec.Description || existing.Spec.Prompt != desired.Spec.Prompt
+}
+
 func (r *A2AServerReconciler) createOrUpdateAgent(ctx context.Context, agent *arkv1alpha1.Agent, agentName, a2aServerName string) (changed bool, err error) {
 	log := logf.FromContext(ctx)
 	existingAgent := &arkv1alpha1.Agent{}
@@ -314,19 +363,18 @@ func (r *A2AServerReconciler) createOrUpdateAgent(ctx context.Context, agent *ar
 		return false, fmt.Errorf("failed to get agent %s: %w", agentName, getErr)
 	}
 
-	// Only update if skills annotation has changed
-	if existingAgent.Annotations[annotations.A2AServerSkills] != agent.Annotations[annotations.A2AServerSkills] {
-		existingAgent.Spec = agent.Spec
-		existingAgent.Annotations = agent.Annotations
-		if err := r.Update(ctx, existingAgent); err != nil {
-			log.Error(err, "Failed to update A2A agent", "agent", agentName, "a2aServer", a2aServerName)
-			return false, fmt.Errorf("failed to update agent %s: %w", agentName, err)
-		}
-		log.Info("a2a agent updated", "agent", agentName, "a2aServer", a2aServerName, "namespace", existingAgent.Namespace)
-		return true, nil
+	if !a2aAgentChanged(existingAgent, agent) {
+		return false, nil
 	}
 
-	return false, nil
+	existingAgent.Spec = agent.Spec
+	existingAgent.Annotations = agent.Annotations
+	if err := r.Update(ctx, existingAgent); err != nil {
+		log.Error(err, "Failed to update A2A agent", "agent", agentName, "a2aServer", a2aServerName)
+		return false, fmt.Errorf("failed to update agent %s: %w", agentName, err)
+	}
+	log.Info("a2a agent updated", "agent", agentName, "a2aServer", a2aServerName, "namespace", existingAgent.Namespace)
+	return true, nil
 }
 
 func (r *A2AServerReconciler) finalizeA2AServerProcessing(ctx context.Context, a2aServer arkv1prealpha1.A2AServer, agentsChanged bool) (ctrl.Result, error) {

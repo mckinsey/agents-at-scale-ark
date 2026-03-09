@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"text/template"
 
@@ -100,11 +101,50 @@ func resolveSelectedMemberName(raw string, members []TeamMember) string {
 			return member.GetName()
 		}
 	}
+	type memberMatch struct {
+		member TeamMember
+		index  int
+	}
 	lower := strings.ToLower(trimmed)
+	allMatches := make([]memberMatch, 0, len(members))
+	cueMatches := make([]memberMatch, 0, len(members))
 	for _, member := range members {
-		if strings.Contains(lower, strings.ToLower(member.GetName())) {
-			return member.GetName()
+		pattern := regexp.MustCompile(`\b` + regexp.QuoteMeta(strings.ToLower(member.GetName())) + `\b`)
+		indices := pattern.FindAllStringIndex(lower, -1)
+		for _, idx := range indices {
+			match := memberMatch{member: member, index: idx[0]}
+			allMatches = append(allMatches, match)
+			windowStart := idx[0] - 48
+			if windowStart < 0 {
+				windowStart = 0
+			}
+			prefix := lower[windowStart:idx[0]]
+			if strings.Contains(prefix, "choose") ||
+				strings.Contains(prefix, "chose") ||
+				strings.Contains(prefix, "select") ||
+				strings.Contains(prefix, "pick") ||
+				strings.Contains(prefix, "next") {
+				cueMatches = append(cueMatches, match)
+			}
 		}
+	}
+	if len(cueMatches) > 0 {
+		latest := cueMatches[0]
+		for _, match := range cueMatches[1:] {
+			if match.index > latest.index {
+				latest = match
+			}
+		}
+		return latest.member.GetName()
+	}
+	if len(allMatches) > 0 {
+		latest := allMatches[0]
+		for _, match := range allMatches[1:] {
+			if match.index > latest.index {
+				latest = match
+			}
+		}
+		return latest.member.GetName()
 	}
 	return ""
 }

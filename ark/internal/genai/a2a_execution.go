@@ -80,7 +80,7 @@ func (e *A2AExecutionEngine) executeA2A(ctx context.Context, agentName, namespac
 	}
 
 	queryName := getQueryName(ctx)
-	includeHistory := shouldIncludeA2AHistory(agentAnnotations, false)
+	includeHistory := shouldIncludeA2AHistory(agentAnnotations, true)
 	metadata, err := buildA2AMetadata(agentAnnotations, history, includeHistory)
 	if err != nil {
 		return nil, err
