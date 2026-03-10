@@ -15,6 +15,7 @@ REGISTRY_PASSWORD="${DOCKER_CICD_CACHE_REGISTRY_PASSWORD:?required}"
 ARK_IMAGE_TAG="${ARK_IMAGE_TAG:-local-test}"
 INSTALL_COVERAGE="false"
 INSTALL_EVALUATOR="false"
+STORAGE_BACKEND="etcd"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -27,10 +28,15 @@ while [[ $# -gt 0 ]]; do
       INSTALL_EVALUATOR="true"
       shift
       ;;
+    --storage-backend)
+      STORAGE_BACKEND="$2"
+      shift 2
+      ;;
     -h|--help)
-      echo "Usage: $0 [--install-coverage] [--install-evaluator]"
+      echo "Usage: $0 [--install-coverage] [--install-evaluator] [--storage-backend etcd|postgresql]"
       echo "  --install-coverage   Install coverage collection components"
       echo "  --install-evaluator  Install ark-evaluator service"
+      echo "  --storage-backend    Storage backend to use (default: etcd)"
       exit 0
       ;;
     *)
@@ -45,6 +51,7 @@ echo "Registry: ${REGISTRY}"
 echo "ARK Image Tag: ${ARK_IMAGE_TAG}"
 echo "Install Coverage: ${INSTALL_COVERAGE}"
 echo "Install Evaluator: ${INSTALL_EVALUATOR}"
+echo "Storage Backend: ${STORAGE_BACKEND}"
 echo
 
 # Check kubectl context
@@ -69,19 +76,56 @@ fi
 echo "=== Installing Gateway API CRDs ==="
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
 
+if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
+  echo "=== Installing PostgreSQL (ark-storage-dev) ==="
+  helm upgrade --install ark-storage-dev "${REPO_ROOT}/charts/ark-storage-dev" \
+    --namespace ark-system \
+    --create-namespace \
+    --wait --timeout=120s
+
+  echo "=== Waiting for PostgreSQL Pod Readiness ==="
+  kubectl -n ark-system wait --for=condition=ready pod -l app=ark-storage-dev --timeout=120s
+fi
+
 echo "=== Installing ARK Controller ==="
 cd "${REPO_ROOT}/ark"
 
-# Deploy controller with impersonation enabled for E2E tests
-helm upgrade --install ark-controller ./dist/chart \
-  --namespace ark-system \
-  --create-namespace \
-  --wait --timeout=300s \
-  --set controllerManager.container.image.repository="${REGISTRY}/ark-controller" \
-  --set controllerManager.container.image.tag="${ARK_IMAGE_TAG}" \
-  --set controllerManager.container.image.pullPolicy=IfNotPresent \
-  --set rbac.enable=true \
+HELM_ARGS=(
+  --namespace ark-system
+  --create-namespace
+  --wait --timeout=300s
+  --set controllerManager.container.image.repository="${REGISTRY}/ark-controller"
+  --set controllerManager.container.image.tag="${ARK_IMAGE_TAG}"
+  --set controllerManager.container.image.pullPolicy=IfNotPresent
+  --set rbac.enable=true
   --set rbac.impersonation.enabled=true
+)
+
+if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
+  HELM_ARGS+=(
+    --set storage.backend=postgresql
+    --set storage.postgresql.host=ark-storage-dev
+    --set storage.postgresql.port=5432
+    --set storage.postgresql.database=ark
+    --set storage.postgresql.user=postgres
+    --set storage.postgresql.passwordSecretName=ark-storage-dev-password
+  )
+fi
+
+helm upgrade --install ark-controller ./dist/chart "${HELM_ARGS[@]}"
+
+if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
+  echo "=== Verifying PostgreSQL Backend ==="
+  sleep 5
+  if kubectl -n ark-system logs deployment/ark-controller --tail=100 | grep -qi "Using PostgreSQL storage backend"; then
+    echo "PostgreSQL backend verified successfully"
+  else
+    echo "ERROR: Controller does not appear to be running with PostgreSQL backend"
+    echo "Controller logs:"
+    kubectl -n ark-system logs deployment/ark-controller --tail=50
+    exit 1
+  fi
+fi
 
 # Apply coverage configuration if requested
 if [ "${INSTALL_COVERAGE}" = "true" ]; then

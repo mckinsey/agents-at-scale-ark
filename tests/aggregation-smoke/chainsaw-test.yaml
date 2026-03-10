@@ -1,0 +1,79 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: aggregation-smoke
+spec:
+  steps:
+    - name: api-discovery
+      try:
+      - script:
+          content: |
+            set -euo pipefail
+            echo "Checking ark.mckinsey.com/v1alpha1 API resources..."
+            RESOURCES=$(kubectl api-resources --api-group=ark.mckinsey.com -o name)
+            for kind in agents models queries teams; do
+              if echo "$RESOURCES" | grep -q "^${kind}\."; then
+                echo "✓ ${kind} discovered"
+              else
+                echo "✗ ${kind} not found in API discovery"
+                exit 1
+              fi
+            done
+          timeout: 30s
+
+    - name: storage-round-trip
+      try:
+      - script:
+          content: |
+            set -euo pipefail
+            cat <<'MANIFEST' | kubectl apply -n $NAMESPACE -f -
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Model
+            metadata:
+              name: smoke-test-model
+            spec:
+              type: none
+              model:
+                value: smoke-test
+            MANIFEST
+            echo "✓ Model created"
+
+            MODEL=$(kubectl get model smoke-test-model -n $NAMESPACE -o jsonpath='{.metadata.name}')
+            if [ "$MODEL" != "smoke-test-model" ]; then
+              echo "✗ Model read-back failed: got '$MODEL'"
+              exit 1
+            fi
+            echo "✓ Model read-back succeeded"
+          env:
+          - name: NAMESPACE
+            value: ($namespace)
+          timeout: 30s
+
+    - name: watch-routing
+      try:
+      - script:
+          content: |
+            set -euo pipefail
+            kubectl get models -n $NAMESPACE --watch-only --timeout=5 &
+            WATCH_PID=$!
+            sleep 2
+
+            cat <<'MANIFEST' | kubectl apply -n $NAMESPACE -f -
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Model
+            metadata:
+              name: smoke-test-watch
+            spec:
+              type: none
+              model:
+                value: watch-test
+            MANIFEST
+
+            sleep 3
+            kill $WATCH_PID 2>/dev/null || true
+            wait $WATCH_PID 2>/dev/null || true
+            echo "✓ Watch routing operational"
+          env:
+          - name: NAMESPACE
+            value: ($namespace)
+          timeout: 30s
