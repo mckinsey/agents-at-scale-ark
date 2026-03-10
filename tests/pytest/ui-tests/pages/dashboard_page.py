@@ -1,6 +1,9 @@
-from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
-from .base_page import BasePage
 import logging
+import os
+from pathlib import Path
+from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
+from dotenv import load_dotenv
+from .base_page import BasePage
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +31,13 @@ class DashboardPage(BasePage):
     
     def __init__(self, page: Page):
         super().__init__(page)
-        self.base_url = "http://localhost:3274"
+        self._load_env()
+        self.base_url = os.getenv("ARK_DASHBOARD_URL", "http://localhost:3274")
+
+    def _load_env(self) -> None:
+        env_path = Path(__file__).parent.parent / ".env"
+        if env_path.exists():
+            load_dotenv(env_path)
     
     def navigate_to_dashboard(self) -> None:
         if self.base_url not in self.page.url:
