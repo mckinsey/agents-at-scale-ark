@@ -22,6 +22,7 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
+
     cleanup:
     - script:
         content: |
