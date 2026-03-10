@@ -28,3 +28,5 @@ The controller currently embeds the full turn loop — prompt building, LLM call
 - Remote/distributed engine deployment (Phase 2)
 - Separate ServiceAccount/RBAC (shares controller SA as sidecar)
 - Changes to user-facing API (Query CR spec unchanged)
+- A2A native streaming (progressive task updates over A2A protocol)
+- A2A native tool call support (tool negotiation via A2A protocol)
