@@ -12,6 +12,20 @@ Ark uses [Semantic Versioning](https://semver.org/). The technical details are i
 
 A detailed record of every change is documented in [`CHANGELOG.md`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.github/CHANGELOG.md).
 
+## v0.2.0
+
+### Evaluations Removed from Core
+
+Evaluation and Evaluator resources have been removed from Ark core and will move to the [marketplace](https://github.com/mckinsey/agents-at-scale-marketplace).
+
+After upgrading, existing Evaluation and Evaluator resources will remain in your cluster but are no longer reconciled. To clean up:
+
+```bash
+kubectl delete evaluations --all -A
+kubectl delete evaluators --all -A
+kubectl delete crd evaluations.ark.mckinsey.com evaluators.ark.mckinsey.com
+```
+
 ## v0.1.50
 
 ### Broker Service Rename
