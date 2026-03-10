@@ -439,5 +439,7 @@ func TestExecuteLocallyA2ANativeToolError(t *testing.T) {
 	result, err := agent.executeLocallyA2ANative(context.Background(), userInput, nil, nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "tool boom")
-	assert.Nil(t, result)
+	require.NotNil(t, result)
+	require.Len(t, result.A2AMessages, 1)
+	assert.Equal(t, "calling tool", ExtractA2ATextFromMessage(result.A2AMessages[0]))
 }

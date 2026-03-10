@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: delegate-agent
+spec:
+  prompt: |
+    Delegate Agent
+    Return a short delegated answer.
+  modelRef:
+    name: test-model

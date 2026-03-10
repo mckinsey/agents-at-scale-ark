@@ -17,6 +17,12 @@ type recordingMemory struct {
 	a2aMessages          []protocol.Message
 }
 
+type recordingCompatMemory struct {
+	addMessagesCalled bool
+	getMessagesCalled bool
+	messages          []genai.Message
+}
+
 func (m *recordingMemory) AddMessages(_ context.Context, _ string, messages []genai.Message) error {
 	m.addMessagesCalled = true
 	m.messages = append([]genai.Message{}, messages...)
@@ -38,6 +44,21 @@ func (m *recordingMemory) GetA2AMessages(context.Context) ([]protocol.Message, e
 }
 
 func (m *recordingMemory) Close() error {
+	return nil
+}
+
+func (m *recordingCompatMemory) AddMessages(_ context.Context, _ string, messages []genai.Message) error {
+	m.addMessagesCalled = true
+	m.messages = append([]genai.Message{}, messages...)
+	return nil
+}
+
+func (m *recordingCompatMemory) GetMessages(context.Context) ([]genai.Message, error) {
+	m.getMessagesCalled = true
+	return append([]genai.Message{}, m.messages...), nil
+}
+
+func (m *recordingCompatMemory) Close() error {
 	return nil
 }
 
@@ -125,4 +146,42 @@ func TestSaveExecutionResultToMemoryFallsBackToCompat(t *testing.T) {
 	assert.False(t, memory.addA2AMessagesCalled)
 	require.Len(t, memory.messages, 2)
 	assert.Equal(t, "compat output", memory.messages[1].OfAssistant.Content.OfString.Value)
+}
+
+func TestSaveExecutionResultToMemoryFallsBackWhenA2AMemoryNotAvailable(t *testing.T) {
+	memory := &recordingCompatMemory{}
+	inputMessages := []genai.Message{
+		genai.NewUserMessage("hello"),
+	}
+	a2aMessage := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.NewTextPart("native output"),
+	})
+	result := &genai.ExecutionResult{
+		A2AMessages: []protocol.Message{a2aMessage},
+	}
+
+	err := saveExecutionResultToMemory(context.Background(), memory, "query-1", inputMessages, result)
+	require.NoError(t, err)
+	assert.True(t, memory.addMessagesCalled)
+	require.Len(t, memory.messages, 2)
+	require.NotNil(t, memory.messages[1].OfAssistant)
+	assert.Equal(t, "native output", memory.messages[1].OfAssistant.Content.OfString.Value)
+}
+
+func TestLoadInitialA2AMessagesFallsBackToCompatMemory(t *testing.T) {
+	memory := &recordingCompatMemory{
+		messages: []genai.Message{
+			genai.NewUserMessage("hello"),
+			genai.NewAssistantMessage("native output"),
+		},
+	}
+	reconciler := &QueryReconciler{}
+
+	messages, err := reconciler.loadInitialA2AMessages(context.Background(), memory)
+	require.NoError(t, err)
+	assert.True(t, memory.getMessagesCalled)
+	require.Len(t, messages, 2)
+	assert.Equal(t, protocol.MessageRoleUser, messages[0].Role)
+	assert.Equal(t, protocol.MessageRoleAgent, messages[1].Role)
+	assert.Equal(t, "native output", genai.ExtractA2ATextFromMessage(messages[1]))
 }

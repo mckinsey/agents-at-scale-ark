@@ -175,16 +175,6 @@ func isA2AExtensionAllowed(uri string, supported map[string]struct{}) bool {
 	return ok
 }
 
-func supportsA2AExtension(agentAnnotations map[string]string, extension string) bool {
-	supported := getA2ASupportedExtensions(agentAnnotations)
-	return isA2AExtensionAllowed(extension, supported)
-}
-
-func supportsA2AHistoryExtension(agentAnnotations map[string]string) bool {
-	supported := getA2ASupportedExtensions(agentAnnotations)
-	return isA2AExtensionAllowed(a2aHistoryExtensionKey, supported)
-}
-
 func parseA2APermissions(raw string) (map[string]interface{}, error) {
 	if raw == "" {
 		return nil, nil

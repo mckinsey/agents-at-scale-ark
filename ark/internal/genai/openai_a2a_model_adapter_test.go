@@ -237,6 +237,18 @@ func TestA2ATurnUsesStreamingWhenEventStreamProvided(t *testing.T) {
 	require.Len(t, stream.chunks, 1)
 }
 
+func TestNewOpenAIA2AModelAdapterNilModelFailsGracefully(t *testing.T) {
+	adapter := NewOpenAIA2AModelAdapter(nil, "test-agent", "default")
+	userMessage := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("hello"),
+	})
+
+	result, err := adapter.A2ATurn(context.Background(), []protocol.Message{userMessage}, nil, nil, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrA2AModelProviderNotSupported)
+	assert.Nil(t, result)
+}
+
 func TestA2ATurnConvertsA2AImagePartToOpenAIImageURL(t *testing.T) {
 	provider := &adapterTestChatProvider{
 		response: &openai.ChatCompletion{

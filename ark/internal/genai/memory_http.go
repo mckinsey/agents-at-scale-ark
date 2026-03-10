@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -27,6 +28,17 @@ type HTTPMemory struct {
 	namespace        string
 	headers          map[string]string
 	eventingRecorder eventing.MemoryRecorder
+}
+
+func httpStatusError(resp *http.Response) error {
+	if resp == nil {
+		return fmt.Errorf("HTTP status unknown")
+	}
+	bodySnippet, readErr := io.ReadAll(io.LimitReader(resp.Body, 512))
+	if readErr != nil || len(bodySnippet) == 0 {
+		return fmt.Errorf("HTTP status %d", resp.StatusCode)
+	}
+	return fmt.Errorf("HTTP status %d: %s", resp.StatusCode, strings.TrimSpace(string(bodySnippet)))
 }
 
 // NewHTTPMemory creates a new HTTP-based memory implementation
@@ -104,7 +116,7 @@ func createConversation(ctx context.Context, httpClient *http.Client, baseURL, c
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("HTTP status %d", resp.StatusCode)
+		return "", httpStatusError(resp)
 	}
 
 	var response createResponse
@@ -215,7 +227,7 @@ func (m *HTTPMemory) AddMessages(ctx context.Context, queryID string, messages [
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		err := fmt.Errorf("HTTP status %d", resp.StatusCode)
+		err := httpStatusError(resp)
 		operationData := map[string]string{"result": err.Error()}
 		m.eventingRecorder.Fail(ctx, "MemoryAddMessages", operationData["result"], err, operationData)
 		return err
@@ -304,7 +316,7 @@ func (m *HTTPMemory) AddA2AMessages(ctx context.Context, queryID string, message
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		err := fmt.Errorf("HTTP status %d", resp.StatusCode)
+		err := httpStatusError(resp)
 		operationData := map[string]string{"result": err.Error()}
 		m.eventingRecorder.Fail(ctx, "MemoryAddMessages", operationData["result"], err, operationData)
 		return err
@@ -369,7 +381,7 @@ func (m *HTTPMemory) fetchMessageRecords(ctx context.Context) ([]MessageRecord, 
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		err := fmt.Errorf("HTTP status %d", resp.StatusCode)
+		err := httpStatusError(resp)
 		operationData := map[string]string{"result": err.Error()}
 		m.eventingRecorder.Fail(ctx, "MemoryGetMessages", operationData["result"], err, operationData)
 		return nil, err

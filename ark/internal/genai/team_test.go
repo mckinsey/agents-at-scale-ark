@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
+	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkann "mckinsey.com/ark/internal/annotations"
 	eventingnoop "mckinsey.com/ark/internal/eventing/noop"
 	telemetrynoop "mckinsey.com/ark/internal/telemetry/noop"
@@ -530,4 +531,137 @@ func TestTeamExecuteA2ASequentialStampsAgentNames(t *testing.T) {
 
 	assert.Equal(t, "researcher", getAgentNameFromMessage(result.A2AMessages[0]))
 	assert.Equal(t, "writer", getAgentNameFromMessage(result.A2AMessages[1]))
+}
+
+func TestTeamExecuteA2ARoundRobinCyclesMembers(t *testing.T) {
+	memberOne := &a2aRecordingTeamMember{
+		name: "member-one",
+		output: []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("m1"),
+			}),
+		},
+	}
+	memberTwo := &a2aRecordingTeamMember{
+		name: "member-two",
+		output: []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("m2"),
+			}),
+		},
+	}
+	maxTurns := 3
+	team := &Team{
+		Name:      "round-team",
+		Namespace: "default",
+		Strategy:  StrategyRoundRobin,
+		MaxTurns:  &maxTurns,
+		Members:   []TeamMember{memberOne, memberTwo},
+	}
+	tp := telemetrynoop.NewProvider()
+	ep := eventingnoop.NewProvider()
+	team.telemetryRecorder = tp.TeamRecorder()
+	team.eventingRecorder = ep.TeamRecorder()
+
+	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("hello"),
+	})
+
+	result, err := team.ExecuteA2A(context.Background(), userInput, nil, nil, nil)
+	require.NoError(t, err)
+	require.Len(t, result.A2AMessages, 3)
+	assert.Equal(t, "m1", ExtractA2ATextFromMessage(result.A2AMessages[0]))
+	assert.Equal(t, "m2", ExtractA2ATextFromMessage(result.A2AMessages[1]))
+	assert.Equal(t, "m1", ExtractA2ATextFromMessage(result.A2AMessages[2]))
+	require.Len(t, memberTwo.seenHistory, 1)
+	assert.Equal(t, "m1", ExtractA2ATextFromMessage(memberTwo.seenHistory[0]))
+	require.Len(t, memberOne.seenHistory, 2)
+}
+
+func TestTeamExecuteA2ASelectorUsesSelectedMember(t *testing.T) {
+	researcher := &a2aRecordingTeamMember{
+		name: "researcher",
+		output: []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("research"),
+			}),
+		},
+	}
+	analyst := &a2aRecordingTeamMember{
+		name: "analyst",
+		output: []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("analysis"),
+			}),
+		},
+	}
+	maxTurns := 1
+	team := &Team{
+		Name:              "selector-team",
+		Namespace:         "default",
+		Strategy:          StrategySelector,
+		MaxTurns:          &maxTurns,
+		Members:           []TeamMember{researcher, analyst},
+		mockSelectorAgent: newMockSelectorAgent("analyst"),
+	}
+	tp := telemetrynoop.NewProvider()
+	ep := eventingnoop.NewProvider()
+	team.telemetryRecorder = tp.TeamRecorder()
+	team.eventingRecorder = ep.TeamRecorder()
+
+	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("hello"),
+	})
+
+	result, err := team.ExecuteA2A(context.Background(), userInput, nil, nil, nil)
+	require.NoError(t, err)
+	require.Len(t, result.A2AMessages, 1)
+	assert.Equal(t, "analysis", ExtractA2ATextFromMessage(result.A2AMessages[0]))
+	assert.Empty(t, researcher.seenHistory)
+}
+
+func TestTeamExecuteA2AGraphFollowsEdges(t *testing.T) {
+	researcher := &a2aRecordingTeamMember{
+		name: "researcher",
+		output: []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("research"),
+			}),
+		},
+	}
+	writer := &a2aRecordingTeamMember{
+		name: "writer",
+		output: []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("summary"),
+			}),
+		},
+	}
+	team := &Team{
+		Name:      "graph-team",
+		Namespace: "default",
+		Strategy:  StrategyGraph,
+		Members:   []TeamMember{researcher, writer},
+		Graph: &arkv1alpha1.TeamGraphSpec{
+			Edges: []arkv1alpha1.TeamGraphEdge{
+				{From: "researcher", To: "writer"},
+			},
+		},
+	}
+	tp := telemetrynoop.NewProvider()
+	ep := eventingnoop.NewProvider()
+	team.telemetryRecorder = tp.TeamRecorder()
+	team.eventingRecorder = ep.TeamRecorder()
+
+	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("hello"),
+	})
+
+	result, err := team.ExecuteA2A(context.Background(), userInput, nil, nil, nil)
+	require.NoError(t, err)
+	require.Len(t, result.A2AMessages, 2)
+	assert.Equal(t, "research", ExtractA2ATextFromMessage(result.A2AMessages[0]))
+	assert.Equal(t, "summary", ExtractA2ATextFromMessage(result.A2AMessages[1]))
+	require.Len(t, writer.seenHistory, 1)
+	assert.Equal(t, "research", ExtractA2ATextFromMessage(writer.seenHistory[0]))
 }

@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: agent-tool-delegation-query
+spec:
+  input: Please delegate this task.
+  target:
+    type: agent
+    name: coordinator-agent

@@ -91,8 +91,12 @@ func (e *A2AExecutionEngine) executeA2A(ctx context.Context, agentName, namespac
 		e.eventingRecorder.Complete(ctx, "A2AExecution", "A2A execution completed successfully", operationData)
 		return streamResult, nil
 	}
-	if streamed && streamErr != nil {
-		log.Error(streamErr, "A2A streaming execution failed, falling back to blocking", "agent", agentName)
+	if !shouldFallbackToBlockingExecution(streamed, streamErr) {
+		streamFailure := fmt.Errorf("a2a streaming execution failed after partial stream; blocking retry skipped: %w", streamErr)
+		log.Error(streamFailure, "A2A streaming execution failed", "agent", agentName)
+		streamA2AError(ctx, eventStream, streamFailure)
+		e.eventingRecorder.Fail(ctx, "A2AExecution", fmt.Sprintf("A2A streaming execution failed: %v", streamFailure), streamFailure, operationData)
+		return nil, streamFailure
 	}
 
 	a2aResponse, err := ExecuteA2AAgent(ctx, e.client, a2aAddress, a2aServer.Spec.Headers, namespace, userInput, metadata, agentName, queryName, contextID, e.eventingRecorder, &a2aServer)
@@ -132,6 +136,9 @@ func (e *A2AExecutionEngine) streamA2AExecution(ctx context.Context, address str
 	rpcURL := strings.TrimSuffix(address, "/")
 	a2aClient, clientErr := CreateA2AClient(ctx, e.client, rpcURL, headers, namespace, agentName, e.eventingRecorder)
 	var resubscriber StreamResubscriber
+	if clientErr != nil {
+		log.Error(clientErr, "failed to create A2A client for stream resubscription", "agent", agentName, "address", address)
+	}
 	if clientErr == nil && a2aClient != nil {
 		resubscriber = &a2aClientResubscriber{client: a2aClient}
 	}
@@ -256,6 +263,10 @@ func (e *A2AExecutionEngine) tryA2AStreamingExecution(ctx context.Context, addre
 		return nil, true, err
 	}
 	return result, true, nil
+}
+
+func shouldFallbackToBlockingExecution(streamed bool, streamErr error) bool {
+	return !streamed || streamErr == nil
 }
 
 func buildA2AMessagesFromResponse(response *A2AResponse) []protocol.Message {

@@ -70,9 +70,9 @@ spec:
             (response != null): true
             (response.target.name): 'token-test-agent'
             (contains(response.content, 'distributed computing')): true
-            (tokenUsage.promptTokens > `0`): true
-            (tokenUsage.completionTokens > `0`): true
-            (tokenUsage.totalTokens > `0`): true
+            (to_number(tokenUsage.promptTokens) == `50`): true
+            (to_number(tokenUsage.completionTokens) == `100`): true
+            (to_number(tokenUsage.totalTokens) == `150`): true
     catch:
       # In the case of any errors, show the full query for troubleshooting.
       - describe:

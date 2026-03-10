@@ -336,12 +336,33 @@ var managedA2AAnnotationKeys = []string{
 }
 
 func a2aAgentChanged(existing, desired *arkv1alpha1.Agent) bool {
+	if a2aAnnotationsDiffer(existing.Annotations, desired.Annotations) {
+		return true
+	}
+	return existing.Spec.Description != desired.Spec.Description || existing.Spec.Prompt != desired.Spec.Prompt
+}
+
+func a2aAnnotationsDiffer(existing, desired map[string]string) bool {
+	trackedKeys := make(map[string]struct{}, len(managedA2AAnnotationKeys))
 	for _, key := range managedA2AAnnotationKeys {
-		if existing.Annotations[key] != desired.Annotations[key] {
+		trackedKeys[key] = struct{}{}
+	}
+	for key := range existing {
+		if strings.HasPrefix(key, annotations.ARKPrefix) {
+			trackedKeys[key] = struct{}{}
+		}
+	}
+	for key := range desired {
+		if strings.HasPrefix(key, annotations.ARKPrefix) {
+			trackedKeys[key] = struct{}{}
+		}
+	}
+	for key := range trackedKeys {
+		if existing[key] != desired[key] {
 			return true
 		}
 	}
-	return existing.Spec.Description != desired.Spec.Description || existing.Spec.Prompt != desired.Spec.Prompt
+	return false
 }
 
 func (r *A2AServerReconciler) createOrUpdateAgent(ctx context.Context, agent *arkv1alpha1.Agent, agentName, a2aServerName string) (changed bool, err error) {

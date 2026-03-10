@@ -1,0 +1,67 @@
+terminationGracePeriodSeconds: 3
+ark:
+  model:
+    enabled: true
+    name: test-model
+    type: completions
+    provider: openai
+    model: gpt-4
+    apiKey: mock-api-key
+
+config:
+  rules:
+  - path: "^/v1/models$"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "gpt-4",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            }
+          ]
+        }
+
+  - path: "/v1/chat/completions"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}]}'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'Coordinator Agent') && !body.messages[?role=='tool']"
+    response:
+      status: 200
+      content: |
+        {
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "tool_calls": [{
+                "id": "call_delegate",
+                "type": "function",
+                "function": {
+                  "name": "delegate-agent-tool",
+                  "arguments": "{\"input\": \"delegate this task\"}"
+                }
+              }]
+            },
+            "finish_reason": "tool_calls"
+          }]
+        }
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'Coordinator Agent') && body.messages[?role=='tool']"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"COORDINATOR FINAL DELEGATE RESPONSE"},"finish_reason":"stop"}]}'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'Delegate Agent')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"DELEGATE RESPONSE"},"finish_reason":"stop"}]}'

@@ -107,10 +107,10 @@ func TestA2AAgentChangedDetectsExtensionChanges(t *testing.T) {
 	existing := &arkv1alpha1.Agent{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: map[string]string{
-				annotations.A2AServerName:         "server-1",
-				annotations.A2AServerAddress:      "http://example.com",
-				annotations.A2AServerSkills:       `[]`,
-				annotations.A2AStreamingSupported: "false",
+				annotations.A2AServerName:          "server-1",
+				annotations.A2AServerAddress:       "http://example.com",
+				annotations.A2AServerSkills:        `[]`,
+				annotations.A2AStreamingSupported:  "false",
 				annotations.A2ASupportedExtensions: `["https://ark.mckinsey.com/extensions/history/v1"]`,
 			},
 		},
@@ -120,10 +120,10 @@ func TestA2AAgentChangedDetectsExtensionChanges(t *testing.T) {
 	desired := &arkv1alpha1.Agent{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: map[string]string{
-				annotations.A2AServerName:         "server-1",
-				annotations.A2AServerAddress:      "http://example.com",
-				annotations.A2AServerSkills:       `[]`,
-				annotations.A2AStreamingSupported: "false",
+				annotations.A2AServerName:          "server-1",
+				annotations.A2AServerAddress:       "http://example.com",
+				annotations.A2AServerSkills:        `[]`,
+				annotations.A2AStreamingSupported:  "false",
 				annotations.A2ASupportedExtensions: `["https://ark.mckinsey.com/extensions/history/v1","https://ark.mckinsey.com/extensions/permissions/v1"]`,
 			},
 		},
@@ -160,6 +160,65 @@ func TestA2AAgentChangedDetectsExtensionRemoval(t *testing.T) {
 	}
 
 	assert.True(t, a2aAgentChanged(existing, desired), "should detect extension annotation removal")
+}
+
+func TestA2AAgentChangedDetectsInheritedArkAnnotationChange(t *testing.T) {
+	existing := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: map[string]string{
+				annotations.A2AServerName:         "server-1",
+				annotations.A2AServerAddress:      "http://example.com",
+				annotations.A2AServerSkills:       `[]`,
+				annotations.A2AStreamingSupported: "false",
+				annotations.A2AHistoryEnabled:     "false",
+			},
+		},
+		Spec: arkv1alpha1.AgentSpec{Description: "test"},
+	}
+
+	desired := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: map[string]string{
+				annotations.A2AServerName:         "server-1",
+				annotations.A2AServerAddress:      "http://example.com",
+				annotations.A2AServerSkills:       `[]`,
+				annotations.A2AStreamingSupported: "false",
+				annotations.A2AHistoryEnabled:     "true",
+			},
+		},
+		Spec: arkv1alpha1.AgentSpec{Description: "test"},
+	}
+
+	assert.True(t, a2aAgentChanged(existing, desired), "should detect inherited Ark annotation change")
+}
+
+func TestA2AAgentChangedDetectsInheritedArkAnnotationRemoval(t *testing.T) {
+	existing := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: map[string]string{
+				annotations.A2AServerName:         "server-1",
+				annotations.A2AServerAddress:      "http://example.com",
+				annotations.A2AServerSkills:       `[]`,
+				annotations.A2AStreamingSupported: "false",
+				annotations.A2AHistoryLimit:       "4",
+			},
+		},
+		Spec: arkv1alpha1.AgentSpec{Description: "test"},
+	}
+
+	desired := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: map[string]string{
+				annotations.A2AServerName:         "server-1",
+				annotations.A2AServerAddress:      "http://example.com",
+				annotations.A2AServerSkills:       `[]`,
+				annotations.A2AStreamingSupported: "false",
+			},
+		},
+		Spec: arkv1alpha1.AgentSpec{Description: "test"},
+	}
+
+	assert.True(t, a2aAgentChanged(existing, desired), "should detect inherited Ark annotation removal")
 }
 
 func TestA2AAgentChangedNoChange(t *testing.T) {

@@ -164,7 +164,36 @@ func TestA2ALocalEngineToolError(t *testing.T) {
 	result, err := engine.Execute(context.Background(), userInput, []protocol.Message{userInput}, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "tool boom")
-	assert.Nil(t, result)
+	require.NotNil(t, result)
+	require.Len(t, result.A2AMessages, 1)
+	assert.Equal(t, "calling tool", ExtractA2ATextFromMessage(result.A2AMessages[0]))
+}
+
+func TestA2ALocalEngineTerminateTeamPreservesPartialMessages(t *testing.T) {
+	toolCalls := []A2AToolCall{
+		{ID: "call-1", Name: "lookup", Arguments: `{}`},
+	}
+	provider := &testA2AModelProvider{
+		results: []*A2ATurnResult{
+			a2aToolCallResult("terminating", toolCalls),
+		},
+	}
+	executor := &testToolExecutor{
+		err: &TerminateTeam{},
+	}
+	registry := newTestToolRegistry(executor)
+	engine := NewA2ALocalEngine(provider, registry, "test/agent")
+
+	userInput := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+		protocol.NewTextPart("hi"),
+	})
+
+	result, err := engine.Execute(context.Background(), userInput, []protocol.Message{userInput}, nil)
+	require.Error(t, err)
+	assert.True(t, IsTerminateTeam(err))
+	require.NotNil(t, result)
+	require.Len(t, result.A2AMessages, 1)
+	assert.Equal(t, "terminating", ExtractA2ATextFromMessage(result.A2AMessages[0]))
 }
 
 func TestA2ALocalEngineContextIDAndTaskIDPropagation(t *testing.T) {
@@ -367,7 +396,9 @@ func TestA2ALocalEngineNoToolsConfigured(t *testing.T) {
 	result, err := engine.Execute(context.Background(), userInput, []protocol.Message{userInput}, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "has no tools configured")
-	assert.Nil(t, result)
+	require.NotNil(t, result)
+	require.Len(t, result.A2AMessages, 1)
+	assert.Equal(t, "calling tool", ExtractA2ATextFromMessage(result.A2AMessages[0]))
 }
 
 func TestFilterCallerHistoryForDelegationStripsToolCallsAndResults(t *testing.T) {

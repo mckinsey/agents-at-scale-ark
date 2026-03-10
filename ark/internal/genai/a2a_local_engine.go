@@ -74,7 +74,9 @@ func (e *A2ALocalEngine) Execute(ctx context.Context, userInput protocol.Message
 			if !IsTerminateTeam(err) {
 				logger.Error(err, "Tool execution failed", "agent", e.agentName)
 			}
-			return nil, err
+			return &ExecutionResult{
+				A2AMessages: newMessages,
+			}, err
 		}
 		toolOutcomes = outcomes
 	}

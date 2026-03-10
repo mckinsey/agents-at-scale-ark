@@ -41,28 +41,35 @@ type A2ANativeTurnProvider interface {
 }
 
 func NewOpenAIA2AModelAdapter(model *Model, agentName, agentNamespace string) A2AModelProvider {
+	adapter := &openAIA2AModelAdapter{
+		agentName:       agentName,
+		agentNamespace:  agentNamespace,
+		toolOutcomeByID: map[string]string{},
+	}
+	if model == nil {
+		return adapter
+	}
 	var nativeProvider A2ANativeTurnProvider
-	if model != nil && model.Provider != nil {
+	if model.Provider != nil {
 		if provider, ok := any(model.Provider).(A2ANativeTurnProvider); ok {
 			nativeProvider = provider
 		}
 	}
-	return &openAIA2AModelAdapter{
-		provider:          model.Provider,
-		nativeProvider:    nativeProvider,
-		modelName:         model.Model,
-		modelType:         model.Type,
-		agentName:         agentName,
-		agentNamespace:    agentNamespace,
-		outputSchema:      model.OutputSchema,
-		schemaName:        model.SchemaName,
-		telemetryRecorder: model.telemetryRecorder,
-		eventingRecorder:  model.eventingRecorder,
-		toolOutcomeByID:   map[string]string{},
-	}
+	adapter.provider = model.Provider
+	adapter.nativeProvider = nativeProvider
+	adapter.modelName = model.Model
+	adapter.modelType = model.Type
+	adapter.outputSchema = model.OutputSchema
+	adapter.schemaName = model.SchemaName
+	adapter.telemetryRecorder = model.telemetryRecorder
+	adapter.eventingRecorder = model.eventingRecorder
+	return adapter
 }
 
 func (a *openAIA2AModelAdapter) A2ATurn(ctx context.Context, messages []protocol.Message, toolOutcomes []A2AToolOutcome, tools []A2AToolDefinition, eventStream EventStreamInterface) (*A2ATurnResult, error) {
+	if a == nil || (a.nativeProvider == nil && a.provider == nil) {
+		return nil, ErrA2AModelProviderNotSupported
+	}
 	if a.nativeProvider != nil {
 		return a.a2aTurnViaNativeProvider(ctx, messages, toolOutcomes, tools, eventStream)
 	}

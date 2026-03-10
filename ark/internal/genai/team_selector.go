@@ -91,6 +91,25 @@ func resolveSelectedMemberName(raw string, members []TeamMember) string {
 	if trimmed == "" {
 		return ""
 	}
+	if name := matchMemberExact(trimmed, members); name != "" {
+		return name
+	}
+	allMatches, cueMatches := findMemberMentions(strings.ToLower(trimmed), members)
+	if m := latestMemberMatch(cueMatches); m != nil {
+		return m.member.GetName()
+	}
+	if m := latestMemberMatch(allMatches); m != nil {
+		return m.member.GetName()
+	}
+	return ""
+}
+
+type memberMatch struct {
+	member TeamMember
+	index  int
+}
+
+func matchMemberExact(trimmed string, members []TeamMember) string {
 	for _, member := range members {
 		if member.GetName() == trimmed {
 			return member.GetName()
@@ -101,52 +120,50 @@ func resolveSelectedMemberName(raw string, members []TeamMember) string {
 			return member.GetName()
 		}
 	}
-	type memberMatch struct {
-		member TeamMember
-		index  int
-	}
-	lower := strings.ToLower(trimmed)
-	allMatches := make([]memberMatch, 0, len(members))
-	cueMatches := make([]memberMatch, 0, len(members))
+	return ""
+}
+
+var selectionCues = []string{"choose", "chose", "select", "pick", "next"}
+
+func findMemberMentions(lower string, members []TeamMember) (all, cued []memberMatch) {
 	for _, member := range members {
 		pattern := regexp.MustCompile(`\b` + regexp.QuoteMeta(strings.ToLower(member.GetName())) + `\b`)
-		indices := pattern.FindAllStringIndex(lower, -1)
-		for _, idx := range indices {
+		for _, idx := range pattern.FindAllStringIndex(lower, -1) {
 			match := memberMatch{member: member, index: idx[0]}
-			allMatches = append(allMatches, match)
-			windowStart := idx[0] - 48
-			if windowStart < 0 {
-				windowStart = 0
-			}
-			prefix := lower[windowStart:idx[0]]
-			if strings.Contains(prefix, "choose") ||
-				strings.Contains(prefix, "chose") ||
-				strings.Contains(prefix, "select") ||
-				strings.Contains(prefix, "pick") ||
-				strings.Contains(prefix, "next") {
-				cueMatches = append(cueMatches, match)
+			all = append(all, match)
+			if hasCuePrefix(lower, idx[0]) {
+				cued = append(cued, match)
 			}
 		}
 	}
-	if len(cueMatches) > 0 {
-		latest := cueMatches[0]
-		for _, match := range cueMatches[1:] {
-			if match.index > latest.index {
-				latest = match
-			}
-		}
-		return latest.member.GetName()
+	return all, cued
+}
+
+func hasCuePrefix(text string, pos int) bool {
+	start := pos - 48
+	if start < 0 {
+		start = 0
 	}
-	if len(allMatches) > 0 {
-		latest := allMatches[0]
-		for _, match := range allMatches[1:] {
-			if match.index > latest.index {
-				latest = match
-			}
+	prefix := text[start:pos]
+	for _, cue := range selectionCues {
+		if strings.Contains(prefix, cue) {
+			return true
 		}
-		return latest.member.GetName()
 	}
-	return ""
+	return false
+}
+
+func latestMemberMatch(matches []memberMatch) *memberMatch {
+	if len(matches) == 0 {
+		return nil
+	}
+	latest := &matches[0]
+	for i := range matches[1:] {
+		if matches[i+1].index > latest.index {
+			latest = &matches[i+1]
+		}
+	}
+	return latest
 }
 
 func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, error) {

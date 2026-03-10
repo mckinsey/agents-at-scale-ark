@@ -30,6 +30,15 @@ spec:
             name: mock-llm-message-counter
           status:
             (contains(conditions[?type == 'Ready'].status, 'True')): true
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: message-counter-agent
+          spec:
+            executionEngine:
+              name: a2a
     catch:
     - events: {}
     - describe:
@@ -60,6 +69,7 @@ spec:
           status:
             (response != null): true
             (contains(response.content, '1 message(s) received')): true
+            (response.a2a.contextId != null): true
     catch:
     - events: {}
     - describe:
@@ -107,6 +117,7 @@ spec:
             - status: 'True'
             (response != null): true
             (contains(response.content, '2 message(s) received')): true
+            (response.a2a.contextId != null): true
     catch:
     - events: {}
     - describe:

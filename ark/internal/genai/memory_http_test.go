@@ -874,6 +874,142 @@ func TestHTTPMemoryHeadersUpdatedOnResolve(t *testing.T) {
 		"New header should be added from status")
 }
 
+func TestHTTPMemoryAddMessagesIncludesErrorBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == MessagesEndpoint && r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte("invalid message payload"))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	resolvedAddress := server.URL
+	memory := &arkv1alpha1.Memory{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "error-body-memory",
+			Namespace: "default",
+		},
+		Spec: arkv1alpha1.MemorySpec{
+			Address: arkv1alpha1.ValueSource{
+				Value: server.URL,
+			},
+		},
+		Status: arkv1alpha1.MemoryStatus{
+			LastResolvedAddress: &resolvedAddress,
+			Phase:               "ready",
+		},
+	}
+	fakeClient := setupMemoryTestClient([]client.Object{memory})
+	httpMemory := &HTTPMemory{
+		client:           fakeClient,
+		httpClient:       server.Client(),
+		baseURL:          server.URL,
+		conversationId:   "test-conv-id",
+		name:             "error-body-memory",
+		namespace:        "default",
+		headers:          map[string]string{},
+		eventingRecorder: &noOpMemoryRecorder{},
+	}
+
+	err := httpMemory.AddMessages(context.Background(), "query-id", []Message{NewUserMessage("test")})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "HTTP status 400")
+	assert.Contains(t, err.Error(), "invalid message payload")
+}
+
+func TestHTTPMemoryAddA2AMessagesIncludesErrorBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == MessagesEndpoint && r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte("invalid native payload"))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	resolvedAddress := server.URL
+	memory := &arkv1alpha1.Memory{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "error-body-a2a-memory",
+			Namespace: "default",
+		},
+		Spec: arkv1alpha1.MemorySpec{
+			Address: arkv1alpha1.ValueSource{
+				Value: server.URL,
+			},
+		},
+		Status: arkv1alpha1.MemoryStatus{
+			LastResolvedAddress: &resolvedAddress,
+			Phase:               "ready",
+		},
+	}
+	fakeClient := setupMemoryTestClient([]client.Object{memory})
+	httpMemory := &HTTPMemory{
+		client:           fakeClient,
+		httpClient:       server.Client(),
+		baseURL:          server.URL,
+		conversationId:   "test-conv-id",
+		name:             "error-body-a2a-memory",
+		namespace:        "default",
+		headers:          map[string]string{},
+		eventingRecorder: &noOpMemoryRecorder{},
+	}
+
+	msg := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{protocol.NewTextPart("hello")})
+	err := httpMemory.AddA2AMessages(context.Background(), "query-id", []protocol.Message{msg})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "HTTP status 400")
+	assert.Contains(t, err.Error(), "invalid native payload")
+}
+
+func TestHTTPMemoryGetMessagesIncludesErrorBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == MessagesEndpoint && r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte("storage backend unavailable"))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	resolvedAddress := server.URL
+	memory := &arkv1alpha1.Memory{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "error-body-get-memory",
+			Namespace: "default",
+		},
+		Spec: arkv1alpha1.MemorySpec{
+			Address: arkv1alpha1.ValueSource{
+				Value: server.URL,
+			},
+		},
+		Status: arkv1alpha1.MemoryStatus{
+			LastResolvedAddress: &resolvedAddress,
+			Phase:               "ready",
+		},
+	}
+	fakeClient := setupMemoryTestClient([]client.Object{memory})
+	httpMemory := &HTTPMemory{
+		client:           fakeClient,
+		httpClient:       server.Client(),
+		baseURL:          server.URL,
+		conversationId:   "test-conv-id",
+		name:             "error-body-get-memory",
+		namespace:        "default",
+		headers:          map[string]string{},
+		eventingRecorder: &noOpMemoryRecorder{},
+	}
+
+	_, err := httpMemory.GetMessages(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "HTTP status 500")
+	assert.Contains(t, err.Error(), "storage backend unavailable")
+}
+
 func TestHTTPMemoryEmptyHeaders(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == MessagesEndpoint && r.Method == http.MethodPost {

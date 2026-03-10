@@ -1046,6 +1046,42 @@ func convertCompatMessagesToA2A(messages []genai.Message) ([]protocol.Message, e
 	return converted, nil
 }
 
+func addA2AMessagesToMemory(ctx context.Context, memory genai.MemoryInterface, queryName string, messages []protocol.Message) error {
+	if memory == nil || len(messages) == 0 {
+		return nil
+	}
+	if a2aMemory, ok := memory.(genai.A2AMemoryInterface); ok {
+		return a2aMemory.AddA2AMessages(ctx, queryName, messages)
+	}
+	compatMessages := make([]genai.Message, 0, len(messages))
+	for i := range messages {
+		compatMessage, err := genai.A2AToOpenAIMessageMultimodal(messages[i])
+		if err != nil {
+			return fmt.Errorf("failed to convert A2A message %d to compat: %w", i, err)
+		}
+		compatMessages = append(compatMessages, compatMessage)
+	}
+	return memory.AddMessages(ctx, queryName, compatMessages)
+}
+
+func loadA2AMessagesFromMemory(ctx context.Context, memory genai.MemoryInterface) ([]protocol.Message, error) {
+	if memory == nil {
+		return nil, nil
+	}
+	if a2aMemory, ok := memory.(genai.A2AMemoryInterface); ok {
+		return a2aMemory.GetA2AMessages(ctx)
+	}
+	compatMessages, err := memory.GetMessages(ctx)
+	if err != nil {
+		return nil, err
+	}
+	converted, err := convertCompatMessagesToA2A(compatMessages)
+	if err != nil {
+		return nil, err
+	}
+	return converted, nil
+}
+
 func saveA2AExecutionResultToMemory(ctx context.Context, memory genai.MemoryInterface, queryName string, inputMessages []protocol.Message, result *genai.ExecutionResult) error {
 	if memory == nil || result == nil {
 		return nil
@@ -1058,7 +1094,7 @@ func saveA2AExecutionResultToMemory(ctx context.Context, memory genai.MemoryInte
 	if len(newA2AMessages) == 0 {
 		return nil
 	}
-	if err := memory.AddA2AMessages(ctx, queryName, newA2AMessages); err != nil {
+	if err := addA2AMessagesToMemory(ctx, memory, queryName, newA2AMessages); err != nil {
 		return fmt.Errorf("failed to save native messages to memory: %w", err)
 	}
 	return nil
@@ -1078,7 +1114,7 @@ func saveExecutionResultToMemory(ctx context.Context, memory genai.MemoryInterfa
 		if len(newA2AMessages) == 0 {
 			return nil
 		}
-		if err := memory.AddA2AMessages(ctx, queryName, newA2AMessages); err != nil {
+		if err := addA2AMessagesToMemory(ctx, memory, queryName, newA2AMessages); err != nil {
 			return fmt.Errorf("failed to save native messages to memory: %w", err)
 		}
 		return nil
@@ -1103,7 +1139,7 @@ func (r *QueryReconciler) loadInitialMessages(ctx context.Context, memory genai.
 }
 
 func (r *QueryReconciler) loadInitialA2AMessages(ctx context.Context, memory genai.MemoryInterface) ([]protocol.Message, error) {
-	messages, err := memory.GetA2AMessages(ctx)
+	messages, err := loadA2AMessagesFromMemory(ctx, memory)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get A2A messages from memory: %w", err)
 	}

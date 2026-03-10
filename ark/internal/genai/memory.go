@@ -40,9 +40,12 @@ func getMemoryTimeout() time.Duration {
 type MemoryInterface interface {
 	AddMessages(ctx context.Context, queryID string, messages []Message) error
 	GetMessages(ctx context.Context) ([]Message, error)
+	Close() error
+}
+
+type A2AMemoryInterface interface {
 	AddA2AMessages(ctx context.Context, queryID string, messages []protocol.Message) error
 	GetA2AMessages(ctx context.Context) ([]protocol.Message, error)
-	Close() error
 }
 
 type Config struct {

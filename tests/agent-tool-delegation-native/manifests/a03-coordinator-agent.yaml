@@ -1,0 +1,13 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: coordinator-agent
+spec:
+  prompt: |
+    Coordinator Agent
+    Always call delegate-agent-tool before replying.
+  modelRef:
+    name: test-model
+  tools:
+    - type: agent
+      name: delegate-agent-tool

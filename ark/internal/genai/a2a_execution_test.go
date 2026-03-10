@@ -491,3 +491,37 @@ func TestStreamA2ANativeBlockingResponseSucceeds(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, stream.chunks, 1)
 }
+
+func TestShouldFallbackToBlockingExecution(t *testing.T) {
+	tests := []struct {
+		name      string
+		streamed  bool
+		streamErr error
+		want      bool
+	}{
+		{
+			name:      "fallback when streaming not attempted",
+			streamed:  false,
+			streamErr: nil,
+			want:      true,
+		},
+		{
+			name:      "fallback when streaming succeeded without result",
+			streamed:  true,
+			streamErr: nil,
+			want:      true,
+		},
+		{
+			name:      "no fallback after partial streaming error",
+			streamed:  true,
+			streamErr: errors.New("stream failed"),
+			want:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, shouldFallbackToBlockingExecution(tt.streamed, tt.streamErr))
+		})
+	}
+}
