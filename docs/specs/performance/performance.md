@@ -21,16 +21,13 @@ concurrent workers. Assert zero errors and p99 latency under 200ms.
 
 ### PostgreSQL Storage Backend Install
 
-Starting from a vanilla Ark cluster, deploy the PostgreSQL storage backend.
-This requires a maximum of:
+Starting from a vanilla Ark cluster, switch to the PostgreSQL storage backend
+following the [core architecture](../reference/core-architecture.mdx) migration
+path. This involves deploying PostgreSQL, removing etcd-mode CRDs, re-labelling
+APIServices for helm ownership, and upgrading the controller with PostgreSQL
+storage configuration.
 
-1. One `helm install` command (the PostgreSQL storage chart from the marketplace)
-2. One additional command (restart or reconfigure the controller)
-
-The same chainsaw E2E tests (`!evaluated,!llm` selector) must pass against this
-topology, confirming identical functional behaviour regardless of backend.
-
-Then run the same apiserver benchmark: create 100 Query resources with 10
+Run the same apiserver benchmark: create 100 Query resources with 10
 concurrent workers. Assert zero errors and p99 latency under 200ms.
 
 ### Thresholds
