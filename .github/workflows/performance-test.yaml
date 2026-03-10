@@ -79,7 +79,7 @@ jobs:
 
       - name: Wait for PostgreSQL readiness
         run: |
-          kubectl wait pod -l app.kubernetes.io/name=ark-storage-dev \
+          kubectl wait pod -l app=ark-storage-dev \
             --for=condition=Ready \
             --namespace ark-system \
             --timeout=120s
