@@ -2,6 +2,9 @@ apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   name: team-selector
+  labels:
+    # LLM tests call real language model APIs
+    llm: "true"
 spec:
   description: Test selector team strategy with AI-driven participant selection
   # Selector strategy requires multiple AI model calls for participant selection
