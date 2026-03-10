@@ -24,7 +24,6 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	"mckinsey.com/ark/internal/genai"
-	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 )
 
 const (
@@ -45,7 +44,6 @@ const (
 type QueryReconciler struct {
 	client.Client
 	Scheme          *runtime.Scheme
-	Telemetry       *telemetryconfig.Provider
 	Eventing        *eventingconfig.Provider
 	QueryEngineAddr string
 	operations      sync.Map
@@ -185,37 +183,25 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		}
 	}()
 
-	sessionId := obj.Spec.SessionId
-	if sessionId == "" {
-		sessionId = string(obj.UID)
-	}
-
-	opCtx, span := r.Telemetry.QueryRecorder().StartQuery(opCtx, &obj, "execute")
-	r.Telemetry.QueryRecorder().RecordSessionID(span, sessionId)
-	defer span.End()
-
 	opCtx = r.Eventing.QueryRecorder().InitializeQueryContext(opCtx, &obj)
 	opCtx = r.Eventing.QueryRecorder().StartTokenCollection(opCtx)
 	opCtx = r.Eventing.QueryRecorder().Start(opCtx, "QueryExecution", fmt.Sprintf("Executing query %s", obj.Name), nil)
 
 	impersonatedClient, err := r.getClientForQuery(obj)
 	if err != nil {
-		r.Telemetry.QueryRecorder().RecordError(span, err)
 		_ = r.updateStatus(opCtx, &obj, statusError)
 		return
 	}
 
 	target, err := r.resolveTarget(opCtx, obj, impersonatedClient)
 	if err != nil {
-		r.Telemetry.QueryRecorder().RecordError(span, err)
 		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Failed to resolve target: %v", err), err, nil)
 		_ = r.updateStatus(opCtx, &obj, statusError)
 		return
 	}
 
-	response, err := r.executeViaEngine(opCtx, obj, *target)
+	response, engineMeta, err := r.executeViaEngine(opCtx, obj, *target)
 	if err != nil {
-		r.Telemetry.QueryRecorder().RecordError(span, err)
 		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Query execution failed: %v", err), err, nil)
 		_ = r.updateStatus(opCtx, &obj, statusError)
 		return
@@ -223,72 +209,28 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	obj.Status.Response = response
 
-	if response != nil && response.Phase == statusDone {
-		r.Telemetry.QueryRecorder().RecordRootOutput(span, response.Content)
+	if engineMeta.TokenUsage != nil {
+		obj.Status.TokenUsage = *engineMeta.TokenUsage
 	}
-
-	tokenSummary := r.Eventing.QueryRecorder().GetTokenSummary(opCtx)
-	obj.Status.TokenUsage = tokenSummary
-
-	if tokenSummary.TotalTokens > 0 {
-		r.Telemetry.QueryRecorder().RecordTokenUsage(span, tokenSummary.PromptTokens, tokenSummary.CompletionTokens, tokenSummary.TotalTokens)
+	if engineMeta.ConversationId != "" {
+		obj.Status.ConversationId = engineMeta.ConversationId
 	}
 
 	queryStatus := r.determineQueryStatus(response)
-	_ = r.updateStatus(opCtx, &obj, queryStatus)
-
-	eventStream, _ := r.createEventStreamIfNeeded(opCtx, obj)
 	duration := &metav1.Duration{Duration: time.Since(startTime)}
-	r.finalizeEventStream(opCtx, eventStream, &obj)
 	_ = r.updateStatusWithDuration(opCtx, &obj, queryStatus, duration)
 
-	r.Telemetry.QueryRecorder().RecordSuccess(span)
-	operationData := map[string]string{
-		"promptTokens":     fmt.Sprintf("%d", tokenSummary.PromptTokens),
-		"completionTokens": fmt.Sprintf("%d", tokenSummary.CompletionTokens),
-		"totalTokens":      fmt.Sprintf("%d", tokenSummary.TotalTokens),
-	}
-	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", operationData)
+	log.Info("query execution completed", "query", obj.Name, "status", queryStatus, "duration", duration.Duration)
+	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", nil)
 }
 
-// finalizeEventStream sends a final chunk with complete query status, then closes the stream
-func (r *QueryReconciler) finalizeEventStream(ctx context.Context, eventStream genai.EventStreamInterface, query *arkv1alpha1.Query) {
-	if eventStream == nil {
-		return
-	}
 
-	log := logf.FromContext(ctx)
-
-	// Send final chunk with empty content delta but complete query status in metadata
-	emptyChunk := genai.NewContentChunk("chatcmpl-final", query.Name, "")
-	finalChunk := genai.WrapChunkWithMetadata(ctx, emptyChunk, "", query)
-	if err := eventStream.StreamChunk(ctx, finalChunk); err != nil {
-		log.Error(err, "Failed to stream final completion chunk with query status")
-	}
-
-	// Notify event stream that streaming is complete. This ensures that
-	// clients connected to the stream receive the completion event and
-	// will close their connection.
-	if completionErr := eventStream.NotifyCompletion(ctx); completionErr != nil {
-		// If we cannot close the event stream, log and error but don't
-		// fail - the final message will still be available in the
-		// query response.
-		log.Error(completionErr, "Failed to notify query completion to event stream")
-	}
-
-	// Close the event stream. If this fails, we log and error but don't
-	// fail the query, as the final message is still recorded.
-	if closeErr := eventStream.Close(); closeErr != nil {
-		log.Error(closeErr, "Failed to close event stream")
-	}
-}
-
-func (r *QueryReconciler) executeViaEngine(ctx context.Context, query arkv1alpha1.Query, target arkv1alpha1.QueryTarget) (*arkv1alpha1.Response, error) {
+func (r *QueryReconciler) executeViaEngine(ctx context.Context, query arkv1alpha1.Query, target arkv1alpha1.QueryTarget) (*arkv1alpha1.Response, engineResponseMeta, error) {
 	log := logf.FromContext(ctx)
 
 	agentConfig, err := r.buildAgentConfigForEngine(ctx, query, target)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build agent config: %w", err)
+		return nil, engineResponseMeta{}, fmt.Errorf("failed to build agent config: %w", err)
 	}
 
 	arkMetadata := map[string]any{
@@ -305,12 +247,12 @@ func (r *QueryReconciler) executeViaEngine(ctx context.Context, query arkv1alpha
 		genai.ArkMetadataKey: arkMetadata,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal A2A metadata: %w", err)
+		return nil, engineResponseMeta{}, fmt.Errorf("failed to marshal A2A metadata: %w", err)
 	}
 
 	var metadata map[string]any
 	if err := json.Unmarshal(metadataBytes, &metadata); err != nil {
-		return nil, fmt.Errorf("failed to prepare A2A metadata: %w", err)
+		return nil, engineResponseMeta{}, fmt.Errorf("failed to prepare A2A metadata: %w", err)
 	}
 
 	userText := r.extractUserInput(ctx, query)
@@ -321,7 +263,7 @@ func (r *QueryReconciler) executeViaEngine(ctx context.Context, query arkv1alpha
 
 	a2aClient, err := genai.CreateA2AClient(ctx, r.Client, r.QueryEngineAddr, nil, query.Namespace, query.Name, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create A2A client for query engine: %w", err)
+		return nil, engineResponseMeta{}, fmt.Errorf("failed to create A2A client for query engine: %w", err)
 	}
 
 	timeout := 5 * time.Minute
@@ -342,28 +284,32 @@ func (r *QueryReconciler) executeViaEngine(ctx context.Context, query arkv1alpha
 
 	result, err := a2aClient.SendMessage(execCtx, params)
 	if err != nil {
-		return nil, fmt.Errorf("query engine execution failed: %w", err)
+		return nil, engineResponseMeta{}, fmt.Errorf("query engine execution failed: %w", err)
 	}
 
 	responseText, err := extractA2AResponseText(result)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract response from query engine: %w", err)
+		return nil, engineResponseMeta{}, fmt.Errorf("failed to extract response from query engine: %w", err)
 	}
+
+	engineMeta := extractEngineResponseMeta(result)
 
 	log.Info("query engine execution completed", "query", query.Name, "target", target.Name)
 
 	responseMessages := []genai.Message{genai.NewAssistantMessage(responseText)}
 	rawJSON, err := serializeMessages(responseMessages)
 	if err != nil {
-		return nil, fmt.Errorf("failed to serialize response: %w", err)
+		return nil, engineResponseMeta{}, fmt.Errorf("failed to serialize response: %w", err)
 	}
 
-	return &arkv1alpha1.Response{
+	response := &arkv1alpha1.Response{
 		Target:  target,
 		Content: responseText,
 		Raw:     rawJSON,
 		Phase:   statusDone,
-	}, nil
+	}
+
+	return response, engineMeta, nil
 }
 
 func (r *QueryReconciler) buildAgentConfigForEngine(ctx context.Context, query arkv1alpha1.Query, target arkv1alpha1.QueryTarget) (map[string]any, error) {
@@ -404,6 +350,60 @@ func extractA2AResponseText(result *protocol.MessageResult) (string, error) {
 	default:
 		return "", fmt.Errorf("unexpected A2A result type: %T", result.Result)
 	}
+}
+
+type engineResponseMeta struct {
+	TokenUsage     *arkv1alpha1.TokenUsage
+	ConversationId string
+}
+
+func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMeta {
+	var meta engineResponseMeta
+	if result == nil {
+		return meta
+	}
+
+	var msgMeta map[string]any
+	switch r := result.Result.(type) {
+	case *protocol.Message:
+		msgMeta = r.Metadata
+	}
+
+	if msgMeta == nil {
+		return meta
+	}
+
+	arkData, ok := msgMeta[genai.ArkMetadataKey]
+	if !ok {
+		return meta
+	}
+
+	arkMap, ok := arkData.(map[string]any)
+	if !ok {
+		return meta
+	}
+
+	if convId, ok := arkMap["conversationId"].(string); ok {
+		meta.ConversationId = convId
+	}
+
+	if tokenData, ok := arkMap["tokenUsage"].(map[string]any); ok {
+		usage := &arkv1alpha1.TokenUsage{}
+		if v, ok := tokenData["prompt_tokens"].(float64); ok {
+			usage.PromptTokens = int64(v)
+		}
+		if v, ok := tokenData["completion_tokens"].(float64); ok {
+			usage.CompletionTokens = int64(v)
+		}
+		if v, ok := tokenData["total_tokens"].(float64); ok {
+			usage.TotalTokens = int64(v)
+		}
+		if usage.TotalTokens > 0 {
+			meta.TokenUsage = usage
+		}
+	}
+
+	return meta
 }
 
 func (r *QueryReconciler) resolveTarget(ctx context.Context, query arkv1alpha1.Query, impersonatedClient client.Client) (*arkv1alpha1.QueryTarget, error) {
@@ -492,29 +492,6 @@ func (r *QueryReconciler) resolveSelector(ctx context.Context, selector *metav1.
 }
 
 
-func (r *QueryReconciler) createEventStreamIfNeeded(ctx context.Context, query arkv1alpha1.Query) (genai.EventStreamInterface, error) {
-	if !genai.IsStreamingEnabled(query) {
-		return nil, nil
-	}
-
-	sessionId := query.Spec.SessionId
-	if sessionId == "" {
-		sessionId = string(query.UID)
-	}
-
-	eventStream, err := genai.NewEventStreamForQuery(ctx, r.Client, query.Namespace, sessionId, query.Name)
-	if err != nil {
-		return nil, fmt.Errorf("streaming configuration error: %w", err)
-	}
-
-	if eventStream == nil {
-		logf.FromContext(ctx).Info("Streaming requested but no streaming service configured",
-			"query", query.Name,
-			"namespace", query.Namespace)
-	}
-
-	return eventStream, nil
-}
 
 
 func (r *QueryReconciler) createSuccessResponse(target arkv1alpha1.QueryTarget, messages []genai.Message) arkv1alpha1.Response {

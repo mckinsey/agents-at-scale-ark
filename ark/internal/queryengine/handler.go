@@ -65,6 +65,17 @@ func (h *Handler) ProcessMessage(
 	}
 
 	ctx = context.WithValue(ctx, genai.QueryContextKey, &query)
+	ctx = h.eventing.QueryRecorder().InitializeQueryContext(ctx, &query)
+	ctx = h.eventing.QueryRecorder().StartTokenCollection(ctx)
+
+	ctx, querySpan := h.telemetry.QueryRecorder().StartQuery(ctx, &query, "execute")
+	defer querySpan.End()
+
+	sessionId := query.Spec.SessionId
+	if sessionId == "" {
+		sessionId = string(query.UID)
+	}
+	h.telemetry.QueryRecorder().RecordSessionID(querySpan, sessionId)
 
 	inputMessages, err := genai.GetQueryInputMessages(ctx, query, h.k8sClient)
 	if err != nil {
@@ -77,16 +88,39 @@ func (h *Handler) ProcessMessage(
 		return nil, fmt.Errorf("failed to create memory client: %w", err)
 	}
 
+	if httpMemory, ok := memory.(*genai.HTTPMemory); ok {
+		conversationId = httpMemory.GetConversationID()
+	}
+
 	memoryMessages, err := memory.GetMessages(ctx)
 	if err != nil {
 		log.Error(err, "failed to load memory messages, continuing without history")
 		memoryMessages = nil
 	}
 
-	eventStream, err := genai.NewEventStreamForQuery(ctx, h.k8sClient, query.Namespace, query.Spec.SessionId, query.Name)
+	eventStream, err := genai.NewEventStreamForQuery(ctx, h.k8sClient, query.Namespace, sessionId, query.Name)
 	if err != nil {
 		log.Error(err, "failed to create event stream, continuing without streaming")
 	}
+	defer func() {
+		if eventStream == nil {
+			return
+		}
+		if completionErr := eventStream.NotifyCompletion(ctx); completionErr != nil {
+			log.Error(completionErr, "failed to notify stream completion")
+		}
+		if closeErr := eventStream.Close(); closeErr != nil {
+			log.Error(closeErr, "failed to close event stream")
+		}
+	}()
+
+	userContent := genai.ExtractUserMessageContent(inputMessages)
+	h.telemetry.QueryRecorder().RecordRootInput(querySpan, userContent)
+
+	ctx, targetSpan := h.telemetry.QueryRecorder().StartTarget(ctx, target.Type, target.Name)
+	defer targetSpan.End()
+
+	h.telemetry.QueryRecorder().RecordInput(targetSpan, userContent)
 
 	var responseMessages []genai.Message
 
@@ -104,8 +138,17 @@ func (h *Handler) ProcessMessage(
 	}
 
 	if err != nil {
+		h.telemetry.QueryRecorder().RecordError(targetSpan, err)
+		h.telemetry.QueryRecorder().RecordError(querySpan, err)
+		genai.StreamError(ctx, eventStream, err, "execution_failed", target.Name)
 		return nil, fmt.Errorf("execution failed: %w", err)
 	}
+
+	responseContent := extractAssistantText(responseMessages)
+	h.telemetry.QueryRecorder().RecordOutput(targetSpan, responseContent)
+	h.telemetry.QueryRecorder().RecordRootOutput(querySpan, responseContent)
+	h.telemetry.QueryRecorder().RecordSuccess(targetSpan)
+	h.telemetry.QueryRecorder().RecordSuccess(querySpan)
 
 	if memory != nil && len(responseMessages) > 0 {
 		newMessages := genai.PrepareNewMessagesForMemory(inputMessages, responseMessages)
@@ -116,10 +159,32 @@ func (h *Handler) ProcessMessage(
 
 	responseText := extractAssistantText(responseMessages)
 
+	tokenSummary := h.eventing.QueryRecorder().GetTokenSummary(ctx)
+	if tokenSummary.TotalTokens > 0 {
+		h.telemetry.QueryRecorder().RecordTokenUsage(querySpan, tokenSummary.PromptTokens, tokenSummary.CompletionTokens, tokenSummary.TotalTokens)
+	}
+
+	responseMeta := map[string]any{}
+	if tokenSummary.TotalTokens > 0 {
+		responseMeta["tokenUsage"] = map[string]any{
+			"prompt_tokens":     tokenSummary.PromptTokens,
+			"completion_tokens": tokenSummary.CompletionTokens,
+			"total_tokens":      tokenSummary.TotalTokens,
+		}
+	}
+	if conversationId != "" {
+		responseMeta["conversationId"] = conversationId
+	}
+
 	responseMessage := protocol.NewMessage(
 		protocol.MessageRoleAgent,
 		[]protocol.Part{protocol.NewTextPart(responseText)},
 	)
+	if len(responseMeta) > 0 {
+		responseMessage.Metadata = map[string]any{
+			genai.ArkMetadataKey: responseMeta,
+		}
+	}
 
 	return &taskmanager.MessageProcessingResult{
 		Result: &responseMessage,

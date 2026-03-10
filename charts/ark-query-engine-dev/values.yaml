@@ -1,0 +1,15 @@
+image:
+  repository: ark-query-engine
+  tag: latest
+
+port: 9090
+
+serviceAccountName: ark-controller
+
+resources:
+  limits:
+    memory: "4096Mi"
+    cpu: "2000m"
+  requests:
+    memory: "512Mi"
+    cpu: "200m"
