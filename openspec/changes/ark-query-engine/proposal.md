@@ -20,7 +20,7 @@ The controller currently embeds the full turn loop — prompt building, LLM call
 - A2A server receiving `protocol.Message` with query/target metadata
 - Full turn loop: agent execution, team orchestration, tool calling, streaming, memory
 - Sidecar deployment in controller pod via Helm chart
-- Default ExecutionEngine CR pointing to localhost sidecar
+- Controller flag for sidecar address (default: `http://localhost:9090`)
 - Controller refactored to delegate execution via A2A SendMessage
 
 **Out of scope:**

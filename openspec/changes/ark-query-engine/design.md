@@ -94,6 +94,34 @@ The controller:
 3. Sends the final status chunk to ark-broker (with completed Query CR)
 4. Calls `NotifyCompletion` + `Close` on the stream
 
+## Query CR Ownership
+
+The controller is the sole writer to the Query CR. The engine never writes to it.
+
+```
+Controller                          Engine
+    │                                  │
+    ├── pending → running              │
+    ├── write conversationId           │
+    ├── A2A SendMessage ──────────────►│
+    │                                  ├── execute (agent/team/model)
+    │                                  ├── stream chunks → ark-broker
+    │   A2A Response ◄─────────────────┤
+    ├── write response to status       │
+    ├── write token usage              │
+    ├── running → done/error           │
+    ├── finalize stream                │
+    └── write duration                 │
+```
+
+The split is: the engine handles **intermediate** state (streaming chunks to ark-broker, executing tools, running the turn loop), while the controller handles **terminal** state (writing response, setting done/error, finalizing the stream, recording duration).
+
+The engine is stateless from the Query CR perspective — it receives context via A2A metadata, executes, and returns results. If the engine crashes mid-execution, the controller's existing `spec.timeout` handles marking the query as error.
+
+This avoids write conflicts (two writers on the same CR) and keeps the engine focused on execution without needing write RBAC for Query resources.
+
+**Future direction:** The query engine should eventually own all query and associated resource updates, including terminal state. This Phase 1 split is a stepping stone — once the engine is stable, moving terminal state ownership to the engine simplifies the controller further and enables richer progress reporting during execution.
+
 ## Module Structure
 
 Same Go module (`ark/`), separate binary:
@@ -184,7 +212,7 @@ The engine runs as a sidecar container in the controller pod:
 - Shares the controller's ServiceAccount (same RBAC permissions)
 - Health endpoint at `/health` for K8s probes
 
-A default ExecutionEngine CR is created in `ark-system` namespace pointing to `http://localhost:9090`.
+The controller knows the sidecar address via a flag/env var (default: `http://localhost:9090`). No ExecutionEngine CR is needed for the built-in engine — the CRD pattern is for user-deployed external engines that need address resolution and health tracking. A co-located sidecar at a known address doesn't benefit from that machinery.
 
 ## A2A Server Implementation
 
@@ -201,9 +229,11 @@ Uses `trpc-a2a-go v0.2.4` server package:
 | Module boundary | Same Go module, separate binary | Avoids `internal/` visibility issues, no import refactoring |
 | A2A message content | Fat metadata + query ref | Same contract as external engines (Python SDK), engine uses K8s for tool execution, MCP, memory, streaming |
 | Streaming destination | Engine → ark-broker directly | Same mechanism as today, no proxy needed |
+| Query CR ownership | Controller is sole writer | No write conflicts, engine stays stateless, timeout handles crashes |
 | Stream finalization | Controller finalizes | Controller owns Query CR lifecycle |
 | Memory ownership | Engine handles load/save | Clean extraction of full execution context |
 | Team member routing | Local by default, A2A only if explicit engine | Avoids infinite recursion, matches existing semantics |
 | RBAC | Shared SA (sidecar) | Same trust boundary, least-privilege deferred to Phase 2 |
+| Engine address | Flag/env var, no default ExecutionEngine CR | Sidecar is always localhost, CRD pattern is for external engines |
 | Topology | Sidecar in controller pod | Localhost latency, simplest default |
 | Language | Go | Same module, extracts existing code |

@@ -61,16 +61,11 @@
 - Resource limits (configurable via values.yaml)
 - Share controller's ServiceAccount
 
-### 9. Default ExecutionEngine CR
-- Create `dist/chart/templates/query-engine/execution-engine.yaml`
-- ExecutionEngine CR in `ark-system` namespace
-- Address: `http://localhost:9090`
-- Name: `default` (or configurable)
-
-### 10. Controller routing logic
-- When agent/team/model has no explicit `executionEngine`, use the default ExecutionEngine CR
-- Look up default engine by convention (e.g., `default` in `ark-system`) or from controller config
+### 9. Controller routing logic
+- Add `--query-engine-addr` flag to controller (default: `http://localhost:9090`)
+- When agent/team/model has no explicit `executionEngine`, send A2A message to flag address
 - Existing agents with explicit `executionEngine` refs continue to work unchanged
+- No default ExecutionEngine CR needed — sidecar address is configuration, not a resource
 
 ## Phase 4: Verification
 
@@ -98,7 +93,7 @@
 
 - [ ] Controller has no direct LLM execution — turn loop, provider adapters, and completions logic only run in the engine
 - [ ] `ark/cmd/query-engine/` exists — own binary, Dockerfile, health endpoint
-- [ ] Default install deploys the engine — ExecutionEngine CR in ark-system points to localhost sidecar
+- [ ] Default install deploys the engine — sidecar in controller pod, address via flag
 - [ ] A2A is the protocol — controller and engine communicate via `protocol.Message` only
 - [ ] All existing e2e tests pass — zero user-facing change
 - [ ] Engine has 100% unit test coverage on `internal/queryengine/`
