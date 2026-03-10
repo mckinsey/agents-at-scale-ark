@@ -4,399 +4,316 @@ package controller
 
 import (
 	"context"
-	"fmt"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
-	"mckinsey.com/ark/internal/eventing"
+	eventnoop "mckinsey.com/ark/internal/eventing/noop"
 )
 
-const (
-	// Condition types
-	AgentAvailable = "Available"
-)
+var _ = Describe("Agent Controller", func() {
+	Context("When reconciling a resource", func() {
+		const resourceName = "test-resource"
+		const testModelName = "test-model"
+		const weatherAPIToolName = "weather-api"
 
-type AgentReconciler struct {
-	client.Client
-	Scheme   *runtime.Scheme
-	Eventing eventing.Provider
-}
+		ctx := context.Background()
 
-// +kubebuilder:rbac:groups=ark.mckinsey.com,resources=agents,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=ark.mckinsey.com,resources=agents/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=ark.mckinsey.com,resources=agents/finalizers,verbs=update
-// +kubebuilder:rbac:groups=ark.mckinsey.com,resources=tools,verbs=get;list;watch
-// +kubebuilder:rbac:groups=ark.mckinsey.com,resources=models,verbs=get;list;watch
-// +kubebuilder:rbac:groups=ark.mckinsey.com,resources=a2aservers,verbs=get;list;watch
-
-//nolint:dupl
-func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := logf.FromContext(ctx)
-
-	// Fetch the Agent instance
-	var agent arkv1alpha1.Agent
-	if err := r.Get(ctx, req.NamespacedName, &agent); err != nil {
-		if errors.IsNotFound(err) {
-			log.Info("Agent resource not found. Ignoring since object must be deleted")
-			return ctrl.Result{}, nil
+		typeNamespacedName := types.NamespacedName{
+			Name:      resourceName,
+			Namespace: "default", // TODO(user):Modify as needed
 		}
-		log.Error(err, "Failed to get Agent")
-		return ctrl.Result{}, err
-	}
+		agent := &arkv1alpha1.Agent{}
 
-	// Initialize conditions if empty
-	if len(agent.Status.Conditions) == 0 {
-		r.setCondition(&agent, AgentAvailable, metav1.ConditionUnknown, "Initializing", "Agent availability is being determined")
-		if err := r.updateStatus(ctx, &agent); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
-	}
-
-	// Check current condition
-	currentCondition := meta.FindStatusCondition(agent.Status.Conditions, AgentAvailable)
-
-	// Check all dependencies and determine new status
-	available, reason, message := r.checkDependencies(ctx, &agent)
-
-	// Determine new status
-	var newStatus metav1.ConditionStatus
-	if available {
-		newStatus = metav1.ConditionTrue
-	} else {
-		newStatus = metav1.ConditionFalse
-	}
-
-	// Only update if status actually changed
-	if currentCondition == nil || currentCondition.Status != newStatus || currentCondition.Reason != reason {
-		log.Info("agent status changed", "agent", agent.Name, "available", newStatus, "reason", reason)
-		r.setCondition(&agent, AgentAvailable, newStatus, reason, message)
-		if !available {
-			r.Eventing.AgentRecorder().DependencyUnavailable(ctx, &agent, message)
-		}
-		if err := r.updateStatus(ctx, &agent); err != nil {
-			return ctrl.Result{}, err
-		}
-	}
-
-	return ctrl.Result{}, nil
-}
-
-// checkDependencies validates all agent dependencies and returns availability status
-func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alpha1.Agent) (available bool, reason, message string) {
-	// Check A2AServer dependency (if agent is owned by an A2AServer)
-	if ok, msg := r.checkA2AServerDependency(ctx, agent); !ok {
-		return false, "A2AServerNotReady", msg
-	}
-
-	// Non-A2A agents require a model. If no model is assigned, mark as unavailable.
-	if agent.Spec.ModelRef == nil && !r.isA2AAgent(agent) {
-		return false, "ModelNotAssigned", "No model has been assigned to this agent"
-	}
-
-	// Check the status of the agent's model. Some agents (such as A2A agents) have a 'nil' model, and their status is not associated with model availability.
-	if agent.Spec.ModelRef != nil {
-		if ok, msg := r.checkModelDependency(ctx, agent); !ok {
-			return false, "ModelNotFound", msg
-		}
-	}
-
-	// Check tool dependencies
-	if ok, msg := r.checkToolDependencies(ctx, agent); !ok {
-		return false, "ToolNotFound", msg
-	}
-
-	// All dependencies resolved
-	return true, "Available", "All dependencies are available"
-}
-
-// checkModelDependency validates model dependency
-func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1alpha1.Agent) (bool, string) {
-	modelName := agent.Spec.ModelRef.Name
-	modelNamespace := agent.Namespace
-
-	if agent.Spec.ModelRef.Namespace != "" {
-		modelNamespace = agent.Spec.ModelRef.Namespace
-	}
-
-	var model arkv1alpha1.Model
-	modelKey := types.NamespacedName{Name: modelName, Namespace: modelNamespace}
-	if err := r.Get(ctx, modelKey, &model); err != nil {
-		if errors.IsNotFound(err) {
-			msg := fmt.Sprintf("Model '%s' not found in namespace '%s'", modelName, modelNamespace)
-			return false, msg
-		}
-		return false, fmt.Sprintf("Error checking model: %v", err)
-	}
-
-	// Check if model is available
-	modelCondition := meta.FindStatusCondition(model.Status.Conditions, "ModelAvailable")
-	if modelCondition == nil || modelCondition.Status != metav1.ConditionTrue {
-		msg := fmt.Sprintf("Model '%s' is not available", modelName)
-		return false, msg
-	}
-
-	return true, ""
-}
-
-// checkToolDependencies validates tool dependencies
-func (r *AgentReconciler) checkToolDependencies(ctx context.Context, agent *arkv1alpha1.Agent) (bool, string) {
-	for _, toolSpec := range agent.Spec.Tools {
-		// Skip built-in tools - they don't reference Tool CRDs
-		if toolSpec.Type == "built-in" || toolSpec.Name == "" {
-			continue
-		}
-
-		toolName := toolSpec.GetToolCRDName()
-
-		var tool arkv1alpha1.Tool
-		toolKey := types.NamespacedName{Name: toolName, Namespace: agent.Namespace}
-		if err := r.Get(ctx, toolKey, &tool); err != nil {
-			if errors.IsNotFound(err) {
-				msg := fmt.Sprintf("Tool '%s' not found in namespace '%s'", toolName, agent.Namespace)
-				return false, msg
-			}
-			return false, fmt.Sprintf("Error checking tool: %v", err)
-		}
-
-		// Validate that the declared type matches the Tool CRD type (except for deprecated 'custom')
-		if toolSpec.Type != "custom" && tool.Spec.Type != toolSpec.Type {
-			msg := fmt.Sprintf("Tool '%s' has type '%s', but agent declares it as '%s'", toolName, tool.Spec.Type, toolSpec.Type)
-			return false, msg
-		}
-	}
-
-	return true, ""
-}
-
-// isA2AAgent returns true if the agent is owned by an A2AServer
-func (r *AgentReconciler) isA2AAgent(agent *arkv1alpha1.Agent) bool {
-	for _, ownerRef := range agent.GetOwnerReferences() {
-		if ownerRef.Kind == "A2AServer" && ownerRef.APIVersion == "ark.mckinsey.com/v1prealpha1" {
-			return true
-		}
-	}
-	return false
-}
-
-// checkA2AServerDependency validates A2AServer dependency for agents owned by A2AServers
-func (r *AgentReconciler) checkA2AServerDependency(ctx context.Context, agent *arkv1alpha1.Agent) (bool, string) {
-	// Check if agent has an A2AServer owner
-	for _, ownerRef := range agent.GetOwnerReferences() {
-		if ownerRef.Kind == "A2AServer" && ownerRef.APIVersion == "ark.mckinsey.com/v1prealpha1" {
-			return r.validateA2AServerDependency(ctx, agent, ownerRef)
-		}
-	}
-
-	// No A2AServer owner
-	return true, ""
-}
-
-// validateA2AServerDependency checks if the A2AServer is ready
-func (r *AgentReconciler) validateA2AServerDependency(ctx context.Context, agent *arkv1alpha1.Agent, ownerRef metav1.OwnerReference) (bool, string) {
-	// Get the A2AServer
-	var a2aServer arkv1prealpha1.A2AServer
-	a2aServerKey := types.NamespacedName{Name: ownerRef.Name, Namespace: agent.Namespace}
-	if err := r.Get(ctx, a2aServerKey, &a2aServer); err != nil {
-		if errors.IsNotFound(err) {
-			msg := fmt.Sprintf("A2AServer '%s' not found in namespace '%s'", ownerRef.Name, agent.Namespace)
-			return false, msg
-		}
-		return false, fmt.Sprintf("Error checking A2AServer: %v", err)
-	}
-
-	// Check if A2AServer is Ready
-	if !r.isA2AServerReady(&a2aServer) {
-		msg := fmt.Sprintf("A2AServer '%s' is not ready", ownerRef.Name)
-		return false, msg
-	}
-
-	return true, ""
-}
-
-// isA2AServerReady checks if an A2AServer has Ready condition true
-func (r *AgentReconciler) isA2AServerReady(a2aServer *arkv1prealpha1.A2AServer) bool {
-	for _, condition := range a2aServer.Status.Conditions {
-		if condition.Type == "Ready" && condition.Status == "True" {
-			return true
-		}
-	}
-	return false
-}
-
-// setCondition sets a condition on the Agent
-func (r *AgentReconciler) setCondition(agent *arkv1alpha1.Agent, conditionType string, status metav1.ConditionStatus, reason, message string) {
-	meta.SetStatusCondition(&agent.Status.Conditions, metav1.Condition{
-		Type:               conditionType,
-		Status:             status,
-		Reason:             reason,
-		Message:            message,
-		ObservedGeneration: agent.Generation,
-	})
-}
-
-// updateStatus updates the Agent status
-func (r *AgentReconciler) updateStatus(ctx context.Context, agent *arkv1alpha1.Agent) error {
-	if ctx.Err() != nil {
-		return nil
-	}
-
-	err := r.Status().Update(ctx, agent)
-	if err != nil {
-		logf.FromContext(ctx).Error(err, "failed to update agent status")
-	}
-	return err
-}
-
-func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&arkv1alpha1.Agent{}).
-		// Watch for Tool events and reconcile dependent agents
-		Watches(
-			&arkv1alpha1.Tool{},
-			handler.EnqueueRequestsFromMapFunc(r.findAgentsForTool),
-		).
-		// Watch for Model events and reconcile dependent agents
-		Watches(
-			&arkv1alpha1.Model{},
-			handler.EnqueueRequestsFromMapFunc(r.findAgentsForModel),
-		).
-		// Watch for A2AServer events and reconcile owned agents
-		Watches(
-			&arkv1prealpha1.A2AServer{},
-			handler.EnqueueRequestsFromMapFunc(r.findAgentsForA2AServer),
-		).
-		Named("agent").
-		Complete(r)
-}
-
-// findAgentsForTool finds agents that depend on the given tool
-func (r *AgentReconciler) findAgentsForTool(ctx context.Context, obj client.Object) []reconcile.Request {
-	tool, ok := obj.(*arkv1alpha1.Tool)
-	if !ok {
-		return nil
-	}
-
-	return r.findAgentsForDependency(ctx, tool.Name, tool.Namespace, "tool", func(agent *arkv1alpha1.Agent) bool {
-		return r.agentDependsOnTool(agent, tool.Name)
-	})
-}
-
-// findAgentsForModel finds agents that depend on the given model
-func (r *AgentReconciler) findAgentsForModel(ctx context.Context, obj client.Object) []reconcile.Request {
-	model, ok := obj.(*arkv1alpha1.Model)
-	if !ok {
-		return nil
-	}
-
-	return r.findAgentsForDependency(ctx, model.Name, model.Namespace, "model", func(agent *arkv1alpha1.Agent) bool {
-		return r.agentDependsOnModel(agent, model.Name)
-	})
-}
-
-// findAgentsForDependency is a generic function to find agents that depend on a given resource
-func (r *AgentReconciler) findAgentsForDependency(ctx context.Context, resourceName, namespace, resourceType string, dependencyCheck func(*arkv1alpha1.Agent) bool) []reconcile.Request {
-	log := logf.Log.WithName("agent-controller").WithValues(resourceType, resourceName, "namespace", namespace)
-
-	// List all agents in the same namespace
-	var agentList arkv1alpha1.AgentList
-	if err := r.List(ctx, &agentList, client.InNamespace(namespace)); err != nil {
-		log.Error(err, "Failed to list agents for dependency check", "resourceType", resourceType)
-		return nil
-	}
-
-	var requests []reconcile.Request
-	seenAgents := make(map[string]bool) // Deduplication map
-
-	for _, agent := range agentList.Items {
-		// Check if this agent depends on the resource
-		if dependencyCheck(&agent) {
-			agentKey := agent.Namespace + "/" + agent.Name
-
-			// Skip if we've already added this agent
-			if seenAgents[agentKey] {
-				continue
-			}
-			seenAgents[agentKey] = true
-
-			requests = append(requests, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      agent.Name,
-					Namespace: agent.Namespace,
-				},
-			})
-		}
-	}
-
-	return requests
-}
-
-// agentDependsOnTool checks if an agent depends on a specific tool
-func (r *AgentReconciler) agentDependsOnTool(agent *arkv1alpha1.Agent, toolName string) bool {
-	for _, toolSpec := range agent.Spec.Tools {
-		// Skip built-in tools - they don't reference Tool CRDs
-		if toolSpec.Type == "built-in" {
-			continue
-		}
-		// Check both the exposed name and the actual tool name (for partial tools)
-		if toolSpec.Name == toolName {
-			return true
-		}
-		if toolSpec.Partial != nil && toolSpec.Partial.Name == toolName {
-			return true
-		}
-	}
-	return false
-}
-
-// agentDependsOnModel checks if an agent depends on a specific model
-func (r *AgentReconciler) agentDependsOnModel(agent *arkv1alpha1.Agent, modelName string) bool {
-	return agent.Spec.ModelRef != nil && agent.Spec.ModelRef.Name == modelName
-}
-
-// findAgentsForA2AServer finds agents owned by the given A2AServer
-func (r *AgentReconciler) findAgentsForA2AServer(ctx context.Context, obj client.Object) []reconcile.Request {
-	a2aServer, ok := obj.(*arkv1prealpha1.A2AServer)
-	if !ok {
-		return nil
-	}
-
-	log := logf.Log.WithName("agent-controller").WithValues("a2aserver", a2aServer.Name, "namespace", a2aServer.Namespace)
-
-	// List all agents in the same namespace
-	var agentList arkv1alpha1.AgentList
-	if err := r.List(ctx, &agentList, client.InNamespace(a2aServer.Namespace)); err != nil {
-		log.Error(err, "Failed to list agents for A2AServer dependency check")
-		return nil
-	}
-
-	var requests []reconcile.Request
-	for _, agent := range agentList.Items {
-		// Check if this agent is owned by the A2AServer
-		for _, ownerRef := range agent.GetOwnerReferences() {
-			if ownerRef.Kind == "A2AServer" && ownerRef.Name == a2aServer.Name {
-				requests = append(requests, reconcile.Request{
-					NamespacedName: types.NamespacedName{
-						Name:      agent.Name,
-						Namespace: agent.Namespace,
+		BeforeEach(func() {
+			By("creating the custom resource for the Kind Agent")
+			err := k8sClient.Get(ctx, typeNamespacedName, agent)
+			if err != nil && errors.IsNotFound(err) {
+				resource := &arkv1alpha1.Agent{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      resourceName,
+						Namespace: "default",
 					},
-				})
-				log.Info("Triggering reconciliation for agent owned by A2AServer", "agent", agent.Name)
-				break
+					Spec: arkv1alpha1.AgentSpec{
+						ModelRef: &arkv1alpha1.AgentModelRef{
+							Name: testModelName,
+						},
+						Prompt: "test prompt",
+					},
+				}
+				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
-		}
-	}
+		})
 
-	return requests
-}
+		AfterEach(func() {
+			// TODO(user): Cleanup logic after each test, like removing the resource instance.
+			resource := &arkv1alpha1.Agent{}
+			err := k8sClient.Get(ctx, typeNamespacedName, resource)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Cleanup the specific resource instance Agent")
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+		})
+		It("should successfully reconcile the resource", func() {
+			By("Reconciling the created resource")
+			controllerReconciler := &AgentReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Eventing: eventnoop.NewProvider(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
+			// Example: If you expect a certain status condition after reconciliation, verify it here.
+		})
+
+		It("should handle agents without explicit model reference", func() {
+			const defaultModelResourceName = "test-default-model-resource"
+			defaultModelTypeNamespacedName := types.NamespacedName{
+				Name:      defaultModelResourceName,
+				Namespace: "default",
+			}
+
+			By("creating an agent without explicit model reference")
+			defaultModelAgent := &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      defaultModelResourceName,
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.AgentSpec{
+					ModelRef: &arkv1alpha1.AgentModelRef{Name: testModelName}, // Webhook sets default model
+					Prompt:   "test prompt for default model",
+				},
+			}
+			Expect(k8sClient.Create(ctx, defaultModelAgent)).To(Succeed())
+
+			By("Reconciling the agent with no explicit model")
+			controllerReconciler := &AgentReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Eventing: eventnoop.NewProvider(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: defaultModelTypeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Cleanup the default model test resource")
+			Expect(k8sClient.Delete(ctx, defaultModelAgent)).To(Succeed())
+		})
+
+		It("should handle A2A agents without model reference", func() {
+			const a2aAgentResourceName = "test-a2a-agent-resource"
+			a2aAgentTypeNamespacedName := types.NamespacedName{
+				Name:      a2aAgentResourceName,
+				Namespace: "default",
+			}
+
+			By("creating an A2A agent without model reference")
+			a2aAgent := &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      a2aAgentResourceName,
+					Namespace: "default",
+					Annotations: map[string]string{
+						"ark.mckinsey.com/a2a-server-name": "test-a2a-server",
+					},
+				},
+				Spec: arkv1alpha1.AgentSpec{
+					ModelRef: nil,
+					Prompt:   "test prompt for A2A agent",
+				},
+			}
+			Expect(k8sClient.Create(ctx, a2aAgent)).To(Succeed())
+
+			By("Reconciling the A2A agent without model")
+			controllerReconciler := &AgentReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Eventing: eventnoop.NewProvider(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: a2aAgentTypeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Cleanup the A2A agent test resource")
+			Expect(k8sClient.Delete(ctx, a2aAgent)).To(Succeed())
+		})
+
+		It("should handle agents with partial tool dependencies", func() {
+			const partialToolAgentName = "test-partial-tool-agent"
+			partialToolAgentTypeNamespacedName := types.NamespacedName{
+				Name:      partialToolAgentName,
+				Namespace: "default",
+			}
+
+			By("creating a Tool CRD that will be referenced by partial")
+			baseTool := &arkv1alpha1.Tool{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      weatherAPIToolName,
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.ToolSpec{
+					Type:        "http",
+					Description: "Weather API tool",
+				},
+			}
+			Expect(k8sClient.Create(ctx, baseTool)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, baseTool)).To(Succeed())
+			}()
+
+			By("creating an agent with partial tool configuration")
+			partialToolAgent := &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      partialToolAgentName,
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.AgentSpec{
+					ModelRef: &arkv1alpha1.AgentModelRef{Name: testModelName},
+					Prompt:   "test prompt for partial tool agent",
+					Tools: []arkv1alpha1.AgentTool{
+						{
+							Type:        "custom",
+							Name:        "get-weather", // Exposed name
+							Description: "Get weather for a specific city",
+							Partial: &arkv1alpha1.ToolPartial{
+								Name: weatherAPIToolName, // Actual Tool CRD name
+								Parameters: []arkv1alpha1.ToolFunction{
+									{
+										Name:  "units",
+										Value: "celsius", // Pre-filled parameter
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, partialToolAgent)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, partialToolAgent)).To(Succeed())
+			}()
+
+			By("Reconciling the agent with partial tool dependencies")
+			controllerReconciler := &AgentReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Eventing: eventnoop.NewProvider(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: partialToolAgentTypeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying agentDependsOnTool works with partial tools")
+			// Test that agent depends on the exposed name
+			Expect(controllerReconciler.agentDependsOnTool(partialToolAgent, "get-weather")).To(BeTrue())
+			// Test that agent depends on the actual CRD name
+			Expect(controllerReconciler.agentDependsOnTool(partialToolAgent, weatherAPIToolName)).To(BeTrue())
+			// Test that agent does not depend on unrelated tool
+			Expect(controllerReconciler.agentDependsOnTool(partialToolAgent, "unrelated-tool")).To(BeFalse())
+		})
+
+		It("should fail reconciliation when partial tool CRD is missing", func() {
+			const missingToolAgentName = "test-missing-tool-agent"
+			const missingToolModelName = "test-missing-tool-model"
+			missingToolAgentTypeNamespacedName := types.NamespacedName{
+				Name:      missingToolAgentName,
+				Namespace: "default",
+			}
+
+			By("creating an available model for the agent")
+			missingToolModel := &arkv1alpha1.Model{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      missingToolModelName,
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.ModelSpec{
+					Provider: "openai",
+					Config:   arkv1alpha1.ModelConfig{},
+				},
+			}
+			Expect(k8sClient.Create(ctx, missingToolModel)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, missingToolModel)).To(Succeed())
+			}()
+			missingToolModel.Status.Conditions = []metav1.Condition{
+				{
+					Type:               "ModelAvailable",
+					Status:             metav1.ConditionTrue,
+					Reason:             "Available",
+					Message:            "Model is available",
+					LastTransitionTime: metav1.Now(),
+				},
+			}
+			Expect(k8sClient.Status().Update(ctx, missingToolModel)).To(Succeed())
+
+			By("creating an agent with partial tool referencing non-existent CRD")
+			missingToolAgent := &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      missingToolAgentName,
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.AgentSpec{
+					ModelRef: &arkv1alpha1.AgentModelRef{Name: missingToolModelName},
+					Prompt:   "test prompt for missing tool agent",
+					Tools: []arkv1alpha1.AgentTool{
+						{
+							Type: "custom",
+							Name: "missing-tool", // Exposed name
+							Partial: &arkv1alpha1.ToolPartial{
+								Name: "non-existent-tool", // This CRD doesn't exist
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, missingToolAgent)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, missingToolAgent)).To(Succeed())
+			}()
+
+			By("Reconciling the agent with missing tool dependency")
+			controllerReconciler := &AgentReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Eventing: eventnoop.NewProvider(),
+			}
+
+			// First reconcile to initialize status
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: missingToolAgentTypeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconcile to check dependencies
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: missingToolAgentTypeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred()) // Reconcile should succeed but set status to unavailable
+
+			By("Verifying agent status shows tool not found")
+			var reconciledAgent arkv1alpha1.Agent
+			Expect(k8sClient.Get(ctx, missingToolAgentTypeNamespacedName, &reconciledAgent)).To(Succeed())
+			Expect(reconciledAgent.Status.Conditions).To(HaveLen(1))
+			condition := reconciledAgent.Status.Conditions[0]
+			Expect(condition.Type).To(Equal("Available"))
+			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(condition.Reason).To(Equal("ToolNotFound"))
+			Expect(condition.Message).To(ContainSubstring("Tool 'non-existent-tool' not found"))
+		})
+	})
+})
