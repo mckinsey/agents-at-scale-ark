@@ -518,9 +518,14 @@ jobs:
 
 
   e2e-tests-standard:
+    name: E2E Standard (${{ matrix.storage-backend }})
     needs: [setup-container-cache-registry, build-containers]
     if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }} # Remove skipping these tests once chainsaw can be run with mock-llm
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        storage-backend: [etcd, postgresql]
     steps:
       - uses: actions/checkout@v4
 
@@ -528,6 +533,7 @@ jobs:
         with:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "true"
+          storage-backend: ${{ matrix.storage-backend }}
           ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
@@ -552,16 +558,25 @@ jobs:
         run: |
           cd tests
           mkdir -p /tmp/chainsaw-report
-          chainsaw test --config .chainsaw.yaml --selector '!llm'
+          if [ "${{ matrix.storage-backend }}" = "etcd" ]; then
+            chainsaw test --config .chainsaw.yaml --selector '!llm,!postgresql'
+          else
+            chainsaw test --config .chainsaw.yaml --selector '!llm'
+          fi
 
       - uses: ./.github/actions/collect-coverage-e2e
         with:
-          artifact-name: coverage-reports-standard
+          artifact-name: coverage-reports-standard-${{ matrix.storage-backend }}
 
   e2e-tests-llm:
+    name: E2E LLM (${{ matrix.storage-backend }})
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
     if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        storage-backend: [etcd, postgresql]
     steps:
       - uses: actions/checkout@v4
 
@@ -569,7 +584,7 @@ jobs:
         with:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "true"
-
+          storage-backend: ${{ matrix.storage-backend }}
           ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
@@ -612,7 +627,7 @@ jobs:
 
       - uses: ./.github/actions/collect-coverage-e2e
         with:
-          artifact-name: coverage-reports-llm
+          artifact-name: coverage-reports-llm-${{ matrix.storage-backend }}
 
   e2e-ui-tests:
     needs: [setup-container-cache-registry, build-containers]
