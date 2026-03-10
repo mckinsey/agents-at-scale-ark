@@ -68,9 +68,9 @@ spec:
     - script:
         content: |
           events=$(kubectl get events -n $NAMESPACE --field-selector involvedObject.name=countdown-fail-query,involvedObject.kind=Query -o json)
-          parse_errors=$(echo "$events" | jq '[.items[] | select(.reason == "A2AResponseParseError")] | length')
-          if [ "$parse_errors" -lt 1 ]; then
-            echo "expected A2AResponseParseError event for native A2A failure path" >&2
+          exec_errors=$(echo "$events" | jq '[.items[] | select(.reason == "A2AExecutionError")] | length')
+          if [ "$exec_errors" -lt 1 ]; then
+            echo "expected A2AExecutionError event for native A2A failure path" >&2
             echo "$events" | jq -r '.items[] | "\(.reason): \(.message // "no message")"'
             exit 1
           fi
