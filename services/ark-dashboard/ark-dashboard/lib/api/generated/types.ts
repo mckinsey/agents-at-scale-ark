@@ -1896,7 +1896,7 @@ export interface components {
             pollInterval?: string | null;
             /** Priority */
             priority?: number | null;
-            queryRef: components["schemas"]["QueryRef-Output"];
+            queryRef: components["schemas"]["QueryRef"];
             status?: components["schemas"]["A2ATaskStatus"] | null;
             /** Taskid */
             taskId: string;
@@ -1971,7 +1971,7 @@ export interface components {
             namespace: string;
             /** Phase */
             phase?: string | null;
-            queryRef?: components["schemas"]["QueryRef-Output"] | null;
+            queryRef?: components["schemas"]["QueryRef"] | null;
             /** Taskid */
             taskId: string;
         };
@@ -3887,21 +3887,9 @@ export interface components {
         };
         /**
          * QueryRef
-         * @description Reference to a query.
-         */
-        "QueryRef-Input": {
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace?: string | null;
-            /** Responsetarget */
-            responseTarget?: string | null;
-        };
-        /**
-         * QueryRef
          * @description Reference to a Query.
          */
-        "QueryRef-Output": {
+        QueryRef: {
             /** Name */
             name: string;
             /** Namespace */
@@ -4239,18 +4227,6 @@ export interface components {
             selector?: components["schemas"]["Selector"] | null;
             /** Strategy */
             strategy?: string | null;
-        };
-        /**
-         * TokenUsage
-         * @description Token usage metrics.
-         */
-        TokenUsage: {
-            /** Completiontokens */
-            completionTokens?: number | null;
-            /** Prompttokens */
-            promptTokens?: number | null;
-            /** Totaltokens */
-            totalTokens?: number | null;
         };
         /** ToolDetailResponse */
         ToolDetailResponse: {
