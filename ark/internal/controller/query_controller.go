@@ -175,16 +175,13 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 
 func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alpha1.Query, namespacedName types.NamespacedName) {
 	log := logf.FromContext(opCtx)
-	cleanupCache := true
 	startTime := time.Now()
 
 	defer func() {
-		if r := recover(); r != nil {
-			log.Error(fmt.Errorf("query execution goroutine panic: %v", r), "Query execution goroutine panicked")
+		if recovered := recover(); recovered != nil {
+			log.Error(fmt.Errorf("query execution goroutine panic: %v", recovered), "Query execution goroutine panicked")
 		}
-		if cleanupCache {
-			r.operations.Delete(namespacedName)
-		}
+		r.operations.Delete(namespacedName)
 	}()
 
 	sessionId := obj.Spec.SessionId
@@ -204,19 +201,12 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		return
 	}
 
-	// Get conversation ID from memory if attached
-	if memory != nil {
-		if httpMemory, ok := memory.(*genai.HTTPMemory); ok {
-			conversationId = httpMemory.GetConversationID()
-		}
-	}
+	conversationId = resolveConversationID(memory, conversationId)
 
+	if err := r.persistConversationID(opCtx, namespacedName, conversationId); err != nil {
+		log.Error(err, "failed to set conversation ID in query status")
+	}
 	if conversationId != "" {
-		if err := r.updateStatusAtomic(opCtx, namespacedName, func(q *arkv1alpha1.Query) {
-			q.Status.ConversationId = conversationId
-		}); err != nil {
-			log.Error(err, "failed to set conversation ID in query status")
-		}
 		r.Telemetry.QueryRecorder().RecordConversationID(span, conversationId)
 	}
 
@@ -224,20 +214,16 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	opCtx = r.Eventing.QueryRecorder().StartTokenCollection(opCtx)
 	opCtx = r.Eventing.QueryRecorder().Start(opCtx, "QueryExecution", fmt.Sprintf("Executing query %s", obj.Name), nil)
 
-	if inputMessages, parseErr := genai.GetQueryInputMessages(opCtx, obj, impersonatedClient); parseErr == nil {
-		r.Telemetry.QueryRecorder().RecordRootInput(span, genai.ExtractUserMessageContent(inputMessages))
-	} else if a2aMessages, a2aErr := genai.GetQueryInputA2AMessages(opCtx, obj, impersonatedClient); a2aErr == nil {
-		r.Telemetry.QueryRecorder().RecordRootInput(span, genai.ExtractA2AUserMessageContent(a2aMessages))
-	}
+	r.recordQueryRootInput(opCtx, obj, impersonatedClient, func(input string) {
+		r.Telemetry.QueryRecorder().RecordRootInput(span, input)
+	})
 
 	response, eventStream, err := r.reconcileQueue(opCtx, obj, impersonatedClient, memory)
 	if err != nil {
 		genai.StreamError(opCtx, eventStream, err, "query_execution_failed", "query")
 		r.Telemetry.QueryRecorder().RecordError(span, err)
 		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Query execution failed: %v", err), err, nil)
-		if updateErr := r.updateStatusAtomic(opCtx, namespacedName, func(q *arkv1alpha1.Query) {
-			r.applyStatusFields(q, statusError, nil)
-		}); updateErr != nil {
+		if updateErr := r.markQueryErrorStatus(opCtx, namespacedName); updateErr != nil {
 			log.Error(updateErr, "failed to update query error status")
 		}
 		return
@@ -263,14 +249,7 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	obj.Status.Duration = duration
 	r.finalizeEventStream(opCtx, eventStream, &obj)
 
-	if err := r.updateStatusAtomic(opCtx, namespacedName, func(q *arkv1alpha1.Query) {
-		q.Status.Response = response
-		q.Status.TokenUsage = tokenSummary
-		if conversationId != "" {
-			q.Status.ConversationId = conversationId
-		}
-		r.applyStatusFields(q, queryStatus, duration)
-	}); err != nil {
+	if err := r.persistFinalQueryStatus(opCtx, namespacedName, response, tokenSummary, conversationId, queryStatus, duration); err != nil {
 		log.Error(err, "failed to update final query status")
 	}
 
@@ -281,6 +260,52 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		"totalTokens":      fmt.Sprintf("%d", tokenSummary.TotalTokens),
 	}
 	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", operationData)
+}
+
+func resolveConversationID(memory genai.MemoryInterface, conversationID string) string {
+	if memory == nil {
+		return conversationID
+	}
+	if httpMemory, ok := memory.(*genai.HTTPMemory); ok {
+		return httpMemory.GetConversationID()
+	}
+	return conversationID
+}
+
+func (r *QueryReconciler) persistConversationID(opCtx context.Context, namespacedName types.NamespacedName, conversationID string) error {
+	if conversationID == "" {
+		return nil
+	}
+	return r.updateStatusAtomic(opCtx, namespacedName, func(q *arkv1alpha1.Query) {
+		q.Status.ConversationId = conversationID
+	})
+}
+
+func (r *QueryReconciler) recordQueryRootInput(opCtx context.Context, obj arkv1alpha1.Query, impersonatedClient client.Client, record func(string)) {
+	if inputMessages, parseErr := genai.GetQueryInputMessages(opCtx, obj, impersonatedClient); parseErr == nil {
+		record(genai.ExtractUserMessageContent(inputMessages))
+		return
+	}
+	if a2aMessages, a2aErr := genai.GetQueryInputA2AMessages(opCtx, obj, impersonatedClient); a2aErr == nil {
+		record(genai.ExtractA2AUserMessageContent(a2aMessages))
+	}
+}
+
+func (r *QueryReconciler) markQueryErrorStatus(opCtx context.Context, namespacedName types.NamespacedName) error {
+	return r.updateStatusAtomic(opCtx, namespacedName, func(q *arkv1alpha1.Query) {
+		r.applyStatusFields(q, statusError, nil)
+	})
+}
+
+func (r *QueryReconciler) persistFinalQueryStatus(opCtx context.Context, namespacedName types.NamespacedName, response *arkv1alpha1.Response, tokenSummary arkv1alpha1.TokenUsage, conversationID, queryStatus string, duration *metav1.Duration) error {
+	return r.updateStatusAtomic(opCtx, namespacedName, func(q *arkv1alpha1.Query) {
+		q.Status.Response = response
+		q.Status.TokenUsage = tokenSummary
+		if conversationID != "" {
+			q.Status.ConversationId = conversationID
+		}
+		r.applyStatusFields(q, queryStatus, duration)
+	})
 }
 
 // finalizeEventStream sends a final chunk with complete query status, then closes the stream
