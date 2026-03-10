@@ -74,3 +74,11 @@ spec:
         apiVersion: ark.mckinsey.com/v1prealpha1
         kind: A2AServer
         name: mock-llm-countdown
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
