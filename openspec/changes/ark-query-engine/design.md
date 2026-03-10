@@ -30,7 +30,7 @@
 
 ## A2A Message Contract
 
-The controller sends a thin A2A message. The engine reads CRDs using its own K8s client.
+The controller sends the same fat metadata contract used by external execution engines (Python SDK's `BaseExecutor`, etc.), extended with a query reference. This keeps one contract for all engines — external engines use the metadata directly, the built-in engine uses its K8s client for anything the metadata doesn't cover.
 
 ```json
 {
@@ -38,25 +38,55 @@ The controller sends a thin A2A message. The engine reads CRDs using its own K8s
   "parts": [{ "text": "<user input>" }],
   "metadata": {
     "ark.mckinsey.com/execution-engine": {
-      "query": { "name": "q-123", "namespace": "default" },
-      "target": {
-        "type": "agent|team|model",
+      "agent": {
         "name": "weather-agent",
-        "namespace": "default"
+        "namespace": "default",
+        "prompt": "You are a weather assistant...",
+        "description": "...",
+        "parameters": [{"name": "city", "value": "Boston"}],
+        "model": {
+          "name": "gpt-4",
+          "type": "openai",
+          "config": { "openai": { ... } }
+        },
+        "outputSchema": { ... },
+        "labels": {}
       },
-      "eventStreamAddress": "http://ark-broker.ark-system:8080/stream/q-123"
+      "tools": [
+        { "name": "get_weather", "description": "...", "parameters": { ... } }
+      ],
+      "history": [
+        {"role": "user", "content": "..."},
+        {"role": "assistant", "content": "..."}
+      ],
+      "query": { "name": "q-123", "namespace": "default" }
     }
   }
 }
 ```
 
+The `agent`, `tools`, and `history` fields match the existing `ExecutionEngineA2AClient` contract. The `query` field is the only addition — it lets the built-in engine read the Query CR for runtime context.
+
+**What the fat metadata provides** (sufficient for external engines):
+- Agent config (resolved prompt, parameters, model + provider config, output schema)
+- Tool schemas (name, description, parameters)
+- Conversation history
+- User input (the A2A message text)
+
+**What the built-in engine resolves via K8s** (beyond the metadata):
+- Tool execution (HTTP endpoints, MCP connections, agent/team-as-tool)
+- MCP tool discovery (connects to MCP servers at runtime)
+- Memory load/save (reads Memory ref from Query CR)
+- Streaming config (reads `ark-config-streaming` ConfigMap, streams to ark-broker)
+- Model/MCP headers (resolves overrides from Query + Agent CRDs)
+- Team member loading (recursive agent/team resolution)
+
 The engine:
-1. Reads the Query CR for overrides, session, memory ref, timeout
-2. Reads the target CRD (Agent/Team/Model)
-3. Calls `MakeAgent()` / `MakeTeam()` / `LoadModel()` — same code paths as today
-4. Creates its own EventStream to ark-broker
-5. Executes the turn loop
-6. Returns `protocol.Message` with the assistant response
+1. Parses fat metadata for agent config and tool schemas
+2. Reads the Query CR (from `query` ref) for overrides, session, memory ref, timeout
+3. Uses K8s client for tool executors, MCP discovery, memory, streaming
+4. Executes the turn loop
+5. Returns `protocol.Message` with the assistant response
 
 The controller:
 1. Receives the A2A response
@@ -169,7 +199,7 @@ Uses `trpc-a2a-go v0.2.4` server package:
 | Decision | Choice | Rationale |
 |---|---|---|
 | Module boundary | Same Go module, separate binary | Avoids `internal/` visibility issues, no import refactoring |
-| A2A message content | Thin refs (query + target names) | Engine has K8s client, reads CRDs directly |
+| A2A message content | Fat metadata + query ref | Same contract as external engines (Python SDK), engine uses K8s for tool execution, MCP, memory, streaming |
 | Streaming destination | Engine → ark-broker directly | Same mechanism as today, no proxy needed |
 | Stream finalization | Controller finalizes | Controller owns Query CR lifecycle |
 | Memory ownership | Engine handles load/save | Clean extraction of full execution context |
