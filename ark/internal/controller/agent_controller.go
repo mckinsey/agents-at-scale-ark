@@ -23,8 +23,9 @@ import (
 )
 
 const (
-	// Condition types
-	AgentAvailable = "Available"
+	AgentAvailable    = "Available"
+	a2aServerKind     = "A2AServer"
+	a2aServerAPIGroup = "ark.mckinsey.com/v1prealpha1"
 )
 
 type AgentReconciler struct {
@@ -183,7 +184,7 @@ func (r *AgentReconciler) checkToolDependencies(ctx context.Context, agent *arkv
 // isA2AAgent returns true if the agent is owned by an A2AServer
 func (r *AgentReconciler) isA2AAgent(agent *arkv1alpha1.Agent) bool {
 	for _, ownerRef := range agent.GetOwnerReferences() {
-		if ownerRef.Kind == "A2AServer" && ownerRef.APIVersion == "ark.mckinsey.com/v1prealpha1" {
+		if ownerRef.Kind == a2aServerKind && ownerRef.APIVersion == a2aServerAPIGroup {
 			return true
 		}
 	}
@@ -194,7 +195,7 @@ func (r *AgentReconciler) isA2AAgent(agent *arkv1alpha1.Agent) bool {
 func (r *AgentReconciler) checkA2AServerDependency(ctx context.Context, agent *arkv1alpha1.Agent) (bool, string) {
 	// Check if agent has an A2AServer owner
 	for _, ownerRef := range agent.GetOwnerReferences() {
-		if ownerRef.Kind == "A2AServer" && ownerRef.APIVersion == "ark.mckinsey.com/v1prealpha1" {
+		if ownerRef.Kind == a2aServerKind && ownerRef.APIVersion == a2aServerAPIGroup {
 			return r.validateA2AServerDependency(ctx, agent, ownerRef)
 		}
 	}
@@ -385,7 +386,7 @@ func (r *AgentReconciler) findAgentsForA2AServer(ctx context.Context, obj client
 	for _, agent := range agentList.Items {
 		// Check if this agent is owned by the A2AServer
 		for _, ownerRef := range agent.GetOwnerReferences() {
-			if ownerRef.Kind == "A2AServer" && ownerRef.Name == a2aServer.Name {
+			if ownerRef.Kind == a2aServerKind && ownerRef.Name == a2aServer.Name {
 				requests = append(requests, reconcile.Request{
 					NamespacedName: types.NamespacedName{
 						Name:      agent.Name,
