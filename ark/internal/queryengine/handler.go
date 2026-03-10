@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/openai/openai-go"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -96,6 +97,8 @@ func (h *Handler) ProcessMessage(
 		_, responseMessages, err = h.executeTeam(ctx, query, target.Name, inputMessages, memoryMessages, memory, eventStream)
 	case "model":
 		responseMessages, err = h.executeModel(ctx, query, target.Name, inputMessages, memoryMessages, eventStream)
+	case "tool":
+		responseMessages, err = h.executeTool(ctx, query, target.Name, inputMessages)
 	default:
 		err = fmt.Errorf("unsupported target type: %s", target.Type)
 	}
@@ -211,6 +214,73 @@ func (h *Handler) executeModel(
 
 	assistantMessage := genai.Message(completion.Choices[0].Message.ToParam())
 	return []genai.Message{assistantMessage}, nil
+}
+
+func (h *Handler) executeTool(
+	ctx context.Context,
+	query arkv1alpha1.Query,
+	toolName string,
+	inputMessages []genai.Message,
+) ([]genai.Message, error) {
+	queryCrd := &query
+	q, err := genai.MakeQuery(queryCrd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make query: %w", err)
+	}
+
+	var toolCRD arkv1alpha1.Tool
+	if err := h.k8sClient.Get(ctx, types.NamespacedName{
+		Name:      toolName,
+		Namespace: query.Namespace,
+	}, &toolCRD); err != nil {
+		return nil, fmt.Errorf("failed to get tool %s: %w", toolName, err)
+	}
+
+	lastMessage := inputMessages[len(inputMessages)-1]
+	var resolvedInput string
+	switch {
+	case lastMessage.OfUser != nil:
+		resolvedInput = lastMessage.OfUser.Content.OfString.Value
+	case lastMessage.OfAssistant != nil:
+		resolvedInput = lastMessage.OfAssistant.Content.OfString.Value
+	case lastMessage.OfTool != nil:
+		resolvedInput = lastMessage.OfTool.Content.OfString.Value
+	default:
+		return nil, fmt.Errorf("unable to extract content from input message")
+	}
+
+	var toolArgs map[string]any
+	if err := json.Unmarshal([]byte(resolvedInput), &toolArgs); err != nil {
+		toolArgs = map[string]any{"input": resolvedInput}
+	}
+
+	argsJSON, _ := json.Marshal(toolArgs)
+	toolCall := genai.ToolCall{
+		ID: "tool-call-" + toolName,
+		Function: openai.ChatCompletionMessageToolCallFunction{
+			Name:      toolName,
+			Arguments: string(argsJSON),
+		},
+		Type: "function",
+	}
+
+	toolRegistry := genai.NewToolRegistry(q.McpSettings, h.telemetry.ToolRecorder(), h.eventing.ToolRecorder())
+	defer toolRegistry.Close()
+
+	toolDefinition := genai.CreateToolFromCRD(&toolCRD)
+	mcpPool, mcpSettings := toolRegistry.GetMCPPool()
+	executor, err := genai.CreateToolExecutor(ctx, h.k8sClient, &toolCRD, query.Namespace, mcpPool, mcpSettings, h.telemetry, h.eventing)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create tool executor: %w", err)
+	}
+	toolRegistry.RegisterTool(toolDefinition, executor)
+
+	result, err := toolRegistry.ExecuteTool(ctx, toolCall)
+	if err != nil {
+		return nil, fmt.Errorf("tool execution failed: %w", err)
+	}
+
+	return []genai.Message{genai.NewAssistantMessage(result.Content)}, nil
 }
 
 func extractArkMetadata(message protocol.Message) (*arkMetadata, error) {
