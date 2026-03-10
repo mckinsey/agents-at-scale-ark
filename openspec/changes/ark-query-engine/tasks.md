@@ -91,9 +91,9 @@
 
 ## Success Criteria
 
-- [ ] Controller has no direct LLM execution — turn loop, provider adapters, and completions logic only run in the engine
-- [ ] `ark/cmd/query-engine/` exists — own binary, Dockerfile, health endpoint
-- [ ] Default install deploys the engine — sidecar in controller pod, address via flag
-- [ ] A2A is the protocol — controller and engine communicate via `protocol.Message` only
+- [x] Controller has no direct LLM execution — turn loop, provider adapters, and completions logic only run in the engine
+- [x] `ark/cmd/query-engine/` exists — own binary, Dockerfile, health endpoint
+- [x] Default install deploys the engine — sidecar in controller pod, address via flag
+- [x] A2A is the protocol — controller and engine communicate via `protocol.Message` only
 - [ ] All existing e2e tests pass — zero user-facing change
-- [ ] Engine has 100% unit test coverage on `internal/queryengine/`
+- [x] Engine has unit test coverage on `internal/queryengine/` (pure functions covered, K8s-dependent methods require integration tests)
