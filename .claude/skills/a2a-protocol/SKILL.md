@@ -19,6 +19,13 @@ communication between independent AI agent systems.
 > under the Apache-2.0 license. Each file includes source attribution in its
 > YAML frontmatter.
 
+> **Version note:** This skill bundles the **RC v1.0** spec. The official A2A
+> SDKs for [Go](https://github.com/a2aproject/a2a-go) and
+> [Python](https://github.com/a2aproject/a2a-python) may lag behind at v0.3.x.
+> When generating code, cross-check against the SDK version the project uses.
+> See [topic-whats-new-v1.md](./references/topic-whats-new-v1.md) for v1.0
+> changes.
+
 ## When to use this skill
 
 - Building or debugging an A2A server or client
