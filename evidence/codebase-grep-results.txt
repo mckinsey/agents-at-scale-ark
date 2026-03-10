@@ -1,2 +1,0 @@
-./docs/content/disclaimer.mdx
-./docs/content/developer-guide/observability/index.mdx
