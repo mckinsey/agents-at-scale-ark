@@ -229,10 +229,37 @@ var _ = Describe("Agent Controller", func() {
 
 		It("should fail reconciliation when partial tool CRD is missing", func() {
 			const missingToolAgentName = "test-missing-tool-agent"
+			const missingToolModelName = "test-missing-tool-model"
 			missingToolAgentTypeNamespacedName := types.NamespacedName{
 				Name:      missingToolAgentName,
 				Namespace: "default",
 			}
+
+			By("creating an available model for the agent")
+			missingToolModel := &arkv1alpha1.Model{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      missingToolModelName,
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.ModelSpec{
+					Provider: "openai",
+					Config:   arkv1alpha1.ModelConfig{},
+				},
+			}
+			Expect(k8sClient.Create(ctx, missingToolModel)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, missingToolModel)).To(Succeed())
+			}()
+			missingToolModel.Status.Conditions = []metav1.Condition{
+				{
+					Type:               "ModelAvailable",
+					Status:             metav1.ConditionTrue,
+					Reason:             "Available",
+					Message:            "Model is available",
+					LastTransitionTime: metav1.Now(),
+				},
+			}
+			Expect(k8sClient.Status().Update(ctx, missingToolModel)).To(Succeed())
 
 			By("creating an agent with partial tool referencing non-existent CRD")
 			missingToolAgent := &arkv1alpha1.Agent{
@@ -241,13 +268,14 @@ var _ = Describe("Agent Controller", func() {
 					Namespace: "default",
 				},
 				Spec: arkv1alpha1.AgentSpec{
-					Prompt: "test prompt for missing tool agent",
+					ModelRef: &arkv1alpha1.AgentModelRef{Name: missingToolModelName},
+					Prompt:   "test prompt for missing tool agent",
 					Tools: []arkv1alpha1.AgentTool{
 						{
 							Type: "custom",
-							Name: "missing-tool", // Exposed name
+							Name: "missing-tool",
 							Partial: &arkv1alpha1.ToolPartial{
-								Name: "non-existent-tool", // This CRD doesn't exist
+								Name: "non-existent-tool",
 							},
 						},
 					},
