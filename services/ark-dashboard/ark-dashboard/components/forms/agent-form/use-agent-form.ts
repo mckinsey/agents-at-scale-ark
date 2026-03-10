@@ -81,7 +81,7 @@ export function useAgentForm({
           agentName
         ) {
           const [agentData, modelsData, toolsData] = await Promise.all([
-            agentsService.getByName(agentName),
+            agentsService.getByName(agentName, namespace),
             modelsService.getAll(namespace),
             toolsService.getAll(namespace),
           ]);

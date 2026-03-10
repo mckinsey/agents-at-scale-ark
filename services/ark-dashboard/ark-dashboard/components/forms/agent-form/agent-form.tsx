@@ -59,7 +59,7 @@ export function AgentForm({
   onCancel,
 }: AgentFormProps) {
   const { push } = useNamespacedNavigation();
-  const { readOnlyMode } = useNamespace();
+  const { namespace, readOnlyMode } = useNamespace();
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
   const [allAgents, setAllAgents] = useState<Agent[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
@@ -71,12 +71,12 @@ export function AgentForm({
     if (isViewing) {
       setAgentsLoading(true);
       agentsService
-        .getAll()
+        .getAll(namespace)
         .then(agents => setAllAgents(agents))
         .catch(console.error)
         .finally(() => setAgentsLoading(false));
     }
-  }, [isViewing]);
+  }, [isViewing, namespace]);
 
   const { form, state, actions } = useAgentForm({
     mode,
