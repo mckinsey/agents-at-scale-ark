@@ -9,7 +9,7 @@ metadata:
 spec:
   reportFormat: JSON                     # Output test reports in JSON format
   reportName: /tmp/chainsaw-report/chainsaw-report.json  # Path where the test report will be saved
-  delayBeforeCleanup: 15s  # Increased delay before cleanup for stability
+  forceTerminationGracePeriod: 5s
   timeouts:
     apply: 60s                           # Increased timeout for 'apply' operations
     assert: 240s                         # Increased timeout for assertion checks (LLM calls can be slow)
