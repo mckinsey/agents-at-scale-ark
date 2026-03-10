@@ -14,17 +14,19 @@ A detailed record of every change is documented in [`CHANGELOG.md`](https://gith
 
 ## v0.2.0
 
-### Evaluations Removed from Core
+### Evaluations Moved to Marketplace
 
-Evaluation and Evaluator resources have been removed from Ark core and will move to the [marketplace](https://github.com/mckinsey/agents-at-scale-marketplace).
+`Evaluation` and `Evaluator` CRDs, controllers, webhooks, API endpoints, CLI commands, and dashboard pages have been removed from Ark core. Evaluations are now maintained as a standalone module in the [Ark Marketplace](https://github.com/mckinsey/agents-at-scale-marketplace). See [marketplace issue #129](https://github.com/mckinsey/agents-at-scale-marketplace/issues/129) for migration status.
 
-After upgrading, existing Evaluation and Evaluator resources will remain in your cluster but are no longer reconciled. To clean up:
+**If you are using evaluations**, install the evaluator module from the marketplace after upgrading. Existing `Evaluation` and `Evaluator` resources in your cluster will remain but are no longer reconciled until the marketplace module is installed. To clean up orphaned resources instead:
 
 ```bash
 kubectl delete evaluations --all -A
 kubectl delete evaluators --all -A
 kubectl delete crd evaluations.ark.mckinsey.com evaluators.ark.mckinsey.com
 ```
+
+**If you are not using evaluations**, no action is needed.
 
 ## v0.1.50
 
