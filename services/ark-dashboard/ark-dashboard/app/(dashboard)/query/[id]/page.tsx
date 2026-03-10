@@ -44,6 +44,7 @@ import type { Agent } from '@/lib/services/agents';
 import { queriesService } from '@/lib/services/queries';
 import type { ToolDetail } from '@/lib/services/tools';
 import { cn } from '@/lib/utils';
+import { useNamespace } from '@/providers/NamespaceProvider';
 import {
   type QueryParameter,
   extractAgentRequiredParams,
@@ -350,6 +351,7 @@ function QueryDetailContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const { push } = useNamespacedNavigation();
+  const { namespace } = useNamespace();
   const queryId = params.id as string;
   const targetTool = searchParams.get('target_tool');
   const isNew = queryId === 'new';
@@ -544,11 +546,11 @@ function QueryDetailContent() {
         setMemoriesLoading(true);
         try {
           const [agents, models, teams, tools, memories] = await Promise.all([
-            agentsService.getAll(),
-            modelsService.getAll(),
-            teamsService.getAll(),
-            toolsService.getAll(),
-            memoriesService.getAll(),
+            agentsService.getAll(namespace),
+            modelsService.getAll(namespace),
+            teamsService.getAll(namespace),
+            toolsService.getAll(namespace),
+            memoriesService.getAll(namespace),
           ]);
 
           const targets = [
@@ -628,7 +630,7 @@ function QueryDetailContent() {
     };
 
     loadQuery();
-  }, [queryId, isNew, targetTool, defaultQueryTimeout]);
+  }, [queryId, isNew, targetTool, defaultQueryTimeout, namespace]);
 
   // Fetch tool schema when target is a tool
   useEffect(() => {

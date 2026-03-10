@@ -81,7 +81,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
           teamName
         ) {
           const [teamData, agentsData] = await Promise.all([
-            teamsService.getByName(teamName),
+            teamsService.getByName(teamName, namespace),
             agentsService.getAll(namespace),
           ]);
 
@@ -163,7 +163,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
             graph: graphEdges.length > 0 ? { edges: graphEdges } : undefined,
           }, { namespace });
 
-          const updatedTeam = await teamsService.getByName(teamName!);
+          const updatedTeam = await teamsService.getByName(teamName!, namespace);
           setTeam(updatedTeam);
           setInitialMembers(selectedMembers);
           setInitialGraphEdges(graphEdges);

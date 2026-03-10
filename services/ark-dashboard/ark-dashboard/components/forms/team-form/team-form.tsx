@@ -62,7 +62,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
         .catch(console.error)
         .finally(() => setTeamsLoading(false));
     }
-  }, [isViewing]);
+  }, [isViewing, namespace]);
 
   const { form, state, actions } = useTeamForm({
     mode,
