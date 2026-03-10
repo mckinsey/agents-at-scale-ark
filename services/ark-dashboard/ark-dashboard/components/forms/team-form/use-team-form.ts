@@ -28,7 +28,7 @@ const teamFormSchema = z.object({
   name: kubernetesNameSchema,
   description: z.string().optional(),
   strategy: z.string().min(1, 'Strategy is required'),
-  loops: z.boolean().optional(),
+  loops: z.boolean(),
   maxTurns: z.string().optional(),
   selectorAgent: z.string().optional(),
   selectorPrompt: z.string().optional(),

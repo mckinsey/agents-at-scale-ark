@@ -63,7 +63,7 @@ def team_to_detail_response(team: dict) -> TeamDetailResponse:
         members=spec.get("members", []),
         strategy=spec.get("strategy", ""),
         graph=spec.get("graph"),
-        loops=spec.get("loops"),
+        loops=spec.get("loops", False),
         maxTurns=spec.get("maxTurns"),
         selector=spec.get("selector"),
         available=availability,
@@ -130,8 +130,7 @@ async def create_team(body: TeamCreateRequest, namespace: Optional[str] = Query(
             graph_dict = body.graph.model_dump(exclude_none=True, by_alias=True)
             team_spec["graph"] = graph_dict
         
-        if body.loops is not None:
-            team_spec["loops"] = body.loops
+        team_spec["loops"] = body.loops
 
         if body.maxTurns is not None:
             team_spec["maxTurns"] = body.maxTurns
@@ -205,8 +204,7 @@ async def update_team(team_name: str, body: TeamUpdateRequest, namespace: Option
             else:
                 existing_spec.pop("graph", None)
 
-        if body.loops is not None:
-            existing_spec["loops"] = body.loops
+        existing_spec["loops"] = body.loops
 
         if "maxTurns" in body.model_fields_set:
             if body.maxTurns is not None:
