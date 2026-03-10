@@ -66,7 +66,7 @@
 ### Gate C: Scope Hygiene
 
 - [x] Investigation artifact directory removal done (`INV-015`)
-- [ ] PR description summarizes addressed feedback and explicitly calls out deferred P3/P4 scope
+- [x] PR description summarizes addressed feedback and explicitly calls out deferred P3/P4 scope
 
 ### Merge Decision Rule
 
