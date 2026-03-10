@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider as JotaiProvider } from 'jotai';
 import { toast } from 'sonner';
@@ -7,7 +7,6 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import { ManageMarketplaceSettings } from './manage-marketplace-settings';
 
-// Mock sonner toast
 vi.mock('sonner', () => ({
   toast: {
     success: vi.fn(),
@@ -16,6 +15,21 @@ vi.mock('sonner', () => ({
 }));
 
 const mockToast = vi.mocked(toast);
+const mockFetch = vi.fn();
+
+function mockValidateSuccess() {
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({ valid: true, itemCount: 1 }),
+  });
+}
+
+function mockValidateFailure(error: string) {
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({ valid: false, error }),
+  });
+}
 
 function renderWithProviders(ui: React.ReactElement) {
   const queryClient = new QueryClient({
@@ -25,19 +39,18 @@ function renderWithProviders(ui: React.ReactElement) {
     },
   });
 
-  return render(
+  return { queryClient, ...render(
     <QueryClientProvider client={queryClient}>
       <JotaiProvider>{ui}</JotaiProvider>
     </QueryClientProvider>
-  );
+  ) };
 }
 
 describe('ManageMarketplaceSettings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Clear localStorage
+    vi.stubGlobal('fetch', mockFetch);
     localStorage.clear();
-    // Set default marketplace sources
     localStorage.setItem('marketplace-sources', JSON.stringify([
       {
         id: 'default',
@@ -56,18 +69,28 @@ describe('ManageMarketplaceSettings', () => {
     expect(screen.getByText('ARK marketplace')).toBeInTheDocument();
   });
 
+  it('should not render a Save button', () => {
+    renderWithProviders(<ManageMarketplaceSettings />);
+
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+  });
+
+  it('should not render an enable/disable toggle for sources', () => {
+    renderWithProviders(<ManageMarketplaceSettings />);
+
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+  });
+
   it('should render refresh data button', () => {
     renderWithProviders(<ManageMarketplaceSettings />);
 
-    const refreshButton = screen.getByRole('button', { name: /Refresh Data/i });
-    expect(refreshButton).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Refresh Data/i })).toBeInTheDocument();
   });
 
   it('should refresh marketplace data when refresh button is clicked', async () => {
     renderWithProviders(<ManageMarketplaceSettings />);
 
-    const refreshButton = screen.getByRole('button', { name: /Refresh Data/i });
-    await userEvent.click(refreshButton);
+    await userEvent.click(screen.getByRole('button', { name: /Refresh Data/i }));
 
     await waitFor(() => {
       expect(mockToast.success).toHaveBeenCalledWith('Marketplace data refreshed');
@@ -77,83 +100,138 @@ describe('ManageMarketplaceSettings', () => {
   it('should show add marketplace form when add button is clicked', async () => {
     renderWithProviders(<ManageMarketplaceSettings />);
 
-    // Initially, the form should not be visible
-    expect(screen.queryByText('Add new marketplace')).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText(/https:\/\/raw.githubusercontent.com/i)).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/https:\/\/raw\.githubusercontent\.com/i)).not.toBeInTheDocument();
 
-    // Click add new marketplace button
-    const addButton = screen.getByRole('button', { name: /Add new marketplace/i });
-    await userEvent.click(addButton);
+    await userEvent.click(screen.getByRole('button', { name: /Add new marketplace/i }));
 
-    // Form should now be visible
-    expect(screen.getByPlaceholderText(/https:\/\/raw.githubusercontent.com/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/https:\/\/raw\.githubusercontent\.com/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Marketplace JSON URL/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Display name/i)).toBeInTheDocument();
   });
 
-  it('should add a new marketplace source and save it', async () => {
+  it('should add a new marketplace source immediately without a save step', async () => {
+    mockValidateSuccess();
     renderWithProviders(<ManageMarketplaceSettings />);
 
-    // Click add new marketplace button
-    const addButton = screen.getByRole('button', { name: /Add new marketplace/i });
-    await userEvent.click(addButton);
+    await userEvent.click(screen.getByRole('button', { name: /Add new marketplace/i }));
 
-    // Fill in the form
-    const urlInput = screen.getByPlaceholderText(/https:\/\/raw.githubusercontent.com/i);
-    const displayInput = screen.getByLabelText(/Display name/i);
+    await userEvent.type(
+      screen.getByPlaceholderText(/https:\/\/raw\.githubusercontent\.com/i),
+      'https://example.com/marketplace.json'
+    );
+    await userEvent.type(screen.getByLabelText(/Display name/i), 'Custom Marketplace');
 
-    await userEvent.type(urlInput, 'https://example.com/custom-marketplace.json');
-    await userEvent.type(displayInput, 'Custom Marketplace');
-
-    // Click add button to add to local state
-    const confirmAddButton = screen.getByRole('button', { name: 'Add' });
-    await userEvent.click(confirmAddButton);
-
-    // The new source should be visible (but not saved yet)
-    expect(screen.queryByText('Add new marketplace')).toBeInTheDocument();
-
-    // Save the settings
-    const saveButton = screen.getByRole('button', { name: 'Save' });
-    await userEvent.click(saveButton);
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
 
     await waitFor(() => {
-      expect(mockToast.success).toHaveBeenCalledWith('Marketplace settings saved and data refreshed');
+      expect(screen.getByText('Custom Marketplace')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
     });
   });
 
   it('should show error when trying to add source without URL', async () => {
     renderWithProviders(<ManageMarketplaceSettings />);
 
-    // Click add new marketplace button
-    const addButton = screen.getByRole('button', { name: /Add new marketplace/i });
-    await userEvent.click(addButton);
-
-    // Click add without filling URL
-    const confirmAddButton = screen.getByRole('button', { name: 'Add' });
-    await userEvent.click(confirmAddButton);
+    await userEvent.click(screen.getByRole('button', { name: /Add new marketplace/i }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
 
     await waitFor(() => {
-      expect(mockToast.error).toHaveBeenCalledWith('Marketplace URL is required');
+      expect(screen.getByText('Marketplace URL is required')).toBeInTheDocument();
+    });
+  });
+
+  it('should reject HTTP URLs with a validation error', async () => {
+    renderWithProviders(<ManageMarketplaceSettings />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Add new marketplace/i }));
+    await userEvent.type(
+      screen.getByPlaceholderText(/https:\/\/raw\.githubusercontent\.com/i),
+      'http://example.com/marketplace.json'
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Only HTTPS URLs are allowed')).toBeInTheDocument();
+    });
+  });
+
+  it('should reject URLs that do not point to a marketplace.json file', async () => {
+    renderWithProviders(<ManageMarketplaceSettings />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Add new marketplace/i }));
+    await userEvent.type(
+      screen.getByPlaceholderText(/https:\/\/raw\.githubusercontent\.com/i),
+      'https://example.com/other-file.json'
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('URL must point to a marketplace.json file')).toBeInTheDocument();
+    });
+  });
+
+  it('should accept a valid HTTPS marketplace.json URL', async () => {
+    mockValidateSuccess();
+    renderWithProviders(<ManageMarketplaceSettings />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Add new marketplace/i }));
+    await userEvent.type(
+      screen.getByPlaceholderText(/https:\/\/raw\.githubusercontent\.com/i),
+      'https://example.com/marketplace.json'
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Only HTTPS URLs are allowed/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/must point to a marketplace.json/i)).not.toBeInTheDocument();
+    });
+  });
+
+  it('should show schema error with reference link when URL does not match marketplace schema', async () => {
+    mockValidateFailure('JSON does not match the marketplace schema');
+    renderWithProviders(<ManageMarketplaceSettings />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Add new marketplace/i }));
+    await userEvent.type(
+      screen.getByPlaceholderText(/https:\/\/raw\.githubusercontent\.com/i),
+      'https://example.com/marketplace.json'
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('JSON does not match the marketplace schema')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /See the public marketplace\.json/i })).toBeInTheDocument();
+    });
+  });
+
+  it('should show fetch error with reference link when URL cannot be fetched', async () => {
+    mockValidateFailure('Could not fetch the URL (HTTP 404)');
+    renderWithProviders(<ManageMarketplaceSettings />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Add new marketplace/i }));
+    await userEvent.type(
+      screen.getByPlaceholderText(/https:\/\/raw\.githubusercontent\.com/i),
+      'https://example.com/marketplace.json'
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Could not fetch the URL (HTTP 404)')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /See the public marketplace\.json/i })).toBeInTheDocument();
     });
   });
 
   it('should cancel adding a new source', async () => {
     renderWithProviders(<ManageMarketplaceSettings />);
 
-    // Click add new marketplace button
-    const addButton = screen.getByRole('button', { name: /Add new marketplace/i });
-    await userEvent.click(addButton);
+    await userEvent.click(screen.getByRole('button', { name: /Add new marketplace/i }));
 
-    // Form should be visible
-    expect(screen.getByPlaceholderText(/https:\/\/raw.githubusercontent.com/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/https:\/\/raw\.githubusercontent\.com/i)).toBeInTheDocument();
 
-    // Click cancel
-    const cancelButton = screen.getAllByRole('button', { name: 'Cancel' })[0];
-    await userEvent.click(cancelButton);
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
-    // Form should be hidden, add button should be visible again
     await waitFor(() => {
-      expect(screen.queryByPlaceholderText(/https:\/\/raw.githubusercontent.com/i)).not.toBeInTheDocument();
+      expect(screen.queryByPlaceholderText(/https:\/\/raw\.githubusercontent\.com/i)).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Add new marketplace/i })).toBeInTheDocument();
     });
   });
@@ -161,37 +239,13 @@ describe('ManageMarketplaceSettings', () => {
   it('should not show delete button for default marketplace source', () => {
     renderWithProviders(<ManageMarketplaceSettings />);
 
-    // The default source should not have a delete button
     const defaultSection = screen.getByText('ARK marketplace').closest('.rounded-lg');
     const deleteButtons = defaultSection?.querySelectorAll('button[class*="hover:text-destructive"]') || [];
 
     expect(deleteButtons.length).toBe(0);
   });
 
-  it('should toggle marketplace source enabled state', async () => {
-    renderWithProviders(<ManageMarketplaceSettings />);
-
-    // Find the switch for the default marketplace
-    const switchElement = screen.getByRole('switch');
-    expect(switchElement).toHaveAttribute('aria-checked', 'true');
-
-    // Toggle it off
-    await userEvent.click(switchElement);
-
-    // Switch should now be off (but not saved yet)
-    expect(switchElement).toHaveAttribute('aria-checked', 'false');
-
-    // Save the change
-    const saveButton = screen.getByRole('button', { name: 'Save' });
-    await userEvent.click(saveButton);
-
-    await waitFor(() => {
-      expect(mockToast.success).toHaveBeenCalledWith('Marketplace settings saved and data refreshed');
-    });
-  });
-
-  it('should delete a custom marketplace source', async () => {
-    // Set up with a custom source
+  it('should delete a custom marketplace source immediately', async () => {
     localStorage.setItem('marketplace-sources', JSON.stringify([
       {
         id: 'default',
@@ -203,7 +257,7 @@ describe('ManageMarketplaceSettings', () => {
       {
         id: 'custom-1',
         name: 'Custom Marketplace',
-        url: 'https://example.com/custom.json',
+        url: 'https://example.com/marketplace.json',
         displayName: 'Custom Marketplace',
         enabled: true,
       },
@@ -211,11 +265,8 @@ describe('ManageMarketplaceSettings', () => {
 
     renderWithProviders(<ManageMarketplaceSettings />);
 
-    // Both sources should be visible
-    expect(screen.getByText('ARK marketplace')).toBeInTheDocument();
     expect(screen.getByText('Custom Marketplace')).toBeInTheDocument();
 
-    // Find the custom source section and its delete button
     const customSection = screen.getByText('Custom Marketplace').closest('.rounded-lg');
     const deleteButton = customSection?.querySelector('button[class*="hover:text-destructive"]');
 
@@ -225,39 +276,12 @@ describe('ManageMarketplaceSettings', () => {
       await userEvent.click(deleteButton);
     }
 
-    // Custom source should still be visible (not saved yet)
-    expect(screen.queryByText('Custom Marketplace')).not.toBeInTheDocument();
-
-    // Save to persist the deletion
-    const saveButton = screen.getByRole('button', { name: 'Save' });
-    await userEvent.click(saveButton);
-
     await waitFor(() => {
-      expect(mockToast.success).toHaveBeenCalledWith('Marketplace settings saved and data refreshed');
-    });
-  });
-
-  it('should revert changes when cancel is clicked', async () => {
-    renderWithProviders(<ManageMarketplaceSettings />);
-
-    // Toggle the default source off
-    const switchElement = screen.getByRole('switch');
-    await userEvent.click(switchElement);
-    expect(switchElement).toHaveAttribute('aria-checked', 'false');
-
-    // Click cancel instead of save
-    const cancelButton = screen.getByRole('button', { name: 'Cancel' });
-    await userEvent.click(cancelButton);
-
-    // Switch should be back to on
-    await waitFor(() => {
-      const switchAfterCancel = screen.getByRole('switch');
-      expect(switchAfterCancel).toHaveAttribute('aria-checked', 'true');
+      expect(screen.queryByText('Custom Marketplace')).not.toBeInTheDocument();
     });
   });
 
   it('should handle multiple sources with proper display', async () => {
-    // Set up with multiple sources
     localStorage.setItem('marketplace-sources', JSON.stringify([
       {
         id: 'default',
@@ -269,9 +293,9 @@ describe('ManageMarketplaceSettings', () => {
       {
         id: 'custom-1',
         name: 'Internal Tools',
-        url: 'https://internal.example.com/tools.json',
+        url: 'https://internal.example.com/marketplace.json',
         displayName: 'Internal Tools',
-        enabled: false,
+        enabled: true,
       },
       {
         id: 'custom-2',
@@ -284,20 +308,13 @@ describe('ManageMarketplaceSettings', () => {
 
     renderWithProviders(<ManageMarketplaceSettings />);
 
-    // All sources should be visible
     expect(screen.getByText('ARK marketplace')).toBeInTheDocument();
     expect(screen.getByText('Internal Tools')).toBeInTheDocument();
     expect(screen.getByText('Community Marketplace')).toBeInTheDocument();
-
-    // Check that switches reflect the enabled state
-    const switches = screen.getAllByRole('switch');
-    expect(switches).toHaveLength(3);
-    expect(switches[0]).toHaveAttribute('aria-checked', 'true'); // ARK marketplace
-    expect(switches[1]).toHaveAttribute('aria-checked', 'false'); // Internal Tools (disabled)
-    expect(switches[2]).toHaveAttribute('aria-checked', 'true'); // Community Marketplace
   });
 
-  it('should invalidate queries when saving settings', async () => {
+  it('should invalidate queries when adding a new source', async () => {
+    mockValidateSuccess();
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -315,9 +332,12 @@ describe('ManageMarketplaceSettings', () => {
       </QueryClientProvider>
     );
 
-    // Make a change and save
-    const saveButton = screen.getByRole('button', { name: 'Save' });
-    await userEvent.click(saveButton);
+    await userEvent.click(screen.getByRole('button', { name: /Add new marketplace/i }));
+    await userEvent.type(
+      screen.getByPlaceholderText(/https:\/\/raw\.githubusercontent\.com/i),
+      'https://example.com/marketplace.json'
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
 
     await waitFor(() => {
       expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['marketplace'] });
@@ -327,11 +347,32 @@ describe('ManageMarketplaceSettings', () => {
   it('should show both url and display name inputs correctly', async () => {
     renderWithProviders(<ManageMarketplaceSettings />);
 
-    // The default source should show both URL and display name
     expect(screen.getByDisplayValue('https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json')).toBeInTheDocument();
 
-    // All readonly display name inputs should be present
     const displayNameInputs = screen.getAllByDisplayValue('ARK marketplace');
     expect(displayNameInputs.length).toBeGreaterThan(0);
+  });
+
+  it('should clear url error when user updates the url input', async () => {
+    renderWithProviders(<ManageMarketplaceSettings />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Add new marketplace/i }));
+    await userEvent.type(
+      screen.getByPlaceholderText(/https:\/\/raw\.githubusercontent\.com/i),
+      'http://example.com/marketplace.json'
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Only HTTPS URLs are allowed')).toBeInTheDocument();
+    });
+
+    const urlInput = screen.getByPlaceholderText(/https:\/\/raw\.githubusercontent\.com/i);
+    await userEvent.clear(urlInput);
+    await userEvent.type(urlInput, 'https://');
+
+    await waitFor(() => {
+      expect(screen.queryByText('Only HTTPS URLs are allowed')).not.toBeInTheDocument();
+    });
   });
 });

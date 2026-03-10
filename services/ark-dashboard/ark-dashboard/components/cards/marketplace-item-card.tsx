@@ -195,19 +195,19 @@ export function MarketplaceItemCard({
             className="h-8"
             onClick={handleInstall}
             disabled={isInstalling || localStatus === 'installed'}>
-            {localStatus === 'installed' ? (
+            {localStatus === 'installed' && (
               <>
                 Installed
                 <Check className="ml-1 h-3 w-3" />
               </>
-            ) : isInstalling ? (
+            )}
+            {isInstalling && localStatus !== 'installed' && (
               <>
                 <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                Installing...
+                Loading...
               </>
-            ) : (
-              'Get'
             )}
+            {!isInstalling && localStatus !== 'installed' && 'Get'}
           </Button>
         </div>
       </CardFooter>

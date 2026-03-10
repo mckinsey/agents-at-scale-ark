@@ -145,11 +145,11 @@ describe('MarketplaceItemCard', () => {
 
     await user.click(screen.getByRole('button', { name: /get/i }));
 
-    expect(screen.getByText('Installing...')).toBeInTheDocument();
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
 
     resolveInstall!({});
     await waitFor(() => {
-      expect(screen.queryByText('Installing...')).not.toBeInTheDocument();
+      expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
     });
   });
 
