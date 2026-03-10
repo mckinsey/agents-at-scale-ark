@@ -122,3 +122,11 @@ spec:
           kind: Agent
           metadata:
             name: test-explicit-mcp
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
