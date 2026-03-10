@@ -78,3 +78,11 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
