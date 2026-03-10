@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -209,10 +211,12 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		}
 	}
 
-	// Set conversation ID in status if we have one (from memory or spec)
 	if conversationId != "" {
-		obj.Status.ConversationId = conversationId
-		_ = r.updateStatus(opCtx, &obj, obj.Status.Phase)
+		if err := r.updateStatusAtomic(opCtx, namespacedName, func(q *arkv1alpha1.Query) {
+			q.Status.ConversationId = conversationId
+		}); err != nil {
+			log.Error(err, "failed to set conversation ID in query status")
+		}
 		r.Telemetry.QueryRecorder().RecordConversationID(span, conversationId)
 	}
 
@@ -231,7 +235,11 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		genai.StreamError(opCtx, eventStream, err, "query_execution_failed", "query")
 		r.Telemetry.QueryRecorder().RecordError(span, err)
 		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Query execution failed: %v", err), err, nil)
-		_ = r.updateStatus(opCtx, &obj, statusError)
+		if updateErr := r.updateStatusAtomic(opCtx, namespacedName, func(q *arkv1alpha1.Query) {
+			r.applyStatusFields(q, statusError, nil)
+		}); updateErr != nil {
+			log.Error(updateErr, "failed to update query error status")
+		}
 		return
 	}
 
@@ -249,11 +257,22 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	}
 
 	queryStatus := r.determineQueryStatus(response)
-	_ = r.updateStatus(opCtx, &obj, queryStatus)
-
 	duration := &metav1.Duration{Duration: time.Since(startTime)}
+
+	obj.Status.Phase = queryStatus
+	obj.Status.Duration = duration
 	r.finalizeEventStream(opCtx, eventStream, &obj)
-	_ = r.updateStatusWithDuration(opCtx, &obj, queryStatus, duration)
+
+	if err := r.updateStatusAtomic(opCtx, namespacedName, func(q *arkv1alpha1.Query) {
+		q.Status.Response = response
+		q.Status.TokenUsage = tokenSummary
+		if conversationId != "" {
+			q.Status.ConversationId = conversationId
+		}
+		r.applyStatusFields(q, queryStatus, duration)
+	}); err != nil {
+		log.Error(err, "failed to update final query status")
+	}
 
 	r.Telemetry.QueryRecorder().RecordSuccess(span)
 	operationData := map[string]string{
@@ -297,15 +316,21 @@ func (r *QueryReconciler) finalizeEventStream(ctx context.Context, eventStream g
 }
 
 func (r *QueryReconciler) setupQueryExecution(opCtx context.Context, obj arkv1alpha1.Query, conversationId string) (client.Client, genai.MemoryInterface, error) {
+	nn := types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}
+
 	impersonatedClient, err := r.getClientForQuery(obj)
 	if err != nil {
-		_ = r.updateStatus(opCtx, &obj, statusError)
+		_ = r.updateStatusAtomic(opCtx, nn, func(q *arkv1alpha1.Query) {
+			r.applyStatusFields(q, statusError, nil)
+		})
 		return nil, nil, fmt.Errorf("failed to create impersonated client: %w", err)
 	}
 
 	memory, err := genai.NewMemoryForQuery(opCtx, impersonatedClient, obj.Spec.Memory, obj.Namespace, conversationId, obj.Name, r.Eventing.MemoryRecorder())
 	if err != nil {
-		_ = r.updateStatus(opCtx, &obj, statusError)
+		_ = r.updateStatusAtomic(opCtx, nn, func(q *arkv1alpha1.Query) {
+			r.applyStatusFields(q, statusError, nil)
+		})
 		return nil, nil, fmt.Errorf("failed to create memory client: %w", err)
 	}
 
@@ -571,13 +596,47 @@ func lastResponseContent(messages []genai.Message) string {
 		if messages[i].OfSystem != nil {
 			continue
 		}
-		text := messageToText(messages[i])
+		if terminateResponse := terminateToolResponse(messages[i]); terminateResponse != "" {
+			return terminateResponse
+		}
+		text := strings.TrimSpace(messageToText(messages[i]))
+		if text == "" {
+			continue
+		}
+		if text == "." && messages[i].OfAssistant != nil && len(messages[i].OfAssistant.ToolCalls) > 0 {
+			continue
+		}
 		if text != "" {
 			return text
 		}
 	}
 	if len(messages) > 0 {
-		return messageToText(messages[len(messages)-1])
+		if terminateResponse := terminateToolResponse(messages[len(messages)-1]); terminateResponse != "" {
+			return terminateResponse
+		}
+		return strings.TrimSpace(messageToText(messages[len(messages)-1]))
+	}
+	return ""
+}
+
+func terminateToolResponse(message genai.Message) string {
+	if message.OfAssistant == nil || len(message.OfAssistant.ToolCalls) == 0 {
+		return ""
+	}
+	for _, toolCall := range message.OfAssistant.ToolCalls {
+		if toolCall.Function.Name != genai.BuiltinToolTerminate {
+			continue
+		}
+		var args struct {
+			Response string `json:"response"`
+		}
+		if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
+			continue
+		}
+		response := strings.TrimSpace(args.Response)
+		if response != "" {
+			return response
+		}
 	}
 	return ""
 }
@@ -642,12 +701,9 @@ func (r *QueryReconciler) updateStatus(ctx context.Context, query *arkv1alpha1.Q
 	return r.updateStatusWithDuration(ctx, query, status, nil)
 }
 
-func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *arkv1alpha1.Query, status string, duration *metav1.Duration) error {
-	if ctx.Err() != nil {
-		return nil
-	}
-	query.Status.Phase = status
-	switch status {
+func (r *QueryReconciler) applyStatusFields(query *arkv1alpha1.Query, phase string, duration *metav1.Duration) {
+	query.Status.Phase = phase
+	switch phase {
 	case statusRunning:
 		r.setConditionCompleted(query, metav1.ConditionFalse, "QueryRunning", "Query is running")
 	case statusDone:
@@ -664,11 +720,37 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 	if duration != nil {
 		query.Status.Duration = duration
 	}
+}
+
+func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *arkv1alpha1.Query, status string, duration *metav1.Duration) error {
+	if ctx.Err() != nil {
+		return nil
+	}
+	r.applyStatusFields(query, status, duration)
 	err := r.Status().Update(ctx, query)
 	if err != nil {
 		logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
 	}
 	return err
+}
+
+func (r *QueryReconciler) updateStatusAtomic(ctx context.Context, namespacedName types.NamespacedName, updateFn func(*arkv1alpha1.Query)) error {
+	if ctx.Err() != nil {
+		return nil
+	}
+	log := logf.FromContext(ctx)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		var fresh arkv1alpha1.Query
+		if err := r.Get(ctx, namespacedName, &fresh); err != nil {
+			return err
+		}
+		updateFn(&fresh)
+		if err := r.Status().Update(ctx, &fresh); err != nil {
+			log.V(1).Info("query status update conflict, will retry", "query", namespacedName.Name, "error", err)
+			return err
+		}
+		return nil
+	})
 }
 
 // determineQueryStatus checks if any responses have error phase and returns appropriate query status

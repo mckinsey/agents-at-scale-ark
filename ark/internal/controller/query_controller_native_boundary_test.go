@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/openai/openai-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"mckinsey.com/ark/internal/genai"
@@ -184,4 +185,39 @@ func TestLoadInitialA2AMessagesFallsBackToCompatMemory(t *testing.T) {
 	assert.Equal(t, protocol.MessageRoleUser, messages[0].Role)
 	assert.Equal(t, protocol.MessageRoleAgent, messages[1].Role)
 	assert.Equal(t, "native output", genai.ExtractA2ATextFromMessage(messages[1]))
+}
+
+func TestLastResponseContentUsesTerminateToolResponse(t *testing.T) {
+	assistant := genai.NewAssistantMessage(".")
+	assistant.OfAssistant.ToolCalls = []openai.ChatCompletionMessageToolCallParam{
+		{
+			ID:   "call-terminate",
+			Type: "function",
+			Function: openai.ChatCompletionMessageToolCallFunctionParam{
+				Name:      genai.BuiltinToolTerminate,
+				Arguments: `{"response":"COORDINATION: final answer"}`,
+			},
+		},
+	}
+
+	content := lastResponseContent([]genai.Message{assistant})
+	assert.Equal(t, "COORDINATION: final answer", content)
+}
+
+func TestLastResponseContentSkipsToolCallPlaceholderDot(t *testing.T) {
+	assistantWithToolCall := genai.NewAssistantMessage(".")
+	assistantWithToolCall.OfAssistant.ToolCalls = []openai.ChatCompletionMessageToolCallParam{
+		{
+			ID:   "call-noop",
+			Type: "function",
+			Function: openai.ChatCompletionMessageToolCallFunctionParam{
+				Name:      "noop",
+				Arguments: `{"message":"ok"}`,
+			},
+		},
+	}
+	previous := genai.NewAssistantMessage("meaningful content")
+
+	content := lastResponseContent([]genai.Message{previous, assistantWithToolCall})
+	assert.Equal(t, "meaningful content", content)
 }
