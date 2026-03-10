@@ -106,7 +106,13 @@ jobs:
             --set storage.postgresql.user=postgres \
             --set storage.postgresql.passwordSecretName=ark-storage-dev \
             --set storage.postgresql.passwordSecretKey=password \
-            --wait --timeout=300s
+            --timeout=300s
+
+      - name: Wait for aggregated API
+        run: |
+          kubectl wait --for=condition=Available \
+            apiservice/v1alpha1.ark.mckinsey.com \
+            --timeout=300s
 
       - uses: actions/setup-go@v5
         with:
