@@ -153,16 +153,16 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
             description: values.description || undefined,
             members: selectedMembers.length > 0 ? selectedMembers : undefined,
             strategy: values.strategy || undefined,
-            loops: values.loops || undefined,
-            maxTurns: values.maxTurns ? parseInt(values.maxTurns) : undefined,
+            loops: values.loops,
+            maxTurns: values.maxTurns ? parseInt(values.maxTurns) : null,
             selector:
               values.selectorAgent || values.selectorPrompt
                 ? {
                     agent: values.selectorAgent || undefined,
                     selectorPrompt: values.selectorPrompt || undefined,
                   }
-                : undefined,
-            graph: graphEdges.length > 0 ? { edges: graphEdges } : undefined,
+                : null,
+            graph: graphEdges.length > 0 ? { edges: graphEdges } : null,
           });
 
           const updatedTeam = await teamsService.getByName(teamName!);
@@ -177,7 +177,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
             description: values.description || undefined,
             members: selectedMembers,
             strategy: values.strategy,
-            loops: values.loops || undefined,
+            loops: values.loops,
             maxTurns: values.maxTurns ? parseInt(values.maxTurns) : undefined,
             selector:
               values.selectorAgent || values.selectorPrompt

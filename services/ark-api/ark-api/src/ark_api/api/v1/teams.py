@@ -191,26 +191,34 @@ async def update_team(team_name: str, body: TeamUpdateRequest, namespace: Option
         # Update only the fields that are provided
         if body.description is not None:
             existing_spec["description"] = body.description
-        
+
         if body.members is not None:
             existing_spec["members"] = [member.model_dump(exclude_none=True) for member in body.members]
-        
+
         if body.strategy is not None:
             existing_spec["strategy"] = body.strategy
-        
-        if body.graph is not None:
-            # Handle graph edges with from_ field conversion
-            graph_dict = body.graph.model_dump(exclude_none=True, by_alias=True)
-            existing_spec["graph"] = graph_dict
+
+        if "graph" in body.model_fields_set:
+            if body.graph is not None:
+                graph_dict = body.graph.model_dump(exclude_none=True, by_alias=True)
+                existing_spec["graph"] = graph_dict
+            else:
+                existing_spec.pop("graph", None)
 
         if body.loops is not None:
             existing_spec["loops"] = body.loops
 
-        if body.maxTurns is not None:
-            existing_spec["maxTurns"] = body.maxTurns
+        if "maxTurns" in body.model_fields_set:
+            if body.maxTurns is not None:
+                existing_spec["maxTurns"] = body.maxTurns
+            else:
+                existing_spec.pop("maxTurns", None)
 
-        if body.selector is not None:
-            existing_spec["selector"] = body.selector.model_dump(exclude_none=True)
+        if "selector" in body.model_fields_set:
+            if body.selector is not None:
+                existing_spec["selector"] = body.selector.model_dump(exclude_none=True)
+            else:
+                existing_spec.pop("selector", None)
 
         # Update the team
         # Get the full existing team object and update its spec
