@@ -144,14 +144,11 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
   done
   echo "ark.mckinsey.com API group registered"
 
-  if kubectl -n ark-system logs deployment/ark-controller --tail=200 | grep -qi "Using PostgreSQL storage backend"; then
-    echo "PostgreSQL backend verified successfully"
-  else
-    echo "ERROR: Controller does not appear to be running with PostgreSQL backend"
-    echo "Controller logs:"
-    kubectl -n ark-system logs deployment/ark-controller --tail=50
+  if kubectl get crd agents.ark.mckinsey.com &>/dev/null; then
+    echo "ERROR: CRD agents.ark.mckinsey.com exists — controller is using etcd, not PostgreSQL aggregated API server"
     exit 1
   fi
+  echo "PostgreSQL backend verified (no CRDs present, API served via aggregated API server)"
 fi
 
 echo
