@@ -25,7 +25,7 @@ type Team struct {
 	Members           []TeamMember
 	Strategy          string
 	Description       string
-	Loops             *bool
+	Loops             bool
 	MaxTurns          *int
 	Selector          *arkv1alpha1.TeamSelectorSpec
 	Graph             *arkv1alpha1.TeamGraphSpec
@@ -72,7 +72,7 @@ func (t *Team) Execute(ctx context.Context, userInput Message, history []Message
 }
 
 func (t *Team) executeSequential(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
-	loops := (t.Loops != nil && *t.Loops) || t.Strategy == "round-robin"
+	loops := t.Loops || t.Strategy == "round-robin"
 
 	if loops {
 		return t.executeSequentialWithLoops(ctx, userInput, history)

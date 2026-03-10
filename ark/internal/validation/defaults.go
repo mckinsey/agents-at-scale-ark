@@ -46,8 +46,7 @@ func DefaultTeam(team *arkv1alpha1.Team) {
 
 	if team.Spec.MaxTurns != nil {
 		team.Spec.Strategy = StrategySequential
-		loops := true
-		team.Spec.Loops = &loops
+		team.Spec.Loops = true
 		team.Annotations[annotations.MigrationWarningPrefix+"round-robin"] = "strategy 'round-robin' is deprecated - migrated to 'sequential' with loops: true. Will be removed in v1.0.0"
 	} else {
 		team.Spec.Strategy = StrategySequential

@@ -387,7 +387,7 @@ export function TeamEditor({
       description: values.description || undefined,
       members: selectedMembers.length > 0 ? selectedMembers : undefined,
       strategy: values.strategy || undefined,
-      loops: values.loops || undefined,
+      loops: values.loops,
       maxTurns: values.maxTurns ? parseInt(values.maxTurns) : undefined,
       selector:
         values.selectorAgent || values.selectorPrompt

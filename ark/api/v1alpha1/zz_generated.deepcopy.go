@@ -2123,11 +2123,6 @@ func (in *TeamSpec) DeepCopyInto(out *TeamSpec) {
 		*out = make([]TeamMember, len(*in))
 		copy(*out, *in)
 	}
-	if in.Loops != nil {
-		in, out := &in.Loops, &out.Loops
-		*out = new(bool)
-		**out = **in
-	}
 	if in.MaxTurns != nil {
 		in, out := &in.MaxTurns, &out.MaxTurns
 		*out = new(int)

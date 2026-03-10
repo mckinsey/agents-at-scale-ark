@@ -88,7 +88,7 @@ func TestDefaultTeam(t *testing.T) {
 		if team.Spec.Strategy != "sequential" {
 			t.Fatalf("expected strategy 'sequential', got '%s'", team.Spec.Strategy)
 		}
-		if team.Spec.Loops == nil || !*team.Spec.Loops {
+		if !team.Spec.Loops {
 			t.Fatal("expected loops to be true")
 		}
 		if team.Spec.MaxTurns == nil || *team.Spec.MaxTurns != 5 {
@@ -111,8 +111,8 @@ func TestDefaultTeam(t *testing.T) {
 		if team.Spec.Strategy != "sequential" {
 			t.Fatalf("expected strategy 'sequential', got '%s'", team.Spec.Strategy)
 		}
-		if team.Spec.Loops != nil {
-			t.Fatal("expected loops to be nil")
+		if team.Spec.Loops {
+			t.Fatal("expected loops to be false")
 		}
 		if team.Spec.MaxTurns != nil {
 			t.Fatal("expected maxTurns to remain nil")
