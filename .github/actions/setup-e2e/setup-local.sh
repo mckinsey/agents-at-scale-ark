@@ -107,19 +107,6 @@ fi
 
 helm upgrade --install ark-controller ./dist/chart "${HELM_ARGS[@]}"
 
-if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
-  echo "=== Verifying PostgreSQL Backend ==="
-  sleep 5
-  if kubectl -n ark-system logs deployment/ark-controller --tail=100 | grep -qi "Using PostgreSQL storage backend"; then
-    echo "PostgreSQL backend verified successfully"
-  else
-    echo "ERROR: Controller does not appear to be running with PostgreSQL backend"
-    echo "Controller logs:"
-    kubectl -n ark-system logs deployment/ark-controller --tail=50
-    exit 1
-  fi
-fi
-
 helm upgrade --install ark-completions ./executors/completions/chart \
   --namespace ark-system \
   --wait --timeout=300s \
@@ -139,6 +126,33 @@ fi
 # Wait for ARK deployment to be ready
 echo "=== Waiting for ARK Deployment ==="
 kubectl -n ark-system wait --for=condition=available --timeout=300s deployment/ark-controller
+
+if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
+  echo "=== Verifying PostgreSQL Backend ==="
+  RETRIES=0
+  MAX_RETRIES=30
+  until kubectl api-resources --api-group=ark.mckinsey.com -o name 2>/dev/null | grep -q "agents\."; do
+    RETRIES=$((RETRIES + 1))
+    if [ "$RETRIES" -ge "$MAX_RETRIES" ]; then
+      echo "ERROR: ark.mckinsey.com API group did not become available after ${MAX_RETRIES} attempts"
+      echo "Controller logs:"
+      kubectl -n ark-system logs deployment/ark-controller --tail=50
+      exit 1
+    fi
+    echo "Waiting for aggregated API server to register... (attempt ${RETRIES}/${MAX_RETRIES})"
+    sleep 10
+  done
+  echo "ark.mckinsey.com API group registered"
+
+  if kubectl -n ark-system logs deployment/ark-controller --tail=200 | grep -qi "Using PostgreSQL storage backend"; then
+    echo "PostgreSQL backend verified successfully"
+  else
+    echo "ERROR: Controller does not appear to be running with PostgreSQL backend"
+    echo "Controller logs:"
+    kubectl -n ark-system logs deployment/ark-controller --tail=50
+    exit 1
+  fi
+fi
 
 echo
 echo "=== Setup Complete! ==="
