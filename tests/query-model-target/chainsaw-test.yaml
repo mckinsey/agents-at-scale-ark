@@ -66,3 +66,10 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: model-target-query
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
