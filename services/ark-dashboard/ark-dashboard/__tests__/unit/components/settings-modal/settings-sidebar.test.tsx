@@ -4,6 +4,7 @@ import { Provider, createStore } from 'jotai';
 import { useRouter } from 'next/navigation';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { SettingPage } from '@/atoms/settings-modal';
 import { SettingsSidebar } from '@/components/settings-modal/settings-sidebar';
 
 vi.mock('next/navigation', () => ({
@@ -22,10 +23,10 @@ describe('SettingsSidebar', () => {
     });
   });
 
-  const renderWithStore = (activePage: string = 'a2a-servers') =>
+  const renderWithStore = (activePage: SettingPage = 'a2a-servers') =>
     render(
       <Provider store={store}>
-        <SettingsSidebar activePage={activePage as any} />
+        <SettingsSidebar activePage={activePage} />
       </Provider>,
     );
 

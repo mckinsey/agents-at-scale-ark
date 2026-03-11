@@ -25,17 +25,15 @@ export default function SettingsPage() {
 
   const pageSegments = params.page as string[] | undefined;
   const pageKey = pageSegments?.[0] as SettingPage | undefined;
+  const isValidPage = pageKey != null && VALID_SETTINGS_PAGES.includes(pageKey);
 
-  const activePage =
-    pageKey && VALID_SETTINGS_PAGES.includes(pageKey)
-      ? pageKey
-      : DEFAULT_SETTINGS_PAGE;
+  const activePage = isValidPage ? pageKey : DEFAULT_SETTINGS_PAGE;
 
   useEffect(() => {
-    if (!pageKey || !VALID_SETTINGS_PAGES.includes(pageKey)) {
+    if (!isValidPage) {
       router.replace(`/settings/${DEFAULT_SETTINGS_PAGE}`);
     }
-  }, [pageKey, router]);
+  }, [isValidPage, router]);
 
   return (
     <div className="-m-10 flex h-[calc(100vh-1rem)] overflow-hidden">
