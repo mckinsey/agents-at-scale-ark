@@ -80,6 +80,10 @@ helm upgrade --install ark-controller ./dist/chart \
   --set controllerManager.container.image.repository="${REGISTRY}/ark-controller" \
   --set controllerManager.container.image.tag="${ARK_IMAGE_TAG}" \
   --set controllerManager.container.image.pullPolicy=IfNotPresent \
+  --set queryEngine.enabled=true \
+  --set queryEngine.container.image.repository="${REGISTRY}/ark-query-engine" \
+  --set queryEngine.container.image.tag="${ARK_IMAGE_TAG}" \
+  --set queryEngine.container.image.pullPolicy=IfNotPresent \
   --set rbac.enable=true \
   --set rbac.impersonation.enabled=true
 

@@ -65,6 +65,7 @@ type config struct {
 	probeAddr                                        string
 	secureMetrics                                    bool
 	enableHTTP2                                      bool
+	queryEngineAddr                                  string
 }
 
 func main() {
@@ -98,7 +99,7 @@ func main() {
 	// Initialize eventing provider with direct client for broker discovery
 	eventingProvider := eventingconfig.NewProvider(mgr, directClient)
 
-	setupControllers(mgr, telemetryProvider, eventingProvider)
+	setupControllers(mgr, telemetryProvider, eventingProvider, result.config)
 	setupWebhooks(mgr)
 	setupEmbeddedApiserver(mgr)
 	startManager(mgr, metricsCertWatcher, webhookCertWatcher)
@@ -129,6 +130,8 @@ func parseFlags() struct {
 	flag.BoolVar(&cfg.enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.BoolVar(&showVersion, "version", false, "Show version information and exit")
+	flag.StringVar(&cfg.queryEngineAddr, "query-engine-addr", "http://localhost:9090",
+		"Address of the query engine sidecar for A2A communication")
 
 	zapOpts := zap.Options{Development: false}
 	zapOpts.BindFlags(flag.CommandLine)
@@ -242,7 +245,7 @@ func setupMetricsServer(cfg config, baseTLSOpts []func(*tls.Config)) (metricsser
 	return metricsServerOptions, metricsCertWatcher
 }
 
-func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provider, eventingProvider *eventingconfig.Provider) {
+func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provider, eventingProvider *eventingconfig.Provider, cfg config) {
 	controllers := []struct {
 		name       string
 		reconciler interface{ SetupWithManager(ctrl.Manager) error }
@@ -253,10 +256,11 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 			Eventing: eventingProvider,
 		}},
 		{"Query", &controller.QueryReconciler{
-			Client:    mgr.GetClient(),
-			Scheme:    mgr.GetScheme(),
-			Telemetry: telemetryProvider,
-			Eventing:  eventingProvider,
+			Client:          mgr.GetClient(),
+			Scheme:          mgr.GetScheme(),
+			Telemetry:       telemetryProvider,
+			Eventing:        eventingProvider,
+			QueryEngineAddr: cfg.queryEngineAddr,
 		}},
 		{"Tool", &controller.ToolReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
 		{"Team", &controller.TeamReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("team-controller")}},
