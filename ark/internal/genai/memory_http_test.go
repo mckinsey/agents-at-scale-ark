@@ -344,7 +344,7 @@ func TestHTTPMemoryGetMessagesWithHeaders(t *testing.T) {
 					}
 					w.Header().Set("Content-Type", "application/json")
 					response := MessagesResponse{
-						Messages: []MessageRecord{
+						Items: []MessageRecord{
 							{
 								Message: json.RawMessage(`{"role": "user", "content": "hello"}`),
 							},

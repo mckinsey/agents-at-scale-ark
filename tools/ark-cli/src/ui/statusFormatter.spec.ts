@@ -1,15 +1,15 @@
-import {describe, it, expect, jest, beforeEach, afterEach} from '@jest/globals';
+import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {StatusFormatter, StatusSection} from './statusFormatter.js';
 
 describe('StatusFormatter', () => {
-  let consoleLogSpy: jest.SpiedFunction<typeof console.log>;
+  let consoleLogSpy: vi.SpiedFunction<typeof console.log>;
 
   beforeEach(() => {
-    consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('prints sections', () => {

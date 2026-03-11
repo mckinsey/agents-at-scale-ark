@@ -46,3 +46,11 @@ spec:
               spec:
                 provider: openai
                 type: completions
+
+      cleanup:
+      - script:
+          content: |
+            helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+          env:
+          - name: NAMESPACE
+            value: ($namespace)

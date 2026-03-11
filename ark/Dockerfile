@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM golang:1.24-bullseye AS builder
+FROM golang:1.24.13-bookworm AS builder
 ARG TARGETOS
 ARG TARGETARCH
 ARG ENABLE_COVERAGE=false
@@ -20,6 +20,7 @@ RUN go mod download
 COPY cmd/main.go cmd/main.go
 COPY api/ api/
 COPY internal/ internal/
+COPY config/crd/bases/ internal/apiserver/crds/
 COPY version.txt version.txt
 
 # Build

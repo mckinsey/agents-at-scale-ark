@@ -1,31 +1,31 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 import {Command} from 'commander';
 
-const mockLoadConfig = jest.fn() as any;
-const mockGetConfigPaths = jest.fn() as any;
-const mockFormatConfig = jest.fn() as any;
+const mockLoadConfig = vi.fn() as any;
+const mockGetConfigPaths = vi.fn() as any;
+const mockFormatConfig = vi.fn() as any;
 
-jest.unstable_mockModule('../../lib/config.js', () => ({
+vi.mock('../../lib/config.js', () => ({
   loadConfig: mockLoadConfig,
   getConfigPaths: mockGetConfigPaths,
   formatConfig: mockFormatConfig,
 }));
 
-const mockExistsSync = jest.fn() as any;
-jest.unstable_mockModule('fs', () => ({
+const mockExistsSync = vi.fn() as any;
+vi.mock('fs', () => ({
   default: {
     existsSync: mockExistsSync,
   },
   existsSync: mockExistsSync,
 }));
 
-const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
 
 const {createConfigCommand} = await import('./index.js');
 
 describe('config command', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Reset environment variables
     delete process.env.ARK_CHAT_STREAMING;
     delete process.env.ARK_CHAT_OUTPUT_FORMAT;

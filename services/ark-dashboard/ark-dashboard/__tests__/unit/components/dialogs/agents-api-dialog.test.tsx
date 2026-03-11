@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentsAPIDialog } from '@/components/dialogs/agents-api-dialog';
 import type { Agent } from '@/lib/services';
@@ -46,6 +46,10 @@ describe('AgentsAPIDialog', () => {
       },
       writable: true,
     });
+  });
+
+  afterEach(() => {
+    vi.clearAllTimers();
   });
 
   it('should render dialog when open', () => {
@@ -101,7 +105,7 @@ describe('AgentsAPIDialog', () => {
 
     const endpoint = screen.getByText('http://localhost:3000/api/openai/v1/chat/completions');
     expect(endpoint).toBeInTheDocument();
-    expect(screen.getByText('External')).toBeInTheDocument();
+    expect(screen.getByText('Cluster internal')).toBeInTheDocument();
   });
 
   it('should toggle between external and internal endpoints', async () => {
@@ -115,11 +119,13 @@ describe('AgentsAPIDialog', () => {
     );
 
     const toggle = screen.getByRole('switch');
-    expect(screen.getByText('External')).toBeInTheDocument();
+    // Label always shows "Cluster internal" now
+    expect(screen.getByText('Cluster internal')).toBeInTheDocument();
     expect(screen.getByText('http://localhost:3000/api/openai/v1/chat/completions')).toBeInTheDocument();
 
     await user.click(toggle);
 
+    // Label remains "Cluster internal" after toggle
     expect(screen.getByText('Cluster internal')).toBeInTheDocument();
     expect(screen.getByText('http://ark-api.<namespace>.svc.cluster.local/api/openai/v1/chat/completions')).toBeInTheDocument();
 

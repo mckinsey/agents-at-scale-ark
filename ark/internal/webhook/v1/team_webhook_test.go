@@ -13,13 +13,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/validation"
 )
 
 var _ = Describe("Team Webhook", func() {
 	var (
 		obj       *arkv1alpha1.Team
 		oldObj    *arkv1alpha1.Team
-		validator *TeamCustomValidator
+		validator *validation.WebhookValidator
 		ctx       context.Context
 	)
 
@@ -83,9 +84,8 @@ var _ = Describe("Team Webhook", func() {
 		// Create fake client with all agents
 		fakeClient := fake.NewClientBuilder().WithScheme(s).WithObjects(objects...).Build()
 
-		// Create validator with fake client
-		validator = &TeamCustomValidator{
-			ResourceValidator: &ResourceValidator{Client: fakeClient},
+		validator = &validation.WebhookValidator{
+			V: validation.NewValidator(&validation.WebhookLookup{Client: fakeClient}),
 		}
 
 		obj = &arkv1alpha1.Team{
@@ -103,7 +103,7 @@ var _ = Describe("Team Webhook", func() {
 	Context("Selector strategy with graph constraints", func() {
 		It("Should allow multiple edges from same source for selector strategy", func() {
 			By("creating a selector team with graph that has multiple edges from same source")
-			obj.Spec.Strategy = StrategySelector
+			obj.Spec.Strategy = validation.StrategySelector
 			obj.Spec.Members = []arkv1alpha1.TeamMember{
 				{Name: "researcher", Type: "agent"},
 				{Name: "analyst", Type: "agent"},
@@ -126,7 +126,7 @@ var _ = Describe("Team Webhook", func() {
 
 		It("Should reject graph edges with invalid member names for selector strategy", func() {
 			By("creating a selector team with graph referencing non-existent members")
-			obj.Spec.Strategy = StrategySelector
+			obj.Spec.Strategy = validation.StrategySelector
 			obj.Spec.Members = []arkv1alpha1.TeamMember{
 				{Name: "researcher", Type: "agent"},
 			}
@@ -146,7 +146,7 @@ var _ = Describe("Team Webhook", func() {
 
 		It("Should require graph to have at least one edge when provided for selector strategy", func() {
 			By("creating a selector team with empty graph edges")
-			obj.Spec.Strategy = StrategySelector
+			obj.Spec.Strategy = validation.StrategySelector
 			obj.Spec.Members = []arkv1alpha1.TeamMember{
 				{Name: "researcher", Type: "agent"},
 			}
@@ -164,7 +164,7 @@ var _ = Describe("Team Webhook", func() {
 
 		It("Should allow selector strategy without graph (backward compatibility)", func() {
 			By("creating a selector team without graph")
-			obj.Spec.Strategy = StrategySelector
+			obj.Spec.Strategy = validation.StrategySelector
 			obj.Spec.Members = []arkv1alpha1.TeamMember{
 				{Name: "researcher", Type: "agent"},
 			}

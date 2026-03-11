@@ -1,10 +1,10 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 import {Command} from 'commander';
 
-const mockExecuteDirectEvaluation = jest.fn() as any;
-const mockExecuteQueryEvaluation = jest.fn() as any;
+const mockExecuteDirectEvaluation = vi.fn() as any;
+const mockExecuteQueryEvaluation = vi.fn() as any;
 
-jest.unstable_mockModule('../../lib/executeEvaluation.js', () => ({
+vi.mock('../../lib/executeEvaluation.js', () => ({
   executeDirectEvaluation: mockExecuteDirectEvaluation,
   executeQueryEvaluation: mockExecuteQueryEvaluation,
 }));
@@ -13,7 +13,7 @@ const {createEvaluationCommand} = await import('./index.js');
 
 describe('createEvaluationCommand', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should create an evaluation command', () => {
@@ -104,8 +104,8 @@ describe('createEvaluationCommand', () => {
 
       const mockStdin = {
         isTTY: false,
-        setEncoding: jest.fn(),
-        on: jest.fn((event: string, callback: (data?: string) => void) => {
+        setEncoding: vi.fn(),
+        on: vi.fn((event: string, callback: (data?: string) => void) => {
           if (event === 'data') {
             callback('piped-query-name');
           } else if (event === 'end') {

@@ -1,6 +1,7 @@
 'use client';
 
 import { MessageCircle, Pencil, Trash2, Users } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
@@ -20,6 +21,7 @@ import type {
   TeamCreateRequest,
   TeamUpdateRequest,
 } from '@/lib/services';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { BaseCard, type BaseCardAction } from './base-card';
 
@@ -33,10 +35,12 @@ interface TeamCardProps {
 }
 
 export function TeamCard({ team, agents, onUpdate, onDelete }: TeamCardProps) {
+  const router = useRouter();
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(team.name);
-  const [editorOpen, setEditorOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const { readOnlyMode } = useNamespace();
 
   // Get the names of member agents
   const memberAgents = team.members
@@ -53,6 +57,7 @@ export function TeamCard({ team, agents, onUpdate, onDelete }: TeamCardProps) {
       icon: Pencil,
       label: 'Edit team',
       onClick: () => setEditorOpen(true),
+      disabled: readOnlyMode,
     });
   }
 
@@ -61,14 +66,20 @@ export function TeamCard({ team, agents, onUpdate, onDelete }: TeamCardProps) {
       icon: Trash2,
       label: 'Delete team',
       onClick: () => setDeleteConfirmOpen(true),
-      disabled: isChatOpen,
+      disabled: isChatOpen || readOnlyMode,
     });
   }
 
   actions.push({
     icon: MessageCircle,
     label: 'Chat with team',
-    onClick: () => toggleFloatingChat(team.name, 'team'),
+    onClick: () =>
+      toggleFloatingChat(
+        team.name,
+        'team',
+        team.strategy,
+        team.graph?.edges ?? undefined,
+      ),
     className: isChatOpen ? 'fill-current' : '',
   });
 
@@ -78,6 +89,7 @@ export function TeamCard({ team, agents, onUpdate, onDelete }: TeamCardProps) {
         title={team.name}
         description={team.description}
         icon={<Users className="h-5 w-5" />}
+        onClick={() => router.push(`/teams/${encodeURIComponent(team.name)}`)}
         actions={
           team.members.length === 0
             ? actions.filter(a => a.label !== 'Chat with team')
@@ -110,13 +122,15 @@ export function TeamCard({ team, agents, onUpdate, onDelete }: TeamCardProps) {
           </div>
         }
       />
-      <TeamEditor
-        open={editorOpen}
-        onOpenChange={setEditorOpen}
-        team={team}
-        agents={agents}
-        onSave={onUpdate || (() => {})}
-      />
+      {onUpdate && (
+        <TeamEditor
+          open={editorOpen}
+          team={team}
+          agents={agents}
+          onOpenChange={setEditorOpen}
+          onSave={onUpdate}
+        />
+      )}
       {onDelete && (
         <ConfirmationDialog
           open={deleteConfirmOpen}

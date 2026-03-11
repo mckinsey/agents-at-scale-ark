@@ -53,6 +53,18 @@ export const isBrokerEnabledAtom = atom(get => {
   return get(storedIsBrokerEnabledAtom);
 });
 
+export const MARKETPLACE_FEATURE_KEY = 'experimental-marketplace';
+export const storedIsMarketplaceEnabledAtom = atomWithStorage<boolean>(
+  MARKETPLACE_FEATURE_KEY,
+  false,
+  undefined,
+  { getOnInit: true },
+);
+
+export const isMarketplaceEnabledAtom = atom(get => {
+  return get(storedIsMarketplaceEnabledAtom);
+});
+
 export const FILES_BROWSER_FEATURE_KEY = 'files-browser-available';
 export const isFilesBrowserAvailableAtom = atom<boolean>(false);
 

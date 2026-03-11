@@ -1,41 +1,60 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 import {Command} from 'commander';
 
-const mockExeca = jest.fn(() => Promise.resolve()) as any;
-jest.unstable_mockModule('execa', () => ({
+const mockExeca = vi.fn(() => Promise.resolve()) as any;
+vi.mock('execa', () => ({
   execa: mockExeca,
 }));
 
-const mockGetClusterInfo = jest.fn() as any;
-jest.unstable_mockModule('../../lib/cluster.js', () => ({
+const mockPrompt = vi.fn();
+vi.mock('inquirer', () => ({
+  default: {
+    prompt: mockPrompt,
+    Separator: vi.fn().mockImplementation((text) => ({type: 'separator', line: text})),
+  },
+}));
+
+const mockGetClusterInfo = vi.fn() as any;
+vi.mock('../../lib/cluster.js', () => ({
   getClusterInfo: mockGetClusterInfo,
 }));
 
-const mockGetInstallableServices = jest.fn() as any;
+const mockGetInstallableServices = vi.fn() as any;
 const mockArkServices = {};
 const mockArkDependencies = {};
-jest.unstable_mockModule('../../arkServices.js', () => ({
+vi.mock('../../arkServices.js', () => ({
   getInstallableServices: mockGetInstallableServices,
   arkServices: mockArkServices,
   arkDependencies: mockArkDependencies,
 }));
 
+const mockIsMarketplaceService = vi.fn();
+const mockGetMarketplaceItem = vi.fn();
+const mockGetAllMarketplaceServices = vi.fn();
+const mockGetAllMarketplaceAgents = vi.fn();
+vi.mock('../../marketplaceServices.js', () => ({
+  isMarketplaceService: mockIsMarketplaceService,
+  getMarketplaceItem: mockGetMarketplaceItem,
+  getAllMarketplaceServices: mockGetAllMarketplaceServices,
+  getAllMarketplaceAgents: mockGetAllMarketplaceAgents,
+}));
+
 const mockOutput = {
-  error: jest.fn(),
-  info: jest.fn(),
-  success: jest.fn(),
-  warning: jest.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  success: vi.fn(),
+  warning: vi.fn(),
 };
-jest.unstable_mockModule('../../lib/output.js', () => ({
+vi.mock('../../lib/output.js', () => ({
   default: mockOutput,
 }));
 
-const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+const mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {
   throw new Error('process.exit called');
 }) as any);
 
-jest.spyOn(console, 'log').mockImplementation(() => {});
-jest.spyOn(console, 'error').mockImplementation(() => {});
+vi.spyOn(console, 'log').mockImplementation(() => {});
+vi.spyOn(console, 'error').mockImplementation(() => {});
 
 const {createInstallCommand} = await import('./index.js');
 
@@ -49,12 +68,13 @@ describe('install command', () => {
   } as any;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockGetClusterInfo.mockResolvedValue({
       context: 'test-cluster',
       type: 'minikube',
       namespace: 'default',
     });
+    mockIsMarketplaceService.mockReturnValue(false);
   });
 
   it('creates command with correct structure', () => {
@@ -176,6 +196,31 @@ describe('install command', () => {
     );
   });
 
+  it('uninstalls prerequisites before installing service', async () => {
+    const mockService = {
+      name: 'ark-api',
+      helmReleaseName: 'ark-api',
+      chartPath: './charts/ark-api',
+      namespace: 'ark-system',
+      prerequisiteUninstalls: [
+        {releaseName: 'old-release', namespace: 'ark-system'},
+      ],
+    };
+    mockGetInstallableServices.mockReturnValue({
+      'ark-api': mockService,
+    });
+    mockExeca.mockResolvedValue({stdout: ''});
+
+    const command = createInstallCommand(mockConfig);
+    await command.parseAsync(['node', 'test', 'ark-api']);
+
+    expect(mockExeca).toHaveBeenCalledWith(
+      'helm',
+      ['uninstall', 'old-release', '--ignore-not-found', '--namespace', 'ark-system'],
+      {stdio: 'inherit'}
+    );
+  });
+
   it('exits when cluster not connected', async () => {
     mockGetClusterInfo.mockResolvedValue({error: true});
 
@@ -184,6 +229,26 @@ describe('install command', () => {
     await expect(
       command.parseAsync(['node', 'test', 'ark-api'])
     ).rejects.toThrow('process.exit called');
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('shows error when marketplace item not found', async () => {
+    mockIsMarketplaceService.mockReturnValue(true);
+    mockGetMarketplaceItem.mockResolvedValue(null);
+    mockGetAllMarketplaceServices.mockResolvedValue({
+      phoenix: {name: 'phoenix'},
+    });
+    mockGetAllMarketplaceAgents.mockResolvedValue(null);
+
+    const command = createInstallCommand(mockConfig);
+
+    await expect(
+      command.parseAsync(['node', 'test', 'marketplace/services/nonexistent'])
+    ).rejects.toThrow('process.exit called');
+    expect(mockOutput.error).toHaveBeenCalledWith(
+      "marketplace item 'marketplace/services/nonexistent' not found"
+    );
+    expect(mockOutput.info).toHaveBeenCalledWith('available marketplace items:');
     expect(mockExit).toHaveBeenCalledWith(1);
   });
 
@@ -360,6 +425,42 @@ describe('install command', () => {
       );
     });
 
+    it('errors when --wait-for-ready used without -y flag', async () => {
+      const command = createInstallCommand(mockConfig);
+
+      await expect(
+        command.parseAsync(['node', 'test', '--wait-for-ready', '30s'])
+      ).rejects.toThrow('process.exit called');
+      expect(mockOutput.error).toHaveBeenCalledWith(
+        '--wait-for-ready requires -y flag for non-interactive mode'
+      );
+      expect(mockExit).toHaveBeenCalledWith(1);
+    });
+
+    it('handles install failure for single service', async () => {
+      const mockService = {
+        name: 'ark-api',
+        helmReleaseName: 'ark-api',
+        chartPath: './charts/ark-api',
+        namespace: 'ark-system',
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-api': mockService,
+      });
+
+      mockExeca
+        .mockResolvedValueOnce({stdout: ''})
+        .mockRejectedValueOnce(new Error('helm upgrade failed'));
+
+      const command = createInstallCommand(mockConfig);
+
+      await expect(
+        command.parseAsync(['node', 'test', 'ark-api'])
+      ).rejects.toThrow('process.exit called');
+      expect(mockOutput.error).toHaveBeenCalledWith('failed to install ark-api');
+      expect(mockExit).toHaveBeenCalledWith(1);
+    });
+
     it('handles service without namespace', async () => {
       const mockService = {
         name: 'ark-dashboard',
@@ -390,6 +491,73 @@ describe('install command', () => {
         ['uninstall', 'ark-dashboard'],
         {stdio: 'inherit'}
       );
+    });
+  });
+
+  describe('interactive install', () => {
+    it('prompts for components when no service name and no -y flag', async () => {
+      mockGetInstallableServices.mockReturnValue({
+        'ark-api': {
+          name: 'ark-api',
+          helmReleaseName: 'ark-api',
+          chartPath: './charts/ark-api',
+          namespace: 'ark-system',
+          category: 'core',
+          description: 'API service',
+        },
+      });
+      mockPrompt.mockResolvedValue({components: ['ark-api']});
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test']);
+
+      expect(mockPrompt).toHaveBeenCalled();
+    });
+
+    it('exits when no components selected', async () => {
+      mockGetInstallableServices.mockReturnValue({
+        'ark-api': {
+          name: 'ark-api',
+          helmReleaseName: 'ark-api',
+          chartPath: './charts/ark-api',
+          namespace: 'ark-system',
+          category: 'core',
+          description: 'API service',
+        },
+      });
+      mockPrompt.mockResolvedValue({components: []});
+
+      const command = createInstallCommand(mockConfig);
+
+      await expect(
+        command.parseAsync(['node', 'test'])
+      ).rejects.toThrow('process.exit called');
+      expect(mockOutput.warning).toHaveBeenCalledWith('No components selected. Exiting.');
+      expect(mockExit).toHaveBeenCalledWith(0);
+    });
+
+    it('handles Ctrl-C gracefully during component selection', async () => {
+      mockGetInstallableServices.mockReturnValue({
+        'ark-api': {
+          name: 'ark-api',
+          helmReleaseName: 'ark-api',
+          chartPath: './charts/ark-api',
+          namespace: 'ark-system',
+          category: 'core',
+          description: 'API service',
+        },
+      });
+      const exitError = new Error('User cancelled');
+      (exitError as any).name = 'ExitPromptError';
+      mockPrompt.mockRejectedValue(exitError);
+
+      const command = createInstallCommand(mockConfig);
+
+      await expect(
+        command.parseAsync(['node', 'test'])
+      ).rejects.toThrow('process.exit called');
+      expect(mockExit).toHaveBeenCalledWith(130);
     });
   });
 });

@@ -125,7 +125,7 @@ export function AgentsAPIDialog({
                 <Label
                   htmlFor="endpoint-toggle"
                   className="text-muted-foreground text-xs">
-                  {isInternalEndpoint ? 'Cluster internal' : 'External'}
+                  Cluster internal
                 </Label>
                 <Switch
                   id="endpoint-toggle"
