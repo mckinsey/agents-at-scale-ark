@@ -66,3 +66,10 @@ spec:
             (response.target.name): 'event-test-agent'
     finally:
       - events: {}
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

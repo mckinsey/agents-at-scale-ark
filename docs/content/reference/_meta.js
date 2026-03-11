@@ -22,5 +22,6 @@ export default {
   'utility-images': 'Utility Images',
 
   '---project': { type: 'separator', title: 'Project' },
-  contributors: 'Contributors'
+  contributors: 'Contributors',
+  articles: 'Articles'
 }
