@@ -74,8 +74,12 @@ func ValidateBaseURL(baseURL string) error {
 		return fmt.Errorf("URL must contain a hostname")
 	}
 
-	// Enforce HTTPS-only
-	if parsed.Scheme != "https" {
+	// Allow HTTP for internal cluster services (.svc.cluster.local)
+	// These cannot be exploited from outside the cluster
+	isClusterInternal := strings.HasSuffix(host, ".svc.cluster.local")
+
+	// Enforce HTTPS-only (except for cluster-internal services)
+	if !isClusterInternal && parsed.Scheme != "https" {
 		return fmt.Errorf("all URLs must use HTTPS; got %s://", parsed.Scheme)
 	}
 

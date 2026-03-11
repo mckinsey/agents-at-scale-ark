@@ -484,6 +484,50 @@ func TestValidateBaseURL(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 		}
 	})
 
+	t.Run("Allow HTTP for cluster-internal services", func(t *testing.T) {
+		_ = os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
+		_ = os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")
+
+		tests := []struct {
+			name string
+			url  string
+		}{
+			{"Cluster service - short name", "http://mock-openai.svc.cluster.local/v1"},
+			{"Cluster service - with namespace", "http://mock-openai.default.svc.cluster.local/v1"},
+			{"Cluster service - with port", "http://service.namespace.svc.cluster.local:8080/api"},
+			{"Cluster service - root domain", "http://service.svc.cluster.local"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := ValidateBaseURL(tt.url)
+				if err != nil {
+					t.Errorf("HTTP should be allowed for cluster-internal services, got error: %v", err)
+				}
+			})
+		}
+
+		nonClusterTests := []struct {
+			name string
+			url  string
+		}{
+			{"HTTP to external domain", "http://api.openai.com/v1"},
+			{"HTTP to similar but not cluster domain", "http://evil.svc.cluster.local.attacker.com/v1"},
+		}
+
+		for _, tt := range nonClusterTests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := ValidateBaseURL(tt.url)
+				if err == nil {
+					t.Fatal("expected error for non-cluster HTTP URL, got nil")
+				}
+				if !contains(err.Error(), "must use HTTPS") {
+					t.Errorf("expected 'must use HTTPS' error, got: %v", err)
+				}
+			})
+		}
+	})
+
 	t.Run("Block loopback addresses (127.0.0.1, ::1)", func(t *testing.T) {
 		_ = os.Unsetenv("WHITELISTED_MODEL_DOMAINS")
 		_ = os.Unsetenv("ALLOWED_PRIVATE_IP_RANGES")

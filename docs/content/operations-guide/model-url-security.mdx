@@ -19,6 +19,14 @@ baseUrl: "https://api.openai.com/v1"
 baseUrl: "http://api.openai.com/v1"
 ```
 
+**Exception:** Cluster-internal services (`.svc.cluster.local`) are allowed to use HTTP since they cannot be accessed from outside the cluster. This is primarily used for testing and development with mock services.
+
+```yaml
+# ✅ Valid (cluster-internal)
+baseUrl: "http://mock-openai.default.svc.cluster.local/v1"
+baseUrl: "http://service.namespace.svc.cluster.local:8080/api"
+```
+
 ### Scheme Validation
 **Protects against:** Local file access, code injection
 
