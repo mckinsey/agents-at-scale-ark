@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: team-query
+spec:
+  input: "Research the latest trends in insurtech and AI-driven claims processing for 2025, focusing on how Israeli insurance companies are adopting automation."
+  target:
+    type: team
+    name: research-analysis-team

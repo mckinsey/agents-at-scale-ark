@@ -1,0 +1,31 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+labels:
+  - pairs:
+      app: harel-demo
+      use-case: platform-tour
+
+resources:
+  - models/azure-gpt4o.yaml
+  - models/claude.yaml
+  - models/gemini.yaml
+  - tools/get-coordinates.yaml
+  - tools/get-forecast.yaml
+  - tools/web-search.yaml
+  - tools/create-post.yaml
+  - mcp/filesystem-mcp.yaml
+  - agents/weather-agent.yaml
+  - agents/researcher-agent.yaml
+  - agents/analyst-agent.yaml
+  - agents/creator-agent.yaml
+  - teams/research-team.yaml
+  - queries/weather-query.yaml
+  - queries/team-query.yaml
+  - queries/memory-query-1.yaml
+  - queries/memory-query-2.yaml
+  - queries/memory-followup.yaml
+  - evals/evaluator.yaml
+  - evals/evaluation.yaml
+  - memory/memory.yaml
+  - a2a/a2a-weather-agent.yaml

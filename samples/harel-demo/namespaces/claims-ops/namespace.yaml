@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: claims-ops
+  labels:
+    app: harel-demo
+    department: claims

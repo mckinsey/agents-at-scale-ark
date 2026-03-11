@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: memory-followup
+spec:
+  input: "What is my name? Do you remember where I work?"
+  target:
+    type: agent
+    name: weather
+  sessionId: harel-demo-session-001

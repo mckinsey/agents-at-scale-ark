@@ -1,0 +1,19 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: web-search
+  namespace: virtual-agents
+spec:
+  type: http
+  description: "Searches the web for information using DuckDuckGo search API"
+  inputSchema:
+    type: object
+    properties:
+      query:
+        type: string
+        description: Search query to execute on the web
+    required: ["query"]
+  http:
+    url: https://api.duckduckgo.com/?q={query}&format=json&no_html=1&skip_disambig=1
+    method: GET
+    timeout: 30s

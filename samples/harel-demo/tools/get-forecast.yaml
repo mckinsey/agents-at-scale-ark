@@ -1,0 +1,22 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: get-forecast
+spec:
+  type: http
+  inputSchema:
+    type: object
+    properties:
+      office:
+        type: string
+        description: "Weather office identifier (e.g., TOP)"
+      gridX:
+        type: integer
+        description: "Grid X coordinate"
+      gridY:
+        type: integer
+        description: "Grid Y coordinate"
+    required: ["office", "gridX", "gridY"]
+  description: "Get weather forecast for a specific location and time period"
+  http:
+    url: https://api.weather.gov/gridpoints/{office}/{gridX},{gridY}/forecast

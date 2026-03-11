@@ -1,0 +1,14 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: MCPServer
+metadata:
+  name: filesystem
+spec:
+  address:
+    valueFrom:
+      serviceRef:
+        name: mcp-filesystem-server
+        port: http
+        path: /mcp
+  transport: http
+  description: "Filesystem operations for reading, writing, and managing files"
+  timeout: "30s"

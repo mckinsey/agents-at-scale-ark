@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gemini-model-token
+type: Opaque
+stringData:
+  token: ${GEMINI_API_KEY}
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: gemini
+spec:
+  type: openai
+  model:
+    value: gemini-2.0-flash
+  config:
+    openai:
+      baseUrl:
+        value: "https://generativelanguage.googleapis.com/v1beta/openai/"
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            name: gemini-model-token
+            key: token

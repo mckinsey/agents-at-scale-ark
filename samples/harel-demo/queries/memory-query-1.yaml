@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: memory-query-1
+spec:
+  input: "Hello! My name is Yael and I work at Harel Insurance. Please remember this for our conversation."
+  target:
+    type: agent
+    name: weather
+  sessionId: harel-demo-session-001

@@ -1,0 +1,27 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: web-search
+  labels:
+    category: research
+    type: web-tool
+spec:
+  type: http
+  inputSchema:
+    type: object
+    properties:
+      query:
+        type: string
+        description: Search query to execute on the web
+      num_results:
+        type: integer
+        description: Number of search results to return
+        default: 5
+        minimum: 1
+        maximum: 10
+    required: ["query"]
+  description: "Searches the web for information using DuckDuckGo search API and returns relevant results with titles, snippets, and URLs"
+  http:
+    url: https://api.duckduckgo.com/?q={query}&format=json&no_html=1&skip_disambig=1&limit={num_results}
+    method: GET
+    timeout: 30s

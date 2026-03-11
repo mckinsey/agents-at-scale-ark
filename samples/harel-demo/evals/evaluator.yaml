@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Evaluator
+metadata:
+  name: ark-evaluator
+spec:
+  address:
+    valueFrom:
+      serviceRef:
+        name: ark-evaluator
+        port: "8000"
+  description: "Default evaluator service for scoring query responses"

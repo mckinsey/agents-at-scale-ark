@@ -23,8 +23,27 @@ function CollapsibleTrigger({
   showChevron = false,
   isActive = false,
   className,
+  asChild,
+  children,
   ...props
 }: CollapsibleTriggerProps) {
+  if (asChild) {
+    return (
+      <CollapsiblePrimitive.CollapsibleTrigger
+        data-slot="collapsible-trigger"
+        data-active={isActive}
+        className={cn(
+          'group/collapsible-trigger',
+          'data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground',
+          className,
+        )}
+        asChild
+        {...props}>
+        {children}
+      </CollapsiblePrimitive.CollapsibleTrigger>
+    );
+  }
+
   return (
     <CollapsiblePrimitive.CollapsibleTrigger
       data-slot="collapsible-trigger"
@@ -35,7 +54,7 @@ function CollapsibleTrigger({
         className,
       )}
       {...props}>
-      {props.children}
+      {children}
       {showChevron && (
         <>
           <ChevronUp className="ml-auto transition-all group-data-[state=closed]/collapsible:hidden group-data-[state=open]/collapsible:block" />

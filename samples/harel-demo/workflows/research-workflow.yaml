@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: research-workflow
+spec:
+  entrypoint: run-research
+  templates:
+    - name: run-research
+      resource:
+        action: create
+        manifest: |
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            generateName: research-workflow-
+          spec:
+            input: "Research the latest trends in insurtech and AI-driven claims processing, focusing on enterprise adoption and ROI metrics."
+            target:
+              type: team
+              name: research-analysis-team
+        successCondition: status.phase == done
+        failureCondition: status.phase == error

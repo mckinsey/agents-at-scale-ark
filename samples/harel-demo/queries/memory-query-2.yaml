@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: memory-query-2
+spec:
+  input: "I am interested in weather forecasts for our office locations. Can you check the weather in New York?"
+  target:
+    type: agent
+    name: weather
+  sessionId: harel-demo-session-001

@@ -1,0 +1,53 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: sequential-research-workflow
+spec:
+  entrypoint: research-pipeline
+  templates:
+    - name: research-pipeline
+      steps:
+        - - name: research
+            template: run-query
+            arguments:
+              parameters:
+                - name: agent
+                  value: researcher
+                - name: input
+                  value: "Research the latest trends in insurtech and AI-driven claims processing, focusing on enterprise adoption and ROI metrics."
+        - - name: analyze
+            template: run-query
+            arguments:
+              parameters:
+                - name: agent
+                  value: analyst
+                - name: input
+                  value: "Analyze the latest trends in insurtech and AI-driven claims processing. Validate findings, identify key patterns, and provide strategic recommendations for enterprise adoption."
+        - - name: create-report
+            template: run-query
+            arguments:
+              parameters:
+                - name: agent
+                  value: creator
+                - name: input
+                  value: "Create a professional report on insurtech trends and AI-driven claims processing for enterprise decision-makers. Include executive summary, key findings, strategic insights, and actionable recommendations."
+
+    - name: run-query
+      inputs:
+        parameters:
+          - name: agent
+          - name: input
+      resource:
+        action: create
+        manifest: |
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            generateName: sequential-research-
+          spec:
+            input: "{{inputs.parameters.input}}"
+            target:
+              type: agent
+              name: "{{inputs.parameters.agent}}"
+        successCondition: status.phase == done
+        failureCondition: status.phase == error

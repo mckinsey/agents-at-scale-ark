@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: anthropic-api-key
+type: Opaque
+stringData:
+  apiKey: ${ANTHROPIC_API_KEY}
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: claude
+spec:
+  type: openai
+  model:
+    value: claude-opus-4-20250514
+  config:
+    openai:
+      baseUrl:
+        value: "https://api.anthropic.com/v1/"
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            name: anthropic-api-key
+            key: apiKey
