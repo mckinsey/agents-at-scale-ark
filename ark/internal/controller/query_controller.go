@@ -296,10 +296,10 @@ func (r *QueryReconciler) executeViaEngine(ctx context.Context, query arkv1alpha
 
 	log.Info("query engine execution completed", "query", query.Name, "target", target.Name)
 
-	responseMessages := []genai.Message{genai.NewAssistantMessage(responseText)}
-	rawJSON, err := serializeMessages(responseMessages)
-	if err != nil {
-		return nil, engineResponseMeta{}, fmt.Errorf("failed to serialize response: %w", err)
+	rawJSON := engineMeta.MessagesRaw
+	if rawJSON == "" {
+		responseMessages := []genai.Message{genai.NewAssistantMessage(responseText)}
+		rawJSON, _ = serializeMessages(responseMessages)
 	}
 
 	response := &arkv1alpha1.Response{
@@ -355,6 +355,7 @@ func extractA2AResponseText(result *protocol.MessageResult) (string, error) {
 type engineResponseMeta struct {
 	TokenUsage     *arkv1alpha1.TokenUsage
 	ConversationId string
+	MessagesRaw    string
 }
 
 func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMeta {
@@ -385,6 +386,12 @@ func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMet
 
 	if convId, ok := arkMap["conversationId"].(string); ok {
 		meta.ConversationId = convId
+	}
+
+	if messagesRaw, ok := arkMap["messages"]; ok {
+		if rawBytes, err := json.Marshal(messagesRaw); err == nil {
+			meta.MessagesRaw = string(rawBytes)
+		}
 	}
 
 	if tokenData, ok := arkMap["tokenUsage"].(map[string]any); ok {

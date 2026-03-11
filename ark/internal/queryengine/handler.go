@@ -176,6 +176,11 @@ func (h *Handler) ProcessMessage(
 		responseMeta["conversationId"] = conversationId
 	}
 
+	serializedMessages := serializeResponseMessages(responseMessages)
+	if serializedMessages != "" {
+		responseMeta["messages"] = json.RawMessage(serializedMessages)
+	}
+
 	responseMessage := protocol.NewMessage(
 		protocol.MessageRoleAgent,
 		[]protocol.Part{protocol.NewTextPart(responseText)},
@@ -379,4 +384,30 @@ func extractAssistantText(messages []genai.Message) string {
 		}
 	}
 	return ""
+}
+
+func serializeResponseMessages(messages []genai.Message) string {
+	var actual []interface{}
+	for _, msg := range messages {
+		switch {
+		case msg.OfAssistant != nil:
+			actual = append(actual, msg.OfAssistant)
+		case msg.OfUser != nil:
+			actual = append(actual, msg.OfUser)
+		case msg.OfSystem != nil:
+			actual = append(actual, msg.OfSystem)
+		case msg.OfTool != nil:
+			actual = append(actual, msg.OfTool)
+		case msg.OfFunction != nil:
+			actual = append(actual, msg.OfFunction)
+		}
+	}
+	if len(actual) == 0 {
+		return ""
+	}
+	data, err := json.Marshal(actual)
+	if err != nil {
+		return ""
+	}
+	return string(data)
 }
