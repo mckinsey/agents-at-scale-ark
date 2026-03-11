@@ -22,5 +22,5 @@
 
 - [x] 4.1 Run `make build` in `ark/` to verify compilation
 - [x] 4.2 Run `make test` in `ark/` to verify unit tests pass
-- [ ] 4.3 Run the 6 failing chainsaw tests: `chainsaw test query-label-selector a2a-blocking-task-completed a2a-blocking-task-failed a2a-message-context agent-partial-tool agent-partial-tool-valuefrom`
-- [ ] 4.4 Run full chainsaw suite with `--selector '!evaluated,!llm'` to verify no regressions
+- [x] 4.3 Run the 6 failing chainsaw tests: `chainsaw test query-label-selector a2a-blocking-task-completed a2a-blocking-task-failed a2a-message-context agent-partial-tool agent-partial-tool-valuefrom`
+- [x] 4.4 Run full chainsaw suite with `--selector '!evaluated,!llm'` to verify no regressions
