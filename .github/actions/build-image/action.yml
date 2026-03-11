@@ -26,6 +26,10 @@ inputs:
   prebuild:
     description: 'Optional prebuild command to run before docker build'
     required: false
+  dockerfile:
+    description: 'Dockerfile name (default: Dockerfile)'
+    required: false
+    default: 'Dockerfile'
   build-args:
     description: 'Additional build arguments (multiline string)'
     required: false
@@ -50,6 +54,7 @@ runs:
       uses: docker/build-push-action@v6
       with:
         context: ${{ inputs.path }}
+        file: ${{ inputs.path }}/${{ inputs.dockerfile }}
         platforms: ${{ inputs.platforms }}
         push: ${{ inputs.push }}
         tags: ${{ inputs.registry && format('{0}/{1}:{2}', inputs.registry, inputs.image, inputs.tag) || format('{0}:{1}', inputs.image, inputs.tag) }}

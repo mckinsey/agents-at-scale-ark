@@ -55,9 +55,9 @@
 
 ## Success Criteria
 
-- [ ] `ark-query-engine` image built in CI on every PR
-- [ ] Security scan covers `ark-query-engine` image
-- [ ] Release pipeline builds and pushes `ark-query-engine` multi-arch image
-- [ ] E2E tests run with query engine sidecar enabled
-- [ ] Developer guide page exists for query engine
-- [ ] Architecture and query execution docs reflect engine separation
+- [x] `ark-query-engine` image built in CI on every PR
+- [x] Security scan covers `ark-query-engine` image
+- [x] Release pipeline builds and pushes `ark-query-engine` multi-arch image
+- [x] E2E tests run with query engine sidecar enabled
+- [x] Developer guide page exists for query engine
+- [x] Architecture and query execution docs reflect engine separation
