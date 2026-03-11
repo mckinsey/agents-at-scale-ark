@@ -43,15 +43,6 @@ jobs:
         run: ./apiserver-bench -objects 100 -output /tmp/results-etcd-100.json
         working-directory: benchmarks/apiserver
 
-      - name: Check thresholds
-        run: |
-          pip install pyyaml -q
-          ./scripts/calc-check-thresholds \
-            ../../docs/specs/performance/performance-thresholds.yaml \
-            etcd-baseline-query-creation \
-            /tmp/results-etcd-100.json
-        working-directory: benchmarks/apiserver
-
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -126,35 +117,32 @@ jobs:
         run: ./apiserver-bench -objects 100 -output /tmp/results-postgres-100.json
         working-directory: benchmarks/apiserver
 
-      - name: Check thresholds
-        run: |
-          pip install pyyaml -q
-          ./scripts/calc-check-thresholds \
-            ../../docs/specs/performance/performance-thresholds.yaml \
-            postgresql-baseline-query-creation \
-            /tmp/results-postgres-100.json
-        working-directory: benchmarks/apiserver
-
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: postgres-benchmark-results
           path: /tmp/results-postgres-*.json
 
-  # Results summary
-  results-summary:
+  # Verify all scenarios against thresholds (this is the build gate)
+  verify-results:
     needs: [etcd-baseline, postgres-baseline]
     if: always()
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: /tmp/results
           merge-multiple: true
 
-      - name: Print results
+      - name: Verify performance thresholds
         run: |
-          for f in /tmp/results/results-*.json; do
-            echo "=== $(basename $f) ==="
-            python3 -m json.tool "$f"
-          done
+          pip install pyyaml -q
+          THRESHOLDS=docs/specs/performance/performance-thresholds.yaml
+          echo "| Scenario | Backend | Objects | Concurrency | Max Errors | Max p99 | Actual | Result |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|---------|---------|-------------|------------|---------|--------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          benchmarks/apiserver/scripts/check-storage-backends \
+            "$THRESHOLDS" etcd-baseline-query-creation /tmp/results/results-etcd-100.json
+          benchmarks/apiserver/scripts/check-storage-backends \
+            "$THRESHOLDS" postgresql-baseline-query-creation /tmp/results/results-postgres-100.json

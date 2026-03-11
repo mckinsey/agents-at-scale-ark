@@ -17,7 +17,10 @@ Thresholds are defined in
 Install a single-controller Ark cluster using the default storage backend
 (etcd). This is the standard `helm install` — no additional infrastructure
 required. Run the apiserver benchmark: create 100 Query resources with 10
-concurrent workers. Assert zero errors and p99 latency under 200ms.
+concurrent workers. Assert zero errors and p99 latency under 200ms
+(authoritative thresholds are in
+[`performance-thresholds.yaml`](performance-thresholds.yaml); the build
+verifies against them automatically).
 
 ### PostgreSQL Storage Backend Install
 
@@ -28,9 +31,16 @@ APIServices for helm ownership, and upgrading the controller with PostgreSQL
 storage configuration.
 
 Run the same apiserver benchmark: create 100 Query resources with 10
-concurrent workers. Assert zero errors and p99 latency under 200ms.
+concurrent workers. Assert zero errors and p99 latency under 200ms
+(authoritative thresholds are in
+[`performance-thresholds.yaml`](performance-thresholds.yaml); the build
+verifies against them automatically).
 
 ### Thresholds
+
+The authoritative source for threshold values is
+[`performance-thresholds.yaml`](performance-thresholds.yaml). The table below
+is an example summary; the build verifies against the YAML file automatically.
 
 | Scenario | Backend | Objects | Concurrency | Max Errors | Max p99 |
 |----------|---------|---------|-------------|------------|---------|
