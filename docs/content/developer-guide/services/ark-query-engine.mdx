@@ -4,7 +4,7 @@ Built-in execution engine that runs the LLM turn loop, tool execution, team orch
 
 - Deployed as a sidecar in the controller pod
 - Communicates with the controller via A2A protocol
-- Handles agent, team, model, and tool execution
+- Handles built-in agent, team, model, and tool execution (agents with an `executionEngine` are dispatched directly by the controller)
 - Streams chunks directly to ark-broker
 
 ## Architecture
