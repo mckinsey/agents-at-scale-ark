@@ -44,8 +44,8 @@
 
 ## Success Criteria
 
-- [ ] Dashboard streaming works without losing previous messages
+- [x] Dashboard streaming works without losing previous messages
 - [x] OTEL traces owned by engine (controller telemetry removed)
 - [x] Token usage returned in A2A response metadata, written to Query CR status
 - [x] ConversationId returned in A2A response metadata, written to Query CR status
-- [ ] DevSpace restarts engine independently from controller
+- [x] DevSpace restarts engine independently from controller
