@@ -2347,3 +2347,151 @@ class TestTeamsEndpoint(unittest.TestCase):
         data = response.json()
         self.assertIn("graph strategy requires maxTurns", data["detail"])
         self.assertIn("admission webhook", data["detail"])
+
+    @patch('ark_api.api.v1.teams.with_ark_client')
+    def test_create_team_with_loops(self, mock_ark_client):
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        mock_team = Mock()
+        mock_team.to_dict.return_value = {
+            "metadata": {"name": "loop-team", "namespace": "default"},
+            "spec": {
+                "members": [
+                    {"name": "agent1", "type": "agent"},
+                    {"name": "agent2", "type": "agent"}
+                ],
+                "strategy": "sequential",
+                "loops": True,
+                "maxTurns": 5
+            },
+            "status": {"phase": "pending"}
+        }
+
+        mock_client.teams.a_create = AsyncMock(return_value=mock_team)
+
+        request_data = {
+            "name": "loop-team",
+            "members": [
+                {"name": "agent1", "type": "agent"},
+                {"name": "agent2", "type": "agent"}
+            ],
+            "strategy": "sequential",
+            "loops": True,
+            "maxTurns": 5
+        }
+        response = self.client.post("/v1/teams?namespace=default", json=request_data)
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["name"], "loop-team")
+        self.assertEqual(data["strategy"], "sequential")
+        self.assertTrue(data["loops"])
+        self.assertEqual(data["maxTurns"], 5)
+
+    @patch('ark_api.api.v1.teams.with_ark_client')
+    def test_create_team_default_loops_false(self, mock_ark_client):
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        mock_team = Mock()
+        mock_team.to_dict.return_value = {
+            "metadata": {"name": "no-loop-team", "namespace": "default"},
+            "spec": {
+                "members": [{"name": "agent1", "type": "agent"}],
+                "strategy": "sequential",
+                "loops": False
+            },
+            "status": {"phase": "pending"}
+        }
+
+        mock_client.teams.a_create = AsyncMock(return_value=mock_team)
+
+        request_data = {
+            "name": "no-loop-team",
+            "members": [{"name": "agent1", "type": "agent"}],
+            "strategy": "sequential"
+        }
+        response = self.client.post("/v1/teams?namespace=default", json=request_data)
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertFalse(data["loops"])
+
+    @patch('ark_api.api.v1.teams.with_ark_client')
+    def test_update_team_set_loops(self, mock_ark_client):
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        existing_team = Mock()
+        existing_team.to_dict.return_value = {
+            "metadata": {"name": "test-team", "namespace": "default"},
+            "spec": {
+                "members": [{"name": "agent1", "type": "agent"}],
+                "strategy": "sequential",
+                "loops": False
+            },
+            "status": {"phase": "Ready"}
+        }
+
+        updated_team = Mock()
+        updated_team.to_dict.return_value = {
+            "metadata": {"name": "test-team", "namespace": "default"},
+            "spec": {
+                "members": [{"name": "agent1", "type": "agent"}],
+                "strategy": "sequential",
+                "loops": True,
+                "maxTurns": 3
+            },
+            "status": {"phase": "Ready"}
+        }
+
+        mock_client.teams.a_get = AsyncMock(return_value=existing_team)
+        mock_client.teams.a_update = AsyncMock(return_value=updated_team)
+
+        request_data = {"loops": True, "maxTurns": 3}
+        response = self.client.put("/v1/teams/test-team?namespace=default", json=request_data)
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["loops"])
+        self.assertEqual(data["maxTurns"], 3)
+        mock_client.teams.a_update.assert_called_once()
+
+    @patch('ark_api.api.v1.teams.with_ark_client')
+    def test_update_team_clear_loops(self, mock_ark_client):
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        existing_team = Mock()
+        existing_team.to_dict.return_value = {
+            "metadata": {"name": "test-team", "namespace": "default"},
+            "spec": {
+                "members": [{"name": "agent1", "type": "agent"}],
+                "strategy": "sequential",
+                "loops": True,
+                "maxTurns": 5
+            },
+            "status": {"phase": "Ready"}
+        }
+
+        updated_team = Mock()
+        updated_team.to_dict.return_value = {
+            "metadata": {"name": "test-team", "namespace": "default"},
+            "spec": {
+                "members": [{"name": "agent1", "type": "agent"}],
+                "strategy": "sequential",
+                "loops": False
+            },
+            "status": {"phase": "Ready"}
+        }
+
+        mock_client.teams.a_get = AsyncMock(return_value=existing_team)
+        mock_client.teams.a_update = AsyncMock(return_value=updated_team)
+
+        request_data = {"loops": False}
+        response = self.client.put("/v1/teams/test-team?namespace=default", json=request_data)
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertFalse(data["loops"])
