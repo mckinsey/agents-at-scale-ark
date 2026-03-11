@@ -102,9 +102,26 @@ func (h *Handler) ProcessMessage(
 	if err != nil {
 		log.Error(err, "failed to create event stream, continuing without streaming")
 	}
-	defer func() {
+
+	finalizeStream := func(responseMessages []genai.Message) {
 		if eventStream == nil {
 			return
+		}
+		if len(responseMessages) > 0 {
+			rawJSON := serializeResponseMessages(responseMessages)
+			completedQuery := query.DeepCopy()
+			completedQuery.Status.Phase = "done"
+			completedQuery.Status.Response = &arkv1alpha1.Response{
+				Target:  *target,
+				Content: extractAssistantText(responseMessages),
+				Raw:     rawJSON,
+				Phase:   "done",
+			}
+			finalChunk := genai.NewContentChunk("chatcmpl-final", query.Name, "")
+			wrappedChunk := genai.WrapChunkWithMetadata(ctx, finalChunk, "", completedQuery)
+			if err := eventStream.StreamChunk(ctx, wrappedChunk); err != nil {
+				log.Error(err, "failed to send final chunk")
+			}
 		}
 		if completionErr := eventStream.NotifyCompletion(ctx); completionErr != nil {
 			log.Error(completionErr, "failed to notify stream completion")
@@ -112,7 +129,7 @@ func (h *Handler) ProcessMessage(
 		if closeErr := eventStream.Close(); closeErr != nil {
 			log.Error(closeErr, "failed to close event stream")
 		}
-	}()
+	}
 
 	userContent := genai.ExtractUserMessageContent(inputMessages)
 	h.telemetry.QueryRecorder().RecordRootInput(querySpan, userContent)
@@ -141,6 +158,7 @@ func (h *Handler) ProcessMessage(
 		h.telemetry.QueryRecorder().RecordError(targetSpan, err)
 		h.telemetry.QueryRecorder().RecordError(querySpan, err)
 		genai.StreamError(ctx, eventStream, err, "execution_failed", target.Name)
+		finalizeStream(nil)
 		return nil, fmt.Errorf("execution failed: %w", err)
 	}
 
@@ -190,6 +208,8 @@ func (h *Handler) ProcessMessage(
 			genai.ArkMetadataKey: responseMeta,
 		}
 	}
+
+	finalizeStream(responseMessages)
 
 	return &taskmanager.MessageProcessingResult{
 		Result: &responseMessage,
