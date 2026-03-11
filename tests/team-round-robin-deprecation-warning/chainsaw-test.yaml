@@ -131,7 +131,7 @@ spec:
             name: test-rr-no-turns
           spec:
             strategy: sequential
-            (loops == null || loops == false): true
+            loops: false
 
   - name: test-sequential-no-warning
     try:

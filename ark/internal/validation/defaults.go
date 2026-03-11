@@ -50,6 +50,7 @@ func DefaultTeam(team *arkv1alpha1.Team) {
 		team.Annotations[annotations.MigrationWarningPrefix+"round-robin"] = "strategy 'round-robin' is deprecated - migrated to 'sequential' with loops: true. Will be removed in v1.0.0"
 	} else {
 		team.Spec.Strategy = StrategySequential
+		team.Spec.Loops = false
 		team.Annotations[annotations.MigrationWarningPrefix+"round-robin"] = "strategy 'round-robin' is deprecated - migrated to 'sequential'. Set loops: true and maxTurns to enable looping. Will be removed in v1.0.0"
 	}
 }
