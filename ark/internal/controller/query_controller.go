@@ -22,8 +22,10 @@ import (
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/annotations"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	"mckinsey.com/ark/internal/genai"
+	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 )
 
 const (
@@ -44,6 +46,7 @@ const (
 type QueryReconciler struct {
 	client.Client
 	Scheme          *runtime.Scheme
+	Telemetry       *telemetryconfig.Provider
 	Eventing        *eventingconfig.Provider
 	QueryEngineAddr string
 	operations      sync.Map
@@ -200,7 +203,7 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		return
 	}
 
-	response, engineMeta, err := r.executeViaEngine(opCtx, obj, *target)
+	response, engineMeta, err := r.dispatchExecution(opCtx, obj, *target, impersonatedClient)
 	if err != nil {
 		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Query execution failed: %v", err), err, nil)
 		_ = r.updateStatus(opCtx, &obj, statusError)
@@ -224,6 +227,19 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", nil)
 }
 
+func (r *QueryReconciler) dispatchExecution(ctx context.Context, query arkv1alpha1.Query, target arkv1alpha1.QueryTarget, impersonatedClient client.Client) (*arkv1alpha1.Response, engineResponseMeta, error) {
+	if r.shouldExecuteDirectly(ctx, target, query.Namespace, impersonatedClient) {
+		response, err := r.executeDirectly(ctx, query, target, impersonatedClient)
+		return response, engineResponseMeta{}, err
+	}
+
+	response, eMeta, err := r.executeViaEngine(ctx, query, target)
+	if err != nil {
+		return r.createErrorResponse(target, err), engineResponseMeta{}, nil
+	}
+	return response, eMeta, nil
+}
+
 func (r *QueryReconciler) executeViaEngine(ctx context.Context, query arkv1alpha1.Query, target arkv1alpha1.QueryTarget) (*arkv1alpha1.Response, engineResponseMeta, error) {
 	log := logf.FromContext(ctx)
 
@@ -236,6 +252,10 @@ func (r *QueryReconciler) executeViaEngine(ctx context.Context, query arkv1alpha
 		"query": map[string]string{
 			"name":      query.Name,
 			"namespace": query.Namespace,
+		},
+		"target": map[string]string{
+			"type": target.Type,
+			"name": target.Name,
 		},
 	}
 
@@ -306,6 +326,122 @@ func (r *QueryReconciler) executeViaEngine(ctx context.Context, query arkv1alpha
 	}
 
 	return response, engineMeta, nil
+}
+
+func (r *QueryReconciler) shouldExecuteDirectly(ctx context.Context, target arkv1alpha1.QueryTarget, namespace string, k8sClient client.Client) bool {
+	if target.Type != targetTypeAgent {
+		return false
+	}
+	var agentCRD arkv1alpha1.Agent
+	if err := k8sClient.Get(ctx, types.NamespacedName{
+		Name:      target.Name,
+		Namespace: namespace,
+	}, &agentCRD); err != nil {
+		return false
+	}
+	return agentCRD.Spec.ExecutionEngine != nil
+}
+
+func (r *QueryReconciler) executeDirectly(ctx context.Context, query arkv1alpha1.Query, target arkv1alpha1.QueryTarget, impersonatedClient client.Client) (*arkv1alpha1.Response, error) {
+	ctx = context.WithValue(ctx, genai.QueryContextKey, &query)
+
+	queryID := string(query.UID)
+	sessionID := query.Spec.SessionId
+	if sessionID == "" {
+		sessionID = queryID
+	}
+	ctx = genai.WithQueryContext(ctx, queryID, sessionID, query.Name)
+
+	if a2aContextID, ok := query.Annotations[annotations.A2AContextID]; ok && a2aContextID != "" {
+		ctx = genai.WithA2AContextID(ctx, a2aContextID)
+	}
+
+	ctx = genai.WithExecutionMetadata(ctx, map[string]interface{}{
+		"target": fmt.Sprintf("%s/%s", target.Type, target.Name),
+	})
+
+	var agentCRD arkv1alpha1.Agent
+	if err := impersonatedClient.Get(ctx, types.NamespacedName{
+		Name:      target.Name,
+		Namespace: query.Namespace,
+	}, &agentCRD); err != nil {
+		return r.createErrorResponse(target, fmt.Errorf("failed to get agent %s: %w", target.Name, err)), nil
+	}
+
+	agent, err := genai.MakeAgent(ctx, impersonatedClient, &agentCRD, r.Telemetry, r.Eventing)
+	if err != nil {
+		return r.createErrorResponse(target, fmt.Errorf("failed to make agent %s: %w", target.Name, err)), nil
+	}
+
+	inputMessages, err := genai.GetQueryInputMessages(ctx, query, impersonatedClient)
+	if err != nil {
+		return r.createErrorResponse(target, fmt.Errorf("failed to get input messages: %w", err)), nil
+	}
+
+	timeout := 5 * time.Minute
+	if query.Spec.Timeout != nil {
+		timeout = query.Spec.Timeout.Duration
+	}
+	execCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	currentMessage, contextMessages := genai.PrepareExecutionMessages(inputMessages, nil)
+	result, err := agent.Execute(execCtx, currentMessage, contextMessages, nil, nil)
+	if err != nil {
+		return r.createErrorResponse(target, err), nil
+	}
+
+	if result == nil || result.Messages == nil {
+		return r.createErrorResponse(target, fmt.Errorf("agent returned no result")), nil
+	}
+
+	response := r.createSuccessResponse(target, result.Messages)
+	if result.A2AResponse != nil {
+		response.A2A = &arkv1alpha1.A2AMetadata{
+			ContextID: result.A2AResponse.ContextID,
+			TaskID:    result.A2AResponse.TaskID,
+		}
+	}
+
+	return response, nil
+}
+
+func (r *QueryReconciler) createSuccessResponse(target arkv1alpha1.QueryTarget, messages []genai.Message) *arkv1alpha1.Response {
+	rawJSON, err := serializeMessages(messages)
+	if err != nil {
+		return r.createErrorResponse(target, fmt.Errorf("failed to serialize messages: %w", err))
+	}
+
+	content := ""
+	for i := len(messages) - 1; i >= 0; i-- {
+		msg := messages[i]
+		if msg.OfAssistant != nil && msg.OfAssistant.Content.OfString.Value != "" {
+			content = msg.OfAssistant.Content.OfString.Value
+			break
+		}
+	}
+
+	return &arkv1alpha1.Response{
+		Target:  target,
+		Content: content,
+		Raw:     rawJSON,
+		Phase:   statusDone,
+	}
+}
+
+func (r *QueryReconciler) createErrorResponse(target arkv1alpha1.QueryTarget, err error) *arkv1alpha1.Response {
+	errorMessage := map[string]interface{}{
+		"error":   "target_execution_error",
+		"message": err.Error(),
+	}
+	errorRaw, _ := json.Marshal([]map[string]interface{}{errorMessage})
+
+	return &arkv1alpha1.Response{
+		Target:  target,
+		Content: err.Error(),
+		Raw:     string(errorRaw),
+		Phase:   statusError,
+	}
 }
 
 func (r *QueryReconciler) buildAgentConfigForEngine(query arkv1alpha1.Query, target arkv1alpha1.QueryTarget) map[string]any {

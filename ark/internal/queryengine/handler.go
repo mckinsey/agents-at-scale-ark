@@ -29,6 +29,12 @@ type arkMetadata struct {
 	Tools   json.RawMessage `json:"tools"`
 	History json.RawMessage `json:"history"`
 	Query   queryRef        `json:"query"`
+	Target  *metadataTarget `json:"target,omitempty"`
+}
+
+type metadataTarget struct {
+	Type string `json:"type"`
+	Name string `json:"name"`
 }
 
 type queryRef struct {
@@ -36,7 +42,7 @@ type queryRef struct {
 	Namespace string `json:"namespace"`
 }
 
-func (h *Handler) ProcessMessage( //nolint:gocognit,cyclop
+func (h *Handler) ProcessMessage( //nolint:gocognit,cyclop,gocyclo
 	ctx context.Context,
 	message protocol.Message,
 	options taskmanager.ProcessOptions,
@@ -60,6 +66,12 @@ func (h *Handler) ProcessMessage( //nolint:gocognit,cyclop
 	}
 
 	target := query.Spec.Target
+	if target == nil && meta.Target != nil {
+		target = &arkv1alpha1.QueryTarget{
+			Type: meta.Target.Type,
+			Name: meta.Target.Name,
+		}
+	}
 	if target == nil {
 		return nil, fmt.Errorf("query %s/%s has no target", meta.Query.Namespace, meta.Query.Name)
 	}
