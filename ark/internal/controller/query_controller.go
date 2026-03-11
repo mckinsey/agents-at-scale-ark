@@ -343,6 +343,7 @@ func (r *QueryReconciler) shouldExecuteDirectly(ctx context.Context, target arkv
 }
 
 func (r *QueryReconciler) executeDirectly(ctx context.Context, query arkv1alpha1.Query, target arkv1alpha1.QueryTarget, impersonatedClient client.Client) (*arkv1alpha1.Response, error) {
+	log := logf.FromContext(ctx)
 	ctx = context.WithValue(ctx, genai.QueryContextKey, &query)
 
 	queryID := string(query.UID)
@@ -359,6 +360,11 @@ func (r *QueryReconciler) executeDirectly(ctx context.Context, query arkv1alpha1
 	ctx = genai.WithExecutionMetadata(ctx, map[string]interface{}{
 		"target": fmt.Sprintf("%s/%s", target.Type, target.Name),
 	})
+
+	eventStream, err := genai.NewEventStreamForQuery(ctx, impersonatedClient, query.Namespace, sessionID, query.Name)
+	if err != nil {
+		log.Error(err, "failed to create event stream, continuing without streaming")
+	}
 
 	var agentCRD arkv1alpha1.Agent
 	if err := impersonatedClient.Get(ctx, types.NamespacedName{
@@ -386,12 +392,14 @@ func (r *QueryReconciler) executeDirectly(ctx context.Context, query arkv1alpha1
 	defer cancel()
 
 	currentMessage, contextMessages := genai.PrepareExecutionMessages(inputMessages, nil)
-	result, err := agent.Execute(execCtx, currentMessage, contextMessages, nil, nil)
+	result, err := agent.Execute(execCtx, currentMessage, contextMessages, nil, eventStream)
 	if err != nil {
+		r.finalizeDirectStream(ctx, eventStream, nil, query)
 		return r.createErrorResponse(target, err), nil
 	}
 
 	if result == nil || result.Messages == nil {
+		r.finalizeDirectStream(ctx, eventStream, nil, query)
 		return r.createErrorResponse(target, fmt.Errorf("agent returned no result")), nil
 	}
 
@@ -403,7 +411,32 @@ func (r *QueryReconciler) executeDirectly(ctx context.Context, query arkv1alpha1
 		}
 	}
 
+	r.finalizeDirectStream(ctx, eventStream, response, query)
 	return response, nil
+}
+
+func (r *QueryReconciler) finalizeDirectStream(ctx context.Context, eventStream genai.EventStreamInterface, response *arkv1alpha1.Response, query arkv1alpha1.Query) {
+	if eventStream == nil {
+		return
+	}
+	log := logf.FromContext(ctx)
+
+	if response != nil {
+		completedQuery := query.DeepCopy()
+		completedQuery.Status.Phase = statusDone
+		completedQuery.Status.Response = response
+		finalChunk := genai.NewContentChunk("chatcmpl-final", query.Name, "")
+		wrappedChunk := genai.WrapChunkWithMetadata(ctx, finalChunk, "", completedQuery)
+		if err := eventStream.StreamChunk(ctx, wrappedChunk); err != nil {
+			log.Error(err, "failed to send final chunk")
+		}
+	}
+	if completionErr := eventStream.NotifyCompletion(ctx); completionErr != nil {
+		log.Error(completionErr, "failed to notify stream completion")
+	}
+	if closeErr := eventStream.Close(); closeErr != nil {
+		log.Error(closeErr, "failed to close event stream")
+	}
 }
 
 func (r *QueryReconciler) createSuccessResponse(target arkv1alpha1.QueryTarget, messages []genai.Message) *arkv1alpha1.Response {
