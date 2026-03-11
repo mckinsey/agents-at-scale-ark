@@ -182,7 +182,7 @@ func consumeA2AStreamEvents(ctx context.Context, k8sClient client.Client, events
 }
 
 func consumeA2AMessageEvent(ctx context.Context, msg *protocol.Message, content *strings.Builder, response *A2AResponse, eventStream EventStreamInterface, completionID, modelID string) {
-	text := extractTextFromParts(msg.Parts)
+	text := ExtractTextFromParts(msg.Parts)
 	if text != "" {
 		content.WriteString(text)
 	}
@@ -213,7 +213,7 @@ func consumeA2AStatusUpdateEvent(ctx context.Context, event *protocol.TaskStatus
 	}
 	var text string
 	if event.Status.Message != nil {
-		text = extractTextFromParts(event.Status.Message.Parts)
+		text = ExtractTextFromParts(event.Status.Message.Parts)
 	}
 	if event.Final && text != "" && content.Len() == 0 {
 		content.WriteString(text)
@@ -226,7 +226,7 @@ func consumeA2AArtifactUpdateEvent(ctx context.Context, event *protocol.TaskArti
 	if response.TaskID == "" {
 		response.TaskID = event.TaskID
 	}
-	text := extractTextFromParts(event.Artifact.Parts)
+	text := ExtractTextFromParts(event.Artifact.Parts)
 	if text != "" {
 		content.WriteString(text)
 	}
@@ -254,14 +254,14 @@ func streamContentChunk(ctx context.Context, eventStream EventStreamInterface, c
 
 func extractTextFromTaskStatus(task *protocol.Task) string {
 	if task.Status.Message != nil {
-		if text := extractTextFromParts(task.Status.Message.Parts); text != "" {
+		if text := ExtractTextFromParts(task.Status.Message.Parts); text != "" {
 			return text
 		}
 	}
 	for i := len(task.History) - 1; i >= 0; i-- {
 		msg := task.History[i]
 		if msg.Role == protocol.MessageRoleAgent && len(msg.Parts) > 0 {
-			if text := extractTextFromParts(msg.Parts); text != "" {
+			if text := ExtractTextFromParts(msg.Parts); text != "" {
 				return text
 			}
 		}

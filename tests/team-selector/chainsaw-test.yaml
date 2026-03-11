@@ -116,3 +116,11 @@ spec:
           else
               echo "WARNING: Response might be shorter than expected for selector team execution"
           fi
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

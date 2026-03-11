@@ -12,6 +12,10 @@ images:
     image: ark-controller
     dockerfile: ./Dockerfile
     context: .
+  ark-query-engine:
+    image: ark-query-engine
+    dockerfile: ./Dockerfile.query-engine
+    context: .
 
 pipelines:
   deploy: |-
@@ -30,6 +34,7 @@ pipelines:
       done
     fi
     create_deployments ark-controller
+    create_deployments ark-query-engine
   dev: |-
     if [ "${STORAGE_BACKEND}" == "postgresql" ]; then
       create_deployments ark-storage-dev
@@ -45,6 +50,7 @@ pipelines:
       done
     fi
     create_deployments ark-controller
+    create_deployments ark-query-engine
     start_dev --all
 
 deployments:
@@ -59,6 +65,11 @@ deployments:
             image:
               repository: ${runtime.images.ark-controller.image}
               tag: ${runtime.images.ark-controller.tag}
+            args:
+              - "--leader-elect"
+              - "--metrics-bind-address=:8443"
+              - "--health-probe-bind-address=:8081"
+              - "--query-engine-addr=http://ark-query-engine.ark-system:9090"
             resources:
               limits:
                 memory: "4096Mi"
@@ -70,16 +81,52 @@ deployments:
             runAsNonRoot: false
         webhook:
           enable: true
+        queryEngine:
+          enabled: false
         telemetry:
           tenantRouting:
             otelDiscovery: true
+  ark-query-engine:
+    namespace: ark-system
+    helm:
+      chart:
+        path: ../charts/ark-query-engine-dev
+      releaseName: ark-query-engine
+      values:
+        image:
+          repository: ${runtime.images.ark-query-engine.image}
+          tag: ${runtime.images.ark-query-engine.tag}
 
 dev:
   ark-controller:
     imageSelector: ark-controller
     devImage: golang:1.24.13-bookworm
     command:
-      ["sh", "-c", "cd /app && mkdir -p internal/apiserver/crds && cp config/crd/bases/*.yaml internal/apiserver/crds/ && GOTOOLCHAIN=auto go run cmd/main.go --leader-elect=false"]
+      - "sh"
+      - "-c"
+      - |
+        cd /app
+        mkdir -p internal/apiserver/crds && cp config/crd/bases/*.yaml internal/apiserver/crds/
+        GOTOOLCHAIN=auto go run cmd/main.go --leader-elect=false --query-engine-addr=http://ark-query-engine.ark-system:9090
+    namespace: ark-system
+    logs:
+      lastLines: 50
+    sync:
+      - path: .:/app
+        startContainer: true
+        disableDownload: true
+        uploadExcludeFile: .dockerignore
+        onUpload:
+          restartContainer: true
+    ssh:
+      enabled: true
+  ark-query-engine:
+    imageSelector: ark-query-engine
+    devImage: golang:1.24.13-bookworm
+    command:
+      - "sh"
+      - "-c"
+      - "cd /app && GOTOOLCHAIN=auto go run cmd/query-engine/main.go --addr=:9090"
     namespace: ark-system
     logs:
       lastLines: 50
@@ -134,5 +181,4 @@ profiles:
             ARK_POSTGRES_PASSWORD=arkdev123 \
             ARK_POSTGRES_SSL_MODE=disable \
             ARK_APISERVER_PORT=6443 \
-            go run cmd/main.go --leader-elect=false
-
+            go run cmd/main.go --leader-elect=false --query-engine-addr=http://ark-query-engine.ark-system:9090

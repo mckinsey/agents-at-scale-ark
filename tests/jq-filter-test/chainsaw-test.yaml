@@ -109,3 +109,11 @@ spec:
             (contains(response.content, 'slideshow')): true
             (contains(response.content, 'author')): true
             (contains(response.content, 'slides')): true
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

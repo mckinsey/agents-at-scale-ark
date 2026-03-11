@@ -2,36 +2,78 @@
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useAtom } from 'jotai';
-import { Plus, RefreshCw, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Loader2, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { marketplaceSourcesAtom, type MarketplaceSource } from '@/atoms/marketplace-sources';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
+
+const PUBLIC_MARKETPLACE_URL =
+  'https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json';
+
+type MarketplaceSourceProps = {
+  url: string;
+  displayName?: string;
+}
+
+function validateMarketplaceUrl(url: string): string | null {
+  if (!url) {
+    return 'Marketplace URL is required';
+  }
+  if (!url.startsWith('https://')) {
+    return 'Only HTTPS URLs are allowed';
+  }
+  if (!url.endsWith('/marketplace.json')) {
+    return 'URL must point to a marketplace.json file';
+  }
+  return null;
+}
+
+async function validateMarketplaceSchema(url: string): Promise<string | null> {
+  const response = await fetch('/api/marketplace/validate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+  const result = (await response.json()) as { valid: boolean; error?: string };
+  if (!result.valid) {
+    return result.error ?? 'Invalid marketplace JSON';
+  }
+  return null;
+}
 
 export function ManageMarketplaceSettings() {
   const queryClient = useQueryClient();
   const [sources, setSources] = useAtom(marketplaceSourcesAtom);
-  const [localSources, setLocalSources] = useState<MarketplaceSource[]>([]);
 
   const [isAdding, setIsAdding] = useState(false);
-  const [newSource, setNewSource] = useState<Partial<MarketplaceSource>>({
+  const [isValidating, setIsValidating] = useState(false);
+  const [newSource, setNewSource] = useState<MarketplaceSourceProps>({
     url: '',
     displayName: '',
   });
+  const [urlError, setUrlError] = useState<string | null>(null);
 
-  // Load sources from persistent storage on mount
-  useEffect(() => {
-    setLocalSources(sources);
-  }, [sources]);
-
-  const handleAddSource = () => {
-    if (!newSource.url) {
-      toast.error('Marketplace URL is required');
+  const handleAddSource = async () => {
+    const staticError = validateMarketplaceUrl(newSource.url);
+    if (staticError) {
+      setUrlError(staticError);
       return;
+    }
+
+    setIsValidating(true);
+    setUrlError(null);
+    try {
+      const schemaError = await validateMarketplaceSchema(newSource.url);
+      if (schemaError) {
+        setUrlError(schemaError);
+        return;
+      }
+    } finally {
+      setIsValidating(false);
     }
 
     const source: MarketplaceSource = {
@@ -39,44 +81,31 @@ export function ManageMarketplaceSettings() {
       name: newSource.displayName || 'Marketplace JSON URL',
       url: newSource.url,
       displayName: newSource.displayName,
-      enabled: true,
     };
 
-    setLocalSources([...localSources, source]);
+    const updated = [...sources, source];
+    setSources(updated);
+    await queryClient.invalidateQueries({ queryKey: ['marketplace'] });
+
     setNewSource({ url: '', displayName: '' });
+    setUrlError(null);
     setIsAdding(false);
   };
 
-  const handleDeleteSource = (id: string) => {
-    // Don't allow deleting the default source
+  const handleDeleteSource = async (id: string) => {
     if (id === 'default') {
       toast.error('Cannot delete the default marketplace source');
       return;
     }
-    setLocalSources(localSources.filter(s => s.id !== id));
-  };
-
-  const handleToggleSource = (id: string) => {
-    setLocalSources(localSources.map(s =>
-      s.id === id ? { ...s, enabled: !s.enabled } : s
-    ));
-  };
-
-  const handleSave = async () => {
-    // Save to persistent storage
-    setSources(localSources);
-
-    // Invalidate marketplace queries to refresh data
+    const updated = sources.filter(s => s.id !== id);
+    setSources(updated);
     await queryClient.invalidateQueries({ queryKey: ['marketplace'] });
-
-    toast.success('Marketplace settings saved and data refreshed');
   };
 
-  const handleCancel = () => {
+  const handleCancelAdd = () => {
     setIsAdding(false);
     setNewSource({ url: '', displayName: '' });
-    // Reset to original sources
-    setLocalSources(sources);
+    setUrlError(null);
   };
 
   const handleRefresh = async () => {
@@ -87,7 +116,7 @@ export function ManageMarketplaceSettings() {
   return (
     <div className="space-y-6">
       {/* Existing sources */}
-      {localSources.length > 0 && (
+      {sources.length > 0 && (
         <div>
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold">Marketplace Sources</h2>
@@ -101,17 +130,11 @@ export function ManageMarketplaceSettings() {
             </Button>
           </div>
           <div className="space-y-3">
-            {localSources.map(source => (
+            {sources.map(source => (
               <div key={source.id} className="rounded-lg border p-4">
                 <div className="flex items-start justify-between">
                   <div className="flex-1 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-sm font-medium">{source.name}</Label>
-                      <Switch
-                        checked={source.enabled !== false}
-                        onCheckedChange={() => handleToggleSource(source.id)}
-                      />
-                    </div>
+                    <Label className="text-sm font-medium">{source.name}</Label>
 
                     <div className="space-y-3">
                       <div>
@@ -167,13 +190,26 @@ export function ManageMarketplaceSettings() {
               </Label>
               <Input
                 id="new-url"
-                value={newSource.url || ''}
-                onChange={e =>
-                  setNewSource({ ...newSource, url: e.target.value })
-                }
+                value={newSource.url}
+                onChange={e => {
+                  setNewSource({ ...newSource, url: e.target.value });
+                  setUrlError(null);
+                }}
                 placeholder="https://raw.githubusercontent.com/org/repo/main/marketplace.json"
-                className="mt-1.5 font-mono text-sm"
+                className={`mt-1.5 font-mono text-sm${urlError ? ' border-destructive' : ''}`}
               />
+              {urlError && (
+                <p className="mt-1 text-xs text-destructive">
+                  {urlError}{' '}
+                  <a
+                    href={PUBLIC_MARKETPLACE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline">
+                    See the public marketplace.json for reference.
+                  </a>
+                </p>
+              )}
             </div>
 
             <div>
@@ -193,11 +229,18 @@ export function ManageMarketplaceSettings() {
           </div>
 
           <div className="mt-4 flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={handleCancel}>
+            <Button variant="outline" size="sm" onClick={handleCancelAdd} disabled={isValidating}>
               Cancel
             </Button>
-            <Button size="sm" onClick={handleAddSource}>
-              Add
+            <Button size="sm" onClick={handleAddSource} disabled={isValidating}>
+              {isValidating ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Validating…
+                </>
+              ) : (
+                'Add'
+              )}
             </Button>
           </div>
         </div>
@@ -216,16 +259,6 @@ export function ManageMarketplaceSettings() {
           </Button>
         </div>
       )}
-
-      {/* Save/Cancel buttons */}
-      <div className="flex justify-end gap-2 border-t pt-4">
-        <Button variant="outline" onClick={handleCancel}>
-          Cancel
-        </Button>
-        <Button onClick={handleSave}>
-          Save
-        </Button>
-      </div>
     </div>
   );
 }
