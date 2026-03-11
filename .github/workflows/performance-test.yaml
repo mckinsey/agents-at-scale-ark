@@ -22,7 +22,7 @@ jobs:
   etcd-baseline:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: ./.github/actions/setup-e2e
         with:
@@ -43,7 +43,7 @@ jobs:
         run: ./apiserver-bench -objects 100 -output /tmp/results-etcd-100.json
         working-directory: benchmarks/apiserver
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: etcd-benchmark-results
@@ -53,7 +53,7 @@ jobs:
   postgres-baseline:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: ./.github/actions/setup-e2e
         with:
@@ -117,7 +117,7 @@ jobs:
         run: ./apiserver-bench -objects 100 -output /tmp/results-postgres-100.json
         working-directory: benchmarks/apiserver
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: postgres-benchmark-results
@@ -129,9 +129,9 @@ jobs:
     if: always()
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           path: /tmp/results
           merge-multiple: true

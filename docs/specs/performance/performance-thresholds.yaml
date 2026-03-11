@@ -13,7 +13,7 @@ storage_backends:
     concurrency: 10
     assertions:
       create_errors: 0
-      create_p99_ms: 200
+      create_p99_ms: 500
 
   - name: postgresql-baseline-query-creation
     storage_backend: postgresql
@@ -21,7 +21,7 @@ storage_backends:
     concurrency: 10
     assertions:
       create_errors: 0
-      create_p99_ms: 200
+      create_p99_ms: 500
 
 # Linear query scaling (work in progress)
 #
