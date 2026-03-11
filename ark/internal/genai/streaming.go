@@ -33,6 +33,7 @@ type StreamMetadata struct {
 	Agent          string             `json:"agent,omitempty"`
 	Model          string             `json:"model,omitempty"`
 	CompletedQuery *arkv1alpha1.Query `json:"completedQuery,omitempty"`
+	SystemMessage  string             `json:"systemMessage,omitempty"`
 }
 
 // ChunkWithMetadata wraps an OpenAI chunk with ARK metadata
@@ -55,6 +56,30 @@ func NewContentChunk(id, model, content string) *openai.ChatCompletionChunk {
 				},
 			},
 		},
+	}
+}
+
+// StreamSystemMessage sends a system message through the event stream
+func StreamSystemMessage(ctx context.Context, eventStream EventStreamInterface, message string) {
+	if eventStream == nil || message == "" {
+		return
+	}
+
+	chunk := &openai.ChatCompletionChunk{
+		ID:      "chatcmpl-system",
+		Object:  "chat.completion.chunk",
+		Created: time.Now().Unix(),
+	}
+
+	chunkWithMeta := &ChunkWithMetadata{
+		ChatCompletionChunk: chunk,
+		Ark: &StreamMetadata{
+			SystemMessage: message,
+		},
+	}
+
+	if err := eventStream.StreamChunk(ctx, chunkWithMeta); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to stream system message")
 	}
 }
 

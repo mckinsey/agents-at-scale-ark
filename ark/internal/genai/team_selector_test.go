@@ -585,8 +585,9 @@ func TestHandleMemberSelectionError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			team := &Team{}
 			var newMessages []Message
+			ctx := context.Background()
 
-			shouldTerminate, returnErr := team.handleMemberSelectionError(tt.err, &newMessages)
+			shouldTerminate, returnErr := team.handleMemberSelectionError(ctx, tt.err, &newMessages)
 
 			assert.Equal(t, tt.wantTerminate, shouldTerminate)
 			if tt.wantReturnErr {
@@ -621,7 +622,7 @@ func TestStartTurnTelemetry(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	telCtx := team.startTurnTelemetry(ctx, 5, "test-agent", "agent")
+	turnCtx, tel := team.startTurnTelemetry(ctx, 5, "test-agent", "agent")
 
 	assert.True(t, mockTelemetry.startTurnCalled)
 	assert.Equal(t, 5, mockTelemetry.lastTurn)
@@ -629,11 +630,11 @@ func TestStartTurnTelemetry(t *testing.T) {
 	assert.Equal(t, "agent", mockTelemetry.lastMemberType)
 	assert.True(t, mockEventing.startCalled)
 	assert.Equal(t, "TeamTurn", mockEventing.lastOperation)
-	assert.Equal(t, 5, telCtx.turnNum)
-	assert.NotNil(t, telCtx.span)
-	assert.NotNil(t, telCtx.ctx)
-	assert.Contains(t, telCtx.opData, "teamName")
-	assert.Equal(t, "test-team", telCtx.opData["teamName"])
+	assert.Equal(t, 5, tel.turnNum)
+	assert.NotNil(t, tel.span)
+	assert.NotNil(t, turnCtx)
+	assert.Contains(t, tel.opData, "teamName")
+	assert.Equal(t, "test-team", tel.opData["teamName"])
 }
 
 func TestRecordTurnOutput(t *testing.T) {
@@ -669,12 +670,11 @@ func TestRecordTurnOutput(t *testing.T) {
 				telemetryRecorder: mockTelemetry,
 			}
 
-			telCtx := turnTelemetryContext{
-				ctx:  context.Background(),
+			tel := turnTelemetry{
 				span: &mockTelemetrySpan{},
 			}
 
-			team.recordTurnOutput(telCtx, tt.messages)
+			team.recordTurnOutput(tel, tt.messages)
 
 			assert.Equal(t, tt.wantRecordCalled, mockTelemetry.recordOutputCalled)
 			if tt.wantRecordCalled {
@@ -716,12 +716,12 @@ func TestCompleteTurnOnError(t *testing.T) {
 				eventingRecorder:  mockEventing,
 			}
 
-			telCtx := turnTelemetryContext{
-				ctx:  context.Background(),
+			ctx := context.Background()
+			tel := turnTelemetry{
 				span: mockSpan,
 			}
 
-			shouldTerminate, returnErr := team.completeTurnOnError(telCtx, tt.err)
+			shouldTerminate, returnErr := team.completeTurnOnError(ctx, tel, tt.err)
 
 			assert.Equal(t, tt.wantTerminate, shouldTerminate)
 			if tt.wantReturnErr {
@@ -748,13 +748,13 @@ func TestCompleteTurnOnSuccess(t *testing.T) {
 		eventingRecorder:  mockEventing,
 	}
 
-	telCtx := turnTelemetryContext{
-		ctx:     context.Background(),
+	ctx := context.Background()
+	tel := turnTelemetry{
 		span:    mockSpan,
 		turnNum: 3,
 	}
 
-	team.completeTurnOnSuccess(telCtx)
+	team.completeTurnOnSuccess(ctx, tel)
 
 	assert.True(t, mockTelemetry.recordSuccessCalled)
 	assert.True(t, mockSpan.ended)
@@ -858,4 +858,47 @@ func TestLoadSelectorAgent_RequiresSelectorSpec(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "selector agent must be specified")
+}
+
+func TestExecuteSelector_WithInvalidAgentSelection(t *testing.T) {
+	mockMember1 := &mockTeamMember{name: "agent1"}
+	mockMember2 := &mockTeamMember{name: "agent2"}
+
+	mockSelector := &mockSelectorAgent{returnName: "invalid-agent"}
+	maxTurns := 1
+
+	team := &Team{
+		Name:     "test-team",
+		Strategy: "selector",
+		Members: []TeamMember{
+			mockMember1,
+			mockMember2,
+		},
+		mockSelectorAgent: mockSelector,
+		MaxTurns:          &maxTurns,
+		telemetryRecorder: &mockTeamRecorder{},
+		eventingRecorder:  &mockEventingRecorder{},
+	}
+
+	ctx := context.Background()
+	userInput := NewUserMessage("test message")
+	history := []Message{}
+
+	messages, err := team.executeSelector(ctx, userInput, history)
+
+	require.NoError(t, err)
+	require.NotEmpty(t, messages)
+
+	foundWarning := false
+	for _, msg := range messages {
+		if msg.OfSystem != nil {
+			content := msg.OfSystem.Content.OfString.Value
+			if content == "Selector did not choose valid agent: returned invalid-agent" {
+				foundWarning = true
+				break
+			}
+		}
+	}
+
+	assert.True(t, foundWarning, "Expected to find invalid agent warning message in output")
 }

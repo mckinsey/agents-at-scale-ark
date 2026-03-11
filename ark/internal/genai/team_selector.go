@@ -245,12 +245,17 @@ func (t *Team) buildLegalTransitionsMap() map[string][]TeamMember {
 	return legalTransitions
 }
 
-func (t *Team) handleMemberSelectionError(err error, newMessages *[]Message) (shouldTerminate bool, returnErr error) {
+func (t *Team) handleMemberSelectionError(ctx context.Context, err error, newMessages *[]Message) (shouldTerminate bool, returnErr error) {
 	var invalidAgentErr *InvalidAgentError
 	switch {
 	case errors.As(err, &invalidAgentErr):
-		warningMessage := NewSystemMessage(fmt.Sprintf("Selector did not choose valid agent: returned %s", invalidAgentErr.SelectedName))
+		warningContent := fmt.Sprintf("Selector did not choose valid agent: returned %s", invalidAgentErr.SelectedName)
+		warningMessage := NewSystemMessage(warningContent)
 		*newMessages = append(*newMessages, warningMessage)
+
+		// Stream the warning message immediately so it appears during execution
+		StreamSystemMessage(ctx, t.eventStream, warningContent)
+
 		return false, nil
 	case IsTerminateTeam(err):
 		return true, nil
@@ -259,14 +264,13 @@ func (t *Team) handleMemberSelectionError(err error, newMessages *[]Message) (sh
 	}
 }
 
-type turnTelemetryContext struct {
-	ctx     context.Context
+type turnTelemetry struct {
 	span    telemetry.Span
 	opData  map[string]string
 	turnNum int
 }
 
-func (t *Team) startTurnTelemetry(ctx context.Context, turn int, memberName, memberType string) turnTelemetryContext {
+func (t *Team) startTurnTelemetry(ctx context.Context, turn int, memberName, memberType string) (context.Context, turnTelemetry) {
 	turnCtx, turnSpan := t.telemetryRecorder.StartTurn(ctx, turn, memberName, memberType)
 
 	operationData := map[string]string{
@@ -276,24 +280,23 @@ func (t *Team) startTurnTelemetry(ctx context.Context, turn int, memberName, mem
 	}
 	turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s", turn, t.Name), operationData)
 
-	return turnTelemetryContext{
-		ctx:     turnCtx,
+	return turnCtx, turnTelemetry{
 		span:    turnSpan,
 		opData:  operationData,
 		turnNum: turn,
 	}
 }
 
-func (t *Team) recordTurnOutput(telCtx turnTelemetryContext, newMessages []Message) {
+func (t *Team) recordTurnOutput(tel turnTelemetry, newMessages []Message) {
 	if len(newMessages) > 0 {
-		t.telemetryRecorder.RecordTurnOutput(telCtx.span, newMessages, len(newMessages))
+		t.telemetryRecorder.RecordTurnOutput(tel.span, newMessages, len(newMessages))
 	}
 }
 
-func (t *Team) completeTurnOnError(telCtx turnTelemetryContext, err error) (shouldTerminate bool, returnErr error) {
-	t.telemetryRecorder.RecordError(telCtx.span, err)
-	telCtx.span.End()
-	t.eventingRecorder.Fail(telCtx.ctx, "TeamTurn", fmt.Sprintf("Team turn failed: %v", err), err, telCtx.opData)
+func (t *Team) completeTurnOnError(ctx context.Context, tel turnTelemetry, err error) (shouldTerminate bool, returnErr error) {
+	t.telemetryRecorder.RecordError(tel.span, err)
+	tel.span.End()
+	t.eventingRecorder.Fail(ctx, "TeamTurn", fmt.Sprintf("Team turn failed: %v", err), err, tel.opData)
 
 	if IsTerminateTeam(err) {
 		return true, nil
@@ -301,10 +304,19 @@ func (t *Team) completeTurnOnError(telCtx turnTelemetryContext, err error) (shou
 	return false, err
 }
 
-func (t *Team) completeTurnOnSuccess(telCtx turnTelemetryContext) {
-	t.telemetryRecorder.RecordSuccess(telCtx.span)
-	telCtx.span.End()
-	t.eventingRecorder.Complete(telCtx.ctx, "TeamTurn", fmt.Sprintf("Team turn %d completed successfully", telCtx.turnNum), telCtx.opData)
+func (t *Team) completeTurnOnSuccess(ctx context.Context, tel turnTelemetry) {
+	t.telemetryRecorder.RecordSuccess(tel.span)
+	tel.span.End()
+	t.eventingRecorder.Complete(ctx, "TeamTurn", fmt.Sprintf("Team turn %d completed successfully", tel.turnNum), tel.opData)
+}
+
+func (t *Team) checkAndHandleMaxTurns(turn int, newMessages *[]Message) bool {
+	if t.MaxTurns != nil && turn+1 >= *t.MaxTurns {
+		maxTurnsMessage := NewSystemMessage(fmt.Sprintf("Team conversation reached maximum turns limit (%d)", *t.MaxTurns))
+		*newMessages = append(*newMessages, maxTurnsMessage)
+		return true
+	}
+	return false
 }
 
 func (t *Team) executeSelector(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
@@ -323,7 +335,7 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 	for turn := 0; ; turn++ {
 		nextMember, err := t.determineNextMember(ctx, messages, tmpl, previousMember, legalTransitions)
 		if err != nil {
-			shouldTerminate, returnErr := t.handleMemberSelectionError(err, &newMessages)
+			shouldTerminate, returnErr := t.handleMemberSelectionError(ctx, err, &newMessages)
 			if shouldTerminate {
 				return newMessages, nil
 			}
@@ -332,27 +344,25 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 			}
 		}
 
-		telCtx := t.startTurnTelemetry(ctx, turn, nextMember.GetName(), nextMember.GetType())
+		turnCtx, tel := t.startTurnTelemetry(ctx, turn, nextMember.GetName(), nextMember.GetType())
 
-		err = t.executeMemberAndAccumulate(telCtx.ctx, nextMember, userInput, &messages, &newMessages, turn)
+		err = t.executeMemberAndAccumulate(turnCtx, nextMember, userInput, &messages, &newMessages, turn)
 
-		t.recordTurnOutput(telCtx, newMessages)
+		t.recordTurnOutput(tel, newMessages)
 
 		if err != nil {
-			shouldTerminate, returnErr := t.completeTurnOnError(telCtx, err)
+			shouldTerminate, returnErr := t.completeTurnOnError(turnCtx, tel, err)
 			if shouldTerminate {
 				return newMessages, nil
 			}
 			return newMessages, returnErr
 		}
 
-		t.completeTurnOnSuccess(telCtx)
+		t.completeTurnOnSuccess(turnCtx, tel)
 
 		previousMember = nextMember.GetName()
 
-		if t.MaxTurns != nil && turn+1 >= *t.MaxTurns {
-			maxTurnsMessage := NewSystemMessage(fmt.Sprintf("Team conversation reached maximum turns limit (%d)", *t.MaxTurns))
-			newMessages = append(newMessages, maxTurnsMessage)
+		if t.checkAndHandleMaxTurns(turn, &newMessages) {
 			return newMessages, nil
 		}
 	}
