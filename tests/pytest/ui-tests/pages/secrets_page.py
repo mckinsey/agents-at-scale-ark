@@ -64,7 +64,14 @@ class SecretsPage(BasePage):
                 pass
         self.page.keyboard.press("Escape")
     
+    def _goto_secrets(self) -> None:
+        self.page.goto("http://localhost:3274/secrets")
+        self.wait_for_navigation_complete()
+        self.wait_for_element(self.ADD_SECRET_BUTTON, timeout=10000)
+        self.wait_for_element_hidden(self.LOADING_INDICATOR, timeout=10000)
+
     def is_secret_in_table(self, secret_name: str, retries: int = 3) -> bool:
+        self._goto_secrets()
         for attempt in range(retries):
             try:
                 self.page.get_by_text(secret_name, exact=False).first.wait_for(state="visible", timeout=15000)
@@ -73,10 +80,7 @@ class SecretsPage(BasePage):
                 logger.info(f"Secret {secret_name} not visible on attempt {attempt + 1}/{retries}: {e}")
                 if attempt < retries - 1:
                     logger.info(f"Secret {secret_name} not found, retrying ({attempt + 1}/{retries})...")
-                    self.page.reload()
-                    self.wait_for_navigation_complete()
-                    self.wait_for_element(self.ADD_SECRET_BUTTON, timeout=10000)
-                    self.wait_for_element_hidden(self.LOADING_INDICATOR, timeout=10000)
+                    self._goto_secrets()
         return False
     
     def create_secret_with_verification(self, prefix: str, env_key: str) -> dict:

@@ -88,11 +88,20 @@ class ToolsPage(BasePage):
         type_trigger.click()
         
         self.wait_for_dropdown_options()
-        http_option = self.page.get_by_role("option", name="HTTP", exact=True)
-        if http_option.count() > 0:
-            http_option.click()
-        else:
-            self.page.locator("[role='option']:has-text('HTTP')").first.click()
+        for attempt in range(3):
+            try:
+                http_option = self.page.get_by_role("option", name="HTTP", exact=True)
+                if http_option.count() == 0:
+                    http_option = self.page.locator("[role='option']:has-text('HTTP')").first
+                http_option.wait_for(state="visible", timeout=5000)
+                self.page.wait_for_timeout(300)
+                http_option.click(force=True)
+                break
+            except Exception as e:
+                logger.info(f"HTTP option click failed (attempt {attempt + 1}/3): {e}")
+                if attempt < 2:
+                    type_trigger.click()
+                    self.wait_for_dropdown_options()
         
         description_input = self.page.locator("input#description, input[name='description'], [role='dialog'] input:nth-of-type(2)").first
         description_input.wait_for(state="visible", timeout=5000)
