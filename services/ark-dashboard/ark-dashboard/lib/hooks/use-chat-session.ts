@@ -17,13 +17,12 @@ import {
 import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { hashPromptSync } from '@/lib/analytics/utils';
+import type { ChatType } from '@/lib/chat-events';
 import { chatService } from '@/lib/services';
 import type {
   ArkExtendedChunk,
   ExtendedChatMessage,
 } from '@/lib/types/chat-message';
-
-type ChatType = 'model' | 'team' | 'agent';
 
 interface UseChatSessionParams {
   name: string;
@@ -250,20 +249,21 @@ export function useChatSession({
 
           const arkTokenUsage =
             arkData.completedQuery?.status?.tokenUsage;
-          if (arkTokenUsage) {
-            const usage: TokenUsage = {
-              prompt_tokens: arkTokenUsage.promptTokens || 0,
-              completion_tokens: arkTokenUsage.completionTokens || 0,
-              total_tokens: arkTokenUsage.totalTokens || 0,
-            };
-            messageTokenUsage = usage;
-            updateTokenUsage(usage);
-          } else if (typedChunk?.usage) {
-            const usage: TokenUsage = {
-              prompt_tokens: typedChunk.usage.prompt_tokens ?? 0,
-              completion_tokens: typedChunk.usage.completion_tokens ?? 0,
-              total_tokens: typedChunk.usage.total_tokens ?? 0,
-            };
+          const usage: TokenUsage | null = arkTokenUsage
+            ? {
+                prompt_tokens: arkTokenUsage.promptTokens || 0,
+                completion_tokens: arkTokenUsage.completionTokens || 0,
+                total_tokens: arkTokenUsage.totalTokens || 0,
+              }
+            : typedChunk?.usage
+              ? {
+                  prompt_tokens: typedChunk.usage.prompt_tokens ?? 0,
+                  completion_tokens: typedChunk.usage.completion_tokens ?? 0,
+                  total_tokens: typedChunk.usage.total_tokens ?? 0,
+                }
+              : null;
+
+          if (usage) {
             messageTokenUsage = usage;
             updateTokenUsage(usage);
           }
