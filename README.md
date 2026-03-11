@@ -16,6 +16,7 @@
     <a href="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/cicd.yaml"><img src="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/cicd.yaml/badge.svg" alt="CI/CD"></a>
     <a href="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/deploy.yml"><img src="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/deploy.yml/badge.svg" alt="Deploy"></a>
     <a href="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/deploy_gcp.yml"><img src="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/deploy_gcp.yml/badge.svg" alt="Deploy GCP"></a>
+    <a href="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/performance-test.yaml"><img src="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/performance-test.yaml/badge.svg" alt="Performance Test"></a>
     <a href="https://codecov.io/gh/mckinsey/agents-at-scale-ark"><img src="https://codecov.io/gh/mckinsey/agents-at-scale-ark/branch/main/graph/badge.svg" alt="Coverage"></a>
     <a href="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/sonar_scan.yaml"><img src="https://github.com/mckinsey/agents-at-scale-ark/actions/workflows/sonar_scan.yaml/badge.svg" alt="SonarQube Scan"></a>
     <a href="https://www.npmjs.com/package/@agents-at-scale/ark"><img src="https://img.shields.io/npm/v/@agents-at-scale/ark.svg" alt="npm version"></a>
