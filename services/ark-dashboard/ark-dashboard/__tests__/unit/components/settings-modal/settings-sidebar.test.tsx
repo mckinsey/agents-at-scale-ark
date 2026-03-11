@@ -1,26 +1,31 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider, createStore } from 'jotai';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { useRouter } from 'next/navigation';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  activeSettingPageAtom,
-  settingsModalOpenAtom,
-} from '@/atoms/settings-modal';
 import { SettingsSidebar } from '@/components/settings-modal/settings-sidebar';
+
+vi.mock('next/navigation', () => ({
+  useRouter: vi.fn(),
+}));
 
 describe('SettingsSidebar', () => {
   let store: ReturnType<typeof createStore>;
+  const mockPush = vi.fn();
 
   beforeEach(() => {
     store = createStore();
-    store.set(settingsModalOpenAtom, true);
+    vi.clearAllMocks();
+    (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
+      push: mockPush,
+    });
   });
 
-  const renderWithStore = () =>
+  const renderWithStore = (activePage: string = 'a2a-servers') =>
     render(
       <Provider store={store}>
-        <SettingsSidebar />
+        <SettingsSidebar activePage={activePage as any} />
       </Provider>,
     );
 
@@ -45,21 +50,21 @@ describe('SettingsSidebar', () => {
     expect(screen.getByText('Secrets')).toBeInTheDocument();
   });
 
-  it('should update active page when a menu item is clicked', async () => {
+  it('should navigate to settings page when a menu item is clicked', async () => {
     const user = userEvent.setup();
     renderWithStore();
 
     await user.click(screen.getByText('Memory'));
 
-    expect(store.get(activeSettingPageAtom)).toBe('memory');
+    expect(mockPush).toHaveBeenCalledWith('/settings/memory');
   });
 
-  it('should close modal when close button is clicked', async () => {
+  it('should navigate to home when close button is clicked', async () => {
     const user = userEvent.setup();
     renderWithStore();
 
     await user.click(screen.getByLabelText('Close settings'));
 
-    expect(store.get(settingsModalOpenAtom)).toBe(false);
+    expect(mockPush).toHaveBeenCalledWith('/');
   });
 });

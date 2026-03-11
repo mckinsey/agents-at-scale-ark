@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AppSidebar } from '@/components/app-sidebar';
-import { SettingsModal } from '@/components/settings-modal';
 import { SidebarProvider } from '@/components/ui/sidebar';
 
 vi.mock('next/navigation', () => ({
@@ -95,7 +94,7 @@ describe('AppSidebar - Settings Menu Item', () => {
     });
   });
 
-  it('should open settings modal when Settings is clicked', async () => {
+  it('should navigate to settings page when Settings is clicked', async () => {
     const user = userEvent.setup();
 
     render(
@@ -103,7 +102,6 @@ describe('AppSidebar - Settings Menu Item', () => {
         <SidebarProvider>
           <AppSidebar />
         </SidebarProvider>
-        <SettingsModal />
       </JotaiProvider>,
     );
 
@@ -114,8 +112,6 @@ describe('AppSidebar - Settings Menu Item', () => {
     const settingsButton = screen.getByText('Settings');
     await user.click(settingsButton);
 
-    await waitFor(() => {
-      expect(screen.getByRole('dialog')).toBeInTheDocument();
-    });
+    expect(mockPush).toHaveBeenCalledWith('/settings');
   });
 });
