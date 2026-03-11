@@ -42,19 +42,82 @@ type queryRef struct {
 	Namespace string `json:"namespace"`
 }
 
-func (h *Handler) ProcessMessage( //nolint:gocognit,cyclop,gocyclo
+type executionState struct {
+	query          arkv1alpha1.Query
+	target         *arkv1alpha1.QueryTarget
+	sessionId      string
+	conversationId string
+	inputMessages  []genai.Message
+	memoryMessages []genai.Message
+	memory         genai.MemoryInterface
+	eventStream    genai.EventStreamInterface
+	querySpan      telemetry.Span
+	targetSpan     telemetry.Span
+}
+
+func (s *executionState) finalizeStream(ctx context.Context, responseMessages []genai.Message) {
+	if s.eventStream == nil {
+		return
+	}
+	if len(responseMessages) > 0 {
+		rawJSON := serializeResponseMessages(responseMessages)
+		completedQuery := s.query.DeepCopy()
+		completedQuery.Status.Phase = "done"
+		completedQuery.Status.Response = &arkv1alpha1.Response{
+			Target:  *s.target,
+			Content: extractAssistantText(responseMessages),
+			Raw:     rawJSON,
+			Phase:   "done",
+		}
+		finalChunk := genai.NewContentChunk("chatcmpl-final", s.query.Name, "")
+		wrappedChunk := genai.WrapChunkWithMetadata(ctx, finalChunk, "", completedQuery)
+		if err := s.eventStream.StreamChunk(ctx, wrappedChunk); err != nil {
+			log.Error(err, "failed to send final chunk")
+		}
+	}
+	if completionErr := s.eventStream.NotifyCompletion(ctx); completionErr != nil {
+		log.Error(completionErr, "failed to notify stream completion")
+	}
+	if closeErr := s.eventStream.Close(); closeErr != nil {
+		log.Error(closeErr, "failed to close event stream")
+	}
+}
+
+func (h *Handler) ProcessMessage(
 	ctx context.Context,
 	message protocol.Message,
 	options taskmanager.ProcessOptions,
 	handler taskmanager.TaskHandler,
 ) (*taskmanager.MessageProcessingResult, error) {
+	query, target, err := h.resolveQueryAndTarget(ctx, message)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, state, err := h.setupExecution(ctx, query, target)
+	if err != nil {
+		return nil, err
+	}
+	defer state.querySpan.End()
+	defer state.targetSpan.End()
+
+	responseMessages, err := h.dispatchTarget(ctx, state)
+	if err != nil {
+		state.finalizeStream(ctx, nil)
+		return nil, fmt.Errorf("execution failed: %w", err)
+	}
+
+	return h.buildA2AResponse(ctx, state, responseMessages), nil
+}
+
+func (h *Handler) resolveQueryAndTarget(ctx context.Context, message protocol.Message) (*arkv1alpha1.Query, *arkv1alpha1.QueryTarget, error) {
 	meta, err := extractArkMetadata(message)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract ark metadata: %w", err)
+		return nil, nil, fmt.Errorf("failed to extract ark metadata: %w", err)
 	}
 
 	if meta.Query.Name == "" || meta.Query.Namespace == "" {
-		return nil, fmt.Errorf("query reference is required in ark metadata")
+		return nil, nil, fmt.Errorf("query reference is required in ark metadata")
 	}
 
 	var query arkv1alpha1.Query
@@ -62,7 +125,7 @@ func (h *Handler) ProcessMessage( //nolint:gocognit,cyclop,gocyclo
 		Name:      meta.Query.Name,
 		Namespace: meta.Query.Namespace,
 	}, &query); err != nil {
-		return nil, fmt.Errorf("failed to get query %s/%s: %w", meta.Query.Namespace, meta.Query.Name, err)
+		return nil, nil, fmt.Errorf("failed to get query %s/%s: %w", meta.Query.Namespace, meta.Query.Name, err)
 	}
 
 	target := query.Spec.Target
@@ -73,15 +136,18 @@ func (h *Handler) ProcessMessage( //nolint:gocognit,cyclop,gocyclo
 		}
 	}
 	if target == nil {
-		return nil, fmt.Errorf("query %s/%s has no target", meta.Query.Namespace, meta.Query.Name)
+		return nil, nil, fmt.Errorf("query %s/%s has no target", meta.Query.Namespace, meta.Query.Name)
 	}
 
-	ctx = context.WithValue(ctx, genai.QueryContextKey, &query)
-	ctx = h.eventing.QueryRecorder().InitializeQueryContext(ctx, &query)
+	return &query, target, nil
+}
+
+func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, target *arkv1alpha1.QueryTarget) (context.Context, *executionState, error) {
+	ctx = context.WithValue(ctx, genai.QueryContextKey, query)
+	ctx = h.eventing.QueryRecorder().InitializeQueryContext(ctx, query)
 	ctx = h.eventing.QueryRecorder().StartTokenCollection(ctx)
 
-	ctx, querySpan := h.telemetry.QueryRecorder().StartQuery(ctx, &query, "execute")
-	defer querySpan.End()
+	ctx, querySpan := h.telemetry.QueryRecorder().StartQuery(ctx, query, "execute")
 
 	sessionId := query.Spec.SessionId
 	if sessionId == "" {
@@ -89,15 +155,17 @@ func (h *Handler) ProcessMessage( //nolint:gocognit,cyclop,gocyclo
 	}
 	h.telemetry.QueryRecorder().RecordSessionID(querySpan, sessionId)
 
-	inputMessages, err := genai.GetQueryInputMessages(ctx, query, h.k8sClient)
+	inputMessages, err := genai.GetQueryInputMessages(ctx, *query, h.k8sClient)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get input messages: %w", err)
+		querySpan.End()
+		return ctx, nil, fmt.Errorf("failed to get input messages: %w", err)
 	}
 
 	conversationId := query.Spec.ConversationId
 	memory, err := genai.NewMemoryForQuery(ctx, h.k8sClient, query.Spec.Memory, query.Namespace, conversationId, query.Name, h.eventing.MemoryRecorder())
 	if err != nil {
-		return nil, fmt.Errorf("failed to create memory client: %w", err)
+		querySpan.End()
+		return ctx, nil, fmt.Errorf("failed to create memory client: %w", err)
 	}
 
 	if httpMemory, ok := memory.(*genai.HTTPMemory); ok {
@@ -115,83 +183,70 @@ func (h *Handler) ProcessMessage( //nolint:gocognit,cyclop,gocyclo
 		log.Error(err, "failed to create event stream, continuing without streaming")
 	}
 
-	finalizeStream := func(responseMessages []genai.Message) {
-		if eventStream == nil {
-			return
-		}
-		if len(responseMessages) > 0 {
-			rawJSON := serializeResponseMessages(responseMessages)
-			completedQuery := query.DeepCopy()
-			completedQuery.Status.Phase = "done"
-			completedQuery.Status.Response = &arkv1alpha1.Response{
-				Target:  *target,
-				Content: extractAssistantText(responseMessages),
-				Raw:     rawJSON,
-				Phase:   "done",
-			}
-			finalChunk := genai.NewContentChunk("chatcmpl-final", query.Name, "")
-			wrappedChunk := genai.WrapChunkWithMetadata(ctx, finalChunk, "", completedQuery)
-			if err := eventStream.StreamChunk(ctx, wrappedChunk); err != nil {
-				log.Error(err, "failed to send final chunk")
-			}
-		}
-		if completionErr := eventStream.NotifyCompletion(ctx); completionErr != nil {
-			log.Error(completionErr, "failed to notify stream completion")
-		}
-		if closeErr := eventStream.Close(); closeErr != nil {
-			log.Error(closeErr, "failed to close event stream")
-		}
-	}
-
 	userContent := genai.ExtractUserMessageContent(inputMessages)
 	h.telemetry.QueryRecorder().RecordRootInput(querySpan, userContent)
 
 	ctx, targetSpan := h.telemetry.QueryRecorder().StartTarget(ctx, target.Type, target.Name)
-	defer targetSpan.End()
-
 	h.telemetry.QueryRecorder().RecordInput(targetSpan, userContent)
 
-	var responseMessages []genai.Message
+	state := &executionState{
+		query:          *query,
+		target:         target,
+		sessionId:      sessionId,
+		conversationId: conversationId,
+		inputMessages:  inputMessages,
+		memoryMessages: memoryMessages,
+		memory:         memory,
+		eventStream:    eventStream,
+		querySpan:      querySpan,
+		targetSpan:     targetSpan,
+	}
 
-	switch target.Type {
-	case "agent":
-		_, responseMessages, err = h.executeAgent(ctx, query, target.Name, inputMessages, memoryMessages, memory, eventStream)
-	case "team":
-		_, responseMessages, err = h.executeTeam(ctx, query, target.Name, inputMessages, memoryMessages, memory, eventStream)
+	return ctx, state, nil
+}
+
+func (h *Handler) dispatchTarget(ctx context.Context, state *executionState) ([]genai.Message, error) {
+	var responseMessages []genai.Message
+	var err error
+
+	switch state.target.Type {
+	case "agent", "team":
+		_, responseMessages, err = h.executeMember(ctx, state.query, state.target.Type, state.target.Name, state.inputMessages, state.memoryMessages, state.memory, state.eventStream)
 	case "model":
-		responseMessages, err = h.executeModel(ctx, query, target.Name, inputMessages, memoryMessages, eventStream)
+		responseMessages, err = h.executeModel(ctx, state.query, state.target.Name, state.inputMessages, state.memoryMessages, state.eventStream)
 	case "tool":
-		responseMessages, err = h.executeTool(ctx, query, target.Name, inputMessages)
+		responseMessages, err = h.executeTool(ctx, state.query, state.target.Name, state.inputMessages)
 	default:
-		err = fmt.Errorf("unsupported target type: %s", target.Type)
+		err = fmt.Errorf("unsupported target type: %s", state.target.Type)
 	}
 
 	if err != nil {
-		h.telemetry.QueryRecorder().RecordError(targetSpan, err)
-		h.telemetry.QueryRecorder().RecordError(querySpan, err)
-		genai.StreamError(ctx, eventStream, err, "execution_failed", target.Name)
-		finalizeStream(nil)
-		return nil, fmt.Errorf("execution failed: %w", err)
+		h.telemetry.QueryRecorder().RecordError(state.targetSpan, err)
+		h.telemetry.QueryRecorder().RecordError(state.querySpan, err)
+		genai.StreamError(ctx, state.eventStream, err, "execution_failed", state.target.Name)
+		return nil, err
 	}
 
-	responseContent := extractAssistantText(responseMessages)
-	h.telemetry.QueryRecorder().RecordOutput(targetSpan, responseContent)
-	h.telemetry.QueryRecorder().RecordRootOutput(querySpan, responseContent)
-	h.telemetry.QueryRecorder().RecordSuccess(targetSpan)
-	h.telemetry.QueryRecorder().RecordSuccess(querySpan)
+	return responseMessages, nil
+}
 
-	if memory != nil && len(responseMessages) > 0 {
-		newMessages := genai.PrepareNewMessagesForMemory(inputMessages, responseMessages)
-		if saveErr := memory.AddMessages(ctx, query.Name, newMessages); saveErr != nil {
+func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, responseMessages []genai.Message) *taskmanager.MessageProcessingResult {
+	responseContent := extractAssistantText(responseMessages)
+	h.telemetry.QueryRecorder().RecordOutput(state.targetSpan, responseContent)
+	h.telemetry.QueryRecorder().RecordRootOutput(state.querySpan, responseContent)
+	h.telemetry.QueryRecorder().RecordSuccess(state.targetSpan)
+	h.telemetry.QueryRecorder().RecordSuccess(state.querySpan)
+
+	if state.memory != nil && len(responseMessages) > 0 {
+		newMessages := genai.PrepareNewMessagesForMemory(state.inputMessages, responseMessages)
+		if saveErr := state.memory.AddMessages(ctx, state.query.Name, newMessages); saveErr != nil {
 			log.Error(saveErr, "failed to save messages to memory")
 		}
 	}
 
-	responseText := extractAssistantText(responseMessages)
-
 	tokenSummary := h.eventing.QueryRecorder().GetTokenSummary(ctx)
 	if tokenSummary.TotalTokens > 0 {
-		h.telemetry.QueryRecorder().RecordTokenUsage(querySpan, tokenSummary.PromptTokens, tokenSummary.CompletionTokens, tokenSummary.TotalTokens)
+		h.telemetry.QueryRecorder().RecordTokenUsage(state.querySpan, tokenSummary.PromptTokens, tokenSummary.CompletionTokens, tokenSummary.TotalTokens)
 	}
 
 	responseMeta := map[string]any{}
@@ -202,8 +257,8 @@ func (h *Handler) ProcessMessage( //nolint:gocognit,cyclop,gocyclo
 			"total_tokens":      tokenSummary.TotalTokens,
 		}
 	}
-	if conversationId != "" {
-		responseMeta["conversationId"] = conversationId
+	if state.conversationId != "" {
+		responseMeta["conversationId"] = state.conversationId
 	}
 
 	serializedMessages := serializeResponseMessages(responseMessages)
@@ -213,7 +268,7 @@ func (h *Handler) ProcessMessage( //nolint:gocognit,cyclop,gocyclo
 
 	responseMessage := protocol.NewMessage(
 		protocol.MessageRoleAgent,
-		[]protocol.Part{protocol.NewTextPart(responseText)},
+		[]protocol.Part{protocol.NewTextPart(responseContent)},
 	)
 	if len(responseMeta) > 0 {
 		responseMessage.Metadata = map[string]any{
@@ -221,68 +276,51 @@ func (h *Handler) ProcessMessage( //nolint:gocognit,cyclop,gocyclo
 		}
 	}
 
-	finalizeStream(responseMessages)
+	state.finalizeStream(ctx, responseMessages)
 
 	return &taskmanager.MessageProcessingResult{
 		Result: &responseMessage,
-	}, nil
+	}
 }
 
-func (h *Handler) executeAgent( //nolint:dupl
+func (h *Handler) executeMember(
 	ctx context.Context,
 	query arkv1alpha1.Query,
-	agentName string,
+	targetType, targetName string,
 	inputMessages []genai.Message,
 	memoryMessages []genai.Message,
 	memory genai.MemoryInterface,
 	eventStream genai.EventStreamInterface,
 ) (*genai.ExecutionResult, []genai.Message, error) {
-	var agentCRD arkv1alpha1.Agent
-	if err := h.k8sClient.Get(ctx, types.NamespacedName{
-		Name:      agentName,
-		Namespace: query.Namespace,
-	}, &agentCRD); err != nil {
-		return nil, nil, fmt.Errorf("failed to get agent %s: %w", agentName, err)
-	}
+	var member genai.TeamMember
 
-	agent, err := genai.MakeAgent(ctx, h.k8sClient, &agentCRD, h.telemetry, h.eventing)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to make agent %s: %w", agentName, err)
-	}
-
-	currentMessage, contextMessages := genai.PrepareExecutionMessages(inputMessages, memoryMessages)
-	result, err := agent.Execute(ctx, currentMessage, contextMessages, memory, eventStream)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return result, result.Messages, nil
-}
-
-func (h *Handler) executeTeam( //nolint:dupl
-	ctx context.Context,
-	query arkv1alpha1.Query,
-	teamName string,
-	inputMessages []genai.Message,
-	memoryMessages []genai.Message,
-	memory genai.MemoryInterface,
-	eventStream genai.EventStreamInterface,
-) (*genai.ExecutionResult, []genai.Message, error) {
-	var teamCRD arkv1alpha1.Team
-	if err := h.k8sClient.Get(ctx, types.NamespacedName{
-		Name:      teamName,
-		Namespace: query.Namespace,
-	}, &teamCRD); err != nil {
-		return nil, nil, fmt.Errorf("failed to get team %s: %w", teamName, err)
-	}
-
-	team, err := genai.MakeTeam(ctx, h.k8sClient, &teamCRD, h.telemetry, h.eventing)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to make team %s: %w", teamName, err)
+	switch targetType {
+	case "agent":
+		var agentCRD arkv1alpha1.Agent
+		if err := h.k8sClient.Get(ctx, types.NamespacedName{Name: targetName, Namespace: query.Namespace}, &agentCRD); err != nil {
+			return nil, nil, fmt.Errorf("failed to get agent %s: %w", targetName, err)
+		}
+		agent, err := genai.MakeAgent(ctx, h.k8sClient, &agentCRD, h.telemetry, h.eventing)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to make agent %s: %w", targetName, err)
+		}
+		member = agent
+	case "team":
+		var teamCRD arkv1alpha1.Team
+		if err := h.k8sClient.Get(ctx, types.NamespacedName{Name: targetName, Namespace: query.Namespace}, &teamCRD); err != nil {
+			return nil, nil, fmt.Errorf("failed to get team %s: %w", targetName, err)
+		}
+		team, err := genai.MakeTeam(ctx, h.k8sClient, &teamCRD, h.telemetry, h.eventing)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to make team %s: %w", targetName, err)
+		}
+		member = team
+	default:
+		return nil, nil, fmt.Errorf("unsupported member type: %s", targetType)
 	}
 
 	currentMessage, contextMessages := genai.PrepareExecutionMessages(inputMessages, memoryMessages)
-	result, err := team.Execute(ctx, currentMessage, contextMessages, memory, eventStream)
+	result, err := member.Execute(ctx, currentMessage, contextMessages, memory, eventStream)
 	if err != nil {
 		return nil, nil, err
 	}

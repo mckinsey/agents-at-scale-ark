@@ -61,6 +61,7 @@ queryEngine:
       requests:
         cpu: 10m
         memory: 64Mi
+        ephemeral-storage: 128Mi
 
 # [RBAC]: To enable RBAC (Permissions) configurations
 rbac:

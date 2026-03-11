@@ -105,9 +105,16 @@ func NewProviderWithClient(ctx context.Context, k8sClient client.Client) *Provid
 
 type noopEventEmitter struct{}
 
-func (e *noopEventEmitter) EmitNormal(_ context.Context, _ k8sruntime.Object, _, _ string)  {}
-func (e *noopEventEmitter) EmitWarning(_ context.Context, _ k8sruntime.Object, _, _ string) {}
+func (e *noopEventEmitter) EmitNormal(_ context.Context, _ k8sruntime.Object, _, _ string) {
+	// noop: used as default when no event emitter is configured
+}
+
+func (e *noopEventEmitter) EmitWarning(_ context.Context, _ k8sruntime.Object, _, _ string) {
+	// noop: used as default when no event emitter is configured
+}
+
 func (e *noopEventEmitter) EmitStructured(_ context.Context, _ k8sruntime.Object, _, _, _ string, _ any) {
+	// noop: used as default when no event emitter is configured
 }
 
 func (p *Provider) ModelRecorder() eventing.ModelRecorder {
