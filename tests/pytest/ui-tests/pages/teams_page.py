@@ -90,22 +90,20 @@ class TeamsPage(BasePage):
 
         logger.info(f"Selecting member: {member_name}")
         try:
-            member_checkbox = self.page.locator(f"div:has-text('{member_name}') input[type='checkbox'], label:has-text('{member_name}') input[type='checkbox']").first
-            member_checkbox.wait_for(state="visible", timeout=10000)
-            if member_checkbox.is_visible():
-                member_checkbox.click()
-            else:
-                all_checkboxes = self.page.locator("button[role='checkbox']")
-                if all_checkboxes.count() > 0:
-                    all_checkboxes.first.click()
+            member_label = self.page.locator(f"label:has-text('{member_name}')").first
+            member_label.wait_for(state="visible", timeout=10000)
+            member_label.click()
+            logger.info(f"Selected member via label click: {member_name}")
         except Exception as e:
-            logger.warning(f"Could not select member checkbox: {e}")
+            logger.warning(f"Could not select member via label: {e}")
             try:
-                all_checkboxes = self.page.locator("button[role='checkbox']")
-                if all_checkboxes.count() > 0:
-                    all_checkboxes.first.click()
-            except Exception:
-                pass
+                member_row = self.page.locator(f"div:has(div:text('{member_name}'))").first
+                checkbox = member_row.locator("button[role='checkbox']").first
+                checkbox.wait_for(state="visible", timeout=5000)
+                checkbox.click()
+                logger.info(f"Selected member via checkbox button: {member_name}")
+            except Exception as e2:
+                logger.warning(f"Could not select member via checkbox button: {e2}")
 
         logger.info("Clicking Create Team button")
         self.page.locator("button:has-text('Create Team')").first.click()
@@ -144,16 +142,20 @@ class TeamsPage(BasePage):
 
         logger.info(f"Selecting member: {member_name}")
         try:
-            checkbox = self.page.locator(f"tr:has-text('{member_name}') input[type='checkbox'], div:has-text('{member_name}') input[type='checkbox'], label:has-text('{member_name}') input[type='checkbox']").first
-            checkbox.wait_for(state="visible", timeout=10000)
-            if checkbox.is_visible():
-                checkbox.check()
-            else:
-                all_checkboxes = self.page.locator("[role='dialog'] input[type='checkbox']")
-                if all_checkboxes.count() > 0:
-                    all_checkboxes.first.check()
+            member_label = self.page.locator(f"label:has-text('{member_name}')").first
+            member_label.wait_for(state="visible", timeout=10000)
+            member_label.click()
+            logger.info(f"Selected member via label click: {member_name}")
         except Exception as e:
-            logger.warning(f"Could not select member checkbox: {e}")
+            logger.warning(f"Could not select member via label: {e}")
+            try:
+                member_row = self.page.locator(f"div:has(div:text('{member_name}'))").first
+                checkbox = member_row.locator("button[role='checkbox']").first
+                checkbox.wait_for(state="visible", timeout=5000)
+                checkbox.click()
+                logger.info(f"Selected member via checkbox button: {member_name}")
+            except Exception as e2:
+                logger.warning(f"Could not select member via checkbox button: {e2}")
 
         save_button = self.page.locator("[role='dialog'] button:has-text('Create'), [data-slot='dialog-content'] button:has-text('Create')").first
         if not save_button.is_visible():
