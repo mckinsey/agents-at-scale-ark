@@ -530,12 +530,16 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 	p.watchers[key] = append(p.watchers[key], ch)
 	p.mu.Unlock()
 
-	return &postgresWatcher{
+	w := &postgresWatcher{
 		ch:      ch,
 		backend: p,
 		key:     key,
+		kind:    kind,
 		ctx:     ctx,
-	}, nil
+		done:    make(chan struct{}),
+	}
+	go w.sendBookmarks()
+	return w, nil
 }
 
 func (p *PostgreSQLBackend) GetResourceVersion(ctx context.Context, kind, namespace, name string) (int64, error) {
@@ -635,18 +639,70 @@ func (p *PostgreSQLBackend) removeWatcher(key string, ch chan watch.Event) {
 	}
 }
 
+func (p *PostgreSQLBackend) getMaxResourceVersion() (int64, error) {
+	var rv sql.NullInt64
+	err := p.db.QueryRowContext(p.ctx, `SELECT MAX(resource_version) FROM resources`).Scan(&rv)
+	if err != nil {
+		return 0, err
+	}
+	if !rv.Valid {
+		return 0, nil
+	}
+	return rv.Int64, nil
+}
+
 type postgresWatcher struct {
 	ch      chan watch.Event
 	backend *PostgreSQLBackend
 	key     string
+	kind    string
 	ctx     context.Context
+	done    chan struct{}
 }
 
 func (w *postgresWatcher) Stop() {
 	w.backend.removeWatcher(w.key, w.ch)
+	close(w.done)
 	close(w.ch)
 }
 
 func (w *postgresWatcher) ResultChan() <-chan watch.Event {
 	return w.ch
+}
+
+func (w *postgresWatcher) sendBookmarks() {
+	w.sendBookmark()
+
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-w.done:
+			return
+		case <-w.ctx.Done():
+			return
+		case <-ticker.C:
+			w.sendBookmark()
+		}
+	}
+}
+
+func (w *postgresWatcher) sendBookmark() {
+	rv, err := w.backend.getMaxResourceVersion()
+	if err != nil {
+		return
+	}
+	obj := w.backend.converter.NewObject(w.kind)
+	if obj == nil {
+		return
+	}
+	if accessor, aErr := meta.Accessor(obj); aErr == nil {
+		accessor.SetResourceVersion(fmt.Sprintf("%d", rv))
+		accessor.SetAnnotations(map[string]string{"k8s.io/initial-events-end": "true"})
+	}
+	select {
+	case w.ch <- watch.Event{Type: watch.Bookmark, Object: obj}:
+	default:
+	}
 }
