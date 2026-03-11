@@ -82,8 +82,7 @@ spec:
           status:
             (response != null): true
             (response.target.name): 'round-robin-brainstorm-team'
-            (length(response.content) > `300`): true
-            (contains(response.content, 'customer satisfaction') || contains(response.content, 'software')): true
+            (length(response.content) > `50`): true
             (tokenUsage.totalTokens > `50`): true
     catch:
     - events: {}

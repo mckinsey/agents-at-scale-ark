@@ -5,7 +5,7 @@ metadata:
 spec:
   strategy: sequential
   loops: true
-  maxTurns: 10
+  maxTurns: 3
   members:
     - type: agent
       name: brainstormer

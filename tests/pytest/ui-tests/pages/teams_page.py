@@ -24,7 +24,7 @@ class TeamsPage(BasePage):
     TEST_DATA = {
         "default": {
             "description": "Resolve customer queries",
-            "strategy": "Round Robin",
+            "strategy": "Sequential",
             "max_turns": "5"
         }
     }
