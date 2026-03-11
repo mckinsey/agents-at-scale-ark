@@ -91,9 +91,14 @@ class SecretsPage(BasePage):
         logger.info(f"Secret value length: {len(secret_value)}")
         
         self.page.locator(self.ADD_SECRET_BUTTON).first.click()
+        self.wait_for_modal_open()
         
-        inputs = self.page.locator("[role='dialog'] input:visible, [data-slot='dialog-content'] input:visible")
+        inputs = self.page.locator("[role='dialog'] input, [data-slot='dialog-content'] input")
         inputs.first.wait_for(state="visible", timeout=10000)
+        try:
+            inputs.nth(1).wait_for(state="visible", timeout=5000)
+        except Exception:
+            pass
         
         input_count = inputs.count()
         logger.info(f"Found {input_count} inputs in dialog")
@@ -103,8 +108,8 @@ class SecretsPage(BasePage):
             inputs.nth(1).fill(secret_value)
         else:
             inputs.first.fill(secret_name)
-            textarea = self.page.locator("[role='dialog'] textarea:visible").first
-            if textarea.is_visible():
+            textarea = self.page.locator("[role='dialog'] textarea, [data-slot='dialog-content'] textarea").first
+            if textarea.is_visible(timeout=2000):
                 textarea.fill(secret_value)
         
         save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
