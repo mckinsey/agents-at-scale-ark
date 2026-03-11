@@ -77,6 +77,9 @@ jobs:
         include:
           - path: ark
             image: ark-controller
+          - path: ark
+            image: ark-query-engine
+            dockerfile: Dockerfile.query-engine
           - path: services/ark-api
             image: ark-api
             prebuild: "make ark-api-deps && mkdir -p services/ark-api/ark-api/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/out/"
@@ -136,6 +139,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           prebuild: ${{ matrix.prebuild }}
+          dockerfile: ${{ matrix.dockerfile || 'Dockerfile' }}
       
       - name: Push to "latest" tag
         if: ${{ inputs.deploy_containers_to_latest }}

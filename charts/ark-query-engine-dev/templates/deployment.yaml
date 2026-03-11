@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      securityContext:
+        runAsNonRoot: false
+      containers:
+        - name: query-engine
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: {{ .Values.port }}
+          env:
+          - name: OTEL_SERVICE_NAME
+            value: "ark-query-engine"
+          - name: ARK_TELEMETRY_OTEL_DISCOVERY
+            value: "true"
+          envFrom:
+          - configMapRef:
+              name: otel-environment-variables
+              optional: true
+          - secretRef:
+              name: otel-environment-variables
+              optional: true
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
