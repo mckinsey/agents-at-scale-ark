@@ -118,6 +118,10 @@ runs:
           --set controllerManager.container.image.repository="${{ inputs.ci-cache-registry }}/ark-controller" \
           --set controllerManager.container.image.tag="${{ inputs.ark-image-tag }}" \
           --set controllerManager.container.image.pullPolicy=Always \
+          --set queryEngine.enabled=true \
+          --set queryEngine.container.image.repository="${{ inputs.ci-cache-registry }}/ark-query-engine" \
+          --set queryEngine.container.image.tag="${{ inputs.ark-image-tag }}" \
+          --set queryEngine.container.image.pullPolicy=Always \
           --wait --timeout=5m
 
         # Install ark-tenant from local chart

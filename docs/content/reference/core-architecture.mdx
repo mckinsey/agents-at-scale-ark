@@ -12,10 +12,11 @@ This page describes the current architecture of Ark and the planned aggregated a
 The current Ark deployment consists of:
 
 - **Ark Core (Controller)**: Go-based component with metrics, webhook, and controller modules
+- **Query Engine (Sidecar)**: A2A server that runs the LLM turn loop, tool execution, team orchestration, and streaming
 - **Kubernetes API Server**: Handles standard Kubernetes and Ark custom resources
 - **etcd**: Stores all Kubernetes resources including Ark custom resources (Agents, Models, Queries, etc.)
 
-All Ark resources are stored in etcd alongside standard Kubernetes resources. Query execution is handled by the controller module, which scales vertically but has limitations for high-concurrency query workloads.
+All Ark resources are stored in etcd alongside standard Kubernetes resources. The controller delegates query execution to the query engine sidecar via A2A protocol. The engine handles agent execution, tool calls, team orchestration, memory, and streaming to ark-broker.
 
 ### Current Query Execution Flow
 
@@ -25,7 +26,7 @@ sequenceDiagram
     participant KubeAPI as Kubernetes API
     participant etcd as etcd
     participant Controller as Ark Controller
-    participant Executor as Query Executor
+    participant Engine as Query Engine (Sidecar)
     participant Model as Model Provider
 
     User->>KubeAPI: Create Query
@@ -35,10 +36,10 @@ sequenceDiagram
     KubeAPI->>etcd: Retrieve Query
     etcd-->>KubeAPI: Query data
     KubeAPI-->>Controller: Query data
-    Controller->>Executor: Execute Query
-    Executor->>Model: LLM API call
-    Model-->>Executor: Response
-    Executor-->>Controller: Result
+    Controller->>Engine: A2A SendMessage
+    Engine->>Model: LLM API call
+    Model-->>Engine: Response
+    Engine-->>Controller: A2A Response
     Controller->>KubeAPI: Update Query status
     KubeAPI->>etcd: Store Query status
 ```
