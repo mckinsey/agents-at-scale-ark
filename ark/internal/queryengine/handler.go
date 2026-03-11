@@ -36,7 +36,7 @@ type queryRef struct {
 	Namespace string `json:"namespace"`
 }
 
-func (h *Handler) ProcessMessage(
+func (h *Handler) ProcessMessage( //nolint:gocognit,cyclop
 	ctx context.Context,
 	message protocol.Message,
 	options taskmanager.ProcessOptions,
@@ -216,7 +216,7 @@ func (h *Handler) ProcessMessage(
 	}, nil
 }
 
-func (h *Handler) executeAgent(
+func (h *Handler) executeAgent( //nolint:dupl
 	ctx context.Context,
 	query arkv1alpha1.Query,
 	agentName string,
@@ -247,7 +247,7 @@ func (h *Handler) executeAgent(
 	return result, result.Messages, nil
 }
 
-func (h *Handler) executeTeam(
+func (h *Handler) executeTeam( //nolint:dupl
 	ctx context.Context,
 	query arkv1alpha1.Query,
 	teamName string,
@@ -355,7 +355,7 @@ func (h *Handler) executeTool(
 	}
 
 	toolRegistry := genai.NewToolRegistry(q.McpSettings, h.telemetry.ToolRecorder(), h.eventing.ToolRecorder())
-	defer toolRegistry.Close()
+	defer func() { _ = toolRegistry.Close() }()
 
 	toolDefinition := genai.CreateToolFromCRD(&toolCRD)
 	mcpPool, mcpSettings := toolRegistry.GetMCPPool()

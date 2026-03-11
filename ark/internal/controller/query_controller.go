@@ -224,18 +224,14 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", nil)
 }
 
-
 func (r *QueryReconciler) executeViaEngine(ctx context.Context, query arkv1alpha1.Query, target arkv1alpha1.QueryTarget) (*arkv1alpha1.Response, engineResponseMeta, error) {
 	log := logf.FromContext(ctx)
 
-	agentConfig, err := r.buildAgentConfigForEngine(ctx, query, target)
-	if err != nil {
-		return nil, engineResponseMeta{}, fmt.Errorf("failed to build agent config: %w", err)
-	}
+	agentConfig := r.buildAgentConfigForEngine(query, target)
 
 	arkMetadata := map[string]any{
-		"agent": agentConfig,
-		"tools": []any{},
+		"agent":   agentConfig,
+		"tools":   []any{},
 		"history": []any{},
 		"query": map[string]string{
 			"name":      query.Name,
@@ -312,12 +308,12 @@ func (r *QueryReconciler) executeViaEngine(ctx context.Context, query arkv1alpha
 	return response, engineMeta, nil
 }
 
-func (r *QueryReconciler) buildAgentConfigForEngine(ctx context.Context, query arkv1alpha1.Query, target arkv1alpha1.QueryTarget) (map[string]any, error) {
+func (r *QueryReconciler) buildAgentConfigForEngine(query arkv1alpha1.Query, target arkv1alpha1.QueryTarget) map[string]any {
 	return map[string]any{
 		"name":      target.Name,
 		"namespace": query.Namespace,
 		"prompt":    "",
-	}, nil
+	}
 }
 
 func (r *QueryReconciler) extractUserInput(ctx context.Context, query arkv1alpha1.Query) string {
@@ -359,38 +355,37 @@ type engineResponseMeta struct {
 }
 
 func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMeta {
-	var meta engineResponseMeta
+	var responseMeta engineResponseMeta
 	if result == nil {
-		return meta
+		return responseMeta
 	}
 
 	var msgMeta map[string]any
-	switch r := result.Result.(type) {
-	case *protocol.Message:
-		msgMeta = r.Metadata
+	if msg, ok := result.Result.(*protocol.Message); ok {
+		msgMeta = msg.Metadata
 	}
 
 	if msgMeta == nil {
-		return meta
+		return responseMeta
 	}
 
 	arkData, ok := msgMeta[genai.ArkMetadataKey]
 	if !ok {
-		return meta
+		return responseMeta
 	}
 
 	arkMap, ok := arkData.(map[string]any)
 	if !ok {
-		return meta
+		return responseMeta
 	}
 
 	if convId, ok := arkMap["conversationId"].(string); ok {
-		meta.ConversationId = convId
+		responseMeta.ConversationId = convId
 	}
 
 	if messagesRaw, ok := arkMap["messages"]; ok {
 		if rawBytes, err := json.Marshal(messagesRaw); err == nil {
-			meta.MessagesRaw = string(rawBytes)
+			responseMeta.MessagesRaw = string(rawBytes)
 		}
 	}
 
@@ -406,11 +401,11 @@ func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMet
 			usage.TotalTokens = int64(v)
 		}
 		if usage.TotalTokens > 0 {
-			meta.TokenUsage = usage
+			responseMeta.TokenUsage = usage
 		}
 	}
 
-	return meta
+	return responseMeta
 }
 
 func (r *QueryReconciler) resolveTarget(ctx context.Context, query arkv1alpha1.Query, impersonatedClient client.Client) (*arkv1alpha1.QueryTarget, error) {
@@ -498,61 +493,6 @@ func (r *QueryReconciler) resolveSelector(ctx context.Context, selector *metav1.
 	return nil, fmt.Errorf("no matching resources found for selector")
 }
 
-
-
-
-func (r *QueryReconciler) createSuccessResponse(target arkv1alpha1.QueryTarget, messages []genai.Message) arkv1alpha1.Response {
-	rawJSON, err := serializeMessages(messages)
-	if err != nil {
-		serializationErr := fmt.Errorf("failed to serialize messages for target %v: %w", target, err)
-		return r.createErrorResponse(target, serializationErr)
-	}
-
-	content := lastResponseContent(messages)
-
-	return arkv1alpha1.Response{
-		Target:  target,
-		Content: content,
-		Raw:     rawJSON,
-		Phase:   statusDone,
-	}
-}
-
-func lastResponseContent(messages []genai.Message) string {
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].OfSystem != nil {
-			continue
-		}
-		text := messageToText(messages[i])
-		if text != "" {
-			return text
-		}
-	}
-	if len(messages) > 0 {
-		return messageToText(messages[len(messages)-1])
-	}
-	return ""
-}
-
-// messageToText extracts text content from a single OpenAI message format structure.
-// This function assumes the message follows OpenAI's ChatCompletionMessageParamUnion format.
-func messageToText(message genai.Message) string {
-	switch {
-	case message.OfAssistant != nil:
-		return message.OfAssistant.Content.OfString.Value
-	case message.OfTool != nil:
-		return message.OfTool.Content.OfString.Value
-	case message.OfUser != nil:
-		return message.OfUser.Content.OfString.Value
-	default:
-		logf.Log.Error(fmt.Errorf("LLMResponseMalformed"),
-			"Unable to parse message content to text",
-			"messageContent", "unknown message structure",
-			"message", message)
-		return ""
-	}
-}
-
 // serializeMessages converts OpenAI union message types to their actual content for JSON serialization
 func serializeMessages(messages []genai.Message) (string, error) {
 	var actualMessages []interface{}
@@ -631,23 +571,6 @@ func (r *QueryReconciler) determineQueryStatus(response *arkv1alpha1.Response) s
 	return statusDone
 }
 
-// createErrorResponse creates a standardized error response for a failed target
-func (r *QueryReconciler) createErrorResponse(target arkv1alpha1.QueryTarget, err error) arkv1alpha1.Response {
-	// Create error structure for Raw field - similar to successful message format
-	errorMessage := map[string]interface{}{
-		"error":   "target_execution_error",
-		"message": err.Error(),
-	}
-	errorRaw, _ := json.Marshal([]map[string]interface{}{errorMessage})
-
-	return arkv1alpha1.Response{
-		Target:  target,
-		Content: err.Error(),
-		Raw:     string(errorRaw),
-		Phase:   statusError,
-	}
-}
-
 func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query) {
 	log := logf.FromContext(ctx)
 	log.Info("finalizing query", "name", query.Name, "namespace", query.Namespace)
@@ -661,7 +584,6 @@ func (r *QueryReconciler) finalize(ctx context.Context, query *arkv1alpha1.Query
 		log.Info("cancelled running operation for query", "name", query.Name, "namespace", query.Namespace)
 	}
 }
-
 
 func (r *QueryReconciler) getClientForQuery(query arkv1alpha1.Query) (client.Client, error) {
 	// If no service account specified, use controller's own identity.
@@ -706,7 +628,6 @@ func (r *QueryReconciler) cleanupExistingOperation(namespacedName types.Namespac
 		logf.Log.Info("No existing operation found to cleanup", "query", namespacedName.String())
 	}
 }
-
 
 func (r *QueryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).

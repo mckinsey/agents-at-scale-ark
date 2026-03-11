@@ -65,19 +65,21 @@ func main() {
 
 	ctx := context.Background()
 	telemetryProvider := telemetryconfig.NewProvider(ctx, k8sClient)
-	defer func() {
-		if err := telemetryProvider.Shutdown(); err != nil {
-			log.Error(err, "failed to shutdown telemetry provider")
-		}
-	}()
-
 	eventingProvider := eventingconfig.NewProviderWithClient(ctx, k8sClient)
 
 	srv, err := queryengine.NewServer(k8sClient, telemetryProvider, eventingProvider, addr)
 	if err != nil {
 		log.Error(err, "failed to create query engine server")
+		if shutdownErr := telemetryProvider.Shutdown(); shutdownErr != nil {
+			log.Error(shutdownErr, "failed to shutdown telemetry provider")
+		}
 		os.Exit(1)
 	}
+	defer func() {
+		if err := telemetryProvider.Shutdown(); err != nil {
+			log.Error(err, "failed to shutdown telemetry provider")
+		}
+	}()
 
 	ctx, cancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -92,7 +94,7 @@ func main() {
 	case err := <-errCh:
 		if err != nil {
 			log.Error(err, "server error")
-			os.Exit(1)
+			cancel()
 		}
 	case <-ctx.Done():
 		log.Info("shutting down")
