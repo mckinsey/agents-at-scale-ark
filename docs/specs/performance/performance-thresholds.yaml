@@ -1,0 +1,30 @@
+# Ark API server performance thresholds.
+#
+# Each scenario creates Query resources via the Kubernetes API and asserts
+# that the operation completes within the specified error and latency bounds.
+#
+# storage_backend values match the ark helm chart (storage.backend):
+# "etcd" or "postgresql"
+
+storage_backends:
+  - name: etcd-baseline-query-creation
+    storage_backend: etcd
+    objects: 100
+    concurrency: 10
+    assertions:
+      create_errors: 0
+      create_p99_ms: 500
+
+  - name: postgresql-baseline-query-creation
+    storage_backend: postgresql
+    objects: 100
+    concurrency: 10
+    assertions:
+      create_errors: 0
+      create_p99_ms: 500
+
+# Linear query scaling (work in progress)
+#
+# Future: assert that create throughput remains constant as object count
+# increases from 100 to 1000+ on the PostgreSQL backend.
+# Target scaling ratio: >= 0.8 (throughput_at_N / throughput_at_100)

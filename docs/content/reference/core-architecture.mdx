@@ -241,10 +241,11 @@ Benchmarks at 10,000 Ark resources:
 Migrating from etcd to PostgreSQL configuration:
 
 1. Deploy PostgreSQL database
-2. Deploy ark-apiserver with aggregated API configuration
-3. Register APIService for `ark.mckinsey.com` group
-4. Migrate existing resources using `kubectl get -o yaml | kubectl apply -f -`
-5. Verify watch events and controller reconciliation
+2. Delete etcd-mode CRDs (`*.ark.mckinsey.com`) — the aggregated API server replaces them
+3. For helm-managed installations, re-label APIServices with `app.kubernetes.io/managed-by=Helm` and annotate with the helm release name so the upgrade can adopt them
+4. Upgrade the controller with `storage.backend=postgresql` and the PostgreSQL connection settings
+5. Migrate existing resources using `kubectl get -o yaml | kubectl apply -f -`
+6. Verify watch events and controller reconciliation
 
 Resources are fully compatible between configurations - the storage backend is transparent to clients using `kubectl` or the Kubernetes API.
 
