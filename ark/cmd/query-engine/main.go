@@ -20,7 +20,7 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
-	"mckinsey.com/ark/internal/queryengine"
+	completions "mckinsey.com/ark/executors/completions"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 )
 
@@ -67,7 +67,7 @@ func main() {
 	telemetryProvider := telemetryconfig.NewProvider(ctx, k8sClient)
 	eventingProvider := eventingconfig.NewProviderWithClient(ctx, k8sClient)
 
-	srv, err := queryengine.NewServer(k8sClient, telemetryProvider, eventingProvider, addr)
+	srv, err := completions.NewServer(k8sClient, telemetryProvider, eventingProvider, addr)
 	if err != nil {
 		log.Error(err, "failed to create query engine server")
 		if shutdownErr := telemetryProvider.Shutdown(); shutdownErr != nil {

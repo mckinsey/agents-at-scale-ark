@@ -12,7 +12,7 @@ import (
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/openai/openai-go"
 
-	"mckinsey.com/ark/internal/genai"
+	completions "mckinsey.com/ark/executors/completions"
 )
 
 type ProbeResult struct {
@@ -21,8 +21,8 @@ type ProbeResult struct {
 	DetailedError error
 }
 
-func ProbeModel(ctx context.Context, model *genai.Model, timeout time.Duration) ProbeResult {
-	probeCtx := genai.ContextWithProbeMode(context.Background())
+func ProbeModel(ctx context.Context, model *completions.Model, timeout time.Duration) ProbeResult {
+	probeCtx := completions.ContextWithProbeMode(context.Background())
 	probeCtx, cancel := context.WithTimeout(probeCtx, timeout)
 	defer cancel()
 

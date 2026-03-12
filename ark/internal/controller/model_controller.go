@@ -19,7 +19,7 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/eventing"
 	eventnoop "mckinsey.com/ark/internal/eventing/noop"
-	"mckinsey.com/ark/internal/genai"
+	completions "mckinsey.com/ark/executors/completions"
 	"mckinsey.com/ark/internal/telemetry"
 	telenoop "mckinsey.com/ark/internal/telemetry/noop"
 )
@@ -101,7 +101,7 @@ func addJitter(d time.Duration) time.Duration {
 func (r *ModelReconciler) probeModel(ctx context.Context, model arkv1alpha1.Model) ProbeResult {
 	noopTelemetryRecorder := telenoop.NewModelRecorder()
 	noopEventingRecorder := eventnoop.NewModelRecorder()
-	resolvedModel, err := genai.LoadModel(ctx, r.Client, &arkv1alpha1.AgentModelRef{
+	resolvedModel, err := completions.LoadModel(ctx, r.Client, &arkv1alpha1.AgentModelRef{
 		Name:      model.Name,
 		Namespace: model.Namespace,
 	}, model.Namespace, nil, noopTelemetryRecorder, noopEventingRecorder)

@@ -25,7 +25,7 @@ import (
 	arka2a "mckinsey.com/ark/internal/a2a"
 	"mckinsey.com/ark/internal/annotations"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
-	"mckinsey.com/ark/internal/genai"
+	completions "mckinsey.com/ark/executors/completions"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 )
 
@@ -315,7 +315,7 @@ func (r *QueryReconciler) executeViaEngine(ctx context.Context, query arkv1alpha
 
 	rawJSON := engineMeta.MessagesRaw
 	if rawJSON == "" {
-		responseMessages := []genai.Message{genai.NewAssistantMessage(responseText)}
+		responseMessages := []completions.Message{completions.NewAssistantMessage(responseText)}
 		rawJSON, _ = serializeMessages(responseMessages)
 	}
 
@@ -345,24 +345,24 @@ func (r *QueryReconciler) shouldExecuteDirectly(ctx context.Context, target arkv
 
 func (r *QueryReconciler) executeDirectly(ctx context.Context, query arkv1alpha1.Query, target arkv1alpha1.QueryTarget, impersonatedClient client.Client) (*arkv1alpha1.Response, error) {
 	log := logf.FromContext(ctx)
-	ctx = context.WithValue(ctx, genai.QueryContextKey, &query)
+	ctx = context.WithValue(ctx, completions.QueryContextKey, &query)
 
 	queryID := string(query.UID)
 	sessionID := query.Spec.SessionId
 	if sessionID == "" {
 		sessionID = queryID
 	}
-	ctx = genai.WithQueryContext(ctx, queryID, sessionID, query.Name)
+	ctx = completions.WithQueryContext(ctx, queryID, sessionID, query.Name)
 
 	if a2aContextID, ok := query.Annotations[annotations.A2AContextID]; ok && a2aContextID != "" {
-		ctx = genai.WithA2AContextID(ctx, a2aContextID)
+		ctx = completions.WithA2AContextID(ctx, a2aContextID)
 	}
 
-	ctx = genai.WithExecutionMetadata(ctx, map[string]interface{}{
+	ctx = completions.WithExecutionMetadata(ctx, map[string]interface{}{
 		"target": fmt.Sprintf("%s/%s", target.Type, target.Name),
 	})
 
-	eventStream, err := genai.NewEventStreamForQuery(ctx, impersonatedClient, query.Namespace, sessionID, query.Name)
+	eventStream, err := completions.NewEventStreamForQuery(ctx, impersonatedClient, query.Namespace, sessionID, query.Name)
 	if err != nil {
 		log.Error(err, "failed to create event stream, continuing without streaming")
 	}
@@ -375,12 +375,12 @@ func (r *QueryReconciler) executeDirectly(ctx context.Context, query arkv1alpha1
 		return r.createErrorResponse(target, fmt.Errorf("failed to get agent %s: %w", target.Name, err)), nil
 	}
 
-	agent, err := genai.MakeAgent(ctx, impersonatedClient, &agentCRD, r.Telemetry, r.Eventing)
+	agent, err := completions.MakeAgent(ctx, impersonatedClient, &agentCRD, r.Telemetry, r.Eventing)
 	if err != nil {
 		return r.createErrorResponse(target, fmt.Errorf("failed to make agent %s: %w", target.Name, err)), nil
 	}
 
-	inputMessages, err := genai.GetQueryInputMessages(ctx, query, impersonatedClient)
+	inputMessages, err := completions.GetQueryInputMessages(ctx, query, impersonatedClient)
 	if err != nil {
 		return r.createErrorResponse(target, fmt.Errorf("failed to get input messages: %w", err)), nil
 	}
@@ -392,7 +392,7 @@ func (r *QueryReconciler) executeDirectly(ctx context.Context, query arkv1alpha1
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	currentMessage, contextMessages := genai.PrepareExecutionMessages(inputMessages, nil)
+	currentMessage, contextMessages := completions.PrepareExecutionMessages(inputMessages, nil)
 	result, err := agent.Execute(execCtx, currentMessage, contextMessages, nil, eventStream)
 	if err != nil {
 		r.finalizeDirectStream(ctx, eventStream, nil, query)
@@ -416,7 +416,7 @@ func (r *QueryReconciler) executeDirectly(ctx context.Context, query arkv1alpha1
 	return response, nil
 }
 
-func (r *QueryReconciler) finalizeDirectStream(ctx context.Context, eventStream genai.EventStreamInterface, response *arkv1alpha1.Response, query arkv1alpha1.Query) {
+func (r *QueryReconciler) finalizeDirectStream(ctx context.Context, eventStream completions.EventStreamInterface, response *arkv1alpha1.Response, query arkv1alpha1.Query) {
 	if eventStream == nil {
 		return
 	}
@@ -426,8 +426,8 @@ func (r *QueryReconciler) finalizeDirectStream(ctx context.Context, eventStream 
 		completedQuery := query.DeepCopy()
 		completedQuery.Status.Phase = statusDone
 		completedQuery.Status.Response = response
-		finalChunk := genai.NewContentChunk("chatcmpl-final", query.Name, "")
-		wrappedChunk := genai.WrapChunkWithMetadata(ctx, finalChunk, "", completedQuery)
+		finalChunk := completions.NewContentChunk("chatcmpl-final", query.Name, "")
+		wrappedChunk := completions.WrapChunkWithMetadata(ctx, finalChunk, "", completedQuery)
 		if err := eventStream.StreamChunk(ctx, wrappedChunk); err != nil {
 			log.Error(err, "failed to send final chunk")
 		}
@@ -440,7 +440,7 @@ func (r *QueryReconciler) finalizeDirectStream(ctx context.Context, eventStream 
 	}
 }
 
-func (r *QueryReconciler) createSuccessResponse(target arkv1alpha1.QueryTarget, messages []genai.Message) *arkv1alpha1.Response {
+func (r *QueryReconciler) createSuccessResponse(target arkv1alpha1.QueryTarget, messages []completions.Message) *arkv1alpha1.Response {
 	rawJSON, err := serializeMessages(messages)
 	if err != nil {
 		return r.createErrorResponse(target, fmt.Errorf("failed to serialize messages: %w", err))
@@ -487,11 +487,11 @@ func (r *QueryReconciler) buildAgentConfigForEngine(query arkv1alpha1.Query, tar
 }
 
 func (r *QueryReconciler) extractUserInput(ctx context.Context, query arkv1alpha1.Query) string {
-	inputMessages, err := genai.GetQueryInputMessages(ctx, query, r.Client)
+	inputMessages, err := completions.GetQueryInputMessages(ctx, query, r.Client)
 	if err != nil {
 		return ""
 	}
-	return genai.ExtractUserMessageContent(inputMessages)
+	return completions.ExtractUserMessageContent(inputMessages)
 }
 
 func extractA2AResponseText(result *protocol.MessageResult) (string, error) {
@@ -664,7 +664,7 @@ func (r *QueryReconciler) resolveSelector(ctx context.Context, selector *metav1.
 }
 
 // serializeMessages converts OpenAI union message types to their actual content for JSON serialization
-func serializeMessages(messages []genai.Message) (string, error) {
+func serializeMessages(messages []completions.Message) (string, error) {
 	var actualMessages []interface{}
 	for _, msg := range messages {
 		switch {
