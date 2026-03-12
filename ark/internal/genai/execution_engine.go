@@ -161,7 +161,7 @@ func extractResponseText(result *protocol.MessageResult) (string, error) {
 
 	switch r := result.Result.(type) {
 	case *protocol.Message:
-		return extractTextFromParts(r.Parts), nil
+		return ExtractTextFromParts(r.Parts), nil
 	case *protocol.Task:
 		text, err := extractTextFromTask(r)
 		if err != nil {

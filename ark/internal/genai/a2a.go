@@ -204,7 +204,7 @@ func extractResponseFromMessageResult(ctx context.Context, k8sClient client.Clie
 
 	switch r := result.Result.(type) {
 	case *protocol.Message:
-		text := extractTextFromParts(r.Parts)
+		text := ExtractTextFromParts(r.Parts)
 		response := &A2AResponse{
 			Content: text,
 		}
@@ -249,7 +249,7 @@ func extractTextFromTask(task *protocol.Task) (string, error) {
 		var text strings.Builder
 		for _, msg := range task.History {
 			if msg.Role == protocol.MessageRoleAgent && len(msg.Parts) > 0 {
-				msgText := extractTextFromParts(msg.Parts)
+				msgText := ExtractTextFromParts(msg.Parts)
 				if msgText != "" {
 					if text.Len() > 0 {
 						text.WriteString("\n")
@@ -265,7 +265,7 @@ func extractTextFromTask(task *protocol.Task) (string, error) {
 		// Extract error message from status.message
 		errorMsg := "task failed"
 		if task.Status.Message != nil && len(task.Status.Message.Parts) > 0 {
-			errorMsg = extractTextFromParts(task.Status.Message.Parts)
+			errorMsg = ExtractTextFromParts(task.Status.Message.Parts)
 		}
 		return "", fmt.Errorf("%s", errorMsg)
 
@@ -274,8 +274,8 @@ func extractTextFromTask(task *protocol.Task) (string, error) {
 	}
 }
 
-// extractTextFromParts extracts text from message parts in a type-safe way
-func extractTextFromParts(parts []protocol.Part) string {
+// ExtractTextFromParts extracts text from message parts in a type-safe way
+func ExtractTextFromParts(parts []protocol.Part) string {
 	var text strings.Builder
 	for _, part := range parts {
 		if textPart, ok := part.(protocol.TextPart); ok {

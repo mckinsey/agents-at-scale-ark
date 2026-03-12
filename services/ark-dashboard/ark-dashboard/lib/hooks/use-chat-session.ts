@@ -133,7 +133,8 @@ export function useChatSession({
   const handleStreamChatResponse = useCallback(
     async (userMessage: string) => {
       const messageArray = buildChatMessages(chatMessages, userMessage);
-      let currentMessageIndex = chatMessages.length + 1;
+      const turnStartIndex = chatMessages.length + 1;
+      let currentMessageIndex = turnStartIndex;
 
       updateChatMessages(prev => [
         ...prev,
@@ -347,8 +348,8 @@ export function useChatSession({
 
       if (completedQueryMessages.length > 0) {
         updateChatMessages(prev => {
-          // Keep only user messages, replace everything else with completedQueryMessages
-          const userMessages = prev.filter(m => m.role === 'user');
+          // Preserve previous turns, replace only current turn with complete message chain
+          const beforeThisTurn = prev.slice(0, turnStartIndex);
           const converted: ExtendedChatMessage[] = [];
 
           completedQueryMessages.forEach(msg => {
@@ -390,7 +391,7 @@ export function useChatSession({
             }
           });
 
-          const updated = [...userMessages, ...converted];
+          const updated = [...beforeThisTurn, ...converted];
           return updated;
         });
       }
