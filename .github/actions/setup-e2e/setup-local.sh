@@ -90,19 +90,18 @@ fi
 echo "=== Installing ARK Controller ==="
 cd "${REPO_ROOT}/ark"
 
-# Deploy controller with impersonation enabled for E2E tests
-helm upgrade --install ark-controller ./dist/chart \
-  --namespace ark-system \
-  --create-namespace \
-  --wait --timeout=300s \
-  --set controllerManager.container.image.repository="${REGISTRY}/ark-controller" \
-  --set controllerManager.container.image.tag="${ARK_IMAGE_TAG}" \
-  --set controllerManager.container.image.pullPolicy=IfNotPresent \
-  --set queryEngine.enabled=true \
-  --set queryEngine.container.image.repository="${REGISTRY}/ark-query-engine" \
-  --set queryEngine.container.image.tag="${ARK_IMAGE_TAG}" \
-  --set queryEngine.container.image.pullPolicy=IfNotPresent \
-  --set rbac.enable=true \
+HELM_ARGS=(
+  --namespace ark-system
+  --create-namespace
+  --wait --timeout=300s
+  --set controllerManager.container.image.repository="${REGISTRY}/ark-controller"
+  --set controllerManager.container.image.tag="${ARK_IMAGE_TAG}"
+  --set controllerManager.container.image.pullPolicy=IfNotPresent
+  --set queryEngine.enabled=true
+  --set queryEngine.container.image.repository="${REGISTRY}/ark-query-engine"
+  --set queryEngine.container.image.tag="${ARK_IMAGE_TAG}"
+  --set queryEngine.container.image.pullPolicy=IfNotPresent
+  --set rbac.enable=true
   --set rbac.impersonation.enabled=true
 )
 
