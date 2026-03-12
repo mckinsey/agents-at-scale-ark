@@ -15,7 +15,8 @@ spec:
       labels:
         app: ark-completions
     spec:
-      serviceAccountName: {{ .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }} # NOSONAR - RBAC defined in ark-controller chart
+      automountServiceAccountToken: true
       securityContext:
         runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
       containers:
