@@ -19,8 +19,8 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
-	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	completions "mckinsey.com/ark/executors/completions"
+	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 )
 

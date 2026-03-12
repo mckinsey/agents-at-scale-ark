@@ -22,10 +22,10 @@ import (
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	completions "mckinsey.com/ark/executors/completions"
 	arka2a "mckinsey.com/ark/internal/a2a"
 	"mckinsey.com/ark/internal/annotations"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
-	completions "mckinsey.com/ark/executors/completions"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 )
 

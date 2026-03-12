@@ -17,9 +17,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	completions "mckinsey.com/ark/executors/completions"
 	"mckinsey.com/ark/internal/eventing"
 	eventnoop "mckinsey.com/ark/internal/eventing/noop"
-	completions "mckinsey.com/ark/executors/completions"
 	"mckinsey.com/ark/internal/telemetry"
 	telenoop "mckinsey.com/ark/internal/telemetry/noop"
 )

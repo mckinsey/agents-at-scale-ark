@@ -24,8 +24,8 @@ import (
 	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/labels"
-	"mckinsey.com/ark/internal/resolution"
 	arkmcp "mckinsey.com/ark/internal/mcp"
+	"mckinsey.com/ark/internal/resolution"
 )
 
 const (

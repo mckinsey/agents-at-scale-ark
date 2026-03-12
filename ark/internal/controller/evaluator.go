@@ -16,13 +16,13 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	"mckinsey.com/ark/internal/common"
 	completions "mckinsey.com/ark/executors/completions"
+	"mckinsey.com/ark/internal/common"
 )
 
 type EvaluationRequest struct {
 	QueryID   string                 `json:"queryId"`
-	Input     []completions.Message        `json:"input"`
+	Input     []completions.Message  `json:"input"`
 	Responses []arkv1alpha1.Response `json:"responses"`
 	Query     arkv1alpha1.Query      `json:"query"`
 }
