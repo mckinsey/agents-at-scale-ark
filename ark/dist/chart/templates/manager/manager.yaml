@@ -48,6 +48,22 @@ spec:
           - name: SSL_CERT_FILE
             value: "/etc/ssl/certs/custom-ca/{{ .Values.customCACert.key }}"
           {{- end }}
+          {{- if .Values.modelUrlSecurity.domainWhitelist.enabled }}
+          - name: WHITELISTED_MODEL_DOMAINS
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Values.modelUrlSecurity.configMapName | default "model-url-security" }}
+                key: {{ .Values.modelUrlSecurity.domainWhitelist.key | default "whitelisted-domains" }}
+                optional: true
+          {{- end }}
+          {{- if .Values.modelUrlSecurity.privateIPAllowlist.enabled }}
+          - name: ALLOWED_PRIVATE_IP_RANGES
+            valueFrom:
+              configMapKeyRef:
+                name: {{ .Values.modelUrlSecurity.configMapName | default "model-url-security" }}
+                key: {{ .Values.modelUrlSecurity.privateIPAllowlist.key | default "allowed-private-ips" }}
+                optional: true
+          {{- end }}
           {{- if and .Values.storage (ne .Values.storage.backend "etcd") }}
           - name: ARK_STORAGE_BACKEND
             value: {{ .Values.storage.backend | quote }}

@@ -134,6 +134,18 @@ customCACert:
   secretName: "custom-ca-cert"
   key: "ca.crt"
 
+# [MODEL-URL-SECURITY]: Model URL security configuration
+# Opt-in domain whitelist: When enabled, restricts to specific domains
+# Opt-in private IP allowlist: When enabled, allows specific internal IP ranges
+modelUrlSecurity:
+  configMapName: "model-url-security"
+  domainWhitelist:
+    enabled: false
+    key: "whitelisted-domains"
+  privateIPAllowlist:
+    enabled: false
+    key: "allowed-private-ips"
+
 # [TELEMETRY]: Telemetry and tracing configuration
 telemetry:
   tenantRouting:
