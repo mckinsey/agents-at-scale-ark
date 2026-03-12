@@ -18,18 +18,18 @@
 
 - [x] 3.1 Add `ark-completions` service entry to `tools/ark-cli/src/arkServices.ts` as `core` category with chart path, namespace, deployment name
 - [x] 3.2 Ensure install ordering — ark-completions installs after ark-controller (dependency on SA)
-- [ ] 3.3 Verify `ark install` and `ark status` work with the new service
+- [x] 3.3 Verify `ark install` and `ark status` work with the new service
 
 ## 4. DevSpace Alignment
 
 - [x] 4.1 Update `ark/devspace.yaml` to use chart path (`ark/executors/completions/chart`) instead of dev chart
-- [ ] 4.2 Verify `devspace dev` deploys completions as standalone with correct image overrides
+- [x] 4.2 Verify `devspace dev` deploys completions as standalone with correct image overrides
 
 ## 5. CI/CD Updates
 
 - [x] 5.1 Add `ark-completions` chart to build-charts matrix in `.github/workflows/cicd.yaml`
 - [x] 5.2 Verify e2e setup scripts use standalone deployment
-- [ ] 5.3 Verify chart lint/package passes for the new chart
+- [x] 5.3 Verify chart lint/package passes for the new chart
 
 ## 6. Documentation Updates
 
@@ -46,8 +46,8 @@
 - [x] `ark/executors/completions/chart/` exists as a production Helm chart
 - [x] Controller chart has no sidecar — completions is a separate Deployment
 - [x] `ark install` installs completions as a core service
-- [ ] `ark status` shows completions engine health
+- [x] `ark status` shows completions engine health
 - [x] Dev and prod use the same topology (standalone pod + K8s service)
 - [x] All docs reference "completions engine" not "query engine"
 - [x] CI/CD builds and publishes the chart
-- [ ] All e2e tests pass
+- [x] All e2e tests pass
