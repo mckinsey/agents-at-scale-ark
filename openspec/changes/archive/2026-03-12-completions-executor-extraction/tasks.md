@@ -138,8 +138,8 @@
 - [x] Shared infra lives in focused packages: `internal/a2a/`, `internal/mcp/`, `internal/resolution/`
 - [x] Controller-specific code absorbed by owning controllers
 - [x] `cmd/completions/` binary builds and runs
-- [ ] `ark-completions` image builds in CI
+- [x] `ark-completions` image builds in CI
 - [x] Deploys in `ark-system` namespace as part of default Ark install
-- [ ] All existing e2e tests pass unchanged
+- [x] All existing e2e tests pass unchanged
 - [x] Dependency graph has no cycles
 - [x] Root Makefile builds via `make build-completions`
