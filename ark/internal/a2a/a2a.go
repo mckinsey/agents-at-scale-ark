@@ -19,14 +19,11 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark/internal/eventing"
+	"mckinsey.com/ark/internal/resolution"
 	"mckinsey.com/ark/internal/telemetry"
 )
 
 const ArkMetadataKey = "ark.mckinsey.com/execution-engine"
-
-type HeaderResolverFunc func(ctx context.Context, k8sClient client.Client, header arkv1prealpha1.Header, namespace string) (string, error)
-
-var ResolveHeaderValueV1PreAlpha1 HeaderResolverFunc
 
 const (
 	AgentCardPathVersion2 = "/.well-known/agent.json"
@@ -340,12 +337,9 @@ func executeA2ARequest(ctx context.Context, req *http.Request, a2aRecorder event
 }
 
 func resolveA2AHeaders(ctx context.Context, k8sClient client.Client, headers []arkv1prealpha1.Header, namespace string) (map[string]string, error) {
-	if ResolveHeaderValueV1PreAlpha1 == nil {
-		return nil, fmt.Errorf("header resolver not configured")
-	}
 	resolvedHeaders := make(map[string]string)
 	for _, header := range headers {
-		headerValue, err := ResolveHeaderValueV1PreAlpha1(ctx, k8sClient, header, namespace)
+		headerValue, err := resolution.ResolveHeaderValueV1PreAlpha1(ctx, k8sClient, header, namespace)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve header %s: %v", header.Name, err)
 		}

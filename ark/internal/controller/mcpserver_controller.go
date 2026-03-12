@@ -23,8 +23,8 @@ import (
 	"mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/eventing"
-	"mckinsey.com/ark/internal/genai"
 	"mckinsey.com/ark/internal/labels"
+	"mckinsey.com/ark/internal/resolution"
 	arkmcp "mckinsey.com/ark/internal/mcp"
 )
 
@@ -284,7 +284,7 @@ func (r *MCPServerReconciler) createMCPClient(ctx context.Context, mcpServer *ar
 }
 
 func (r *MCPServerReconciler) resolveHeaders(ctx context.Context, mcpServer *arkv1alpha1.MCPServer) (map[string]string, error) {
-	headers, err := genai.ResolveHeaders(ctx, r.Client, mcpServer.Spec.Headers, mcpServer.Namespace)
+	headers, err := resolution.ResolveHeaders(ctx, r.Client, mcpServer.Spec.Headers, mcpServer.Namespace)
 	if err != nil {
 		return nil, err
 	}
