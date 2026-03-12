@@ -1,6 +1,6 @@
 /* Copyright 2025. McKinsey & Company */
 
-package genai
+package controller
 
 import (
 	"context"
@@ -14,20 +14,16 @@ import (
 
 const noContextValue = "none"
 
-// ContextHelper handles contextual background information extraction for evaluations
 type ContextHelper struct {
 	client client.Client
 }
 
-// NewContextHelper creates a new context helper
 func NewContextHelper(k8sClient client.Client) *ContextHelper {
 	return &ContextHelper{
 		client: k8sClient,
 	}
 }
 
-// ExtractContextualBackground extracts only true contextual background information for evaluation
-// This focuses on information that helps understand the user's input/query, not system configuration
 func (h *ContextHelper) ExtractContextualBackground(ctx context.Context, evaluation *arkv1alpha1.Evaluation) (string, string) {
 	log := logf.FromContext(ctx)
 
@@ -37,7 +33,6 @@ func (h *ContextHelper) ExtractContextualBackground(ctx context.Context, evaluat
 			return h.extractQueryContextualBackground(ctx, evaluation.Spec.Config.QueryRef, evaluation.Namespace)
 		}
 	case "direct":
-		// Direct evaluations should have context provided via parameters
 		log.Info("Direct evaluation - context should be provided via parameters")
 	default:
 		log.Info("Unknown evaluation type for context extraction", "type", evaluation.Spec.Type)
@@ -46,7 +41,6 @@ func (h *ContextHelper) ExtractContextualBackground(ctx context.Context, evaluat
 	return "", noContextValue
 }
 
-// contextInfo holds context extraction state
 type contextInfo struct {
 	builder strings.Builder
 	source  string
@@ -82,7 +76,6 @@ func (ci *contextInfo) addParameters(params map[string]string) {
 	}
 }
 
-// fetchQuery retrieves a query from the cluster
 func (h *ContextHelper) fetchQuery(ctx context.Context, queryRef *arkv1alpha1.QueryRef, defaultNamespace string) (arkv1alpha1.Query, error) {
 	queryNamespace := queryRef.Namespace
 	if queryNamespace == "" {
@@ -99,20 +92,16 @@ func (h *ContextHelper) fetchQuery(ctx context.Context, queryRef *arkv1alpha1.Qu
 	return query, err
 }
 
-// buildContextInfo extracts all contextual information from a query
 func (h *ContextHelper) buildContextInfo(ctx context.Context, query *arkv1alpha1.Query) *contextInfo {
 	info := &contextInfo{source: noContextValue}
 
-	// Extract memory context
 	h.addMemoryContextIfAvailable(ctx, query, info)
 
-	// Extract parameter context
 	h.addParameterContextIfAvailable(query, info)
 
 	return info
 }
 
-// addMemoryContextIfAvailable extracts memory context into contextInfo
 func (h *ContextHelper) addMemoryContextIfAvailable(ctx context.Context, query *arkv1alpha1.Query, info *contextInfo) {
 	if query.Spec.Memory == nil || query.Spec.Memory.Name == "" {
 		return
@@ -124,7 +113,6 @@ func (h *ContextHelper) addMemoryContextIfAvailable(ctx context.Context, query *
 	}
 }
 
-// addParameterContextIfAvailable extracts parameter context into contextInfo
 func (h *ContextHelper) addParameterContextIfAvailable(query *arkv1alpha1.Query, info *contextInfo) {
 	if len(query.Spec.Parameters) == 0 {
 		return
@@ -136,18 +124,15 @@ func (h *ContextHelper) addParameterContextIfAvailable(query *arkv1alpha1.Query,
 	}
 }
 
-// extractQueryContextualBackground extracts only true contextual background information from a query
 func (h *ContextHelper) extractQueryContextualBackground(ctx context.Context, queryRef *arkv1alpha1.QueryRef, defaultNamespace string) (string, string) {
 	log := logf.FromContext(ctx)
 
-	// Fetch the query
 	query, err := h.fetchQuery(ctx, queryRef, defaultNamespace)
 	if err != nil {
 		log.Error(err, "Failed to fetch query for context extraction", "queryName", queryRef.Name)
 		return "", noContextValue
 	}
 
-	// Extract contextual information
 	contextInfo := h.buildContextInfo(ctx, &query)
 	if contextInfo.isEmpty() {
 		log.Info("No contextual background information found", "queryName", query.Name)
@@ -163,17 +148,14 @@ func (h *ContextHelper) extractQueryContextualBackground(ctx context.Context, qu
 	return extractedContext, contextInfo.source
 }
 
-// extractMemoryContext extracts conversation history (true background context)
 func (h *ContextHelper) extractMemoryContext(ctx context.Context, memoryRef *arkv1alpha1.MemoryRef, defaultNamespace string) (string, string) {
 	log := logf.FromContext(ctx)
 
-	// Determine namespace
 	memoryNamespace := memoryRef.Namespace
 	if memoryNamespace == "" {
 		memoryNamespace = defaultNamespace
 	}
 
-	// Fetch memory resource
 	var memory arkv1alpha1.Memory
 	memoryKey := client.ObjectKey{
 		Name:      memoryRef.Name,
@@ -185,9 +167,6 @@ func (h *ContextHelper) extractMemoryContext(ctx context.Context, memoryRef *ark
 		return "", noContextValue
 	}
 
-	// Memory CRD only tracks address, actual conversation content is in external service
-	// For now, we note that conversation history exists at this address
-	// TODO: In future, could fetch actual conversation content from memory service
 	if memory.Status.LastResolvedAddress != nil && *memory.Status.LastResolvedAddress != "" {
 		memoryContext := fmt.Sprintf("Previous conversation history available (stored at: %s)\n", *memory.Status.LastResolvedAddress)
 		log.Info("Memory context extracted", "memoryName", memoryRef.Name, "address", *memory.Status.LastResolvedAddress)
@@ -198,12 +177,9 @@ func (h *ContextHelper) extractMemoryContext(ctx context.Context, memoryRef *ark
 	return "", noContextValue
 }
 
-// filterContextualParameters filters parameters to only include actual contextual information
-// This excludes model configurations and includes only background information that helps understand the query
 func (h *ContextHelper) filterContextualParameters(params []arkv1alpha1.Parameter) map[string]string {
 	contextualParams := make(map[string]string)
 
-	// Define patterns for contextual parameters (background information)
 	contextualPrefixes := []string{
 		"context",
 		"background",
@@ -217,7 +193,6 @@ func (h *ContextHelper) filterContextualParameters(params []arkv1alpha1.Paramete
 		"material",
 	}
 
-	// Define patterns for non-contextual (configuration) parameters
 	configPrefixes := []string{
 		"model.",
 		"temperature",
@@ -247,7 +222,6 @@ func (h *ContextHelper) filterContextualParameters(params []arkv1alpha1.Paramete
 	for _, param := range params {
 		paramName := strings.ToLower(param.Name)
 
-		// Skip configuration parameters
 		isConfig := false
 		for _, prefix := range configPrefixes {
 			if strings.HasPrefix(paramName, prefix) {
@@ -259,7 +233,6 @@ func (h *ContextHelper) filterContextualParameters(params []arkv1alpha1.Paramete
 			continue
 		}
 
-		// Include contextual parameters
 		isContextual := false
 		for _, prefix := range contextualPrefixes {
 			if strings.HasPrefix(paramName, prefix) || strings.Contains(paramName, prefix) {

@@ -1,6 +1,6 @@
 /* Copyright 2025. McKinsey & Company */
 
-package genai
+package controller
 
 import (
 	"context"
@@ -82,10 +82,9 @@ func TestCallEvaluatorHTTPEndpoint_WithEndpointTrailingSlash(t *testing.T) {
 
 func TestCallEvaluatorHTTPEndpoint_MarshalError(t *testing.T) {
 	ctx := context.Background()
-	// channels cannot be marshaled to JSON
 	invalidRequest := make(chan int)
 
-	//nolint:bodyclose // Error case returns nil response
+	//nolint:bodyclose
 	_, err := callEvaluatorHTTPEndpoint(ctx, "http://localhost", "", invalidRequest, 5*time.Second)
 
 	require.Error(t, err)
@@ -96,7 +95,7 @@ func TestCallEvaluatorHTTPEndpoint_InvalidURL(t *testing.T) {
 	ctx := context.Background()
 	request := map[string]string{"field": "test"}
 
-	//nolint:bodyclose // Error case returns nil response
+	//nolint:bodyclose
 	_, err := callEvaluatorHTTPEndpoint(ctx, "://invalid-url", "", request, 5*time.Second)
 
 	require.Error(t, err)
@@ -107,8 +106,7 @@ func TestCallEvaluatorHTTPEndpoint_NetworkError(t *testing.T) {
 	ctx := context.Background()
 	request := map[string]string{"field": "test"}
 
-	// Use a URL that will fail to connect
-	//nolint:bodyclose // Error case returns nil response
+	//nolint:bodyclose
 	_, err := callEvaluatorHTTPEndpoint(ctx, "http://localhost:0", "", request, 1*time.Second)
 
 	require.Error(t, err)
@@ -116,18 +114,17 @@ func TestCallEvaluatorHTTPEndpoint_NetworkError(t *testing.T) {
 }
 
 func TestCallEvaluatorHTTPEndpoint_ContextCancellation(t *testing.T) {
-	// Server that never responds
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(10 * time.Second)
 	}))
 	defer server.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // Cancel immediately
+	cancel()
 
 	request := map[string]string{"field": "test"}
 
-	//nolint:bodyclose // Error case returns nil response
+	//nolint:bodyclose
 	_, err := callEvaluatorHTTPEndpoint(ctx, server.URL, "", request, 5*time.Second)
 
 	require.Error(t, err)
@@ -135,7 +132,6 @@ func TestCallEvaluatorHTTPEndpoint_ContextCancellation(t *testing.T) {
 }
 
 func TestCallEvaluatorHTTPEndpoint_Timeout(t *testing.T) {
-	// Server that responds slowly
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(1 * time.Second)
 		w.WriteHeader(http.StatusOK)
@@ -145,7 +141,7 @@ func TestCallEvaluatorHTTPEndpoint_Timeout(t *testing.T) {
 	ctx := context.Background()
 	request := map[string]string{"field": "test"}
 
-	//nolint:bodyclose // Error case returns nil response
+	//nolint:bodyclose
 	_, err := callEvaluatorHTTPEndpoint(ctx, server.URL, "", request, 100*time.Millisecond)
 
 	require.Error(t, err)
@@ -162,7 +158,7 @@ func TestCallEvaluatorHTTPEndpoint_Status400WithFastAPIError(t *testing.T) {
 	ctx := context.Background()
 	request := map[string]string{"field": "test"}
 
-	//nolint:bodyclose // Error case returns nil response
+	//nolint:bodyclose
 	_, err := callEvaluatorHTTPEndpoint(ctx, server.URL, "", request, 5*time.Second)
 
 	require.Error(t, err)
@@ -180,7 +176,7 @@ func TestCallEvaluatorHTTPEndpoint_Status500WithFastAPIError(t *testing.T) {
 	ctx := context.Background()
 	request := map[string]string{"field": "test"}
 
-	//nolint:bodyclose // Error case returns nil response
+	//nolint:bodyclose
 	_, err := callEvaluatorHTTPEndpoint(ctx, server.URL, "", request, 5*time.Second)
 
 	require.Error(t, err)
@@ -198,7 +194,7 @@ func TestCallEvaluatorHTTPEndpoint_Status404WithPlainTextError(t *testing.T) {
 	ctx := context.Background()
 	request := map[string]string{"field": "test"}
 
-	//nolint:bodyclose // Error case returns nil response
+	//nolint:bodyclose
 	_, err := callEvaluatorHTTPEndpoint(ctx, server.URL, "", request, 5*time.Second)
 
 	require.Error(t, err)
@@ -209,14 +205,13 @@ func TestCallEvaluatorHTTPEndpoint_Status404WithPlainTextError(t *testing.T) {
 func TestCallEvaluatorHTTPEndpoint_Status503WithEmptyBody(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		// Empty body
 	}))
 	defer server.Close()
 
 	ctx := context.Background()
 	request := map[string]string{"field": "test"}
 
-	//nolint:bodyclose // Error case returns nil response
+	//nolint:bodyclose
 	_, err := callEvaluatorHTTPEndpoint(ctx, server.URL, "", request, 5*time.Second)
 
 	require.Error(t, err)
@@ -233,12 +228,11 @@ func TestCallEvaluatorHTTPEndpoint_Status400WithMalformedJSON(t *testing.T) {
 	ctx := context.Background()
 	request := map[string]string{"field": "test"}
 
-	//nolint:bodyclose // Error case returns nil response
+	//nolint:bodyclose
 	_, err := callEvaluatorHTTPEndpoint(ctx, server.URL, "", request, 5*time.Second)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "evaluator returned status 400")
-	// Should fall back to raw body since JSON parsing fails
 	assert.Contains(t, err.Error(), "incomplete json")
 }
 
@@ -252,7 +246,7 @@ func TestCallEvaluatorHTTPEndpoint_Status500WithComplexErrorJSON(t *testing.T) {
 	ctx := context.Background()
 	request := map[string]string{"field": "test"}
 
-	//nolint:bodyclose // Error case returns nil response
+	//nolint:bodyclose
 	_, err := callEvaluatorHTTPEndpoint(ctx, server.URL, "", request, 5*time.Second)
 
 	require.Error(t, err)
@@ -270,7 +264,7 @@ func TestCallEvaluatorHTTPEndpoint_Status403(t *testing.T) {
 	ctx := context.Background()
 	request := map[string]string{"field": "test"}
 
-	//nolint:bodyclose // Error case returns nil response
+	//nolint:bodyclose
 	_, err := callEvaluatorHTTPEndpoint(ctx, server.URL, "", request, 5*time.Second)
 
 	require.Error(t, err)
@@ -279,26 +273,22 @@ func TestCallEvaluatorHTTPEndpoint_Status403(t *testing.T) {
 }
 
 func TestCallEvaluatorHTTPEndpoint_ErrorReadingResponseBody(t *testing.T) {
-	// Create a server that returns a non-200 status with a body that will fail to read
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", "1000")
 		w.WriteHeader(http.StatusInternalServerError)
-		// Don't write the full body - this will cause a read error
 	}))
 	defer server.Close()
 
 	ctx := context.Background()
 	request := map[string]string{"field": "test"}
 
-	//nolint:bodyclose // Error case returns nil response
+	//nolint:bodyclose
 	_, err := callEvaluatorHTTPEndpoint(ctx, server.URL, "", request, 5*time.Second)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "evaluator returned status 500")
-	// Should mention read error if body reading fails
 }
 
-// Test that the error message format is consistent
 func TestCallEvaluatorHTTPEndpoint_ErrorMessageFormat(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -341,7 +331,7 @@ func TestCallEvaluatorHTTPEndpoint_ErrorMessageFormat(t *testing.T) {
 			ctx := context.Background()
 			request := map[string]string{"field": "test"}
 
-			//nolint:bodyclose // Error case returns nil response
+			//nolint:bodyclose
 			_, err := callEvaluatorHTTPEndpoint(ctx, server.URL, "", request, 5*time.Second)
 
 			require.Error(t, err)
@@ -351,7 +341,6 @@ func TestCallEvaluatorHTTPEndpoint_ErrorMessageFormat(t *testing.T) {
 	}
 }
 
-// Test endpoint path construction
 func TestCallEvaluatorHTTPEndpoint_EndpointPaths(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -397,7 +386,6 @@ func TestCallEvaluatorHTTPEndpoint_EndpointPaths(t *testing.T) {
 			ctx := context.Background()
 			request := map[string]string{"field": "test"}
 
-			// Replace server URL in base URL
 			testURL := strings.Replace(tt.baseURL, "http://example.com", server.URL, 1)
 
 			resp, err := callEvaluatorHTTPEndpoint(ctx, testURL, tt.endpoint, request, 5*time.Second)

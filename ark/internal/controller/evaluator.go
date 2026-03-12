@@ -1,6 +1,6 @@
 /* Copyright 2025. McKinsey & Company */
 
-package genai
+package controller
 
 import (
 	"bytes"
@@ -17,16 +17,16 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/common"
+	"mckinsey.com/ark/internal/genai"
 )
 
 type EvaluationRequest struct {
 	QueryID   string                 `json:"queryId"`
-	Input     []Message              `json:"input"`
+	Input     []genai.Message        `json:"input"`
 	Responses []arkv1alpha1.Response `json:"responses"`
 	Query     arkv1alpha1.Query      `json:"query"`
 }
 
-// GoldenExample represents a single golden dataset example
 type GoldenExample struct {
 	Input          string            `json:"input"`
 	ExpectedOutput string            `json:"expectedOutput"`
@@ -41,9 +41,6 @@ type EvaluationResponse struct {
 	TokenUsage *arkv1alpha1.TokenUsage `json:"tokenUsage,omitempty"`
 }
 
-// Deprecated types - use UnifiedEvaluationRequest instead
-
-// UnifiedEvaluationRequest for the new unified evaluation endpoint
 type UnifiedEvaluationRequest struct {
 	Type          string                 `json:"type"`
 	Config        map[string]interface{} `json:"config"`
@@ -94,7 +91,6 @@ func callEvaluatorHTTPEndpoint(ctx context.Context, address, endpoint string, re
 
 	httpClient := &http.Client{Timeout: timeout}
 
-	// Build endpoint URL
 	evaluateURL := address
 	if endpoint != "" {
 		if evaluateURL[len(evaluateURL)-1] != '/' {
@@ -138,12 +134,10 @@ func callEvaluatorHTTPEndpoint(ctx context.Context, address, endpoint string, re
 	return resp, nil
 }
 
-// CallUnifiedEvaluator performs evaluation using the new unified endpoint
 func CallUnifiedEvaluator(ctx context.Context, k8sClient client.Client, evaluatorRef arkv1alpha1.EvaluationEvaluatorRef, request UnifiedEvaluationRequest, namespace string, timeout time.Duration) (*EvaluationResponse, error) {
 	log := logf.FromContext(ctx)
 	log.Info("CallUnifiedEvaluator started", "evaluatorRef", evaluatorRef.Name, "namespace", namespace, "parameters", request.Parameters, "timeout", timeout)
 
-	// Load evaluator
 	evaluator, err := loadEvaluatorByName(ctx, k8sClient, evaluatorRef.Name, evaluatorRef.Namespace, namespace)
 	if err != nil {
 		log.Error(err, "Failed to load evaluator", "evaluatorRef", evaluatorRef.Name)
@@ -152,7 +146,6 @@ func CallUnifiedEvaluator(ctx context.Context, k8sClient client.Client, evaluato
 
 	log.Info("Evaluator loaded successfully", "evaluatorName", evaluator.Name, "evaluatorNamespace", evaluator.Namespace)
 
-	// Resolve evaluator address
 	address, err := resolveEvaluatorAddress(ctx, k8sClient, evaluator)
 	if err != nil {
 		log.Error(err, "Failed to resolve evaluator address")
@@ -161,7 +154,6 @@ func CallUnifiedEvaluator(ctx context.Context, k8sClient client.Client, evaluato
 
 	log.Info("Calling unified evaluator HTTP endpoint", "address", address, "requestType", request.Type, "parameters", request.Parameters, "timeout", timeout)
 
-	// Call unified evaluator HTTP endpoint
 	response, err := callUnifiedEvaluatorHTTP(ctx, address, request, timeout)
 	if err != nil {
 		log.Error(err, "Unified evaluator HTTP call failed")
@@ -173,10 +165,8 @@ func CallUnifiedEvaluator(ctx context.Context, k8sClient client.Client, evaluato
 }
 
 func callUnifiedEvaluatorHTTP(ctx context.Context, address string, request UnifiedEvaluationRequest, configuredTimeout time.Duration) (*EvaluationResponse, error) {
-	// Use configured timeout, with type-specific adjustments if needed
 	timeout := configuredTimeout
 	if request.Type == "baseline" && configuredTimeout < 120*time.Second {
-		// For baseline evaluations, ensure at least 2 minutes due to multiple LLM calls
 		timeout = 120 * time.Second
 		logf.Log.Info("Adjusted timeout for baseline evaluation", "configured", configuredTimeout, "adjusted", timeout)
 	}
