@@ -34,9 +34,15 @@ spec:
             metadata:
               name: smoke-test-model
             spec:
-              type: none
+              provider: openai
               model:
                 value: smoke-test
+              config:
+                openai:
+                  baseUrl:
+                    value: http://localhost:9999/v1
+                  apiKey:
+                    value: smoke-test-key
             MANIFEST
             echo "OK Model created"
 
@@ -66,9 +72,15 @@ spec:
             metadata:
               name: smoke-test-watch
             spec:
-              type: none
+              provider: openai
               model:
                 value: watch-test
+              config:
+                openai:
+                  baseUrl:
+                    value: http://localhost:9999/v1
+                  apiKey:
+                    value: smoke-test-key
             MANIFEST
 
             sleep 3
