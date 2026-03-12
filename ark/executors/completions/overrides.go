@@ -20,16 +20,7 @@ const (
 )
 
 func ResolveHeaders(ctx context.Context, k8sClient client.Client, headers []arkv1alpha1.Header, namespace string) (map[string]string, error) {
-	resolvedHeaders := make(map[string]string)
-	for _, header := range headers {
-		value, err := ResolveHeaderValue(ctx, k8sClient, header, namespace)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve header %s: %w", header.Name, err)
-		}
-		resolvedHeaders[header.Name] = value
-	}
-
-	return resolvedHeaders, nil
+	return resolution.ResolveHeadersWith(ctx, k8sClient, headers, namespace, ResolveHeaderValue)
 }
 
 func ResolveHeaderValue(ctx context.Context, k8sClient client.Client, header arkv1alpha1.Header, namespace string) (string, error) {

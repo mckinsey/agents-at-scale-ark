@@ -12,10 +12,16 @@ import (
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 )
 
+type HeaderResolver func(ctx context.Context, k8sClient client.Client, header arkv1alpha1.Header, namespace string) (string, error)
+
 func ResolveHeaders(ctx context.Context, k8sClient client.Client, headers []arkv1alpha1.Header, namespace string) (map[string]string, error) {
+	return ResolveHeadersWith(ctx, k8sClient, headers, namespace, ResolveHeaderValue)
+}
+
+func ResolveHeadersWith(ctx context.Context, k8sClient client.Client, headers []arkv1alpha1.Header, namespace string, resolve HeaderResolver) (map[string]string, error) {
 	resolvedHeaders := make(map[string]string)
 	for _, header := range headers {
-		value, err := ResolveHeaderValue(ctx, k8sClient, header, namespace)
+		value, err := resolve(ctx, k8sClient, header, namespace)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve header %s: %w", header.Name, err)
 		}
