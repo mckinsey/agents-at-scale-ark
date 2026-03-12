@@ -19,12 +19,13 @@ communication between independent AI agent systems.
 > under the Apache-2.0 license. Each file includes source attribution in its
 > YAML frontmatter.
 
-> **Version note:** This skill bundles the **RC v1.0** spec. The official A2A
-> SDKs for [Go](https://github.com/a2aproject/a2a-go) and
-> [Python](https://github.com/a2aproject/a2a-python) may lag behind at v0.3.x.
-> When generating code, cross-check against the SDK version the project uses.
-> See [topic-whats-new-v1.md](./references/topic-whats-new-v1.md) for v1.0
-> changes.
+> **IMPORTANT — Use v0.3 by default.** The primary references are **v0.3.0**,
+> which is the version currently supported by the official
+> [Go](https://github.com/a2aproject/a2a-go) and
+> [Python](https://github.com/a2aproject/a2a-python) SDKs and most
+> implementations. The v1.0 RC spec is available in `references/v1.0-rc/` but
+> should only be consulted when explicitly working on v1.0 features or
+> migration planning.
 
 ## When to use this skill
 
@@ -65,32 +66,27 @@ information — without exposing internal state, memory, or tools.
 
 **Task lifecycle:** `submitted` → `working` → `input-required` → `completed` / `failed` / `canceled`
 
-**Agent discovery:** Clients find agents via `/.well-known/agent-card.json`
+**Agent discovery:** Clients find agents via `/.well-known/agent.json`
 
-## Specification reference
+## Specification reference (v0.3)
 
-The full A2A specification (RC v1.0) is split into sections in `references/`:
+The primary A2A specification (v0.3.0) is split into sections in `references/`:
 
 | File | Contents |
 |------|----------|
-| [spec-01-introduction.md](./references/spec-01-introduction.md) | Goals, principles, spec structure |
-| [spec-02-terminology.md](./references/spec-02-terminology.md) | Requirements language, core concepts |
-| [spec-03-operations.md](./references/spec-03-operations.md) | All protocol operations (Send, Stream, Get, List, Cancel, Subscribe, Push Notifications, Extended Agent Card) |
-| [spec-04-data-model.md](./references/spec-04-data-model.md) | Task, Message, Part, Artifact, streaming events, push notification objects |
-| [spec-05-binding-requirements.md](./references/spec-05-binding-requirements.md) | Protocol binding requirements and interoperability |
-| [spec-06-workflows.md](./references/spec-06-workflows.md) | Common workflows and examples |
-| [spec-07-authentication.md](./references/spec-07-authentication.md) | Authentication and authorization |
-| [spec-08-agent-card.md](./references/spec-08-agent-card.md) | Agent Card structure, discovery, extended cards |
-| [spec-09-jsonrpc-binding.md](./references/spec-09-jsonrpc-binding.md) | JSON-RPC 2.0 protocol binding |
-| [spec-10-grpc-binding.md](./references/spec-10-grpc-binding.md) | gRPC protocol binding |
-| [spec-11-http-rest-binding.md](./references/spec-11-http-rest-binding.md) | HTTP+JSON/REST protocol binding |
-| [spec-12-custom-binding.md](./references/spec-12-custom-binding.md) | Guidelines for custom bindings |
-| [spec-13-security.md](./references/spec-13-security.md) | Security considerations |
-| [spec-14-iana.md](./references/spec-14-iana.md) | Media type, header, and well-known URI registrations |
-| [spec-appendix-a-migration.md](./references/spec-appendix-a-migration.md) | Migration from earlier versions |
-| [spec-appendix-b-mcp.md](./references/spec-appendix-b-mcp.md) | Relationship to MCP |
+| [spec-01-introduction.md](./references/spec-01-introduction.md) | Goals, principles, design |
+| [spec-02-core-concepts.md](./references/spec-02-core-concepts.md) | Core concepts summary |
+| [spec-03-transport.md](./references/spec-03-transport.md) | Transport layer: JSON-RPC 2.0 over HTTP, SSE streaming |
+| [spec-04-authentication.md](./references/spec-04-authentication.md) | Authentication and authorization |
+| [spec-05-agent-card.md](./references/spec-05-agent-card.md) | Agent Card structure, discovery, extended cards |
+| [spec-06-data-objects.md](./references/spec-06-data-objects.md) | Task, Message, Part, Artifact, TaskStatus, streaming events |
+| [spec-07-rpc-methods.md](./references/spec-07-rpc-methods.md) | All JSON-RPC methods (send, stream, get, cancel, push, resubscribe) |
+| [spec-08-error-handling.md](./references/spec-08-error-handling.md) | Error codes and handling |
+| [spec-09-workflows.md](./references/spec-09-workflows.md) | Common workflows and examples |
+| [spec-10-appendices.md](./references/spec-10-appendices.md) | Appendices |
+| [spec-11-compliance.md](./references/spec-11-compliance.md) | A2A compliance requirements |
 
-## Topic guides
+## Topic guides (v0.3)
 
 Conceptual guides from the A2A documentation:
 
@@ -104,23 +100,21 @@ Conceptual guides from the A2A documentation:
 | [topic-extensions.md](./references/topic-extensions.md) | A2A extension mechanism |
 | [topic-enterprise-ready.md](./references/topic-enterprise-ready.md) | Enterprise features: auth, security, tracing |
 | [topic-a2a-and-mcp.md](./references/topic-a2a-and-mcp.md) | A2A vs MCP comparison |
-| [topic-definitions.md](./references/topic-definitions.md) | Glossary of terms |
-| [topic-whats-new-v1.md](./references/topic-whats-new-v1.md) | Changes in v1.0 |
 
-## Key JSON-RPC methods
+## Key JSON-RPC methods (v0.3)
 
 | Method | Description |
 |--------|-------------|
-| `message/send` | Send a message and get a response |
+| `message/send` | Send a message, get a response (or initiate a task) |
 | `message/stream` | Send a message and stream response via SSE |
 | `tasks/get` | Get current state of a task |
-| `tasks/list` | List tasks, optionally filtered by context |
 | `tasks/cancel` | Cancel a running task |
 | `tasks/resubscribe` | Re-subscribe to a task's SSE stream |
 | `tasks/pushNotificationConfig/set` | Configure push notification webhook |
 | `tasks/pushNotificationConfig/get` | Get push notification config |
 | `tasks/pushNotificationConfig/list` | List push notification configs |
 | `tasks/pushNotificationConfig/delete` | Delete push notification config |
+| `agent/getAuthenticatedExtendedCard` | Get extended Agent Card (authenticated) |
 
 ## Agent Card example
 
@@ -151,15 +145,26 @@ Conceptual guides from the A2A documentation:
 }
 ```
 
-Discovered at: `https://myagent.example.com/.well-known/agent-card.json`
+Discovered at: `https://myagent.example.com/.well-known/agent.json`
 
 ## Quick lookup guide
 
-- **"How do I discover agents?"** → [topic-agent-discovery.md](./references/topic-agent-discovery.md), [spec-08-agent-card.md](./references/spec-08-agent-card.md)
-- **"What are the task states?"** → [topic-life-of-a-task.md](./references/topic-life-of-a-task.md), [spec-04-data-model.md](./references/spec-04-data-model.md)
-- **"How does streaming work?"** → [topic-streaming-and-async.md](./references/topic-streaming-and-async.md), [spec-03-operations.md](./references/spec-03-operations.md)
-- **"What's the difference between A2A and MCP?"** → [topic-a2a-and-mcp.md](./references/topic-a2a-and-mcp.md), [spec-appendix-b-mcp.md](./references/spec-appendix-b-mcp.md)
+- **"How do I discover agents?"** → [topic-agent-discovery.md](./references/topic-agent-discovery.md), [spec-05-agent-card.md](./references/spec-05-agent-card.md)
+- **"What are the task states?"** → [topic-life-of-a-task.md](./references/topic-life-of-a-task.md), [spec-06-data-objects.md](./references/spec-06-data-objects.md)
+- **"How does streaming work?"** → [topic-streaming-and-async.md](./references/topic-streaming-and-async.md), [spec-07-rpc-methods.md](./references/spec-07-rpc-methods.md)
+- **"What's the difference between A2A and MCP?"** → [topic-a2a-and-mcp.md](./references/topic-a2a-and-mcp.md)
 - **"How do extensions work?"** → [topic-extensions.md](./references/topic-extensions.md)
-- **"What security/auth is needed?"** → [spec-07-authentication.md](./references/spec-07-authentication.md), [spec-13-security.md](./references/spec-13-security.md), [topic-enterprise-ready.md](./references/topic-enterprise-ready.md)
-- **"How do I implement an A2A server?"** → [spec-09-jsonrpc-binding.md](./references/spec-09-jsonrpc-binding.md) (JSON-RPC), [spec-11-http-rest-binding.md](./references/spec-11-http-rest-binding.md) (REST)
-- **"What changed in v1.0?"** → [topic-whats-new-v1.md](./references/topic-whats-new-v1.md), [spec-appendix-a-migration.md](./references/spec-appendix-a-migration.md)
+- **"What security/auth is needed?"** → [spec-04-authentication.md](./references/spec-04-authentication.md), [topic-enterprise-ready.md](./references/topic-enterprise-ready.md)
+- **"What are the error codes?"** → [spec-08-error-handling.md](./references/spec-08-error-handling.md)
+- **"Show me workflow examples"** → [spec-09-workflows.md](./references/spec-09-workflows.md)
+
+## v1.0 RC reference (use only when needed)
+
+The v1.0 Release Candidate spec is available in `references/v1.0-rc/` for
+forward-looking work. Key differences from v0.3 are documented in
+[v1.0-rc/topic-whats-new-v1.md](./references/v1.0-rc/topic-whats-new-v1.md).
+
+Only consult v1.0 content when:
+- Explicitly planning migration from v0.3 to v1.0
+- Working on features that require v1.0-specific capabilities
+- The user specifically asks about v1.0
