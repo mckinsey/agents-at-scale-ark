@@ -123,15 +123,15 @@ spec:
               readOnly: true
             {{- end }}
           {{- end }}
-        {{- if .Values.queryEngine.enabled }}
-        - name: query-engine
-          image: {{ .Values.queryEngine.container.image.repository }}:{{ .Values.queryEngine.container.image.tag | default .Chart.AppVersion }}
-          imagePullPolicy: {{ .Values.queryEngine.container.image.pullPolicy | default "IfNotPresent" }}
+        {{- if .Values.completions.enabled }}
+        - name: completions
+          image: {{ .Values.completions.container.image.repository }}:{{ .Values.completions.container.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.completions.container.image.pullPolicy | default "IfNotPresent" }}
           args:
-            - "--addr=:{{ .Values.queryEngine.container.port }}"
+            - "--addr=:{{ .Values.completions.container.port }}"
           env:
           - name: OTEL_SERVICE_NAME
-            value: "ark-query-engine"
+            value: "ark-completions"
           {{- if .Values.customCACert.enabled }}
           - name: SSL_CERT_FILE
             value: "/etc/ssl/certs/custom-ca/{{ .Values.customCACert.key }}"
@@ -146,19 +146,19 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: {{ .Values.queryEngine.container.port }}
+              port: {{ .Values.completions.container.port }}
             initialDelaySeconds: 10
             periodSeconds: 20
             timeoutSeconds: 5
           readinessProbe:
             httpGet:
               path: /health
-              port: {{ .Values.queryEngine.container.port }}
+              port: {{ .Values.completions.container.port }}
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 5
           resources:
-            {{- toYaml .Values.queryEngine.container.resources | nindent 12 }}
+            {{- toYaml .Values.completions.container.resources | nindent 12 }}
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

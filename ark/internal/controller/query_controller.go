@@ -49,7 +49,7 @@ type QueryReconciler struct {
 	Scheme          *runtime.Scheme
 	Telemetry       *telemetryconfig.Provider
 	Eventing        *eventingconfig.Provider
-	QueryEngineAddr string
+	CompletionsAddr string
 	operations      sync.Map
 }
 
@@ -278,7 +278,7 @@ func (r *QueryReconciler) executeViaEngine(ctx context.Context, query arkv1alpha
 	})
 	message.Metadata = metadata
 
-	a2aClient, err := arka2a.CreateA2AClient(ctx, r.Client, r.QueryEngineAddr, nil, query.Namespace, query.Name, nil)
+	a2aClient, err := arka2a.CreateA2AClient(ctx, r.Client, r.CompletionsAddr, nil, query.Namespace, query.Name, nil)
 	if err != nil {
 		return nil, engineResponseMeta{}, fmt.Errorf("failed to create A2A client for query engine: %w", err)
 	}

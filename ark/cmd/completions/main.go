@@ -47,14 +47,14 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&zapOpts)))
-	log := ctrl.Log.WithName("query-engine")
+	log := ctrl.Log.WithName("completions")
 
 	if showVersion {
 		fmt.Printf("Version: %s\nCommit: %s\n", Version, GitCommit)
 		os.Exit(0)
 	}
 
-	log.Info("starting ark query engine", "version", Version, "commit", GitCommit)
+	log.Info("starting ark completions engine", "version", Version, "commit", GitCommit)
 
 	restConfig := ctrl.GetConfigOrDie()
 	k8sClient, err := client.New(restConfig, client.Options{Scheme: scheme})
@@ -69,7 +69,7 @@ func main() {
 
 	srv, err := completions.NewServer(k8sClient, telemetryProvider, eventingProvider, addr)
 	if err != nil {
-		log.Error(err, "failed to create query engine server")
+		log.Error(err, "failed to create completions engine server")
 		if shutdownErr := telemetryProvider.Shutdown(); shutdownErr != nil {
 			log.Error(shutdownErr, "failed to shutdown telemetry provider")
 		}

@@ -18,13 +18,13 @@ spec:
       securityContext:
         runAsNonRoot: false
       containers:
-        - name: query-engine
+        - name: completions
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           ports:
             - containerPort: {{ .Values.port }}
           env:
           - name: OTEL_SERVICE_NAME
-            value: "ark-query-engine"
+            value: "ark-completions"
           - name: ARK_TELEMETRY_OTEL_DISCOVERY
             value: "true"
           envFrom:

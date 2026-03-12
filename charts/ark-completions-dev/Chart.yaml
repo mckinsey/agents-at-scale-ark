@@ -1,0 +1,5 @@
+apiVersion: v2
+name: ark-completions-dev
+description: Completions engine for Ark development
+type: application
+version: 0.1.0

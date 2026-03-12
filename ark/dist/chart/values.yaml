@@ -47,11 +47,11 @@ controllerManager:
   terminationGracePeriodSeconds: 10
   serviceAccountName: ark-controller
 
-queryEngine:
+completions:
   enabled: true
   container:
     image:
-      repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-query-engine
+      repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-completions
       pullPolicy: IfNotPresent
     port: 9090
     resources:

@@ -1,5 +1,0 @@
-apiVersion: v2
-name: ark-query-engine-dev
-description: Query engine for Ark development
-type: application
-version: 0.1.0

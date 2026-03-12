@@ -10,17 +10,18 @@ COPY go.mod go.mod
 COPY go.sum go.sum
 RUN go mod download
 
-COPY cmd/query-engine/ cmd/query-engine/
+COPY cmd/completions/ cmd/completions/
 COPY api/ api/
+COPY executors/ executors/
 COPY internal/ internal/
 
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} GOTOOLCHAIN=auto go build \
     -ldflags "-X main.Version=${VERSION} -X main.GitCommit=${GIT_COMMIT}" \
-    -a -o query-engine cmd/query-engine/main.go
+    -a -o completions cmd/completions/main.go
 
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
-COPY --from=builder /workspace/query-engine .
+COPY --from=builder /workspace/completions .
 USER 65532:65532
 
-ENTRYPOINT ["/query-engine"]
+ENTRYPOINT ["/completions"]

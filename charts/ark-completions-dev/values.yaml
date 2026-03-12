@@ -1,5 +1,5 @@
 image:
-  repository: ark-query-engine
+  repository: ark-completions
   tag: latest
 
 port: 9090

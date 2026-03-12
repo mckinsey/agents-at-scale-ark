@@ -41,7 +41,7 @@ func NewServer(
 	}
 
 	agentCard := server.AgentCard{
-		Name:               "ark-query-engine",
+		Name:               "ark-completions",
 		Description:        "Ark built-in query execution engine",
 		URL:                "http://localhost" + addr,
 		Version:            "1.0.0",
