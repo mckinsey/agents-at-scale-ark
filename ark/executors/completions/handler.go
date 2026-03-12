@@ -211,7 +211,7 @@ func (h *Handler) dispatchTarget(ctx context.Context, state *executionState) ([]
 
 	switch state.target.Type {
 	case ToolTypeAgent, ToolTypeTeam:
-		_, responseMessages, err = h.executeMember(ctx, state.query, state.target.Type, state.target.Name, state.inputMessages, state.memoryMessages, state.memory, state.eventStream)
+		_, responseMessages, err = h.executeMember(ctx, state)
 	case "model":
 		responseMessages, err = h.executeModel(ctx, state.query, state.target.Name, state.inputMessages, state.memoryMessages, state.eventStream)
 	case "tool":
@@ -283,21 +283,16 @@ func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, r
 	}
 }
 
-func (h *Handler) executeMember(
-	ctx context.Context,
-	query arkv1alpha1.Query,
-	targetType, targetName string,
-	inputMessages []Message,
-	memoryMessages []Message,
-	memory MemoryInterface,
-	eventStream EventStreamInterface,
-) (*ExecutionResult, []Message, error) {
+func (h *Handler) executeMember(ctx context.Context, state *executionState) (*ExecutionResult, []Message, error) {
 	var member TeamMember
+
+	targetType := state.target.Type
+	targetName := state.target.Name
 
 	switch targetType {
 	case ToolTypeAgent:
 		var agentCRD arkv1alpha1.Agent
-		if err := h.k8sClient.Get(ctx, types.NamespacedName{Name: targetName, Namespace: query.Namespace}, &agentCRD); err != nil {
+		if err := h.k8sClient.Get(ctx, types.NamespacedName{Name: targetName, Namespace: state.query.Namespace}, &agentCRD); err != nil {
 			return nil, nil, fmt.Errorf("failed to get agent %s: %w", targetName, err)
 		}
 		agent, err := MakeAgent(ctx, h.k8sClient, &agentCRD, h.telemetry, h.eventing)
@@ -307,7 +302,7 @@ func (h *Handler) executeMember(
 		member = agent
 	case ToolTypeTeam:
 		var teamCRD arkv1alpha1.Team
-		if err := h.k8sClient.Get(ctx, types.NamespacedName{Name: targetName, Namespace: query.Namespace}, &teamCRD); err != nil {
+		if err := h.k8sClient.Get(ctx, types.NamespacedName{Name: targetName, Namespace: state.query.Namespace}, &teamCRD); err != nil {
 			return nil, nil, fmt.Errorf("failed to get team %s: %w", targetName, err)
 		}
 		team, err := MakeTeam(ctx, h.k8sClient, &teamCRD, h.telemetry, h.eventing)
@@ -319,8 +314,8 @@ func (h *Handler) executeMember(
 		return nil, nil, fmt.Errorf("unsupported member type: %s", targetType)
 	}
 
-	currentMessage, contextMessages := PrepareExecutionMessages(inputMessages, memoryMessages)
-	result, err := member.Execute(ctx, currentMessage, contextMessages, memory, eventStream)
+	currentMessage, contextMessages := PrepareExecutionMessages(state.inputMessages, state.memoryMessages)
+	result, err := member.Execute(ctx, currentMessage, contextMessages, state.memory, state.eventStream)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -409,7 +404,12 @@ func (h *Handler) executeTool(
 
 	toolDefinition := CreateToolFromCRD(&toolCRD)
 	mcpPool, mcpSettings := toolRegistry.GetMCPPool()
-	executor, err := CreateToolExecutor(ctx, h.k8sClient, &toolCRD, query.Namespace, mcpPool, mcpSettings, h.telemetry, h.eventing)
+	executor, err := CreateToolExecutor(ctx, h.k8sClient, &toolCRD, query.Namespace, ToolExecutorDeps{
+		MCPPool:           mcpPool,
+		MCPSettings:       mcpSettings,
+		TelemetryProvider: h.telemetry,
+		EventingProvider:  h.eventing,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tool executor: %w", err)
 	}

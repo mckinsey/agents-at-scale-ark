@@ -150,6 +150,49 @@ func TestExtractTextFromTask(t *testing.T) {
 			errorMsg:    "task in state 'working' (expected completed or failed)",
 		},
 		{
+			name: "completed task with only non-agent messages",
+			task: &protocol.Task{
+				ID: "task-nonagent",
+				Status: protocol.TaskStatus{
+					State: TaskStateCompleted,
+				},
+				History: []protocol.Message{
+					{
+						Role: protocol.MessageRoleUser,
+						Parts: []protocol.Part{
+							protocol.TextPart{Text: "User message 1"},
+						},
+					},
+					{
+						Role: protocol.MessageRoleUser,
+						Parts: []protocol.Part{
+							protocol.TextPart{Text: "User message 2"},
+						},
+					},
+				},
+			},
+			expected:    "",
+			expectError: false,
+		},
+		{
+			name: "failed task with multiple status message parts",
+			task: &protocol.Task{
+				ID: "task-failparts",
+				Status: protocol.TaskStatus{
+					State: TaskStateFailed,
+					Message: &protocol.Message{
+						Parts: []protocol.Part{
+							protocol.TextPart{Text: "Error: "},
+							protocol.TextPart{Text: "timeout exceeded"},
+						},
+					},
+				},
+			},
+			expected:    "",
+			expectError: true,
+			errorMsg:    "Error: timeout exceeded",
+		},
+		{
 			name: "completed task with empty history",
 			task: &protocol.Task{
 				ID: "task-8",

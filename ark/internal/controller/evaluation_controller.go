@@ -733,39 +733,22 @@ func (r *EvaluationReconciler) updateEvaluationComplete(ctx context.Context, eva
 		Namespace: evaluation.Namespace,
 	}
 
-	// Use retry logic for atomic updates
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		// Fetch the latest version
 		latest := &arkv1alpha1.Evaluation{}
 		if err := r.Get(ctx, evalKey, latest); err != nil {
 			log.Error(err, "failed to get latest Evaluation for completion update", "evaluation", evaluation.Name)
 			return err
 		}
 
-		// Update annotations if metadata exists
 		if len(response.Metadata) > 0 {
-			if latest.Annotations == nil {
-				latest.Annotations = make(map[string]string)
-			}
-			for key, value := range response.Metadata {
-				annotationKey := fmt.Sprintf("evaluation.metadata/%s", key)
-				latest.Annotations[annotationKey] = value
-				log.V(1).Info("Adding metadata as annotation", "evaluation", evaluation.Name, "key", annotationKey, "value", value)
-			}
-
-			// Update the main object with annotations
-			if err := r.Update(ctx, latest); err != nil {
-				log.V(1).Info("failed to update Evaluation annotations (will retry)", "evaluation", evaluation.Name, "error", err)
+			if err := r.updateEvaluationAnnotations(ctx, latest, response.Metadata); err != nil {
 				return err
 			}
-
-			// Re-fetch after annotation update to ensure we have the latest version
 			if err := r.Get(ctx, evalKey, latest); err != nil {
 				return err
 			}
 		}
 
-		// Update all status fields atomically
 		latest.Status.Score = response.Score
 		latest.Status.Passed = response.Passed
 		latest.Status.TokenUsage = response.TokenUsage
@@ -774,7 +757,6 @@ func (r *EvaluationReconciler) updateEvaluationComplete(ctx context.Context, eva
 
 		r.setConditionCompleted(latest, metav1.ConditionTrue, "EvaluationCompleted", message)
 
-		// Update status subresource
 		if err := r.Status().Update(ctx, latest); err != nil {
 			log.V(1).Info("Status update failed (will retry)", "evaluation", evaluation.Name, "error", err)
 			return err
@@ -783,6 +765,23 @@ func (r *EvaluationReconciler) updateEvaluationComplete(ctx context.Context, eva
 		log.Info("Completed Evaluation atomically", "evaluation", evaluation.Name, "score", response.Score, "passed", response.Passed, "phase", statusDone)
 		return nil
 	})
+}
+
+func (r *EvaluationReconciler) updateEvaluationAnnotations(ctx context.Context, latest *arkv1alpha1.Evaluation, metadata map[string]string) error {
+	log := logf.FromContext(ctx)
+	if latest.Annotations == nil {
+		latest.Annotations = make(map[string]string)
+	}
+	for key, value := range metadata {
+		annotationKey := fmt.Sprintf("evaluation.metadata/%s", key)
+		latest.Annotations[annotationKey] = value
+		log.V(1).Info("Adding metadata as annotation", "evaluation", latest.Name, "key", annotationKey, "value", value)
+	}
+	if err := r.Update(ctx, latest); err != nil {
+		log.V(1).Info("failed to update Evaluation annotations (will retry)", "evaluation", latest.Name, "error", err)
+		return err
+	}
+	return nil
 }
 
 func (r *EvaluationReconciler) ensureChildEvaluations(ctx context.Context, parentEvaluation arkv1alpha1.Evaluation) (bool, error) {

@@ -6,6 +6,15 @@ import (
 	"time"
 )
 
+type MCPClientConfig struct {
+	ServerName      string
+	ServerNamespace string
+	ServerURL       string
+	Headers         map[string]string
+	Transport       string
+	Timeout         time.Duration
+}
+
 type MCPClientPool struct {
 	clients map[string]*MCPClient
 }
@@ -16,15 +25,15 @@ func NewMCPClientPool() *MCPClientPool {
 	}
 }
 
-func (p *MCPClientPool) GetOrCreateClient(ctx context.Context, serverName, serverNamespace, serverURL string, headers map[string]string, transport string, timeout time.Duration, mcpSettings map[string]MCPSettings) (*MCPClient, error) {
-	key := fmt.Sprintf("%s/%s", serverNamespace, serverName)
+func (p *MCPClientPool) GetOrCreateClient(ctx context.Context, cfg MCPClientConfig, mcpSettings map[string]MCPSettings) (*MCPClient, error) {
+	key := fmt.Sprintf("%s/%s", cfg.ServerNamespace, cfg.ServerName)
 	if mcpClient, exists := p.clients[key]; exists {
 		return mcpClient, nil
 	}
 
 	mcpSetting := mcpSettings[key]
 
-	mcpClient, err := NewMCPClient(ctx, serverURL, headers, transport, timeout, mcpSetting)
+	mcpClient, err := NewMCPClient(ctx, cfg.ServerURL, cfg.Headers, cfg.Transport, cfg.Timeout, mcpSetting)
 	if err != nil {
 		return nil, err
 	}

@@ -25,16 +25,23 @@ func (r *ToolRegistry) registerTools(ctx context.Context, k8sClient client.Clien
 	return nil
 }
 
-func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, mcpPool *arkmcp.MCPClientPool, mcpSettings map[string]arkmcp.MCPSettings, telemetryProvider telemetry.Provider, eventingProvider eventing.Provider) (ToolExecutor, error) {
+type ToolExecutorDeps struct {
+	MCPPool           *arkmcp.MCPClientPool
+	MCPSettings       map[string]arkmcp.MCPSettings
+	TelemetryProvider telemetry.Provider
+	EventingProvider  eventing.Provider
+}
+
+func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, deps ToolExecutorDeps) (ToolExecutor, error) {
 	switch tool.Spec.Type {
 	case ToolTypeHTTP:
 		return createHTTPExecutor(k8sClient, tool, namespace)
 	case ToolTypeMCP:
-		return createMCPExecutor(ctx, k8sClient, tool, namespace, mcpPool, mcpSettings)
+		return createMCPExecutor(ctx, k8sClient, tool, namespace, deps.MCPPool, deps.MCPSettings)
 	case ToolTypeAgent:
-		return createAgentExecutor(ctx, k8sClient, tool, namespace, telemetryProvider, eventingProvider)
+		return createAgentExecutor(ctx, k8sClient, tool, namespace, deps.TelemetryProvider, deps.EventingProvider)
 	case ToolTypeTeam:
-		return createTeamExecutor(ctx, k8sClient, tool, namespace, telemetryProvider, eventingProvider)
+		return createTeamExecutor(ctx, k8sClient, tool, namespace, deps.TelemetryProvider, deps.EventingProvider)
 	case ToolTypeBuiltin:
 		return createBuiltinExecutor(tool)
 	default:
@@ -149,15 +156,16 @@ func createMCPExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1
 		timeout = parsedTimeout
 	}
 
-	// Use the MCP client pool to get or create the client
 	mcpClient, err := mcpPool.GetOrCreateClient(
 		ctx,
-		tool.Spec.MCP.MCPServerRef.Name,
-		mcpServerNamespace,
-		mcpURL,
-		headers,
-		mcpServerCRD.Spec.Transport,
-		timeout,
+		arkmcp.MCPClientConfig{
+			ServerName:      tool.Spec.MCP.MCPServerRef.Name,
+			ServerNamespace: mcpServerNamespace,
+			ServerURL:       mcpURL,
+			Headers:         headers,
+			Transport:       mcpServerCRD.Spec.Transport,
+			Timeout:         timeout,
+		},
 		mcpSettings,
 	)
 	if err != nil {
@@ -187,7 +195,12 @@ func (r *ToolRegistry) registerTool(ctx context.Context, k8sClient client.Client
 	// For partial tools, this is agentTool.Name, not the actual CRD name
 	toolDef.Name = agentTool.Name
 
-	executor, err := CreateToolExecutor(ctx, k8sClient, tool, namespace, r.mcpPool, r.mcpSettings, telemetryProvider, eventingProvider)
+	executor, err := CreateToolExecutor(ctx, k8sClient, tool, namespace, ToolExecutorDeps{
+		MCPPool:           r.mcpPool,
+		MCPSettings:       r.mcpSettings,
+		TelemetryProvider: telemetryProvider,
+		EventingProvider:  eventingProvider,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create executor for tool %s: %w", toolDef.Name, err)
 	}

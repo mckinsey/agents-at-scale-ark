@@ -22,7 +22,7 @@ type ProbeResult struct {
 }
 
 func ProbeModel(ctx context.Context, model *completions.Model, timeout time.Duration) ProbeResult {
-	probeCtx := completions.ContextWithProbeMode(context.Background())
+	probeCtx := completions.ContextWithProbeMode(ctx)
 	probeCtx, cancel := context.WithTimeout(probeCtx, timeout)
 	defer cancel()
 

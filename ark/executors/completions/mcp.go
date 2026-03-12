@@ -31,10 +31,9 @@ func (m *MCPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, e
 		return ToolResult{ID: call.ID, Name: call.Function.Name, Content: ""}, err
 	}
 
-	var arguments map[string]any
+	arguments := make(map[string]any)
 	if err := json.Unmarshal([]byte(call.Function.Arguments), &arguments); err != nil {
 		log.Info("Error parsing tool arguments", "ToolCall", call)
-		arguments = make(map[string]any)
 	}
 
 	response, err := m.MCPClient.Client.CallTool(ctx, &mcpsdk.CallToolParams{

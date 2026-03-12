@@ -248,7 +248,10 @@ func TestCreateToolExecutor_TeamType(t *testing.T) {
 		}
 
 		k8sClient := setupTestClientForTools([]client.Object{team})
-		executor, err := CreateToolExecutor(ctx, k8sClient, tool, "default", nil, nil, telemetryProvider, eventingProvider)
+		executor, err := CreateToolExecutor(ctx, k8sClient, tool, "default", ToolExecutorDeps{
+			TelemetryProvider: telemetryProvider,
+			EventingProvider:  eventingProvider,
+		})
 
 		require.NoError(t, err)
 		require.NotNil(t, executor)

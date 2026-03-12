@@ -128,14 +128,6 @@ runs:
         IMAGE_TAG="${{ inputs.clean_version }}"
         COMPLETIONS_REPO="${IMAGE_REPO/ark-controller/ark-completions}"
         set -euo pipefail
-        # Deploy completions engine as standalone service
-        helm upgrade --install ark-completions oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-completions --version "${IMAGE_TAG}" \
-          --namespace "${{ inputs.namespace }}" \
-          --create-namespace \
-          --timeout="${{ inputs.timeout }}" \
-          $( [ -n "${COMPLETIONS_REPO}" ] && echo "--set image.repository=${COMPLETIONS_REPO}" ) \
-          $( [ -n "${IMAGE_TAG}" ] && echo "--set image.tag=${IMAGE_TAG}" )
-        # Deploy controller
         helm upgrade --install ark-controller "${CHART}" \
           --namespace "${{ inputs.namespace }}" \
           --create-namespace \
@@ -145,6 +137,11 @@ runs:
           $( [ -n "${IMAGE_REPO}" ] && echo "--set controllerManager.container.image.repository=${IMAGE_REPO}" ) \
           $( [ -n "${IMAGE_TAG}" ] && echo "--set controllerManager.container.image.tag=${IMAGE_TAG}" ) \
           $( [ -n "${{ inputs.container_registry_server }}" ] && echo "--set containerRegistry.enabled=true --set containerRegistry.server=${{ inputs.container_registry_server }} --set containerRegistry.username=${{ inputs.container_registry_username }} --set containerRegistry.password=${{ inputs.container_registry_password }}" )
+        helm upgrade --install ark-completions oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-completions --version "${IMAGE_TAG}" \
+          --namespace "${{ inputs.namespace }}" \
+          --timeout="${{ inputs.timeout }}" \
+          $( [ -n "${COMPLETIONS_REPO}" ] && echo "--set image.repository=${COMPLETIONS_REPO}" ) \
+          $( [ -n "${IMAGE_TAG}" ] && echo "--set image.tag=${IMAGE_TAG}" )
 
     - name: Wait for deployment readiness
       shell: bash
