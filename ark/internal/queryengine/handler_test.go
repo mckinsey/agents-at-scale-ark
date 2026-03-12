@@ -14,8 +14,8 @@ import (
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	"mckinsey.com/ark/internal/genai"
 	eventingnoop "mckinsey.com/ark/internal/eventing/noop"
+	"mckinsey.com/ark/internal/genai"
 	telemetrynoop "mckinsey.com/ark/internal/telemetry/noop"
 )
 

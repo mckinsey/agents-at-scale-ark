@@ -530,6 +530,16 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 	p.watchers[key] = append(p.watchers[key], ch)
 	p.mu.Unlock()
 
+	existing, _, err := p.List(ctx, kind, namespace, storage.ListOptions{
+		LabelSelector: opts.LabelSelector,
+		FieldSelector: opts.FieldSelector,
+	})
+	if err == nil {
+		for _, obj := range existing {
+			ch <- watch.Event{Type: watch.Added, Object: obj}
+		}
+	}
+
 	w := &postgresWatcher{
 		ch:      ch,
 		backend: p,
