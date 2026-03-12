@@ -95,6 +95,10 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 build: validate-chart-crds manifests generate fmt vet ## Build manager binary.
 	go build $(LDFLAGS) -o bin/manager cmd/main.go
 
+.PHONY: build-query-engine
+build-query-engine: fmt vet ## Build query engine binary.
+	go build $(LDFLAGS) -o bin/query-engine cmd/query-engine/main.go
+
 .PHONY: run
 run: manifests generate fmt vet
 	scripts/tls-certs.sh
@@ -140,7 +144,18 @@ build-container: ## Build the ark-controller
 		--build-arg VERSION=$(VERSION) \
 		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
 		-t $(IMAGE):$(IMAGE_TAG) \
-		-f Dockerfile . 
+		-f Dockerfile .
+
+QUERY_ENGINE_IMAGE ?= ark-query-engine
+QUERY_ENGINE_IMAGE_TAG ?= latest
+
+.PHONY: build-query-engine-container
+build-query-engine-container: ## Build the ark-query-engine container
+	$(CONTAINER_TOOL) build \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
+		-t $(QUERY_ENGINE_IMAGE):$(QUERY_ENGINE_IMAGE_TAG) \
+		-f Dockerfile.query-engine .
 
 .PHONY: deploy
 deploy: manifests ## Deploy controller and cert-manager to the K8s cluster specified in ~/.kube/config.

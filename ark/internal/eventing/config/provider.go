@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -66,6 +67,54 @@ func NewProvider(mgr ctrl.Manager, k8sClient client.Client) *Provider {
 		toolRecorder:            recorders.NewToolRecorder(k8sEmitter, operationEmitter),
 		memoryRecorder:          recorders.NewMemoryRecorder(k8sEmitter, operationEmitter),
 	}
+}
+
+func NewProviderWithClient(ctx context.Context, k8sClient client.Client) *Provider {
+	noopEmitter := &noopEventEmitter{}
+	operationEmitter := eventing.EventEmitter(noopEmitter)
+
+	if k8sClient != nil {
+		endpoints, err := routing.DiscoverBrokerEndpoints(ctx, k8sClient)
+		switch {
+		case err != nil:
+			log.Error(err, "failed to discover broker endpoints, using noop emitter for operations")
+		case len(endpoints) > 0:
+			namespaces := make([]string, 0, len(endpoints))
+			for _, ep := range endpoints {
+				namespaces = append(namespaces, ep.Namespace)
+			}
+			log.Info("broker endpoints discovered, using broker for operation events", "count", len(endpoints), "namespaces", namespaces)
+			operationEmitter = brokereventing.NewBrokerEventEmitter(endpoints)
+		default:
+			log.Info("no broker endpoints found, using noop emitter for operations")
+		}
+	}
+
+	return &Provider{
+		modelRecorder:           recorders.NewModelRecorder(noopEmitter, operationEmitter),
+		a2aRecorder:             recorders.NewA2aRecorder(noopEmitter, operationEmitter),
+		agentRecorder:           recorders.NewAgentRecorder(noopEmitter, operationEmitter),
+		teamRecorder:            recorders.NewTeamRecorder(noopEmitter, operationEmitter),
+		executionEngineRecorder: recorders.NewExecutionEngineRecorder(noopEmitter, operationEmitter),
+		mcpServerRecorder:       recorders.NewMCPServerRecorder(noopEmitter),
+		queryRecorder:           recorders.NewQueryRecorder(noopEmitter, operationEmitter),
+		toolRecorder:            recorders.NewToolRecorder(noopEmitter, operationEmitter),
+		memoryRecorder:          recorders.NewMemoryRecorder(noopEmitter, operationEmitter),
+	}
+}
+
+type noopEventEmitter struct{}
+
+func (e *noopEventEmitter) EmitNormal(_ context.Context, _ k8sruntime.Object, _, _ string) {
+	// noop: used as default when no event emitter is configured
+}
+
+func (e *noopEventEmitter) EmitWarning(_ context.Context, _ k8sruntime.Object, _, _ string) {
+	// noop: used as default when no event emitter is configured
+}
+
+func (e *noopEventEmitter) EmitStructured(_ context.Context, _ k8sruntime.Object, _, _, _ string, _ any) {
+	// noop: used as default when no event emitter is configured
 }
 
 func (p *Provider) ModelRecorder() eventing.ModelRecorder {
