@@ -30,6 +30,14 @@ Verify your cluster context:
 kubectl config get-contexts
 ```
 
+### Slow Performance or High Disk Usage
+
+If Ark feels slow, pods take a long time to start, or you notice excessive disk activity, your cluster likely doesn't have enough resources. Ark runs a number of services concurrently (operator, API, dashboard, executor, broker, database, MCP servers) and needs a well-resourced cluster. When using Minikube, start your cluster with plenty of CPU and memory:
+
+```bash
+minikube start --cpus 8 --memory 30720
+```
+
 ### Common Installation Issues
 
 #### Installing Ark on Windows
