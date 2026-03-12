@@ -1,9 +1,0 @@
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: chicago-weather-query
-spec:
-  input: What's the current weather forecast for Chicago, Illinois?
-  target:
-    type: agent
-    name: chicago-weather-agent

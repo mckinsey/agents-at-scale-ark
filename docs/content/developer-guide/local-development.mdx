@@ -64,7 +64,18 @@ Switching between storage backends is destructive. Resources created with etcd (
 </Callout>
 
 - ark-api and ark-dashboard deploy to namespace: default
-- ark-controller and localhost-gateway deploys to namespace: ark-system
+- ark-controller, ark-query-engine, and localhost-gateway deploy to namespace: ark-system
+
+## Query Engine in Dev Mode
+
+The query engine runs as a separate pod in dev mode (not as a sidecar). This allows independent code sync and restart — changing engine code only restarts the engine, not the controller.
+
+DevSpace deploys the engine using the `ark-query-engine-dev` chart. The controller connects via `--query-engine-addr=http://ark-query-engine.ark-system:9090`.
+
+```bash
+# Both controller and query engine start with devspace dev
+devspace dev --dependency ark-controller
+```
 
 ## Check deployment status
 ```bash
