@@ -6,7 +6,6 @@ export interface MarketplaceSource {
   name: string;
   url: string;
   displayName?: string;
-  enabled?: boolean;
 }
 
 // Default marketplace source
@@ -15,7 +14,6 @@ const DEFAULT_MARKETPLACE_SOURCE: MarketplaceSource = {
   name: 'ARK marketplace',
   url: 'https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json',
   displayName: 'ARK marketplace',
-  enabled: true,
 };
 
 // Persistent storage for marketplace sources

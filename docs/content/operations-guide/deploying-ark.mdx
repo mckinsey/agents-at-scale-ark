@@ -92,6 +92,8 @@ helm upgrade --install \
   --create-namespace \
   --set controllerManager.container.image.repository=your-registry.com/ark-controller \
   --set controllerManager.container.image.tag=0.1.21 \
+  --set queryEngine.container.image.repository=your-registry.com/ark-query-engine \
+  --set queryEngine.container.image.tag=0.1.21 \
   --set containerRegistry.enabled=true \
   --set containerRegistry.server=your-registry.com \
   --set containerRegistry.username=your_username \

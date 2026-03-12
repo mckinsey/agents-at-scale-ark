@@ -82,3 +82,11 @@ spec:
               name: mock-llm-mcp
           status:
             state: Ready
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
