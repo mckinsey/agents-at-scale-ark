@@ -1,6 +1,6 @@
 /* Copyright 2025. McKinsey & Company */
 
-package genai
+package a2a
 
 import (
 	"fmt"
@@ -29,7 +29,6 @@ const (
 	PartKindFile = "file"
 )
 
-// ConvertA2AStateToPhase converts A2A protocol task states to Ark K8s A2ATask phases
 func ConvertA2AStateToPhase(state string) string {
 	switch state {
 	case "submitted":
@@ -53,7 +52,6 @@ func ConvertA2AStateToPhase(state string) string {
 	}
 }
 
-// IsTerminalPhase returns true if the phase represents a terminal state
 func IsTerminalPhase(phase string) bool {
 	return phase == PhaseCompleted || phase == PhaseFailed || phase == PhaseCancelled
 }
@@ -176,7 +174,6 @@ func convertMetadataToStringMap(metadata map[string]any) map[string]string {
 	return result
 }
 
-// PopulateA2ATaskStatusFromProtocol populates A2ATaskStatus fields from a protocol.Task
 func PopulateA2ATaskStatusFromProtocol(status *arkv1alpha1.A2ATaskStatus, task *protocol.Task) {
 	artifacts := convertArtifactsFromProtocol(task.Artifacts)
 	history := convertHistoryFromProtocol(task.History)
@@ -196,7 +193,6 @@ func PopulateA2ATaskStatusFromProtocol(status *arkv1alpha1.A2ATaskStatus, task *
 	status.LastStatusTimestamp = task.Status.Timestamp
 }
 
-// MergeArtifacts merges new artifacts into existing status, avoiding duplicates by ArtifactID
 func MergeArtifacts(existingStatus, newStatus *arkv1alpha1.A2ATaskStatus) {
 	existingArtifactIds := make(map[string]bool)
 	for _, artifact := range existingStatus.Artifacts {
@@ -210,7 +206,6 @@ func MergeArtifacts(existingStatus, newStatus *arkv1alpha1.A2ATaskStatus) {
 	}
 }
 
-// MergeHistory merges new messages into existing history, avoiding duplicates by MessageID
 func MergeHistory(existingStatus, newStatus *arkv1alpha1.A2ATaskStatus) {
 	if len(newStatus.History) == 0 {
 		return
@@ -231,7 +226,6 @@ func MergeHistory(existingStatus, newStatus *arkv1alpha1.A2ATaskStatus) {
 	}
 }
 
-// UpdateA2ATaskStatus updates the A2ATask status with information from the A2A server
 func UpdateA2ATaskStatus(a2aTaskStatus *arkv1alpha1.A2ATaskStatus, task *protocol.Task) {
 	if task == nil {
 		return
@@ -263,14 +257,12 @@ func setTaskTimestamps(status *arkv1alpha1.A2ATaskStatus, oldPhase string, task 
 	newPhase := ConvertA2AStateToPhase(string(task.Status.State))
 	status.Phase = newPhase
 
-	// Set StartTime from protocol timestamp when task first starts execution
 	if oldPhase == PhasePending && status.StartTime == nil {
 		if timestamp := parseProtocolTimestamp(task.Status.Timestamp); timestamp != nil {
 			status.StartTime = timestamp
 		}
 	}
 
-	// Set CompletionTime from protocol timestamp when reaching terminal state
 	if !IsTerminalPhase(oldPhase) && IsTerminalPhase(newPhase) {
 		if timestamp := parseProtocolTimestamp(task.Status.Timestamp); timestamp != nil {
 			status.CompletionTime = timestamp

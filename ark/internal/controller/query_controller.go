@@ -22,6 +22,7 @@ import (
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	arka2a "mckinsey.com/ark/internal/a2a"
 	"mckinsey.com/ark/internal/annotations"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	"mckinsey.com/ark/internal/genai"
@@ -260,7 +261,7 @@ func (r *QueryReconciler) executeViaEngine(ctx context.Context, query arkv1alpha
 	}
 
 	metadataBytes, err := json.Marshal(map[string]any{
-		genai.ArkMetadataKey: arkMetadata,
+		arka2a.ArkMetadataKey: arkMetadata,
 	})
 	if err != nil {
 		return nil, engineResponseMeta{}, fmt.Errorf("failed to marshal A2A metadata: %w", err)
@@ -277,7 +278,7 @@ func (r *QueryReconciler) executeViaEngine(ctx context.Context, query arkv1alpha
 	})
 	message.Metadata = metadata
 
-	a2aClient, err := genai.CreateA2AClient(ctx, r.Client, r.QueryEngineAddr, nil, query.Namespace, query.Name, nil)
+	a2aClient, err := arka2a.CreateA2AClient(ctx, r.Client, r.QueryEngineAddr, nil, query.Namespace, query.Name, nil)
 	if err != nil {
 		return nil, engineResponseMeta{}, fmt.Errorf("failed to create A2A client for query engine: %w", err)
 	}
@@ -500,13 +501,13 @@ func extractA2AResponseText(result *protocol.MessageResult) (string, error) {
 
 	switch r := result.Result.(type) {
 	case *protocol.Message:
-		return genai.ExtractTextFromParts(r.Parts), nil
+		return arka2a.ExtractTextFromParts(r.Parts), nil
 	case *protocol.Task:
 		if r.Status.Message != nil {
-			return genai.ExtractTextFromParts(r.Status.Message.Parts), nil
+			return arka2a.ExtractTextFromParts(r.Status.Message.Parts), nil
 		}
 		for _, artifact := range r.Artifacts {
-			text := genai.ExtractTextFromParts(artifact.Parts)
+			text := arka2a.ExtractTextFromParts(artifact.Parts)
 			if text != "" {
 				return text, nil
 			}
@@ -538,7 +539,7 @@ func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMet
 		return responseMeta
 	}
 
-	arkData, ok := msgMeta[genai.ArkMetadataKey]
+	arkData, ok := msgMeta[arka2a.ArkMetadataKey]
 	if !ok {
 		return responseMeta
 	}

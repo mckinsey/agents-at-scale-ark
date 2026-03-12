@@ -12,10 +12,9 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
+	arka2a "mckinsey.com/ark/internal/a2a"
 	"mckinsey.com/ark/internal/eventing"
 )
-
-const ArkMetadataKey = "ark.mckinsey.com/execution-engine"
 
 type ExecutionEngineMessage struct {
 	Role    string `json:"role"`
@@ -106,7 +105,7 @@ func (c *ExecutionEngineA2AClient) Execute(ctx context.Context, engineRef *arkv1
 	}
 
 	metadataBytes, err := json.Marshal(map[string]any{
-		ArkMetadataKey: arkMetadata,
+		arka2a.ArkMetadataKey: arkMetadata,
 	})
 	if err != nil {
 		c.eventingRecorder.Fail(ctx, "ExecutionEngine", fmt.Sprintf("Failed to marshal metadata: %v", err), err, operationData)
@@ -123,7 +122,7 @@ func (c *ExecutionEngineA2AClient) Execute(ctx context.Context, engineRef *arkv1
 	})
 	message.Metadata = metadata
 
-	a2aClient, err := CreateA2AClient(ctx, c.client, engineAddress, nil, agentConfig.Namespace, agentConfig.Name, nil)
+	a2aClient, err := arka2a.CreateA2AClient(ctx, c.client, engineAddress, nil, agentConfig.Namespace, agentConfig.Name, nil)
 	if err != nil {
 		c.eventingRecorder.Fail(ctx, "ExecutionEngine", fmt.Sprintf("Failed to create A2A client: %v", err), err, operationData)
 		return nil, fmt.Errorf("failed to create A2A client: %w", err)
@@ -161,9 +160,9 @@ func extractResponseText(result *protocol.MessageResult) (string, error) {
 
 	switch r := result.Result.(type) {
 	case *protocol.Message:
-		return ExtractTextFromParts(r.Parts), nil
+		return arka2a.ExtractTextFromParts(r.Parts), nil
 	case *protocol.Task:
-		text, err := extractTextFromTask(r)
+		text, err := arka2a.ExtractTextFromTask(r)
 		if err != nil {
 			return "", err
 		}

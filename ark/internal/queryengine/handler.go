@@ -13,6 +13,7 @@ import (
 	"trpc.group/trpc-go/trpc-a2a-go/taskmanager"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	arka2a "mckinsey.com/ark/internal/a2a"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/genai"
 	"mckinsey.com/ark/internal/telemetry"
@@ -272,7 +273,7 @@ func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, r
 	)
 	if len(responseMeta) > 0 {
 		responseMessage.Metadata = map[string]any{
-			genai.ArkMetadataKey: responseMeta,
+			arka2a.ArkMetadataKey: responseMeta,
 		}
 	}
 
@@ -428,9 +429,9 @@ func extractArkMetadata(message protocol.Message) (*arkMetadata, error) {
 		return nil, fmt.Errorf("message has no metadata")
 	}
 
-	arkData, ok := message.Metadata[genai.ArkMetadataKey]
+	arkData, ok := message.Metadata[arka2a.ArkMetadataKey]
 	if !ok {
-		return nil, fmt.Errorf("message metadata missing %s key", genai.ArkMetadataKey)
+		return nil, fmt.Errorf("message metadata missing %s key", arka2a.ArkMetadataKey)
 	}
 
 	raw, err := json.Marshal(arkData)

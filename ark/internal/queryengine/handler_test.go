@@ -14,8 +14,9 @@ import (
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	"mckinsey.com/ark/internal/genai"
+	arka2a "mckinsey.com/ark/internal/a2a"
 	eventingnoop "mckinsey.com/ark/internal/eventing/noop"
+	"mckinsey.com/ark/internal/genai"
 	telemetrynoop "mckinsey.com/ark/internal/telemetry/noop"
 )
 
@@ -32,7 +33,7 @@ func TestExtractArkMetadata(t *testing.T) {
 				Role:  protocol.MessageRoleUser,
 				Parts: []protocol.Part{protocol.NewTextPart("hello")},
 				Metadata: map[string]any{
-					genai.ArkMetadataKey: map[string]any{
+					arka2a.ArkMetadataKey: map[string]any{
 						"agent": map[string]any{"name": "test-agent", "namespace": "default"},
 						"query": map[string]any{"name": "q-123", "namespace": "default"},
 					},
@@ -117,7 +118,7 @@ func TestExtractArkMetadataQueryValidation(t *testing.T) {
 		Role:  protocol.MessageRoleUser,
 		Parts: []protocol.Part{protocol.NewTextPart("hello")},
 		Metadata: map[string]any{
-			genai.ArkMetadataKey: map[string]any{
+			arka2a.ArkMetadataKey: map[string]any{
 				"agent": map[string]any{"name": "test-agent"},
 				"query": map[string]any{"name": "", "namespace": ""},
 			},
@@ -135,7 +136,7 @@ func TestExtractArkMetadataPreservesToolsAndHistory(t *testing.T) {
 		Role:  protocol.MessageRoleUser,
 		Parts: []protocol.Part{protocol.NewTextPart("hello")},
 		Metadata: map[string]any{
-			genai.ArkMetadataKey: map[string]any{
+			arka2a.ArkMetadataKey: map[string]any{
 				"agent": map[string]any{"name": "a", "namespace": "ns"},
 				"tools": []any{
 					map[string]any{"name": "tool1", "description": "desc"},
@@ -203,7 +204,7 @@ func TestExtractArkMetadataWithTarget(t *testing.T) {
 		Role:  protocol.MessageRoleUser,
 		Parts: []protocol.Part{protocol.NewTextPart("hello")},
 		Metadata: map[string]any{
-			genai.ArkMetadataKey: map[string]any{
+			arka2a.ArkMetadataKey: map[string]any{
 				"query":  map[string]any{"name": "q-1", "namespace": "ns"},
 				"target": map[string]any{"type": "model", "name": "gpt-4"},
 			},
@@ -257,7 +258,7 @@ func TestResolveQueryAndTarget(t *testing.T) {
 			Role:  protocol.MessageRoleUser,
 			Parts: []protocol.Part{protocol.NewTextPart("hello")},
 			Metadata: map[string]any{
-				genai.ArkMetadataKey: map[string]any{
+				arka2a.ArkMetadataKey: map[string]any{
 					"query": map[string]any{"name": "test-query", "namespace": "default"},
 				},
 			},
@@ -285,7 +286,7 @@ func TestResolveQueryAndTarget(t *testing.T) {
 			Role:  protocol.MessageRoleUser,
 			Parts: []protocol.Part{protocol.NewTextPart("hello")},
 			Metadata: map[string]any{
-				genai.ArkMetadataKey: map[string]any{
+				arka2a.ArkMetadataKey: map[string]any{
 					"query":  map[string]any{"name": "q-no-target", "namespace": "default"},
 					"target": map[string]any{"type": "model", "name": "gpt-4"},
 				},
@@ -305,7 +306,7 @@ func TestResolveQueryAndTarget(t *testing.T) {
 			Role:  protocol.MessageRoleUser,
 			Parts: []protocol.Part{protocol.NewTextPart("hello")},
 			Metadata: map[string]any{
-				genai.ArkMetadataKey: map[string]any{
+				arka2a.ArkMetadataKey: map[string]any{
 					"query": map[string]any{"name": "missing", "namespace": "default"},
 				},
 			},
@@ -331,7 +332,7 @@ func TestResolveQueryAndTarget(t *testing.T) {
 			Role:  protocol.MessageRoleUser,
 			Parts: []protocol.Part{protocol.NewTextPart("hello")},
 			Metadata: map[string]any{
-				genai.ArkMetadataKey: map[string]any{
+				arka2a.ArkMetadataKey: map[string]any{
 					"query": map[string]any{"name": "q-empty", "namespace": "default"},
 				},
 			},
@@ -348,7 +349,7 @@ func TestResolveQueryAndTarget(t *testing.T) {
 			Role:  protocol.MessageRoleUser,
 			Parts: []protocol.Part{protocol.NewTextPart("hello")},
 			Metadata: map[string]any{
-				genai.ArkMetadataKey: map[string]any{
+				arka2a.ArkMetadataKey: map[string]any{
 					"query": map[string]any{"name": "", "namespace": ""},
 				},
 			},

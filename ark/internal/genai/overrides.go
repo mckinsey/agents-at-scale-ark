@@ -12,7 +12,12 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
+	arka2a "mckinsey.com/ark/internal/a2a"
 )
+
+func init() {
+	arka2a.ResolveHeaderValueV1PreAlpha1 = ResolveHeaderValueV1PreAlpha1
+}
 
 type OverrideType string
 

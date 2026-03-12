@@ -1,6 +1,6 @@
 /* Copyright 2025. McKinsey & Company */
 
-package genai
+package a2a
 
 import (
 	"testing"
@@ -406,8 +406,6 @@ func TestConvertHistoryFromProtocol(t *testing.T) {
 	}
 }
 
-// High complexity due to comprehensive test case coverage
-//
 //nolint:gocognit
 func TestConvertStatusMessageFromProtocol(t *testing.T) {
 	tests := []struct {
@@ -601,8 +599,6 @@ func TestPopulateA2ATaskStatusFromProtocol(t *testing.T) {
 	}
 }
 
-// High complexity due to comprehensive test case coverage
-//
 //nolint:gocognit
 func TestMergeArtifacts(t *testing.T) {
 	tests := []struct {
@@ -686,8 +682,6 @@ func TestMergeArtifacts(t *testing.T) {
 	}
 }
 
-// High complexity due to comprehensive test case coverage
-//
 //nolint:gocognit
 func TestMergeHistory(t *testing.T) {
 	tests := []struct {

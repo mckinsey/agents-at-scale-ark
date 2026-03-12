@@ -14,6 +14,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
+	arka2a "mckinsey.com/ark/internal/a2a"
 	"mckinsey.com/ark/internal/eventing/noop"
 	"mckinsey.com/ark/internal/eventing/recorder"
 )
@@ -235,7 +236,7 @@ func TestExtractResponseText(t *testing.T) {
 		task := &protocol.Task{
 			ID: "task-1",
 			Status: protocol.TaskStatus{
-				State: TaskStateCompleted,
+				State: arka2a.TaskStateCompleted,
 			},
 			History: []protocol.Message{
 				{
@@ -254,7 +255,7 @@ func TestExtractResponseText(t *testing.T) {
 		task := &protocol.Task{
 			ID: "task-2",
 			Status: protocol.TaskStatus{
-				State: TaskStateFailed,
+				State: arka2a.TaskStateFailed,
 				Message: &protocol.Message{
 					Parts: []protocol.Part{protocol.TextPart{Text: "error occurred"}},
 				},

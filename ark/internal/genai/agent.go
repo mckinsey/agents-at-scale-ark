@@ -13,6 +13,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
+	arka2a "mckinsey.com/ark/internal/a2a"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
 )
@@ -80,7 +81,7 @@ func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []M
 }
 
 func (a *Agent) executeWithExecutionEngineRouter(ctx context.Context, userInput Message, history []Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
-	if a.ExecutionEngine.Name == ExecutionEngineA2A {
+	if a.ExecutionEngine.Name == arka2a.ExecutionEngineA2A {
 		return a.executeWithA2AExecutionEngine(ctx, userInput, eventStream)
 	}
 
@@ -255,7 +256,7 @@ func ValidateExecutionEngine(ctx context.Context, k8sClient client.Client, execu
 	}
 
 	// Pass validation for reserved 'a2a' execution engine (internal)
-	if engineName == ExecutionEngineA2A {
+	if engineName == arka2a.ExecutionEngineA2A {
 		return nil
 	}
 
@@ -351,7 +352,7 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 	var resolvedModel *Model
 
 	// A2A agents don't need models - they delegate to external A2A servers
-	if crd.Spec.ExecutionEngine == nil || crd.Spec.ExecutionEngine.Name != ExecutionEngineA2A {
+	if crd.Spec.ExecutionEngine == nil || crd.Spec.ExecutionEngine.Name != arka2a.ExecutionEngineA2A {
 		var err error
 		resolvedModel, err = LoadModel(ctx, k8sClient, crd.Spec.ModelRef, crd.Namespace, modelHeaders, telemetryProvider.ModelRecorder(), eventingProvider.ModelRecorder())
 		if err != nil {

@@ -1,4 +1,4 @@
-package genai
+package a2a
 
 import (
 	"testing"
@@ -185,7 +185,7 @@ func TestExtractTextFromTask(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := extractTextFromTask(tt.task)
+			result, err := ExtractTextFromTask(tt.task)
 
 			if tt.expectError {
 				assert.Error(t, err)

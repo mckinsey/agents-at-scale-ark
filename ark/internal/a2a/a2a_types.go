@@ -1,15 +1,13 @@
 /* Copyright 2025. McKinsey & Company */
 
-package genai
+package a2a
 
 import (
 	"trpc.group/trpc-go/trpc-a2a-go/server"
 )
 
-// ExecutionEngineA2A is the reserved name for A2A execution engine
 const ExecutionEngineA2A = "a2a"
 
-// A2A Task states from the A2A protocol
 const (
 	TaskStateSubmitted     = "submitted"
 	TaskStateWorking       = "working"
@@ -21,7 +19,6 @@ const (
 	TaskStateAuthRequired  = "auth-required"
 )
 
-// Use the official A2A library types
 type (
 	A2AAgentCard = server.AgentCard
 )

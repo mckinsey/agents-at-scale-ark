@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
+
+	arka2a "mckinsey.com/ark/internal/a2a"
 )
 
 type mockEventStream struct {
@@ -83,7 +85,7 @@ func TestConsumeA2AStreamEventsFinalStatus(t *testing.T) {
 			TaskID:    "task-1",
 			ContextID: "ctx-1",
 			Status: protocol.TaskStatus{
-				State: protocol.TaskState(TaskStateWorking),
+				State: protocol.TaskState(arka2a.TaskStateWorking),
 			},
 		},
 	}
@@ -93,7 +95,7 @@ func TestConsumeA2AStreamEventsFinalStatus(t *testing.T) {
 			ContextID: "ctx-1",
 			Final:     true,
 			Status: protocol.TaskStatus{
-				State: protocol.TaskState(TaskStateCompleted),
+				State: protocol.TaskState(arka2a.TaskStateCompleted),
 				Message: &protocol.Message{
 					Parts: []protocol.Part{protocol.NewTextPart("done")},
 				},
@@ -128,7 +130,7 @@ func TestConsumeA2AStreamEventsTask(t *testing.T) {
 			ID:        "task-1",
 			ContextID: "ctx-1",
 			Status: protocol.TaskStatus{
-				State: protocol.TaskState(TaskStateCompleted),
+				State: protocol.TaskState(arka2a.TaskStateCompleted),
 				Message: &protocol.Message{
 					Parts: []protocol.Part{protocol.NewTextPart("task result")},
 				},
@@ -162,7 +164,7 @@ func TestExtractTextFromTaskStatus(t *testing.T) {
 	t.Run("from status message", func(t *testing.T) {
 		task := &protocol.Task{
 			Status: protocol.TaskStatus{
-				State: protocol.TaskState(TaskStateCompleted),
+				State: protocol.TaskState(arka2a.TaskStateCompleted),
 				Message: &protocol.Message{
 					Parts: []protocol.Part{protocol.NewTextPart("from status")},
 				},
@@ -174,7 +176,7 @@ func TestExtractTextFromTaskStatus(t *testing.T) {
 	t.Run("from history fallback", func(t *testing.T) {
 		task := &protocol.Task{
 			Status: protocol.TaskStatus{
-				State: protocol.TaskState(TaskStateCompleted),
+				State: protocol.TaskState(arka2a.TaskStateCompleted),
 			},
 			History: []protocol.Message{
 				{Role: protocol.MessageRoleAgent, Parts: []protocol.Part{protocol.NewTextPart("from history")}},
@@ -185,7 +187,7 @@ func TestExtractTextFromTaskStatus(t *testing.T) {
 
 	t.Run("empty task", func(t *testing.T) {
 		task := &protocol.Task{
-			Status: protocol.TaskStatus{State: protocol.TaskState(TaskStateWorking)},
+			Status: protocol.TaskStatus{State: protocol.TaskState(arka2a.TaskStateWorking)},
 		}
 		assert.Equal(t, "", extractTextFromTaskStatus(task))
 	})
