@@ -1,17 +1,12 @@
 'use client';
 
 import { Bot, MessageCircle, Pencil, Trash2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { AvailabilityStatusBadge } from '@/components/ui/availability-status-badge';
-import { useChatState } from '@/lib/chat-context';
 import { toggleFloatingChat } from '@/lib/chat-events';
-import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
+import { useAgentDisplay } from '@/lib/hooks/use-agent-display';
 import type { Agent } from '@/lib/services';
-import { getCustomIcon } from '@/lib/utils/icon-resolver';
-import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { BaseCard, type BaseCardAction } from './base-card';
 
@@ -21,19 +16,17 @@ interface AgentCardProps {
 }
 
 export function AgentCard({ agent, onDelete }: AgentCardProps) {
-  const router = useRouter();
-  const { isOpen } = useChatState();
-  const isChatOpen = isOpen(agent.name);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const { readOnlyMode } = useNamespace();
-
-  const modelName = agent.modelRef?.name || 'No model assigned';
-  const isA2A = agent.isA2A || false;
-  const availabilityStatus = !isA2A && !agent.modelRef ? 'False' : agent.available;
-  const IconComponent = getCustomIcon(
-    agent.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON],
-    Bot,
-  );
+  const {
+    router,
+    isChatOpen,
+    deleteConfirmOpen,
+    setDeleteConfirmOpen,
+    readOnlyMode,
+    modelName,
+    isA2A,
+    availabilityStatus,
+    IconComponent,
+  } = useAgentDisplay(agent);
 
   const actions: BaseCardAction[] = [
     {
