@@ -96,6 +96,15 @@ deployments:
         image:
           repository: ${runtime.images.ark-completions.image}
           tag: ${runtime.images.ark-completions.tag}
+        resources:
+          limits:
+            memory: "4096Mi"
+            cpu: "2000m"
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+        securityContext:
+          runAsNonRoot: false
 
 dev:
   ark-controller:

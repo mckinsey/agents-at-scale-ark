@@ -17,9 +17,7 @@ spec:
     spec:
       serviceAccountName: {{ .Values.serviceAccountName }}
       securityContext:
-        runAsNonRoot: true
-        seccompProfile:
-          type: RuntimeDefault
+        runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
       containers:
         - name: completions
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"

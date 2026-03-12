@@ -18,6 +18,9 @@ resources:
     memory: 64Mi
     ephemeral-storage: 128Mi
 
+securityContext:
+  runAsNonRoot: true
+
 customCACert:
   enabled: false
   secretName: "custom-ca-cert"
