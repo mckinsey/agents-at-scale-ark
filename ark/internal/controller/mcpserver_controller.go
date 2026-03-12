@@ -25,6 +25,7 @@ import (
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/genai"
 	"mckinsey.com/ark/internal/labels"
+	arkmcp "mckinsey.com/ark/internal/mcp"
 )
 
 const (
@@ -249,8 +250,8 @@ func (r *MCPServerReconciler) updateStatus(ctx context.Context, mcpServer *arkv1
 	return err
 }
 
-func (r *MCPServerReconciler) createMCPClient(ctx context.Context, mcpServer *arkv1alpha1.MCPServer) (*genai.MCPClient, error) {
-	mcpURL, err := genai.BuildMCPServerURL(ctx, r.Client, mcpServer)
+func (r *MCPServerReconciler) createMCPClient(ctx context.Context, mcpServer *arkv1alpha1.MCPServer) (*arkmcp.MCPClient, error) {
+	mcpURL, err := arkmcp.BuildMCPServerURL(ctx, r.Client, mcpServer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build MCP server URL: %v", err)
 	}
@@ -275,7 +276,7 @@ func (r *MCPServerReconciler) createMCPClient(ctx context.Context, mcpServer *ar
 	}
 
 	// MCP settings are not needed for listing tools, etc.
-	mcpClient, err := genai.NewMCPClient(ctx, mcpURL, headers, mcpServer.Spec.Transport, timeout, genai.MCPSettings{})
+	mcpClient, err := arkmcp.NewMCPClient(ctx, mcpURL, headers, mcpServer.Spec.Transport, timeout, arkmcp.MCPSettings{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create MCP client: %w", err)
 	}

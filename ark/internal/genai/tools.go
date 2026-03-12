@@ -21,6 +21,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/eventing"
+	arkmcp "mckinsey.com/ark/internal/mcp"
 	"mckinsey.com/ark/internal/telemetry"
 )
 
@@ -182,17 +183,17 @@ func (h *HTTPExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, 
 type ToolRegistry struct {
 	tools             map[string]ToolDefinition
 	executors         map[string]ToolExecutor
-	mcpPool           *MCPClientPool         // One MCP client pool per agent
-	mcpSettings       map[string]MCPSettings // MCP settings per MCP server (namespace/name)
+	mcpPool           *arkmcp.MCPClientPool
+	mcpSettings       map[string]arkmcp.MCPSettings
 	telemetryRecorder telemetry.ToolRecorder
 	eventingRecorder  eventing.ToolRecorder
 }
 
-func NewToolRegistry(mcpSettings map[string]MCPSettings, telemetryRecorder telemetry.ToolRecorder, eventingRecorder eventing.ToolRecorder) *ToolRegistry {
+func NewToolRegistry(mcpSettings map[string]arkmcp.MCPSettings, telemetryRecorder telemetry.ToolRecorder, eventingRecorder eventing.ToolRecorder) *ToolRegistry {
 	return &ToolRegistry{
 		tools:             make(map[string]ToolDefinition),
 		executors:         make(map[string]ToolExecutor),
-		mcpPool:           NewMCPClientPool(),
+		mcpPool:           arkmcp.NewMCPClientPool(),
 		mcpSettings:       mcpSettings,
 		telemetryRecorder: telemetryRecorder,
 		eventingRecorder:  eventingRecorder,
@@ -294,7 +295,7 @@ func (tr *ToolRegistry) ToOpenAITools() []openai.ChatCompletionToolParam {
 }
 
 // GetMCPPool returns the MCP client pool for this tool registry
-func (tr *ToolRegistry) GetMCPPool() (*MCPClientPool, map[string]MCPSettings) {
+func (tr *ToolRegistry) GetMCPPool() (*arkmcp.MCPClientPool, map[string]arkmcp.MCPSettings) {
 	return tr.mcpPool, tr.mcpSettings
 }
 

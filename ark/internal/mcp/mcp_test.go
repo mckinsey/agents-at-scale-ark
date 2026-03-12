@@ -1,4 +1,4 @@
-package genai
+package mcp
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,7 +40,7 @@ func TestNewMCPClient(t *testing.T) {
 				connectionOptions: mcpConnectionOps{
 					host:      "localhost",
 					port:      "8888",
-					transport: "ABC", // NOTE: Unsupported transport to force error
+					transport: "ABC",
 				},
 			},
 			expectedError: ErrUnsupportedTransport,
@@ -56,7 +56,7 @@ func TestNewMCPClient(t *testing.T) {
 			mcpClient: struct{ connectionOptions mcpConnectionOps }{
 				connectionOptions: mcpConnectionOps{
 					host:      "localhost",
-					port:      "9999", // NOTE: Wrong port to force connection failure
+					port:      "9999",
 					transport: "http",
 				},
 			},
@@ -98,21 +98,17 @@ func TestNewMCPClient(t *testing.T) {
 
 	for testName, tc := range testCases {
 		t.Run(testName, func(t *testing.T) {
-			// Store server and client for cleanup
 			mcpServerMock := mcpServerMock{}.New(t, tc.mcpServer.connectionOptions)
 			var mcpClient *MCPClient
 
 			t.Cleanup(func() {
-				// Release connections when test completes
-				if mcpClient != nil && mcpClient.client != nil {
-					_ = mcpClient.client.Close()
+				if mcpClient != nil && mcpClient.Client != nil {
+					_ = mcpClient.Client.Close()
 				}
 
-				// And shut down server
 				_ = mcpServerMock.Shutdown(t.Context())
 			})
 
-			// Start server in a goroutine since ListenAndServe blocks
 			go func() {
 				fmt.Println("Starting MCP server mock...")
 				err := mcpServerMock.ListenAndServe(t)
@@ -121,7 +117,6 @@ func TestNewMCPClient(t *testing.T) {
 				}
 			}()
 
-			// Wait for the server to start
 			ctx := t.Context()
 			serverURL := fmt.Sprintf("http://%s:%s", tc.mcpServer.connectionOptions.host, tc.mcpServer.connectionOptions.port)
 			require.NoError(t, waitForServer(t, ctx, serverURL, 5*time.Second))
@@ -140,7 +135,6 @@ func TestNewMCPClient(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, client)
 
-				// Store client for cleanup
 				mcpClient = client
 
 				tools, err := client.ListTools(ctx)
@@ -152,15 +146,15 @@ func TestNewMCPClient(t *testing.T) {
 }
 
 type mcpServerMock struct {
-	server     *mcp.Server
+	server     *mcpsdk.Server
 	httpServer *http.Server
 	opts       mcpConnectionOps
 }
 
 func (m mcpServerMock) New(t *testing.T, opts mcpConnectionOps) *mcpServerMock {
-	mcpServer := mcp.NewServer(&mcp.Implementation{Name: "greeter", Version: "v0.0.1"}, nil)
+	mcpServer := mcpsdk.NewServer(&mcpsdk.Implementation{Name: "greeter", Version: "v0.0.1"}, nil)
 
-	mcp.AddTool(mcpServer, &mcp.Tool{Name: "greet", Description: "say hi"}, m.sayHi)
+	mcpsdk.AddTool(mcpServer, &mcpsdk.Tool{Name: "greet", Description: "say hi"}, m.sayHi)
 
 	return &mcpServerMock{
 		server: mcpServer,
@@ -174,9 +168,9 @@ func (m *mcpServerMock) ListenAndServe(t *testing.T) error {
 	var handler http.Handler
 	switch m.opts.transport {
 	case "sse":
-		handler = mcp.NewSSEHandler(m.getServerFn(), nil)
+		handler = mcpsdk.NewSSEHandler(m.getServerFn(), nil)
 	case "http":
-		handler = mcp.NewStreamableHTTPHandler(m.getServerFn(), nil)
+		handler = mcpsdk.NewStreamableHTTPHandler(m.getServerFn(), nil)
 	default:
 		panic("unsupported transport")
 	}
@@ -195,8 +189,8 @@ func (m *mcpServerMock) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func (m *mcpServerMock) getServerFn() func(request *http.Request) *mcp.Server {
-	return func(request *http.Request) *mcp.Server {
+func (m *mcpServerMock) getServerFn() func(request *http.Request) *mcpsdk.Server {
+	return func(request *http.Request) *mcpsdk.Server {
 		return m.server
 	}
 }
@@ -205,15 +199,14 @@ type sayHiParams struct {
 	Name string `json:"name"`
 }
 
-func (m *mcpServerMock) sayHi(ctx context.Context, req *mcp.CallToolRequest, args sayHiParams) (*mcp.CallToolResult, any, error) {
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			&mcp.TextContent{Text: "Hi " + args.Name},
+func (m *mcpServerMock) sayHi(ctx context.Context, req *mcpsdk.CallToolRequest, args sayHiParams) (*mcpsdk.CallToolResult, any, error) {
+	return &mcpsdk.CallToolResult{
+		Content: []mcpsdk.Content{
+			&mcpsdk.TextContent{Text: "Hi " + args.Name},
 		},
 	}, nil, nil
 }
 
-// waitForServer polls the server URL until it responds or timeout is reached
 func waitForServer(t *testing.T, ctx context.Context, url string, timeout time.Duration) error {
 	t.Helper()
 
@@ -237,7 +230,6 @@ func waitForServer(t *testing.T, ctx context.Context, url string, timeout time.D
 			return nil
 		}
 
-		// Check if context was cancelled
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}

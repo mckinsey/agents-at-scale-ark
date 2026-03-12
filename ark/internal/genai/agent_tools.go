@@ -12,53 +12,9 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/eventing"
+	arkmcp "mckinsey.com/ark/internal/mcp"
 	"mckinsey.com/ark/internal/telemetry"
 )
-
-// Add MCP client pool to ToolRegistry
-type MCPClientPool struct {
-	clients map[string]*MCPClient // key: mcpServerName
-}
-
-func NewMCPClientPool() *MCPClientPool {
-	return &MCPClientPool{
-		clients: make(map[string]*MCPClient),
-	}
-}
-
-// GetOrCreateClient returns an existing MCP client or creates a new one for the given server
-func (p *MCPClientPool) GetOrCreateClient(ctx context.Context, serverName, serverNamespace, serverURL string, headers map[string]string, transport string, timeout time.Duration, mcpSettings map[string]MCPSettings) (*MCPClient, error) {
-	key := fmt.Sprintf("%s/%s", serverNamespace, serverName)
-	if mcpClient, exists := p.clients[key]; exists {
-		return mcpClient, nil
-	}
-
-	// Get MCP settings for this server if available
-	mcpSetting := mcpSettings[key]
-
-	// Create new client for this MCP server
-	mcpClient, err := NewMCPClient(ctx, serverURL, headers, transport, timeout, mcpSetting)
-	if err != nil {
-		return nil, err
-	}
-
-	p.clients[key] = mcpClient
-	return mcpClient, nil
-}
-
-// Close closes all MCP client connections in the pool
-func (p *MCPClientPool) Close() error {
-	var lastErr error
-	for key, mcpClient := range p.clients {
-		if mcpClient != nil && mcpClient.client != nil {
-			if err := mcpClient.client.Close(); err != nil {
-				lastErr = fmt.Errorf("failed to close MCP client %s: %w", key, err)
-			}
-		}
-		delete(p.clients, key)
-	}
-	return lastErr
-}
 
 func (r *ToolRegistry) registerTools(ctx context.Context, k8sClient client.Client, agent *arkv1alpha1.Agent, telemetryProvider telemetry.Provider, eventingProvider eventing.Provider) error {
 	for _, agentTool := range agent.Spec.Tools {
@@ -69,7 +25,7 @@ func (r *ToolRegistry) registerTools(ctx context.Context, k8sClient client.Clien
 	return nil
 }
 
-func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, mcpPool *MCPClientPool, mcpSettings map[string]MCPSettings, telemetryProvider telemetry.Provider, eventingProvider eventing.Provider) (ToolExecutor, error) {
+func CreateToolExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, mcpPool *arkmcp.MCPClientPool, mcpSettings map[string]arkmcp.MCPSettings, telemetryProvider telemetry.Provider, eventingProvider eventing.Provider) (ToolExecutor, error) {
 	switch tool.Spec.Type {
 	case ToolTypeHTTP:
 		return createHTTPExecutor(k8sClient, tool, namespace)
@@ -150,7 +106,7 @@ func createHTTPExecutor(k8sClient client.Client, tool *arkv1alpha1.Tool, namespa
 	}, nil
 }
 
-func createMCPExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, mcpPool *MCPClientPool, mcpSettings map[string]MCPSettings) (ToolExecutor, error) {
+func createMCPExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1alpha1.Tool, namespace string, mcpPool *arkmcp.MCPClientPool, mcpSettings map[string]arkmcp.MCPSettings) (ToolExecutor, error) {
 	if tool.Spec.MCP == nil {
 		return nil, fmt.Errorf("mcp spec is required for tool %s", tool.Name)
 	}
@@ -169,7 +125,7 @@ func createMCPExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1
 		return nil, fmt.Errorf("failed to get MCP server %v: %w", mcpServerKey, err)
 	}
 
-	mcpURL, err := BuildMCPServerURL(ctx, k8sClient, &mcpServerCRD)
+	mcpURL, err := arkmcp.BuildMCPServerURL(ctx, k8sClient, &mcpServerCRD)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build MCP server URL: %w", err)
 	}

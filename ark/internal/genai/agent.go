@@ -15,6 +15,7 @@ import (
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
 	"mckinsey.com/ark/internal/eventing"
+	arkmcp "mckinsey.com/ark/internal/mcp"
 	"mckinsey.com/ark/internal/telemetry"
 )
 
@@ -298,7 +299,7 @@ func resolveModelHeadersForAgent(ctx context.Context, k8sClient client.Client, a
 	return modelHeaders, nil
 }
 
-func resolveMCPSettingsForAgent(ctx context.Context, k8sClient client.Client, agentCRD *arkv1alpha1.Agent, queryCRD *arkv1alpha1.Query, queryMCPSettings map[string]MCPSettings) (map[string]MCPSettings, error) {
+func resolveMCPSettingsForAgent(ctx context.Context, k8sClient client.Client, agentCRD *arkv1alpha1.Agent, queryCRD *arkv1alpha1.Query, queryMCPSettings map[string]arkmcp.MCPSettings) (map[string]arkmcp.MCPSettings, error) {
 	agentHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, agentCRD.Spec.Overrides, agentCRD.Namespace, OverrideTypeMCPServer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve MCP headers for agent %s/%s: %w", agentCRD.Namespace, agentCRD.Name, err)
@@ -311,7 +312,7 @@ func resolveMCPSettingsForAgent(ctx context.Context, k8sClient client.Client, ag
 
 	mcpSettings := queryMCPSettings
 	if mcpSettings == nil {
-		mcpSettings = make(map[string]MCPSettings)
+		mcpSettings = make(map[string]arkmcp.MCPSettings)
 	}
 
 	for mcpKey, headers := range agentHeadersMap {

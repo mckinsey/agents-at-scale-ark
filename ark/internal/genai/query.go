@@ -10,6 +10,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
+	arkmcp "mckinsey.com/ark/internal/mcp"
 )
 
 type Query struct {
@@ -17,11 +18,11 @@ type Query struct {
 	Namespace   string
 	Input       runtime.RawExtension
 	Parameters  []arkv1alpha1.Parameter
-	McpSettings map[string]MCPSettings
+	McpSettings map[string]arkmcp.MCPSettings
 }
 
-func getMCPSettings(crd *arkv1alpha1.Query) (map[string]MCPSettings, error) {
-	mcpSettings := make(map[string]MCPSettings)
+func getMCPSettings(crd *arkv1alpha1.Query) (map[string]arkmcp.MCPSettings, error) {
+	mcpSettings := make(map[string]arkmcp.MCPSettings)
 
 	if crd.Annotations == nil || crd.Annotations[annotations.MCPServerSettings] == "" {
 		return mcpSettings, nil
