@@ -2,20 +2,22 @@ apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   name: aggregation-smoke
+  labels:
+    postgresql: "true"
 spec:
   steps:
     - name: api-discovery
       try:
       - script:
           content: |
-            set -euo pipefail
+            set -eu
             echo "Checking ark.mckinsey.com/v1alpha1 API resources..."
             RESOURCES=$(kubectl api-resources --api-group=ark.mckinsey.com -o name)
             for kind in agents models queries teams; do
               if echo "$RESOURCES" | grep -q "^${kind}\."; then
-                echo "✓ ${kind} discovered"
+                echo "OK ${kind} discovered"
               else
-                echo "✗ ${kind} not found in API discovery"
+                echo "FAIL ${kind} not found in API discovery"
                 exit 1
               fi
             done
@@ -25,7 +27,7 @@ spec:
       try:
       - script:
           content: |
-            set -euo pipefail
+            set -eu
             cat <<'MANIFEST' | kubectl apply -n $NAMESPACE -f -
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Model
@@ -36,14 +38,14 @@ spec:
               model:
                 value: smoke-test
             MANIFEST
-            echo "✓ Model created"
+            echo "OK Model created"
 
             MODEL=$(kubectl get model smoke-test-model -n $NAMESPACE -o jsonpath='{.metadata.name}')
             if [ "$MODEL" != "smoke-test-model" ]; then
-              echo "✗ Model read-back failed: got '$MODEL'"
+              echo "FAIL Model read-back failed: got '$MODEL'"
               exit 1
             fi
-            echo "✓ Model read-back succeeded"
+            echo "OK Model read-back succeeded"
           env:
           - name: NAMESPACE
             value: ($namespace)
@@ -53,7 +55,7 @@ spec:
       try:
       - script:
           content: |
-            set -euo pipefail
+            set -eu
             kubectl get models -n $NAMESPACE --watch-only --timeout=5 &
             WATCH_PID=$!
             sleep 2
@@ -72,7 +74,7 @@ spec:
             sleep 3
             kill $WATCH_PID 2>/dev/null || true
             wait $WATCH_PID 2>/dev/null || true
-            echo "✓ Watch routing operational"
+            echo "OK Watch routing operational"
           env:
           - name: NAMESPACE
             value: ($namespace)
