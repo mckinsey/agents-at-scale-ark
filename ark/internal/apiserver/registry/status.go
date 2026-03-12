@@ -4,6 +4,7 @@ package registry
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -98,19 +99,31 @@ func getNamespaceFromContext(ctx context.Context) string {
 }
 
 func copyStatusOnly(dst, src runtime.Object) error {
-	srcValue, err := runtime.DefaultUnstructuredConverter.ToUnstructured(src)
+	srcData, err := json.Marshal(src)
 	if err != nil {
-		return fmt.Errorf("failed to convert source to unstructured: %w", err)
+		return fmt.Errorf("failed to marshal source: %w", err)
 	}
-
-	dstValue, err := runtime.DefaultUnstructuredConverter.ToUnstructured(dst)
+	dstData, err := json.Marshal(dst)
 	if err != nil {
-		return fmt.Errorf("failed to convert destination to unstructured: %w", err)
+		return fmt.Errorf("failed to marshal destination: %w", err)
 	}
 
-	if status, ok := srcValue["status"]; ok {
-		dstValue["status"] = status
+	var srcMap map[string]json.RawMessage
+	var dstMap map[string]json.RawMessage
+	if err := json.Unmarshal(srcData, &srcMap); err != nil {
+		return fmt.Errorf("failed to parse source: %w", err)
+	}
+	if err := json.Unmarshal(dstData, &dstMap); err != nil {
+		return fmt.Errorf("failed to parse destination: %w", err)
 	}
 
-	return runtime.DefaultUnstructuredConverter.FromUnstructured(dstValue, dst)
+	if status, ok := srcMap["status"]; ok {
+		dstMap["status"] = status
+	}
+
+	merged, err := json.Marshal(dstMap)
+	if err != nil {
+		return fmt.Errorf("failed to marshal merged: %w", err)
+	}
+	return json.Unmarshal(merged, dst)
 }
