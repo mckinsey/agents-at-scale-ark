@@ -210,7 +210,7 @@ func (h *Handler) dispatchTarget(ctx context.Context, state *executionState) ([]
 	var err error
 
 	switch state.target.Type {
-	case "agent", "team":
+	case ToolTypeAgent, ToolTypeTeam:
 		_, responseMessages, err = h.executeMember(ctx, state.query, state.target.Type, state.target.Name, state.inputMessages, state.memoryMessages, state.memory, state.eventStream)
 	case "model":
 		responseMessages, err = h.executeModel(ctx, state.query, state.target.Name, state.inputMessages, state.memoryMessages, state.eventStream)
@@ -295,7 +295,7 @@ func (h *Handler) executeMember(
 	var member TeamMember
 
 	switch targetType {
-	case "agent":
+	case ToolTypeAgent:
 		var agentCRD arkv1alpha1.Agent
 		if err := h.k8sClient.Get(ctx, types.NamespacedName{Name: targetName, Namespace: query.Namespace}, &agentCRD); err != nil {
 			return nil, nil, fmt.Errorf("failed to get agent %s: %w", targetName, err)
@@ -305,7 +305,7 @@ func (h *Handler) executeMember(
 			return nil, nil, fmt.Errorf("failed to make agent %s: %w", targetName, err)
 		}
 		member = agent
-	case "team":
+	case ToolTypeTeam:
 		var teamCRD arkv1alpha1.Team
 		if err := h.k8sClient.Get(ctx, types.NamespacedName{Name: targetName, Namespace: query.Namespace}, &teamCRD); err != nil {
 			return nil, nil, fmt.Errorf("failed to get team %s: %w", targetName, err)
