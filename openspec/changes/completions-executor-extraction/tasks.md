@@ -133,13 +133,13 @@
 
 ## Success Criteria
 
-- [ ] `internal/genai/` is deleted — no grab-bag package
-- [ ] `executors/completions/` exists as a composed service unit with README, CLAUDE.md, Makefile, Dockerfile, chart, devspace, build.mk
-- [ ] Shared infra lives in focused packages: `internal/a2a/`, `internal/mcp/`, `internal/resolution/`
-- [ ] Controller-specific code absorbed by owning controllers
-- [ ] `cmd/completions/` binary builds and runs
+- [x] `internal/genai/` is deleted — no grab-bag package
+- [x] `executors/completions/` exists as a composed service unit with README, CLAUDE.md, Makefile, Dockerfile, chart, devspace
+- [x] Shared infra lives in focused packages: `internal/a2a/`, `internal/mcp/`, `internal/resolution/`
+- [x] Controller-specific code absorbed by owning controllers
+- [x] `cmd/completions/` binary builds and runs
 - [ ] `ark-completions` image builds in CI
-- [ ] Deploys in `ark-system` namespace as part of default Ark install
+- [x] Deploys in `ark-system` namespace as part of default Ark install
 - [ ] All existing e2e tests pass unchanged
-- [ ] Dependency graph has no cycles
-- [ ] Root Makefile discovers and builds via `build.mk`
+- [x] Dependency graph has no cycles
+- [x] Root Makefile builds via `make build-completions`

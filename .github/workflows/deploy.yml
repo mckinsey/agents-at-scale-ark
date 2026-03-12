@@ -78,8 +78,8 @@ jobs:
           - path: ark
             image: ark-controller
           - path: ark
-            image: ark-query-engine
-            dockerfile: Dockerfile.query-engine
+            image: ark-completions
+            dockerfile: Dockerfile.completions
           - path: services/ark-api
             image: ark-api
             prebuild: "make ark-api-deps && mkdir -p services/ark-api/ark-api/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/out/"
