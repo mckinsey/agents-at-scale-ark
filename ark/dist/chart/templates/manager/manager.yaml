@@ -123,6 +123,54 @@ spec:
               readOnly: true
             {{- end }}
           {{- end }}
+        {{- if .Values.queryEngine.enabled }}
+        - name: query-engine
+          image: {{ .Values.queryEngine.container.image.repository }}:{{ .Values.queryEngine.container.image.tag | default .Chart.AppVersion }}
+          imagePullPolicy: {{ .Values.queryEngine.container.image.pullPolicy | default "IfNotPresent" }}
+          args:
+            - "--addr=:{{ .Values.queryEngine.container.port }}"
+          env:
+          - name: OTEL_SERVICE_NAME
+            value: "ark-query-engine"
+          {{- if .Values.customCACert.enabled }}
+          - name: SSL_CERT_FILE
+            value: "/etc/ssl/certs/custom-ca/{{ .Values.customCACert.key }}"
+          {{- end }}
+          envFrom:
+          - configMapRef:
+              name: otel-environment-variables
+              optional: true
+          - secretRef:
+              name: otel-environment-variables
+              optional: true
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.queryEngine.container.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.queryEngine.container.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            {{- toYaml .Values.queryEngine.container.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - "ALL"
+          {{- if .Values.customCACert.enabled }}
+          volumeMounts:
+            - name: custom-ca-cert
+              mountPath: /etc/ssl/certs/custom-ca
+              readOnly: true
+          {{- end }}
+        {{- end }}
       securityContext:
         {{- toYaml .Values.controllerManager.securityContext | nindent 8 }}
       serviceAccountName: {{ .Values.controllerManager.serviceAccountName }}

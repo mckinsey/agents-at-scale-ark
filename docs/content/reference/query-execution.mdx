@@ -55,42 +55,39 @@ spec:
 ### 2. Controller Processing
 
 The Query controller detects the new Query and:
-1. Creates an impersonated Kubernetes client using the specified service account
-2. Resolves the Memory reference (if provided)
-3. Determines the execution strategy based on targets
-4. Initiates execution for each target
+1. Resolves the target (agent, team, model, or tool) from the spec or label selector
+2. If the target agent has an `executionEngine` (A2A or named engine), the controller executes it directly — bypassing the sidecar since these agents proxy to external services
+3. Otherwise, sends an A2A `SendMessage` to the query engine sidecar with the target and query reference
+4. Waits for the response and writes the result to the Query status
 
-### 3. Target Execution
+### 3. Query Engine Execution
 
-For each target (Agent or Team):
+The query engine receives the A2A message and:
+1. Reads the Query CR and target CRD from Kubernetes
+2. Creates a memory client and loads conversation history
+3. Creates an EventStream for streaming chunks to ark-broker
+4. Executes the target
 
 #### Agent Execution
 1. **Model Resolution**: Resolves the agent's model reference
-2. **Parameter Resolution**: Resolves agent parameters from:
-   - Static values
-   - ConfigMaps and Secrets
-   - Query parameters
-3. **Prompt Construction**: Builds the final prompt from:
-   - Agent's system prompt
-   - Memory context (if configured)
-   - User input
+2. **Parameter Resolution**: Resolves agent parameters from static values, ConfigMaps, Secrets, and query parameters
+3. **Prompt Construction**: Builds the prompt from agent system prompt, memory context, and user input
 4. **Tool Preparation**: Prepares available tools and MCP servers
-5. **Model Invocation**: Sends request to the model provider
-6. **Tool Execution**: Handles any tool calls from the model
-7. **Response Generation**: Collects and formats the final response
+5. **Turn Loop**: Calls the model, executes tool calls, repeats until no more tool calls
+6. **Streaming**: Chunks stream directly from the engine to ark-broker
 
 #### Team Execution
-1. **Strategy Application**: Uses the team's strategy (sequential, parallel, etc.)
+1. **Strategy Application**: Uses the team's strategy (sequential, round-robin, selector, graph)
 2. **Member Coordination**: Orchestrates execution across team members
-3. **Result Aggregation**: Combines responses according to strategy
+3. **Recursive Routing**: Members with explicit execution engines route via A2A; others execute locally
 
 ### 4. Response Handling
 
-The controller:
-1. Collects responses from all targets
-2. Updates the Query status with results
-3. Stores conversation in Memory (if configured)
-4. Marks the Query as completed
+After execution:
+1. The engine saves new messages to memory, sends a final stream chunk, and closes the stream
+2. The engine returns the A2A response with the assistant message, token usage, and conversation ID
+3. The controller writes the response, token usage, and conversation ID to the Query CR status
+4. The controller marks the Query as completed
 
 ## Execution Engines
 
