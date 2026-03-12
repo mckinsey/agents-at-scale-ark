@@ -73,6 +73,14 @@ echo "=== Installing ARK Controller ==="
 cd "${REPO_ROOT}/ark"
 
 # Deploy controller with impersonation enabled for E2E tests
+helm upgrade --install ark-completions ./executors/completions/chart \
+  --namespace ark-system \
+  --create-namespace \
+  --wait --timeout=300s \
+  --set image.repository="${REGISTRY}/ark-completions" \
+  --set image.tag="${ARK_IMAGE_TAG}" \
+  --set image.pullPolicy=IfNotPresent
+
 helm upgrade --install ark-controller ./dist/chart \
   --namespace ark-system \
   --create-namespace \
@@ -80,10 +88,6 @@ helm upgrade --install ark-controller ./dist/chart \
   --set controllerManager.container.image.repository="${REGISTRY}/ark-controller" \
   --set controllerManager.container.image.tag="${ARK_IMAGE_TAG}" \
   --set controllerManager.container.image.pullPolicy=IfNotPresent \
-  --set completions.enabled=true \
-  --set completions.container.image.repository="${REGISTRY}/ark-completions" \
-  --set completions.container.image.tag="${ARK_IMAGE_TAG}" \
-  --set completions.container.image.pullPolicy=IfNotPresent \
   --set rbac.enable=true \
   --set rbac.impersonation.enabled=true
 

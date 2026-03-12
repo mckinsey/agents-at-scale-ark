@@ -906,6 +906,7 @@ jobs:
         chart:
           # Package only the essential charts.
           - { name: ark-controller, path: ark/dist/chart }
+          - { name: ark-completions, path: ark/executors/completions/chart }
           - { name: ark-api, path: services/ark-api/chart }
           - { name: ark-dashboard, path: services/ark-dashboard/chart }
           - { name: ark-mcp, path: services/ark-mcp/chart }

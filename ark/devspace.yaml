@@ -90,7 +90,7 @@ deployments:
     namespace: ark-system
     helm:
       chart:
-        path: ../charts/ark-completions-dev
+        path: ./executors/completions/chart
       releaseName: ark-completions
       values:
         image:

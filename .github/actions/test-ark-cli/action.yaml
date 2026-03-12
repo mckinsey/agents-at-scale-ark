@@ -112,16 +112,20 @@ runs:
 
         # Install ark-controller from local chart (includes CRDs)
         # Use pre-built controller image from registry cache
+        helm upgrade --install ark-completions ark/executors/completions/chart \
+          --namespace ark-system \
+          --create-namespace \
+          --set image.repository="${{ inputs.ci-cache-registry }}/ark-completions" \
+          --set image.tag="${{ inputs.ark-image-tag }}" \
+          --set image.pullPolicy=Always \
+          --wait --timeout=5m
+
         helm upgrade --install ark-controller ark/dist/chart \
           --namespace ark-system \
           --create-namespace \
           --set controllerManager.container.image.repository="${{ inputs.ci-cache-registry }}/ark-controller" \
           --set controllerManager.container.image.tag="${{ inputs.ark-image-tag }}" \
           --set controllerManager.container.image.pullPolicy=Always \
-          --set completions.enabled=true \
-          --set completions.container.image.repository="${{ inputs.ci-cache-registry }}/ark-completions" \
-          --set completions.container.image.tag="${{ inputs.ark-image-tag }}" \
-          --set completions.container.image.pullPolicy=Always \
           --wait --timeout=5m
 
         # Install ark-tenant from local chart
