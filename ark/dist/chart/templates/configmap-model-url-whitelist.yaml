@@ -1,0 +1,30 @@
+{{- if or .Values.modelUrlSecurity.domainWhitelist.enabled .Values.modelUrlSecurity.privateIPAllowlist.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.modelUrlSecurity.configMapName | default "model-url-security" }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+data:
+  {{- if .Values.modelUrlSecurity.domainWhitelist.enabled }}
+  {{ .Values.modelUrlSecurity.domainWhitelist.key | default "whitelisted-domains" }}: |
+    # Domain whitelist (opt-in) - uncomment to enable domain restrictions
+    # Supports exact domains, subdomains, and wildcards (*.example.com)
+    # Common AI providers:
+    # api.openai.com
+    # openai.azure.com
+    # api.anthropic.com
+    # generativelanguage.googleapis.com
+    # amazonaws.com
+  {{- end }}
+
+  {{- if .Values.modelUrlSecurity.privateIPAllowlist.enabled }}
+  {{ .Values.modelUrlSecurity.privateIPAllowlist.key | default "allowed-private-ips" }}: |
+    # Private IP allowlist (opt-in) - uncomment to allow specific internal endpoints
+    # Use CIDR notation to specify allowed ranges
+    # Example: Allow specific internal model gateway
+    # 10.100.50.0/24
+    # 192.168.1.100/32
+  {{- end }}
+{{- end }}
