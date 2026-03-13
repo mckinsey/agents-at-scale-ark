@@ -247,12 +247,12 @@ func TestDetermineNextMember(t *testing.T) {
 			wantMember: "selected",
 		},
 		{
-			name:           "no legal transitions falls back to first",
+			name:           "no legal transitions terminates team",
 			previousMember: "writer",
 			legalTransitions: map[string][]TeamMember{
 				"researcher": {members[1]},
 			},
-			wantMember: "researcher",
+			wantError: true,
 		},
 	}
 
@@ -272,6 +272,8 @@ func TestDetermineNextMember(t *testing.T) {
 
 			if tt.wantError {
 				require.Error(t, err)
+				assert.True(t, IsTerminateTeam(err), "expected TerminateTeam error")
+				assert.Nil(t, member, "member should be nil on error")
 				return
 			}
 
@@ -307,12 +309,13 @@ func TestSelectFromGraphConstraints(t *testing.T) {
 			wantMember: "selected",
 		},
 		{
-			name:           "no legal transitions",
+			name:           "no legal transitions terminates team",
 			previousMember: "writer",
 			legalTransitions: map[string][]TeamMember{
 				"researcher": {members[1]},
 			},
-			wantMember: "researcher", // Falls back to first
+			wantError:      true,
+			errorSubstring: "no onward transitions",
 		},
 		{
 			name:           "single legal transition",
@@ -349,6 +352,8 @@ func TestSelectFromGraphConstraints(t *testing.T) {
 
 			if tt.wantError {
 				require.Error(t, err)
+				assert.True(t, IsTerminateTeam(err), "expected TerminateTeam error")
+				assert.Nil(t, member, "member should be nil on error")
 				if tt.errorSubstring != "" {
 					assert.Contains(t, err.Error(), tt.errorSubstring)
 				}
