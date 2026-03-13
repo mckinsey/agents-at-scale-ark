@@ -138,16 +138,36 @@ func TestDefaultTeam(t *testing.T) {
 		}
 	})
 
-	t.Run("does not modify graph strategy", func(t *testing.T) {
+	t.Run("migrates graph to sequential with loops disabled", func(t *testing.T) {
+		maxTurns := 10
 		team := &arkv1alpha1.Team{
 			ObjectMeta: metav1.ObjectMeta{Name: "t"},
 			Spec: arkv1alpha1.TeamSpec{
 				Strategy: "graph",
+				MaxTurns: &maxTurns,
+				Graph: &arkv1alpha1.TeamGraphSpec{
+					Edges: []arkv1alpha1.TeamGraphEdge{
+						{From: "a", To: "b"},
+					},
+				},
 			},
 		}
 		DefaultTeam(team)
-		if team.Spec.Strategy != "graph" {
-			t.Fatalf("expected strategy 'graph', got '%s'", team.Spec.Strategy)
+		if team.Spec.Strategy != "sequential" {
+			t.Fatalf("expected strategy 'sequential', got '%s'", team.Spec.Strategy)
+		}
+		if team.Spec.Loops {
+			t.Fatal("expected loops to be false")
+		}
+		if team.Spec.Graph != nil {
+			t.Fatal("expected graph to be nil")
+		}
+		if team.Spec.MaxTurns != nil {
+			t.Fatal("expected maxTurns to be nil")
+		}
+		key := annotations.MigrationWarningPrefix + "graph"
+		if team.Annotations[key] == "" {
+			t.Fatal("expected migration warning annotation")
 		}
 	})
 }
