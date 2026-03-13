@@ -13,7 +13,6 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
-	"mckinsey.com/ark/internal/genai"
 	"mckinsey.com/ark/internal/validation"
 )
 
@@ -47,7 +46,7 @@ var _ = Describe("Model Webhook", func() {
 				Model: arkv1alpha1.ValueSource{
 					Value: "gpt-4o",
 				},
-				Provider: genai.ProviderOpenAI,
+				Provider: validation.ProviderOpenAI,
 				Config: arkv1alpha1.ModelConfig{
 					OpenAI: &arkv1alpha1.OpenAIModelConfig{
 						BaseURL: arkv1alpha1.ValueSource{
@@ -70,7 +69,7 @@ var _ = Describe("Model Webhook", func() {
 		})
 
 		It("Should allow valid Azure model with direct values", func() {
-			model.Spec.Provider = genai.ProviderAzure
+			model.Spec.Provider = validation.ProviderAzure
 			model.Spec.Config = arkv1alpha1.ModelConfig{
 				Azure: &arkv1alpha1.AzureModelConfig{
 					BaseURL: arkv1alpha1.ValueSource{
@@ -88,7 +87,7 @@ var _ = Describe("Model Webhook", func() {
 		})
 
 		It("Should allow valid Bedrock model with direct values", func() {
-			model.Spec.Provider = genai.ProviderBedrock
+			model.Spec.Provider = validation.ProviderBedrock
 			model.Spec.Config = arkv1alpha1.ModelConfig{
 				Bedrock: &arkv1alpha1.BedrockModelConfig{
 					Region: &arkv1alpha1.ValueSource{
@@ -288,7 +287,7 @@ var _ = Describe("Model Webhook", func() {
 			}
 			Expect(fakeClient.Create(ctx, configMap)).To(Succeed())
 
-			model.Spec.Provider = genai.ProviderBedrock
+			model.Spec.Provider = validation.ProviderBedrock
 			model.Spec.Config = arkv1alpha1.ModelConfig{
 				Bedrock: &arkv1alpha1.BedrockModelConfig{
 					Region: &arkv1alpha1.ValueSource{
@@ -379,7 +378,7 @@ var _ = Describe("Model Webhook", func() {
 	Context("When provider field is missing", func() {
 		It("Should reject model with empty provider", func() {
 			model.Spec.Provider = ""
-			model.Spec.Type = genai.ModelTypeCompletions
+			model.Spec.Type = validation.ModelTypeCompletions
 
 			warnings, err := validator.ValidateCreate(ctx, model)
 			Expect(err).To(HaveOccurred())
@@ -389,7 +388,7 @@ var _ = Describe("Model Webhook", func() {
 
 		It("Should suggest migration when type has legacy provider value", func() {
 			model.Spec.Provider = ""
-			model.Spec.Type = genai.ProviderOpenAI
+			model.Spec.Type = validation.ProviderOpenAI
 
 			warnings, err := validator.ValidateCreate(ctx, model)
 			Expect(err).To(HaveOccurred())
@@ -398,8 +397,8 @@ var _ = Describe("Model Webhook", func() {
 		})
 
 		It("Should accept model with valid provider", func() {
-			model.Spec.Provider = genai.ProviderOpenAI
-			model.Spec.Type = genai.ModelTypeCompletions
+			model.Spec.Provider = validation.ProviderOpenAI
+			model.Spec.Type = validation.ModelTypeCompletions
 
 			warnings, err := validator.ValidateCreate(ctx, model)
 			Expect(err).NotTo(HaveOccurred())
@@ -432,8 +431,8 @@ var _ = Describe("Model Webhook", func() {
 		})
 
 		It("Should not return warning for new format models", func() {
-			model.Spec.Provider = genai.ProviderOpenAI
-			model.Spec.Type = genai.ModelTypeCompletions
+			model.Spec.Provider = validation.ProviderOpenAI
+			model.Spec.Type = validation.ModelTypeCompletions
 
 			warnings, err := validator.ValidateCreate(ctx, model)
 			Expect(err).NotTo(HaveOccurred())
@@ -457,14 +456,14 @@ var _ = Describe("Model Defaulter", func() {
 		It("Should migrate openai from type to provider and add warning annotation", func() {
 			model := &arkv1alpha1.Model{
 				Spec: arkv1alpha1.ModelSpec{
-					Type: genai.ProviderOpenAI,
+					Type: validation.ProviderOpenAI,
 				},
 			}
 
 			err := defaulter.Default(ctx, model)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(model.Spec.Provider).To(Equal(genai.ProviderOpenAI))
-			Expect(model.Spec.Type).To(Equal(genai.ModelTypeCompletions))
+			Expect(model.Spec.Provider).To(Equal(validation.ProviderOpenAI))
+			Expect(model.Spec.Type).To(Equal(validation.ModelTypeCompletions))
 			Expect(model.Annotations).To(HaveKey(annotations.MigrationWarningPrefix + "provider"))
 			Expect(model.Annotations[annotations.MigrationWarningPrefix+"provider"]).To(ContainSubstring("openai"))
 		})
@@ -472,14 +471,14 @@ var _ = Describe("Model Defaulter", func() {
 		It("Should migrate azure from type to provider and add warning annotation", func() {
 			model := &arkv1alpha1.Model{
 				Spec: arkv1alpha1.ModelSpec{
-					Type: genai.ProviderAzure,
+					Type: validation.ProviderAzure,
 				},
 			}
 
 			err := defaulter.Default(ctx, model)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(model.Spec.Provider).To(Equal(genai.ProviderAzure))
-			Expect(model.Spec.Type).To(Equal(genai.ModelTypeCompletions))
+			Expect(model.Spec.Provider).To(Equal(validation.ProviderAzure))
+			Expect(model.Spec.Type).To(Equal(validation.ModelTypeCompletions))
 			Expect(model.Annotations).To(HaveKey(annotations.MigrationWarningPrefix + "provider"))
 			Expect(model.Annotations[annotations.MigrationWarningPrefix+"provider"]).To(ContainSubstring("azure"))
 		})
@@ -487,14 +486,14 @@ var _ = Describe("Model Defaulter", func() {
 		It("Should migrate bedrock from type to provider and add warning annotation", func() {
 			model := &arkv1alpha1.Model{
 				Spec: arkv1alpha1.ModelSpec{
-					Type: genai.ProviderBedrock,
+					Type: validation.ProviderBedrock,
 				},
 			}
 
 			err := defaulter.Default(ctx, model)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(model.Spec.Provider).To(Equal(genai.ProviderBedrock))
-			Expect(model.Spec.Type).To(Equal(genai.ModelTypeCompletions))
+			Expect(model.Spec.Provider).To(Equal(validation.ProviderBedrock))
+			Expect(model.Spec.Type).To(Equal(validation.ModelTypeCompletions))
 			Expect(model.Annotations).To(HaveKey(annotations.MigrationWarningPrefix + "provider"))
 			Expect(model.Annotations[annotations.MigrationWarningPrefix+"provider"]).To(ContainSubstring("bedrock"))
 		})
@@ -504,28 +503,28 @@ var _ = Describe("Model Defaulter", func() {
 		It("Should not modify model with provider already set", func() {
 			model := &arkv1alpha1.Model{
 				Spec: arkv1alpha1.ModelSpec{
-					Provider: genai.ProviderAzure,
-					Type:     genai.ModelTypeCompletions,
+					Provider: validation.ProviderAzure,
+					Type:     validation.ModelTypeCompletions,
 				},
 			}
 
 			err := defaulter.Default(ctx, model)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(model.Spec.Provider).To(Equal(genai.ProviderAzure))
-			Expect(model.Spec.Type).To(Equal(genai.ModelTypeCompletions))
+			Expect(model.Spec.Provider).To(Equal(validation.ProviderAzure))
+			Expect(model.Spec.Type).To(Equal(validation.ModelTypeCompletions))
 		})
 
 		It("Should not modify model with non-provider type value", func() {
 			model := &arkv1alpha1.Model{
 				Spec: arkv1alpha1.ModelSpec{
-					Provider: genai.ProviderOpenAI,
+					Provider: validation.ProviderOpenAI,
 					Type:     "custom-type",
 				},
 			}
 
 			err := defaulter.Default(ctx, model)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(model.Spec.Provider).To(Equal(genai.ProviderOpenAI))
+			Expect(model.Spec.Provider).To(Equal(validation.ProviderOpenAI))
 			Expect(model.Spec.Type).To(Equal("custom-type"))
 		})
 	})

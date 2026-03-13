@@ -8,7 +8,6 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	"mckinsey.com/ark/internal/genai"
 )
 
 func ValidateTool(tool *arkv1alpha1.Tool) ([]string, error) {
@@ -19,15 +18,15 @@ func ValidateTool(tool *arkv1alpha1.Tool) ([]string, error) {
 	}
 
 	switch tool.Spec.Type {
-	case genai.ToolTypeHTTP:
+	case ToolTypeHTTP:
 		return validateHTTP(tool.Spec.HTTP)
-	case genai.ToolTypeMCP:
+	case ToolTypeMCP:
 		return validateMCPTool(tool.Spec.MCP)
-	case genai.ToolTypeAgent:
+	case ToolTypeAgent:
 		return validateAgentToolRef(tool.Spec.Agent.Name)
-	case genai.ToolTypeTeam:
+	case ToolTypeTeam:
 		return validateTeamToolRef(tool.Spec.Team.Name)
-	case genai.ToolTypeBuiltin:
+	case ToolTypeBuiltin:
 		return validateBuiltinTool(tool.Name)
 	default:
 		return nil, fmt.Errorf("unsupported tool type '%s': supported types are: http, mcp, agent, team, builtin", tool.Spec.Type)
@@ -84,7 +83,7 @@ func validateTeamToolRef(team string) ([]string, error) {
 }
 
 func validateBuiltinTool(toolName string) ([]string, error) {
-	supportedBuiltinTools := []string{genai.BuiltinToolNoop, genai.BuiltinToolTerminate}
+	supportedBuiltinTools := []string{BuiltinToolNoop, BuiltinToolTerminate}
 	for _, supportedTool := range supportedBuiltinTools {
 		if toolName == supportedTool {
 			return nil, nil

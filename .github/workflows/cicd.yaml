@@ -239,8 +239,8 @@ jobs:
           - path: ark
             image: ark-controller
           - path: ark
-            image: ark-query-engine
-            dockerfile: Dockerfile.query-engine
+            image: ark-completions
+            dockerfile: Dockerfile.completions
           - path: services/ark-api
             image: ark-api
             prebuild: "make ark-api-deps && mkdir -p services/ark-api/ark-api/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/out/"
@@ -306,7 +306,7 @@ jobs:
       matrix:
         image:
           - ark-controller
-          - ark-query-engine
+          - ark-completions
           - ark-api
           - ark-dashboard
           - ark-evaluator
@@ -906,6 +906,7 @@ jobs:
         chart:
           # Package only the essential charts.
           - { name: ark-controller, path: ark/dist/chart }
+          - { name: ark-completions, path: ark/executors/completions/chart }
           - { name: ark-api, path: services/ark-api/chart }
           - { name: ark-dashboard, path: services/ark-dashboard/chart }
           - { name: ark-mcp, path: services/ark-mcp/chart }

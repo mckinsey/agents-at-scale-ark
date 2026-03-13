@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	"mckinsey.com/ark/internal/genai"
 )
 
 func getWhitelistedModelProviderDomains() []string {
@@ -213,15 +212,15 @@ func (v *Validator) ValidateModel(ctx context.Context, model *arkv1alpha1.Model)
 
 func (v *Validator) validateProviderConfig(ctx context.Context, model *arkv1alpha1.Model) error {
 	switch model.Spec.Provider {
-	case genai.ProviderAzure:
+	case ProviderAzure:
 		return v.validateAzureConfig(ctx, model)
-	case genai.ProviderOpenAI:
+	case ProviderOpenAI:
 		return v.validateOpenAIConfig(ctx, model)
-	case genai.ProviderBedrock:
+	case ProviderBedrock:
 		return v.validateBedrockConfig(ctx, model)
 	default:
 		if model.Spec.Provider == "" {
-			if genai.IsDeprecatedProviderInType(model.Spec.Type) {
+			if IsDeprecatedProviderInType(model.Spec.Type) {
 				return fmt.Errorf("provider is required - update model to migrate '%s' from spec.type to spec.provider", model.Spec.Type)
 			}
 			return fmt.Errorf("provider is required")

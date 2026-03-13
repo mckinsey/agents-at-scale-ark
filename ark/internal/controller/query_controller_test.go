@@ -16,7 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	"mckinsey.com/ark/internal/genai"
+	completions "mckinsey.com/ark/executors/completions"
 )
 
 var _ = Describe("Query Controller", func() {
@@ -211,11 +211,11 @@ var _ = Describe("Query Controller", func() {
 var _ = Describe("Query Controller Message Serialization", func() {
 	Context("When serializing messages", func() {
 		It("should serialize all message types correctly", func() {
-			messages := []genai.Message{
-				genai.Message(openai.AssistantMessage("hello")),
-				genai.Message(openai.UserMessage("hi")),
-				genai.Message(openai.SystemMessage("sys")),
-				genai.Message(openai.ToolMessage("tool-content", "tool-1")),
+			messages := []completions.Message{
+				completions.Message(openai.AssistantMessage("hello")),
+				completions.Message(openai.UserMessage("hi")),
+				completions.Message(openai.SystemMessage("sys")),
+				completions.Message(openai.ToolMessage("tool-content", "tool-1")),
 			}
 
 			jsonStr, err := serializeMessages(messages)
@@ -228,7 +228,7 @@ var _ = Describe("Query Controller Message Serialization", func() {
 
 		It("should return error for unknown message types", func() {
 			// Create a message with no known type
-			messages := []genai.Message{{}}
+			messages := []completions.Message{{}}
 			_, err := serializeMessages(messages)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(Equal("unknown message type encountered during serialization"))
