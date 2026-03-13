@@ -186,8 +186,8 @@ func (t *Team) selectFromGraphConstraints(ctx context.Context, messages []Messag
 
 	switch len(legal) {
 	case 0:
-		// No legal transitions - fallback to first member
-		return t.Members[0], nil
+		// No legal transitions - use the TerminateTeam error to end early
+		return nil, NewTerminateTeamWithReason("no onward transitions")
 	case 1:
 		// Only one legal transition - use it directly (skip selector agent for optimization)
 		selectedMember := legal[0]
