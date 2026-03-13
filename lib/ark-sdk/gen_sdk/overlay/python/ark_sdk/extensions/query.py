@@ -15,6 +15,7 @@ from ..executor import (
     Parameter,
     ToolDefinition,
 )
+from ..k8s import SecretClient
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,9 @@ async def resolve_query(
     Query CRD → Agent CRD → Model CRD + Tool CRDs → ExecutionEngineRequest
     """
     from ..client import V1_ALPHA1, with_ark_client
+    from ..k8s import init_k8s
 
+    await init_k8s()
     async with with_ark_client(query_ref.namespace, V1_ALPHA1) as ark:
         query = await ark.queries.a_get(query_ref.name, query_ref.namespace)
         return await _resolve_from_query(ark, query, query_ref.namespace, user_input)
@@ -120,6 +123,55 @@ async def _build_agent_config(ark, agent, query, namespace: str) -> AgentConfig:
     )
 
 
+async def _resolve_value_source(vs, namespace: str) -> str:
+    """Resolve a ValueSource to its actual string value.
+
+    Handles direct values, secretKeyRef, and configMapKeyRef.
+    """
+    if isinstance(vs, dict):
+        if vs.get("value"):
+            return vs["value"]
+        vf = vs.get("valueFrom") or {}
+        secret_ref = vf.get("secretKeyRef")
+        cm_ref = vf.get("configMapKeyRef")
+    else:
+        if getattr(vs, "value", None):
+            return vs.value
+        vf = getattr(vs, "value_from", None) or getattr(vs, "valueFrom", None)
+        if not vf:
+            return ""
+        secret_ref = getattr(vf, "secret_key_ref", None) or getattr(vf, "secretKeyRef", None)
+        cm_ref = getattr(vf, "config_map_key_ref", None) or getattr(vf, "configMapKeyRef", None)
+
+    if secret_ref:
+        ref_name = secret_ref.get("name") if isinstance(secret_ref, dict) else getattr(secret_ref, "name", None)
+        ref_key = secret_ref.get("key") if isinstance(secret_ref, dict) else getattr(secret_ref, "key", None)
+        if ref_name and ref_key:
+            try:
+                sc = SecretClient(namespace=namespace)
+                result = await sc.get_secret_value(ref_name, ref_key)
+                import base64
+                return base64.b64decode(result["value"]).decode("utf-8")
+            except Exception as e:
+                logger.warning(f"Failed to resolve secret {ref_name}/{ref_key}: {e}")
+
+    if cm_ref:
+        ref_name = cm_ref.get("name") if isinstance(cm_ref, dict) else getattr(cm_ref, "name", None)
+        ref_key = cm_ref.get("key") if isinstance(cm_ref, dict) else getattr(cm_ref, "key", None)
+        if ref_name and ref_key:
+            try:
+                from kubernetes_asyncio import client
+                from kubernetes_asyncio.client.api_client import ApiClient
+                async with ApiClient() as api:
+                    v1 = client.CoreV1Api(api)
+                    cm = await v1.read_namespaced_config_map(name=ref_name, namespace=namespace)
+                    return (cm.data or {}).get(ref_key, "")
+            except Exception as e:
+                logger.warning(f"Failed to resolve configmap {ref_name}/{ref_key}: {e}")
+
+    return ""
+
+
 async def _resolve_model(ark, model_ref, namespace: str) -> Model:
     model_name = model_ref.name
     model_namespace = getattr(model_ref, "namespace", None) or namespace
@@ -132,21 +184,26 @@ async def _resolve_model(ark, model_ref, namespace: str) -> Model:
 
     model_spec = model_crd.spec
     resolved_name = model_name
-    if model_spec.model and hasattr(model_spec.model, "value"):
-        resolved_name = model_spec.model.value or model_name
+    if model_spec.model:
+        resolved_name = await _resolve_value_source(model_spec.model, model_namespace) or model_name
 
     provider = getattr(model_spec, "provider", "unknown")
     config = {}
     if model_spec.config:
-        config_dict = model_spec.config.to_dict() if hasattr(model_spec.config, "to_dict") else {}
-        provider_config = config_dict.get(provider, config_dict.get("openai", {}))
-        if isinstance(provider_config, dict):
-            config = {
-                k: v for k, v in provider_config.items()
-                if k not in ("apiKey", "api_key", "auth")
-            }
+        provider_config_obj = getattr(model_spec.config, provider, None) or getattr(model_spec.config, "openai", None)
+        if provider_config_obj:
+            api_key_vs = getattr(provider_config_obj, "api_key", None) or getattr(provider_config_obj, "apiKey", None)
+            if api_key_vs:
+                config["apiKey"] = await _resolve_value_source(api_key_vs, model_namespace)
 
-    return Model(name=resolved_name, type=provider, config=config)
+            base_url_vs = getattr(provider_config_obj, "base_url", None) or getattr(provider_config_obj, "baseUrl", None)
+            if base_url_vs:
+                config["baseUrl"] = await _resolve_value_source(base_url_vs, model_namespace)
+
+            if hasattr(provider_config_obj, "properties") and provider_config_obj.properties:
+                config["properties"] = provider_config_obj.properties
+
+    return Model(name=resolved_name, type=provider, config={provider: config} if config else {})
 
 
 def _resolve_parameters(
