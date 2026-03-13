@@ -65,14 +65,18 @@ class SecretsPage(BasePage):
         self.page.keyboard.press("Escape")
     
     def is_secret_in_table(self, secret_name: str, retries: int = 3) -> bool:
+        self.page.reload()
+        self.wait_for_navigation_complete()
+        self.wait_for_element(self.ADD_SECRET_BUTTON, timeout=10000)
+        self.wait_for_element_hidden(self.LOADING_INDICATOR, timeout=10000)
         for attempt in range(retries):
             try:
-                self.page.get_by_text(secret_name, exact=False).first.wait_for(state="visible", timeout=15000)
+                self.page.get_by_text(secret_name, exact=False).first.wait_for(state="visible", timeout=10000)
                 return True
             except Exception as e:
-                logger.info(f"Secret {secret_name} not visible on attempt {attempt + 1}/{retries}: {e}")
+                logger.debug(f"Secret {secret_name} not visible on attempt {attempt + 1}/{retries}: {e}")
                 if attempt < retries - 1:
-                    logger.info(f"Secret {secret_name} not found, retrying ({attempt + 1}/{retries})...")
+                    logger.debug(f"Secret {secret_name} not found, retrying ({attempt + 1}/{retries})...")
                     self.page.reload()
                     self.wait_for_navigation_complete()
                     self.wait_for_element(self.ADD_SECRET_BUTTON, timeout=10000)
@@ -108,15 +112,17 @@ class SecretsPage(BasePage):
         save_button.click(force=True)
         
         self.wait_for_modal_close()
+        self.page.wait_for_timeout(1000)
         self.wait_for_load_state("domcontentloaded")
-        
+
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
             popup_visible = True
         except:
             popup_visible = False
-        
+
         self.navigate_to_secrets_tab()
+        self.page.wait_for_load_state("networkidle")
         in_table = self.is_secret_in_table(secret_name)
         
         return {
