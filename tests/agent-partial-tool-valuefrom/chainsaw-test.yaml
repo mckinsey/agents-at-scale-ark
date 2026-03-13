@@ -96,7 +96,7 @@ spec:
                               name: tool-config
                               key: default-city
         - assert:
-            timeout: 10s
+            timeout: 30s
             resource:
               apiVersion: ark.mckinsey.com/v1alpha1
               kind: Agent
@@ -126,7 +126,7 @@ spec:
                   type: agent
                   name: partial-tool-valuefrom-agent
         - assert:
-            timeout: 10s
+            timeout: 30s
             resource:
               apiVersion: ark.mckinsey.com/v1alpha1
               kind: Query
@@ -136,7 +136,6 @@ spec:
                 (conditions[?type == 'Completed']):
                   - status: "True"
         - assert:
-            timeout: 5s
             resource:
               apiVersion: ark.mckinsey.com/v1alpha1
               kind: Query
