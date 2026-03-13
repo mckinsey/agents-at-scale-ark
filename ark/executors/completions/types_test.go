@@ -1,4 +1,4 @@
-package genai
+package completions
 
 import (
 	"errors"
