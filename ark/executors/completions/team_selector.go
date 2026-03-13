@@ -34,7 +34,7 @@ type InvalidAgentError struct {
 }
 
 func (e *InvalidAgentError) Error() string {
-	return fmt.Sprintf("selector did not choose valid agent: returned %s", e.SelectedName)
+	return fmt.Sprintf("selector returned invalid agent name: %s", e.SelectedName)
 }
 
 func buildHistory(messages []Message) string {
@@ -151,17 +151,10 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 		}
 	}
 
-	// Fallback to first member if not found
 	if len(membersToSearch) > 0 {
 		// This error will allow us to message to the user that the selector's response doesn't match an agent
 		err := &InvalidAgentError{SelectedName: selectedName}
-		fallback := membersToSearch[0]
-
-		// Avoid repeating same member
-		if fallback.GetName() == previousMember && len(membersToSearch) > 1 {
-			fallback = membersToSearch[1]
-		}
-		return fallback, err
+		return nil, err
 	}
 
 	return nil, fmt.Errorf("no members available")
@@ -249,14 +242,13 @@ func (t *Team) handleMemberSelectionError(ctx context.Context, err error, newMes
 	var invalidAgentErr *InvalidAgentError
 	switch {
 	case errors.As(err, &invalidAgentErr):
-		warningContent := fmt.Sprintf("Selector did not choose valid agent: returned %s", invalidAgentErr.SelectedName)
+		warningContent := fmt.Sprintf("Selector returned invalid agent name: %s. Ending conversation", invalidAgentErr.SelectedName)
 		warningMessage := NewSystemMessage(warningContent)
 		*newMessages = append(*newMessages, warningMessage)
 
 		// Stream the warning message immediately so it appears during execution
 		StreamSystemMessage(ctx, t.eventStream, warningContent)
-
-		return false, nil
+		return true, nil
 	case IsTerminateTeam(err):
 		return true, nil
 	default:
