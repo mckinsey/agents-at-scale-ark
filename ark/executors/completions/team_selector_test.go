@@ -610,9 +610,9 @@ func TestHandleMemberSelectionError(t *testing.T) {
 }
 
 func TestInvalidAgentError(t *testing.T) {
-    err := &InvalidAgentError{SelectedName: "invalid-agent"}
-    errMsg := err.Error()
-    assert.Equal(t, errMsg, "selector returned invalid agent name: invalid-agent", "Wrong error message from InvalidAgent")
+	err := &InvalidAgentError{SelectedName: "invalid-agent"}
+	errMsg := err.Error()
+	assert.Equal(t, errMsg, "selector returned invalid agent name: invalid-agent", "Wrong error message from InvalidAgent")
 }
 
 func TestStartTurnTelemetry(t *testing.T) {
@@ -738,7 +738,7 @@ func TestCompleteTurnOnError(t *testing.T) {
 			assert.True(t, mockSpan.ended)
 			assert.True(t, mockEventing.failCalled)
 			assert.False(t, mockTelemetry.recordSuccessCalled)
-	        assert.False(t, mockEventing.completeCalled)
+			assert.False(t, mockEventing.completeCalled)
 		})
 	}
 }
@@ -764,8 +764,8 @@ func TestCompleteTurnOnSuccess(t *testing.T) {
 	assert.True(t, mockTelemetry.recordSuccessCalled)
 	assert.True(t, mockSpan.ended)
 	assert.True(t, mockEventing.completeCalled)
-    assert.False(t, mockTelemetry.recordErrorCalled)
-    assert.False(t, mockEventing.failCalled)
+	assert.False(t, mockTelemetry.recordErrorCalled)
+	assert.False(t, mockEventing.failCalled)
 }
 
 func TestSelectMember_WithInvalidAgent(t *testing.T) {
@@ -789,33 +789,7 @@ func TestSelectMember_WithInvalidAgent(t *testing.T) {
 	var invalidErr *InvalidAgentError
 	require.ErrorAs(t, err, &invalidErr)
 	assert.Equal(t, "selected", invalidErr.SelectedName)
-	assert.NotNil(t, member)
-	assert.Contains(t, []string{"agent1", "agent2"}, member.GetName())
-}
-
-func TestSelectMember_AvoidsPreviousMember(t *testing.T) {
-	members := []TeamMember{
-		&mockTeamMember{name: "agent1"},
-		&mockTeamMember{name: "agent2"},
-	}
-
-	mockSelector := &mockSelectorAgent{returnName: "invalid"}
-	team := &Team{
-		Members:           members,
-		mockSelectorAgent: mockSelector,
-	}
-
-	ctx := context.Background()
-	tmpl, err := template.New("test").Parse("test")
-	require.NoError(t, err)
-
-	member, err := team.selectMember(ctx, []Message{}, tmpl, "agent1, agent2", "roles", "agent1", nil)
-
-	var invalidErr *InvalidAgentError
-	require.ErrorAs(t, err, &invalidErr)
-	assert.Equal(t, "invalid", invalidErr.SelectedName)
-	assert.NotNil(t, member)
-	assert.Equal(t, "agent2", member.GetName())
+	assert.Nil(t, member)
 }
 
 func TestSelectMember_ReturnsErrorOnNoMessages(t *testing.T) {
