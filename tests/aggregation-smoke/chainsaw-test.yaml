@@ -40,7 +40,7 @@ spec:
               config:
                 openai:
                   baseUrl:
-                    value: http://localhost:9999/v1
+                    value: https://localhost:9999/v1
                   apiKey:
                     value: smoke-test-key
             MANIFEST
@@ -78,7 +78,7 @@ spec:
               config:
                 openai:
                   baseUrl:
-                    value: http://localhost:9999/v1
+                    value: https://localhost:9999/v1
                   apiKey:
                     value: smoke-test-key
             MANIFEST
