@@ -9,6 +9,12 @@ The memory interface contracts use OpenAI message unions as their storage type. 
 - Update noop memory implementation to match the new interface.
 - Handler memory load/save paths use protocol messages directly.
 
+## Prerequisites
+
+- PR-A merged: extension helpers ensure that extension metadata (`Message.Extensions` + `Message.Metadata[uri]`) survives round-trip through memory storage/retrieval.
+- PR1-v2 merged: adapter layer for boundary conversion.
+- PR2-v2 merged: execution loops produce `[]ProtocolMessage` with extension attribution.
+
 ## Capabilities
 
 ### New Capabilities
