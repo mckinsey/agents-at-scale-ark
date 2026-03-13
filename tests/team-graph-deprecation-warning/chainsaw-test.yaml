@@ -1,0 +1,106 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: team-graph-deprecation-warning
+spec:
+  description: Test that deprecated 'graph' strategy is migrated to 'sequential' with appropriate warning
+
+  steps:
+  - name: setup-resources
+    try:
+    - script:
+        skipLogOutput: true
+        content: |
+          set -u
+          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
+        outputs:
+        - name: azure
+          value: (json_parse($stdout))
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - apply:
+        file: manifests/*.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: agent-a
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: agent-b
+
+  - name: test-graph-migration
+    try:
+    - script:
+        content: |
+          OUTPUT=$(kubectl apply -f - --namespace $NAMESPACE 2>&1 <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Team
+          metadata:
+            name: test-graph-team
+          spec:
+            strategy: graph
+            maxTurns: 5
+            members:
+            - name: agent-a
+              type: agent
+            - name: agent-b
+              type: agent
+            graph:
+              edges:
+              - from: agent-a
+                to: agent-b
+          EOF
+          )
+          echo "$OUTPUT"
+
+          if echo "$OUTPUT" | grep -q "graph"; then
+            echo "PASS: Warning mentions graph"
+          else
+            echo "FAIL: Warning missing graph mention"
+            exit 1
+          fi
+
+          if echo "$OUTPUT" | grep -q "deprecated"; then
+            echo "PASS: Warning mentions deprecation"
+          else
+            echo "FAIL: Warning missing deprecation message"
+            exit 1
+          fi
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Team
+          metadata:
+            name: test-graph-team
+          spec:
+            strategy: sequential
+            loops: false
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
