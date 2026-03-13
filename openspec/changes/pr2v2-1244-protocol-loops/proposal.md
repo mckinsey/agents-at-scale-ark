@@ -7,9 +7,14 @@ Agent, team, selector, and graph execution loops use `[]Message` (OpenAI unions)
 - Convert `TeamMember` interface to accept and return `ProtocolMessage` types.
 - Convert agent execution loop to use protocol messages internally, converting to OpenAI only at the model provider boundary.
 - Convert team sequential, round-robin, selector, and graph loops to protocol-native history accumulation.
-- Agent produces a sequence of ProtocolMessages (one per execution step) with extension attribution.
-- Selector reads extension metadata for agent identity.
+- Agent produces a sequence of ProtocolMessages (one per execution step) with extension attribution via `arka2a.SetExtension`.
+- Selector reads extension metadata for agent identity via `arka2a.GetExtensionAs`.
 - Streaming events map 1:1 to the protocol message sequence.
+
+## Prerequisites
+
+- PR-A merged: generic extension helpers (`SetExtension`, `GetExtension`, `GetExtensionAs`, `HasExtension`) and URI constants in `ark/internal/a2a/`.
+- PR1-v2 merged: bidirectional adapter in `protocol_messages.go` for OpenAI boundary conversion.
 
 ## Capabilities
 
