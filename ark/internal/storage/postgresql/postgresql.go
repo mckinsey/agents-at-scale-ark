@@ -85,9 +85,27 @@ func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error
 		return nil, fmt.Errorf("failed to initialize schema: %w", err)
 	}
 
+	backend.warmPool()
 	go backend.listenForNotifications()
 
 	return backend, nil
+}
+
+func (p *PostgreSQLBackend) warmPool() {
+	var wg sync.WaitGroup
+	for range min(p.db.Stats().MaxOpenConnections, 20) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			conn, err := p.db.Conn(context.Background())
+			if err != nil {
+				return
+			}
+			_ = conn.PingContext(context.Background())
+			_ = conn.Close()
+		}()
+	}
+	wg.Wait()
 }
 
 func (p *PostgreSQLBackend) initSchema() error {

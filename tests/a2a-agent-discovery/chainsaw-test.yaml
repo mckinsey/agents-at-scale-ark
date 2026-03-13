@@ -38,7 +38,7 @@ spec:
           metadata:
             name: mock-llm-echo
           status:
-            (contains(conditions[?type == 'Ready'].status, 'True')): true
+            (contains(conditions[?type == 'Ready'].status || `[]`, 'True')): true
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1prealpha1
@@ -46,7 +46,7 @@ spec:
           metadata:
             name: mock-llm-countdown
           status:
-            (contains(conditions[?type == 'Ready'].status, 'True')): true
+            (contains(conditions[?type == 'Ready'].status || `[]`, 'True')): true
     # Verify agent addresses are resolved
     - assert:
         resource:

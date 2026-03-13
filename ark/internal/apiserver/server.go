@@ -103,7 +103,7 @@ func (s *Server) Start(ctx context.Context) error {
 	serverConfig.RequestTimeout = 24 * time.Hour
 	serverConfig.MinRequestTimeout = 86400
 	serverConfig.LongRunningFunc = func(r *http.Request, requestInfo *genericrequest.RequestInfo) bool {
-		return true
+		return requestInfo.Verb == "watch"
 	}
 
 	namer := apiopenapi.NewDefinitionNamer(Scheme)
