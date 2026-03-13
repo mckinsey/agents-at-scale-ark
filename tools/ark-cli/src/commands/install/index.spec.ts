@@ -503,6 +503,16 @@ describe('install command', () => {
   describe('interactive install', () => {
     const setupInteractiveMocks = () => {
       Object.assign(mockArkServices, {
+        'ark-controller': {
+          name: 'ark-controller',
+          helmReleaseName: 'ark-controller',
+          chartPath: './charts/ark-controller',
+          namespace: 'ark-system',
+          category: 'core',
+          description: 'Core Ark controller',
+          enabled: true,
+          mandatory: true,
+        },
         'ark-api': {
           name: 'ark-api',
           helmReleaseName: 'ark-api',

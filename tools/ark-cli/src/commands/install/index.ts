@@ -248,11 +248,6 @@ export async function installArk(
         ...mandatoryServiceNames,
         ...answers.components,
       ];
-
-      if (selectedComponents.length === 0) {
-        output.warning('No components selected. Exiting.');
-        process.exit(0);
-      }
     } catch (error) {
       // Handle Ctrl-C gracefully
       if (error && (error as {name?: string}).name === 'ExitPromptError') {
