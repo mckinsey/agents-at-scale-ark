@@ -57,7 +57,7 @@ spec:
                   app.kubernetes.io/name: mock-llm
               status:
                 phase: Running
-                (contains(conditions[?type == 'Ready'].status, 'True')): true
+                (contains(conditions[?type == 'Ready'].status || `[]`, 'True')): true
         - wait:
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Model

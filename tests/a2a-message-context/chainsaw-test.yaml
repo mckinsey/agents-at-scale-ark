@@ -29,7 +29,7 @@ spec:
           metadata:
             name: mock-llm-message-counter
           status:
-            (contains(conditions[?type == 'Ready'].status, 'True')): true
+            (contains(conditions[?type == 'Ready'].status || `[]`, 'True')): true
     catch:
     - events: {}
     - describe:

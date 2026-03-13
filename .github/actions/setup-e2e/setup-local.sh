@@ -148,6 +148,16 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
   done
   echo "ark.mckinsey.com API group registered"
 
+  echo "=== Waiting for APIService availability ==="
+  kubectl wait --for=condition=Available apiservice v1alpha1.ark.mckinsey.com --timeout=120s
+  kubectl wait --for=condition=Available apiservice v1prealpha1.ark.mckinsey.com --timeout=120s 2>/dev/null || true
+
+  echo "=== Warming up aggregated API server ==="
+  for i in $(seq 1 5); do
+    kubectl get agents.ark.mckinsey.com -A --request-timeout=10s &>/dev/null && break
+    sleep 2
+  done
+
   if kubectl get crd agents.ark.mckinsey.com &>/dev/null; then
     echo "ERROR: CRD agents.ark.mckinsey.com exists — controller is using etcd, not PostgreSQL aggregated API server"
     exit 1
