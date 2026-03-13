@@ -260,23 +260,15 @@ func (r *QueryReconciler) executeViaEngine(ctx context.Context, query arkv1alpha
 		},
 	}
 
-	metadataBytes, err := json.Marshal(map[string]any{
-		arka2a.ArkMetadataKey: arkMetadata,
-	})
-	if err != nil {
-		return nil, engineResponseMeta{}, fmt.Errorf("failed to marshal A2A metadata: %w", err)
-	}
-
-	var metadata map[string]any
-	if err := json.Unmarshal(metadataBytes, &metadata); err != nil {
-		return nil, engineResponseMeta{}, fmt.Errorf("failed to prepare A2A metadata: %w", err)
-	}
-
 	userText := r.extractUserInput(ctx, query)
 	message := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
 		protocol.NewTextPart(userText),
 	})
-	message.Metadata = metadata
+	message.Extensions = []string{arka2a.ExecutionContextExtensionURI}
+	message.Metadata = map[string]any{
+		arka2a.ExecutionContextExtensionURI: arkMetadata,
+		arka2a.ArkMetadataKey:              arkMetadata,
+	}
 
 	a2aClient, err := arka2a.CreateA2AClient(ctx, r.Client, r.CompletionsAddr, nil, query.Namespace, query.Name, nil)
 	if err != nil {
@@ -522,6 +514,7 @@ type engineResponseMeta struct {
 	TokenUsage     *arkv1alpha1.TokenUsage
 	ConversationId string
 	MessagesRaw    string
+	ProtocolNative bool
 }
 
 func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMeta {
@@ -539,23 +532,52 @@ func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMet
 		return responseMeta
 	}
 
-	arkData, ok := msgMeta[arka2a.ArkMetadataKey]
+	arkData, ok := msgMeta[arka2a.ExecutionContextExtensionURI]
+	if !ok {
+		arkData, ok = msgMeta[arka2a.ArkMetadataKey]
+	}
 	if !ok {
 		return responseMeta
 	}
 
 	arkMap, ok := arkData.(map[string]any)
 	if !ok {
-		return responseMeta
+		rawBytes, marshalErr := json.Marshal(arkData)
+		if marshalErr != nil {
+			return responseMeta
+		}
+		if json.Unmarshal(rawBytes, &arkMap) != nil {
+			return responseMeta
+		}
 	}
 
 	if convId, ok := arkMap["conversationId"].(string); ok {
 		responseMeta.ConversationId = convId
 	}
 
-	if messagesRaw, ok := arkMap["messages"]; ok {
-		if rawBytes, err := json.Marshal(messagesRaw); err == nil {
-			responseMeta.MessagesRaw = string(rawBytes)
+	if v1Raw, ok := arkMap["responseMessagesV1"]; ok {
+		var rawBytes []byte
+		switch typed := v1Raw.(type) {
+		case string:
+			rawBytes = []byte(typed)
+		case json.RawMessage:
+			rawBytes = typed
+		default:
+			if b, err := json.Marshal(typed); err == nil {
+				rawBytes = b
+			}
+		}
+		if rawJSON := protocolMessagesToRawJSON(rawBytes); rawJSON != "" {
+			responseMeta.MessagesRaw = rawJSON
+			responseMeta.ProtocolNative = true
+		}
+	}
+
+	if responseMeta.MessagesRaw == "" {
+		if messagesRaw, ok := arkMap["messages"]; ok {
+			if rawBytes, err := json.Marshal(messagesRaw); err == nil {
+				responseMeta.MessagesRaw = string(rawBytes)
+			}
 		}
 	}
 
@@ -576,6 +598,40 @@ func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMet
 	}
 
 	return responseMeta
+}
+
+func protocolMessagesToRawJSON(data []byte) string {
+	if len(data) == 0 {
+		return ""
+	}
+	var protoMsgs []protocol.Message
+	if err := json.Unmarshal(data, &protoMsgs); err != nil {
+		return ""
+	}
+	if len(protoMsgs) == 0 {
+		return ""
+	}
+
+	type rawCompatMessage struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}
+
+	converted := make([]rawCompatMessage, 0, len(protoMsgs))
+	for _, pm := range protoMsgs {
+		role := "assistant"
+		if pm.Role == protocol.MessageRoleUser {
+			role = "user"
+		}
+		text := arka2a.ExtractTextFromParts(pm.Parts)
+		converted = append(converted, rawCompatMessage{Role: role, Content: text})
+	}
+
+	rawBytes, err := json.Marshal(converted)
+	if err != nil {
+		return ""
+	}
+	return string(rawBytes)
 }
 
 func (r *QueryReconciler) resolveTarget(ctx context.Context, query arkv1alpha1.Query, impersonatedClient client.Client) (*arkv1alpha1.QueryTarget, error) {

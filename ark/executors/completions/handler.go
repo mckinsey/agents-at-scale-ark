@@ -249,31 +249,50 @@ func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, r
 		h.telemetry.QueryRecorder().RecordTokenUsage(state.querySpan, tokenSummary.PromptTokens, tokenSummary.CompletionTokens, tokenSummary.TotalTokens)
 	}
 
-	responseMeta := map[string]any{}
+	extensionPayload := arka2a.ExecutionResponsePayload{
+		ConversationId: state.conversationId,
+	}
 	if tokenSummary.TotalTokens > 0 {
-		responseMeta["tokenUsage"] = map[string]any{
+		extensionPayload.TokenUsage = &arka2a.ResponseTokenUsage{
+			PromptTokens:     tokenSummary.PromptTokens,
+			CompletionTokens: tokenSummary.CompletionTokens,
+			TotalTokens:      tokenSummary.TotalTokens,
+		}
+	}
+
+	serializedMessages := serializeResponseMessages(responseMessages)
+	if serializedMessages != "" {
+		extensionPayload.Messages = json.RawMessage(serializedMessages)
+	}
+
+	protocolMessages := openAIToProtocolResponseMessages(responseMessages)
+	if protoBytes, err := json.Marshal(protocolMessages); err == nil && len(protocolMessages) > 0 {
+		extensionPayload.ResponseMessagesV1 = protoBytes
+	}
+
+	legacyMeta := map[string]any{}
+	if tokenSummary.TotalTokens > 0 {
+		legacyMeta["tokenUsage"] = map[string]any{
 			"prompt_tokens":     tokenSummary.PromptTokens,
 			"completion_tokens": tokenSummary.CompletionTokens,
 			"total_tokens":      tokenSummary.TotalTokens,
 		}
 	}
 	if state.conversationId != "" {
-		responseMeta["conversationId"] = state.conversationId
+		legacyMeta["conversationId"] = state.conversationId
 	}
-
-	serializedMessages := serializeResponseMessages(responseMessages)
 	if serializedMessages != "" {
-		responseMeta["messages"] = json.RawMessage(serializedMessages)
+		legacyMeta["messages"] = json.RawMessage(serializedMessages)
 	}
 
 	responseMessage := protocol.NewMessage(
 		protocol.MessageRoleAgent,
 		[]protocol.Part{protocol.NewTextPart(responseContent)},
 	)
-	if len(responseMeta) > 0 {
-		responseMessage.Metadata = map[string]any{
-			arka2a.ArkMetadataKey: responseMeta,
-		}
+	responseMessage.Extensions = []string{arka2a.ExecutionContextExtensionURI}
+	responseMessage.Metadata = map[string]any{
+		arka2a.ExecutionContextExtensionURI: extensionPayload,
+		arka2a.ArkMetadataKey:              legacyMeta,
 	}
 
 	state.finalizeStream(ctx, responseMessages)
@@ -281,6 +300,30 @@ func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, r
 	return &taskmanager.MessageProcessingResult{
 		Result: &responseMessage,
 	}
+}
+
+func openAIToProtocolResponseMessages(messages []Message) []protocol.Message {
+	var result []protocol.Message
+	for _, msg := range messages {
+		switch {
+		case msg.OfAssistant != nil:
+			pm := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart(msg.OfAssistant.Content.OfString.Value),
+			})
+			result = append(result, pm)
+		case msg.OfUser != nil:
+			pm := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+				protocol.NewTextPart(msg.OfUser.Content.OfString.Value),
+			})
+			result = append(result, pm)
+		case msg.OfTool != nil:
+			pm := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart(msg.OfTool.Content.OfString.Value),
+			})
+			result = append(result, pm)
+		}
+	}
+	return result
 }
 
 func (h *Handler) executeMember(ctx context.Context, state *executionState) (*ExecutionResult, []Message, error) {
@@ -428,9 +471,12 @@ func extractArkMetadata(message protocol.Message) (*arkMetadata, error) {
 		return nil, fmt.Errorf("message has no metadata")
 	}
 
-	arkData, ok := message.Metadata[arka2a.ArkMetadataKey]
+	arkData, ok := message.Metadata[arka2a.ExecutionContextExtensionURI]
 	if !ok {
-		return nil, fmt.Errorf("message metadata missing %s key", arka2a.ArkMetadataKey)
+		arkData, ok = message.Metadata[arka2a.ArkMetadataKey]
+	}
+	if !ok {
+		return nil, fmt.Errorf("message metadata missing %s key", arka2a.ExecutionContextExtensionURI)
 	}
 
 	raw, err := json.Marshal(arkData)

@@ -4,6 +4,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -14,9 +15,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	completions "mckinsey.com/ark/executors/completions"
+	arka2a "mckinsey.com/ark/internal/a2a"
 )
 
 var _ = Describe("Query Controller", func() {
@@ -227,11 +230,141 @@ var _ = Describe("Query Controller Message Serialization", func() {
 		})
 
 		It("should return error for unknown message types", func() {
-			// Create a message with no known type
 			messages := []completions.Message{{}}
 			_, err := serializeMessages(messages)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(Equal("unknown message type encountered during serialization"))
 		})
+	})
+})
+
+var _ = Describe("extractEngineResponseMeta", func() {
+	Context("three-tier extraction precedence", func() {
+		It("should prefer responseMessagesV1 from extension URI when present", func() {
+			protoMsgs := []protocol.Message{
+				protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+					protocol.NewTextPart("protocol answer"),
+				}),
+			}
+			protoBytes, err := json.Marshal(protoMsgs)
+			Expect(err).NotTo(HaveOccurred())
+
+			responseMsg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("hello"),
+			})
+			responseMsg.Extensions = []string{arka2a.ExecutionContextExtensionURI}
+			responseMsg.Metadata = map[string]any{
+				arka2a.ExecutionContextExtensionURI: map[string]any{
+					"conversationId":     "conv-123",
+					"responseMessagesV1": json.RawMessage(protoBytes),
+					"messages":           json.RawMessage(`[{"role":"assistant","content":"legacy"}]`),
+				},
+			}
+
+			msgResult := &protocol.MessageResult{Result: &responseMsg}
+			meta := extractEngineResponseMeta(msgResult)
+
+			Expect(meta.ConversationId).To(Equal("conv-123"))
+			Expect(meta.ProtocolNative).To(BeTrue())
+			Expect(meta.MessagesRaw).To(ContainSubstring("protocol answer"))
+			Expect(meta.MessagesRaw).NotTo(ContainSubstring("legacy"))
+		})
+
+		It("should fall back to legacy messages when responseMessagesV1 is absent", func() {
+			responseMsg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("hello"),
+			})
+			responseMsg.Metadata = map[string]any{
+				arka2a.ArkMetadataKey: map[string]any{
+					"conversationId": "conv-456",
+					"messages":       json.RawMessage(`[{"role":"assistant","content":"legacy msg"}]`),
+				},
+			}
+
+			msgResult := &protocol.MessageResult{Result: &responseMsg}
+			meta := extractEngineResponseMeta(msgResult)
+
+			Expect(meta.ConversationId).To(Equal("conv-456"))
+			Expect(meta.ProtocolNative).To(BeFalse())
+			Expect(meta.MessagesRaw).To(ContainSubstring("legacy msg"))
+		})
+
+		It("should return empty MessagesRaw when neither field is present", func() {
+			responseMsg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("just text"),
+			})
+			responseMsg.Metadata = map[string]any{
+				arka2a.ExecutionContextExtensionURI: map[string]any{
+					"conversationId": "conv-789",
+				},
+			}
+
+			msgResult := &protocol.MessageResult{Result: &responseMsg}
+			meta := extractEngineResponseMeta(msgResult)
+
+			Expect(meta.ConversationId).To(Equal("conv-789"))
+			Expect(meta.MessagesRaw).To(BeEmpty())
+			Expect(meta.ProtocolNative).To(BeFalse())
+		})
+
+		It("should extract token usage from extension URI metadata", func() {
+			responseMsg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("hello"),
+			})
+			responseMsg.Metadata = map[string]any{
+				arka2a.ExecutionContextExtensionURI: map[string]any{
+					"tokenUsage": map[string]any{
+						"prompt_tokens":     float64(100),
+						"completion_tokens": float64(50),
+						"total_tokens":      float64(150),
+					},
+				},
+			}
+
+			msgResult := &protocol.MessageResult{Result: &responseMsg}
+			meta := extractEngineResponseMeta(msgResult)
+
+			Expect(meta.TokenUsage).NotTo(BeNil())
+			Expect(meta.TokenUsage.PromptTokens).To(Equal(int64(100)))
+			Expect(meta.TokenUsage.CompletionTokens).To(Equal(int64(50)))
+			Expect(meta.TokenUsage.TotalTokens).To(Equal(int64(150)))
+		})
+
+		It("should return empty meta for nil result", func() {
+			meta := extractEngineResponseMeta(nil)
+			Expect(meta.MessagesRaw).To(BeEmpty())
+			Expect(meta.ConversationId).To(BeEmpty())
+			Expect(meta.TokenUsage).To(BeNil())
+		})
+	})
+})
+
+var _ = Describe("protocolMessagesToRawJSON", func() {
+	It("should convert protocol messages to role/content JSON", func() {
+		protoMsgs := []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("agent response"),
+			}),
+			protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+				protocol.NewTextPart("user input"),
+			}),
+		}
+		data, err := json.Marshal(protoMsgs)
+		Expect(err).NotTo(HaveOccurred())
+
+		rawJSON := protocolMessagesToRawJSON(data)
+		Expect(rawJSON).To(ContainSubstring(`"role":"assistant"`))
+		Expect(rawJSON).To(ContainSubstring(`"content":"agent response"`))
+		Expect(rawJSON).To(ContainSubstring(`"role":"user"`))
+		Expect(rawJSON).To(ContainSubstring(`"content":"user input"`))
+	})
+
+	It("should return empty string for empty data", func() {
+		Expect(protocolMessagesToRawJSON(nil)).To(BeEmpty())
+		Expect(protocolMessagesToRawJSON([]byte{})).To(BeEmpty())
+	})
+
+	It("should return empty string for invalid JSON", func() {
+		Expect(protocolMessagesToRawJSON([]byte("not json"))).To(BeEmpty())
 	})
 })
