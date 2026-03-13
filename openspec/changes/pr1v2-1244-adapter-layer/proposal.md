@@ -9,6 +9,11 @@ There is no bidirectional conversion layer between `protocol.Message` and OpenAI
 - Define DataPart schemas for tool calls and tool results.
 - Tests for round-trip fidelity and sequence preservation.
 
+## Prerequisites
+
+- PR-A merged: generic extension helpers (`SetExtension`, `GetExtension`, `SetMetadata`, `GetMetadata`) and extension URI constants available in `ark/internal/a2a/`.
+- The adapter uses `arka2a.SetExtension` when attaching execution-context metadata during conversion, ensuring converted messages are spec-compliant from creation.
+
 ## Capabilities
 
 ### New Capabilities

@@ -4,6 +4,15 @@
 
 Create a single adapter module (`protocol_messages.go`) that owns all bidirectional conversion between OpenAI unions and protocol messages. All other code calls through this module instead of doing inline conversion.
 
+## Prerequisites
+
+PR-A provides:
+- `arka2a.SetExtension(m, uri, payload)` / `arka2a.SetMetadata(m, key, value)` for spec-compliant extension and metadata assignment
+- `arka2a.GetExtensionAs[T](m, uri)` for typed extension retrieval
+- `arka2a.ExecutionContextExtensionURI` and `arka2a.ExecutionTraceExtensionURI` constants
+
+The adapter module uses these helpers when attaching metadata to converted messages, ensuring that extension URIs appear in `Message.Extensions` and metadata keys do not.
+
 ## Conversion: OpenAI -> Protocol
 
 Each OpenAI message becomes one `protocol.Message`:
@@ -36,6 +45,12 @@ Tool result DataPart:
 ```json
 {"type": "tool_result", "id": "call-1", "name": "weather_api", "content": "72F sunny"}
 ```
+
+## Extension Handling During Conversion
+
+When converting OpenAI -> Protocol, the adapter attaches extension metadata using PR-A helpers:
+- `arka2a.SetExtension(&msg, arka2a.ExecutionTraceExtensionURI, tracePayload)` for execution trace attribution
+- This ensures `ExecutionTraceExtensionURI` is listed in `msg.Extensions` per A2A spec Section 4.6.2
 
 ## Public API
 
