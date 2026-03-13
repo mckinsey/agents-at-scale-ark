@@ -1,6 +1,8 @@
-"""A2A protocol application setup for execution engines."""
+"""A2A protocol application setup for execution engines.
 
-import json
+Extension spec: ark/api/extensions/query/v1/
+"""
+
 import logging
 from typing import Any, List
 
@@ -10,21 +12,25 @@ from a2a.server.apps import A2AStarletteApplication
 from a2a.server.events import EventQueue
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
-from a2a.types import AgentCapabilities, AgentCard, AgentSkill, Part, TextPart, Message as A2AMessage
+from a2a.types import (
+    AgentCapabilities,
+    AgentCard,
+    AgentExtension,
+    AgentSkill,
+    Part,
+    TextPart,
+    Message as A2AMessage,
+)
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from .executor import (
-    ARK_METADATA_KEY,
-    AgentConfig,
-    BaseExecutor,
-    ExecutionEngineRequest,
-    Message,
-    Model,
-    Parameter,
-    ToolDefinition,
+from .executor import BaseExecutor
+from .extensions.query import (
+    QUERY_EXTENSION_URI,
+    extract_query_ref,
+    resolve_query,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,39 +47,9 @@ class A2AExecutorAdapter(AgentExecutor):
 
     async def execute(self, context: Any, event_queue: EventQueue) -> None:
         user_text = context.get_user_input()
-        msg_metadata = {}
-        if context.message and context.message.metadata:
-            msg_metadata = context.message.metadata
-        ark_metadata = msg_metadata.get(ARK_METADATA_KEY, {})
-        agent_data = ark_metadata.get("agent", {})
-        model_data = agent_data.get("model", {})
-        tools_data = ark_metadata.get("tools", [])
-        history_data = ark_metadata.get("history", [])
 
-        agent_config = AgentConfig(
-            name=agent_data.get("name", "unknown"),
-            namespace=agent_data.get("namespace", "default"),
-            prompt=agent_data.get("prompt", ""),
-            description=agent_data.get("description", ""),
-            parameters=[Parameter(**p) for p in agent_data.get("parameters", [])],
-            model=Model(
-                name=model_data.get("name", ""),
-                type=model_data.get("type", ""),
-                config=model_data.get("config", {}),
-            ),
-            labels=agent_data.get("labels", {}),
-        )
-
-        tools = [ToolDefinition(**t) for t in tools_data]
-        history = [Message(**m) for m in history_data]
-        user_input = Message(role="user", content=user_text)
-
-        request = ExecutionEngineRequest(
-            agent=agent_config,
-            userInput=user_input,
-            history=history,
-            tools=tools,
-        )
+        query_ref = extract_query_ref(context.message)
+        request = await resolve_query(query_ref, user_text)
 
         try:
             response_messages = await self.executor.execute_agent(request)
@@ -86,7 +62,7 @@ class A2AExecutorAdapter(AgentExecutor):
                 A2AMessage(
                     role="agent",
                     parts=[Part(root=TextPart(text=response_text))],
-                    messageId=context.message.messageId + "-response" if hasattr(context.message, "messageId") else "response",
+                    message_id=context.message.message_id + "-response" if hasattr(context.message, "message_id") else "response",
                 )
             )
         except Exception as e:
@@ -95,7 +71,7 @@ class A2AExecutorAdapter(AgentExecutor):
                 A2AMessage(
                     role="agent",
                     parts=[Part(root=TextPart(text=f"Execution error: {e}"))],
-                    messageId="error-response",
+                    message_id="error-response",
                 )
             )
 
@@ -129,9 +105,17 @@ class ExecutorApp:
             url="https://localhost:8000",
             version="1.0.0",
             skills=self.skills,
-            capabilities=AgentCapabilities(),
-            defaultInputModes=["text"],
-            defaultOutputModes=["text"],
+            capabilities=AgentCapabilities(
+                extensions=[
+                    AgentExtension(
+                        uri=QUERY_EXTENSION_URI,
+                        description="Ark query context",
+                        required=False,
+                    )
+                ],
+            ),
+            default_input_modes=["text"],
+            default_output_modes=["text"],
         )
 
         adapter = A2AExecutorAdapter(executor)

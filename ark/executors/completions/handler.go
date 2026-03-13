@@ -272,7 +272,7 @@ func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, r
 	)
 	if len(responseMeta) > 0 {
 		responseMessage.Metadata = map[string]any{
-			arka2a.ArkMetadataKey: responseMeta,
+			arka2a.QueryExtensionMetadataKey: responseMeta,
 		}
 	}
 
@@ -423,25 +423,28 @@ func (h *Handler) executeTool(
 	return []Message{NewAssistantMessage(result.Content)}, nil
 }
 
+// Query extension spec: ark/api/extensions/query/v1/
 func extractArkMetadata(message protocol.Message) (*arkMetadata, error) {
 	if message.Metadata == nil {
 		return nil, fmt.Errorf("message has no metadata")
 	}
 
-	arkData, ok := message.Metadata[arka2a.ArkMetadataKey]
+	refData, ok := message.Metadata[arka2a.QueryExtensionMetadataKey]
 	if !ok {
-		return nil, fmt.Errorf("message metadata missing %s key", arka2a.ArkMetadataKey)
+		return nil, fmt.Errorf("message metadata missing %s key", arka2a.QueryExtensionMetadataKey)
 	}
 
-	raw, err := json.Marshal(arkData)
+	raw, err := json.Marshal(refData)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal ark metadata: %w", err)
+		return nil, fmt.Errorf("failed to marshal query ref: %w", err)
 	}
 
-	var meta arkMetadata
-	if err := json.Unmarshal(raw, &meta); err != nil {
-		return nil, fmt.Errorf("failed to parse ark metadata: %w", err)
+	var ref queryRef
+	if err := json.Unmarshal(raw, &ref); err != nil {
+		return nil, fmt.Errorf("failed to parse query ref: %w", err)
 	}
+
+	meta := arkMetadata{Query: ref}
 
 	return &meta, nil
 }

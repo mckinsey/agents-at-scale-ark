@@ -32,9 +32,8 @@ func TestExtractArkMetadata(t *testing.T) {
 				Role:  protocol.MessageRoleUser,
 				Parts: []protocol.Part{protocol.NewTextPart("hello")},
 				Metadata: map[string]any{
-					arka2a.ArkMetadataKey: map[string]any{
-						"agent": map[string]any{"name": "test-agent", "namespace": "default"},
-						"query": map[string]any{"name": "q-123", "namespace": "default"},
+					arka2a.QueryExtensionMetadataKey: map[string]any{
+						"name": "q-123", "namespace": "default",
 					},
 				},
 			},
@@ -49,7 +48,7 @@ func TestExtractArkMetadata(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "missing ark key",
+			name: "missing extension key",
 			message: protocol.Message{
 				Role:     protocol.MessageRoleUser,
 				Parts:    []protocol.Part{protocol.NewTextPart("hello")},
@@ -117,9 +116,8 @@ func TestExtractArkMetadataQueryValidation(t *testing.T) {
 		Role:  protocol.MessageRoleUser,
 		Parts: []protocol.Part{protocol.NewTextPart("hello")},
 		Metadata: map[string]any{
-			arka2a.ArkMetadataKey: map[string]any{
-				"agent": map[string]any{"name": "test-agent"},
-				"query": map[string]any{"name": "", "namespace": ""},
+			arka2a.QueryExtensionMetadataKey: map[string]any{
+				"name": "", "namespace": "",
 			},
 		},
 	}
@@ -128,30 +126,6 @@ func TestExtractArkMetadataQueryValidation(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, meta.Query.Name)
 	assert.Empty(t, meta.Query.Namespace)
-}
-
-func TestExtractArkMetadataPreservesToolsAndHistory(t *testing.T) {
-	message := protocol.Message{
-		Role:  protocol.MessageRoleUser,
-		Parts: []protocol.Part{protocol.NewTextPart("hello")},
-		Metadata: map[string]any{
-			arka2a.ArkMetadataKey: map[string]any{
-				"agent": map[string]any{"name": "a", "namespace": "ns"},
-				"tools": []any{
-					map[string]any{"name": "tool1", "description": "desc"},
-				},
-				"history": []any{
-					map[string]any{"role": "user", "content": "hi"},
-				},
-				"query": map[string]any{"name": "q", "namespace": "ns"},
-			},
-		},
-	}
-
-	meta, err := extractArkMetadata(message)
-	require.NoError(t, err)
-	assert.NotNil(t, meta.Tools)
-	assert.NotNil(t, meta.History)
 }
 
 func TestSerializeResponseMessages(t *testing.T) {
@@ -198,25 +172,6 @@ func TestSerializeResponseMessages(t *testing.T) {
 	}
 }
 
-func TestExtractArkMetadataWithTarget(t *testing.T) {
-	message := protocol.Message{
-		Role:  protocol.MessageRoleUser,
-		Parts: []protocol.Part{protocol.NewTextPart("hello")},
-		Metadata: map[string]any{
-			arka2a.ArkMetadataKey: map[string]any{
-				"query":  map[string]any{"name": "q-1", "namespace": "ns"},
-				"target": map[string]any{"type": "model", "name": "gpt-4"},
-			},
-		},
-	}
-
-	meta, err := extractArkMetadata(message)
-	require.NoError(t, err)
-	require.NotNil(t, meta.Target)
-	assert.Equal(t, "model", meta.Target.Type)
-	assert.Equal(t, "gpt-4", meta.Target.Name)
-}
-
 func newTestScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
 	_ = arkv1alpha1.AddToScheme(scheme)
@@ -257,8 +212,8 @@ func TestResolveQueryAndTarget(t *testing.T) {
 			Role:  protocol.MessageRoleUser,
 			Parts: []protocol.Part{protocol.NewTextPart("hello")},
 			Metadata: map[string]any{
-				arka2a.ArkMetadataKey: map[string]any{
-					"query": map[string]any{"name": "test-query", "namespace": "default"},
+				arka2a.QueryExtensionMetadataKey: map[string]any{
+					"name": "test-query", "namespace": "default",
 				},
 			},
 		}
@@ -270,43 +225,14 @@ func TestResolveQueryAndTarget(t *testing.T) {
 		assert.Equal(t, "my-agent", target.Name)
 	})
 
-	t.Run("uses metadata target when spec target is nil", func(t *testing.T) {
-		queryNoTarget := &arkv1alpha1.Query{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "q-no-target",
-				Namespace: "default",
-			},
-			Spec: arkv1alpha1.QuerySpec{
-				Input: runtime.RawExtension{Raw: []byte(`"hello"`)},
-			},
-		}
-		h := newTestHandler(queryNoTarget)
-		msg := protocol.Message{
-			Role:  protocol.MessageRoleUser,
-			Parts: []protocol.Part{protocol.NewTextPart("hello")},
-			Metadata: map[string]any{
-				arka2a.ArkMetadataKey: map[string]any{
-					"query":  map[string]any{"name": "q-no-target", "namespace": "default"},
-					"target": map[string]any{"type": "model", "name": "gpt-4"},
-				},
-			},
-		}
-
-		q, target, err := h.resolveQueryAndTarget(context.Background(), msg)
-		require.NoError(t, err)
-		assert.Equal(t, "q-no-target", q.Name)
-		assert.Equal(t, "model", target.Type)
-		assert.Equal(t, "gpt-4", target.Name)
-	})
-
 	t.Run("errors when query not found", func(t *testing.T) {
 		h := newTestHandler()
 		msg := protocol.Message{
 			Role:  protocol.MessageRoleUser,
 			Parts: []protocol.Part{protocol.NewTextPart("hello")},
 			Metadata: map[string]any{
-				arka2a.ArkMetadataKey: map[string]any{
-					"query": map[string]any{"name": "missing", "namespace": "default"},
+				arka2a.QueryExtensionMetadataKey: map[string]any{
+					"name": "missing", "namespace": "default",
 				},
 			},
 		}
@@ -331,8 +257,8 @@ func TestResolveQueryAndTarget(t *testing.T) {
 			Role:  protocol.MessageRoleUser,
 			Parts: []protocol.Part{protocol.NewTextPart("hello")},
 			Metadata: map[string]any{
-				arka2a.ArkMetadataKey: map[string]any{
-					"query": map[string]any{"name": "q-empty", "namespace": "default"},
+				arka2a.QueryExtensionMetadataKey: map[string]any{
+					"name": "q-empty", "namespace": "default",
 				},
 			},
 		}
@@ -348,8 +274,8 @@ func TestResolveQueryAndTarget(t *testing.T) {
 			Role:  protocol.MessageRoleUser,
 			Parts: []protocol.Part{protocol.NewTextPart("hello")},
 			Metadata: map[string]any{
-				arka2a.ArkMetadataKey: map[string]any{
-					"query": map[string]any{"name": "", "namespace": ""},
+				arka2a.QueryExtensionMetadataKey: map[string]any{
+					"name": "", "namespace": "",
 				},
 			},
 		}

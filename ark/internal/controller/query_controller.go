@@ -244,32 +244,12 @@ func (r *QueryReconciler) dispatchExecution(ctx context.Context, query arkv1alph
 func (r *QueryReconciler) executeViaEngine(ctx context.Context, query arkv1alpha1.Query, target arkv1alpha1.QueryTarget) (*arkv1alpha1.Response, engineResponseMeta, error) {
 	log := logf.FromContext(ctx)
 
-	agentConfig := r.buildAgentConfigForEngine(query, target)
-
-	arkMetadata := map[string]any{
-		"agent":   agentConfig,
-		"tools":   []any{},
-		"history": []any{},
-		"query": map[string]string{
+	// Query extension spec: ark/api/extensions/query/v1/
+	metadata := map[string]any{
+		arka2a.QueryExtensionMetadataKey: map[string]string{
 			"name":      query.Name,
 			"namespace": query.Namespace,
 		},
-		"target": map[string]string{
-			"type": target.Type,
-			"name": target.Name,
-		},
-	}
-
-	metadataBytes, err := json.Marshal(map[string]any{
-		arka2a.ArkMetadataKey: arkMetadata,
-	})
-	if err != nil {
-		return nil, engineResponseMeta{}, fmt.Errorf("failed to marshal A2A metadata: %w", err)
-	}
-
-	var metadata map[string]any
-	if err := json.Unmarshal(metadataBytes, &metadata); err != nil {
-		return nil, engineResponseMeta{}, fmt.Errorf("failed to prepare A2A metadata: %w", err)
 	}
 
 	userText := r.extractUserInput(ctx, query)
@@ -277,6 +257,7 @@ func (r *QueryReconciler) executeViaEngine(ctx context.Context, query arkv1alpha
 		protocol.NewTextPart(userText),
 	})
 	message.Metadata = metadata
+	message.Extensions = []string{arka2a.QueryExtensionURI}
 
 	a2aClient, err := arka2a.CreateA2AClient(ctx, r.Client, r.CompletionsAddr, nil, query.Namespace, query.Name, nil)
 	if err != nil {
@@ -478,14 +459,6 @@ func (r *QueryReconciler) createErrorResponse(target arkv1alpha1.QueryTarget, er
 	}
 }
 
-func (r *QueryReconciler) buildAgentConfigForEngine(query arkv1alpha1.Query, target arkv1alpha1.QueryTarget) map[string]any {
-	return map[string]any{
-		"name":      target.Name,
-		"namespace": query.Namespace,
-		"prompt":    "",
-	}
-}
-
 func (r *QueryReconciler) extractUserInput(ctx context.Context, query arkv1alpha1.Query) string {
 	inputMessages, err := completions.GetQueryInputMessages(ctx, query, r.Client)
 	if err != nil {
@@ -539,7 +512,7 @@ func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMet
 		return responseMeta
 	}
 
-	arkData, ok := msgMeta[arka2a.ArkMetadataKey]
+	arkData, ok := msgMeta[arka2a.QueryExtensionMetadataKey]
 	if !ok {
 		return responseMeta
 	}

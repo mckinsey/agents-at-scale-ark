@@ -93,23 +93,15 @@ func (a *Agent) executeWithExecutionEngineRouter(ctx context.Context, userInput 
 	return &ExecutionResult{Messages: messages}, nil
 }
 
-func (a *Agent) executeWithNamedExecutionEngine(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
+func (a *Agent) executeWithNamedExecutionEngine(ctx context.Context, userInput Message, _ []Message) ([]Message, error) {
 	engineClient := NewExecutionEngineA2AClient(a.client, a.eventing.ExecutionEngineRecorder())
 
-	agentConfig, err := buildAgentConfig(a)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build agent config: %w", err)
+	queryCrd, ok := ctx.Value(QueryContextKey).(*arkv1alpha1.Query)
+	if !ok || queryCrd == nil {
+		return nil, fmt.Errorf("query context not available for named execution engine")
 	}
 
-	resolvedPrompt, err := a.resolvePrompt(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("agent %s prompt resolution failed: %w", a.FullName(), err)
-	}
-	agentConfig.Prompt = resolvedPrompt
-
-	toolDefinitions := buildToolDefinitions(a.Tools)
-
-	return engineClient.Execute(ctx, a.ExecutionEngine, agentConfig, userInput, history, toolDefinitions)
+	return engineClient.Execute(ctx, a.ExecutionEngine, queryCrd.Name, queryCrd.Namespace, userInput)
 }
 
 func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Message, eventStream EventStreamInterface) (*ExecutionResult, error) {

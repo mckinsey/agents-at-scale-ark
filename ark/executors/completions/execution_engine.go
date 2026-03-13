@@ -2,7 +2,6 @@ package completions
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -62,15 +61,17 @@ func NewExecutionEngineA2AClient(k8sClient client.Client, eventingRecorder event
 	}
 }
 
-func (c *ExecutionEngineA2AClient) Execute(ctx context.Context, engineRef *arkv1alpha1.ExecutionEngineRef, agentConfig AgentConfig, userInput Message, history []Message, tools []ToolDefinition) ([]Message, error) {
+// Execute sends a QueryRef extension to a named execution engine via A2A.
+// Query extension spec: ark/api/extensions/query/v1/
+func (c *ExecutionEngineA2AClient) Execute(ctx context.Context, engineRef *arkv1alpha1.ExecutionEngineRef, queryName, queryNamespace string, userInput Message) ([]Message, error) {
 	operationData := map[string]string{
 		"engineName": engineRef.Name,
-		"agentName":  agentConfig.Name,
+		"queryName":  queryName,
 		"protocol":   "a2a",
 	}
 	ctx = c.eventingRecorder.Start(ctx, "ExecutionEngine", fmt.Sprintf("Executing agent via A2A execution engine %s", engineRef.Name), operationData)
 
-	engineAddress, err := c.resolveExecutionEngineAddress(ctx, engineRef, agentConfig.Namespace)
+	engineAddress, err := c.resolveExecutionEngineAddress(ctx, engineRef, queryNamespace)
 	if err != nil {
 		c.eventingRecorder.Fail(ctx, "ExecutionEngine", fmt.Sprintf("Failed to resolve execution engine: %v", err), err, operationData)
 		return nil, fmt.Errorf("failed to resolve execution engine: %w", err)
@@ -81,48 +82,20 @@ func (c *ExecutionEngineA2AClient) Execute(ctx context.Context, engineRef *arkv1
 		content = userInput.OfUser.Content.OfString.Value
 	}
 
-	historyMessages := make([]ExecutionEngineMessage, 0, len(history))
-	for _, msg := range history {
-		historyMessages = append(historyMessages, convertToExecutionEngineMessage(msg))
-	}
-
-	toolDefs := make([]map[string]any, 0, len(tools))
-	for _, t := range tools {
-		td := map[string]any{
-			"name":        t.Name,
-			"description": t.Description,
-		}
-		if t.Parameters != nil {
-			td["parameters"] = t.Parameters
-		}
-		toolDefs = append(toolDefs, td)
-	}
-
-	arkMetadata := map[string]any{
-		"agent":   agentConfig,
-		"tools":   toolDefs,
-		"history": historyMessages,
-	}
-
-	metadataBytes, err := json.Marshal(map[string]any{
-		arka2a.ArkMetadataKey: arkMetadata,
-	})
-	if err != nil {
-		c.eventingRecorder.Fail(ctx, "ExecutionEngine", fmt.Sprintf("Failed to marshal metadata: %v", err), err, operationData)
-		return nil, fmt.Errorf("failed to marshal A2A metadata: %w", err)
-	}
-
-	var metadata map[string]any
-	if err := json.Unmarshal(metadataBytes, &metadata); err != nil {
-		return nil, fmt.Errorf("failed to prepare A2A metadata: %w", err)
+	metadata := map[string]any{
+		arka2a.QueryExtensionMetadataKey: map[string]string{
+			"name":      queryName,
+			"namespace": queryNamespace,
+		},
 	}
 
 	message := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
 		protocol.NewTextPart(content),
 	})
 	message.Metadata = metadata
+	message.Extensions = []string{arka2a.QueryExtensionURI}
 
-	a2aClient, err := arka2a.CreateA2AClient(ctx, c.client, engineAddress, nil, agentConfig.Namespace, agentConfig.Name, nil)
+	a2aClient, err := arka2a.CreateA2AClient(ctx, c.client, engineAddress, nil, queryNamespace, queryName, nil)
 	if err != nil {
 		c.eventingRecorder.Fail(ctx, "ExecutionEngine", fmt.Sprintf("Failed to create A2A client: %v", err), err, operationData)
 		return nil, fmt.Errorf("failed to create A2A client: %w", err)

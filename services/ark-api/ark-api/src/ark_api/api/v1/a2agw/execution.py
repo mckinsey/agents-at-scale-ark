@@ -71,8 +71,8 @@ class ARKAgentExecutor(AgentExecutor):
             status.message = new_agent_text_message(f"Task failed: {error_msg}")
             
         return TaskStatusUpdateEvent(
-            contextId=context_id or "default",
-            taskId=task_id or "unknown",
+            context_id=context_id or "default",
+            task_id=task_id or "unknown",
             status=status,
             final=final
         )

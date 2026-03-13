@@ -344,3 +344,29 @@ func TestResolveExecutionEngineAddress(t *testing.T) {
 		assert.Equal(t, "https://custom.example.com", addr)
 	})
 }
+
+func TestQueryRefExtensionMetadata(t *testing.T) {
+	t.Run("metadata contains query extension key", func(t *testing.T) {
+		metadata := map[string]any{
+			arka2a.QueryExtensionMetadataKey: map[string]string{
+				"name":      "my-query",
+				"namespace": "test-ns",
+			},
+		}
+
+		ref, ok := metadata[arka2a.QueryExtensionMetadataKey].(map[string]string)
+		require.True(t, ok)
+		assert.Equal(t, "my-query", ref["name"])
+		assert.Equal(t, "test-ns", ref["namespace"])
+	})
+
+	t.Run("extension URI is set on message", func(t *testing.T) {
+		message := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+			protocol.NewTextPart("hello"),
+		})
+		message.Extensions = []string{arka2a.QueryExtensionURI}
+
+		assert.Len(t, message.Extensions, 1)
+		assert.Equal(t, arka2a.QueryExtensionURI, message.Extensions[0])
+	})
+}
