@@ -525,72 +525,94 @@ func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMet
 		return responseMeta
 	}
 
-	arkData, ok := arka2a.GetExtension(*msg, arka2a.ExecutionContextExtensionURI)
-	if !ok {
-		arkData, ok = arka2a.GetMetadata(*msg, arka2a.ArkMetadataKey)
-	}
+	arkMap, ok := extractArkPayloadMap(*msg)
 	if !ok {
 		return responseMeta
-	}
-
-	arkMap, ok := arkData.(map[string]any)
-	if !ok {
-		rawBytes, marshalErr := json.Marshal(arkData)
-		if marshalErr != nil {
-			return responseMeta
-		}
-		if json.Unmarshal(rawBytes, &arkMap) != nil {
-			return responseMeta
-		}
 	}
 
 	if convId, ok := arkMap["conversationId"].(string); ok {
 		responseMeta.ConversationId = convId
 	}
 
-	if v1Raw, ok := arkMap["responseMessagesV1"]; ok {
-		var rawBytes []byte
-		switch typed := v1Raw.(type) {
-		case string:
-			rawBytes = []byte(typed)
-		case json.RawMessage:
-			rawBytes = typed
-		default:
-			if b, err := json.Marshal(typed); err == nil {
-				rawBytes = b
-			}
-		}
-		if rawJSON := protocolMessagesToRawJSON(rawBytes); rawJSON != "" {
-			responseMeta.MessagesRaw = rawJSON
-			responseMeta.ProtocolNative = true
-		}
-	}
-
-	if responseMeta.MessagesRaw == "" {
-		if messagesRaw, ok := arkMap["messages"]; ok {
-			if rawBytes, err := json.Marshal(messagesRaw); err == nil {
-				responseMeta.MessagesRaw = string(rawBytes)
-			}
-		}
-	}
-
-	if tokenData, ok := arkMap["tokenUsage"].(map[string]any); ok {
-		usage := &arkv1alpha1.TokenUsage{}
-		if v, ok := tokenData["prompt_tokens"].(float64); ok {
-			usage.PromptTokens = int64(v)
-		}
-		if v, ok := tokenData["completion_tokens"].(float64); ok {
-			usage.CompletionTokens = int64(v)
-		}
-		if v, ok := tokenData["total_tokens"].(float64); ok {
-			usage.TotalTokens = int64(v)
-		}
-		if usage.TotalTokens > 0 {
-			responseMeta.TokenUsage = usage
-		}
-	}
+	responseMeta.MessagesRaw, responseMeta.ProtocolNative = extractResponseMessages(arkMap)
+	responseMeta.TokenUsage = extractTokenUsage(arkMap)
 
 	return responseMeta
+}
+
+func extractArkPayloadMap(msg protocol.Message) (map[string]any, bool) {
+	arkData, ok := arka2a.GetExtension(msg, arka2a.ExecutionContextExtensionURI)
+	if !ok {
+		arkData, ok = arka2a.GetMetadata(msg, arka2a.ArkMetadataKey)
+	}
+	if !ok {
+		return nil, false
+	}
+
+	arkMap, ok := arkData.(map[string]any)
+	if ok {
+		return arkMap, true
+	}
+
+	rawBytes, err := json.Marshal(arkData)
+	if err != nil {
+		return nil, false
+	}
+	if json.Unmarshal(rawBytes, &arkMap) != nil {
+		return nil, false
+	}
+	return arkMap, true
+}
+
+func extractResponseMessages(arkMap map[string]any) (raw string, protocolNative bool) {
+	if v1Raw, ok := arkMap["responseMessagesV1"]; ok {
+		rawBytes := toRawBytes(v1Raw)
+		if rawJSON := protocolMessagesToRawJSON(rawBytes); rawJSON != "" {
+			return rawJSON, true
+		}
+	}
+
+	if messagesRaw, ok := arkMap["messages"]; ok {
+		if rawBytes, err := json.Marshal(messagesRaw); err == nil {
+			return string(rawBytes), false
+		}
+	}
+	return "", false
+}
+
+func toRawBytes(v any) []byte {
+	switch typed := v.(type) {
+	case string:
+		return []byte(typed)
+	case json.RawMessage:
+		return typed
+	default:
+		if b, err := json.Marshal(typed); err == nil {
+			return b
+		}
+		return nil
+	}
+}
+
+func extractTokenUsage(arkMap map[string]any) *arkv1alpha1.TokenUsage {
+	tokenData, ok := arkMap["tokenUsage"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	usage := &arkv1alpha1.TokenUsage{}
+	if v, ok := tokenData["prompt_tokens"].(float64); ok {
+		usage.PromptTokens = int64(v)
+	}
+	if v, ok := tokenData["completion_tokens"].(float64); ok {
+		usage.CompletionTokens = int64(v)
+	}
+	if v, ok := tokenData["total_tokens"].(float64); ok {
+		usage.TotalTokens = int64(v)
+	}
+	if usage.TotalTokens > 0 {
+		return usage
+	}
+	return nil
 }
 
 func protocolMessagesToRawJSON(data []byte) string {
