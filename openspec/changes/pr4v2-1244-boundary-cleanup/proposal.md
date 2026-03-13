@@ -9,6 +9,12 @@ After protocol-native loops and memory alignment, the handler and controller sti
 - Streaming path maps ProtocolMessages to A2A events.
 - Controller success serialization uses protocol-native extraction exclusively (legacy `messages` read path retained for backward compatibility but no longer primary).
 
+## Prerequisites
+
+- PR-A merged: extension helpers (`SetExtension`, `SetMetadata`, `GetExtension`, `GetMetadata`, `HasExtension`) used throughout handler and controller for all metadata operations.
+- PR1-v2 through PR3-v2 merged: protocol-native adapter, loops, and memory.
+- All extension attachment and retrieval must use PR-A helpers -- no inline `Message.Metadata[key]` or `Message.Extensions = append(...)` patterns.
+
 ## Capabilities
 
 ### New Capabilities
