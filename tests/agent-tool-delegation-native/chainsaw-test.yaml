@@ -1,30 +1,28 @@
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
-  name: query-token-usage
+  name: agent-tool-delegation-native
 spec:
-  description: Test query token usage tracking and validation
+  description: Test native agent-tool delegation path with deterministic tool call flow
   steps:
   - name: setup-resources
     try:
-    # Install mock-llm with token usage support
     - script:
         content: |
           helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
             --version 0.1.28 \
             --namespace $NAMESPACE \
-            --values mock-llm-values.yaml
+            --values mock-llm-values.yaml \
+            --wait --timeout=120s
         env:
         - name: NAMESPACE
           value: ($namespace)
-    # Install ark-tenant for RBAC
     - script:
         content: |
           helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
         env:
         - name: NAMESPACE
           value: ($namespace)
-    # Wait for Model to be available before creating agents/queries
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Model
@@ -33,53 +31,60 @@ spec:
         for:
           condition:
             name: ModelAvailable
-            value: 'True' 
-    # Apply agent and query
+            value: 'True'
     - apply:
         file: manifests/*.yaml
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: delegate-agent-tool
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
           kind: Agent
           metadata:
-            name: token-test-agent
+            name: delegate-agent
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: coordinator-agent
 
-  # Wait fort the query to complete (error or success).
   - name: wait-for-query-completion
     try:
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
-        name: token-usage-query
+        name: agent-tool-delegation-query
         for:
           condition:
             name: Completed
             value: 'True'
-  - name: validate-response
+
+  - name: validate-delegation-results
     try:
     - assert:
-        # Fast check - the resource won't change since the query is complete.
         timeout: 1s
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
           metadata:
-            name: token-usage-query
+            name: agent-tool-delegation-query
           status:
             phase: done
             (response != null): true
-            (response.target.name): 'token-test-agent'
-            (contains(response.content, 'distributed computing')): true
-            (to_number(tokenUsage.promptTokens) == `50`): true
-            (to_number(tokenUsage.completionTokens) == `100`): true
-            (to_number(tokenUsage.totalTokens) == `150`): true
+            (response.target.name): 'coordinator-agent'
+            (contains(response.content, 'DELEGATE RESPONSE')): true
+            (response.a2a.taskId != null): true
     catch:
-      # In the case of any errors, show the full query for troubleshooting.
-      - describe:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          name: token-usage-query
-      - events: {}
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: agent-tool-delegation-query
 
     cleanup:
     - script:

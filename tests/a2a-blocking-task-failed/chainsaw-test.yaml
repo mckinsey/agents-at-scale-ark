@@ -33,6 +33,15 @@ spec:
             name: mock-llm-countdown
           status:
             (contains(conditions[?type == 'Ready'].status, 'True')): true
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: countdown-agent
+          spec:
+            executionEngine:
+              name: a2a
     # Apply Query targeting countdown agent with invalid input
     - apply:
         file: manifests/a01-query.yaml
@@ -56,6 +65,18 @@ spec:
             (response != null): true
             (response.target.name): 'countdown-agent'
             (contains(response.content, 'Cannot countdown from negative number -5')): true
+    - script:
+        content: |
+          events=$(kubectl get events -n $NAMESPACE --field-selector involvedObject.name=countdown-fail-query,involvedObject.kind=Query -o json)
+          parse_errors=$(echo "$events" | jq '[.items[] | select(.reason == "A2AResponseParseError")] | length')
+          if [ "$parse_errors" -lt 1 ]; then
+            echo "expected A2AResponseParseError event for native A2A failure path" >&2
+            echo "$events" | jq -r '.items[] | "\(.reason): \(.message // "no message")"'
+            exit 1
+          fi
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     catch:
     - events: {}
     - describe:

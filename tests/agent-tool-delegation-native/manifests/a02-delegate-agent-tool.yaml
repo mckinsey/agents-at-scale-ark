@@ -1,0 +1,15 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: delegate-agent-tool
+spec:
+  type: agent
+  description: Delegate work to the delegate-agent.
+  inputSchema:
+    type: object
+    properties:
+      input:
+        type: string
+    required: ["input"]
+  agent:
+    name: delegate-agent

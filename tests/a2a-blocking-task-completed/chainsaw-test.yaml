@@ -33,6 +33,15 @@ spec:
             name: mock-llm-countdown
           status:
             (contains(conditions[?type == 'Ready'].status, 'True')): true
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: countdown-agent
+          spec:
+            executionEngine:
+              name: a2a
     # Apply Query targeting countdown agent
     - apply:
         file: manifests/a01-query.yaml
@@ -60,6 +69,7 @@ spec:
             (contains(response.content, '1 seconds remaining')): true
             (contains(response.content, '0 seconds remaining')): true
             (contains(response.content, 'Countdown complete!')): true
+            (response.a2a.taskId != null): true
     catch:
     - events: {}
     - describe:

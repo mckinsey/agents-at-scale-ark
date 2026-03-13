@@ -64,6 +64,51 @@ spec:
             name: mock-llm-countdown
           status:
             (lastResolvedAddress != null): true
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: echo-agent
+            (annotations."ark.mckinsey.com/a2a-server-name" == 'mock-llm-echo'): true
+            (annotations."ark.mckinsey.com/a2a-server-address" != null): true
+            (annotations."ark.mckinsey.com/a2a-streaming-supported" != null): true
+            (annotations."ark.mckinsey.com/a2a-server-skills" != null): true
+          spec:
+            executionEngine:
+              name: a2a
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: countdown-agent
+            (annotations."ark.mckinsey.com/a2a-server-name" == 'mock-llm-countdown'): true
+            (annotations."ark.mckinsey.com/a2a-server-address" != null): true
+            (annotations."ark.mckinsey.com/a2a-streaming-supported" != null): true
+            (annotations."ark.mckinsey.com/a2a-server-skills" != null): true
+          spec:
+            executionEngine:
+              name: a2a
+    - script:
+        content: |
+          kubectl annotate a2aserver mock-llm-echo -n $NAMESPACE \
+            ark.mckinsey.com/a2a-history-enabled=true \
+            ark.mckinsey.com/a2a-history-limit=4 \
+            ark.mckinsey.com/a2a-permissions='{"subject":"qa-005"}' \
+            --overwrite
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1prealpha1
+          kind: A2AServer
+          metadata:
+            name: mock-llm-echo
+            annotations:
+              ark.mckinsey.com/a2a-history-enabled: 'true'
+              ark.mckinsey.com/a2a-history-limit: '4'
     catch:
     - events: {}
     - describe:
