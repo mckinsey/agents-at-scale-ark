@@ -10,7 +10,6 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
-	"mckinsey.com/ark/internal/genai"
 )
 
 func TestDispatchValidate(t *testing.T) {
@@ -35,7 +34,7 @@ func TestDispatchValidate(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
 			Spec: arkv1alpha1.ModelSpec{
 				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
-				Provider: genai.ProviderOpenAI,
+				Provider: ProviderOpenAI,
 				Config: arkv1alpha1.ModelConfig{
 					OpenAI: &arkv1alpha1.OpenAIModelConfig{
 						BaseURL: arkv1alpha1.ValueSource{Value: "https://api.openai.com"},
@@ -53,7 +52,7 @@ func TestDispatchValidate(t *testing.T) {
 	t.Run("tool", func(t *testing.T) {
 		tool := &arkv1alpha1.Tool{
 			ObjectMeta: metav1.ObjectMeta{Name: "noop", Namespace: "default"},
-			Spec:       arkv1alpha1.ToolSpec{Type: genai.ToolTypeBuiltin},
+			Spec:       arkv1alpha1.ToolSpec{Type: ToolTypeBuiltin},
 		}
 		_, err := v.Validate(ctx, tool)
 		if err != nil {
@@ -121,14 +120,14 @@ func TestDispatchApplyDefaults(t *testing.T) {
 
 	t.Run("model type migrated to provider", func(t *testing.T) {
 		model := &arkv1alpha1.Model{
-			Spec: arkv1alpha1.ModelSpec{Type: genai.ProviderAzure},
+			Spec: arkv1alpha1.ModelSpec{Type: ProviderAzure},
 		}
 		ApplyDefaults(model)
-		if model.Spec.Provider != genai.ProviderAzure {
-			t.Fatalf("expected provider=%s, got %s", genai.ProviderAzure, model.Spec.Provider)
+		if model.Spec.Provider != ProviderAzure {
+			t.Fatalf("expected provider=%s, got %s", ProviderAzure, model.Spec.Provider)
 		}
-		if model.Spec.Type != genai.ModelTypeCompletions {
-			t.Fatalf("expected type=%s, got %s", genai.ModelTypeCompletions, model.Spec.Type)
+		if model.Spec.Type != ModelTypeCompletions {
+			t.Fatalf("expected type=%s, got %s", ModelTypeCompletions, model.Spec.Type)
 		}
 	})
 

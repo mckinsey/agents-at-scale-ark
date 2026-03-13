@@ -95,6 +95,10 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 build: validate-chart-crds manifests generate fmt vet ## Build manager binary.
 	go build $(LDFLAGS) -o bin/manager cmd/main.go
 
+.PHONY: build-completions
+build-completions: fmt vet ## Build completions engine binary.
+	go build $(LDFLAGS) -o bin/completions cmd/completions/main.go
+
 .PHONY: run
 run: manifests generate fmt vet
 	scripts/tls-certs.sh
@@ -140,7 +144,18 @@ build-container: ## Build the ark-controller
 		--build-arg VERSION=$(VERSION) \
 		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
 		-t $(IMAGE):$(IMAGE_TAG) \
-		-f Dockerfile . 
+		-f Dockerfile .
+
+COMPLETIONS_IMAGE ?= ark-completions
+COMPLETIONS_IMAGE_TAG ?= latest
+
+.PHONY: build-completions-container
+build-completions-container: ## Build the ark-completions container
+	$(CONTAINER_TOOL) build \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
+		-t $(COMPLETIONS_IMAGE):$(COMPLETIONS_IMAGE_TAG) \
+		-f Dockerfile.completions .
 
 .PHONY: deploy
 deploy: manifests ## Deploy controller and cert-manager to the K8s cluster specified in ~/.kube/config.

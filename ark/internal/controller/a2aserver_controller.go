@@ -20,10 +20,10 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
+	arka2a "mckinsey.com/ark/internal/a2a"
 	"mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/eventing"
-	"mckinsey.com/ark/internal/genai"
 	"mckinsey.com/ark/internal/labels"
 )
 
@@ -98,7 +98,7 @@ func (r *A2AServerReconciler) processServer(ctx context.Context, a2aServer arkv1
 	// Use the already resolved address from status
 	resolvedAddress := a2aServer.Status.LastResolvedAddress
 	// Don't pass recorder - we handle events at controller level based on actual changes
-	agentCard, err := genai.DiscoverA2AAgents(ctx, r.Client, resolvedAddress, a2aServer.Spec.Headers, a2aServer.Namespace)
+	agentCard, err := arka2a.DiscoverA2AAgents(ctx, r.Client, resolvedAddress, a2aServer.Spec.Headers, a2aServer.Namespace)
 	if err != nil {
 		if err := r.reconcileConditionsDiscoveryFailed(ctx, &a2aServer, err, resolvedAddress); err != nil {
 			return ctrl.Result{}, err
@@ -200,7 +200,7 @@ func (r *A2AServerReconciler) updateStatusWithConditions(ctx context.Context, a2
 	return err
 }
 
-func (r *A2AServerReconciler) createAgentWithSkills(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer, agentCard *genai.A2AAgentCard) (bool, error) {
+func (r *A2AServerReconciler) createAgentWithSkills(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer, agentCard *arka2a.A2AAgentCard) (bool, error) {
 	log := logf.FromContext(ctx)
 	anyChange := false
 
@@ -252,7 +252,7 @@ func (r *A2AServerReconciler) createAgentWithSkills(ctx context.Context, a2aServ
 	return anyChange, nil
 }
 
-func (r *A2AServerReconciler) buildAgentWithSkills(a2aServer *arkv1prealpha1.A2AServer, agentCard *genai.A2AAgentCard, agentName string) *arkv1alpha1.Agent {
+func (r *A2AServerReconciler) buildAgentWithSkills(a2aServer *arkv1prealpha1.A2AServer, agentCard *arka2a.A2AAgentCard, agentName string) *arkv1alpha1.Agent {
 	// Build skills annotation JSON
 	skillsJSON, _ := json.Marshal(agentCard.Skills)
 
@@ -286,7 +286,7 @@ func (r *A2AServerReconciler) buildAgentWithSkills(a2aServer *arkv1prealpha1.A2A
 			Description: agentCard.Description,
 			Prompt:      fmt.Sprintf("You are %s. %s", agentCard.Name, agentCard.Description),
 			ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{
-				Name: genai.ExecutionEngineA2A,
+				Name: arka2a.ExecutionEngineA2A,
 			},
 		},
 	}
