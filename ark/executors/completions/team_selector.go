@@ -31,7 +31,11 @@ func buildHistory(messages []Message) string {
 	var history []string
 	for _, msg := range messages {
 		if m := msg.OfAssistant; m != nil {
-			history = append(history, fmt.Sprintf("# %s:\n%s\n", m.Name.Value, m.Content.OfString))
+			label := m.Name.Value
+			if label == "" {
+				label = "assistant"
+			}
+			history = append(history, fmt.Sprintf("# %s:\n%s\n", label, m.Content.OfString))
 		}
 		if m := msg.OfUser; m != nil {
 			history = append(history, fmt.Sprintf("# user:\n%s\n", m.Content.OfString))

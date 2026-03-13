@@ -19,6 +19,26 @@ type recordingTeamMember struct {
 	seenHistory []Message
 }
 
+type nilResultTeamMember struct {
+	name string
+}
+
+func (m *nilResultTeamMember) Execute(_ context.Context, _ Message, _ []Message, _ MemoryInterface, _ EventStreamInterface) (*ExecutionResult, error) {
+	return nil, nil
+}
+
+func (m *nilResultTeamMember) GetName() string {
+	return m.name
+}
+
+func (m *nilResultTeamMember) GetType() string {
+	return MemberTypeAgent
+}
+
+func (m *nilResultTeamMember) GetDescription() string {
+	return ""
+}
+
 func (m *recordingTeamMember) Execute(_ context.Context, _ Message, history []Message, _ MemoryInterface, _ EventStreamInterface) (*ExecutionResult, error) {
 	m.seenHistory = append([]Message{}, history...)
 	return &ExecutionResult{Messages: append([]Message{}, m.response...)}, nil
@@ -131,4 +151,20 @@ func TestExecuteMemberAndAccumulatePreservesHistoryOrderAcrossTurns(t *testing.T
 	assert.Equal(t, "step two", memberTwo.seenHistory[2].OfAssistant.Content.OfString.Value)
 	assert.Equal(t, "member-one", memberTwo.seenHistory[1].OfAssistant.Name.Value)
 	assert.Equal(t, "member-one", memberTwo.seenHistory[2].OfAssistant.Name.Value)
+}
+
+func TestExecuteMemberAndAccumulateHandlesNilResult(t *testing.T) {
+	team := &Team{
+		Name:             "test-team",
+		Strategy:         "sequential",
+		eventingRecorder: noopEventingTeamRecorder{},
+	}
+
+	member := &nilResultTeamMember{name: "broken-member"}
+	messages := []Message{NewUserMessage("question")}
+	newMessages := []Message{}
+
+	err := team.executeMemberAndAccumulate(context.Background(), member, NewUserMessage("question"), &messages, &newMessages, 0)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "returned nil result")
 }

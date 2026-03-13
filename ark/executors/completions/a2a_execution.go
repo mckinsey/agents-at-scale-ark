@@ -23,6 +23,23 @@ type A2AExecutionEngine struct {
 	eventingRecorder eventing.A2aRecorder
 }
 
+type streamCountingEventStream struct {
+	EventStreamInterface
+	chunkCount int
+}
+
+func (s *streamCountingEventStream) StreamChunk(ctx context.Context, chunk interface{}) error {
+	err := s.EventStreamInterface.StreamChunk(ctx, chunk)
+	if err == nil {
+		s.chunkCount++
+	}
+	return err
+}
+
+func shouldFallbackToBlockingExecution(streamErr error, streamedChunkCount int) bool {
+	return streamErr != nil && streamedChunkCount == 0
+}
+
 func NewA2AExecutionEngine(k8sClient client.Client, eventingRecorder eventing.A2aRecorder) *A2AExecutionEngine {
 	return &A2AExecutionEngine{
 		client:           k8sClient,
@@ -76,9 +93,17 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 	modelID := fmt.Sprintf("agent/%s", agentName)
 
 	if agentAnnotations[arkann.A2AStreamingSupported] == TrueString && eventStream != nil {
-		result, err := e.executeStreaming(ctx, a2aAddress, a2aServer.Spec.Headers, namespace, content, agentName, queryName, contextID, modelID, eventStream, &a2aServer)
+		countingStream := &streamCountingEventStream{EventStreamInterface: eventStream}
+		result, err := e.executeStreaming(ctx, a2aAddress, a2aServer.Spec.Headers, namespace, content, agentName, queryName, contextID, modelID, countingStream, &a2aServer)
 		if err != nil {
-			log.Error(err, "A2A streaming failed, falling back to blocking", "agent", agentName)
+			if shouldFallbackToBlockingExecution(err, countingStream.chunkCount) {
+				log.Error(err, "A2A streaming failed before emitting chunks, falling back to blocking", "agent", agentName)
+			} else {
+				log.Error(err, "A2A streaming failed after emitting chunks, not falling back to blocking", "agent", agentName, "streamedChunks", countingStream.chunkCount)
+				StreamError(ctx, eventStream, err, "a2a_streaming_failed", modelID)
+				e.eventingRecorder.Fail(ctx, "A2AExecution", fmt.Sprintf("A2A streaming execution failed: %v", err), err, operationData)
+				return nil, err
+			}
 		} else {
 			e.eventingRecorder.Complete(ctx, "A2AExecution", "A2A execution completed successfully", operationData)
 			return result, nil

@@ -291,6 +291,11 @@ func (t *Team) executeMemberAndAccumulate(ctx context.Context, member TeamMember
 		t.eventingRecorder.Fail(ctx, "TeamMember", fmt.Sprintf("Team member execution failed: %v", err), err, operationData)
 		return err
 	}
+	if result == nil {
+		err = fmt.Errorf("team member %s returned nil result", member.GetName())
+		t.eventingRecorder.Fail(ctx, "TeamMember", fmt.Sprintf("Team member returned invalid result: %v", err), err, operationData)
+		return err
+	}
 
 	messagesWithName := addAgentNameToMessages(result.Messages, member.GetName())
 	*messages = append(*messages, messagesWithName...)

@@ -2,6 +2,7 @@ package completions
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -294,5 +295,39 @@ func extractChunkContent(t *testing.T, chunk interface{}) string {
 	default:
 		t.Fatalf("unexpected chunk type %T", chunk)
 		return ""
+	}
+}
+
+func TestShouldFallbackToBlockingExecution(t *testing.T) {
+	tests := []struct {
+		name         string
+		streamErr    error
+		streamed     int
+		wantFallback bool
+	}{
+		{
+			name:         "stream error before chunks",
+			streamErr:    errors.New("stream setup failed"),
+			streamed:     0,
+			wantFallback: true,
+		},
+		{
+			name:         "stream error after chunks",
+			streamErr:    errors.New("stream interrupted"),
+			streamed:     2,
+			wantFallback: false,
+		},
+		{
+			name:         "no error",
+			streamErr:    nil,
+			streamed:     0,
+			wantFallback: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.wantFallback, shouldFallbackToBlockingExecution(tt.streamErr, tt.streamed))
+		})
 	}
 }
