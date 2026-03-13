@@ -7,6 +7,7 @@ import (
 	"testing"
 	"text/template"
 
+	"github.com/openai/openai-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -395,6 +396,21 @@ func TestBuildHistory(t *testing.T) {
 				NewUserMessage("Follow-up"),
 			},
 			want: "# user:\nQuestion?\n\n# :\nAnswer\n\n# user:\nFollow-up\n",
+		},
+		{
+			name: "assistant names preserved in history",
+			messages: func() []Message {
+				researchReply := NewAssistantMessage("Research result")
+				researchReply.OfAssistant.Name = openai.String("researcher")
+				analysisReply := NewAssistantMessage("Analysis result")
+				analysisReply.OfAssistant.Name = openai.String("analyst")
+				return []Message{
+					NewUserMessage("Explain renewable energy benefits"),
+					researchReply,
+					analysisReply,
+				}
+			}(),
+			want: "# user:\nExplain renewable energy benefits\n\n# researcher:\nResearch result\n\n# analyst:\nAnalysis result\n",
 		},
 	}
 

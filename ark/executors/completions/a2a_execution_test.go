@@ -192,3 +192,107 @@ func TestExtractTextFromTaskStatus(t *testing.T) {
 		assert.Equal(t, "", extractTextFromTaskStatus(task))
 	})
 }
+
+func TestConsumeA2AStreamEventsEmitsIncrementalChunks(t *testing.T) {
+	ctx := context.Background()
+	events := make(chan protocol.StreamingMessageEvent, 3)
+	stream := &mockEventStream{}
+
+	events <- protocol.StreamingMessageEvent{
+		Result: &protocol.TaskStatusUpdateEvent{
+			TaskID:    "task-1",
+			ContextID: "ctx-1",
+			Status: protocol.TaskStatus{
+				State: protocol.TaskState(arka2a.TaskStateWorking),
+				Message: &protocol.Message{
+					Parts: []protocol.Part{protocol.NewTextPart("first")},
+				},
+			},
+		},
+	}
+	events <- protocol.StreamingMessageEvent{
+		Result: &protocol.TaskArtifactUpdateEvent{
+			TaskID: "task-1",
+			Artifact: protocol.Artifact{
+				Parts: []protocol.Part{protocol.NewTextPart("second")},
+			},
+		},
+	}
+	events <- protocol.StreamingMessageEvent{
+		Result: &protocol.TaskStatusUpdateEvent{
+			TaskID:    "task-1",
+			ContextID: "ctx-1",
+			Final:     true,
+			Status: protocol.TaskStatus{
+				State: protocol.TaskState(arka2a.TaskStateCompleted),
+				Message: &protocol.Message{
+					Parts: []protocol.Part{protocol.NewTextPart("third")},
+				},
+			},
+		},
+	}
+
+	result, err := consumeA2AStreamEvents(ctx, nil, events, stream, "model-1", "comp-1", "agent", "default", "", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "second", result.A2AResponse.Content)
+	require.Len(t, stream.chunks, 3)
+	assert.Equal(t, "first", extractChunkContent(t, stream.chunks[0]))
+	assert.Equal(t, "second", extractChunkContent(t, stream.chunks[1]))
+	assert.Equal(t, "third", extractChunkContent(t, stream.chunks[2]))
+}
+
+func TestConsumeA2AStreamEventsWrapsOpenAIEnvelopeAndArkMetadata(t *testing.T) {
+	ctx := WithQueryContext(context.Background(), "query-1", "session-1", "query-name")
+	ctx = WithExecutionMetadata(ctx, map[string]interface{}{
+		"target": "team/my-team",
+		"team":   "my-team",
+		"agent":  "research-agent",
+	})
+
+	events := make(chan protocol.StreamingMessageEvent, 1)
+	stream := &mockEventStream{}
+
+	events <- protocol.StreamingMessageEvent{
+		Result: &protocol.Message{
+			Role:  protocol.MessageRoleAgent,
+			Parts: []protocol.Part{protocol.NewTextPart("hello")},
+		},
+	}
+	close(events)
+
+	_, err := consumeA2AStreamEvents(ctx, nil, events, stream, "model-1", "comp-1", "research-agent", "default", "", nil)
+	require.NoError(t, err)
+	require.Len(t, stream.chunks, 1)
+
+	chunkWithMeta, ok := stream.chunks[0].(ChunkWithMetadata)
+	require.True(t, ok)
+	require.NotNil(t, chunkWithMeta.ChatCompletionChunk)
+	require.Len(t, chunkWithMeta.Choices, 1)
+	assert.Equal(t, "hello", chunkWithMeta.Choices[0].Delta.Content)
+	require.NotNil(t, chunkWithMeta.Ark)
+	assert.Equal(t, "query-1", chunkWithMeta.Ark.Query)
+	assert.Equal(t, "session-1", chunkWithMeta.Ark.Session)
+	assert.Equal(t, "team/my-team", chunkWithMeta.Ark.Target)
+	assert.Equal(t, "my-team", chunkWithMeta.Ark.Team)
+	assert.Equal(t, "research-agent", chunkWithMeta.Ark.Agent)
+	assert.Equal(t, "model-1", chunkWithMeta.Ark.Model)
+}
+
+func extractChunkContent(t *testing.T, chunk interface{}) string {
+	t.Helper()
+
+	switch c := chunk.(type) {
+	case ChunkWithMetadata:
+		require.NotNil(t, c.ChatCompletionChunk)
+		require.NotEmpty(t, c.Choices)
+		return c.Choices[0].Delta.Content
+	case *ChunkWithMetadata:
+		require.NotNil(t, c)
+		require.NotNil(t, c.ChatCompletionChunk)
+		require.NotEmpty(t, c.Choices)
+		return c.Choices[0].Delta.Content
+	default:
+		t.Fatalf("unexpected chunk type %T", chunk)
+		return ""
+	}
+}
