@@ -64,16 +64,16 @@ Switching between storage backends is destructive. Resources created with etcd (
 </Callout>
 
 - ark-api and ark-dashboard deploy to namespace: default
-- ark-controller, ark-query-engine, and localhost-gateway deploy to namespace: ark-system
+- ark-controller, ark-completions, and localhost-gateway deploy to namespace: ark-system
 
-## Query Engine in Dev Mode
+## Completions Engine in Dev Mode
 
-The query engine runs as a separate pod in dev mode (not as a sidecar). This allows independent code sync and restart — changing engine code only restarts the engine, not the controller.
+The completions engine runs as a standalone pod. This allows independent code sync and restart — changing engine code only restarts the engine, not the controller.
 
-DevSpace deploys the engine using the `ark-query-engine-dev` chart. The controller connects via `--query-engine-addr=http://ark-query-engine.ark-system:9090`.
+DevSpace deploys the engine using the chart at `executors/completions/chart/`. The controller connects via `--completions-addr=http://ark-completions.ark-system:9090`.
 
 ```bash
-# Both controller and query engine start with devspace dev
+# Both controller and completions engine start with devspace dev
 devspace dev --dependency ark-controller
 ```
 

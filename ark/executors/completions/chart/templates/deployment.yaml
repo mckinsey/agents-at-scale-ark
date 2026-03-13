@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ark-completions
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: ark-completions
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ark-completions
+  template:
+    metadata:
+      labels:
+        app: ark-completions
+    spec:
+      serviceAccountName: {{ .Values.serviceAccountName }} # NOSONAR - RBAC defined in ark-controller chart
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+      containers:
+        - name: completions
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - "--addr=:{{ .Values.port }}"
+          ports:
+            - containerPort: {{ .Values.port }}
+              protocol: TCP
+          env:
+          - name: OTEL_SERVICE_NAME
+            value: "ark-completions"
+          - name: ARK_TELEMETRY_OTEL_DISCOVERY
+            value: "true"
+          {{- if .Values.customCACert.enabled }}
+          - name: SSL_CERT_FILE
+            value: "/etc/ssl/certs/custom-ca/{{ .Values.customCACert.key }}"
+          {{- end }}
+          envFrom:
+          - configMapRef:
+              name: otel-environment-variables
+              optional: true
+          - secretRef:
+              name: otel-environment-variables
+              optional: true
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - "ALL"
+          {{- if .Values.customCACert.enabled }}
+          volumeMounts:
+            - name: custom-ca-cert
+              mountPath: /etc/ssl/certs/custom-ca
+              readOnly: true
+          {{- end }}
+      {{- if .Values.customCACert.enabled }}
+      volumes:
+        - name: custom-ca-cert
+          secret:
+            secretName: {{ .Values.customCACert.secretName }}
+            items:
+              - key: {{ .Values.customCACert.key }}
+                path: {{ .Values.customCACert.key }}
+      {{- end }}

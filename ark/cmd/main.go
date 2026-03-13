@@ -65,7 +65,7 @@ type config struct {
 	probeAddr                                        string
 	secureMetrics                                    bool
 	enableHTTP2                                      bool
-	queryEngineAddr                                  string
+	completionsAddr                                  string
 }
 
 func main() {
@@ -130,8 +130,8 @@ func parseFlags() struct {
 	flag.BoolVar(&cfg.enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.BoolVar(&showVersion, "version", false, "Show version information and exit")
-	flag.StringVar(&cfg.queryEngineAddr, "query-engine-addr", "http://localhost:9090",
-		"Address of the query engine sidecar for A2A communication")
+	flag.StringVar(&cfg.completionsAddr, "completions-addr", "http://ark-completions.ark-system:9090",
+		"Address of the completions engine for A2A communication")
 
 	zapOpts := zap.Options{Development: false}
 	zapOpts.BindFlags(flag.CommandLine)
@@ -260,7 +260,7 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 			Scheme:          mgr.GetScheme(),
 			Telemetry:       telemetryProvider,
 			Eventing:        eventingProvider,
-			QueryEngineAddr: cfg.queryEngineAddr,
+			CompletionsAddr: cfg.completionsAddr,
 		}},
 		{"Tool", &controller.ToolReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
 		{"Team", &controller.TeamReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("team-controller")}},

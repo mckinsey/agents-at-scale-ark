@@ -95,6 +95,18 @@ const defaultArkServices: ServiceCollection = {
     k8sDevDeploymentName: 'ark-controller-devspace',
   },
 
+  'ark-completions': {
+    name: 'ark-completions',
+    helmReleaseName: 'ark-completions',
+    description: 'Completions execution engine for Ark queries',
+    enabled: true,
+    category: 'core',
+    namespace: 'ark-system',
+    chartPath: `${REGISTRY_BASE}/ark-completions:${CHART_VERSION}`,
+    installArgs: ['--create-namespace'],
+    k8sDeploymentName: 'ark-completions',
+  },
+
   'ark-tenant': {
     name: 'ark-tenant',
     helmReleaseName: 'ark-tenant',

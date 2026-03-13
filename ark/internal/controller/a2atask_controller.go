@@ -18,8 +18,8 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
+	arka2a "mckinsey.com/ark/internal/a2a"
 	"mckinsey.com/ark/internal/eventing"
-	"mckinsey.com/ark/internal/genai"
 )
 
 type A2ATaskReconciler struct {
@@ -57,7 +57,7 @@ func (r *A2ATaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// Initialize phase if not set
 	if a2aTask.Status.Phase == "" {
-		a2aTask.Status.Phase = genai.PhasePending
+		a2aTask.Status.Phase = arka2a.PhasePending
 	}
 
 	// Initialize Completed condition if not set
@@ -67,7 +67,7 @@ func (r *A2ATaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Handle terminal states
-	if genai.IsTerminalPhase(a2aTask.Status.Phase) {
+	if arka2a.IsTerminalPhase(a2aTask.Status.Phase) {
 		return ctrl.Result{}, nil
 	}
 
@@ -86,7 +86,7 @@ func (r *A2ATaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Requeue for non-terminal tasks using the configured poll interval
-	if !genai.IsTerminalPhase(a2aTask.Status.Phase) {
+	if !arka2a.IsTerminalPhase(a2aTask.Status.Phase) {
 		pollInterval := time.Second * 5 // default fallback
 		if a2aTask.Spec.PollInterval != nil {
 			pollInterval = a2aTask.Spec.PollInterval.Duration
@@ -116,7 +116,7 @@ func (r *A2ATaskReconciler) fetchA2ATaskStatus(ctx context.Context, a2aTask *ark
 	}
 
 	oldPhase := a2aTask.Status.Phase
-	genai.UpdateA2ATaskStatus(&a2aTask.Status, task)
+	arka2a.UpdateA2ATaskStatus(&a2aTask.Status, task)
 	r.updateConditionsAndEvents(a2aTask, oldPhase)
 	return nil
 }
@@ -141,7 +141,7 @@ func (r *A2ATaskReconciler) createA2AClient(ctx context.Context, a2aTask *arkv1a
 
 	agentName := a2aTask.Spec.AgentRef.Name
 
-	return genai.CreateA2AClient(ctx, r.Client, a2aServerAddress, a2aServer.Spec.Headers, serverNamespace, agentName, r.Eventing.A2aRecorder())
+	return arka2a.CreateA2AClient(ctx, r.Client, a2aServerAddress, a2aServer.Spec.Headers, serverNamespace, agentName, r.Eventing.A2aRecorder())
 }
 
 // queryTaskStatus queries the A2A server for task status
@@ -166,15 +166,15 @@ func (r *A2ATaskReconciler) updateConditionsAndEvents(a2aTask *arkv1alpha1.A2ATa
 
 	// Update Completed condition based on phase
 	switch newPhase {
-	case genai.PhasePending, genai.PhaseAssigned:
+	case arka2a.PhasePending, arka2a.PhaseAssigned:
 		r.setConditionCompleted(a2aTask, metav1.ConditionFalse, "TaskPending", "Task is pending execution")
-	case genai.PhaseRunning:
+	case arka2a.PhaseRunning:
 		r.setConditionCompleted(a2aTask, metav1.ConditionFalse, "TaskRunning", "Task is running")
-	case genai.PhaseCompleted:
+	case arka2a.PhaseCompleted:
 		r.setConditionCompleted(a2aTask, metav1.ConditionTrue, "TaskSucceeded", "Task completed successfully")
-	case genai.PhaseFailed:
+	case arka2a.PhaseFailed:
 		r.setConditionCompleted(a2aTask, metav1.ConditionTrue, "TaskFailed", "Task failed")
-	case genai.PhaseCancelled:
+	case arka2a.PhaseCancelled:
 		r.setConditionCompleted(a2aTask, metav1.ConditionTrue, "TaskCancelled", "Task was cancelled")
 	}
 }
