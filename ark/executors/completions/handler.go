@@ -289,11 +289,8 @@ func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, r
 		protocol.MessageRoleAgent,
 		[]protocol.Part{protocol.NewTextPart(responseContent)},
 	)
-	responseMessage.Extensions = []string{arka2a.ExecutionContextExtensionURI}
-	responseMessage.Metadata = map[string]any{
-		arka2a.ExecutionContextExtensionURI: extensionPayload,
-		arka2a.ArkMetadataKey:              legacyMeta,
-	}
+	arka2a.SetExecutionContextExtension(&responseMessage, extensionPayload)
+	arka2a.SetMetadata(&responseMessage, arka2a.ArkMetadataKey, legacyMeta)
 
 	state.finalizeStream(ctx, responseMessages)
 
@@ -467,13 +464,9 @@ func (h *Handler) executeTool(
 }
 
 func extractArkMetadata(message protocol.Message) (*arkMetadata, error) {
-	if message.Metadata == nil {
-		return nil, fmt.Errorf("message has no metadata")
-	}
-
-	arkData, ok := message.Metadata[arka2a.ExecutionContextExtensionURI]
+	arkData, ok := arka2a.GetExtension(message, arka2a.ExecutionContextExtensionURI)
 	if !ok {
-		arkData, ok = message.Metadata[arka2a.ArkMetadataKey]
+		arkData, ok = arka2a.GetMetadata(message, arka2a.ArkMetadataKey)
 	}
 	if !ok {
 		return nil, fmt.Errorf("message metadata missing %s key", arka2a.ExecutionContextExtensionURI)

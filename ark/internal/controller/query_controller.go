@@ -264,11 +264,8 @@ func (r *QueryReconciler) executeViaEngine(ctx context.Context, query arkv1alpha
 	message := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
 		protocol.NewTextPart(userText),
 	})
-	message.Extensions = []string{arka2a.ExecutionContextExtensionURI}
-	message.Metadata = map[string]any{
-		arka2a.ExecutionContextExtensionURI: arkMetadata,
-		arka2a.ArkMetadataKey:              arkMetadata,
-	}
+	arka2a.SetExtension(&message, arka2a.ExecutionContextExtensionURI, arkMetadata)
+	arka2a.SetMetadata(&message, arka2a.ArkMetadataKey, arkMetadata)
 
 	a2aClient, err := arka2a.CreateA2AClient(ctx, r.Client, r.CompletionsAddr, nil, query.Namespace, query.Name, nil)
 	if err != nil {
@@ -523,18 +520,14 @@ func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMet
 		return responseMeta
 	}
 
-	var msgMeta map[string]any
-	if msg, ok := result.Result.(*protocol.Message); ok {
-		msgMeta = msg.Metadata
-	}
-
-	if msgMeta == nil {
+	msg, ok := result.Result.(*protocol.Message)
+	if !ok || msg == nil {
 		return responseMeta
 	}
 
-	arkData, ok := msgMeta[arka2a.ExecutionContextExtensionURI]
+	arkData, ok := arka2a.GetExtension(*msg, arka2a.ExecutionContextExtensionURI)
 	if !ok {
-		arkData, ok = msgMeta[arka2a.ArkMetadataKey]
+		arkData, ok = arka2a.GetMetadata(*msg, arka2a.ArkMetadataKey)
 	}
 	if !ok {
 		return responseMeta

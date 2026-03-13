@@ -10,7 +10,10 @@ import (
 
 const ExecutionEngineA2A = "a2a"
 
-const ExecutionContextExtensionURI = "ark.mckinsey.com/extensions/execution-context/v1"
+const (
+	ExecutionContextExtensionURI = "ark.mckinsey.com/extensions/execution-context/v1"
+	ExecutionTraceExtensionURI   = "ark.mckinsey.com/extensions/execution-trace/v1"
+)
 
 const (
 	TaskStateSubmitted     = "submitted"
