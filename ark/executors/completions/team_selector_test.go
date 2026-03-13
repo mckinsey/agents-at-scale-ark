@@ -784,7 +784,7 @@ func TestSelectMember_WithInvalidAgent(t *testing.T) {
 	tmpl, err := template.New("test").Parse("test")
 	require.NoError(t, err)
 
-	member, err := team.selectMember(ctx, []Message{}, tmpl, "agent1, agent2", "roles", "", nil)
+	member, err := team.selectMember(ctx, []Message{}, tmpl, "agent1, agent2", "roles", nil)
 
 	var invalidErr *InvalidAgentError
 	require.ErrorAs(t, err, &invalidErr)
@@ -807,7 +807,7 @@ func TestSelectMember_ReturnsErrorOnNoMessages(t *testing.T) {
 	tmpl, err := template.New("test").Parse("test")
 	require.NoError(t, err)
 
-	_, err = team.selectMember(ctx, []Message{}, tmpl, "agent1", "roles", "", nil)
+	_, err = team.selectMember(ctx, []Message{}, tmpl, "agent1", "roles", nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "selector agent returned no messages")

@@ -97,7 +97,7 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, e
 }
 
 //nolint:gocognit // Complex function handling selector agent logic, but cohesive responsibilities
-func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *template.Template, participantsList, rolesList, previousMember string, candidateMembers []TeamMember) (TeamMember, error) {
+func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *template.Template, participantsList, rolesList string, candidateMembers []TeamMember) (TeamMember, error) {
 	history := buildHistory(messages)
 	data := SelectorTemplateData{
 		Roles:        rolesList,
@@ -166,7 +166,7 @@ func (t *Team) determineNextMember(ctx context.Context, messages []Message, tmpl
 		// No graph constraints: use standard selector (all members available)
 		participantsList := buildParticipants(t.Members)
 		rolesList := buildRoles(t.Members)
-		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, nil)
+		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, nil)
 	}
 	// Graph constraints provided: use legal transitions
 	return t.selectFromGraphConstraints(ctx, messages, tmpl, previousMember, legalTransitions)
@@ -184,7 +184,7 @@ func (t *Team) selectFromGraphConstraints(ctx context.Context, messages []Messag
 		// If this is the first step, choose from all available members
 		participantsList := buildParticipants(t.Members)
 		rolesList := buildRoles(t.Members)
-		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, nil)
+		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, nil)
 	}
 
 	legal := legalTransitions[previousMember]
@@ -201,7 +201,7 @@ func (t *Team) selectFromGraphConstraints(ctx context.Context, messages []Messag
 		// Multiple legal transitions - use selector agent to choose from candidates
 		participantsList := buildParticipants(legal)
 		rolesList := buildRoles(legal)
-		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, legal)
+		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, legal)
 	}
 }
 
