@@ -31,6 +31,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+env:
+  UV_VERSION: "0.6.14"
+
 jobs:
   # Setup job to determine container cache registry
   setup-container-cache-registry:
@@ -193,6 +196,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
 
       - name: Install ruff
         uses: astral-sh/ruff-action@v3
@@ -206,6 +211,11 @@ jobs:
           node-version: "22.x"
 
       - run: make -j24 services-build-all
+
+      - name: Verify lockfiles are up-to-date
+        run: |
+          uv sync --frozen --directory services/ark-evaluator
+          uv sync --frozen --directory services/ark-mcp/ark-mcp
 
       - name: Check generated types are unchanged
         run: |
@@ -277,6 +287,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
 
       - name: Login to Docker Registry
         if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
@@ -341,6 +353,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
 
       - name: Build libraries
         run: make libs-build-all
