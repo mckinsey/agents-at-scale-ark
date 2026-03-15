@@ -75,7 +75,7 @@ func (s *Server) Start() error {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
 	})
-	mux.Handle("/", otelhttp.NewHandler(s.a2aServer.Handler(), "completions"))
+	mux.Handle("/", otelhttp.NewHandler(s.a2aServer.Handler(), "executor.completions"))
 
 	s.httpServer = &http.Server{
 		Addr:    s.addr,

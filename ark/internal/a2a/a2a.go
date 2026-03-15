@@ -100,8 +100,12 @@ func CreateA2AClient(ctx context.Context, k8sClient client.Client, rpcURL string
 	}
 
 	httpClient := &http.Client{
-		Timeout:   timeout,
-		Transport: otelhttp.NewTransport(http.DefaultTransport),
+		Timeout: timeout,
+		Transport: otelhttp.NewTransport(http.DefaultTransport,
+			otelhttp.WithSpanNameFormatter(func(_ string, _ *http.Request) string {
+				return "a2a.send"
+			}),
+		),
 	}
 
 	var clientOptions []a2aclient.Option
@@ -311,8 +315,12 @@ func createA2ARequest(ctx context.Context, agentCardURL string, headers []arkv1p
 
 func executeA2ARequest(ctx context.Context, req *http.Request, a2aRecorder eventing.A2aRecorder) (*A2AAgentCard, error) {
 	httpClient := &http.Client{
-		Timeout:   30 * time.Second,
-		Transport: otelhttp.NewTransport(http.DefaultTransport),
+		Timeout: 30 * time.Second,
+		Transport: otelhttp.NewTransport(http.DefaultTransport,
+			otelhttp.WithSpanNameFormatter(func(_ string, _ *http.Request) string {
+				return "a2a.discover"
+			}),
+		),
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
