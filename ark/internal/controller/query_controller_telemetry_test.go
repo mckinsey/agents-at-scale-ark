@@ -53,18 +53,17 @@ func TestQueryRecorderBasicOperations(t *testing.T) {
 	assert.True(t, spans[0].Ended, "span should be ended")
 }
 
-// TestQueryRecorderSessionTracking verifies session ID recording
+// TestQueryRecorderSessionTracking verifies session ID is auto-added from query context
 func TestQueryRecorderSessionTracking(t *testing.T) {
 	mockTracer := mock.NewTracer()
 	mockRecorder := mock.NewQueryRecorder(mockTracer)
 	ctx := context.Background()
 	testQuery := newTestQuery()
+	testQuery.Spec.SessionId = testSessionID
 
 	_, span := mockRecorder.StartQuery(ctx, testQuery, "execute")
-	mockRecorder.RecordSessionID(span, testSessionID)
 	span.End()
 
-	// Verify session ID was recorded
 	querySpan := mockTracer.FindSpan(queryExecuteSpan)
 	require.NotNil(t, querySpan, "query span should exist")
 	assert.Equal(t, testSessionID, querySpan.GetAttributeString(telemetry.AttrSessionID))
