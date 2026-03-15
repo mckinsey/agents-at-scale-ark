@@ -22,22 +22,26 @@ Telemetry is enabled by setting the OpenTelemetry environment variables:
 
 ## Architecture
 
-Some queries go directly from the controller to the OTEL endpoint, while others flow through execution engines when multi-framework agent orchestration is used.
+The controller creates a root trace span (`query.dispatch`) for every query execution. Trace context propagates via W3C `traceparent` headers across A2A boundaries to the completions engine and execution engines, producing a connected trace tree.
 
 ```
-  OTEL Env Vars
-┌─────────────────┐
-│  ARK Controller │
-└─────────┬───────┘
+┌─────────────────────┐
+│   ARK Controller    │
+│  query.dispatch     │──── traceparent ────► Completions Engine
+│  (root span)        │                       query.<name>
+└─────────┬───────────┘                         └─ agent/team/model
+          │                                        └─ LLM calls, tools
           │
-          ├─── → Query Executor → OTEL Endpoint
-          │
-          └─── → Query Executor → Execution Engine → OTEL Endpoint
+          └──── traceparent ────► Named Execution Engine
+                                  (creates own child spans)
+
   OTEL Env Vars
 ┌─────────────────────────┐
 │ Services, Engines, etc  ├─── → OTEL Endpoint
 └─────────────────────────┘
 ```
+
+Session ID propagates automatically via W3C `baggage` headers, making it available across all services without manual header injection.
 
 ## Per-Tenant OTEL Routing
 

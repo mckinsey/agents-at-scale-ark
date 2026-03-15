@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"go.opentelemetry.io/otel/baggage"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
@@ -26,7 +27,9 @@ import (
 	completions "mckinsey.com/ark/executors/completions"
 	arka2a "mckinsey.com/ark/internal/a2a"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
+	"mckinsey.com/ark/internal/telemetry"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
+	otelimpl "mckinsey.com/ark/internal/telemetry/otel"
 )
 
 const (
@@ -183,6 +186,27 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	opCtx = r.Eventing.QueryRecorder().StartTokenCollection(opCtx)
 	opCtx = r.Eventing.QueryRecorder().Start(opCtx, "QueryExecution", fmt.Sprintf("Executing query %s", obj.Name), nil)
 
+	opCtx = otelimpl.SetQueryInContext(opCtx, &obj)
+	sessionId := obj.Spec.SessionId
+	if sessionId == "" {
+		sessionId = string(obj.UID)
+	}
+	if member, err := baggage.NewMember("session.id", sessionId); err == nil {
+		if bag, err := baggage.New(member); err == nil {
+			opCtx = baggage.ContextWithBaggage(opCtx, bag)
+		}
+	}
+
+	opCtx, dispatchSpan := r.Telemetry.Tracer().Start(opCtx, fmt.Sprintf("query.%s.dispatch", obj.Name),
+		telemetry.WithSpanKind(telemetry.SpanKindChain),
+		telemetry.WithAttributes(
+			telemetry.String(telemetry.AttrQueryName, obj.Name),
+			telemetry.String(telemetry.AttrQueryNamespace, obj.Namespace),
+			telemetry.String(telemetry.AttrSessionID, sessionId),
+		),
+	)
+	defer dispatchSpan.End()
+
 	impersonatedClient, err := r.getClientForQuery(obj)
 	if err != nil {
 		_ = r.updateStatus(opCtx, &obj, statusError)
@@ -191,25 +215,35 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	target, err := r.resolveTarget(opCtx, obj, impersonatedClient)
 	if err != nil {
+		dispatchSpan.RecordError(err)
 		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Failed to resolve target: %v", err), err, nil)
 		_ = r.updateStatus(opCtx, &obj, statusError)
 		return
 	}
+	dispatchSpan.SetAttributes(
+		telemetry.String(telemetry.AttrTargetType, target.Type),
+		telemetry.String(telemetry.AttrTargetName, target.Name),
+	)
 
 	address, err := r.resolveDispatchAddress(opCtx, *target, obj.Namespace)
 	if err != nil {
+		dispatchSpan.RecordError(err)
 		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Failed to resolve dispatch address: %v", err), err, nil)
 		_ = r.updateStatus(opCtx, &obj, statusError)
 		return
 	}
+	dispatchSpan.SetAttributes(telemetry.String("dispatch.address", address))
 
 	response, engineMeta, err := r.sendQueryA2A(opCtx, address, obj, *target)
 	if err != nil {
+		dispatchSpan.RecordError(err)
+		dispatchSpan.SetStatus(telemetry.StatusError, err.Error())
 		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Query execution failed: %v", err), err, nil)
 		obj.Status.Response = createErrorResponse(*target, err)
 		_ = r.updateStatus(opCtx, &obj, statusError)
 		return
 	}
+	dispatchSpan.SetStatus(telemetry.StatusOk, "success")
 
 	obj.Status.Response = response
 

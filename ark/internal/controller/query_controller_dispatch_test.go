@@ -7,8 +7,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/baggage"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
@@ -258,5 +260,54 @@ func TestExtractEngineResponseMeta(t *testing.T) {
 		result := &protocol.MessageResult{Result: task}
 		meta := extractEngineResponseMeta(result)
 		assert.Empty(t, meta.ConversationId)
+	})
+}
+
+func TestSessionIDBaggage(t *testing.T) {
+	t.Run("baggage is set with session ID from spec", func(t *testing.T) {
+		query := arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "q1", Namespace: "default"},
+			Spec:       arkv1alpha1.QuerySpec{SessionId: "explicit-session"},
+		}
+
+		sessionId := query.Spec.SessionId
+		if sessionId == "" {
+			sessionId = string(query.UID)
+		}
+
+		ctx := context.Background()
+		member, err := baggage.NewMember("session.id", sessionId)
+		require.NoError(t, err)
+		bag, err := baggage.New(member)
+		require.NoError(t, err)
+		ctx = baggage.ContextWithBaggage(ctx, bag)
+
+		extractedBag := baggage.FromContext(ctx)
+		assert.Equal(t, "explicit-session", extractedBag.Member("session.id").Value())
+	})
+
+	t.Run("baggage uses UID when session ID is empty", func(t *testing.T) {
+		query := arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "q2",
+				Namespace: "default",
+				UID:       apimachinerytypes.UID("uid-123"),
+			},
+		}
+
+		sessionId := query.Spec.SessionId
+		if sessionId == "" {
+			sessionId = string(query.UID)
+		}
+
+		ctx := context.Background()
+		member, err := baggage.NewMember("session.id", sessionId)
+		require.NoError(t, err)
+		bag, err := baggage.New(member)
+		require.NoError(t, err)
+		ctx = baggage.ContextWithBaggage(ctx, bag)
+
+		extractedBag := baggage.FromContext(ctx)
+		assert.Equal(t, "uid-123", extractedBag.Member("session.id").Value())
 	})
 }

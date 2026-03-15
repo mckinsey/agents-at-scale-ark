@@ -162,8 +162,6 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 	if sessionId == "" {
 		sessionId = string(query.UID)
 	}
-	h.telemetry.QueryRecorder().RecordSessionID(querySpan, sessionId)
-
 	ctx = WithQueryContext(ctx, string(query.UID), sessionId, query.Name)
 	if a2aContextID, ok := query.Annotations[annotations.A2AContextID]; ok && a2aContextID != "" {
 		ctx = WithA2AContextID(ctx, a2aContextID)
