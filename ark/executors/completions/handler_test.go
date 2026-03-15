@@ -308,7 +308,7 @@ func TestDispatchTargetUnsupportedType(t *testing.T) {
 		targetSpan: span,
 	}
 
-	_, err := h.dispatchTarget(context.Background(), state)
+	_, _, err := h.dispatchTarget(context.Background(), state)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported target type")
 }

@@ -331,6 +331,13 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 		Phase:   statusDone,
 	}
 
+	if engineMeta.A2AContextID != "" || engineMeta.A2ATaskID != "" {
+		response.A2A = &arkv1alpha1.A2AMetadata{
+			ContextID: engineMeta.A2AContextID,
+			TaskID:    engineMeta.A2ATaskID,
+		}
+	}
+
 	return response, engineMeta, nil
 }
 
@@ -393,6 +400,8 @@ type engineResponseMeta struct {
 	TokenUsage     *arkv1alpha1.TokenUsage
 	ConversationId string
 	MessagesRaw    string
+	A2AContextID   string
+	A2ATaskID      string
 }
 
 func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMeta {
@@ -430,23 +439,43 @@ func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMet
 		}
 	}
 
-	if tokenData, ok := arkMap["tokenUsage"].(map[string]any); ok {
-		usage := &arkv1alpha1.TokenUsage{}
-		if v, ok := tokenData["prompt_tokens"].(float64); ok {
-			usage.PromptTokens = int64(v)
-		}
-		if v, ok := tokenData["completion_tokens"].(float64); ok {
-			usage.CompletionTokens = int64(v)
-		}
-		if v, ok := tokenData["total_tokens"].(float64); ok {
-			usage.TotalTokens = int64(v)
-		}
-		if usage.TotalTokens > 0 {
-			responseMeta.TokenUsage = usage
-		}
-	}
+	extractA2AMeta(arkMap, &responseMeta)
+	extractTokenUsage(arkMap, &responseMeta)
 
 	return responseMeta
+}
+
+func extractA2AMeta(arkMap map[string]any, responseMeta *engineResponseMeta) {
+	a2aData, ok := arkMap["a2a"].(map[string]any)
+	if !ok {
+		return
+	}
+	if contextID, ok := a2aData["contextId"].(string); ok {
+		responseMeta.A2AContextID = contextID
+	}
+	if taskID, ok := a2aData["taskId"].(string); ok {
+		responseMeta.A2ATaskID = taskID
+	}
+}
+
+func extractTokenUsage(arkMap map[string]any, responseMeta *engineResponseMeta) {
+	tokenData, ok := arkMap["tokenUsage"].(map[string]any)
+	if !ok {
+		return
+	}
+	usage := &arkv1alpha1.TokenUsage{}
+	if v, ok := tokenData["prompt_tokens"].(float64); ok {
+		usage.PromptTokens = int64(v)
+	}
+	if v, ok := tokenData["completion_tokens"].(float64); ok {
+		usage.CompletionTokens = int64(v)
+	}
+	if v, ok := tokenData["total_tokens"].(float64); ok {
+		usage.TotalTokens = int64(v)
+	}
+	if usage.TotalTokens > 0 {
+		responseMeta.TokenUsage = usage
+	}
 }
 
 func (r *QueryReconciler) resolveTarget(ctx context.Context, query arkv1alpha1.Query, impersonatedClient client.Client) (*arkv1alpha1.QueryTarget, error) {

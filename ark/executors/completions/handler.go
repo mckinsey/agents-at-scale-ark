@@ -102,13 +102,13 @@ func (h *Handler) ProcessMessage(
 	defer state.querySpan.End()
 	defer state.targetSpan.End()
 
-	responseMessages, err := h.dispatchTarget(ctx, state)
+	execResult, responseMessages, err := h.dispatchTarget(ctx, state)
 	if err != nil {
 		state.finalizeStream(ctx, nil)
 		return nil, fmt.Errorf("execution failed: %w", err)
 	}
 
-	return h.buildA2AResponse(ctx, state, responseMessages), nil
+	return h.buildA2AResponse(ctx, state, responseMessages, execResult), nil
 }
 
 func (h *Handler) resolveQueryAndTarget(ctx context.Context, message protocol.Message) (*arkv1alpha1.Query, *arkv1alpha1.QueryTarget, error) {
@@ -211,13 +211,14 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 	return ctx, state, nil
 }
 
-func (h *Handler) dispatchTarget(ctx context.Context, state *executionState) ([]Message, error) {
+func (h *Handler) dispatchTarget(ctx context.Context, state *executionState) (*ExecutionResult, []Message, error) {
+	var execResult *ExecutionResult
 	var responseMessages []Message
 	var err error
 
 	switch state.target.Type {
 	case ToolTypeAgent, ToolTypeTeam:
-		_, responseMessages, err = h.executeMember(ctx, state)
+		execResult, responseMessages, err = h.executeMember(ctx, state)
 	case "model":
 		responseMessages, err = h.executeModel(ctx, state.query, state.target.Name, state.inputMessages, state.memoryMessages, state.eventStream)
 	case "tool":
@@ -230,13 +231,13 @@ func (h *Handler) dispatchTarget(ctx context.Context, state *executionState) ([]
 		h.telemetry.QueryRecorder().RecordError(state.targetSpan, err)
 		h.telemetry.QueryRecorder().RecordError(state.querySpan, err)
 		StreamError(ctx, state.eventStream, err, "execution_failed", state.target.Name)
-		return nil, err
+		return nil, nil, err
 	}
 
-	return responseMessages, nil
+	return execResult, responseMessages, nil
 }
 
-func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, responseMessages []Message) *taskmanager.MessageProcessingResult {
+func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, responseMessages []Message, execResult *ExecutionResult) *taskmanager.MessageProcessingResult {
 	responseContent := extractAssistantText(responseMessages)
 	h.telemetry.QueryRecorder().RecordOutput(state.targetSpan, responseContent)
 	h.telemetry.QueryRecorder().RecordRootOutput(state.querySpan, responseContent)
@@ -265,6 +266,19 @@ func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, r
 	}
 	if state.conversationId != "" {
 		responseMeta["conversationId"] = state.conversationId
+	}
+
+	if execResult != nil && execResult.A2AResponse != nil {
+		a2aMeta := map[string]string{}
+		if execResult.A2AResponse.ContextID != "" {
+			a2aMeta["contextId"] = execResult.A2AResponse.ContextID
+		}
+		if execResult.A2AResponse.TaskID != "" {
+			a2aMeta["taskId"] = execResult.A2AResponse.TaskID
+		}
+		if len(a2aMeta) > 0 {
+			responseMeta["a2a"] = a2aMeta
+		}
 	}
 
 	serializedMessages := serializeResponseMessages(responseMessages)
