@@ -14,6 +14,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
+	"mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
 )
@@ -154,6 +155,11 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 		sessionId = string(query.UID)
 	}
 	h.telemetry.QueryRecorder().RecordSessionID(querySpan, sessionId)
+
+	ctx = WithQueryContext(ctx, string(query.UID), sessionId, query.Name)
+	if a2aContextID, ok := query.Annotations[annotations.A2AContextID]; ok && a2aContextID != "" {
+		ctx = WithA2AContextID(ctx, a2aContextID)
+	}
 
 	inputMessages, err := GetQueryInputMessages(ctx, *query, h.k8sClient)
 	if err != nil {
