@@ -206,6 +206,7 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	response, engineMeta, err := r.sendQueryA2A(opCtx, address, obj, *target)
 	if err != nil {
 		r.Eventing.QueryRecorder().Fail(opCtx, "QueryExecution", fmt.Sprintf("Query execution failed: %v", err), err, nil)
+		obj.Status.Response = createErrorResponse(*target, err)
 		_ = r.updateStatus(opCtx, &obj, statusError)
 		return
 	}
@@ -605,6 +606,21 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 		logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
 	}
 	return err
+}
+
+func createErrorResponse(target arkv1alpha1.QueryTarget, err error) *arkv1alpha1.Response {
+	errorMessage := map[string]interface{}{
+		"error":   "target_execution_error",
+		"message": err.Error(),
+	}
+	errorRaw, _ := json.Marshal([]map[string]interface{}{errorMessage})
+
+	return &arkv1alpha1.Response{
+		Target:  target,
+		Content: err.Error(),
+		Raw:     string(errorRaw),
+		Phase:   statusError,
+	}
 }
 
 func (r *QueryReconciler) determineQueryStatus(response *arkv1alpha1.Response) string {
