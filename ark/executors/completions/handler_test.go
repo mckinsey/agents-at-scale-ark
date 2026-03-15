@@ -298,6 +298,118 @@ func TestResolveQueryAndTarget(t *testing.T) {
 	})
 }
 
+func TestResolveQueryAndTargetWithSelector(t *testing.T) {
+	agent := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "labeled-agent",
+			Namespace: "default",
+			Labels:    map[string]string{"env": "prod"},
+		},
+	}
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "selector-query",
+			Namespace: "default",
+		},
+		Spec: arkv1alpha1.QuerySpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"env": "prod"},
+			},
+			Input: runtime.RawExtension{Raw: []byte(`"hello"`)},
+		},
+	}
+
+	t.Run("resolves target via label selector", func(t *testing.T) {
+		h := newTestHandler(query, agent)
+		msg := protocol.Message{
+			Role:  protocol.MessageRoleUser,
+			Parts: []protocol.Part{protocol.NewTextPart("hello")},
+			Metadata: map[string]any{
+				arka2a.QueryExtensionMetadataKey: map[string]any{
+					"name": "selector-query", "namespace": "default",
+				},
+			},
+		}
+
+		q, target, err := h.resolveQueryAndTarget(context.Background(), msg)
+		require.NoError(t, err)
+		assert.Equal(t, "selector-query", q.Name)
+		assert.Equal(t, "agent", target.Type)
+		assert.Equal(t, "labeled-agent", target.Name)
+	})
+
+	t.Run("no matching resources returns error", func(t *testing.T) {
+		queryNoMatch := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "no-match-query",
+				Namespace: "default",
+			},
+			Spec: arkv1alpha1.QuerySpec{
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"env": "staging"},
+				},
+				Input: runtime.RawExtension{Raw: []byte(`"hello"`)},
+			},
+		}
+		h := newTestHandler(queryNoMatch)
+		msg := protocol.Message{
+			Role:  protocol.MessageRoleUser,
+			Parts: []protocol.Part{protocol.NewTextPart("hello")},
+			Metadata: map[string]any{
+				arka2a.QueryExtensionMetadataKey: map[string]any{
+					"name": "no-match-query", "namespace": "default",
+				},
+			},
+		}
+
+		_, _, err := h.resolveQueryAndTarget(context.Background(), msg)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "no matching resources")
+	})
+}
+
+func TestResolveSelector(t *testing.T) {
+	t.Run("resolves agent by label", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "agent-1",
+				Namespace: "default",
+				Labels:    map[string]string{"role": "worker"},
+			},
+		}
+		h := newTestHandler(agent)
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "q", Namespace: "default"},
+			Spec: arkv1alpha1.QuerySpec{
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"role": "worker"},
+				},
+			},
+		}
+
+		target, err := h.resolveSelector(context.Background(), query)
+		require.NoError(t, err)
+		assert.Equal(t, "agent", target.Type)
+		assert.Equal(t, "agent-1", target.Name)
+	})
+
+	t.Run("returns error when no resources match", func(t *testing.T) {
+		h := newTestHandler()
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "q", Namespace: "default"},
+			Spec: arkv1alpha1.QuerySpec{
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"role": "nonexistent"},
+				},
+			},
+		}
+
+		_, err := h.resolveSelector(context.Background(), query)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "no matching resources")
+	})
+}
+
 func TestDispatchTargetUnsupportedType(t *testing.T) {
 	h := newTestHandler()
 	tracer := telemetrynoop.NewTracer()
@@ -308,7 +420,7 @@ func TestDispatchTargetUnsupportedType(t *testing.T) {
 		targetSpan: span,
 	}
 
-	_, err := h.dispatchTarget(context.Background(), state)
+	_, _, err := h.dispatchTarget(context.Background(), state)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported target type")
 }

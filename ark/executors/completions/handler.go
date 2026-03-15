@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/openai/openai-go"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -14,6 +15,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
+	"mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
 )
@@ -101,13 +103,13 @@ func (h *Handler) ProcessMessage(
 	defer state.querySpan.End()
 	defer state.targetSpan.End()
 
-	responseMessages, err := h.dispatchTarget(ctx, state)
+	execResult, responseMessages, err := h.dispatchTarget(ctx, state)
 	if err != nil {
 		state.finalizeStream(ctx, nil)
 		return nil, fmt.Errorf("execution failed: %w", err)
 	}
 
-	return h.buildA2AResponse(ctx, state, responseMessages), nil
+	return h.buildA2AResponse(ctx, state, responseMessages, execResult), nil
 }
 
 func (h *Handler) resolveQueryAndTarget(ctx context.Context, message protocol.Message) (*arkv1alpha1.Query, *arkv1alpha1.QueryTarget, error) {
@@ -135,6 +137,13 @@ func (h *Handler) resolveQueryAndTarget(ctx context.Context, message protocol.Me
 			Name: meta.Target.Name,
 		}
 	}
+	if target == nil && query.Spec.Selector != nil {
+		resolved, err := h.resolveSelector(ctx, &query)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to resolve selector for query %s/%s: %w", meta.Query.Namespace, meta.Query.Name, err)
+		}
+		target = resolved
+	}
 	if target == nil {
 		return nil, nil, fmt.Errorf("query %s/%s has no target", meta.Query.Namespace, meta.Query.Name)
 	}
@@ -154,6 +163,11 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 		sessionId = string(query.UID)
 	}
 	h.telemetry.QueryRecorder().RecordSessionID(querySpan, sessionId)
+
+	ctx = WithQueryContext(ctx, string(query.UID), sessionId, query.Name)
+	if a2aContextID, ok := query.Annotations[annotations.A2AContextID]; ok && a2aContextID != "" {
+		ctx = WithA2AContextID(ctx, a2aContextID)
+	}
 
 	inputMessages, err := GetQueryInputMessages(ctx, *query, h.k8sClient)
 	if err != nil {
@@ -205,13 +219,14 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 	return ctx, state, nil
 }
 
-func (h *Handler) dispatchTarget(ctx context.Context, state *executionState) ([]Message, error) {
+func (h *Handler) dispatchTarget(ctx context.Context, state *executionState) (*ExecutionResult, []Message, error) {
+	var execResult *ExecutionResult
 	var responseMessages []Message
 	var err error
 
 	switch state.target.Type {
 	case ToolTypeAgent, ToolTypeTeam:
-		_, responseMessages, err = h.executeMember(ctx, state)
+		execResult, responseMessages, err = h.executeMember(ctx, state)
 	case "model":
 		responseMessages, err = h.executeModel(ctx, state.query, state.target.Name, state.inputMessages, state.memoryMessages, state.eventStream)
 	case "tool":
@@ -224,13 +239,13 @@ func (h *Handler) dispatchTarget(ctx context.Context, state *executionState) ([]
 		h.telemetry.QueryRecorder().RecordError(state.targetSpan, err)
 		h.telemetry.QueryRecorder().RecordError(state.querySpan, err)
 		StreamError(ctx, state.eventStream, err, "execution_failed", state.target.Name)
-		return nil, err
+		return nil, nil, err
 	}
 
-	return responseMessages, nil
+	return execResult, responseMessages, nil
 }
 
-func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, responseMessages []Message) *taskmanager.MessageProcessingResult {
+func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, responseMessages []Message, execResult *ExecutionResult) *taskmanager.MessageProcessingResult {
 	responseContent := extractAssistantText(responseMessages)
 	h.telemetry.QueryRecorder().RecordOutput(state.targetSpan, responseContent)
 	h.telemetry.QueryRecorder().RecordRootOutput(state.querySpan, responseContent)
@@ -259,6 +274,19 @@ func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, r
 	}
 	if state.conversationId != "" {
 		responseMeta["conversationId"] = state.conversationId
+	}
+
+	if execResult != nil && execResult.A2AResponse != nil {
+		a2aMeta := map[string]string{}
+		if execResult.A2AResponse.ContextID != "" {
+			a2aMeta["contextId"] = execResult.A2AResponse.ContextID
+		}
+		if execResult.A2AResponse.TaskID != "" {
+			a2aMeta["taskId"] = execResult.A2AResponse.TaskID
+		}
+		if len(a2aMeta) > 0 {
+			responseMeta["a2a"] = a2aMeta
+		}
 	}
 
 	serializedMessages := serializeResponseMessages(responseMessages)
@@ -421,6 +449,53 @@ func (h *Handler) executeTool(
 	}
 
 	return []Message{NewAssistantMessage(result.Content)}, nil
+}
+
+func (h *Handler) resolveSelector(ctx context.Context, query *arkv1alpha1.Query) (*arkv1alpha1.QueryTarget, error) {
+	labelSelector, err := metav1.LabelSelectorAsSelector(query.Spec.Selector)
+	if err != nil {
+		return nil, fmt.Errorf("invalid label selector: %w", err)
+	}
+	opts := &client.ListOptions{
+		Namespace:     query.Namespace,
+		LabelSelector: labelSelector,
+	}
+
+	resourceTypes := []struct {
+		list client.ObjectList
+		typ  string
+	}{
+		{&arkv1alpha1.AgentList{}, ToolTypeAgent},
+		{&arkv1alpha1.TeamList{}, ToolTypeTeam},
+		{&arkv1alpha1.ModelList{}, "model"},
+		{&arkv1alpha1.ToolList{}, "tool"},
+	}
+
+	for _, rt := range resourceTypes {
+		if err := h.k8sClient.List(ctx, rt.list, opts); err != nil {
+			continue
+		}
+		switch l := rt.list.(type) {
+		case *arkv1alpha1.AgentList:
+			if len(l.Items) > 0 {
+				return &arkv1alpha1.QueryTarget{Type: rt.typ, Name: l.Items[0].Name}, nil
+			}
+		case *arkv1alpha1.TeamList:
+			if len(l.Items) > 0 {
+				return &arkv1alpha1.QueryTarget{Type: rt.typ, Name: l.Items[0].Name}, nil
+			}
+		case *arkv1alpha1.ModelList:
+			if len(l.Items) > 0 {
+				return &arkv1alpha1.QueryTarget{Type: rt.typ, Name: l.Items[0].Name}, nil
+			}
+		case *arkv1alpha1.ToolList:
+			if len(l.Items) > 0 {
+				return &arkv1alpha1.QueryTarget{Type: rt.typ, Name: l.Items[0].Name}, nil
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("no matching resources found for selector")
 }
 
 // Query extension spec: ark/api/extensions/query/v1/
