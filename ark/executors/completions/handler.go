@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/openai/openai-go"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -135,6 +136,13 @@ func (h *Handler) resolveQueryAndTarget(ctx context.Context, message protocol.Me
 			Type: meta.Target.Type,
 			Name: meta.Target.Name,
 		}
+	}
+	if target == nil && query.Spec.Selector != nil {
+		resolved, err := h.resolveSelector(ctx, &query)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to resolve selector for query %s/%s: %w", meta.Query.Namespace, meta.Query.Name, err)
+		}
+		target = resolved
 	}
 	if target == nil {
 		return nil, nil, fmt.Errorf("query %s/%s has no target", meta.Query.Namespace, meta.Query.Name)
@@ -441,6 +449,53 @@ func (h *Handler) executeTool(
 	}
 
 	return []Message{NewAssistantMessage(result.Content)}, nil
+}
+
+func (h *Handler) resolveSelector(ctx context.Context, query *arkv1alpha1.Query) (*arkv1alpha1.QueryTarget, error) {
+	labelSelector, err := metav1.LabelSelectorAsSelector(query.Spec.Selector)
+	if err != nil {
+		return nil, fmt.Errorf("invalid label selector: %w", err)
+	}
+	opts := &client.ListOptions{
+		Namespace:     query.Namespace,
+		LabelSelector: labelSelector,
+	}
+
+	resourceTypes := []struct {
+		list client.ObjectList
+		typ  string
+	}{
+		{&arkv1alpha1.AgentList{}, ToolTypeAgent},
+		{&arkv1alpha1.TeamList{}, ToolTypeTeam},
+		{&arkv1alpha1.ModelList{}, "model"},
+		{&arkv1alpha1.ToolList{}, "tool"},
+	}
+
+	for _, rt := range resourceTypes {
+		if err := h.k8sClient.List(ctx, rt.list, opts); err != nil {
+			continue
+		}
+		switch l := rt.list.(type) {
+		case *arkv1alpha1.AgentList:
+			if len(l.Items) > 0 {
+				return &arkv1alpha1.QueryTarget{Type: rt.typ, Name: l.Items[0].Name}, nil
+			}
+		case *arkv1alpha1.TeamList:
+			if len(l.Items) > 0 {
+				return &arkv1alpha1.QueryTarget{Type: rt.typ, Name: l.Items[0].Name}, nil
+			}
+		case *arkv1alpha1.ModelList:
+			if len(l.Items) > 0 {
+				return &arkv1alpha1.QueryTarget{Type: rt.typ, Name: l.Items[0].Name}, nil
+			}
+		case *arkv1alpha1.ToolList:
+			if len(l.Items) > 0 {
+				return &arkv1alpha1.QueryTarget{Type: rt.typ, Name: l.Items[0].Name}, nil
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("no matching resources found for selector")
 }
 
 // Query extension spec: ark/api/extensions/query/v1/
