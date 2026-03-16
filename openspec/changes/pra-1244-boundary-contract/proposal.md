@@ -13,16 +13,17 @@ The handler/controller boundary serializes response messages as OpenAI-shaped JS
 - Refactor handler `extractArkMetadata()` to use `GetExtension` with `GetMetadata` fallback.
 - Rewrite handler `openAIToProtocolResponseMessages()` to produce full-fidelity `protocol.Message` with DataParts for tool calls, tool results, system messages, and function messages.
 - Refactor controller `executeViaEngine()` to use `SetExtension` and `SetMetadata`.
-- Refactor controller `extractEngineResponseMeta()` to use `GetExtension` with `GetMetadata` fallback, protocol-first extraction precedence.
-- Rewrite controller `protocolMessagesToRawJSON()` to reconstruct OpenAI-compatible JSON from DataParts with correct roles (`system`, `tool`, `function`, `assistant`) and tool call structure.
-- Controller `extractResponseMessages()` prefers `responseMessagesV1` (protocol-first), falls back to legacy `messages`.
-- Handler populates protocol-native `responseMessagesV1` alongside legacy `messages`. Controller reads protocol path as source of truth.
+- Refactor controller `extractEngineResponseMeta()` with `extractArkPayloadMap` merging both metadata keys (legacy base, extension overlay).
+- Remove `protocolMessagesToRawJSON()` and all OpenAI compat helpers from controller — reconstruction was wrong-direction coupling.
+- Controller `extractResponseMessages()` passes through executor-produced `messages` as opaque bytes for `response.raw`, tracks `responseMessagesV1` presence via `ProtocolNative` flag.
+- Replace `serializeMessages` with `buildFallbackRaw` — no `completions.Message` type dependency on response path.
+- Handler populates protocol-native `responseMessagesV1` alongside legacy `messages`. Controller passes through legacy path opaquely.
 
 ## Capabilities
 
 ### New Capabilities
 - `a2a-multi-extension-support`: Generic, spec-compliant extension API enabling Ark to support many A2A extensions (its own and third-party) via `SetExtension`/`GetExtension`.
-- `a2a-boundary-contract`: Full-fidelity protocol-native response payload at the handler/controller A2A boundary. DataParts preserve tool call structure, system messages, and function results. Controller generates `response.raw` from protocol path.
+- `a2a-boundary-contract`: Full-fidelity protocol-native response payload at the handler/controller A2A boundary. DataParts preserve tool call structure, system messages, and function results. Controller passes through executor-produced content for `response.raw` with zero OpenAI coupling.
 - `a2a-datapart-helpers`: Reusable helpers for extracting and inspecting DataParts from protocol messages.
 
 ### Modified Capabilities

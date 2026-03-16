@@ -43,24 +43,21 @@
 - [x] 7.1 Refactor `executeViaEngine()` to use `SetExtension(msg, ExecutionContextExtensionURI, arkMetadata)`.
 - [x] 7.2 Refactor `executeViaEngine()` to use `SetMetadata(msg, ArkMetadataKey, arkMetadata)` for legacy compat.
 
-## 8. Controller extraction path (protocol-first)
+## 8. Controller response path independence
 
-- [x] 8.1 Refactor `extractEngineResponseMeta()` to use `GetExtension` with `GetMetadata` fallback.
-- [x] 8.2 Flip `extractResponseMessages()` to prefer `responseMessagesV1` (protocol-first), fall back to legacy `messages`.
-- [x] 8.3 Rewrite `protocolMessagesToRawJSON()` to reconstruct OpenAI-compatible JSON from DataParts:
-  - `tool_call` DataParts → `{"role":"assistant","tool_calls":[...]}`
-  - `tool_result` DataParts → `{"role":"tool","tool_call_id":"...","content":"..."}`
-  - `system` DataParts → `{"role":"system","content":"..."}`
-  - `function_result` DataParts → `{"role":"function","name":"...","content":"..."}`
-  - Text-only messages → `{"role":"assistant|user","content":"..."}`
+- [x] 8.1 Refactor `extractEngineResponseMeta()` with `extractArkPayloadMap` merging both metadata keys.
+- [x] 8.2 Rewrite `extractResponseMessages()` to pass through `messages` as opaque bytes for `response.raw`, track `responseMessagesV1` presence via `ProtocolNative` flag.
+- [x] 8.3 Remove `protocolMessagesToRawJSON()` and all 6 compat helpers from controller — reconstruction was wrong-direction coupling.
+- [x] 8.4 Replace `serializeMessages` with `buildFallbackRaw` — no `completions.Message` type dependency.
+- [x] 8.5 Remove `openai` and `completions` imports from controller test serialization tests.
 
 ## 9. Verification
 
 - [x] 9.1 Unit tests for extension helpers covering dedup, metadata-only writes, typed round-trips, and `HasExtension` distinction.
 - [x] 9.2 Unit tests for DataPart helpers covering extraction, type inspection, field access, map access.
 - [x] 9.3 Unit tests for `openAIToProtocolResponseMessages()` covering all message types and mixed sequences.
-- [x] 9.4 Unit tests for `extractEngineResponseMeta()` covering protocol-first precedence.
-- [x] 9.5 Unit tests for `protocolMessagesToRawJSON()` covering DataPart reconstruction for all types.
+- [x] 9.4 Unit tests for `extractEngineResponseMeta()` covering pass-through behavior, metadata merge, and protocol presence tracking.
+- [x] 9.5 Unit tests for `buildFallbackRaw()` covering valid JSON output without OpenAI types.
 - [x] 9.6 Compile `ark/internal/a2a`, `ark/executors/completions`, and `ark/internal/controller` packages.
 - [x] 9.7 Run existing controller and completions tests to verify no regressions.
 - [x] 9.8 Zero lint issues (`make lint`).

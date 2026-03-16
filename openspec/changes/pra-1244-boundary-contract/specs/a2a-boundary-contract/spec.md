@@ -66,35 +66,24 @@ Ark SHALL provide reusable helpers for consuming DataParts from protocol message
 - **WHEN** `DataPartType(dp)` is called on a DataPart with `data.type = "tool_call"`
 - **THEN** it SHALL return `"tool_call"`
 
-### Requirement: Protocol-first extraction precedence in controller
-The controller SHALL extract response metadata preferring `responseMessagesV1` first, legacy `messages` second, assistant-text fallback third.
+### Requirement: Controller response path independence
+The controller SHALL have zero OpenAI reconstruction logic on the response path. `response.raw` receives executor-produced content as opaque bytes.
 
-#### Scenario: Controller prefers protocol-native responseMessagesV1
-- **WHEN** the response metadata contains both `responseMessagesV1` and legacy `messages`
-- **THEN** the controller SHALL use `responseMessagesV1` to derive `response.raw`
+#### Scenario: Controller passes through legacy messages for response.raw
+- **WHEN** the response metadata contains a `messages` field (executor-produced legacy JSON)
+- **THEN** the controller SHALL pass through the `messages` content as opaque bytes to `response.raw` without parsing or reconstructing it
 
-#### Scenario: Controller falls back to legacy messages
-- **WHEN** the response metadata does not contain `responseMessagesV1` but contains a legacy `messages` field
-- **THEN** the controller SHALL use the legacy `messages` field for `response.raw`
+#### Scenario: Controller tracks protocol presence without conversion
+- **WHEN** the response metadata contains `responseMessagesV1`
+- **THEN** the controller SHALL set `ProtocolNative = true` but SHALL NOT convert `responseMessagesV1` to a different format
 
-#### Scenario: Controller falls back to assistant text
+#### Scenario: Controller falls back to minimal assistant message
 - **WHEN** the response metadata contains neither `responseMessagesV1` nor legacy `messages`
-- **THEN** the controller SHALL construct a single-element assistant message array from the response text for `response.raw`
+- **THEN** the controller SHALL construct a single-element assistant message array from the response text using `buildFallbackRaw` (no OpenAI type dependency)
 
-### Requirement: Full-fidelity protocol-to-raw reconstruction
-The controller SHALL reconstruct OpenAI-compatible JSON from protocol messages by mapping DataParts back to their original role and structure.
-
-#### Scenario: Tool call DataParts reconstruct to assistant with tool_calls
-- **WHEN** a protocol message contains `DataPart` with `data.type = "tool_call"`
-- **THEN** `response.raw` SHALL contain `{"role":"assistant","tool_calls":[...]}`
-
-#### Scenario: Tool result DataParts reconstruct to tool role
-- **WHEN** a protocol message contains `DataPart` with `data.type = "tool_result"`
-- **THEN** `response.raw` SHALL contain `{"role":"tool","tool_call_id":"...","content":"..."}`
-
-#### Scenario: System DataParts reconstruct to system role
-- **WHEN** a protocol message contains `DataPart` with `data.type = "system"`
-- **THEN** `response.raw` SHALL contain `{"role":"system","content":"..."}`
+#### Scenario: Controller does not import OpenAI types for response path
+- **WHEN** the controller processes A2A response messages
+- **THEN** the controller SHALL NOT use `completions.Message`, `completions.NewAssistantMessage`, or any OpenAI type constructors for the response serialization path
 
 ### Requirement: Extension URI declaration on outbound controller messages
 The controller SHALL use `SetExtension` to declare `ExecutionContextExtensionURI` on all outbound messages to execution engines, and `SetMetadata` for legacy `ArkMetadataKey`.

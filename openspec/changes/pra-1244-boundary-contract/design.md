@@ -107,24 +107,13 @@ func DataPartMap(dp protocol.DataPart, key string) map[string]any
 
 ## Controller Extraction Path
 
-`extractEngineResponseMeta()` protocol-first precedence:
+`extractEngineResponseMeta()` with controller response path independence:
 
-1. `arka2a.GetExtension(msg, ExecutionContextExtensionURI)` as primary, falls back to `arka2a.GetMetadata(msg, ArkMetadataKey)`.
-2. Within the metadata map, prefer `responseMessagesV1` -- if present, unmarshal as `[]protocol.Message` and convert to `response.raw` compatible JSON via `protocolMessagesToRawJSON`.
-3. If `responseMessagesV1` is absent, fall back to legacy `messages` field.
-4. If neither is present, caller constructs a single assistant message from response text.
+1. `extractArkPayloadMap` merges metadata from `QueryExtensionMetadataKey` (base) and `ExecutionContextExtensionURI` (overlay). Extension key values take precedence for overlapping fields.
+2. `extractResponseMessages` passes through `messages` (executor-produced legacy JSON) as opaque bytes for `response.raw`. No parsing, no reconstruction. Tracks `responseMessagesV1` presence via `ProtocolNative` flag.
+3. If no `messages` field exists, `buildFallbackRaw` constructs minimal `[{"role":"assistant","content":"..."}]` without importing OpenAI types.
 
-## Protocol-to-Raw Conversion
-
-`protocolMessagesToRawJSON()` reconstructs full OpenAI-compatible JSON from DataParts:
-
-| DataPart type | Reconstructed JSON |
-|---|---|
-| (text only, no DataParts) | `{"role":"assistant\|user","content":"..."}` |
-| `tool_call` | `{"role":"assistant","content":"...","tool_calls":[{"id":"...","type":"function","function":{"name":"...","arguments":"..."}}]}` |
-| `tool_result` | `{"role":"tool","tool_call_id":"...","content":"..."}` |
-| `system` | `{"role":"system","content":"..."}` |
-| `function_result` | `{"role":"function","name":"...","content":"..."}` |
+The controller does NOT contain `protocolMessagesToRawJSON` or any OpenAI reconstruction logic. The executor owns the boundary where OpenAI types exist and produces both formats (`messages` for legacy consumers, `responseMessagesV1` for A2A-native consumers).
 
 ## Wire Format Example
 

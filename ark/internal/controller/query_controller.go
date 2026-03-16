@@ -353,8 +353,7 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 
 	rawJSON := engineMeta.MessagesRaw
 	if rawJSON == "" {
-		responseMessages := []completions.Message{completions.NewAssistantMessage(responseText)}
-		rawJSON = serializeMessages(responseMessages)
+		rawJSON = buildFallbackRaw(responseText)
 	}
 
 	response := &arkv1alpha1.Response{
@@ -382,27 +381,13 @@ func extractUserInput(ctx context.Context, query arkv1alpha1.Query, k8sClient cl
 	return completions.ExtractUserMessageContent(inputMessages)
 }
 
-func serializeMessages(messages []completions.Message) string {
-	var actualMessages []interface{}
-	for _, msg := range messages {
-		switch {
-		case msg.OfAssistant != nil:
-			actualMessages = append(actualMessages, msg.OfAssistant)
-		case msg.OfUser != nil:
-			actualMessages = append(actualMessages, msg.OfUser)
-		case msg.OfSystem != nil:
-			actualMessages = append(actualMessages, msg.OfSystem)
-		case msg.OfTool != nil:
-			actualMessages = append(actualMessages, msg.OfTool)
-		case msg.OfFunction != nil:
-			actualMessages = append(actualMessages, msg.OfFunction)
-		}
-	}
-	rawBytes, err := json.Marshal(actualMessages)
+func buildFallbackRaw(content string) string {
+	msg := map[string]string{"role": "assistant", "content": content}
+	b, err := json.Marshal([]map[string]string{msg})
 	if err != nil {
 		return "[]"
 	}
-	return string(rawBytes)
+	return string(b)
 }
 
 func extractA2AResponseText(result *protocol.MessageResult) (string, error) {
@@ -509,141 +494,13 @@ func metadataToMap(data any) map[string]any {
 }
 
 func extractResponseMessages(arkMap map[string]any) (raw string, protocolNative bool) {
-	if v1Raw, ok := arkMap["responseMessagesV1"]; ok {
-		rawBytes := toRawBytes(v1Raw)
-		if rawJSON := protocolMessagesToRawJSON(rawBytes); rawJSON != "" {
-			return rawJSON, true
-		}
-	}
+	_, hasProtocol := arkMap["responseMessagesV1"]
 	if messagesRaw, ok := arkMap["messages"]; ok {
 		if rawBytes, err := json.Marshal(messagesRaw); err == nil {
-			return string(rawBytes), false
+			return string(rawBytes), hasProtocol
 		}
 	}
-	return "", false
-}
-
-func toRawBytes(v any) []byte {
-	switch typed := v.(type) {
-	case string:
-		return []byte(typed)
-	case json.RawMessage:
-		return typed
-	default:
-		if b, err := json.Marshal(typed); err == nil {
-			return b
-		}
-		return nil
-	}
-}
-
-func protocolMessagesToRawJSON(data []byte) string {
-	if len(data) == 0 {
-		return ""
-	}
-	var protoMsgs []protocol.Message
-	if err := json.Unmarshal(data, &protoMsgs); err != nil {
-		return ""
-	}
-	if len(protoMsgs) == 0 {
-		return ""
-	}
-
-	converted := make([]any, 0, len(protoMsgs))
-	for _, pm := range protoMsgs {
-		converted = append(converted, protocolMessageToRawCompat(pm))
-	}
-	if len(converted) == 0 {
-		return ""
-	}
-
-	rawBytes, err := json.Marshal(converted)
-	if err != nil {
-		return ""
-	}
-	return string(rawBytes)
-}
-
-func protocolMessageToRawCompat(pm protocol.Message) any {
-	dataParts := arka2a.ExtractDataParts(pm.Parts)
-	if len(dataParts) == 0 {
-		return textOnlyCompat(pm)
-	}
-
-	dpType := arka2a.DataPartType(dataParts[0])
-	switch dpType {
-	case "tool_result":
-		return toolResultCompat(dataParts[0])
-	case "system":
-		return systemCompat(dataParts[0])
-	case "function_result":
-		return functionResultCompat(dataParts[0])
-	default:
-		return assistantWithToolCallsCompat(pm, dataParts)
-	}
-}
-
-func textOnlyCompat(pm protocol.Message) map[string]any {
-	role := "assistant"
-	if pm.Role == protocol.MessageRoleUser {
-		role = "user"
-	}
-	return map[string]any{
-		"role":    role,
-		"content": arka2a.ExtractTextFromParts(pm.Parts),
-	}
-}
-
-func assistantWithToolCallsCompat(pm protocol.Message, dataParts []protocol.DataPart) map[string]any {
-	msg := map[string]any{
-		"role":    "assistant",
-		"content": arka2a.ExtractTextFromParts(pm.Parts),
-	}
-	toolCalls := make([]map[string]any, 0, len(dataParts))
-	for _, dp := range dataParts {
-		if arka2a.DataPartType(dp) != "tool_call" {
-			continue
-		}
-		tc := map[string]any{
-			"id":   arka2a.DataPartField(dp, "id"),
-			"type": "function",
-			"function": map[string]any{
-				"name":      arka2a.DataPartField(arka2a.ExtractDataParts([]protocol.Part{dp})[0], ""),
-				"arguments": "",
-			},
-		}
-		if fn := arka2a.DataPartMap(dp, "function"); fn != nil {
-			tc["function"] = fn
-		}
-		toolCalls = append(toolCalls, tc)
-	}
-	if len(toolCalls) > 0 {
-		msg["tool_calls"] = toolCalls
-	}
-	return msg
-}
-
-func toolResultCompat(dp protocol.DataPart) map[string]any {
-	return map[string]any{
-		"role":         "tool",
-		"tool_call_id": arka2a.DataPartField(dp, "tool_call_id"),
-		"content":      arka2a.DataPartField(dp, "content"),
-	}
-}
-
-func systemCompat(dp protocol.DataPart) map[string]any {
-	return map[string]any{
-		"role":    "system",
-		"content": arka2a.DataPartField(dp, "content"),
-	}
-}
-
-func functionResultCompat(dp protocol.DataPart) map[string]any {
-	return map[string]any{
-		"role":    "function",
-		"name":    arka2a.DataPartField(dp, "name"),
-		"content": arka2a.DataPartField(dp, "content"),
-	}
+	return "", hasProtocol
 }
 
 func extractA2AMeta(arkMap map[string]any, responseMeta *engineResponseMeta) {
