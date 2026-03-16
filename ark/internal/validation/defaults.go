@@ -5,7 +5,6 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
-	"mckinsey.com/ark/internal/genai"
 )
 
 const toolTypeCustom = "custom"
@@ -36,10 +35,10 @@ func DefaultAgent(agent *arkv1alpha1.Agent) {
 }
 
 func DefaultModel(model *arkv1alpha1.Model) {
-	if model.Spec.Provider == "" && genai.IsDeprecatedProviderInType(model.Spec.Type) {
+	if model.Spec.Provider == "" && IsDeprecatedProviderInType(model.Spec.Type) {
 		originalType := model.Spec.Type
 		model.Spec.Provider = model.Spec.Type
-		model.Spec.Type = genai.ModelTypeCompletions
+		model.Spec.Type = ModelTypeCompletions
 
 		if model.Annotations == nil {
 			model.Annotations = make(map[string]string)
