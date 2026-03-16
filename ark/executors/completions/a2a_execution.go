@@ -85,6 +85,7 @@ func (e *A2AExecutionEngine) Execute(ctx context.Context, agentName, namespace s
 		}
 	}
 
+	// Query extension spec: ark/api/extensions/query/v1/
 	a2aResponse, err := arka2a.ExecuteA2AAgent(ctx, e.client, a2aAddress, a2aServer.Spec.Headers, namespace, content, agentName, queryName, contextID, e.eventingRecorder, &a2aServer)
 	if err != nil {
 		StreamError(ctx, eventStream, err, "a2a_execution_failed", modelID)
