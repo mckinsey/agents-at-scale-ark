@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lib/pq"
@@ -247,7 +248,7 @@ func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name st
 
 	created, _ := p.reconstructObject(kind, namespace, name, rv, generation, resource.Metadata.UID, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON, createdAt)
 	if created != nil {
-		p.notifyWatchers(kind, namespace, watch.Added, created)
+		go p.notifyWatchers(kind, namespace, watch.Added, created)
 	}
 
 	return nil
@@ -401,6 +402,7 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 	}
 
 	var newRV, newGen int64
+	var uid string
 	var createdAt time.Time
 	var updated bool
 	err = p.db.QueryRowContext(ctx, `
@@ -410,12 +412,12 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 			    finalizers = $5::jsonb, owner_references = $6::jsonb,
 			    generation = generation + 1, resource_version = resource_version + 1, updated_at = NOW()
 			WHERE kind = $7 AND namespace = $8 AND name = $9 AND resource_version = $10
-			RETURNING resource_version, generation, created_at
+			RETURNING resource_version, generation, uid, created_at
 		)
-		SELECT resource_version, generation, created_at, true FROM upd
+		SELECT resource_version, generation, uid, created_at, true FROM upd
 		UNION ALL
-		SELECT 0, 0, NOW(), false WHERE NOT EXISTS (SELECT 1 FROM upd)
-	`, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON, kind, namespace, name, rv).Scan(&newRV, &newGen, &createdAt, &updated)
+		SELECT 0, 0, '', NOW(), false WHERE NOT EXISTS (SELECT 1 FROM upd)
+	`, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON, kind, namespace, name, rv).Scan(&newRV, &newGen, &uid, &createdAt, &updated)
 	if err != nil {
 		return fmt.Errorf("failed to update resource: %w", err)
 	}
@@ -429,9 +431,9 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 		return storage.ErrNotFound
 	}
 
-	current, _ := p.reconstructObject(kind, namespace, name, newRV, newGen, "", specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON, createdAt)
+	current, _ := p.reconstructObject(kind, namespace, name, newRV, newGen, uid, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON, createdAt)
 	if current != nil {
-		p.notifyWatchers(kind, namespace, watch.Modified, current)
+		go p.notifyWatchers(kind, namespace, watch.Modified, current)
 	}
 
 	return nil
@@ -496,7 +498,7 @@ func (p *PostgreSQLBackend) UpdateStatus(ctx context.Context, kind, namespace, n
 
 	current, _ := p.Get(ctx, kind, namespace, name)
 	if current != nil {
-		p.notifyWatchers(kind, namespace, watch.Modified, current)
+		go p.notifyWatchers(kind, namespace, watch.Modified, current)
 	}
 
 	return nil
@@ -519,7 +521,7 @@ func (p *PostgreSQLBackend) Delete(ctx context.Context, kind, namespace, name st
 	}
 
 	if obj != nil {
-		p.notifyWatchers(kind, namespace, watch.Deleted, obj)
+		go p.notifyWatchers(kind, namespace, watch.Deleted, obj)
 	}
 
 	return nil
@@ -531,6 +533,7 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 
 	w := &postgresWatcher{
 		ch:      ch,
+		outCh:   make(chan watch.Event, 100),
 		backend: p,
 		key:     key,
 		kind:    kind,
@@ -538,10 +541,6 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 		ctx:     ctx,
 		done:    make(chan struct{}),
 	}
-
-	p.mu.Lock()
-	p.watchers[key] = append(p.watchers[key], w)
-	p.mu.Unlock()
 
 	existing, _, err := p.List(ctx, kind, namespace, storage.ListOptions{
 		LabelSelector: opts.LabelSelector,
@@ -552,6 +551,10 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 			ch <- watch.Event{Type: watch.Added, Object: obj}
 		}
 	}
+
+	p.mu.Lock()
+	p.watchers[key] = append(p.watchers[key], w)
+	p.mu.Unlock()
 
 	go w.run()
 	return w, nil
@@ -623,18 +626,16 @@ func (p *PostgreSQLBackend) notifyWatchers(kind, namespace string, eventType wat
 	allKey := fmt.Sprintf("%s/", kind)
 
 	p.mu.RLock()
-	defer p.mu.RUnlock()
+	watchers := make([]*postgresWatcher, 0, len(p.watchers[key])+len(p.watchers[allKey]))
+	watchers = append(watchers, p.watchers[key]...)
+	if namespace != "" {
+		watchers = append(watchers, p.watchers[allKey]...)
+	}
+	p.mu.RUnlock()
 
 	event := watch.Event{Type: eventType, Object: obj}
-
-	for _, w := range p.watchers[key] {
+	for _, w := range watchers {
 		w.send(event)
-	}
-
-	if namespace != "" {
-		for _, w := range p.watchers[allKey] {
-			w.send(event)
-		}
 	}
 }
 
@@ -663,42 +664,50 @@ func (p *PostgreSQLBackend) getMaxResourceVersion() (int64, error) {
 	return rv.Int64, nil
 }
 
+// postgresWatcher implements watch.Interface with panic-safe channel ownership.
+// The run() goroutine is the sole owner of outCh — only run() closes it on exit.
+// send() writes to the internal ch (never closed by Stop), and run() forwards
+// from ch to outCh. This eliminates all send-on-closed-channel races.
 type postgresWatcher struct {
-	ch      chan watch.Event
+	ch      chan watch.Event // internal buffer: notifyWatchers writes here
+	outCh   chan watch.Event // consumer-facing: only run() writes/closes this
 	backend *PostgreSQLBackend
 	key     string
 	kind    string
 	ns      string
 	ctx     context.Context
 	done    chan struct{}
+	stopped atomic.Bool
 	closed  sync.Once
 }
 
 func (w *postgresWatcher) send(event watch.Event) {
+	if w.stopped.Load() {
+		return
+	}
 	select {
 	case w.ch <- event:
-	case <-time.After(5 * time.Second):
-		klog.Warningf("Watcher channel full for 5s, closing watch for %s (forcing re-list)", w.key)
-		w.closed.Do(func() {
-			close(w.done)
-		})
-	case <-w.done:
+	default:
 	}
 }
 
 func (w *postgresWatcher) Stop() {
+	if w.stopped.Swap(true) {
+		return
+	}
 	w.backend.removeWatcher(w.key, w)
 	w.closed.Do(func() {
 		close(w.done)
 	})
-	close(w.ch)
 }
 
 func (w *postgresWatcher) ResultChan() <-chan watch.Event {
-	return w.ch
+	return w.outCh
 }
 
 func (w *postgresWatcher) run() {
+	defer close(w.outCh)
+
 	w.sendBookmark()
 
 	bookmarkTicker := time.NewTicker(30 * time.Second)
@@ -713,6 +722,14 @@ func (w *postgresWatcher) run() {
 			return
 		case <-w.ctx.Done():
 			return
+		case ev := <-w.ch:
+			select {
+			case w.outCh <- ev:
+			case <-w.done:
+				return
+			case <-w.ctx.Done():
+				return
+			}
 		case <-bookmarkTicker.C:
 			w.sendBookmark()
 		case <-relistTicker.C:
@@ -735,20 +752,22 @@ func (w *postgresWatcher) sendBookmark() {
 		accessor.SetAnnotations(map[string]string{"k8s.io/initial-events-end": "true"})
 	}
 	select {
-	case w.ch <- watch.Event{Type: watch.Bookmark, Object: obj}:
+	case w.outCh <- watch.Event{Type: watch.Bookmark, Object: obj}:
 	default:
 	}
 }
 
 func (w *postgresWatcher) relist() {
-	objects, _, err := w.backend.List(context.Background(), w.kind, w.ns, storage.ListOptions{})
+	objects, _, err := w.backend.List(w.ctx, w.kind, w.ns, storage.ListOptions{})
 	if err != nil {
 		return
 	}
 
 	for _, obj := range objects {
 		select {
-		case w.ch <- watch.Event{Type: watch.Modified, Object: obj}:
+		case w.outCh <- watch.Event{Type: watch.Modified, Object: obj}:
+		case <-w.done:
+			return
 		default:
 			return
 		}
