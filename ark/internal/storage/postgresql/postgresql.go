@@ -548,7 +548,9 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 	})
 	if err == nil {
 		for _, obj := range existing {
-			ch <- watch.Event{Type: watch.Added, Object: obj}
+			ev := watch.Event{Type: watch.Added, Object: obj}
+			w.trackResourceVersion(ev)
+			ch <- ev
 		}
 	}
 
@@ -669,16 +671,17 @@ func (p *PostgreSQLBackend) getMaxResourceVersion() (int64, error) {
 // send() writes to the internal ch (never closed by Stop), and run() forwards
 // from ch to outCh. This eliminates all send-on-closed-channel races.
 type postgresWatcher struct {
-	ch      chan watch.Event // internal buffer: notifyWatchers writes here
-	outCh   chan watch.Event // consumer-facing: only run() writes/closes this
-	backend *PostgreSQLBackend
-	key     string
-	kind    string
-	ns      string
-	ctx     context.Context
-	done    chan struct{}
-	stopped atomic.Bool
-	closed  sync.Once
+	ch         chan watch.Event // internal buffer: notifyWatchers writes here
+	outCh      chan watch.Event // consumer-facing: only run() writes/closes this
+	backend    *PostgreSQLBackend
+	key        string
+	kind       string
+	ns         string
+	ctx        context.Context
+	done       chan struct{}
+	stopped    atomic.Bool
+	closed     sync.Once
+	lastSeenRV atomic.Int64 // high-water-mark for relist delta queries
 }
 
 func (w *postgresWatcher) send(event watch.Event) {
@@ -723,6 +726,7 @@ func (w *postgresWatcher) run() {
 		case <-w.ctx.Done():
 			return
 		case ev := <-w.ch:
+			w.trackResourceVersion(ev)
 			select {
 			case w.outCh <- ev:
 			case <-w.done:
@@ -757,15 +761,69 @@ func (w *postgresWatcher) sendBookmark() {
 	}
 }
 
-func (w *postgresWatcher) relist() {
-	objects, _, err := w.backend.List(w.ctx, w.kind, w.ns, storage.ListOptions{})
+func (w *postgresWatcher) trackResourceVersion(ev watch.Event) {
+	if ev.Object == nil {
+		return
+	}
+	accessor, err := meta.Accessor(ev.Object)
 	if err != nil {
 		return
 	}
+	rv, err := strconv.ParseInt(accessor.GetResourceVersion(), 10, 64)
+	if err != nil {
+		return
+	}
+	for {
+		current := w.lastSeenRV.Load()
+		if rv <= current {
+			return
+		}
+		if w.lastSeenRV.CompareAndSwap(current, rv) {
+			return
+		}
+	}
+}
 
-	for _, obj := range objects {
+func (w *postgresWatcher) relist() {
+	lastRV := w.lastSeenRV.Load()
+
+	query := `
+		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at
+		FROM resources
+		WHERE kind = $1 AND resource_version > $2`
+	args := []interface{}{w.kind, lastRV}
+
+	if w.ns != "" {
+		query += ` AND namespace = $3`
+		args = append(args, w.ns)
+	}
+
+	query += ` ORDER BY resource_version ASC`
+
+	rows, err := w.backend.db.QueryContext(w.ctx, query, args...)
+	if err != nil {
+		return
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var rv, generation int64
+		var ns, name, uid string
+		var spec, status, labels, annotations, finalizers, ownerRefs []byte
+		var createdAt time.Time
+
+		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt); err != nil {
+			return
+		}
+
+		obj, err := w.backend.reconstructObject(w.kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt)
+		if err != nil {
+			continue
+		}
+
 		select {
 		case w.outCh <- watch.Event{Type: watch.Modified, Object: obj}:
+			w.trackResourceVersion(watch.Event{Object: obj})
 		case <-w.done:
 			return
 		default:
