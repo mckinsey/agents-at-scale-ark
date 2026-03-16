@@ -565,16 +565,16 @@ func extractArkPayloadMap(msg protocol.Message) (map[string]any, bool) {
 }
 
 func extractResponseMessages(arkMap map[string]any) (raw string, protocolNative bool) {
+	if messagesRaw, ok := arkMap["messages"]; ok {
+		if rawBytes, err := json.Marshal(messagesRaw); err == nil {
+			return string(rawBytes), false
+		}
+	}
+
 	if v1Raw, ok := arkMap["responseMessagesV1"]; ok {
 		rawBytes := toRawBytes(v1Raw)
 		if rawJSON := protocolMessagesToRawJSON(rawBytes); rawJSON != "" {
 			return rawJSON, true
-		}
-	}
-
-	if messagesRaw, ok := arkMap["messages"]; ok {
-		if rawBytes, err := json.Marshal(messagesRaw); err == nil {
-			return string(rawBytes), false
 		}
 	}
 	return "", false

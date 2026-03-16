@@ -240,7 +240,7 @@ var _ = Describe("Query Controller Message Serialization", func() {
 
 var _ = Describe("extractEngineResponseMeta", func() {
 	Context("three-tier extraction precedence", func() {
-		It("should prefer responseMessagesV1 from extension URI when present", func() {
+		It("should prefer legacy messages for response.raw when both fields are present", func() {
 			protoMsgs := []protocol.Message{
 				protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
 					protocol.NewTextPart("protocol answer"),
@@ -257,7 +257,7 @@ var _ = Describe("extractEngineResponseMeta", func() {
 				arka2a.ExecutionContextExtensionURI: map[string]any{
 					"conversationId":     "conv-123",
 					"responseMessagesV1": json.RawMessage(protoBytes),
-					"messages":           json.RawMessage(`[{"role":"assistant","content":"legacy"}]`),
+					"messages":           json.RawMessage(`[{"role":"system","content":"legacy with role info"}]`),
 				},
 			}
 
@@ -265,9 +265,36 @@ var _ = Describe("extractEngineResponseMeta", func() {
 			meta := extractEngineResponseMeta(msgResult)
 
 			Expect(meta.ConversationId).To(Equal("conv-123"))
+			Expect(meta.ProtocolNative).To(BeFalse())
+			Expect(meta.MessagesRaw).To(ContainSubstring("legacy with role info"))
+		})
+
+		It("should fall back to responseMessagesV1 when legacy messages is absent", func() {
+			protoMsgs := []protocol.Message{
+				protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+					protocol.NewTextPart("protocol only"),
+				}),
+			}
+			protoBytes, err := json.Marshal(protoMsgs)
+			Expect(err).NotTo(HaveOccurred())
+
+			responseMsg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("hello"),
+			})
+			responseMsg.Extensions = []string{arka2a.ExecutionContextExtensionURI}
+			responseMsg.Metadata = map[string]any{
+				arka2a.ExecutionContextExtensionURI: map[string]any{
+					"conversationId":     "conv-proto",
+					"responseMessagesV1": json.RawMessage(protoBytes),
+				},
+			}
+
+			msgResult := &protocol.MessageResult{Result: &responseMsg}
+			meta := extractEngineResponseMeta(msgResult)
+
+			Expect(meta.ConversationId).To(Equal("conv-proto"))
 			Expect(meta.ProtocolNative).To(BeTrue())
-			Expect(meta.MessagesRaw).To(ContainSubstring("protocol answer"))
-			Expect(meta.MessagesRaw).NotTo(ContainSubstring("legacy"))
+			Expect(meta.MessagesRaw).To(ContainSubstring("protocol only"))
 		})
 
 		It("should fall back to legacy messages when responseMessagesV1 is absent", func() {
