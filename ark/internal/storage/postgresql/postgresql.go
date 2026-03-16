@@ -410,7 +410,7 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 			UPDATE resources
 			SET spec = $1::jsonb, status = $2::jsonb, labels = $3::jsonb, annotations = $4::jsonb,
 			    finalizers = $5::jsonb, owner_references = $6::jsonb,
-			    generation = generation + 1, resource_version = resource_version + 1, updated_at = NOW()
+			    generation = generation + 1, resource_version = nextval('resources_resource_version_seq'), updated_at = NOW()
 			WHERE kind = $7 AND namespace = $8 AND name = $9 AND resource_version = $10
 			RETURNING resource_version, generation, uid, created_at
 		)
@@ -475,7 +475,7 @@ func (p *PostgreSQLBackend) UpdateStatus(ctx context.Context, kind, namespace, n
 	err = p.db.QueryRowContext(ctx, `
 		WITH upd AS (
 			UPDATE resources
-			SET status = $1::jsonb, resource_version = resource_version + 1, updated_at = NOW()
+			SET status = $1::jsonb, resource_version = nextval('resources_resource_version_seq'), updated_at = NOW()
 			WHERE kind = $2 AND namespace = $3 AND name = $4 AND resource_version = $5
 			RETURNING resource_version
 		)
