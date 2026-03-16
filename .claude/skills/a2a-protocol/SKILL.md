@@ -19,13 +19,13 @@ communication between independent AI agent systems.
 > under the Apache-2.0 license. Each file includes source attribution in its
 > YAML frontmatter.
 
-> **IMPORTANT — Use v0.3 by default.** The primary references are **v0.3.0**,
-> which is the version currently supported by the official
-> [Go](https://github.com/a2aproject/a2a-go) and
+> **IMPORTANT — Use v0.3 by default.** The primary references in
+> `references/v0.3/` are **v0.3.0**, the version currently supported by the
+> official [Go](https://github.com/a2aproject/a2a-go) and
 > [Python](https://github.com/a2aproject/a2a-python) SDKs and most
-> implementations. The v1.0 RC spec is available in `references/v1.0-rc/` but
-> should only be consulted when explicitly working on v1.0 features or
-> migration planning.
+> implementations. The v1.0 RC spec is in `references/v1.0-rc/` and should
+> only be consulted when explicitly working on v1.0 features or migration
+> planning.
 
 ## When to use this skill
 
@@ -70,21 +70,21 @@ information — without exposing internal state, memory, or tools.
 
 ## Specification reference (v0.3)
 
-The primary A2A specification (v0.3.0) is split into sections in `references/`:
+The primary A2A specification (v0.3.0) is split into sections in `references/v0.3/`:
 
 | File | Contents |
 |------|----------|
-| [spec-01-introduction.md](./references/spec-01-introduction.md) | Goals, principles, design |
-| [spec-02-core-concepts.md](./references/spec-02-core-concepts.md) | Core concepts summary |
-| [spec-03-transport.md](./references/spec-03-transport.md) | Transport layer: JSON-RPC 2.0 over HTTP, SSE streaming |
-| [spec-04-authentication.md](./references/spec-04-authentication.md) | Authentication and authorization |
-| [spec-05-agent-card.md](./references/spec-05-agent-card.md) | Agent Card structure, discovery, extended cards |
-| [spec-06-data-objects.md](./references/spec-06-data-objects.md) | Task, Message, Part, Artifact, TaskStatus, streaming events |
-| [spec-07-rpc-methods.md](./references/spec-07-rpc-methods.md) | All JSON-RPC methods (send, stream, get, cancel, push, resubscribe) |
-| [spec-08-error-handling.md](./references/spec-08-error-handling.md) | Error codes and handling |
-| [spec-09-workflows.md](./references/spec-09-workflows.md) | Common workflows and examples |
-| [spec-10-appendices.md](./references/spec-10-appendices.md) | Appendices |
-| [spec-11-compliance.md](./references/spec-11-compliance.md) | A2A compliance requirements |
+| [spec-01-introduction.md](./references/v0.3/spec-01-introduction.md) | Goals, principles, design |
+| [spec-02-core-concepts.md](./references/v0.3/spec-02-core-concepts.md) | Core concepts summary |
+| [spec-03-transport.md](./references/v0.3/spec-03-transport.md) | Transport layer: JSON-RPC 2.0 over HTTP, SSE streaming |
+| [spec-04-authentication.md](./references/v0.3/spec-04-authentication.md) | Authentication and authorization |
+| [spec-05-agent-card.md](./references/v0.3/spec-05-agent-card.md) | Agent Card structure, discovery, extended cards |
+| [spec-06-data-objects.md](./references/v0.3/spec-06-data-objects.md) | Task, Message, Part, Artifact, TaskStatus, streaming events |
+| [spec-07-rpc-methods.md](./references/v0.3/spec-07-rpc-methods.md) | All JSON-RPC methods (send, stream, get, cancel, push, resubscribe) |
+| [spec-08-error-handling.md](./references/v0.3/spec-08-error-handling.md) | Error codes and handling |
+| [spec-09-workflows.md](./references/v0.3/spec-09-workflows.md) | Common workflows and examples |
+| [spec-10-appendices.md](./references/v0.3/spec-10-appendices.md) | Appendices |
+| [spec-11-compliance.md](./references/v0.3/spec-11-compliance.md) | A2A compliance requirements |
 
 ## Topic guides (v0.3)
 
@@ -92,14 +92,14 @@ Conceptual guides from the A2A documentation:
 
 | File | Contents |
 |------|----------|
-| [topic-what-is-a2a.md](./references/topic-what-is-a2a.md) | Overview of A2A purpose and benefits |
-| [topic-key-concepts.md](./references/topic-key-concepts.md) | Core concepts: actors, elements, interactions |
-| [topic-agent-discovery.md](./references/topic-agent-discovery.md) | Agent Card discovery mechanisms |
-| [topic-life-of-a-task.md](./references/topic-life-of-a-task.md) | Task lifecycle and state transitions |
-| [topic-streaming-and-async.md](./references/topic-streaming-and-async.md) | SSE streaming and async patterns |
-| [topic-extensions.md](./references/topic-extensions.md) | A2A extension mechanism |
-| [topic-enterprise-ready.md](./references/topic-enterprise-ready.md) | Enterprise features: auth, security, tracing |
-| [topic-a2a-and-mcp.md](./references/topic-a2a-and-mcp.md) | A2A vs MCP comparison |
+| [topic-what-is-a2a.md](./references/v0.3/topic-what-is-a2a.md) | Overview of A2A purpose and benefits |
+| [topic-key-concepts.md](./references/v0.3/topic-key-concepts.md) | Core concepts: actors, elements, interactions |
+| [topic-agent-discovery.md](./references/v0.3/topic-agent-discovery.md) | Agent Card discovery mechanisms |
+| [topic-life-of-a-task.md](./references/v0.3/topic-life-of-a-task.md) | Task lifecycle and state transitions |
+| [topic-streaming-and-async.md](./references/v0.3/topic-streaming-and-async.md) | SSE streaming and async patterns |
+| [topic-extensions.md](./references/v0.3/topic-extensions.md) | A2A extension mechanism |
+| [topic-enterprise-ready.md](./references/v0.3/topic-enterprise-ready.md) | Enterprise features: auth, security, tracing |
+| [topic-a2a-and-mcp.md](./references/v0.3/topic-a2a-and-mcp.md) | A2A vs MCP comparison |
 
 ## Key JSON-RPC methods (v0.3)
 
@@ -149,14 +149,14 @@ Discovered at: `https://myagent.example.com/.well-known/agent.json`
 
 ## Quick lookup guide
 
-- **"How do I discover agents?"** → [topic-agent-discovery.md](./references/topic-agent-discovery.md), [spec-05-agent-card.md](./references/spec-05-agent-card.md)
-- **"What are the task states?"** → [topic-life-of-a-task.md](./references/topic-life-of-a-task.md), [spec-06-data-objects.md](./references/spec-06-data-objects.md)
-- **"How does streaming work?"** → [topic-streaming-and-async.md](./references/topic-streaming-and-async.md), [spec-07-rpc-methods.md](./references/spec-07-rpc-methods.md)
-- **"What's the difference between A2A and MCP?"** → [topic-a2a-and-mcp.md](./references/topic-a2a-and-mcp.md)
-- **"How do extensions work?"** → [topic-extensions.md](./references/topic-extensions.md)
-- **"What security/auth is needed?"** → [spec-04-authentication.md](./references/spec-04-authentication.md), [topic-enterprise-ready.md](./references/topic-enterprise-ready.md)
-- **"What are the error codes?"** → [spec-08-error-handling.md](./references/spec-08-error-handling.md)
-- **"Show me workflow examples"** → [spec-09-workflows.md](./references/spec-09-workflows.md)
+- **"How do I discover agents?"** → [topic-agent-discovery.md](./references/v0.3/topic-agent-discovery.md), [spec-05-agent-card.md](./references/v0.3/spec-05-agent-card.md)
+- **"What are the task states?"** → [topic-life-of-a-task.md](./references/v0.3/topic-life-of-a-task.md), [spec-06-data-objects.md](./references/v0.3/spec-06-data-objects.md)
+- **"How does streaming work?"** → [topic-streaming-and-async.md](./references/v0.3/topic-streaming-and-async.md), [spec-07-rpc-methods.md](./references/v0.3/spec-07-rpc-methods.md)
+- **"What's the difference between A2A and MCP?"** → [topic-a2a-and-mcp.md](./references/v0.3/topic-a2a-and-mcp.md)
+- **"How do extensions work?"** → [topic-extensions.md](./references/v0.3/topic-extensions.md)
+- **"What security/auth is needed?"** → [spec-04-authentication.md](./references/v0.3/spec-04-authentication.md), [topic-enterprise-ready.md](./references/v0.3/topic-enterprise-ready.md)
+- **"What are the error codes?"** → [spec-08-error-handling.md](./references/v0.3/spec-08-error-handling.md)
+- **"Show me workflow examples"** → [spec-09-workflows.md](./references/v0.3/spec-09-workflows.md)
 
 ## v1.0 RC reference (use only when needed)
 
