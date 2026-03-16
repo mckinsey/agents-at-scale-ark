@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -74,7 +75,7 @@ func (s *Server) Start() error {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
 	})
-	mux.Handle("/", s.a2aServer.Handler())
+	mux.Handle("/", otelhttp.NewHandler(s.a2aServer.Handler(), "executor.completions"))
 
 	s.httpServer = &http.Server{
 		Addr:    s.addr,

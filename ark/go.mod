@@ -24,7 +24,7 @@ require (
 	k8s.io/apimachinery v0.34.0
 	k8s.io/client-go v0.34.0
 	sigs.k8s.io/controller-runtime v0.22.0
-	trpc.group/trpc-go/trpc-a2a-go v0.2.4
+	trpc.group/trpc-go/trpc-a2a-go v0.2.5
 )
 
 require (

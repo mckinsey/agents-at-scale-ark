@@ -68,7 +68,7 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 
 func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	if a.ExecutionEngine != nil {
-		return a.executeWithExecutionEngineRouter(ctx, userInput, history, eventStream)
+		return a.executeWithA2AExecutionEngine(ctx, userInput, eventStream)
 	}
 
 	messages, err := a.executeLocally(ctx, userInput, history, memory, eventStream)
@@ -79,37 +79,6 @@ func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []M
 		return nil, err
 	}
 	return &ExecutionResult{Messages: messages}, nil
-}
-
-func (a *Agent) executeWithExecutionEngineRouter(ctx context.Context, userInput Message, history []Message, eventStream EventStreamInterface) (*ExecutionResult, error) {
-	if a.ExecutionEngine.Name == arka2a.ExecutionEngineA2A {
-		return a.executeWithA2AExecutionEngine(ctx, userInput, eventStream)
-	}
-
-	messages, err := a.executeWithNamedExecutionEngine(ctx, userInput, history)
-	if err != nil {
-		return nil, err
-	}
-	return &ExecutionResult{Messages: messages}, nil
-}
-
-func (a *Agent) executeWithNamedExecutionEngine(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
-	engineClient := NewExecutionEngineA2AClient(a.client, a.eventing.ExecutionEngineRecorder())
-
-	agentConfig, err := buildAgentConfig(a)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build agent config: %w", err)
-	}
-
-	resolvedPrompt, err := a.resolvePrompt(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("agent %s prompt resolution failed: %w", a.FullName(), err)
-	}
-	agentConfig.Prompt = resolvedPrompt
-
-	toolDefinitions := buildToolDefinitions(a.Tools)
-
-	return engineClient.Execute(ctx, a.ExecutionEngine, agentConfig, userInput, history, toolDefinitions)
 }
 
 func (a *Agent) executeWithA2AExecutionEngine(ctx context.Context, userInput Message, eventStream EventStreamInterface) (*ExecutionResult, error) {

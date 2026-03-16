@@ -1,0 +1,118 @@
+---
+title: Building Execution Engines
+description: Build custom execution engines using the Ark Python SDK
+---
+
+# Building Execution Engines
+
+Execution engines let you run Ark agents with custom frameworks (LangChain, CrewAI, etc.) while integrating with Ark's resource management. They receive agent context via the [A2A v0.3.0 query extension](https://github.com/mckinsey/agents-at-scale-ark/tree/main/ark/api/extensions/query/v1) and return results over the A2A protocol.
+
+For hosting raw A2A agents without Ark integration, see [Building A2A Servers](/developer-guide/building-a2a-servers).
+
+## Quickstart
+
+Install the Ark SDK:
+
+```bash
+pip install ark-sdk
+```
+
+Create a minimal executor:
+
+```python
+from ark_sdk.executor import BaseExecutor, ExecutionEngineRequest, Message
+from ark_sdk.executor_app import ExecutorApp
+
+
+class MyExecutor(BaseExecutor):
+    async def execute_agent(self, request: ExecutionEngineRequest) -> list[Message]:
+        # request.agent has the agent config (name, prompt, model, parameters)
+        # request.userInput has the user message
+        # request.tools has available tool definitions
+        # request.history has conversation history
+        prompt = self._resolve_prompt(request.agent)
+        return [Message(role="assistant", content=f"Echo: {request.userInput.content}")]
+
+
+app = ExecutorApp(
+    executor=MyExecutor("my-engine"),
+    engine_name="my-engine",
+    description="A simple execution engine",
+)
+
+if __name__ == "__main__":
+    app.run()
+```
+
+Run it:
+
+```bash
+python main.py
+```
+
+The engine serves an agent card at `/.well-known/agent-card.json` that declares support for the Ark query extension.
+
+## How It Works
+
+When Ark dispatches a query to your engine:
+
+1. The A2A message carries a `QueryRef` (name + namespace) via the query extension
+2. The SDK extracts the QueryRef and fetches the full Query CRD from the cluster
+3. The SDK resolves the agent config, model, tools, and history from the Query's target
+4. Your `execute_agent()` receives a fully populated `ExecutionEngineRequest`
+
+You never interact with the extension directly — the SDK handles resolution transparently.
+
+## Extension Spec
+
+The query extension contract is defined at [`ark/api/extensions/query/v1/`](https://github.com/mckinsey/agents-at-scale-ark/tree/main/ark/api/extensions/query/v1). The schema is minimal: just `name` and `namespace` fields identifying the Query resource.
+
+## Deploying to Kubernetes
+
+Create an `ExecutionEngine` resource pointing to your engine:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: ExecutionEngine
+metadata:
+  name: my-engine
+spec:
+  address:
+    value: "http://my-engine-service:8000"
+```
+
+Then reference it from an Agent:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: my-agent
+spec:
+  prompt: "You are a helpful assistant."
+  executionEngine:
+    name: my-engine
+  modelRef:
+    name: my-model
+```
+
+Queries targeting `my-agent` will be routed to your engine via A2A.
+
+## Key Types
+
+Import from `ark_sdk.executor`:
+
+| Type | Purpose |
+|------|---------|
+| `BaseExecutor` | Abstract base class — implement `execute_agent()` |
+| `ExecutionEngineRequest` | Input to your executor (agent, tools, history, userInput) |
+| `AgentConfig` | Agent name, namespace, prompt, model, parameters |
+| `Message` | Conversation message (role + content) |
+| `ToolDefinition` | Tool name, description, parameters schema |
+| `Model` | Model name, provider type, config |
+
+Import from `ark_sdk.executor_app`:
+
+| Type | Purpose |
+|------|---------|
+| `ExecutorApp` | Wraps your executor in an A2A server with health check |
