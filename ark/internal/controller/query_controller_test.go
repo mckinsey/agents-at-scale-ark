@@ -4,6 +4,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -12,11 +13,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	completions "mckinsey.com/ark/executors/completions"
+	arka2a "mckinsey.com/ark/internal/a2a"
 )
 
 var _ = Describe("Query Controller", func() {
@@ -229,6 +232,118 @@ var _ = Describe("Query Controller Message Serialization", func() {
 			messages := []completions.Message{{}}
 			jsonStr := serializeMessages(messages)
 			Expect(jsonStr).To(Equal("null"))
+		})
+	})
+})
+
+var _ = Describe("extractEngineResponseMeta", func() {
+	Context("protocol-first extraction precedence", func() {
+		It("should prefer responseMessagesV1 when both fields are present", func() {
+			protoMsgs := []protocol.Message{
+				protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+					protocol.NewTextPart("protocol answer"),
+				}),
+			}
+			protoBytes, err := json.Marshal(protoMsgs)
+			Expect(err).NotTo(HaveOccurred())
+
+			responseMsg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("hello"),
+			})
+			responseMsg.Metadata = map[string]any{
+				arka2a.ExecutionContextExtensionURI: map[string]any{
+					"conversationId":     "conv-123",
+					"responseMessagesV1": json.RawMessage(protoBytes),
+					"messages":           json.RawMessage(`[{"role":"assistant","content":"legacy msg"}]`),
+				},
+			}
+
+			result := &protocol.MessageResult{Result: &responseMsg}
+			meta := extractEngineResponseMeta(result)
+
+			Expect(meta.ConversationId).To(Equal("conv-123"))
+			Expect(meta.MessagesRaw).To(ContainSubstring("protocol answer"))
+			Expect(meta.ProtocolNative).To(BeTrue())
+		})
+
+		It("should fall back to legacy messages when responseMessagesV1 is absent", func() {
+			responseMsg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("hello"),
+			})
+			responseMsg.Metadata = map[string]any{
+				arka2a.QueryExtensionMetadataKey: map[string]any{
+					"conversationId": "conv-456",
+					"messages":       json.RawMessage(`[{"role":"assistant","content":"legacy msg"}]`),
+				},
+			}
+
+			result := &protocol.MessageResult{Result: &responseMsg}
+			meta := extractEngineResponseMeta(result)
+
+			Expect(meta.ConversationId).To(Equal("conv-456"))
+			Expect(meta.MessagesRaw).To(ContainSubstring("legacy msg"))
+			Expect(meta.ProtocolNative).To(BeFalse())
+		})
+
+		It("should handle nil result gracefully", func() {
+			meta := extractEngineResponseMeta(nil)
+			Expect(meta.MessagesRaw).To(BeEmpty())
+		})
+	})
+
+	Context("protocolMessagesToRawJSON with DataParts", func() {
+		It("should reconstruct tool calls from DataParts", func() {
+			msg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("checking weather"),
+				protocol.DataPart{
+					Kind: "data",
+					Data: map[string]any{
+						"type": "tool_call",
+						"id":   "tc-1",
+						"function": map[string]any{
+							"name":      "weather_api",
+							"arguments": `{"city":"NYC"}`,
+						},
+					},
+				},
+			})
+			data, _ := json.Marshal([]protocol.Message{msg})
+			rawJSON := protocolMessagesToRawJSON(data)
+			Expect(rawJSON).To(ContainSubstring("tool_calls"))
+			Expect(rawJSON).To(ContainSubstring("weather_api"))
+		})
+
+		It("should reconstruct tool results from DataParts", func() {
+			msg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.DataPart{
+					Kind: "data",
+					Data: map[string]any{
+						"type":         "tool_result",
+						"tool_call_id": "tc-1",
+						"content":      "72F sunny",
+					},
+				},
+			})
+			data, _ := json.Marshal([]protocol.Message{msg})
+			rawJSON := protocolMessagesToRawJSON(data)
+			Expect(rawJSON).To(ContainSubstring(`"role":"tool"`))
+			Expect(rawJSON).To(ContainSubstring("tc-1"))
+		})
+
+		It("should reconstruct system messages from DataParts", func() {
+			msg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.DataPart{
+					Kind: "data",
+					Data: map[string]any{
+						"type":    "system",
+						"content": "you are helpful",
+					},
+				},
+			})
+			data, _ := json.Marshal([]protocol.Message{msg})
+			rawJSON := protocolMessagesToRawJSON(data)
+			Expect(rawJSON).To(ContainSubstring(`"role":"system"`))
+			Expect(rawJSON).To(ContainSubstring("you are helpful"))
 		})
 	})
 })

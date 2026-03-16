@@ -262,17 +262,35 @@ func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, r
 		h.telemetry.QueryRecorder().RecordTokenUsage(state.querySpan, tokenSummary.PromptTokens, tokenSummary.CompletionTokens, tokenSummary.TotalTokens)
 	}
 
-	responseMeta := buildResponseMeta(state, execResult, responseMessages, tokenSummary)
+	extensionPayload := arka2a.ExecutionResponsePayload{
+		ConversationId: state.conversationId,
+	}
+	if tokenSummary.TotalTokens > 0 {
+		extensionPayload.TokenUsage = &arka2a.ResponseTokenUsage{
+			PromptTokens:     tokenSummary.PromptTokens,
+			CompletionTokens: tokenSummary.CompletionTokens,
+			TotalTokens:      tokenSummary.TotalTokens,
+		}
+	}
+
+	serializedMessages := serializeResponseMessages(responseMessages)
+	if serializedMessages != "" {
+		extensionPayload.Messages = json.RawMessage(serializedMessages)
+	}
+
+	protocolMessages := openAIToProtocolResponseMessages(responseMessages)
+	if protoBytes, err := json.Marshal(protocolMessages); err == nil && len(protocolMessages) > 0 {
+		extensionPayload.ResponseMessagesV1 = protoBytes
+	}
+
+	legacyMeta := buildResponseMeta(state, execResult, responseMessages, tokenSummary)
 
 	responseMessage := protocol.NewMessage(
 		protocol.MessageRoleAgent,
 		[]protocol.Part{protocol.NewTextPart(responseContent)},
 	)
-	if len(responseMeta) > 0 {
-		responseMessage.Metadata = map[string]any{
-			arka2a.QueryExtensionMetadataKey: responseMeta,
-		}
-	}
+	arka2a.SetExecutionContextExtension(&responseMessage, extensionPayload)
+	arka2a.SetMetadata(&responseMessage, arka2a.QueryExtensionMetadataKey, legacyMeta)
 
 	state.finalizeStream(ctx, responseMessages)
 
@@ -500,11 +518,7 @@ func firstItemName[T any, PT interface {
 
 // Query extension spec: ark/api/extensions/query/v1/
 func extractArkMetadata(message protocol.Message) (*arkMetadata, error) {
-	if message.Metadata == nil {
-		return nil, fmt.Errorf("message has no metadata")
-	}
-
-	refData, ok := message.Metadata[arka2a.QueryExtensionMetadataKey]
+	refData, ok := arka2a.GetMetadata(message, arka2a.QueryExtensionMetadataKey)
 	if !ok {
 		return nil, fmt.Errorf("message metadata missing %s key", arka2a.QueryExtensionMetadataKey)
 	}
@@ -558,4 +572,92 @@ func serializeResponseMessages(messages []Message) string {
 		return ""
 	}
 	return string(data)
+}
+
+func openAIToProtocolResponseMessages(messages []Message) []protocol.Message {
+	var result []protocol.Message
+	for _, msg := range messages {
+		switch {
+		case msg.OfAssistant != nil:
+			result = append(result, convertAssistantMessage(msg.OfAssistant))
+		case msg.OfUser != nil:
+			pm := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+				protocol.NewTextPart(msg.OfUser.Content.OfString.Value),
+			})
+			result = append(result, pm)
+		case msg.OfTool != nil:
+			result = append(result, convertToolMessage(msg.OfTool))
+		case msg.OfSystem != nil:
+			result = append(result, convertSystemMessage(msg.OfSystem))
+		case msg.OfFunction != nil:
+			result = append(result, convertFunctionMessage(msg.OfFunction))
+		}
+	}
+	return result
+}
+
+func convertAssistantMessage(m *openai.ChatCompletionAssistantMessageParam) protocol.Message {
+	parts := make([]protocol.Part, 0, 1+len(m.ToolCalls))
+	if content := m.Content.OfString.Value; content != "" {
+		parts = append(parts, protocol.NewTextPart(content))
+	}
+	for _, tc := range m.ToolCalls {
+		parts = append(parts, protocol.DataPart{
+			Kind: "data",
+			Data: map[string]any{
+				"type": "tool_call",
+				"id":   tc.ID,
+				"function": map[string]any{
+					"name":      tc.Function.Name,
+					"arguments": tc.Function.Arguments,
+				},
+			},
+			Metadata: map[string]any{"mediaType": "application/json"},
+		})
+	}
+	if len(parts) == 0 {
+		parts = append(parts, protocol.NewTextPart(""))
+	}
+	return protocol.NewMessage(protocol.MessageRoleAgent, parts)
+}
+
+func convertToolMessage(m *openai.ChatCompletionToolMessageParam) protocol.Message {
+	return protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.DataPart{
+			Kind: "data",
+			Data: map[string]any{
+				"type":         "tool_result",
+				"tool_call_id": m.ToolCallID,
+				"content":      m.Content.OfString.Value,
+			},
+			Metadata: map[string]any{"mediaType": "application/json"},
+		},
+	})
+}
+
+func convertSystemMessage(m *openai.ChatCompletionSystemMessageParam) protocol.Message {
+	return protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.DataPart{
+			Kind: "data",
+			Data: map[string]any{
+				"type":    "system",
+				"content": m.Content.OfString.Value,
+			},
+			Metadata: map[string]any{"mediaType": "application/json"},
+		},
+	})
+}
+
+func convertFunctionMessage(m *openai.ChatCompletionFunctionMessageParam) protocol.Message { //nolint:staticcheck
+	return protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.DataPart{
+			Kind: "data",
+			Data: map[string]any{
+				"type":    "function_result",
+				"name":    m.Name,
+				"content": m.Content.Value,
+			},
+			Metadata: map[string]any{"mediaType": "application/json"},
+		},
+	})
 }
