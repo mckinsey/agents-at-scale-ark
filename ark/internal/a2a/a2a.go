@@ -23,9 +23,6 @@ import (
 	"mckinsey.com/ark/internal/resolution"
 )
 
-// Deprecated: use QueryExtensionURI and QueryExtensionMetadataKey instead.
-const ArkMetadataKey = "ark.mckinsey.com/execution-engine"
-
 // Query extension spec: ark/api/extensions/query/v1/
 const (
 	QueryExtensionURI         = "https://github.com/mckinsey/agents-at-scale-ark/tree/main/ark/api/extensions/query/v1"

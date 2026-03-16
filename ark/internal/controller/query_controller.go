@@ -349,7 +349,7 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 
 	engineMeta := extractEngineResponseMeta(result)
 
-	log.Info("query execution completed", "query", query.Name, "target", target.Name, "address", address)
+	log.V(1).Info("query A2A call completed", "query", query.Name, "target", target.Name, "address", address)
 
 	rawJSON := engineMeta.MessagesRaw
 	if rawJSON == "" {
