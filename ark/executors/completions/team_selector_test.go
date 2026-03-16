@@ -214,7 +214,7 @@ func TestDetermineNextMember(t *testing.T) {
 			team := &Team{
 				Members: members,
 			}
-			team.mockSelectorAgent = newMockSelectorAgent()
+			team.selectorAgent = newMockSelectorAgent()
 
 			ctx := context.Background()
 			messages := []Message{}
@@ -294,7 +294,7 @@ func TestSelectFromGraphConstraints(t *testing.T) {
 				Members: members,
 			}
 
-			team.mockSelectorAgent = newMockSelectorAgent()
+			team.selectorAgent = newMockSelectorAgent()
 
 			ctx := context.Background()
 			messages := []Message{}
@@ -777,7 +777,7 @@ func TestSelectMember_WithInvalidAgent(t *testing.T) {
 	mockSelector := &mockSelectorAgent{returnName: "selected"}
 	team := &Team{
 		Members:           members,
-		mockSelectorAgent: mockSelector,
+		selectorAgent: mockSelector,
 	}
 
 	ctx := context.Background()
@@ -800,7 +800,7 @@ func TestSelectMember_ReturnsErrorOnNoMessages(t *testing.T) {
 	mockSelector := &mockSelectorAgent{returnEmpty: true}
 	team := &Team{
 		Members:           members,
-		mockSelectorAgent: mockSelector,
+		selectorAgent: mockSelector,
 	}
 
 	ctx := context.Background()
@@ -816,7 +816,7 @@ func TestSelectMember_ReturnsErrorOnNoMessages(t *testing.T) {
 func TestLoadSelectorAgent_WithMock(t *testing.T) {
 	mockSelector := newMockSelectorAgent()
 	team := &Team{
-		mockSelectorAgent: mockSelector,
+		selectorAgent: mockSelector,
 	}
 
 	ctx := context.Background()
@@ -853,7 +853,7 @@ func TestExecuteSelector_WithInvalidAgentSelection(t *testing.T) {
 			mockMember1,
 			mockMember2,
 		},
-		mockSelectorAgent: mockSelector,
+		selectorAgent: mockSelector,
 		MaxTurns:          &maxTurns,
 		telemetryRecorder: &mockTeamRecorder{},
 		eventingRecorder:  &mockEventingRecorder{},

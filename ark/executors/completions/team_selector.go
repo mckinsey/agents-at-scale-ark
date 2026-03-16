@@ -71,9 +71,9 @@ func buildRoles(members []TeamMember) string {
 }
 
 func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, error) {
-	// Check for override selector agent first (used in tests)
-	if t.mockSelectorAgent != nil {
-		return t.mockSelectorAgent, nil
+	// Return cached selector agent if already loaded (test mock or production cache)
+	if t.selectorAgent != nil {
+		return t.selectorAgent, nil
 	}
 
 	if t.Selector == nil || t.Selector.Agent == "" {
@@ -92,6 +92,9 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, e
 	if err != nil {
 		return nil, fmt.Errorf("failed to create selector agent: %w", err)
 	}
+
+	// Cache the loaded agent for subsequent turns
+	t.selectorAgent = agent
 
 	return agent, nil
 }
