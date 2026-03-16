@@ -7,7 +7,9 @@ After protocol-native loops and memory alignment, the handler and controller sti
 - Convert handler execution state and dispatch paths to protocol-native message arrays throughout.
 - Remove OpenAI-only message helpers that are replaced by adapter layer functions.
 - Streaming path maps ProtocolMessages to A2A events.
-- Controller success serialization uses protocol-native extraction exclusively (legacy `messages` read path retained for backward compatibility but no longer primary).
+- Handler receives `[]protocol.Message` directly from agent/team execution (no `openAIToProtocolResponseMessages` conversion needed).
+- Handler writes only protocol-native `ResponseMessagesV1`; legacy `messages` becomes derived from protocol via the adapter.
+- Controller protocol-first extraction (already done in PR-A) is the sole path; legacy `messages` retained as read-only fallback for non-migrated engines.
 
 ## Prerequisites
 
