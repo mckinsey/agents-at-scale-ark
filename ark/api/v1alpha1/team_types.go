@@ -12,8 +12,9 @@ type TeamMember struct {
 }
 
 type TeamSelectorSpec struct {
-	Agent          string `json:"agent,omitempty"`
-	SelectorPrompt string `json:"selectorPrompt,omitempty"`
+	Agent          string      `json:"agent,omitempty"`
+	SelectorPrompt string      `json:"selectorPrompt,omitempty"`
+	Tools          []AgentTool `json:"tools,omitempty"`
 }
 
 type TeamGraphEdge struct {

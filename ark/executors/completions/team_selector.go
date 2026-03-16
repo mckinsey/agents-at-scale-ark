@@ -93,6 +93,15 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, e
 		return nil, fmt.Errorf("failed to create selector agent: %w", err)
 	}
 
+	// Register additional tools specific to selector usage
+	if t.Selector.Tools != nil && len(t.Selector.Tools) > 0 {
+		for _, tool := range t.Selector.Tools {
+			if err := agent.Tools.registerTool(ctx, t.Client, tool, t.Namespace, t.telemetry, t.eventing); err != nil {
+				return nil, fmt.Errorf("failed to register selector tool %s: %w", tool.Name, err)
+			}
+		}
+	}
+
 	// Cache the loaded agent for subsequent turns
 	t.selectorAgent = agent
 

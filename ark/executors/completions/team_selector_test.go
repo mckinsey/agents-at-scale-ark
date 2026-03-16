@@ -776,7 +776,7 @@ func TestSelectMember_WithInvalidAgent(t *testing.T) {
 
 	mockSelector := &mockSelectorAgent{returnName: "selected"}
 	team := &Team{
-		Members:           members,
+		Members:       members,
 		selectorAgent: mockSelector,
 	}
 
@@ -799,7 +799,7 @@ func TestSelectMember_ReturnsErrorOnNoMessages(t *testing.T) {
 
 	mockSelector := &mockSelectorAgent{returnEmpty: true}
 	team := &Team{
-		Members:           members,
+		Members:       members,
 		selectorAgent: mockSelector,
 	}
 
@@ -853,7 +853,7 @@ func TestExecuteSelector_WithInvalidAgentSelection(t *testing.T) {
 			mockMember1,
 			mockMember2,
 		},
-		selectorAgent: mockSelector,
+		selectorAgent:     mockSelector,
 		MaxTurns:          &maxTurns,
 		telemetryRecorder: &mockTeamRecorder{},
 		eventingRecorder:  &mockEventingRecorder{},
