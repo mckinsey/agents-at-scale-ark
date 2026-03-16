@@ -111,7 +111,7 @@ func extractUserTextFromMessage(raw json.RawMessage) (string, bool) {
 		Role    string          `json:"role"`
 		Content json.RawMessage `json:"content"`
 	}
-	if err := json.Unmarshal(raw, &msg); err != nil {
+	if json.Unmarshal(raw, &msg) != nil {
 		return "", false
 	}
 	if msg.Role != "user" {
@@ -119,7 +119,7 @@ func extractUserTextFromMessage(raw json.RawMessage) (string, bool) {
 	}
 
 	var contentStr string
-	if err := json.Unmarshal(msg.Content, &contentStr); err == nil && contentStr != "" {
+	if json.Unmarshal(msg.Content, &contentStr) == nil && contentStr != "" {
 		return contentStr, true
 	}
 
@@ -127,7 +127,7 @@ func extractUserTextFromMessage(raw json.RawMessage) (string, bool) {
 		Type string `json:"type"`
 		Text string `json:"text"`
 	}
-	if err := json.Unmarshal(msg.Content, &parts); err == nil {
+	if json.Unmarshal(msg.Content, &parts) == nil {
 		for _, p := range parts {
 			if p.Type == "text" && p.Text != "" {
 				return p.Text, true
