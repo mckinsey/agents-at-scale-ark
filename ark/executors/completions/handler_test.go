@@ -410,6 +410,148 @@ func TestResolveSelector(t *testing.T) {
 	})
 }
 
+func TestBuildResponseMeta(t *testing.T) {
+	t.Run("empty state returns empty meta", func(t *testing.T) {
+		state := &executionState{}
+		meta := buildResponseMeta(state, nil, nil, arkv1alpha1.TokenUsage{})
+		assert.Empty(t, meta)
+	})
+
+	t.Run("includes token usage when present", func(t *testing.T) {
+		state := &executionState{}
+		tokens := arkv1alpha1.TokenUsage{PromptTokens: 10, CompletionTokens: 20, TotalTokens: 30}
+		meta := buildResponseMeta(state, nil, nil, tokens)
+		usage, ok := meta["tokenUsage"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, int64(30), usage["total_tokens"])
+	})
+
+	t.Run("includes conversation ID", func(t *testing.T) {
+		state := &executionState{conversationId: "conv-1"}
+		meta := buildResponseMeta(state, nil, nil, arkv1alpha1.TokenUsage{})
+		assert.Equal(t, "conv-1", meta["conversationId"])
+	})
+
+	t.Run("includes A2A metadata from exec result", func(t *testing.T) {
+		state := &executionState{}
+		execResult := &ExecutionResult{
+			A2AResponse: &arka2a.A2AResponse{ContextID: "ctx-1", TaskID: "task-1"},
+		}
+		meta := buildResponseMeta(state, execResult, nil, arkv1alpha1.TokenUsage{})
+		a2aMeta, ok := meta["a2a"].(map[string]string)
+		require.True(t, ok)
+		assert.Equal(t, "ctx-1", a2aMeta["contextId"])
+		assert.Equal(t, "task-1", a2aMeta["taskId"])
+	})
+
+	t.Run("skips A2A metadata when nil exec result", func(t *testing.T) {
+		state := &executionState{}
+		meta := buildResponseMeta(state, nil, nil, arkv1alpha1.TokenUsage{})
+		_, hasA2A := meta["a2a"]
+		assert.False(t, hasA2A)
+	})
+
+	t.Run("includes serialized messages", func(t *testing.T) {
+		state := &executionState{}
+		msgs := []Message{NewAssistantMessage("hello")}
+		meta := buildResponseMeta(state, nil, msgs, arkv1alpha1.TokenUsage{})
+		_, hasMessages := meta["messages"]
+		assert.True(t, hasMessages)
+	})
+}
+
+func TestResolveSelectorResourceTypes(t *testing.T) {
+	t.Run("resolves team by label", func(t *testing.T) {
+		team := &arkv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "my-team",
+				Namespace: "default",
+				Labels:    map[string]string{"env": "prod"},
+			},
+		}
+		h := newTestHandler(team)
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "q", Namespace: "default"},
+			Spec: arkv1alpha1.QuerySpec{
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"env": "prod"}},
+			},
+		}
+		target, err := h.resolveSelector(context.Background(), query)
+		require.NoError(t, err)
+		assert.Equal(t, "team", target.Type)
+		assert.Equal(t, "my-team", target.Name)
+	})
+
+	t.Run("resolves model by label", func(t *testing.T) {
+		model := &arkv1alpha1.Model{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "my-model",
+				Namespace: "default",
+				Labels:    map[string]string{"tier": "gpu"},
+			},
+		}
+		h := newTestHandler(model)
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "q", Namespace: "default"},
+			Spec: arkv1alpha1.QuerySpec{
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"tier": "gpu"}},
+			},
+		}
+		target, err := h.resolveSelector(context.Background(), query)
+		require.NoError(t, err)
+		assert.Equal(t, "model", target.Type)
+		assert.Equal(t, "my-model", target.Name)
+	})
+
+	t.Run("resolves tool by label", func(t *testing.T) {
+		tool := &arkv1alpha1.Tool{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "my-tool",
+				Namespace: "default",
+				Labels:    map[string]string{"kind": "search"},
+			},
+		}
+		h := newTestHandler(tool)
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "q", Namespace: "default"},
+			Spec: arkv1alpha1.QuerySpec{
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"kind": "search"}},
+			},
+		}
+		target, err := h.resolveSelector(context.Background(), query)
+		require.NoError(t, err)
+		assert.Equal(t, "tool", target.Type)
+		assert.Equal(t, "my-tool", target.Name)
+	})
+
+	t.Run("agents take priority over teams", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "my-agent",
+				Namespace: "default",
+				Labels:    map[string]string{"shared": "true"},
+			},
+		}
+		team := &arkv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "my-team",
+				Namespace: "default",
+				Labels:    map[string]string{"shared": "true"},
+			},
+		}
+		h := newTestHandler(agent, team)
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "q", Namespace: "default"},
+			Spec: arkv1alpha1.QuerySpec{
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"shared": "true"}},
+			},
+		}
+		target, err := h.resolveSelector(context.Background(), query)
+		require.NoError(t, err)
+		assert.Equal(t, "agent", target.Type)
+	})
+}
+
 func TestDispatchTargetUnsupportedType(t *testing.T) {
 	h := newTestHandler()
 	tracer := telemetrynoop.NewTracer()
