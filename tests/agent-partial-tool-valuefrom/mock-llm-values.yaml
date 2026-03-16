@@ -14,6 +14,11 @@ ark:
 
 config:
   rules:
+  - path: "/v1/chat/completions"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"The coordinates are 40.71, -74.01"},"finish_reason":"stop"}]}'
+
   - path: "/v1/models"
     method: "GET"
     response:

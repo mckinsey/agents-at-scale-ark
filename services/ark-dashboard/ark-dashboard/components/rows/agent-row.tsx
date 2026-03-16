@@ -19,6 +19,7 @@ import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import type { Agent } from '@/lib/services';
 import { cn } from '@/lib/utils';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 interface AgentRowProps {
   readonly agent: Agent;
@@ -30,6 +31,7 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(agent.name);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const { readOnlyMode } = useNamespace();
 
   const modelName = agent.modelRef?.name || 'No model assigned';
   const isA2A = agent.isA2A || false;
@@ -42,8 +44,16 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
   return (
     <>
       <div
+        role="link"
+        tabIndex={0}
         className="bg-card hover:bg-accent/5 flex w-full cursor-pointer flex-wrap items-center gap-4 rounded-md border px-4 py-3 transition-colors"
-        onClick={() => router.push(`/agents/${agent.name}`)}>
+        onClick={() => router.push(`/agents/${encodeURIComponent(agent.name)}`)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            router.push(`/agents/${encodeURIComponent(agent.name)}`);
+          }
+        }}>
         <div className="flex flex-grow items-center gap-3 overflow-hidden">
           <IconComponent className="text-muted-foreground h-5 w-5 flex-shrink-0" />
 
@@ -79,12 +89,15 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
                   className="h-8 w-8 p-0"
                   onClick={e => {
                     e.stopPropagation();
-                    router.push(`/agents/${agent.name}`);
-                  }}>
+                    if (!readOnlyMode) router.push(`/agents/${agent.name}`);
+                  }}
+                  disabled={readOnlyMode}>
                   <Pencil className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Edit agent</TooltipContent>
+              <TooltipContent>
+                {readOnlyMode ? 'Read-only mode' : 'Edit agent'}
+              </TooltipContent>
             </Tooltip>
           </TooltipProvider>
 
@@ -97,18 +110,24 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
                     size="sm"
                     className={cn(
                       'h-8 w-8 p-0',
-                      isChatOpen && 'cursor-not-allowed opacity-50',
+                      (isChatOpen || readOnlyMode) &&
+                        'cursor-not-allowed opacity-50',
                     )}
                     onClick={e => {
                       e.stopPropagation();
-                      if (!isChatOpen) setDeleteConfirmOpen(true);
+                      if (!isChatOpen && !readOnlyMode)
+                        setDeleteConfirmOpen(true);
                     }}
-                    disabled={isChatOpen}>
+                    disabled={isChatOpen || readOnlyMode}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {isChatOpen ? 'Cannot delete agent in use' : 'Delete agent'}
+                  {readOnlyMode
+                    ? 'Read-only mode'
+                    : isChatOpen
+                      ? 'Cannot delete agent in use'
+                      : 'Delete agent'}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

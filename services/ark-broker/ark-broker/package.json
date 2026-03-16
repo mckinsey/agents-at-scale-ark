@@ -1,6 +1,6 @@
 {
   "name": "ark-broker",
-  "version": "0.1.52",
+  "version": "0.1.55",
   "description": "Ark broker for memory, telemetry streaming, and observability",
   "main": "dist/main.js",
   "type": "module",
@@ -44,5 +44,12 @@
   },
   "engines": {
     "node": ">=22.0.0"
+  },
+  "overrides": {
+    "minimatch": "^10.2.3",
+    "qs": "^6.15.0",
+    "swagger-jsdoc": {
+      "glob": "^7.2.3"
+    }
   }
 }

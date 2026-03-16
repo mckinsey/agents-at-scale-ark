@@ -3,6 +3,7 @@ import {
   storedIsChatStreamingEnabledAtom,
   storedIsExperimentalDarkModeEnabledAtom,
   storedIsExperimentalExecutionEngineEnabledAtom,
+  storedIsMarketplaceEnabledAtom,
   storedQueryTimeoutSettingAtom,
 } from '@/atoms/experimental-features';
 
@@ -18,6 +19,12 @@ export const experimentalFeatureGroups: ExperimentalFeatureGroup[] = [
         feature: 'Experimental Dark Mode',
         description: 'Enables experimental Dark Mode',
         atom: storedIsExperimentalDarkModeEnabledAtom,
+      },
+      {
+        type: 'boolean',
+        feature: 'Marketplace',
+        description: 'Enables adding 3rd party Marketplaces from settings',
+        atom: storedIsMarketplaceEnabledAtom,
       },
     ],
   },

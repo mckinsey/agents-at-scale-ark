@@ -23,22 +23,36 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
+    - script:
+        content: bash ../helpers/wait-for-evaluator.sh
     - apply:
-        file: manifests/*.yaml
+        file: manifests/a0[0-4]-*.yaml
     - assert:
         resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: RoleBinding
           metadata:
-            name: direct-evaluation-model
-          status:
-            conditions:
-            - type: ModelAvailable
-              status: "True"
+            name: evaluator-llm-test-access
+        timeout: 15s
+    - script:
+        content: bash ../helpers/wait-for-rbac.sh evaluator-llm-test-access $NAMESPACE
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        timeout: 30s
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: direct-evaluation-model
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluator
-        timeout: 1m
+        timeout: 3m
         name: test-evaluator-llm
         for:
           jsonPath:
@@ -50,15 +64,17 @@ spec:
           kind: ConfigMap
           metadata:
             name: golden-examples
+    - apply:
+        file: manifests/a05-evaluation.yaml
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
         timeout: 10m
         name: test-direct-evaluation
         for:
-          jsonPath:
-            path: '{.status.phase}'
-            value: 'done'
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -104,3 +120,11 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
         name: test-direct-evaluation
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

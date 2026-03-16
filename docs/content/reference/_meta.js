@@ -12,6 +12,7 @@ export default {
   evaluations: 'Evaluations',
 
   '---behaviour': { type: 'separator', title: 'System behaviour' },
+  'core-architecture': 'Core Architecture',
   'query-execution': 'Query Execution Flow',
   relationships: 'Resource Relationships',
 
@@ -21,5 +22,6 @@ export default {
   'utility-images': 'Utility Images',
 
   '---project': { type: 'separator', title: 'Project' },
-  contributors: 'Contributors'
+  contributors: 'Contributors',
+  articles: 'Articles'
 }

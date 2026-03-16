@@ -24,10 +24,15 @@ export const namespacesService = {
   },
 
   // Get current Kubernetes context
-  async getContext(): Promise<{ namespace: string; cluster: string }> {
+  async getContext(): Promise<{
+    namespace: string;
+    cluster: string | null;
+    read_only_mode: boolean;
+  }> {
     const response = await apiClient.get<{
       namespace: string;
-      cluster: string;
+      cluster: string | null;
+      read_only_mode: boolean;
     }>('/api/v1/context');
     return response;
   },

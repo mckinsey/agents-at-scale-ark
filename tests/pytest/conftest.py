@@ -113,40 +113,59 @@ def wait_for_dashboard():
 
 def cleanup_port_forwarding():
     """Clean up port forwarding with graceful shutdown first"""
-    # Try graceful shutdown first (SIGTERM)
-    subprocess.run(['bash', '-c', 'lsof -ti :3274 | xargs kill -15 2>/dev/null || true'], 
+    subprocess.run(['bash', '-c', 'lsof -ti :3274 | xargs kill -15 2>/dev/null || true'],
                   capture_output=True)
     time.sleep(2)
-    # Force kill if still running (SIGKILL)
-    subprocess.run(['bash', '-c', 'lsof -ti :3274 | xargs kill -9 2>/dev/null || true'], 
+    subprocess.run(['bash', '-c', 'lsof -ti :3274 | xargs kill -9 2>/dev/null || true'],
                   capture_output=True)
     time.sleep(1)
 
 
+def _is_port_forwarding_active() -> bool:
+    """Returns True if the dashboard port-forward (3274) is already serving."""
+    try:
+        urllib.request.urlopen('http://localhost:3274', timeout=2)
+        return True
+    except Exception:
+        return False
+
+
 @pytest.fixture(scope="session")
-def ark_setup(request):
+def ark_setup(request, tmp_path_factory):
+    """Session-scoped fixture. With xdist (-n N), only the controller process
+    (workerid == "master") does setup; workers just yield immediately because
+    the CI workflow already started the port-forward and the cluster is ready."""
     skip_install = request.config.getoption("--skip-install")
     port_forward = None
-    
+
+    worker_id = getattr(request.config, "workerinput", {}).get("workerid", "master")
+
+    # xdist workers: the CI already deployed ark and port-forwarded.
+    # Workers must NOT touch the port-forward — doing so kills it for siblings.
+    if worker_id != "master":
+        yield
+        return
+
+    # Single-process run (no xdist): manage everything ourselves.
     try:
         if not skip_install and not is_ark_running():
             install_ark()
             time.sleep(30)
-        
+
         wait_for_pods_ready()
-        cleanup_port_forwarding()
-        
-        port_forward = subprocess.Popen(
-            ['kubectl', 'port-forward', '-n', 'default', 'service/ark-dashboard', '3274:3000'],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
-        time.sleep(5)
-        
-        if port_forward.poll() is not None:
-            pytest.exit("Port forwarding failed", returncode=1)
-        
+
+        # Only start our own port-forward if one isn't already serving.
+        if not _is_port_forwarding_active():
+            cleanup_port_forwarding()
+            port_forward = subprocess.Popen(
+                ['kubectl', 'port-forward', '-n', 'default', 'service/ark-dashboard', '3274:3000'],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
+            time.sleep(5)
+            if port_forward.poll() is not None:
+                pytest.exit("Port forwarding failed", returncode=1)
+
         wait_for_dashboard()
-        
         yield
     finally:
         if port_forward:
@@ -160,7 +179,7 @@ def playwright():
         yield p
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def browser(playwright, ark_setup, request):
     visible = request.config.getoption("--visible")
     browser_type = request.config.getoption("--browser-type")
@@ -179,7 +198,7 @@ def browser(playwright, ark_setup, request):
     browser.close()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def context(browser, request):
     visible = request.config.getoption("--visible")
     context_args = {
@@ -191,7 +210,7 @@ def context(browser, request):
     context.close()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def page(context):
     page = context.new_page()
     yield page

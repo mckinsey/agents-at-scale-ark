@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -19,10 +20,10 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
+	arka2a "mckinsey.com/ark/internal/a2a"
 	"mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/eventing"
-	"mckinsey.com/ark/internal/genai"
 	"mckinsey.com/ark/internal/labels"
 )
 
@@ -76,7 +77,7 @@ func (r *A2AServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		if err := r.reconcileConditionsAddressResolutionFailed(ctx, &a2aServer); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: a2aServer.Spec.PollInterval.Duration}, nil
+		return ctrl.Result{RequeueAfter: getPollInterval(a2aServer.Spec.PollInterval)}, nil
 	}
 	a2aServer.Status.LastResolvedAddress = resolvedAddress
 
@@ -97,12 +98,12 @@ func (r *A2AServerReconciler) processServer(ctx context.Context, a2aServer arkv1
 	// Use the already resolved address from status
 	resolvedAddress := a2aServer.Status.LastResolvedAddress
 	// Don't pass recorder - we handle events at controller level based on actual changes
-	agentCard, err := genai.DiscoverA2AAgents(ctx, r.Client, resolvedAddress, a2aServer.Spec.Headers, a2aServer.Namespace)
+	agentCard, err := arka2a.DiscoverA2AAgents(ctx, r.Client, resolvedAddress, a2aServer.Spec.Headers, a2aServer.Namespace)
 	if err != nil {
 		if err := r.reconcileConditionsDiscoveryFailed(ctx, &a2aServer, err, resolvedAddress); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: a2aServer.Spec.PollInterval.Duration}, nil
+		return ctrl.Result{RequeueAfter: getPollInterval(a2aServer.Spec.PollInterval)}, nil
 	}
 
 	// Create/update agents and check if anything actually changed
@@ -111,7 +112,7 @@ func (r *A2AServerReconciler) processServer(ctx context.Context, a2aServer arkv1
 		if err := r.reconcileConditionsAgentCreationFailed(ctx, &a2aServer, err, agentCard.Name); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: a2aServer.Spec.PollInterval.Duration}, nil
+		return ctrl.Result{RequeueAfter: getPollInterval(a2aServer.Spec.PollInterval)}, nil
 	}
 
 	return r.finalizeA2AServerProcessing(ctx, a2aServer, agentsChanged)
@@ -199,7 +200,7 @@ func (r *A2AServerReconciler) updateStatusWithConditions(ctx context.Context, a2
 	return err
 }
 
-func (r *A2AServerReconciler) createAgentWithSkills(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer, agentCard *genai.A2AAgentCard) (bool, error) {
+func (r *A2AServerReconciler) createAgentWithSkills(ctx context.Context, a2aServer *arkv1prealpha1.A2AServer, agentCard *arka2a.A2AAgentCard) (bool, error) {
 	log := logf.FromContext(ctx)
 	anyChange := false
 
@@ -251,14 +252,17 @@ func (r *A2AServerReconciler) createAgentWithSkills(ctx context.Context, a2aServ
 	return anyChange, nil
 }
 
-func (r *A2AServerReconciler) buildAgentWithSkills(a2aServer *arkv1prealpha1.A2AServer, agentCard *genai.A2AAgentCard, agentName string) *arkv1alpha1.Agent {
+func (r *A2AServerReconciler) buildAgentWithSkills(a2aServer *arkv1prealpha1.A2AServer, agentCard *arka2a.A2AAgentCard, agentName string) *arkv1alpha1.Agent {
 	// Build skills annotation JSON
 	skillsJSON, _ := json.Marshal(agentCard.Skills)
 
+	streamingSupported := agentCard.Capabilities.Streaming != nil && *agentCard.Capabilities.Streaming
+
 	agentAnnotations := map[string]string{
-		annotations.A2AServerName:    a2aServer.Name,
-		annotations.A2AServerAddress: a2aServer.Status.LastResolvedAddress,
-		annotations.A2AServerSkills:  string(skillsJSON),
+		annotations.A2AServerName:         a2aServer.Name,
+		annotations.A2AServerAddress:      a2aServer.Status.LastResolvedAddress,
+		annotations.A2AServerSkills:       string(skillsJSON),
+		annotations.A2AStreamingSupported: strconv.FormatBool(streamingSupported),
 	}
 
 	// Inherit ark.mckinsey.com annotations from A2AServer to Agent
@@ -282,7 +286,7 @@ func (r *A2AServerReconciler) buildAgentWithSkills(a2aServer *arkv1prealpha1.A2A
 			Description: agentCard.Description,
 			Prompt:      fmt.Sprintf("You are %s. %s", agentCard.Name, agentCard.Description),
 			ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{
-				Name: genai.ExecutionEngineA2A,
+				Name: arka2a.ExecutionEngineA2A,
 			},
 		},
 	}
@@ -329,14 +333,14 @@ func (r *A2AServerReconciler) finalizeA2AServerProcessing(ctx context.Context, a
 	readyCondition := meta.FindStatusCondition(a2aServer.Status.Conditions, A2AServerReady)
 	if readyCondition != nil && readyCondition.Status == metav1.ConditionTrue && readyCondition.Reason == "AgentDiscovered" && !agentsChanged {
 		// Already ready and no changes - skip event emission
-		return ctrl.Result{RequeueAfter: a2aServer.Spec.PollInterval.Duration}, nil
+		return ctrl.Result{RequeueAfter: getPollInterval(a2aServer.Spec.PollInterval)}, nil
 	}
 
 	if err := r.reconcileConditionsReady(ctx, &a2aServer, agentsChanged); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{RequeueAfter: a2aServer.Spec.PollInterval.Duration}, nil
+	return ctrl.Result{RequeueAfter: getPollInterval(a2aServer.Spec.PollInterval)}, nil
 }
 
 func (r *A2AServerReconciler) sanitizeAgentName(name string) string {

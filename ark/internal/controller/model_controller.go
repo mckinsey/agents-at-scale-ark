@@ -17,9 +17,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	completions "mckinsey.com/ark/executors/completions"
 	"mckinsey.com/ark/internal/eventing"
 	eventnoop "mckinsey.com/ark/internal/eventing/noop"
-	"mckinsey.com/ark/internal/genai"
 	"mckinsey.com/ark/internal/telemetry"
 	telenoop "mckinsey.com/ark/internal/telemetry/noop"
 )
@@ -64,6 +64,8 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	// Probe the model to test whether it is available.
 	result := r.probeModel(ctx, model)
 
+	pollInterval := getPollInterval(model.Spec.PollInterval)
+
 	if !result.Available {
 		changed, err := r.reconcileCondition(ctx, &model, ModelAvailable, metav1.ConditionFalse, "ModelProbeFailed", result.Message)
 		if err != nil {
@@ -78,7 +80,7 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		if changed {
 			r.Eventing.ModelRecorder().ModelUnavailable(ctx, &model, result.Message)
 		}
-		return ctrl.Result{RequeueAfter: addJitter(model.Spec.PollInterval.Duration)}, nil
+		return ctrl.Result{RequeueAfter: addJitter(pollInterval)}, nil
 	}
 
 	// Success case - model is available
@@ -87,7 +89,7 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	// Continue polling at regular interval with jitter to prevent thundering herd
-	return ctrl.Result{RequeueAfter: addJitter(model.Spec.PollInterval.Duration)}, nil
+	return ctrl.Result{RequeueAfter: addJitter(pollInterval)}, nil
 }
 
 // addJitter adds ±10% random jitter to a duration to prevent thundering herd
@@ -96,15 +98,15 @@ func addJitter(d time.Duration) time.Duration {
 	return d + time.Duration(jitter)
 }
 
-func (r *ModelReconciler) probeModel(ctx context.Context, model arkv1alpha1.Model) genai.ProbeResult {
+func (r *ModelReconciler) probeModel(ctx context.Context, model arkv1alpha1.Model) ProbeResult {
 	noopTelemetryRecorder := telenoop.NewModelRecorder()
 	noopEventingRecorder := eventnoop.NewModelRecorder()
-	resolvedModel, err := genai.LoadModel(ctx, r.Client, &arkv1alpha1.AgentModelRef{
+	resolvedModel, err := completions.LoadModel(ctx, r.Client, &arkv1alpha1.AgentModelRef{
 		Name:      model.Name,
 		Namespace: model.Namespace,
 	}, model.Namespace, nil, noopTelemetryRecorder, noopEventingRecorder)
 	if err != nil {
-		return genai.ProbeResult{
+		return ProbeResult{
 			Available:     false,
 			Message:       err.Error(),
 			DetailedError: err,
@@ -118,7 +120,7 @@ func (r *ModelReconciler) probeModel(ctx context.Context, model arkv1alpha1.Mode
 		}
 	}
 
-	result := genai.ProbeModel(ctx, resolvedModel, timeout)
+	result := ProbeModel(ctx, resolvedModel, timeout)
 	return result
 }
 

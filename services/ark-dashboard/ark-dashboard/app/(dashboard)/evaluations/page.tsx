@@ -4,14 +4,10 @@ import { Plus } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useRef } from 'react';
 
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { EvaluationsSection } from '@/components/sections';
 import { Button } from '@/components/ui/button';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-];
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 
 export default function EvaluationsPage() {
   const searchParams = useSearchParams();
@@ -21,7 +17,7 @@ export default function EvaluationsPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={breadcrumbs}
+        breadcrumbs={BASE_BREADCRUMBS}
         currentPage="Evaluations"
         actions={
           <Button

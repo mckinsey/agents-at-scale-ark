@@ -213,7 +213,8 @@
       "profile": "https://vimalpaliwal.com",
       "contributions": [
         "doc",
-        "bug"
+        "bug",
+        "code"
       ]
     },
     {
@@ -464,6 +465,17 @@
       "name": "Jo Stichbury",
       "avatar_url": "https://avatars.githubusercontent.com/u/5180475?v=4",
       "profile": "https://github.com/stichbury",
+      "contributions": [
+        "code",
+        "bug",
+        "doc"
+      ]
+    },
+    {
+      "login": "pontino",
+      "name": "pontino",
+      "avatar_url": "https://avatars.githubusercontent.com/u/713888?v=4",
+      "profile": "https://github.com/pontino",
       "contributions": [
         "code",
         "bug",

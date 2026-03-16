@@ -53,6 +53,8 @@ help: ## Display this help.
 manifests: controller-gen ## Generate CRDs and sync to Helm chart.
 	$(CONTROLLER_GEN) rbac:roleName=ark-controller-role,fileName=ark_controller_role.yaml crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 	@./scripts/sync-chart-crds.sh
+	@mkdir -p internal/apiserver/crds
+	@cp config/crd/bases/*.yaml internal/apiserver/crds/
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -92,6 +94,10 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 .PHONY: build
 build: validate-chart-crds manifests generate fmt vet ## Build manager binary.
 	go build $(LDFLAGS) -o bin/manager cmd/main.go
+
+.PHONY: build-completions
+build-completions: fmt vet ## Build completions engine binary.
+	go build $(LDFLAGS) -o bin/completions cmd/completions/main.go
 
 .PHONY: run
 run: manifests generate fmt vet
@@ -138,7 +144,18 @@ build-container: ## Build the ark-controller
 		--build-arg VERSION=$(VERSION) \
 		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
 		-t $(IMAGE):$(IMAGE_TAG) \
-		-f Dockerfile . 
+		-f Dockerfile .
+
+COMPLETIONS_IMAGE ?= ark-completions
+COMPLETIONS_IMAGE_TAG ?= latest
+
+.PHONY: build-completions-container
+build-completions-container: ## Build the ark-completions container
+	$(CONTAINER_TOOL) build \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
+		-t $(COMPLETIONS_IMAGE):$(COMPLETIONS_IMAGE_TAG) \
+		-f Dockerfile.completions .
 
 .PHONY: deploy
 deploy: manifests ## Deploy controller and cert-manager to the K8s cluster specified in ~/.kube/config.

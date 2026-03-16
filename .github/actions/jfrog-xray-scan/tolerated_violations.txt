@@ -17,3 +17,9 @@ XRAY-937734 - CVE-2026-23864
 - Resource exhaustion in React allows attackers to perform denial of service by sending crafted HTTP requests.
 - Next.js is on the last version (16.1.6) and the fix is not yet available
 - Used in docs only.
+XRAY-944492 - CVE-2026-26996
+- minimatch < 10.2.1 has ReDoS (Regular Expression Denial of Service) via glob patterns with many consecutive `*` wildcards followed by a non-matching literal, causing O(4^N) exponential backtracking. Severity: High (CVSS 8.7).
+- Appears in ark-broker via swagger-jsdoc@6.2.8 -> glob@7.1.6 -> minimatch@3.1.3. The override in package.json pins minimatch to ^3.1.2 (latest 3.x), but 3.x is still in the affected range (< 10.2.1).
+- Not exploitable in our context: swagger-jsdoc only uses glob at startup to scan for JSDoc annotations using hardcoded patterns (`./dist/**/*.js`, `./src/**/*.ts`). No user-controlled input reaches the minimatch pattern argument. The CVE requires attacker-controlled patterns with many consecutive `*` wildcards.
+- Cannot upgrade: swagger-jsdoc@6.x depends on glob@7.x which requires minimatch@3.x API. minimatch@10.x is a complete rewrite with breaking API changes and cannot be used as a drop-in replacement. swagger-jsdoc has not released a version compatible with minimatch@10.x.
+- Used in services/ark-broker/ark-broker only.

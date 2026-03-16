@@ -20,7 +20,6 @@ CONTAINERS=(
     "ark-controller"
     "ark-api"
     "ark-dashboard"
-    "executor-langchain"
     "ark-evaluator"
     "postgres-memory"
 )

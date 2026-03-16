@@ -22,6 +22,7 @@ import { TrackedButton } from '@/components/ui/tracked-button';
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { useDelayedLoading } from '@/lib/hooks';
 import { type Agent, agentsService } from '@/lib/services';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 interface AgentsSectionHandle {
   openApiDialog: () => void;
@@ -34,6 +35,7 @@ export const AgentsSection = forwardRef<AgentsSectionHandle, object>(
     const [loading, setLoading] = useState(true);
     const showLoading = useDelayedLoading(loading);
     const [showCompactView, setShowCompactView] = useState(false);
+    const { readOnlyMode } = useNamespace();
 
     const viewOptions: ToggleOption[] = [
       { id: 'compact', label: 'compact view', active: !showCompactView },
@@ -110,15 +112,25 @@ export const AgentsSection = forwardRef<AgentsSectionHandle, object>(
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
-            <TrackedButton
-              trackingEvent="create_agent_clicked"
-              trackingProperties={{ source: 'empty_state' }}
-              asChild>
-              <Link href="/agents/new">
+            {readOnlyMode ? (
+              <TrackedButton
+                trackingEvent="create_agent_clicked"
+                trackingProperties={{ source: 'empty_state' }}
+                disabled>
                 <Plus className="h-4 w-4" />
                 Create Agent
-              </Link>
-            </TrackedButton>
+              </TrackedButton>
+            ) : (
+              <TrackedButton
+                trackingEvent="create_agent_clicked"
+                trackingProperties={{ source: 'empty_state' }}
+                asChild>
+                <Link href="/agents/new">
+                  <Plus className="h-4 w-4" />
+                  Create Agent
+                </Link>
+              </TrackedButton>
+            )}
           </EmptyContent>
           <Button
             variant="link"
@@ -138,14 +150,14 @@ export const AgentsSection = forwardRef<AgentsSectionHandle, object>(
     return (
       <>
         <div className="flex h-full flex-col">
-          <div className="flex items-center justify-end px-6 py-3">
+          <div className="mt-3 flex items-center justify-end">
             <ToggleSwitch
               options={viewOptions}
               onChange={id => setShowCompactView(id === 'card')}
             />
           </div>
 
-          <main className="flex-1 overflow-auto px-6 py-0">
+          <main className="mt-4 flex-1 overflow-auto">
             {showCompactView && (
               <div className="grid gap-6 pb-6 md:grid-cols-2 lg:grid-cols-3">
                 {agents.map(agent => (

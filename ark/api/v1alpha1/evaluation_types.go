@@ -41,15 +41,15 @@ type QueryRef struct {
 // +kubebuilder:validation:Type=object
 type EvaluationConfig struct {
 	// +kubebuilder:validation:Optional
-	*DirectEvaluationConfig `json:",inline"`
+	DirectEvaluationConfig `json:",inline"`
 	// +kubebuilder:validation:Optional
-	*QueryBasedEvaluationConfig `json:",inline"`
+	QueryBasedEvaluationConfig `json:",inline"`
 	// +kubebuilder:validation:Optional
-	*BatchEvaluationConfig `json:",inline"`
+	BatchEvaluationConfig `json:",inline"`
 	// +kubebuilder:validation:Optional
-	*BaselineEvaluationConfig `json:",inline"`
+	BaselineEvaluationConfig `json:",inline"`
 	// +kubebuilder:validation:Optional
-	*EventEvaluationConfig `json:",inline"`
+	EventEvaluationConfig `json:",inline"`
 }
 
 // DirectEvaluationConfig contains Direct Evaluation specific parameters
