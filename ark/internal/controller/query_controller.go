@@ -27,6 +27,7 @@ import (
 	completions "mckinsey.com/ark/executors/completions"
 	arka2a "mckinsey.com/ark/internal/a2a"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
+	"mckinsey.com/ark/internal/resolution"
 	"mckinsey.com/ark/internal/telemetry"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 	otelimpl "mckinsey.com/ark/internal/telemetry/otel"
@@ -375,11 +376,11 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 }
 
 func extractUserInput(ctx context.Context, query arkv1alpha1.Query, k8sClient client.Client) string {
-	inputMessages, err := completions.GetQueryInputMessages(ctx, query, k8sClient)
+	text, err := resolution.ResolveQueryInputText(ctx, query, k8sClient)
 	if err != nil {
 		return ""
 	}
-	return completions.ExtractUserMessageContent(inputMessages)
+	return text
 }
 
 func serializeMessages(messages []completions.Message) string {
