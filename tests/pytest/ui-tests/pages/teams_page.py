@@ -290,7 +290,12 @@ class TeamsPage(BasePage):
         checkbox = self.page.locator(
             "label:has-text('Enable loops')"
         ).locator("xpath=preceding-sibling::input[@type='checkbox']").first
-        checkbox.click(timeout=5000)
+        current = checkbox.is_checked()
+        if current:
+            checkbox.uncheck()
+        else:
+            checkbox.check()
+        self.page.wait_for_timeout(300)
 
     def create_sequential_loops_team(self, team_name: str, member_name: str, max_turns: str, loops: bool = True) -> dict:
         logger.info(f"Creating sequential+loops team: {team_name}, loops={loops}")
@@ -311,11 +316,13 @@ class TeamsPage(BasePage):
 
         loops_visible = self.is_loops_checkbox_visible()
         if loops and loops_visible:
-            self.toggle_loops_checkbox()
-            try:
-                self.page.locator("input[name='maxTurns'], input[type='number']").first.wait_for(state="visible", timeout=8000)
-            except Exception:
-                pass
+            checkbox = self.page.locator(
+                "label:has-text('Enable loops')"
+            ).locator("xpath=preceding-sibling::input[@type='checkbox']").first
+            checkbox.dispatch_event("click")
+            self.page.locator("input[name='maxTurns'], input[type='number']").first.wait_for(
+                state="visible", timeout=8000
+            )
 
         max_turns_visible = self.is_max_turns_field_visible()
         if loops and max_turns_visible:
@@ -340,11 +347,15 @@ class TeamsPage(BasePage):
         create_btn.click(force=True)
         self.wait_for_load_state("domcontentloaded")
 
+        popup_visible = False
         try:
-            self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=10000)
-            popup_visible = True
+            popup = self.page.locator(self.SUCCESS_POPUP).first
+            popup.wait_for(state="visible", timeout=10000)
+            popup_text = popup.inner_text().lower()
+            is_error = any(w in popup_text for w in ("error", "fail", "denied", "invalid", "cannot", "only be set"))
+            popup_visible = not is_error
         except PlaywrightTimeoutError:
-            popup_visible = False
+            pass
 
         self.wait_for_modal_close()
         self.navigate_to_teams_tab()
