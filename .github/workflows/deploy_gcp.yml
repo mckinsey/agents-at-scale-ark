@@ -95,7 +95,7 @@ jobs:
         with:
           clean_version: ${{ needs.resolve_version.outputs.clean_version }}
           image_registry: ${{ vars.DOCKER_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}
-          install_loadbalancer: "true"
+          install_loadbalancer: "false"
           namespace: default
           pull_policy: IfNotPresent
           timeout: 10m
