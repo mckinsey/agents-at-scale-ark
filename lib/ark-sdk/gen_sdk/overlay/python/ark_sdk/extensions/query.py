@@ -87,7 +87,7 @@ async def _resolve_from_query(ark, query, namespace: str, user_input: str) -> Ex
     agent = await ark.agents.a_get(target.name, namespace)
     agent_config = await _build_agent_config(ark, agent, query, namespace)
     tools = await _build_tool_definitions(ark, agent, namespace)
-    history = _build_history(query)
+    history = _build_history()
 
     return ExecutionEngineRequest(
         agent=agent_config,
@@ -123,53 +123,87 @@ async def _build_agent_config(ark, agent, query, namespace: str) -> AgentConfig:
     )
 
 
-async def _resolve_value_source(vs, namespace: str) -> str:
-    """Resolve a ValueSource to its actual string value.
+def _get_attr_or_key(obj, attr_name: str, dict_key: str = None):
+    if dict_key is None:
+        dict_key = attr_name
+    if isinstance(obj, dict):
+        return obj.get(dict_key)
+    return getattr(obj, attr_name, None)
 
-    Handles direct values, secretKeyRef, and configMapKeyRef.
-    """
+
+def _extract_value_source_refs(vs):
     if isinstance(vs, dict):
         if vs.get("value"):
-            return vs["value"]
+            return vs["value"], None, None
         vf = vs.get("valueFrom") or {}
-        secret_ref = vf.get("secretKeyRef")
-        cm_ref = vf.get("configMapKeyRef")
-    else:
-        if getattr(vs, "value", None):
-            return vs.value
-        vf = getattr(vs, "value_from", None) or getattr(vs, "valueFrom", None)
-        if not vf:
-            return ""
-        secret_ref = getattr(vf, "secret_key_ref", None) or getattr(vf, "secretKeyRef", None)
-        cm_ref = getattr(vf, "config_map_key_ref", None) or getattr(vf, "configMapKeyRef", None)
+        return None, vf.get("secretKeyRef"), vf.get("configMapKeyRef")
 
+    if getattr(vs, "value", None):
+        return vs.value, None, None
+    vf = getattr(vs, "value_from", None) or getattr(vs, "valueFrom", None)
+    if not vf:
+        return None, None, None
+    secret_ref = getattr(vf, "secret_key_ref", None) or getattr(vf, "secretKeyRef", None)
+    cm_ref = getattr(vf, "config_map_key_ref", None) or getattr(vf, "configMapKeyRef", None)
+    return None, secret_ref, cm_ref
+
+
+async def _resolve_secret_ref(secret_ref, namespace: str) -> str:
+    ref_name = _get_attr_or_key(secret_ref, "name")
+    ref_key = _get_attr_or_key(secret_ref, "key")
+    if not (ref_name and ref_key):
+        return ""
+    try:
+        import base64
+        sc = SecretClient(namespace=namespace)
+        result = await sc.get_secret_value(ref_name, ref_key)
+        return base64.b64decode(result["value"]).decode("utf-8")
+    except Exception as e:
+        logger.warning(f"Failed to resolve secret {ref_name}/{ref_key}: {e}")
+        return ""
+
+
+async def _resolve_configmap_ref(cm_ref, namespace: str) -> str:
+    ref_name = _get_attr_or_key(cm_ref, "name")
+    ref_key = _get_attr_or_key(cm_ref, "key")
+    if not (ref_name and ref_key):
+        return ""
+    try:
+        from kubernetes_asyncio import client
+        from kubernetes_asyncio.client.api_client import ApiClient
+        async with ApiClient() as api:
+            v1 = client.CoreV1Api(api)
+            cm = await v1.read_namespaced_config_map(name=ref_name, namespace=namespace)
+            return (cm.data or {}).get(ref_key, "")
+    except Exception as e:
+        logger.warning(f"Failed to resolve configmap {ref_name}/{ref_key}: {e}")
+        return ""
+
+
+async def _resolve_value_source(vs, namespace: str) -> str:
+    direct_value, secret_ref, cm_ref = _extract_value_source_refs(vs)
+    if direct_value:
+        return direct_value
     if secret_ref:
-        ref_name = secret_ref.get("name") if isinstance(secret_ref, dict) else getattr(secret_ref, "name", None)
-        ref_key = secret_ref.get("key") if isinstance(secret_ref, dict) else getattr(secret_ref, "key", None)
-        if ref_name and ref_key:
-            try:
-                sc = SecretClient(namespace=namespace)
-                result = await sc.get_secret_value(ref_name, ref_key)
-                import base64
-                return base64.b64decode(result["value"]).decode("utf-8")
-            except Exception as e:
-                logger.warning(f"Failed to resolve secret {ref_name}/{ref_key}: {e}")
-
+        result = await _resolve_secret_ref(secret_ref, namespace)
+        if result:
+            return result
     if cm_ref:
-        ref_name = cm_ref.get("name") if isinstance(cm_ref, dict) else getattr(cm_ref, "name", None)
-        ref_key = cm_ref.get("key") if isinstance(cm_ref, dict) else getattr(cm_ref, "key", None)
-        if ref_name and ref_key:
-            try:
-                from kubernetes_asyncio import client
-                from kubernetes_asyncio.client.api_client import ApiClient
-                async with ApiClient() as api:
-                    v1 = client.CoreV1Api(api)
-                    cm = await v1.read_namespaced_config_map(name=ref_name, namespace=namespace)
-                    return (cm.data or {}).get(ref_key, "")
-            except Exception as e:
-                logger.warning(f"Failed to resolve configmap {ref_name}/{ref_key}: {e}")
-
+        return await _resolve_configmap_ref(cm_ref, namespace)
     return ""
+
+
+async def _resolve_provider_config(provider_config_obj, namespace: str) -> dict:
+    config = {}
+    api_key_vs = getattr(provider_config_obj, "api_key", None) or getattr(provider_config_obj, "apiKey", None)
+    if api_key_vs:
+        config["apiKey"] = await _resolve_value_source(api_key_vs, namespace)
+    base_url_vs = getattr(provider_config_obj, "base_url", None) or getattr(provider_config_obj, "baseUrl", None)
+    if base_url_vs:
+        config["baseUrl"] = await _resolve_value_source(base_url_vs, namespace)
+    if hasattr(provider_config_obj, "properties") and provider_config_obj.properties:
+        config["properties"] = provider_config_obj.properties
+    return config
 
 
 async def _resolve_model(ark, model_ref, namespace: str) -> Model:
@@ -192,55 +226,51 @@ async def _resolve_model(ark, model_ref, namespace: str) -> Model:
     if model_spec.config:
         provider_config_obj = getattr(model_spec.config, provider, None) or getattr(model_spec.config, "openai", None)
         if provider_config_obj:
-            api_key_vs = getattr(provider_config_obj, "api_key", None) or getattr(provider_config_obj, "apiKey", None)
-            if api_key_vs:
-                config["apiKey"] = await _resolve_value_source(api_key_vs, model_namespace)
-
-            base_url_vs = getattr(provider_config_obj, "base_url", None) or getattr(provider_config_obj, "baseUrl", None)
-            if base_url_vs:
-                config["baseUrl"] = await _resolve_value_source(base_url_vs, model_namespace)
-
-            if hasattr(provider_config_obj, "properties") and provider_config_obj.properties:
-                config["properties"] = provider_config_obj.properties
+            config = await _resolve_provider_config(provider_config_obj, model_namespace)
 
     return Model(name=resolved_name, type=provider, config={provider: config} if config else {})
+
+
+def _build_query_param_map(query_params: Optional[list]) -> Dict[str, str]:
+    param_map: Dict[str, str] = {}
+    if not query_params:
+        return param_map
+    for qp in query_params:
+        name = _get_attr_or_key(qp, "name")
+        value = _get_attr_or_key(qp, "value")
+        if name and value:
+            param_map[name] = value
+    return param_map
+
+
+def _resolve_param_value(param, query_param_map: Dict[str, str]) -> str:
+    value = _get_attr_or_key(param, "value")
+    if value:
+        return value
+    value_from = getattr(param, "value_from", None)
+    if value_from:
+        qp_ref = getattr(value_from, "query_parameter_ref", None)
+        if qp_ref:
+            ref_name = getattr(qp_ref, "name", None)
+            if ref_name and ref_name in query_param_map:
+                return query_param_map[ref_name]
+    name = _get_attr_or_key(param, "name")
+    return query_param_map.get(name, "") if name else ""
 
 
 def _resolve_parameters(
     agent_params: Optional[list],
     query_params: Optional[list],
 ) -> List[Parameter]:
-    resolved = []
-    query_param_map: Dict[str, str] = {}
-    if query_params:
-        for qp in query_params:
-            name = getattr(qp, "name", None) or (qp.get("name") if isinstance(qp, dict) else None)
-            value = getattr(qp, "value", None) or (qp.get("value") if isinstance(qp, dict) else None)
-            if name and value:
-                query_param_map[name] = value
-
+    query_param_map = _build_query_param_map(query_params)
     if not agent_params:
-        return resolved
-
+        return []
+    resolved = []
     for param in agent_params:
-        name = getattr(param, "name", None) or (param.get("name") if isinstance(param, dict) else None)
-        value = getattr(param, "value", None) or (param.get("value") if isinstance(param, dict) else None)
-
-        if not value:
-            value_from = getattr(param, "value_from", None)
-            if value_from:
-                qp_ref = getattr(value_from, "query_parameter_ref", None)
-                if qp_ref:
-                    ref_name = getattr(qp_ref, "name", None)
-                    if ref_name and ref_name in query_param_map:
-                        value = query_param_map[ref_name]
-
-        if not value:
-            value = query_param_map.get(name, "")
-
+        name = _get_attr_or_key(param, "name")
         if name:
+            value = _resolve_param_value(param, query_param_map)
             resolved.append(Parameter(name=name, value=value or ""))
-
     return resolved
 
 
@@ -277,5 +307,5 @@ async def _build_tool_definitions(ark, agent, namespace: str) -> List[ToolDefini
     return tools
 
 
-def _build_history(query) -> List[Message]:
+def _build_history() -> List[Message]:
     return []

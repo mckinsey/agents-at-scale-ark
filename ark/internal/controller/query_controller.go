@@ -268,10 +268,8 @@ func (r *QueryReconciler) resolveDispatchAddress(ctx context.Context, target ark
 	}
 
 	var agentCRD arkv1alpha1.Agent
-	if err := r.Get(ctx, types.NamespacedName{
-		Name:      target.Name,
-		Namespace: namespace,
-	}, &agentCRD); err != nil {
+	err := r.Get(ctx, types.NamespacedName{Name: target.Name, Namespace: namespace}, &agentCRD)
+	if err != nil {
 		return r.CompletionsAddr, nil
 	}
 

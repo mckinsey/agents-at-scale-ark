@@ -262,35 +262,7 @@ func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, r
 		h.telemetry.QueryRecorder().RecordTokenUsage(state.querySpan, tokenSummary.PromptTokens, tokenSummary.CompletionTokens, tokenSummary.TotalTokens)
 	}
 
-	responseMeta := map[string]any{}
-	if tokenSummary.TotalTokens > 0 {
-		responseMeta["tokenUsage"] = map[string]any{
-			"prompt_tokens":     tokenSummary.PromptTokens,
-			"completion_tokens": tokenSummary.CompletionTokens,
-			"total_tokens":      tokenSummary.TotalTokens,
-		}
-	}
-	if state.conversationId != "" {
-		responseMeta["conversationId"] = state.conversationId
-	}
-
-	if execResult != nil && execResult.A2AResponse != nil {
-		a2aMeta := map[string]string{}
-		if execResult.A2AResponse.ContextID != "" {
-			a2aMeta["contextId"] = execResult.A2AResponse.ContextID
-		}
-		if execResult.A2AResponse.TaskID != "" {
-			a2aMeta["taskId"] = execResult.A2AResponse.TaskID
-		}
-		if len(a2aMeta) > 0 {
-			responseMeta["a2a"] = a2aMeta
-		}
-	}
-
-	serializedMessages := serializeResponseMessages(responseMessages)
-	if serializedMessages != "" {
-		responseMeta["messages"] = json.RawMessage(serializedMessages)
-	}
+	responseMeta := buildResponseMeta(state, execResult, responseMessages, tokenSummary)
 
 	responseMessage := protocol.NewMessage(
 		protocol.MessageRoleAgent,
@@ -449,6 +421,36 @@ func (h *Handler) executeTool(
 	return []Message{NewAssistantMessage(result.Content)}, nil
 }
 
+func buildResponseMeta(state *executionState, execResult *ExecutionResult, responseMessages []Message, tokenSummary arkv1alpha1.TokenUsage) map[string]any {
+	responseMeta := map[string]any{}
+	if tokenSummary.TotalTokens > 0 {
+		responseMeta["tokenUsage"] = map[string]any{
+			"prompt_tokens":     tokenSummary.PromptTokens,
+			"completion_tokens": tokenSummary.CompletionTokens,
+			"total_tokens":      tokenSummary.TotalTokens,
+		}
+	}
+	if state.conversationId != "" {
+		responseMeta["conversationId"] = state.conversationId
+	}
+	if execResult != nil && execResult.A2AResponse != nil {
+		a2aMeta := map[string]string{}
+		if execResult.A2AResponse.ContextID != "" {
+			a2aMeta["contextId"] = execResult.A2AResponse.ContextID
+		}
+		if execResult.A2AResponse.TaskID != "" {
+			a2aMeta["taskId"] = execResult.A2AResponse.TaskID
+		}
+		if len(a2aMeta) > 0 {
+			responseMeta["a2a"] = a2aMeta
+		}
+	}
+	if serialized := serializeResponseMessages(responseMessages); serialized != "" {
+		responseMeta["messages"] = json.RawMessage(serialized)
+	}
+	return responseMeta
+}
+
 func (h *Handler) resolveSelector(ctx context.Context, query *arkv1alpha1.Query) (*arkv1alpha1.QueryTarget, error) {
 	labelSelector, err := metav1.LabelSelectorAsSelector(query.Spec.Selector)
 	if err != nil {
@@ -459,41 +461,41 @@ func (h *Handler) resolveSelector(ctx context.Context, query *arkv1alpha1.Query)
 		LabelSelector: labelSelector,
 	}
 
-	resourceTypes := []struct {
-		list client.ObjectList
-		typ  string
+	checks := []struct {
+		list    client.ObjectList
+		typ     string
+		getName func() string
 	}{
-		{&arkv1alpha1.AgentList{}, ToolTypeAgent},
-		{&arkv1alpha1.TeamList{}, ToolTypeTeam},
-		{&arkv1alpha1.ModelList{}, "model"},
-		{&arkv1alpha1.ToolList{}, "tool"},
+		{&arkv1alpha1.AgentList{}, ToolTypeAgent, nil},
+		{&arkv1alpha1.TeamList{}, ToolTypeTeam, nil},
+		{&arkv1alpha1.ModelList{}, "model", nil},
+		{&arkv1alpha1.ToolList{}, "tool", nil},
 	}
+	checks[0].getName = func() string { return firstItemName(checks[0].list.(*arkv1alpha1.AgentList).Items) }
+	checks[1].getName = func() string { return firstItemName(checks[1].list.(*arkv1alpha1.TeamList).Items) }
+	checks[2].getName = func() string { return firstItemName(checks[2].list.(*arkv1alpha1.ModelList).Items) }
+	checks[3].getName = func() string { return firstItemName(checks[3].list.(*arkv1alpha1.ToolList).Items) }
 
-	for _, rt := range resourceTypes {
-		if err := h.k8sClient.List(ctx, rt.list, opts); err != nil {
+	for _, c := range checks {
+		if err := h.k8sClient.List(ctx, c.list, opts); err != nil {
 			continue
 		}
-		switch l := rt.list.(type) {
-		case *arkv1alpha1.AgentList:
-			if len(l.Items) > 0 {
-				return &arkv1alpha1.QueryTarget{Type: rt.typ, Name: l.Items[0].Name}, nil
-			}
-		case *arkv1alpha1.TeamList:
-			if len(l.Items) > 0 {
-				return &arkv1alpha1.QueryTarget{Type: rt.typ, Name: l.Items[0].Name}, nil
-			}
-		case *arkv1alpha1.ModelList:
-			if len(l.Items) > 0 {
-				return &arkv1alpha1.QueryTarget{Type: rt.typ, Name: l.Items[0].Name}, nil
-			}
-		case *arkv1alpha1.ToolList:
-			if len(l.Items) > 0 {
-				return &arkv1alpha1.QueryTarget{Type: rt.typ, Name: l.Items[0].Name}, nil
-			}
+		if name := c.getName(); name != "" {
+			return &arkv1alpha1.QueryTarget{Type: c.typ, Name: name}, nil
 		}
 	}
 
 	return nil, fmt.Errorf("no matching resources found for selector")
+}
+
+func firstItemName[T any, PT interface {
+	*T
+	GetName() string
+}](items []T) string {
+	if len(items) > 0 {
+		return PT(&items[0]).GetName()
+	}
+	return ""
 }
 
 // Query extension spec: ark/api/extensions/query/v1/
