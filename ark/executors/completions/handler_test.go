@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/openai/openai-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -369,6 +370,128 @@ func TestResolveQueryAndTarget(t *testing.T) {
 		_, _, err := h.resolveQueryAndTarget(context.Background(), msg)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to extract ark metadata")
+	})
+}
+
+func TestOpenAIToProtocolResponseMessages(t *testing.T) {
+	t.Run("assistant text-only", func(t *testing.T) {
+		msgs := []Message{NewAssistantMessage("hello")}
+		result := openAIToProtocolResponseMessages(msgs)
+		require.Len(t, result, 1)
+		assert.Equal(t, protocol.MessageRoleAgent, result[0].Role)
+		assert.Equal(t, "hello", arka2a.ExtractTextFromParts(result[0].Parts))
+		assert.Empty(t, arka2a.ExtractDataParts(result[0].Parts))
+	})
+
+	t.Run("user message", func(t *testing.T) {
+		msgs := []Message{NewUserMessage("question")}
+		result := openAIToProtocolResponseMessages(msgs)
+		require.Len(t, result, 1)
+		assert.Equal(t, protocol.MessageRoleUser, result[0].Role)
+		assert.Equal(t, "question", arka2a.ExtractTextFromParts(result[0].Parts))
+	})
+
+	t.Run("system message preserved as DataPart", func(t *testing.T) {
+		msgs := []Message{NewSystemMessage("you are helpful")}
+		result := openAIToProtocolResponseMessages(msgs)
+		require.Len(t, result, 1)
+		assert.Equal(t, protocol.MessageRoleAgent, result[0].Role)
+		dps := arka2a.ExtractDataParts(result[0].Parts)
+		require.Len(t, dps, 1)
+		assert.Equal(t, "system", arka2a.DataPartType(dps[0]))
+		assert.Equal(t, "you are helpful", arka2a.DataPartField(dps[0], "content"))
+	})
+
+	t.Run("tool result preserved as DataPart", func(t *testing.T) {
+		msgs := []Message{ToolMessage("72°F sunny", "call-123")}
+		result := openAIToProtocolResponseMessages(msgs)
+		require.Len(t, result, 1)
+		assert.Equal(t, protocol.MessageRoleAgent, result[0].Role)
+		dps := arka2a.ExtractDataParts(result[0].Parts)
+		require.Len(t, dps, 1)
+		assert.Equal(t, "tool_result", arka2a.DataPartType(dps[0]))
+		assert.Equal(t, "call-123", arka2a.DataPartField(dps[0], "tool_call_id"))
+		assert.Equal(t, "72°F sunny", arka2a.DataPartField(dps[0], "content"))
+	})
+
+	t.Run("assistant with tool calls produces TextPart + DataParts", func(t *testing.T) {
+		assistant := openai.ChatCompletionAssistantMessageParam{
+			Content: openai.ChatCompletionAssistantMessageParamContentUnion{
+				OfString: openai.Opt("I'll check the weather"),
+			},
+			ToolCalls: []openai.ChatCompletionMessageToolCallParam{
+				{
+					ID: "tc-1",
+					Function: openai.ChatCompletionMessageToolCallFunctionParam{
+						Name:      "weather_api",
+						Arguments: `{"city":"NYC"}`,
+					},
+				},
+			},
+		}
+		msgs := []Message{{OfAssistant: &assistant}}
+		result := openAIToProtocolResponseMessages(msgs)
+		require.Len(t, result, 1)
+
+		text := arka2a.ExtractTextFromParts(result[0].Parts)
+		assert.Equal(t, "I'll check the weather", text)
+
+		dps := arka2a.ExtractDataParts(result[0].Parts)
+		require.Len(t, dps, 1)
+		assert.Equal(t, "tool_call", arka2a.DataPartType(dps[0]))
+		assert.Equal(t, "tc-1", arka2a.DataPartField(dps[0], "id"))
+
+		fn := arka2a.DataPartMap(dps[0], "function")
+		require.NotNil(t, fn)
+		assert.Equal(t, "weather_api", fn["name"])
+		assert.Equal(t, `{"city":"NYC"}`, fn["arguments"])
+	})
+
+	t.Run("function result preserved as DataPart", func(t *testing.T) {
+		fn := openai.ChatCompletionFunctionMessageParam{ //nolint:staticcheck // testing deprecated type handling
+			Name:    "my_func",
+			Content: openai.Opt("result data"),
+		}
+		msgs := []Message{{OfFunction: &fn}}
+		result := openAIToProtocolResponseMessages(msgs)
+		require.Len(t, result, 1)
+		dps := arka2a.ExtractDataParts(result[0].Parts)
+		require.Len(t, dps, 1)
+		assert.Equal(t, "function_result", arka2a.DataPartType(dps[0]))
+		assert.Equal(t, "my_func", arka2a.DataPartField(dps[0], "name"))
+		assert.Equal(t, "result data", arka2a.DataPartField(dps[0], "content"))
+	})
+
+	t.Run("mixed message sequence preserves all types", func(t *testing.T) {
+		assistant := openai.ChatCompletionAssistantMessageParam{
+			Content: openai.ChatCompletionAssistantMessageParamContentUnion{
+				OfString: openai.Opt("Let me look that up"),
+			},
+			ToolCalls: []openai.ChatCompletionMessageToolCallParam{
+				{
+					ID: "tc-abc",
+					Function: openai.ChatCompletionMessageToolCallFunctionParam{
+						Name:      "search",
+						Arguments: `{"q":"test"}`,
+					},
+				},
+			},
+		}
+		msgs := []Message{
+			NewSystemMessage("system prompt"),
+			NewUserMessage("question"),
+			{OfAssistant: &assistant},
+			ToolMessage("search result", "tc-abc"),
+			NewAssistantMessage("Here is the answer"),
+		}
+		result := openAIToProtocolResponseMessages(msgs)
+		require.Len(t, result, 5)
+
+		assert.Equal(t, "system", arka2a.DataPartType(arka2a.ExtractDataParts(result[0].Parts)[0]))
+		assert.Equal(t, protocol.MessageRoleUser, result[1].Role)
+		assert.Equal(t, "tool_call", arka2a.DataPartType(arka2a.ExtractDataParts(result[2].Parts)[0]))
+		assert.Equal(t, "tool_result", arka2a.DataPartType(arka2a.ExtractDataParts(result[3].Parts)[0]))
+		assert.Equal(t, "Here is the answer", arka2a.ExtractTextFromParts(result[4].Parts))
 	})
 }
 

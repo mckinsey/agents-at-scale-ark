@@ -272,3 +272,74 @@ func TestGetExecutionContextExtension(t *testing.T) {
 		}
 	})
 }
+
+func TestExtractDataParts(t *testing.T) {
+	t.Run("extracts DataParts from mixed parts", func(t *testing.T) {
+		parts := []protocol.Part{
+			protocol.NewTextPart("hello"),
+			protocol.DataPart{Kind: "data", Data: map[string]any{"type": "tool_call"}},
+			protocol.NewTextPart("world"),
+			protocol.DataPart{Kind: "data", Data: map[string]any{"type": "tool_result"}},
+		}
+		dps := ExtractDataParts(parts)
+		if len(dps) != 2 {
+			t.Fatalf("expected 2 DataParts, got %d", len(dps))
+		}
+	})
+
+	t.Run("returns nil for text-only parts", func(t *testing.T) {
+		parts := []protocol.Part{
+			protocol.NewTextPart("hello"),
+		}
+		dps := ExtractDataParts(parts)
+		if dps != nil {
+			t.Fatalf("expected nil, got %v", dps)
+		}
+	})
+
+	t.Run("handles pointer DataParts", func(t *testing.T) {
+		dp := &protocol.DataPart{Kind: "data", Data: map[string]any{"type": "system"}}
+		parts := []protocol.Part{dp}
+		dps := ExtractDataParts(parts)
+		if len(dps) != 1 {
+			t.Fatalf("expected 1 DataPart, got %d", len(dps))
+		}
+	})
+}
+
+func TestDataPartType(t *testing.T) {
+	dp := protocol.DataPart{Data: map[string]any{"type": "tool_call", "id": "tc-1"}}
+	if DataPartType(dp) != "tool_call" {
+		t.Fatalf("expected tool_call, got %s", DataPartType(dp))
+	}
+}
+
+func TestDataPartField(t *testing.T) {
+	dp := protocol.DataPart{Data: map[string]any{"type": "tool_result", "tool_call_id": "tc-1", "content": "result"}}
+	if DataPartField(dp, "tool_call_id") != "tc-1" {
+		t.Fatalf("expected tc-1, got %s", DataPartField(dp, "tool_call_id"))
+	}
+	if DataPartField(dp, "content") != "result" {
+		t.Fatalf("expected result, got %s", DataPartField(dp, "content"))
+	}
+	if DataPartField(dp, "missing") != "" {
+		t.Fatal("expected empty string for missing key")
+	}
+}
+
+func TestDataPartMap(t *testing.T) {
+	dp := protocol.DataPart{Data: map[string]any{
+		"type":     "tool_call",
+		"function": map[string]any{"name": "weather", "arguments": `{"city":"NYC"}`},
+	}}
+	fn := DataPartMap(dp, "function")
+	if fn == nil {
+		t.Fatal("expected non-nil function map")
+	}
+	if fn["name"] != "weather" {
+		t.Fatalf("expected weather, got %v", fn["name"])
+	}
+	if DataPartMap(dp, "missing") != nil {
+		t.Fatal("expected nil for missing key")
+	}
+}

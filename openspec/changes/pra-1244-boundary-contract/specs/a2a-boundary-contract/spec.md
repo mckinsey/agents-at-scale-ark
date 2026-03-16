@@ -36,12 +36,42 @@ The handler SHALL write a versioned protocol-native response field (`responseMes
 - **THEN** `SetExecutionContextExtension` SHALL be used to add the extension URI to `Message.extensions` and the payload to `Message.metadata`
 - **AND** `SetMetadata` SHALL be used for the legacy `ArkMetadataKey` (NOT added to `Message.extensions`)
 
-### Requirement: Three-tier extraction precedence in controller
-The controller SHALL extract response metadata using a three-tier precedence: protocol-native field first, legacy messages second, assistant-text fallback third.
+### Requirement: Full-fidelity protocol conversion using DataParts
+The handler SHALL convert OpenAI message types to protocol messages with DataParts that preserve all structured execution data.
 
-#### Scenario: Controller extracts protocol-native responseMessagesV1
-- **WHEN** the response metadata under `ExecutionContextExtensionURI` contains a `responseMessagesV1` field
-- **THEN** the controller SHALL use the protocol-native messages to derive `response.raw` and SHALL NOT use legacy `messages`
+#### Scenario: Tool calls preserved as DataParts
+- **WHEN** an assistant message contains tool calls
+- **THEN** each tool call SHALL be represented as a `DataPart` with `data.type = "tool_call"`, `data.id`, and `data.function` containing name and arguments
+
+#### Scenario: Tool results preserved as DataParts
+- **WHEN** a tool message is converted
+- **THEN** it SHALL be represented as a `DataPart` with `data.type = "tool_result"`, `data.tool_call_id`, and `data.content`
+
+#### Scenario: System messages preserved as DataParts
+- **WHEN** a system message is converted
+- **THEN** it SHALL be represented as a `DataPart` with `data.type = "system"` and `data.content` (NOT silently dropped)
+
+#### Scenario: Function results preserved as DataParts
+- **WHEN** a function message is converted
+- **THEN** it SHALL be represented as a `DataPart` with `data.type = "function_result"`, `data.name`, and `data.content`
+
+### Requirement: DataPart extraction helpers
+Ark SHALL provide reusable helpers for consuming DataParts from protocol messages.
+
+#### Scenario: ExtractDataParts filters mixed parts
+- **WHEN** `ExtractDataParts(parts)` is called on a slice containing both TextParts and DataParts
+- **THEN** only the DataParts SHALL be returned
+
+#### Scenario: DataPartType reads the type field
+- **WHEN** `DataPartType(dp)` is called on a DataPart with `data.type = "tool_call"`
+- **THEN** it SHALL return `"tool_call"`
+
+### Requirement: Protocol-first extraction precedence in controller
+The controller SHALL extract response metadata preferring `responseMessagesV1` first, legacy `messages` second, assistant-text fallback third.
+
+#### Scenario: Controller prefers protocol-native responseMessagesV1
+- **WHEN** the response metadata contains both `responseMessagesV1` and legacy `messages`
+- **THEN** the controller SHALL use `responseMessagesV1` to derive `response.raw`
 
 #### Scenario: Controller falls back to legacy messages
 - **WHEN** the response metadata does not contain `responseMessagesV1` but contains a legacy `messages` field
@@ -50,6 +80,21 @@ The controller SHALL extract response metadata using a three-tier precedence: pr
 #### Scenario: Controller falls back to assistant text
 - **WHEN** the response metadata contains neither `responseMessagesV1` nor legacy `messages`
 - **THEN** the controller SHALL construct a single-element assistant message array from the response text for `response.raw`
+
+### Requirement: Full-fidelity protocol-to-raw reconstruction
+The controller SHALL reconstruct OpenAI-compatible JSON from protocol messages by mapping DataParts back to their original role and structure.
+
+#### Scenario: Tool call DataParts reconstruct to assistant with tool_calls
+- **WHEN** a protocol message contains `DataPart` with `data.type = "tool_call"`
+- **THEN** `response.raw` SHALL contain `{"role":"assistant","tool_calls":[...]}`
+
+#### Scenario: Tool result DataParts reconstruct to tool role
+- **WHEN** a protocol message contains `DataPart` with `data.type = "tool_result"`
+- **THEN** `response.raw` SHALL contain `{"role":"tool","tool_call_id":"...","content":"..."}`
+
+#### Scenario: System DataParts reconstruct to system role
+- **WHEN** a protocol message contains `DataPart` with `data.type = "system"`
+- **THEN** `response.raw` SHALL contain `{"role":"system","content":"..."}`
 
 ### Requirement: Extension URI declaration on outbound controller messages
 The controller SHALL use `SetExtension` to declare `ExecutionContextExtensionURI` on all outbound messages to execution engines, and `SetMetadata` for legacy `ArkMetadataKey`.

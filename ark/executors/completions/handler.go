@@ -304,23 +304,87 @@ func openAIToProtocolResponseMessages(messages []Message) []protocol.Message {
 	for _, msg := range messages {
 		switch {
 		case msg.OfAssistant != nil:
-			pm := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
-				protocol.NewTextPart(msg.OfAssistant.Content.OfString.Value),
-			})
-			result = append(result, pm)
+			result = append(result, convertAssistantMessage(msg.OfAssistant))
 		case msg.OfUser != nil:
 			pm := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
 				protocol.NewTextPart(msg.OfUser.Content.OfString.Value),
 			})
 			result = append(result, pm)
 		case msg.OfTool != nil:
-			pm := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
-				protocol.NewTextPart(msg.OfTool.Content.OfString.Value),
-			})
-			result = append(result, pm)
+			result = append(result, convertToolMessage(msg.OfTool))
+		case msg.OfSystem != nil:
+			result = append(result, convertSystemMessage(msg.OfSystem))
+		case msg.OfFunction != nil:
+			result = append(result, convertFunctionMessage(msg.OfFunction))
 		}
 	}
 	return result
+}
+
+func convertAssistantMessage(m *openai.ChatCompletionAssistantMessageParam) protocol.Message {
+	parts := make([]protocol.Part, 0, 1+len(m.ToolCalls))
+	if content := m.Content.OfString.Value; content != "" {
+		parts = append(parts, protocol.NewTextPart(content))
+	}
+	for _, tc := range m.ToolCalls {
+		parts = append(parts, protocol.DataPart{
+			Kind: "data",
+			Data: map[string]any{
+				"type": "tool_call",
+				"id":   tc.ID,
+				"function": map[string]any{
+					"name":      tc.Function.Name,
+					"arguments": tc.Function.Arguments,
+				},
+			},
+			Metadata: map[string]any{"mediaType": "application/json"},
+		})
+	}
+	if len(parts) == 0 {
+		parts = append(parts, protocol.NewTextPart(""))
+	}
+	return protocol.NewMessage(protocol.MessageRoleAgent, parts)
+}
+
+func convertToolMessage(m *openai.ChatCompletionToolMessageParam) protocol.Message {
+	return protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.DataPart{
+			Kind: "data",
+			Data: map[string]any{
+				"type":         "tool_result",
+				"tool_call_id": m.ToolCallID,
+				"content":      m.Content.OfString.Value,
+			},
+			Metadata: map[string]any{"mediaType": "application/json"},
+		},
+	})
+}
+
+func convertSystemMessage(m *openai.ChatCompletionSystemMessageParam) protocol.Message {
+	return protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.DataPart{
+			Kind: "data",
+			Data: map[string]any{
+				"type":    "system",
+				"content": m.Content.OfString.Value,
+			},
+			Metadata: map[string]any{"mediaType": "application/json"},
+		},
+	})
+}
+
+func convertFunctionMessage(m *openai.ChatCompletionFunctionMessageParam) protocol.Message { //nolint:staticcheck // intentionally handles deprecated type for backward compat
+	return protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+		protocol.DataPart{
+			Kind: "data",
+			Data: map[string]any{
+				"type":    "function_result",
+				"name":    m.Name,
+				"content": m.Content.Value,
+			},
+			Metadata: map[string]any{"mediaType": "application/json"},
+		},
+	})
 }
 
 func (h *Handler) executeMember(ctx context.Context, state *executionState) (*ExecutionResult, []Message, error) {

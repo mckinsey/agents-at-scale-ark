@@ -239,8 +239,8 @@ var _ = Describe("Query Controller Message Serialization", func() {
 })
 
 var _ = Describe("extractEngineResponseMeta", func() {
-	Context("three-tier extraction precedence", func() {
-		It("should prefer legacy messages for response.raw when both fields are present", func() {
+	Context("protocol-first extraction precedence", func() {
+		It("should prefer responseMessagesV1 when both fields are present", func() {
 			protoMsgs := []protocol.Message{
 				protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
 					protocol.NewTextPart("protocol answer"),
@@ -265,36 +265,28 @@ var _ = Describe("extractEngineResponseMeta", func() {
 			meta := extractEngineResponseMeta(msgResult)
 
 			Expect(meta.ConversationId).To(Equal("conv-123"))
-			Expect(meta.ProtocolNative).To(BeFalse())
-			Expect(meta.MessagesRaw).To(ContainSubstring("legacy with role info"))
+			Expect(meta.ProtocolNative).To(BeTrue())
+			Expect(meta.MessagesRaw).To(ContainSubstring("protocol answer"))
 		})
 
-		It("should fall back to responseMessagesV1 when legacy messages is absent", func() {
-			protoMsgs := []protocol.Message{
-				protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
-					protocol.NewTextPart("protocol only"),
-				}),
-			}
-			protoBytes, err := json.Marshal(protoMsgs)
-			Expect(err).NotTo(HaveOccurred())
-
+		It("should fall back to legacy messages when responseMessagesV1 is absent", func() {
 			responseMsg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
 				protocol.NewTextPart("hello"),
 			})
 			responseMsg.Extensions = []string{arka2a.ExecutionContextExtensionURI}
 			responseMsg.Metadata = map[string]any{
 				arka2a.ExecutionContextExtensionURI: map[string]any{
-					"conversationId":     "conv-proto",
-					"responseMessagesV1": json.RawMessage(protoBytes),
+					"conversationId": "conv-legacy",
+					"messages":       json.RawMessage(`[{"role":"assistant","content":"legacy only"}]`),
 				},
 			}
 
 			msgResult := &protocol.MessageResult{Result: &responseMsg}
 			meta := extractEngineResponseMeta(msgResult)
 
-			Expect(meta.ConversationId).To(Equal("conv-proto"))
-			Expect(meta.ProtocolNative).To(BeTrue())
-			Expect(meta.MessagesRaw).To(ContainSubstring("protocol only"))
+			Expect(meta.ConversationId).To(Equal("conv-legacy"))
+			Expect(meta.ProtocolNative).To(BeFalse())
+			Expect(meta.MessagesRaw).To(ContainSubstring("legacy only"))
 		})
 
 		It("should fall back to legacy messages when responseMessagesV1 is absent", func() {
@@ -367,7 +359,7 @@ var _ = Describe("extractEngineResponseMeta", func() {
 })
 
 var _ = Describe("protocolMessagesToRawJSON", func() {
-	It("should convert protocol messages to role/content JSON", func() {
+	It("should convert text-only protocol messages to role/content JSON", func() {
 		protoMsgs := []protocol.Message{
 			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
 				protocol.NewTextPart("agent response"),
@@ -384,6 +376,97 @@ var _ = Describe("protocolMessagesToRawJSON", func() {
 		Expect(rawJSON).To(ContainSubstring(`"content":"agent response"`))
 		Expect(rawJSON).To(ContainSubstring(`"role":"user"`))
 		Expect(rawJSON).To(ContainSubstring(`"content":"user input"`))
+	})
+
+	It("should reconstruct tool_call DataParts as assistant with tool_calls", func() {
+		protoMsgs := []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("I'll check"),
+				protocol.DataPart{
+					Kind: "data",
+					Data: map[string]any{
+						"type": "tool_call",
+						"id":   "tc-1",
+						"function": map[string]any{
+							"name":      "weather",
+							"arguments": `{"city":"NYC"}`,
+						},
+					},
+				},
+			}),
+		}
+		data, err := json.Marshal(protoMsgs)
+		Expect(err).NotTo(HaveOccurred())
+
+		rawJSON := protocolMessagesToRawJSON(data)
+		Expect(rawJSON).To(ContainSubstring(`"role":"assistant"`))
+		Expect(rawJSON).To(ContainSubstring(`"tool_calls"`))
+		Expect(rawJSON).To(ContainSubstring(`"tc-1"`))
+		Expect(rawJSON).To(ContainSubstring(`"weather"`))
+	})
+
+	It("should reconstruct tool_result DataParts as tool role messages", func() {
+		protoMsgs := []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.DataPart{
+					Kind: "data",
+					Data: map[string]any{
+						"type":         "tool_result",
+						"tool_call_id": "tc-1",
+						"content":      "72°F sunny",
+					},
+				},
+			}),
+		}
+		data, err := json.Marshal(protoMsgs)
+		Expect(err).NotTo(HaveOccurred())
+
+		rawJSON := protocolMessagesToRawJSON(data)
+		Expect(rawJSON).To(ContainSubstring(`"role":"tool"`))
+		Expect(rawJSON).To(ContainSubstring(`"tool_call_id":"tc-1"`))
+		Expect(rawJSON).To(ContainSubstring(`"content":"72°F sunny"`))
+	})
+
+	It("should reconstruct system DataParts as system role messages", func() {
+		protoMsgs := []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.DataPart{
+					Kind: "data",
+					Data: map[string]any{
+						"type":    "system",
+						"content": "you are helpful",
+					},
+				},
+			}),
+		}
+		data, err := json.Marshal(protoMsgs)
+		Expect(err).NotTo(HaveOccurred())
+
+		rawJSON := protocolMessagesToRawJSON(data)
+		Expect(rawJSON).To(ContainSubstring(`"role":"system"`))
+		Expect(rawJSON).To(ContainSubstring(`"content":"you are helpful"`))
+	})
+
+	It("should reconstruct function_result DataParts as function role messages", func() {
+		protoMsgs := []protocol.Message{
+			protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.DataPart{
+					Kind: "data",
+					Data: map[string]any{
+						"type":    "function_result",
+						"name":    "my_func",
+						"content": "result",
+					},
+				},
+			}),
+		}
+		data, err := json.Marshal(protoMsgs)
+		Expect(err).NotTo(HaveOccurred())
+
+		rawJSON := protocolMessagesToRawJSON(data)
+		Expect(rawJSON).To(ContainSubstring(`"role":"function"`))
+		Expect(rawJSON).To(ContainSubstring(`"name":"my_func"`))
+		Expect(rawJSON).To(ContainSubstring(`"content":"result"`))
 	})
 
 	It("should return empty string for empty data", func() {

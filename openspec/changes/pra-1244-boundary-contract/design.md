@@ -81,18 +81,50 @@ type ResponseTokenUsage struct {
 1. `arka2a.SetExtension(msg, ExecutionContextExtensionURI, arkMetadata)` for the spec-compliant extension.
 2. `arka2a.SetMetadata(msg, ArkMetadataKey, arkMetadata)` for legacy backward compat.
 
+## DataPart Helpers
+
+New helpers in `ark/internal/a2a/extensions.go` for consuming structured protocol data:
+
+```go
+func ExtractDataParts(parts []protocol.Part) []protocol.DataPart
+func DataPartType(dp protocol.DataPart) string
+func DataPartField(dp protocol.DataPart, key string) string
+func DataPartMap(dp protocol.DataPart, key string) map[string]any
+```
+
+## Full-Fidelity Protocol Conversion
+
+`openAIToProtocolResponseMessages()` maps each OpenAI message to a `protocol.Message` with DataParts:
+
+| OpenAI type | Protocol representation |
+|---|---|
+| `OfAssistant` (text only) | `role: agent`, `TextPart` |
+| `OfAssistant` (with tool calls) | `role: agent`, `TextPart` + `DataPart` per call (`{type:tool_call, id, function:{name, arguments}}`) |
+| `OfUser` | `role: user`, `TextPart` |
+| `OfTool` | `role: agent`, `DataPart{type:tool_result, tool_call_id, content}` |
+| `OfSystem` | `role: agent`, `DataPart{type:system, content}` |
+| `OfFunction` | `role: agent`, `DataPart{type:function_result, name, content}` |
+
 ## Controller Extraction Path
 
-`extractEngineResponseMeta()` three-tier precedence:
+`extractEngineResponseMeta()` protocol-first precedence:
 
 1. `arka2a.GetExtension(msg, ExecutionContextExtensionURI)` as primary, falls back to `arka2a.GetMetadata(msg, ArkMetadataKey)`.
-2. Within the metadata map, check for `responseMessagesV1` -- if present, unmarshal as `[]protocol.Message` and convert to `response.raw` compatible JSON.
+2. Within the metadata map, prefer `responseMessagesV1` -- if present, unmarshal as `[]protocol.Message` and convert to `response.raw` compatible JSON via `protocolMessagesToRawJSON`.
 3. If `responseMessagesV1` is absent, fall back to legacy `messages` field.
 4. If neither is present, caller constructs a single assistant message from response text.
 
 ## Protocol-to-Raw Conversion
 
-A helper converts `[]protocol.Message` to the JSON shape expected by `response.raw` (and the dashboard). For each protocol message, extract `role` and text content from parts to produce `[{"role":"assistant","content":"..."}]` compatible JSON.
+`protocolMessagesToRawJSON()` reconstructs full OpenAI-compatible JSON from DataParts:
+
+| DataPart type | Reconstructed JSON |
+|---|---|
+| (text only, no DataParts) | `{"role":"assistant\|user","content":"..."}` |
+| `tool_call` | `{"role":"assistant","content":"...","tool_calls":[{"id":"...","type":"function","function":{"name":"...","arguments":"..."}}]}` |
+| `tool_result` | `{"role":"tool","tool_call_id":"...","content":"..."}` |
+| `system` | `{"role":"system","content":"..."}` |
+| `function_result` | `{"role":"function","name":"...","content":"..."}` |
 
 ## Wire Format Example
 

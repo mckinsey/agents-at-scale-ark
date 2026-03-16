@@ -89,3 +89,45 @@ func GetExecutionContextExtension(m protocol.Message) (*ExecutionResponsePayload
 	}
 	return &result, nil
 }
+
+func ExtractDataParts(parts []protocol.Part) []protocol.DataPart {
+	var result []protocol.DataPart
+	for _, part := range parts {
+		switch dp := part.(type) {
+		case protocol.DataPart:
+			result = append(result, dp)
+		case *protocol.DataPart:
+			if dp != nil {
+				result = append(result, *dp)
+			}
+		}
+	}
+	return result
+}
+
+func DataPartType(dp protocol.DataPart) string {
+	m, ok := dp.Data.(map[string]any)
+	if !ok {
+		return ""
+	}
+	t, _ := m["type"].(string)
+	return t
+}
+
+func DataPartField(dp protocol.DataPart, key string) string {
+	m, ok := dp.Data.(map[string]any)
+	if !ok {
+		return ""
+	}
+	v, _ := m[key].(string)
+	return v
+}
+
+func DataPartMap(dp protocol.DataPart, key string) map[string]any {
+	m, ok := dp.Data.(map[string]any)
+	if !ok {
+		return nil
+	}
+	sub, _ := m[key].(map[string]any)
+	return sub
+}
