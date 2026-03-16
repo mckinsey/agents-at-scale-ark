@@ -64,7 +64,14 @@ class SecretsPage(BasePage):
                 pass
         self.page.keyboard.press("Escape")
     
+    def _goto_secrets(self) -> None:
+        self.page.goto("http://localhost:3274/secrets")
+        self.wait_for_navigation_complete()
+        self.wait_for_element(self.ADD_SECRET_BUTTON, timeout=10000)
+        self.wait_for_element_hidden(self.LOADING_INDICATOR, timeout=10000)
+
     def is_secret_in_table(self, secret_name: str, retries: int = 3) -> bool:
+        self._goto_secrets()
         for attempt in range(retries):
             try:
                 self.page.get_by_text(secret_name, exact=False).first.wait_for(state="visible", timeout=15000)
@@ -73,10 +80,7 @@ class SecretsPage(BasePage):
                 logger.info(f"Secret {secret_name} not visible on attempt {attempt + 1}/{retries}: {e}")
                 if attempt < retries - 1:
                     logger.info(f"Secret {secret_name} not found, retrying ({attempt + 1}/{retries})...")
-                    self.page.reload()
-                    self.wait_for_navigation_complete()
-                    self.wait_for_element(self.ADD_SECRET_BUTTON, timeout=10000)
-                    self.wait_for_element_hidden(self.LOADING_INDICATOR, timeout=10000)
+                    self._goto_secrets()
         return False
     
     def create_secret_with_verification(self, prefix: str, env_key: str) -> dict:
@@ -87,34 +91,47 @@ class SecretsPage(BasePage):
         logger.info(f"Secret value length: {len(secret_value)}")
         
         self.page.locator(self.ADD_SECRET_BUTTON).first.click()
-        
-        inputs = self.page.locator("[role='dialog'] input:visible, [data-slot='dialog-content'] input:visible")
-        inputs.first.wait_for(state="visible", timeout=10000)
-        
-        input_count = inputs.count()
-        logger.info(f"Found {input_count} inputs in dialog")
-        
-        if input_count >= 2:
-            inputs.nth(0).fill(secret_name)
-            inputs.nth(1).fill(secret_value)
-        else:
-            inputs.first.fill(secret_name)
-            textarea = self.page.locator("[role='dialog'] textarea:visible").first
-            if textarea.is_visible():
-                textarea.fill(secret_value)
-        
-        save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
-        save_button.wait_for(state="visible", timeout=5000)
-        save_button.click(force=True)
-        
-        self.wait_for_modal_close()
         self.wait_for_load_state("domcontentloaded")
+        self.page.locator("input").first.wait_for(state="visible", timeout=10000)
+        
+        current_url = self.page.url
+        logger.info(f"URL after clicking Add Secret: {current_url}")
+        
+        dialog_scope = "[role='dialog']" if "/secrets/new" not in current_url else "main, form"
+        logger.info(f"Using dialog scope: {dialog_scope}")
+        
+        name_input = self.page.locator(f"{dialog_scope} input:not([type='password'])").first
+        name_input.wait_for(state="visible", timeout=10000)
+        
+        password_input = self.page.locator(f"{dialog_scope} input[type='password']").first
+        password_input.wait_for(state="visible", timeout=10000)
+        
+        logger.info(f"Filling name field with: {secret_name}")
+        name_input.fill(secret_name)
+        
+        logger.info("Filling password field")
+        password_input.fill(secret_value)
+        
+        logger.info(f"Form filled - name={secret_name}, password_len={len(secret_value)}")
+        
+        save_selector = f"{dialog_scope} button[type='submit']"
+        
+        save_btn = self.page.locator(save_selector).first
+        save_btn.wait_for(state="visible", timeout=5000)
+        logger.info(f"Clicking save button (disabled={save_btn.get_attribute('disabled')})")
+        save_btn.click()
+        self.page.wait_for_timeout(2000)
+        logger.info(f"URL after save: {self.page.url}, dialog visible: {self.is_visible('[role=dialog]')}")
         
         try:
             self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
             popup_visible = True
-        except:
+            logger.info("Success popup appeared after secret creation")
+        except Exception:
             popup_visible = False
+            logger.info("No success popup detected")
+        
+        self.wait_for_modal_close()
         
         self.navigate_to_secrets_tab()
         in_table = self.is_secret_in_table(secret_name)
