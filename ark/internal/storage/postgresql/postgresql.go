@@ -129,6 +129,7 @@ func (p *PostgreSQLBackend) initSchema() error {
 		UNIQUE(kind, namespace, name)
 	);
 	ALTER TABLE resources ADD COLUMN IF NOT EXISTS finalizers JSONB DEFAULT '[]';
+	ALTER TABLE resources ADD COLUMN IF NOT EXISTS owner_references JSONB DEFAULT '[]';
 
 	CREATE INDEX IF NOT EXISTS idx_resources_kind_namespace ON resources(kind, namespace);
 	CREATE INDEX IF NOT EXISTS idx_resources_kind_namespace_name ON resources(kind, namespace, name);
@@ -253,10 +254,11 @@ func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name st
 
 	var resource struct {
 		Metadata struct {
-			UID         string            `json:"uid"`
-			Labels      map[string]string `json:"labels"`
-			Annotations map[string]string `json:"annotations"`
-			Finalizers  []string          `json:"finalizers"`
+			UID             string            `json:"uid"`
+			Labels          map[string]string `json:"labels"`
+			Annotations     map[string]string `json:"annotations"`
+			Finalizers      []string          `json:"finalizers"`
+			OwnerReferences json.RawMessage   `json:"ownerReferences"`
 		} `json:"metadata"`
 		Spec   json.RawMessage `json:"spec"`
 		Status json.RawMessage `json:"status"`
@@ -278,6 +280,10 @@ func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name st
 	labelsJSON, _ := json.Marshal(resource.Metadata.Labels)
 	annotationsJSON, _ := json.Marshal(resource.Metadata.Annotations)
 	finalizersJSON, _ := json.Marshal(resource.Metadata.Finalizers)
+	ownerRefsJSON := string(resource.Metadata.OwnerReferences)
+	if ownerRefsJSON == "" || ownerRefsJSON == jsonNull {
+		ownerRefsJSON = "[]"
+	}
 
 	specJSON := string(resource.Spec)
 	if specJSON == "" || specJSON == jsonNull {
@@ -289,9 +295,9 @@ func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name st
 	}
 
 	_, err = p.db.ExecContext(ctx, `
-		INSERT INTO resources (kind, namespace, name, uid, spec, status, labels, annotations, finalizers)
-		VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb)
-	`, kind, namespace, name, resource.Metadata.UID, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON))
+		INSERT INTO resources (kind, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references)
+		VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb)
+	`, kind, namespace, name, resource.Metadata.UID, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON)
 	if err != nil {
 		return fmt.Errorf("failed to insert resource: %w", err)
 	}
@@ -301,28 +307,28 @@ func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name st
 
 func (p *PostgreSQLBackend) Get(ctx context.Context, kind, namespace, name string) (runtime.Object, error) {
 	row := p.db.QueryRowContext(ctx, `
-		SELECT resource_version, generation, uid, spec, status, labels, annotations, finalizers, created_at, updated_at
+		SELECT resource_version, generation, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, updated_at
 		FROM resources
 		WHERE kind = $1 AND namespace = $2 AND name = $3	`, kind, namespace, name)
 
 	var rv, generation int64
 	var uid string
-	var spec, status, labels, annotations, finalizers []byte
+	var spec, status, labels, annotations, finalizers, ownerRefs []byte
 	var createdAt, updatedAt time.Time
 
-	if err := row.Scan(&rv, &generation, &uid, &spec, &status, &labels, &annotations, &finalizers, &createdAt, &updatedAt); err != nil {
+	if err := row.Scan(&rv, &generation, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &updatedAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("not found")
 		}
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
 
-	return p.reconstructObject(kind, namespace, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), createdAt)
+	return p.reconstructObject(kind, namespace, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt)
 }
 
 func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, opts storage.ListOptions) ([]runtime.Object, string, error) {
 	query := `
-		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, created_at
+		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at
 		FROM resources
 		WHERE kind = $1	`
 	args := []interface{}{kind}
@@ -362,14 +368,14 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 	for rows.Next() {
 		var rv, generation int64
 		var ns, name, uid string
-		var spec, status, labels, annotations, finalizers []byte
+		var spec, status, labels, annotations, finalizers, ownerRefs []byte
 		var createdAt time.Time
 
-		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &createdAt); err != nil {
+		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt); err != nil {
 			return nil, "", fmt.Errorf("failed to scan row: %w", err)
 		}
 
-		obj, err := p.reconstructObject(kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), createdAt)
+		obj, err := p.reconstructObject(kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt)
 		if err != nil {
 			klog.Warningf("Failed to reconstruct object %s/%s: %v", ns, name, err)
 			continue
@@ -401,6 +407,7 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 			Labels          map[string]string `json:"labels"`
 			Annotations     map[string]string `json:"annotations"`
 			Finalizers      []string          `json:"finalizers"`
+			OwnerReferences json.RawMessage   `json:"ownerReferences"`
 		} `json:"metadata"`
 		Spec   json.RawMessage `json:"spec"`
 		Status json.RawMessage `json:"status"`
@@ -422,6 +429,10 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 	labelsJSON, _ := json.Marshal(resource.Metadata.Labels)
 	annotationsJSON, _ := json.Marshal(resource.Metadata.Annotations)
 	finalizersJSON, _ := json.Marshal(resource.Metadata.Finalizers)
+	ownerRefsJSON := string(resource.Metadata.OwnerReferences)
+	if ownerRefsJSON == "" || ownerRefsJSON == jsonNull {
+		ownerRefsJSON = "[]"
+	}
 
 	specJSON := string(resource.Spec)
 	if specJSON == "" || specJSON == jsonNull {
@@ -446,13 +457,14 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 		WITH upd AS (
 			UPDATE resources
 			SET spec = $1::jsonb, status = $2::jsonb, labels = $3::jsonb, annotations = $4::jsonb,
-			    finalizers = $5::jsonb, generation = generation + 1, resource_version = resource_version + 1, updated_at = NOW()
-			WHERE kind = $6 AND namespace = $7 AND name = $8 AND resource_version = $9			RETURNING 1
+			    finalizers = $5::jsonb, owner_references = $6::jsonb,
+			    generation = generation + 1, resource_version = resource_version + 1, updated_at = NOW()
+			WHERE kind = $7 AND namespace = $8 AND name = $9 AND resource_version = $10			RETURNING 1
 		)
 		SELECT
 			(SELECT COUNT(*) > 0 FROM upd) as updated,
-			(SELECT COUNT(*) > 0 FROM resources WHERE kind = $6 AND namespace = $7 AND name = $8 AND deleted_at IS NULL) as exists
-	`, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), kind, namespace, name, rv).Scan(&updated, &exists)
+			(SELECT COUNT(*) > 0 FROM resources WHERE kind = $7 AND namespace = $8 AND name = $9 AND deleted_at IS NULL) as exists
+	`, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON, kind, namespace, name, rv).Scan(&updated, &exists)
 	if err != nil {
 		return fmt.Errorf("failed to update resource: %w", err)
 	}
@@ -583,13 +595,15 @@ func (p *PostgreSQLBackend) Close() error {
 	return p.db.Close()
 }
 
-func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, generation int64, uid, spec, status, labels, annotations, finalizers string, createdAt time.Time) (runtime.Object, error) {
+func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, generation int64, uid, spec, status, labels, annotations, finalizers, ownerRefs string, createdAt time.Time) (runtime.Object, error) {
 	var labelsMap map[string]string
 	var annotationsMap map[string]string
 	var finalizersList []string
+	var ownerRefsList []interface{}
 	_ = json.Unmarshal([]byte(labels), &labelsMap)
 	_ = json.Unmarshal([]byte(annotations), &annotationsMap)
 	_ = json.Unmarshal([]byte(finalizers), &finalizersList)
+	_ = json.Unmarshal([]byte(ownerRefs), &ownerRefsList)
 
 	metadata := map[string]interface{}{
 		"name":              name,
@@ -603,6 +617,9 @@ func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, 
 	}
 	if len(finalizersList) > 0 {
 		metadata["finalizers"] = finalizersList
+	}
+	if len(ownerRefsList) > 0 {
+		metadata["ownerReferences"] = ownerRefsList
 	}
 
 	obj := map[string]interface{}{
