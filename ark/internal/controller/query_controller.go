@@ -469,27 +469,43 @@ func extractArkPayloadMap(result *protocol.MessageResult) map[string]any {
 		return nil
 	}
 
-	arkData, ok := msg.Metadata[arka2a.ExecutionContextExtensionURI]
-	if !ok {
-		arkData, ok = msg.Metadata[arka2a.QueryExtensionMetadataKey]
+	merged := map[string]any{}
+
+	if legacyData, ok := msg.Metadata[arka2a.QueryExtensionMetadataKey]; ok {
+		if m := metadataToMap(legacyData); m != nil {
+			for k, v := range m {
+				merged[k] = v
+			}
+		}
 	}
-	if !ok {
+
+	if extData, ok := msg.Metadata[arka2a.ExecutionContextExtensionURI]; ok {
+		if m := metadataToMap(extData); m != nil {
+			for k, v := range m {
+				merged[k] = v
+			}
+		}
+	}
+
+	if len(merged) == 0 {
 		return nil
 	}
+	return merged
+}
 
-	arkMap, ok := arkData.(map[string]any)
-	if ok {
-		return arkMap
+func metadataToMap(data any) map[string]any {
+	if m, ok := data.(map[string]any); ok {
+		return m
 	}
-
-	rawBytes, err := json.Marshal(arkData)
+	rawBytes, err := json.Marshal(data)
 	if err != nil {
 		return nil
 	}
-	if json.Unmarshal(rawBytes, &arkMap) != nil {
+	var m map[string]any
+	if json.Unmarshal(rawBytes, &m) != nil {
 		return nil
 	}
-	return arkMap
+	return m
 }
 
 func extractResponseMessages(arkMap map[string]any) (raw string, protocolNative bool) {

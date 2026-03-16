@@ -266,6 +266,42 @@ var _ = Describe("extractEngineResponseMeta", func() {
 			Expect(meta.ProtocolNative).To(BeTrue())
 		})
 
+		It("should merge a2a metadata from legacy key when extension key is primary", func() {
+			protoMsgs := []protocol.Message{
+				protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+					protocol.NewTextPart("answer"),
+				}),
+			}
+			protoBytes, err := json.Marshal(protoMsgs)
+			Expect(err).NotTo(HaveOccurred())
+
+			responseMsg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
+				protocol.NewTextPart("hello"),
+			})
+			responseMsg.Metadata = map[string]any{
+				arka2a.QueryExtensionMetadataKey: map[string]any{
+					"conversationId": "conv-legacy",
+					"a2a": map[string]any{
+						"contextId": "ctx-abc",
+						"taskId":    "task-xyz",
+					},
+					"messages": json.RawMessage(`[{"role":"assistant","content":"legacy"}]`),
+				},
+				arka2a.ExecutionContextExtensionURI: map[string]any{
+					"conversationId":     "conv-ext",
+					"responseMessagesV1": json.RawMessage(protoBytes),
+				},
+			}
+
+			result := &protocol.MessageResult{Result: &responseMsg}
+			meta := extractEngineResponseMeta(result)
+
+			Expect(meta.ConversationId).To(Equal("conv-ext"))
+			Expect(meta.A2AContextID).To(Equal("ctx-abc"))
+			Expect(meta.A2ATaskID).To(Equal("task-xyz"))
+			Expect(meta.ProtocolNative).To(BeTrue())
+		})
+
 		It("should fall back to legacy messages when responseMessagesV1 is absent", func() {
 			responseMsg := protocol.NewMessage(protocol.MessageRoleAgent, []protocol.Part{
 				protocol.NewTextPart("hello"),
