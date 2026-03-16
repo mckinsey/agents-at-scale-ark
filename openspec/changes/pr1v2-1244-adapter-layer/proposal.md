@@ -1,28 +1,29 @@
 ## Why
 
-There is no bidirectional conversion layer between `protocol.Message` and OpenAI `ChatCompletionMessageParamUnion`. Each component does ad-hoc conversion, producing inconsistent behavior and duplicated logic.
+PR-A established full-fidelity `OpenAI→Protocol` conversion using DataParts in `handler.go` (`openAIToProtocolResponseMessages`). The reverse direction (`Protocol→OpenAI`) is still ad-hoc: `protocolMessagesToRawJSON` in the controller reconstructs JSON strings but doesn't produce typed OpenAI message unions. The agent execution loop needs typed `Protocol→OpenAI` conversion at the LLM call boundary.
 
 ## What Changes
 
-- Introduce a dedicated adapter module with bidirectional conversion: OpenAI -> ProtocolMessage (after LLM call) and ProtocolMessage -> OpenAI (before LLM call).
-- Each OpenAI message type (assistant, tool, system, user) maps to its own `protocol.Message` with appropriate Parts (TextPart for content, DataPart for tool call structure).
-- Define DataPart schemas for tool calls and tool results.
-- Tests for round-trip fidelity and sequence preservation.
+- Introduce a dedicated adapter module consolidating both conversion directions.
+- Move `openAIToProtocolResponseMessages` (and its helpers) from `handler.go` to the adapter.
+- Add `Protocol→OpenAI` conversion: expand DataParts back to typed `ChatCompletionMessageParamUnion` values for the LLM provider boundary.
+- Round-trip tests proving no information loss through `OpenAI→Protocol→OpenAI`.
 
 ## Prerequisites
 
-- PR-A merged: generic extension helpers (`SetExtension`, `GetExtension`, `SetMetadata`, `GetMetadata`) and extension URI constants available in `ark/internal/a2a/`.
-- The adapter uses `arka2a.SetExtension` when attaching execution-context metadata during conversion, ensuring converted messages are spec-compliant from creation.
+- PR-A merged: generic extension helpers, DataPart helpers (`ExtractDataParts`, `DataPartType`, `DataPartField`, `DataPartMap`), full-fidelity `openAIToProtocolResponseMessages`, and `protocolMessagesToRawJSON` available.
 
 ## Capabilities
 
 ### New Capabilities
-- `protocol-openai-adapter`: Bidirectional conversion between A2A protocol messages and OpenAI message unions with DataPart schemas for tool structures.
+- `protocol-openai-adapter`: Consolidated bidirectional adapter with round-trip fidelity guarantees.
 
 ### Modified Capabilities
+- `a2a-boundary-contract` (PR-A): `openAIToProtocolResponseMessages` relocated to adapter module; handler delegates to adapter.
 
 ## Impact
 
-- `ark/executors/completions/protocol_messages.go` (new)
-- `ark/executors/completions/protocol_messages_test.go` (new)
+- `ark/executors/completions/protocol_messages.go` (new — adapter module)
+- `ark/executors/completions/protocol_messages_test.go` (new — round-trip tests)
+- `ark/executors/completions/handler.go` (modified — delegates to adapter)
 - `ark/executors/completions/types.go`
