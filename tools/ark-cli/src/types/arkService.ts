@@ -8,6 +8,7 @@ export interface ArkService {
   helmReleaseName: string;
   description: string;
   enabled: boolean;
+  mandatory?: boolean;
   category: string;
   namespace?: string;
   chartPath?: string;

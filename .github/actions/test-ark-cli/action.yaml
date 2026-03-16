@@ -120,6 +120,13 @@ runs:
           --set controllerManager.container.image.pullPolicy=Always \
           --wait --timeout=5m
 
+        helm upgrade --install ark-completions ark/executors/completions/chart \
+          --namespace ark-system \
+          --set image.repository="${{ inputs.ci-cache-registry }}/ark-completions" \
+          --set image.tag="${{ inputs.ark-image-tag }}" \
+          --set image.pullPolicy=Always \
+          --wait --timeout=5m
+
         # Install ark-tenant from local chart
         helm upgrade --install ark-tenant charts/ark-tenant \
           --namespace default \

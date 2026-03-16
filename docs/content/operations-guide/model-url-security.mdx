@@ -1,0 +1,425 @@
+# Model URL Security
+
+Ark validates all model base URLs to protect against Server-Side Request Forgery (SSRF) attacks. These security checks prevent malicious URLs from accessing internal services, local files, or cloud metadata endpoints.
+
+## Always-On Security Checks
+
+The following validations are always active and cannot be disabled:
+
+### HTTPS Enforcement
+**Protects against:** Credential exposure, man-in-the-middle attacks
+
+All model base URLs must use HTTPS. HTTP connections are rejected to prevent API keys and credentials from being transmitted in plaintext.
+
+```yaml
+# ✅ Valid
+baseUrl: "https://api.openai.com/v1"
+
+# ❌ Rejected
+baseUrl: "http://api.openai.com/v1"
+```
+
+**Exception:** Cluster-internal services (`.svc.cluster.local`) are allowed to use HTTP since they cannot be accessed from outside the cluster. This is primarily used for testing and development with mock services.
+
+```yaml
+# ✅ Valid (cluster-internal)
+baseUrl: "http://mock-openai.default.svc.cluster.local/v1"
+baseUrl: "http://service.namespace.svc.cluster.local:8080/api"
+```
+
+### Scheme Validation
+**Protects against:** Local file access, code injection
+
+Only network protocols (HTTPS) are allowed. File access and script execution schemes are blocked.
+
+```yaml
+# ❌ Rejected
+baseUrl: "file:///etc/passwd"
+baseUrl: "ftp://internal.server/data"
+baseUrl: "javascript:alert(1)"
+```
+
+### Loopback Address Blocking
+**Protects against:** Localhost exploitation, internal service access
+
+Loopback addresses (127.0.0.1, ::1) are blocked to prevent access to services running on the same host as the controller.
+
+```yaml
+# ❌ Rejected
+baseUrl: "https://127.0.0.1:8080/v1"
+baseUrl: "https://localhost/v1"
+baseUrl: "https://[::1]/api"
+```
+
+### Private IP Blocking
+**Protects against:** Internal network scanning, unauthorized access to private services
+
+Private IP ranges (RFC 1918) are blocked by default to prevent access to internal network resources.
+
+```yaml
+# ❌ Rejected (private IPs)
+baseUrl: "https://10.0.0.1/v1"
+baseUrl: "https://172.16.5.10/api"
+baseUrl: "https://192.168.1.100/v1"
+```
+
+### Cloud Metadata Service Blocking
+**Protects against:** Cloud credential theft, instance metadata exposure
+
+The link-local range (169.254.0.0/16) used by cloud providers for metadata services is blocked.
+
+```yaml
+# ❌ Rejected (cloud metadata)
+baseUrl: "https://169.254.169.254/latest/meta-data"
+```
+
+## Validation Errors
+
+When a model URL fails validation, you'll see an error message indicating which check failed:
+
+```
+Error: spec.config.openai.baseUrl validation failed: all URLs must use HTTPS; got http://
+Error: spec.config.azure.baseUrl validation failed: loopback IP addresses are not allowed: 127.0.0.1
+Error: spec.config.openai.baseUrl validation failed: private IP addresses are not allowed: 10.0.0.1
+```
+
+## Supported Model URLs
+
+All model base URLs must use HTTPS and resolve to public IP addresses. Common cloud AI providers that work by default:
+
+- **OpenAI**: `api.openai.com`
+- **Azure OpenAI**: `*.openai.azure.com`
+- **Anthropic**: `api.anthropic.com`
+- **Google AI**: `generativelanguage.googleapis.com`, `*.googleapis.com`
+- **AWS Bedrock**: `bedrock-runtime.*.amazonaws.com`
+
+For detailed configuration examples, see the sections below.
+
+## Restricting to Approved Domains (Domain Whitelist)
+
+By default, Ark allows any HTTPS domain. Organizations can enable a domain whitelist to restrict model base URLs to approved providers only.
+
+### When to Use Domain Whitelist
+
+Enable the domain whitelist to:
+- Restrict to approved cloud AI providers only
+- Block unauthorized external services
+- Enforce organizational policies on model endpoints
+- Prevent data exfiltration to untrusted domains
+
+### Enabling the Domain Whitelist
+
+If you installed Ark using `ark install`, follow these steps:
+
+#### Step 1: Enable the domain whitelist
+
+```bash
+# Enable domain whitelist via Helm upgrade
+helm upgrade ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
+  --namespace ark-system \
+  --set modelUrlSecurity.domainWhitelist.enabled=true \
+  --reuse-values
+```
+
+This creates a ConfigMap named `model-url-security` with example domains (commented out).
+
+#### Step 2: Configure allowed domains
+
+Edit the ConfigMap to specify which domains are allowed:
+
+```bash
+kubectl edit configmap model-url-security -n ark-system
+```
+
+Uncomment and add your approved domains:
+
+```yaml
+data:
+  whitelisted-domains: |
+    # Example: Major cloud AI providers
+    api.openai.com
+    api.anthropic.com
+
+    # Example: Internal AI gateway with wildcard
+    *.prod.ai-gateway.company.com
+```
+
+See [Common Configurations](#common-configurations) below for more specific examples (AWS, Azure, GCP, etc.).
+
+#### Step 3: Restart the controller
+
+```bash
+kubectl rollout restart deployment ark-controller -n ark-system
+```
+
+#### Step 4: Verify the configuration
+
+Try creating a model with a non-whitelisted domain to confirm it's blocked:
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: test-blocked
+spec:
+  provider: openai
+  model: gpt-4
+  config:
+    openai:
+      baseUrl:
+        value: "https://unauthorized-service.com/v1"
+      apiKey:
+        value: "test"
+EOF
+```
+
+You should see an error:
+```
+Error: domain not in whitelist: unauthorized-service.com
+```
+
+### Domain Pattern Matching
+
+The whitelist supports multiple patterns:
+
+```yaml
+# Exact domain match
+api.openai.com
+
+# Subdomain match (automatically includes subdomains)
+openai.azure.com          # Matches: my-resource.openai.azure.com
+
+# Wildcard pattern
+*.prod.example.com        # Matches: api.prod.example.com, llm.prod.example.com
+
+# Top-level domain match
+amazonaws.com             # Matches: bedrock-runtime.us-east-1.amazonaws.com
+```
+
+### Common Configurations
+
+#### OpenAI + Anthropic Only
+```yaml
+data:
+  whitelisted-domains: |
+    api.openai.com
+    api.anthropic.com
+```
+
+#### Azure OpenAI Enterprise
+```yaml
+data:
+  whitelisted-domains: |
+    openai.azure.com
+```
+
+#### Multi-Cloud + Internal Gateway
+```yaml
+data:
+  whitelisted-domains: |
+    # Public cloud providers
+    api.openai.com
+    api.anthropic.com
+    generativelanguage.googleapis.com
+
+    # Internal AI gateway
+    *.prod.ai-gateway.company.com
+```
+
+#### AWS Bedrock (Multi-Region)
+```yaml
+data:
+  whitelisted-domains: |
+    # AWS Bedrock endpoints
+    bedrock-runtime.us-east-1.amazonaws.com
+    bedrock-runtime.us-west-2.amazonaws.com
+    bedrock-runtime.eu-west-1.amazonaws.com
+    bedrock-runtime.ap-southeast-1.amazonaws.com
+
+    # Or allow all AWS Bedrock regions
+    amazonaws.com
+```
+
+#### Google Vertex AI
+```yaml
+data:
+  whitelisted-domains: |
+    # Vertex AI endpoints
+    us-central1-aiplatform.googleapis.com
+    europe-west4-aiplatform.googleapis.com
+    asia-southeast1-aiplatform.googleapis.com
+
+    # Or allow all Google AI services
+    googleapis.com
+```
+
+#### Self-Hosted / Custom Gateway
+```yaml
+data:
+  whitelisted-domains: |
+    # Custom domain for self-hosted gateway
+    ai-gateway.company.com
+    llm-proxy.company.com
+
+    # Staging environment
+    ai-gateway.staging.company.com
+
+    # Multiple environments with wildcard
+    *.ai-gateway.company.com
+```
+
+### Disabling the Domain Whitelist
+
+To disable domain restrictions and allow any HTTPS domain again:
+
+```bash
+helm upgrade ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
+  --namespace ark-system \
+  --set modelUrlSecurity.domainWhitelist.enabled=false \
+  --reuse-values
+```
+
+The ConfigMap will be removed automatically, and the controller will allow any HTTPS domain.
+
+## Allowing Internal Endpoints (Private IP Allowlist)
+
+By default, Ark blocks all private IP addresses (RFC 1918 ranges). Organizations with internal model gateways can enable an allowlist to permit specific private IP ranges.
+
+### When to Use Private IP Allowlist
+
+Enable the private IP allowlist to:
+- Connect to internal AI gateway services on private networks
+- Use on-premises model hosting infrastructure
+- Access models deployed in private subnets
+- Integrate with internal proxy servers
+
+### Enabling the Private IP Allowlist
+
+If you installed Ark using `ark install`, follow these steps:
+
+#### Step 1: Enable the private IP allowlist
+
+```bash
+# Enable private IP allowlist via Helm upgrade
+helm upgrade ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
+  --namespace ark-system \
+  --set modelUrlSecurity.privateIPAllowlist.enabled=true \
+  --reuse-values
+```
+
+This creates a ConfigMap named `model-url-security` with example CIDR ranges (commented out).
+
+#### Step 2: Configure allowed IP ranges
+
+Edit the ConfigMap to specify which private IP ranges are allowed:
+
+```bash
+kubectl edit configmap model-url-security -n ark-system
+```
+
+Uncomment and add your approved CIDR ranges:
+
+```yaml
+data:
+  allowed-private-ips: |
+    # Example: Internal AI Gateway subnet
+    10.100.50.0/24
+
+    # Example: Specific gateway server
+    192.168.10.100/32
+```
+
+**Important:** Use CIDR notation (e.g., `10.0.0.0/24` for subnets, `192.168.1.1/32` for single IPs). See [CIDR Notation Examples](#cidr-notation-examples) below for more details.
+
+#### Step 3: Restart the controller
+
+```bash
+kubectl rollout restart deployment ark-controller -n ark-system
+```
+
+#### Step 4: Verify the configuration
+
+Try creating a model with an allowed private IP:
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: internal-gateway
+spec:
+  provider: openai
+  model: gpt-4
+  config:
+    openai:
+      baseUrl:
+        value: "https://10.100.50.10/v1"
+      apiKey:
+        value: "test-key"
+EOF
+```
+
+The model should be created successfully. Try an IP **not** in the allowlist to confirm blocking:
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: blocked-ip
+spec:
+  provider: openai
+  model: gpt-4
+  config:
+    openai:
+      baseUrl:
+        value: "https://192.168.1.1/v1"
+      apiKey:
+        value: "test-key"
+EOF
+```
+
+You should see an error:
+```
+Error: private IP addresses are not allowed: 192.168.1.1
+```
+
+### CIDR Notation Examples
+
+```yaml
+# Single IP address
+192.168.1.100/32
+
+# Small subnet (256 addresses)
+10.100.50.0/24
+
+# Medium subnet (65,536 addresses)
+172.16.0.0/16
+
+# Large subnet (16,777,216 addresses)
+10.0.0.0/8
+```
+
+### Security Considerations
+
+**⚠️ Important Security Notes:**
+
+- **Loopback addresses (127.0.0.0/8) are always blocked** - even if added to the allowlist
+- **Metadata service IPs (169.254.0.0/16) are always blocked** - even if added to the allowlist
+- Only add IP ranges you trust and control
+- Use the smallest CIDR range necessary (prefer `/32` for single hosts, `/24` for small subnets)
+- Regularly audit and review allowed ranges
+
+### Disabling the Private IP Allowlist
+
+To disable and block all private IPs again:
+
+```bash
+helm upgrade ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-controller \
+  --namespace ark-system \
+  --set modelUrlSecurity.privateIPAllowlist.enabled=false \
+  --reuse-values
+```
+
+The ConfigMap will be removed automatically, and the controller will block all private IP addresses.
