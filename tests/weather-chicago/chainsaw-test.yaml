@@ -27,20 +27,32 @@ spec:
           value: ($namespace)
     - apply:
         file: manifests/a00-evaluator-llm-rbac.yaml
+    - assert:
+        resource:
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: RoleBinding
+          metadata:
+            name: evaluator-llm-test-access
+        timeout: 15s
+    - script:
+        content: bash ../helpers/wait-for-rbac.sh evaluator-llm-test-access $NAMESPACE
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        timeout: 30s
     - apply:
         file: manifests/a01-secret.yaml
     - apply:
         file: manifests/a02-model.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          metadata:
-            name: weather-default-model
-          status:
-            conditions:
-            - type: ModelAvailable
-              status: "True"
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: weather-default-model
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True' 
     - assert:
         resource:
           apiVersion: apps/v1
@@ -57,12 +69,14 @@ spec:
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluator
-        timeout: 1m
+        timeout: 3m
         name: evaluator-llm
         for:
           jsonPath:
             path: '{.status.phase}'
             value: 'ready'
+    - script:
+        content: bash ../helpers/wait-for-evaluator.sh
     # Create tools using kubectl with template substitution
     - script:
         content: |
@@ -159,14 +173,15 @@ spec:
           kind: Agent
           metadata:
             name: chicago-weather-agent
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: chicago-weather-query
-          status:
-            phase: done
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        timeout: 5m
+        name: chicago-weather-query
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     - apply:
         file: manifests/query-evaluation.yaml
     # Debug evaluation immediately after creation
@@ -174,7 +189,7 @@ spec:
         content: |
           echo "=== Evaluation Created - Initial State ==="
           sleep 2
-          kubectl get evaluation test-query-ref-evaluation -n $NAMESPACE -o yaml
+          kubectl get evaluation weather-query-ref-evaluation -n $NAMESPACE -o yaml
           echo "=== Evaluator Service Status ==="
           kubectl get evaluator evaluator-llm -n $NAMESPACE -o yaml
           echo "=== Checking for Evaluator Service Pods ==="
@@ -186,9 +201,9 @@ spec:
         timeout: 10m
         name: weather-query-ref-evaluation
         for:
-          jsonPath:
-            path: '{.status.phase}'
-            value: 'done'
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -221,3 +236,10 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluator
         name: evaluator-llm
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

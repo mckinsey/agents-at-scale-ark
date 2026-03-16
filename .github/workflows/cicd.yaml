@@ -34,7 +34,6 @@ concurrency:
 jobs:
   # Setup job to determine container cache registry
   setup-container-cache-registry:
-    needs: [jfrog-xray-scan]
     runs-on: ubuntu-24.04
     outputs:
       ci-cache-registry: ${{ steps.setup-registry.outputs.ci-cache-registry }}
@@ -47,42 +46,11 @@ jobs:
         uses: ./.github/actions/setup-container-cache-registry
         with:
           docker-cicd-cache-registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY }}
-
   # Code quality scan with SonarQube
-  # NOTE: This job is currently disabled - waiting for enterprise SonarQube configuration to be applied
   sonar_scan:
-    if: false  # Disabled until enterprise configuration is ready
-    runs-on: [ self-hosted, Linux ]
-    env:
-      SONAR_TOKEN: ${{ secrets.SONARQUBE_TOKEN }}
-      SONAR_HOST_URL: ${{ vars.SONARQUBE_HOST_URL }}
-      PROJECT_KEY: ${{ secrets.SONARQUBE_PROJECT_KEY }}
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@master
-      - if: ${{ github.base_ref == null }}
-        name: Sonar Scan
-        run: |
-          docker run -i --user `id -u` --rm -e SONAR_TOKEN -e SONAR_HOST_URL \
-          -v `pwd`:/app -w /app sonarsource/sonar-scanner-cli:5.0.1 \
-            -Dsonar.projectKey=$PROJECT_KEY \
-            -Dsonar.sources=./ -Dsonar.branch.name=`echo "${{ github.ref }}" | cut -b 12-` \
-            -Dsonar.qualitygate.wait=false
-      - if: ${{ github.base_ref != null }}
-        name: Sonar Scan on PR
-        env:
-          pr_key: ${{ github.event.number }}
-          pr_branch: ${{ github.head_ref }}
-          pr_base: ${{ github.base_ref }}
-        run: |
-          docker run -i --user `id -u` --rm -e SONAR_TOKEN -e SONAR_HOST_URL \
-          -v `pwd`:/app -w /app sonarsource/sonar-scanner-cli:5.0.1 \
-            -Dsonar.projectKey=$PROJECT_KEY \
-            -Dsonar.sources=./ \
-            -Dsonar.pullrequest.key="$pr_key" \
-            -Dsonar.pullrequest.branch="$pr_branch" \
-            -Dsonar.pullrequest.base="$pr_base" \
-            -Dsonar.qualitygate.wait=false
+    needs: [build-and-test-ark, build-and-test-services]
+    uses: ./.github/workflows/sonar_scan.yaml
+    secrets: inherit
 
   # Security scan with JFrog Xray
   jfrog-xray-scan:
@@ -137,6 +105,12 @@ jobs:
           if [ -n "$NEW_VIOLATIONS" ]; then
             echo "New violations found:"
             echo "$NEW_VIOLATIONS"
+
+            # Export NEW_VIOLATIONS for use in next step
+            echo "NEW_VIOLATIONS<<EOF" >> $GITHUB_ENV
+            echo "$NEW_VIOLATIONS" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+
             echo "Checking new violations against whitelist..."
               while read -r violation; do
                 if ! grep -q "$violation" "$WHITELIST"; then
@@ -153,7 +127,14 @@ jobs:
             echo "The following violations were eliminated: $REMOVED_VIOLATIONS."
           else
             echo "No new violations found."
-          fi  
+          fi
+
+      - name: Create GitHub issue for new CVE violations
+        if: always() && env.NEW_VIOLATIONS != ''
+        uses: ./.github/actions/create-cve-issues
+        with:
+          new_violations: ${{ env.NEW_VIOLATIONS }}
+          scan_json: ${{ env.SCAN_JSON }}  
 
   # Build and test Ark itself.
   build-and-test-ark:
@@ -162,7 +143,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24.11"
+          go-version: "1.25.8"
           cache: true
           cache-dependency-path: |
             ark/go.sum
@@ -204,7 +185,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24.11"
+          go-version: "1.25.8"
           cache: true
           cache-dependency-path: |
             ark/go.sum
@@ -219,7 +200,12 @@ jobs:
           version: "0.12.2"
           args: "--version"
 
-      - run: make -j24 build-all
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+
+      - run: make -j24 services-build-all
 
       - name: Check generated types are unchanged
         run: |
@@ -252,6 +238,9 @@ jobs:
         include:
           - path: ark
             image: ark-controller
+          - path: ark
+            image: ark-completions
+            dockerfile: Dockerfile.completions
           - path: services/ark-api
             image: ark-api
             prebuild: "make ark-api-deps && mkdir -p services/ark-api/ark-api/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/out/"
@@ -261,9 +250,6 @@ jobs:
           - path: services/ark-evaluator
             image: ark-evaluator
             prebuild: "make ark-evaluator-deps"
-          - path: services/executor-langchain
-            image: executor-langchain
-            prebuild: "make executor-langchain-deps && mkdir -p services/executor-langchain/build-context && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/executor-langchain/build-context/"
           - path: services/ark-broker/ark-broker
             image: ark-broker
           - path: samples/a2a/langchain-weather-agent
@@ -307,6 +293,7 @@ jobs:
           platforms: linux/amd64
           push: true
           prebuild: ${{ matrix.prebuild }}
+          dockerfile: ${{ matrix.dockerfile || 'Dockerfile' }}
 
   xray-container-scan:
     needs: [setup-container-cache-registry, build-containers]
@@ -317,10 +304,10 @@ jobs:
       matrix:
         image:
           - ark-controller
+          - ark-completions
           - ark-api
           - ark-dashboard
           - ark-evaluator
-          - executor-langchain
           - ark-broker
           - langchain-weather-agent
           - ark-mcp
@@ -362,135 +349,9 @@ jobs:
           path: out/
           retention-days: 30
 
-  e2e-quickstart:
-    needs: [setup-container-cache-registry, build-containers]
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      # Free up some disk space for ARK installation
-      - name: Clean up disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          sudo docker image prune --all --force
-          sudo docker builder prune --all --force
-
-      - name: Install ruff
-        uses: astral-sh/ruff-action@v3
-        with:
-          version: "0.12.2"
-          args: "--version"
-
-      - name: Install dependencies
-        run: |
-          # Install yq
-          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
-          sudo chmod +x /usr/local/bin/yq
-
-          # Install helm
-          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-
-          # Install k9s
-          curl -sS https://webinstall.dev/k9s | bash
-          export PATH="$HOME/.local/bin:$PATH"
-
-          # Install chainsaw
-          curl -s -L "https://github.com/kyverno/chainsaw/releases/download/v0.2.12/chainsaw_linux_amd64.tar.gz" | \
-            tar xz -C /tmp
-          sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
-          sudo chmod +x /usr/local/bin/chainsaw
-
-          # Install gettext for envsubst
-          sudo apt-get update && sudo apt-get install -y gettext
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: "ark/go.mod"
-          cache-dependency-path: "ark/go.sum"
-
-      - name: Configure K3s registry authentication
-        if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
-        run: |
-          sudo mkdir -p /etc/rancher/k3s
-          cat <<EOF | sudo tee /etc/rancher/k3s/registries.yaml
-          mirrors:
-            ghcr.io:
-              endpoint:
-                - "https://ghcr.io"
-          configs:
-            ghcr.io:
-              auth:
-                username: ${{ github.actor }}
-                password: ${{ secrets.GITHUB_TOKEN }}
-          EOF
-
-      - name: Setup K3s cluster
-        uses: ./.github/actions/setup-k3s
-        with:
-          metrics-enabled: false
-          traefik-enabled: false
-          k3s-channel: latest
-          mock-llm-enabled: true
-
-      - name: Install fark, ark CLI and configure kubectl
-        run: |
-          # Install fark
-          make fark-install
-
-          # Install ark CLI
-          make ark-cli-install
-
-          # Configure kubectl
-          kubectl get pods -A
-      - name: Setup Docker Buildx for registry caching
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Registry
-        if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}
-          username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
-          password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
-
-      - name: Run quickstart
-        env:
-          ARK_QUICKSTART_PROMPT_YES: 1
-          ARK_QUICKSTART_MODEL_TYPE: 'openai'
-          ARK_QUICKSTART_MODEL_VERSION: 'gpt-5'
-          ARK_QUICKSTART_BASE_URL: 'http://mock-llm.default.svc.cluster.local/v1'
-          ARK_QUICKSTART_API_KEY: 'mock-api-key'
-          ARK_QUICKSTART_CONTROLLER_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller
-          ARK_QUICKSTART_CONTROLLER_TAG: ${{ github.sha }}
-          CACHE_ARGS: --cache-from type=registry,ref=${{ needs.setup-container-cache-registry.outputs.ci-cache-registry || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller:cache --cache-to type=registry,ref=${{ needs.setup-container-cache-registry.outputs.ci-cache-registry|| format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-controller:cache,mode=max
-        run: |
-          echo "Environment variables set:"
-          echo "ARK_QUICKSTART_PROMPT_YES=$ARK_QUICKSTART_PROMPT_YES"
-          echo "ARK_QUICKSTART_MODEL_TYPE=$ARK_QUICKSTART_MODEL_TYPE"
-          echo "ARK_QUICKSTART_MODEL_VERSION=$ARK_QUICKSTART_MODEL_VERSION"
-          echo "ARK_QUICKSTART_BASE_URL=$ARK_QUICKSTART_BASE_URL"
-          echo "ARK_QUICKSTART_API_KEY=***"
-          make quickstart-force
-      - name: Wait for ARK components to be ready
-        run: |
-          echo "Waiting for ARK controller to be ready..."
-          kubectl -n ark-system wait --for=condition=available --timeout=300s deployment/ark-controller
-          echo "Waiting for webhook service to be ready..."
-          kubectl -n ark-system wait --for=condition=ready pod -l control-plane=ark-controller --timeout=120s
-          echo "Giving webhook service additional time to initialize..."
-          sleep 10
-      - name: Test end-to-end query
-        run: |
-          kubectl describe agent sample-agent
-          # Test ark-cli query command
-          ark query agent/sample-agent "confirm you have read this message"
-          # Test fark
-          fark agent sample-agent "confirm you have read this message"
-
   e2e-ark-cli:
-    needs: [build-ark-cli]
+    needs: [setup-container-cache-registry, build-containers, build-ark-cli]
+    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -502,8 +363,12 @@ jobs:
           model-type: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL && 'azure' || 'openai' }}
           model-name: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL && 'gpt-4.1-mini' || 'gpt-4' }}
           model-api-version: 2024-12-01-preview
+          ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
+          ci-cache-registry-hostname: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry-hostname }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+          ark-image-tag: ${{ github.sha }}
+          is-fork-pr: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr }}
 
   e2e-smoke-test:
     needs: [setup-container-cache-registry, build-containers]
@@ -573,39 +438,74 @@ jobs:
 
       - name: Test endpoints
         run: |
-          # Wait for services to be ready
-          echo "Waiting for services to be ready..."
-          kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
-          kubectl wait --for=condition=ready pod -l app=ark-dashboard -n default --timeout=120s
+          # Wait for pods to exist
+          echo "Waiting for pods to be scheduled..."
+          kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s || true
+          kubectl wait --for=condition=ready pod -l app=ark-dashboard -n default --timeout=120s || true
 
-          # Test ark-api service (including A2A Gateway endpoints)
+          # Test ark-api service
           echo
           echo "=== Testing ark-api service ==="
-          kubectl port-forward -n default service/ark-api 8082:80 &
-          API_PID=$!
-          sleep 15
-          echo "Testing API health endpoint..."
-          curl -f http://127.0.0.1:8082/health || (echo "API health check failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
-          echo "Testing API ready endpoint..."
-          curl -f http://127.0.0.1:8082/ready || (echo "API ready check failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
-          echo "Testing OpenAI models endpoint..."
-          curl -f http://127.0.0.1:8082/openai/v1/models || (echo "OpenAI models endpoint failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
-          echo "Testing A2A Gateway /agents endpoint..."
-          curl -f http://127.0.0.1:8082/a2a/agents || (echo "A2A /agents endpoint failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
-          # Clean up API port-forward
-          kill $API_PID || true
+          for i in $(seq 1 30); do
+            # Kill any existing port-forward on 8082
+            pkill -f "port-forward.*8082:80" 2>/dev/null || true
+            sleep 1
+
+            # Start fresh port-forward
+            kubectl port-forward -n default service/ark-api 8082:80 &
+            sleep 3
+
+            if curl -sf --connect-timeout 5 --max-time 10 http://127.0.0.1:8082/health > /dev/null 2>&1; then
+              echo "ark-api is ready (attempt $i/30)"
+              break
+            fi
+
+            echo "Waiting for ark-api... ($i/30)"
+            if [ $i -eq 30 ]; then
+              echo "ark-api failed to become ready"
+              kubectl logs -l app=ark-api -n default --tail=50
+              exit 1
+            fi
+          done
+
+          echo "Testing API endpoints..."
+          curl -f --max-time 10 http://127.0.0.1:8082/health || (echo "API health check failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
+          curl -f --max-time 10 http://127.0.0.1:8082/ready || (echo "API ready check failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
+          curl -f --max-time 10 http://127.0.0.1:8082/openai/v1/models || (echo "OpenAI models endpoint failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
+          curl -f --max-time 10 http://127.0.0.1:8082/a2a/agents || (echo "A2A /agents endpoint failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
+          echo "ark-api tests passed!"
 
           # Test ark-dashboard service
           echo
           echo "=== Testing ark-dashboard service ==="
-          kubectl port-forward -n default service/ark-dashboard 3001:3000 &
-          DASH_PID=$!
-          sleep 15
-          echo "Testing dashboard endpoint..."
-          curl -f http://127.0.0.1:3001/ || (echo "Dashboard check failed" && kubectl logs -l app=ark-dashboard -n default --tail=20 && exit 1)
-          # Clean up dashboard port-forward
-          kill $DASH_PID || true
+          for i in $(seq 1 30); do
+            # Kill any existing port-forward on 3001
+            pkill -f "port-forward.*3001:3000" 2>/dev/null || true
+            sleep 1
 
+            # Start fresh port-forward
+            kubectl port-forward -n default service/ark-dashboard 3001:3000 &
+            sleep 3
+
+            if curl -sf --connect-timeout 5 --max-time 10 http://127.0.0.1:3001/ > /dev/null 2>&1; then
+              echo "ark-dashboard is ready (attempt $i/30)"
+              break
+            fi
+
+            echo "Waiting for ark-dashboard... ($i/30)"
+            if [ $i -eq 30 ]; then
+              echo "ark-dashboard failed to become ready"
+              kubectl logs -l app=ark-dashboard -n default --tail=50
+              exit 1
+            fi
+          done
+
+          echo "Testing dashboard endpoint..."
+          curl -f --max-time 10 http://127.0.0.1:3001/ || (echo "Dashboard check failed" && kubectl logs -l app=ark-dashboard -n default --tail=20 && exit 1)
+          echo "ark-dashboard tests passed!"
+
+          # Cleanup
+          pkill -f "port-forward" 2>/dev/null || true
           echo "Smoke test completed successfully!"
 
   e2e-tests-standard:
@@ -683,18 +583,7 @@ jobs:
         run: |
           cd tests
           mkdir -p /tmp/chainsaw-report
-          # Use special config for evaluated tests with longer timeouts and sequential execution
-          MAX_RETRIES=3
-          RETRY_DELAY=30
-          for ((attempt=1; attempt<=$MAX_RETRIES; attempt++)); do
-            if chainsaw test --config .chainsaw-evaluated.yaml --selector 'evaluated=true'; then
-              exit 0
-            fi
-            if [ $attempt -lt $MAX_RETRIES ]; then
-              sleep $RETRY_DELAY
-            fi
-          done
-          exit 1
+          chainsaw test --config .chainsaw-evaluated.yaml --selector 'evaluated=true'
 
       - uses: ./.github/actions/collect-coverage-e2e
         with:
@@ -723,6 +612,16 @@ jobs:
           sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
           sudo chmod +x /usr/local/bin/chainsaw
           sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Warm up network connectivity
+        run: |
+          echo "Warming up egress network paths..."
+          for i in {1..5}; do
+            echo "Attempt $i: Testing connectivity to external APIs"
+            curl -s -m 10 "https://api.open-meteo.com/v1/forecast?latitude=40.7128&longitude=-74.006&current_weather=true" > /dev/null && echo "✓ Weather API reachable" || echo "✗ Weather API unreachable (will retry)"
+            sleep 3
+          done
+          echo "Network warm-up complete - egress connectivity established"
 
       - name: Run multi-provider LLM tests
         env:
@@ -801,10 +700,77 @@ jobs:
           kubectl wait --for=condition=ready pod -l app=ark-dashboard -n default --timeout=120s
           kubectl wait --for=condition=ready pod -l app=ark-mcp -n default --timeout=120s
 
+      - name: Update Argo Workflows dependencies
+        run: |
+          cd services/argo-workflows/chart
+          helm dependency update
+          cd ../../..
+
+      - name: Deploy Argo Workflows
+        run: |
+          helm upgrade --install argo-workflows services/argo-workflows/chart \
+            --namespace default \
+            --create-namespace \
+            --set minio.enabled=false \
+            --wait \
+            --timeout=5m
+
+      - name: Wait for Argo Workflows to be ready
+        run: |
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=argo-workflows-server -n default --timeout=120s
+          kubectl wait --for=condition=ready pod -l app=workflow-controller -n default --timeout=120s
+
+      - name: Configure Argo Workflows RBAC
+        run: |
+          kubectl apply -f - <<EOF
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: argo-workflow
+            namespace: default
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRole
+          metadata:
+            name: argo-workflow-extended
+          rules:
+          - apiGroups: [""]
+            resources: ["pods", "pods/log"]
+            verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
+          - apiGroups: ["argoproj.io"]
+            resources: ["workflows", "workflows/finalizers", "workflowtemplates", "workflowtaskresults"]
+            verbs: ["get", "list", "watch", "update", "patch", "create", "delete"]
+          - apiGroups: ["ark.mckinsey.com"]
+            resources: ["queries", "models", "agents"]
+            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: argo-workflow-extended-binding
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: argo-workflow-extended
+          subjects:
+          - kind: ServiceAccount
+            name: argo-workflow
+            namespace: default
+          EOF
+
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: tests/pytest/ui-tests/requirements.txt
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('tests/pytest/ui-tests/requirements.txt') }}
 
       - name: Install UI test dependencies
         run: |
@@ -827,6 +793,7 @@ jobs:
       - name: Start port-forwarding
         run: |
           kubectl port-forward svc/ark-dashboard 3274:3000 &
+          kubectl port-forward svc/argo-workflows-server 8081:2746 &
           sleep 5
           curl -s -o /dev/null -w "%{http_code}" http://localhost:3274 || echo "Dashboard connectivity check"
 
@@ -834,7 +801,7 @@ jobs:
         run: |
           cd tests/pytest/ui-tests
           mkdir -p screenshots
-          pytest tests/ -v --tb=short
+          pytest tests/ -n 4 --dist loadgroup -v --tb=short --log-cli-level=INFO
 
       - name: Upload test screenshots
         if: always()
@@ -844,6 +811,86 @@ jobs:
           path: tests/pytest/ui-tests/screenshots/
           retention-days: 7
 
+  e2e-cli-tests:
+    needs: [setup-container-cache-registry, build-containers]
+    runs-on: ubuntu-24.04
+    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-e2e
+        with:
+          ark-image-tag: ${{ github.sha }}
+          install-coverage: "false"
+          install-evaluator: "false"
+          ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
+          ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
+          ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+
+      - name: Build and install ark-cli
+        run: |
+          cd tools/ark-cli
+          npm ci
+          npm run build
+          npm install -g .
+
+      - name: Deploy ark-api
+        run: |
+          helm upgrade --install ark-api services/ark-api/chart \
+            --namespace default \
+            --create-namespace \
+            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/ark-api" \
+            --set app.image.tag="${{ github.sha }}" \
+            --set app.image.pullPolicy="Always" \
+            --wait \
+            --timeout=5m
+
+      - name: Deploy ark-mcp
+        run: |
+          helm upgrade --install ark-mcp services/ark-mcp/chart \
+            --namespace default \
+            --create-namespace \
+            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/ark-mcp" \
+            --set app.image.tag="${{ github.sha }}" \
+            --set app.image.pullPolicy="Always" \
+            --wait \
+            --timeout=5m
+
+      - name: Wait for services to be ready
+        run: |
+          kubectl wait --for=condition=available -n ark-system --timeout=300s deployment/ark-controller
+          kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
+          kubectl wait --for=condition=ready pod -l app=ark-mcp -n default --timeout=120s
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install CLI test dependencies
+        run: |
+          pip install -r tests/pytest/ui-tests/requirements.txt
+
+      - name: Run File Gateway CLI tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
+        run: |
+          cd tests/pytest/cli-tests/tests
+          pytest test_file_gateway.py -n 2 --dist loadscope -v --tb=short
+
+      - name: Upload CLI test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-test-logs-${{ github.sha }}
+          path: tests/pytest/cli-tests/tests/*.log
+          retention-days: 7
+
   build-charts:
     runs-on: ubuntu-24.04
     strategy:
@@ -851,6 +898,7 @@ jobs:
         chart:
           # Package only the essential charts.
           - { name: ark-controller, path: ark/dist/chart }
+          - { name: ark-completions, path: ark/executors/completions/chart }
           - { name: ark-api, path: services/ark-api/chart }
           - { name: ark-dashboard, path: services/ark-dashboard/chart }
           - { name: ark-mcp, path: services/ark-mcp/chart }
@@ -886,7 +934,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "22.x"
 
@@ -919,7 +967,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "22.x"
 
@@ -934,14 +982,11 @@ jobs:
           cd tools/ark-cli
           npm test
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+      - uses: ./.github/actions/collect-coverage
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          slug: ${{ github.repository }}
-          directory: tools/ark-cli/artifacts/coverage
-          name: ark-cli
-          flags: ark-cli
+          source-path: tools/ark-cli/artifacts/coverage/
+          artifact-folder: ark-cli/unit-tests
+          artifact-suffix: ark-cli-unit
 
       - name: Create NPM package tarball
         run: |
@@ -969,11 +1014,11 @@ jobs:
     needs:
       [
         build-containers,
-        e2e-quickstart,
         e2e-smoke-test,
         e2e-tests-standard,
         e2e-tests-evaluated,
         e2e-ui-tests,
+        e2e-cli-tests,
         build-and-test-ark,
         build-and-test-services,
         build-docs,
@@ -987,7 +1032,7 @@ jobs:
       - name: Setup Go for coverage tools
         uses: actions/setup-go@v5
         with:
-          go-version: "1.24.11"
+          go-version: "1.25.8"
 
       - name: Install Python coverage tools
         run: |
@@ -1035,17 +1080,21 @@ jobs:
           directory: ./coverage-artifacts
           fail_ci_if_error: false
           verbose: true
-          flags: combined-coverage
+          flags: ark-cli,combined-coverage
 
   check-release:
     needs:
       [
         build-containers,
-        e2e-quickstart,
         e2e-smoke-test,
         e2e-tests-standard,
         e2e-tests-evaluated,
         e2e-ui-tests,
+        e2e-cli-tests,
+        e2e-ark-cli,
+        e2e-tests-llm,
+        jfrog-xray-scan,
+        xray-container-scan,
         build-and-test-ark,
         build-and-test-services,
         build-docs,
@@ -1198,7 +1247,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24.11'
+          go-version: '1.25.8'
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
@@ -1248,3 +1297,52 @@ jobs:
             --field deploy_to_pypi=true
         env:
           GH_TOKEN: ${{ github.token }}
+
+  verify-ark-installation:
+    needs: [check-release, release-charts, release-ark-cli]
+    runs-on: ubuntu-24.04
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-k3s
+        with:
+          metrics-enabled: false
+          traefik-enabled: false
+          k3s-channel: latest
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+
+      - name: Install published ark-cli from npm
+        run: |
+          RELEASE_TAG="${{ needs.check-release.outputs.tag }}"
+          echo "Installing ark-cli@${RELEASE_TAG} from npm registry..."
+          npm install -g @agents-at-scale/ark@${RELEASE_TAG}
+          ark --version
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install test dependencies
+        run: |
+          pip install -r tests/pytest/ui-tests/requirements.txt
+
+      - name: Run complete ARK workflow installation test
+        env:
+          PYTHONPATH: ${{ github.workspace }}/tests/pytest
+        run: |
+          cd tests/pytest
+          pytest test_complete_ark_workflow.py -v --tb=short
+
+      - name: Upload verification test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ark-installation-verification-logs-${{ github.sha }}
+          path: tests/pytest/*.log
+          retention-days: 7

@@ -2,16 +2,14 @@
 
 import { use } from 'react';
 
-import type { BreadcrumbElement } from '@/components/common/page-header';
-import { PageHeader } from '@/components/common/page-header';
+import {
+  type BreadcrumbElement,
+  PageHeader,
+} from '@/components/common/page-header';
 import { UpdateModelForm } from '@/components/forms';
 import { Spinner } from '@/components/ui/spinner';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { useGetModelbyId } from '@/lib/services/models-hooks';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-  { href: '/models', label: 'Models' },
-];
 
 type PageProps = {
   params: Promise<{ model_id: string }>;
@@ -21,9 +19,16 @@ export default function ModelUpdatePage({ params }: PageProps) {
   const { model_id: modelId } = use(params);
   const { data, isPending } = useGetModelbyId({ modelId });
 
+  const breadcrumbs: BreadcrumbElement[] = [
+    ...BASE_BREADCRUMBS,
+    { label: 'Models', href: '/models' },
+  ];
+
+  const currentPage = data?.name || 'Update Model';
+
   return (
     <div className="flex min-h-screen flex-col">
-      <PageHeader breadcrumbs={breadcrumbs} currentPage={modelId} />
+      <PageHeader breadcrumbs={breadcrumbs} currentPage={currentPage} />
       {isPending && (
         <div className="flex w-full flex-1 items-center justify-center">
           <Spinner />

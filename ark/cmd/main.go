@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -29,6 +30,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
+	"mckinsey.com/ark/internal/apiserver"
 	"mckinsey.com/ark/internal/controller"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
@@ -63,6 +65,7 @@ type config struct {
 	probeAddr                                        string
 	secureMetrics                                    bool
 	enableHTTP2                                      bool
+	completionsAddr                                  string
 }
 
 func main() {
@@ -96,8 +99,9 @@ func main() {
 	// Initialize eventing provider with direct client for broker discovery
 	eventingProvider := eventingconfig.NewProvider(mgr, directClient)
 
-	setupControllers(mgr, telemetryProvider, eventingProvider)
+	setupControllers(mgr, telemetryProvider, eventingProvider, result.config)
 	setupWebhooks(mgr)
+	setupEmbeddedApiserver(mgr)
 	startManager(mgr, metricsCertWatcher, webhookCertWatcher)
 }
 
@@ -126,6 +130,8 @@ func parseFlags() struct {
 	flag.BoolVar(&cfg.enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.BoolVar(&showVersion, "version", false, "Show version information and exit")
+	flag.StringVar(&cfg.completionsAddr, "completions-addr", "http://ark-completions.ark-system:9090",
+		"Address of the completions engine for A2A communication")
 
 	zapOpts := zap.Options{Development: false}
 	zapOpts.BindFlags(flag.CommandLine)
@@ -239,7 +245,7 @@ func setupMetricsServer(cfg config, baseTLSOpts []func(*tls.Config)) (metricsser
 	return metricsServerOptions, metricsCertWatcher
 }
 
-func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provider, eventingProvider *eventingconfig.Provider) {
+func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provider, eventingProvider *eventingconfig.Provider, cfg config) {
 	controllers := []struct {
 		name       string
 		reconciler interface{ SetupWithManager(ctrl.Manager) error }
@@ -250,10 +256,11 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 			Eventing: eventingProvider,
 		}},
 		{"Query", &controller.QueryReconciler{
-			Client:    mgr.GetClient(),
-			Scheme:    mgr.GetScheme(),
-			Telemetry: telemetryProvider,
-			Eventing:  eventingProvider,
+			Client:          mgr.GetClient(),
+			Scheme:          mgr.GetScheme(),
+			Telemetry:       telemetryProvider,
+			Eventing:        eventingProvider,
+			CompletionsAddr: cfg.completionsAddr,
 		}},
 		{"Tool", &controller.ToolReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
 		{"Team", &controller.TeamReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("team-controller")}},
@@ -323,6 +330,45 @@ func setupWebhooks(mgr ctrl.Manager) {
 			os.Exit(1)
 		}
 	}
+}
+
+func setupEmbeddedApiserver(mgr ctrl.Manager) {
+	backend := os.Getenv("ARK_STORAGE_BACKEND")
+	if backend == "" || backend == "etcd" {
+		return
+	}
+
+	cfg := apiserver.Config{}
+
+	if portStr := os.Getenv("ARK_APISERVER_PORT"); portStr != "" {
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			setupLog.Error(err, "invalid ARK_APISERVER_PORT")
+			os.Exit(1)
+		}
+		cfg.BindPort = port
+	}
+
+	cfg.PostgresHost = os.Getenv("ARK_POSTGRES_HOST")
+	if portStr := os.Getenv("ARK_POSTGRES_PORT"); portStr != "" {
+		port, _ := strconv.Atoi(portStr)
+		cfg.PostgresPort = port
+	}
+	cfg.PostgresDB = os.Getenv("ARK_POSTGRES_DATABASE")
+	cfg.PostgresUser = os.Getenv("ARK_POSTGRES_USER")
+	cfg.PostgresPass = os.Getenv("ARK_POSTGRES_PASSWORD")
+	cfg.PostgresSSL = os.Getenv("ARK_POSTGRES_SSL_MODE")
+	if cfg.PostgresSSL == "" {
+		cfg.PostgresSSL = "disable"
+	}
+	cfg.K8sClient = mgr.GetClient()
+
+	server := apiserver.New(cfg)
+	if err := mgr.Add(server); err != nil {
+		setupLog.Error(err, "unable to add embedded apiserver to manager")
+		os.Exit(1)
+	}
+	setupLog.Info("embedded apiserver configured", "backend", backend)
 }
 
 func startManager(mgr ctrl.Manager, metricsCertWatcher, webhookCertWatcher *certwatcher.CertWatcher) {

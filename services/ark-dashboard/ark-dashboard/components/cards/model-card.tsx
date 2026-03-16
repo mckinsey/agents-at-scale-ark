@@ -11,6 +11,7 @@ import { DASHBOARD_SECTIONS } from '@/lib/constants/dashboard-icons';
 import { getModelTypeDisplayName } from '@/lib/constants/model-types';
 import type { Model } from '@/lib/services';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { BaseCard, type BaseCardAction } from './base-card';
 
@@ -22,6 +23,7 @@ interface ModelCardProps {
 export function ModelCard({ model, onDelete }: ModelCardProps) {
   const router = useRouter();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const { readOnlyMode } = useNamespace();
   // Get custom icon or default model icon
   const IconComponent = getCustomIcon(
     model.annotations?.[ARK_ANNOTATIONS.DASHBOARD_ICON],
@@ -35,7 +37,7 @@ export function ModelCard({ model, onDelete }: ModelCardProps) {
       onClick: () => {
         router.push(`/models/${model.id}/update`);
       },
-      disabled: false,
+      disabled: readOnlyMode,
     },
   ];
 
@@ -44,7 +46,7 @@ export function ModelCard({ model, onDelete }: ModelCardProps) {
       icon: Trash2,
       label: 'Delete model',
       onClick: () => setDeleteConfirmOpen(true),
-      disabled: false,
+      disabled: readOnlyMode,
     });
   }
 

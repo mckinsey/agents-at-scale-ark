@@ -4,24 +4,26 @@ import { Plus } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useRef } from 'react';
 
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { McpServersSection } from '@/components/sections/mcp-servers-section';
 import { Button } from '@/components/ui/button';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-];
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
+import { useGetAllMcpServers } from '@/lib/services/mcp-servers-hooks';
 
 export default function McpPage() {
   const searchParams = useSearchParams();
   const namespace = searchParams.get('namespace') || 'default';
   const mcpSectionRef = useRef<{ openAddEditor: () => void }>(null);
+  const { data: mcpServers } = useGetAllMcpServers();
+
+  const pageTitle = mcpServers
+    ? `MCP Servers (${mcpServers.length})`
+    : 'MCP Servers';
 
   return (
     <>
       <PageHeader
-        breadcrumbs={breadcrumbs}
+        breadcrumbs={BASE_BREADCRUMBS}
         currentPage="MCP Servers"
         actions={
           <Button onClick={() => mcpSectionRef.current?.openAddEditor()}>
@@ -31,6 +33,9 @@ export default function McpPage() {
         }
       />
       <div className="flex flex-1 flex-col">
+        <div>
+          <h1 className="text-xl">{pageTitle}</h1>
+        </div>
         <McpServersSection ref={mcpSectionRef} namespace={namespace} />
       </div>
     </>

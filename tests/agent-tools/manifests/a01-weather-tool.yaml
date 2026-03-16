@@ -20,4 +20,4 @@ spec:
     required: ["latitude", "longitude"]
   description: "Fetches current weather data for given coordinates"
   http:
-    url: https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current_weather=true
+    url: http://mock-weather-api/v1/forecast?latitude={latitude}&longitude={longitude}&current_weather=true

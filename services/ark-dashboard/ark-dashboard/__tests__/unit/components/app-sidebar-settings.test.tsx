@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AppSidebar } from '@/components/app-sidebar';
-import { ExperimentalFeaturesDialog } from '@/components/experimental-features-dialog';
+import { SettingsModal } from '@/components/settings-modal';
 import { SidebarProvider } from '@/components/ui/sidebar';
 
 vi.mock('next/navigation', () => ({
@@ -22,6 +22,7 @@ vi.mock('@/providers/NamespaceProvider', () => ({
     isPending: false,
     setNamespace: vi.fn(),
     createNamespace: vi.fn(),
+    readOnlyMode: false,
   })),
 }));
 
@@ -42,7 +43,34 @@ vi.mock('@/lib/services/system-info', () => ({
   },
 }));
 
-describe('AppSidebar - Experimental Features Menu Item', () => {
+vi.mock('@/lib/services/proxy', () => ({
+  proxyService: {
+    getSystemInfo: vi.fn(() => Promise.resolve({})),
+  },
+}));
+
+vi.mock('@/lib/services/files-count-hooks', () => ({
+  useGetFilesCount: vi.fn(() => ({
+    data: 0,
+    isPending: false,
+  })),
+}));
+
+vi.mock('@/lib/services/events-hooks', () => ({
+  useGetEventsCount: vi.fn(() => ({
+    data: 0,
+    isPending: false,
+  })),
+}));
+
+vi.mock('@/lib/services/workflow-templates-hooks', () => ({
+  useGetAllWorkflowTemplates: vi.fn(() => ({
+    data: [],
+    isPending: false,
+  })),
+}));
+
+describe('AppSidebar - Settings Menu Item', () => {
   const mockPush = vi.fn();
 
   beforeEach(() => {
@@ -53,9 +81,7 @@ describe('AppSidebar - Experimental Features Menu Item', () => {
     });
   });
 
-  it('should show Experimental Features option in the namespace dropdown', async () => {
-    const user = userEvent.setup();
-
+  it('should show Settings button in sidebar', async () => {
     render(
       <JotaiProvider>
         <SidebarProvider>
@@ -64,17 +90,12 @@ describe('AppSidebar - Experimental Features Menu Item', () => {
       </JotaiProvider>,
     );
 
-    const dropdownTrigger = screen.getByText('ARK Dashboard');
-    await user.click(dropdownTrigger);
-
     await waitFor(() => {
-      expect(
-        screen.getByRole('menuitem', { name: 'Experimental Features' }),
-      ).toBeInTheDocument();
+      expect(screen.getByText('Settings')).toBeInTheDocument();
     });
   });
 
-  it('should open experimental features dialog when Experimental Features is clicked', async () => {
+  it('should open settings modal when Settings is clicked', async () => {
     const user = userEvent.setup();
 
     render(
@@ -82,25 +103,19 @@ describe('AppSidebar - Experimental Features Menu Item', () => {
         <SidebarProvider>
           <AppSidebar />
         </SidebarProvider>
-        <ExperimentalFeaturesDialog />
+        <SettingsModal />
       </JotaiProvider>,
     );
 
-    const dropdownTrigger = screen.getByText('ARK Dashboard');
-    await user.click(dropdownTrigger);
-
     await waitFor(() => {
-      expect(screen.getByText('Experimental Features')).toBeInTheDocument();
+      expect(screen.getByText('Settings')).toBeInTheDocument();
     });
 
-    const settingsItem = screen.getByRole('menuitem', {
-      name: 'Experimental Features',
-    });
-    await user.click(settingsItem);
+    const settingsButton = screen.getByText('Settings');
+    await user.click(settingsButton);
 
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
-      expect(screen.getByText('Experimental features')).toBeInTheDocument();
     });
   });
 });

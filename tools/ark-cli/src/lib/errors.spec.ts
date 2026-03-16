@@ -1,4 +1,4 @@
-import {describe, it, expect, jest, beforeEach, afterEach} from '@jest/globals';
+import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {
   ErrorCode,
   ArkError,
@@ -9,7 +9,7 @@ import {
   InputValidator,
 } from './errors.js';
 
-jest.mock('fs');
+vi.mock('fs');
 
 describe('Error Classes', () => {
   describe('ArkError', () => {
@@ -132,14 +132,14 @@ describe('Error Classes', () => {
     });
 
     describe('handleAndExit', () => {
-      let mockExit: jest.SpiedFunction<typeof process.exit>;
-      let mockConsoleError: jest.SpiedFunction<typeof console.error>;
+      let mockExit: vi.SpiedFunction<typeof process.exit>;
+      let mockConsoleError: vi.SpiedFunction<typeof console.error>;
 
       beforeEach(() => {
-        mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
+        mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
           throw new Error('process.exit');
         });
-        mockConsoleError = jest
+        mockConsoleError = vi
           .spyOn(console, 'error')
           .mockImplementation(() => {});
       });

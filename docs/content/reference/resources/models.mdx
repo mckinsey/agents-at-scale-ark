@@ -11,11 +11,12 @@ kind: Model
 metadata:
   name: default
 spec:
-  # The 'openai' type is any openai specification compatible model. This
-  # includes OpenAI, Google Gemini (in OpenAI compability mode), Anthropic
+  # The 'completion' type is for text completion models.
+  # The 'openai' provider supports any OpenAI specification compatible model,
+  # including OpenAI, Google Gemini (in OpenAI compatibility mode), Anthropic
   # Claude and so on.
   provider: openai
-  type: openai
+  type: completion
   model:
     # The specific model type.
     value: gpt-4o
@@ -56,14 +57,18 @@ kubectl create secret generic default-model-token --from-literal=token="your-api
 
 ### Azure OpenAI
 
+Azure models support three authentication methods via `config.azure.auth`: **API Key** (default), **Managed Identity** (AKS node identity), and **Workload Identity** (K8s ServiceAccount federated to Azure). Use exactly one.
+
+**API Key (legacy or explicit):**
+
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Model
 metadata:
   name: gpt-4o-mini
 spec:
-  # The Azure OpenAI model type.
-  type: azure
+  provider: azure
+  type: completion
   model:
     value: gpt-4o-mini
   config:
@@ -75,16 +80,61 @@ spec:
           secretKeyRef:
             name: azure-openai-key
             key: token
-      # Azure-specific API version
       apiVersion:
         value: "2024-12-01-preview"
-      # Optional properties.
-      properties:
-        temperature:
-          value: "0.7"
-        max_tokens:
-          value: "4096"
 ```
+
+**Managed Identity (AKS):** Use when Ark runs on AKS and the cluster or node pool has a User-Assigned Managed Identity with access to the Azure OpenAI resource. No API key is stored on the cluster.
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: gpt-4o-managed-identity
+spec:
+  provider: azure
+  model:
+    value: gpt-4o
+  config:
+    azure:
+      baseUrl:
+        value: "https://your-resource.openai.azure.com"
+      apiVersion:
+        value: "2024-02-15-preview"
+      auth:
+        managedIdentity: {}
+        # Or with user-assigned identity:
+        # managedIdentity:
+        #   clientId:
+        #     value: "12345678-1234-1234-1234-123456789abc"
+```
+
+**Workload Identity:** Use when running on any Kubernetes cluster (including non-Azure) with Azure Workload Identity configured. The pod's ServiceAccount is federated to an Azure Managed Identity.
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: gpt-4o-workload-identity
+spec:
+  provider: azure
+  model:
+    value: gpt-4o
+  config:
+    azure:
+      baseUrl:
+        value: "https://your-resource.openai.azure.com"
+      apiVersion:
+        value: "2024-02-15-preview"
+      auth:
+        workloadIdentity:
+          clientId:
+            value: "12345678-1234-1234-1234-123456789abc"
+          tenantId:
+            value: "87654321-4321-4321-4321-210987654321"
+```
+
+**Testing Azure auth:** (1) API Key: create a Secret with your key, apply a model using `config.azure.auth.apiKey` (or legacy top-level `apiKey`), then run a query. (2) Managed Identity: on AKS with managed identity enabled, apply a model with `auth.managedIdentity` and ensure the identity has "Cognitive Services User" on the Azure OpenAI resource. (3) Workload Identity: configure federation (e.g. Azure AD Workload Identity), apply a model with `auth.workloadIdentity` and the same clientId/tenantId, then run a query from a pod using the federated ServiceAccount.
 
 ### AWS Bedrock
 
@@ -94,8 +144,9 @@ kind: Model
 metadata:
   name: claude-haiku
 spec:
-  # The AWS Bedrock model type.
-  type: bedrock
+  # The AWS Bedrock provider with completion model type.
+  provider: bedrock
+  type: completion
   model:
     value: "us.anthropic.claude-3-5-haiku-20241022-v1:0"
   config:
@@ -135,7 +186,7 @@ spec:
 
 ### Google Gemini and Anthropic Models
 
-Both Google Gemini and Anthropic provide OpenAI-compatible endpoints, allowing you to use their models with the `openai` type. The base URls are:
+Both Google Gemini and Anthropic provide OpenAI-compatible endpoints, allowing you to use their models with the `openai` provider and `completion` type. The base URLs are:
 
 - `https://generativelanguage.googleapis.com/v1beta/openai` for Google Gemini
 - `https://api.anthropic.com/v1` for Anthropic Claude
@@ -154,7 +205,8 @@ kind: Model
 metadata:
   name: gpt-4-custom
 spec:
-  type: openai
+  provider: openai
+  type: completion
   model:
     value: gpt-4o
   config:
@@ -191,7 +243,8 @@ kind: Model
 metadata:
   name: default
 spec:
-  type: azure
+  provider: azure
+  type: completion
   model:
     value: gpt-4o
   config:
@@ -240,7 +293,8 @@ kind: Model
 metadata:
   name: default
 spec:
-  type: azure
+  provider: azure
+  type: completion
   model:
     value: gpt-4o
   config:
@@ -285,7 +339,8 @@ kind: Model
 metadata:
   name: openai-with-headers
 spec:
-  type: openai
+  provider: openai
+  type: completion
   model:
     value: gpt-4o
   config:

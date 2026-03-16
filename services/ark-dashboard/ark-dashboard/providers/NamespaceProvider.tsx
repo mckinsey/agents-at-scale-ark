@@ -25,6 +25,7 @@ interface NamespaceContext {
   namespace: string;
   isNamespaceResolved: boolean;
   setNamespace: (namespace: string) => void;
+  readOnlyMode: boolean;
 }
 
 const NamespaceContext = createContext<NamespaceContext | undefined>(undefined);
@@ -42,6 +43,7 @@ function NamespaceProvider({ children }: PropsWithChildren) {
     },
   ]);
   const [isNamespaceResolved, setIsNamespaceResolved] = useState(false);
+  const [readOnlyMode, setReadOnlyMode] = useState(true);
 
   const { data, isPending, error } = useGetContext();
 
@@ -97,6 +99,8 @@ function NamespaceProvider({ children }: PropsWithChildren) {
       } else {
         setIsNamespaceResolved(true);
       }
+      const newReadOnlyMode = data.read_only_mode ?? false;
+      setReadOnlyMode(newReadOnlyMode);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, namespaceFromQueryParams]);
@@ -109,6 +113,7 @@ function NamespaceProvider({ children }: PropsWithChildren) {
       namespace: namespaceFromQueryParams,
       isNamespaceResolved: isNamespaceResolved,
       setNamespace,
+      readOnlyMode,
     }),
     [
       availableNamespaces,
@@ -117,6 +122,7 @@ function NamespaceProvider({ children }: PropsWithChildren) {
       namespaceFromQueryParams,
       isNamespaceResolved,
       setNamespace,
+      readOnlyMode,
     ],
   );
 

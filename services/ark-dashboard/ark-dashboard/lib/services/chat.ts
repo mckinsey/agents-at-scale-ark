@@ -54,7 +54,10 @@ const QUERY_STATUS_PHASES: readonly QueryStatusPhase[] = [
 
 type QueryStatusWithPhase = {
   phase: string;
-  response?: { content: string };
+  response?: {
+    content: string;
+    raw?: string;
+  };
 };
 
 // Type guard for checking if a phase is terminal
@@ -73,6 +76,17 @@ export type ChatResponse = {
   status: QueryStatusPhase;
   terminal: boolean;
   response?: string;
+  messages?: Array<{
+    role: string;
+    content?: string;
+    name?: string;
+    tool_calls?: Array<{
+      id: string;
+      type: string;
+      function: { name: string; arguments: string };
+    }>;
+    tool_call_id?: string;
+  }>;
 };
 
 export type ChatMessage = {
@@ -182,6 +196,7 @@ export const chatService = {
     targetName: string,
     sessionId?: string,
     enableStreaming?: boolean,
+    timeout?: string,
   ): Promise<QueryDetailResponse> {
     const queryRequest: QueryCreateRequest = {
       name: `chat-query-${generateUUID()}`,
@@ -193,6 +208,7 @@ export const chatService = {
         name: targetName,
       },
       sessionId,
+      timeout,
     };
 
     // Add streaming annotation if enabled
@@ -247,15 +263,37 @@ export const chatService = {
         const phase = statusWithPhase.phase;
         const response = statusWithPhase.response?.content || 'No response';
 
-        // Check if phase is in the valid set, otherwise use 'unknown'
         const validatedPhase: QueryStatusPhase = isValidQueryStatusPhase(phase)
           ? phase
           : 'unknown';
+
+        let messages:
+          | Array<{
+              role: string;
+              content?: string;
+              name?: string;
+              tool_calls?: Array<{
+                id: string;
+                type: string;
+                function: { name: string; arguments: string };
+              }>;
+              tool_call_id?: string;
+            }>
+          | undefined;
+
+        if (statusWithPhase.response?.raw) {
+          try {
+            messages = JSON.parse(statusWithPhase.response.raw);
+          } catch (error) {
+            console.error('Failed to parse raw messages:', error);
+          }
+        }
 
         return {
           terminal: isTerminalPhase(validatedPhase),
           status: validatedPhase,
           response: response,
+          messages: messages,
         };
       }
 
@@ -355,6 +393,7 @@ export const chatService = {
     targetType: string,
     targetName: string,
     sessionId?: string,
+    timeout?: string,
   ): AsyncGenerator<Record<string, unknown>, void, unknown> {
     const model = `${targetType}/${targetName}`;
     const response = await fetch('/api/openai/v1/chat/completions', {
@@ -366,7 +405,10 @@ export const chatService = {
         model,
         messages,
         stream: true,
-        metadata: sessionId ? { sessionId } : undefined,
+        metadata: {
+          ...(sessionId ? { sessionId } : {}),
+          ...(timeout ? { timeout } : {}),
+        },
       }),
     });
 

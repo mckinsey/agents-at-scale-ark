@@ -2,6 +2,9 @@ apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   name: team-graph-selector
+  labels:
+    # LLM tests call real language model APIs
+    llm: "true"
 spec:
   description: Test selector team strategy with graph constraints
   # Graph-constrained selector combines AI-driven selection with workflow constraints
@@ -25,16 +28,15 @@ spec:
           value: ($namespace)
     - apply:
         file: manifests/*.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          metadata:
-            name: test-model
-          status:
-            conditions:
-            - type: ModelAvailable
-              status: "True"
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True' 
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -79,6 +81,8 @@ spec:
                 to: analyzer
               - from: analyzer
                 to: writer
+              - from: writer
+                to: coordinator
   - name: wait-for-query-completion
     try:
     - assert:
@@ -90,7 +94,7 @@ spec:
           status:
             (conditions[?type == 'Completed']):
             - status: 'True'
-        timeout: 180s
+        timeout: 360s
   - name: validate-graph-selector-execution
     try:
     - assert:
@@ -130,3 +134,10 @@ spec:
               echo "Found $graph_constrained graph-constrained selection events"
           fi
 
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

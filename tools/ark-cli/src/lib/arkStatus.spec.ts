@@ -1,8 +1,8 @@
-import {describe, it, expect, jest, beforeEach} from '@jest/globals';
+import {describe, it, expect, vi, beforeEach} from 'vitest';
 
 // Mock execa using unstable_mockModule
-jest.unstable_mockModule('execa', () => ({
-  execa: jest.fn(),
+vi.mock('execa', () => ({
+  execa: vi.fn(),
 }));
 
 // Dynamic imports after mock
@@ -12,7 +12,7 @@ const {isArkReady} = await import('./arkStatus.js');
 describe('arkStatus with __mocks__', () => {
   describe('isArkReady', () => {
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
     });
 
     it('should return true when ark-controller is deployed and ready', async () => {

@@ -10,7 +10,7 @@ spec:
     - script:
         content: |
           helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
-            --version 0.1.27 \
+            --version 0.1.28 \
             --namespace $NAMESPACE \
             --values mock-llm-values.yaml
         env:
@@ -105,6 +105,14 @@ spec:
           status:
             (conditions[?type == 'Completed']):
             - status: 'True'
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: message-counter-second
+          status:
             (response != null): true
             (contains(response.content, '2 message(s) received')): true
     catch:
@@ -113,3 +121,12 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: message-counter-second
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

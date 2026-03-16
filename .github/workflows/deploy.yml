@@ -77,6 +77,9 @@ jobs:
         include:
           - path: ark
             image: ark-controller
+          - path: ark
+            image: ark-completions
+            dockerfile: Dockerfile.completions
           - path: services/ark-api
             image: ark-api
             prebuild: "make ark-api-deps && mkdir -p services/ark-api/ark-api/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/out/"
@@ -134,6 +137,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           prebuild: ${{ matrix.prebuild }}
+          dockerfile: ${{ matrix.dockerfile || 'Dockerfile' }}
       
       - name: Push to "latest" tag
         if: ${{ inputs.deploy_containers_to_latest }}
@@ -200,8 +204,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
   deploy-helm-charts:
-    needs: [resolve_version]
-    if: ${{ inputs.deploy_helm_chart }}
+    needs: [resolve_version, deploy]
+    if: ${{ always() && inputs.deploy_helm_chart && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped') }}
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -259,7 +263,7 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "22.x"
           
@@ -282,8 +286,8 @@ jobs:
         uses: actions/deploy-pages@v4
 
   deploy-to-npm:
-    needs: [resolve_version]
-    if: ${{ inputs.deploy_to_npm }}
+    needs: [resolve_version, deploy]
+    if: ${{ always() && inputs.deploy_to_npm && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -296,7 +300,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
       
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "22.x"
           registry-url: https://registry.npmjs.org/
@@ -311,8 +315,8 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   deploy-to-pypi:
-    needs: [resolve_version]
-    if: ${{ inputs.deploy_to_pypi }}
+    needs: [resolve_version, deploy]
+    if: ${{ always() && inputs.deploy_to_pypi && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4

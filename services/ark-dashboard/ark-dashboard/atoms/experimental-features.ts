@@ -53,5 +53,29 @@ export const isBrokerEnabledAtom = atom(get => {
   return get(storedIsBrokerEnabledAtom);
 });
 
+export const MARKETPLACE_FEATURE_KEY = 'experimental-marketplace';
+export const storedIsMarketplaceEnabledAtom = atomWithStorage<boolean>(
+  MARKETPLACE_FEATURE_KEY,
+  false,
+  undefined,
+  { getOnInit: true },
+);
+
+export const isMarketplaceEnabledAtom = atom(get => {
+  return get(storedIsMarketplaceEnabledAtom);
+});
+
 export const FILES_BROWSER_FEATURE_KEY = 'files-browser-available';
 export const isFilesBrowserAvailableAtom = atom<boolean>(false);
+
+export const QUERY_TIMEOUT_SETTING_KEY = 'query-timeout-setting';
+export const storedQueryTimeoutSettingAtom = atomWithStorage<string>(
+  QUERY_TIMEOUT_SETTING_KEY,
+  '5m',
+  undefined,
+  { getOnInit: true },
+);
+
+export const queryTimeoutSettingAtom = atom(get => {
+  return get(storedQueryTimeoutSettingAtom);
+});

@@ -36,6 +36,10 @@ func (t *MockTracer) Start(ctx context.Context, spanName string, opts ...telemet
 		Config:     cfg,
 	}
 
+	for _, attr := range cfg.Attributes {
+		span.Attributes[attr.Key] = attr.Value
+	}
+
 	t.mu.Lock()
 	t.Spans = append(t.Spans, span)
 	t.mu.Unlock()
@@ -201,11 +205,16 @@ func NewQueryRecorder(tracer *MockTracer) *MockQueryRecorder {
 }
 
 func (r *MockQueryRecorder) StartQuery(ctx context.Context, query *arkv1alpha1.Query, phase string) (context.Context, telemetry.Span) {
+	sessionID := query.Spec.SessionId
+	if sessionID == "" {
+		sessionID = string(query.UID)
+	}
 	return r.Tracer.Start(ctx, "query."+phase,
 		telemetry.WithAttributes(
 			telemetry.String(telemetry.AttrQueryName, query.Name),
 			telemetry.String(telemetry.AttrQueryNamespace, query.Namespace),
 			telemetry.String(telemetry.AttrQueryPhase, phase),
+			telemetry.String(telemetry.AttrSessionID, sessionID),
 		),
 	)
 }
@@ -241,18 +250,6 @@ func (r *MockQueryRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, 
 		telemetry.Int64(telemetry.AttrTokensCompletion, completionTokens),
 		telemetry.Int64(telemetry.AttrTokensTotal, totalTokens),
 	)
-}
-
-func (r *MockQueryRecorder) RecordSessionID(span telemetry.Span, sessionID string) {
-	if sessionID != "" {
-		span.SetAttributes(telemetry.String(telemetry.AttrSessionID, sessionID))
-	}
-}
-
-func (r *MockQueryRecorder) RecordConversationID(span telemetry.Span, conversationID string) {
-	if conversationID != "" {
-		span.SetAttributes(telemetry.String(telemetry.AttrConversationID, conversationID))
-	}
 }
 
 func (r *MockQueryRecorder) RecordSuccess(span telemetry.Span) {

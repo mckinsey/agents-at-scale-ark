@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kyc-demo
+  labels:
+    ark.mckinsey.com/demo: "true"
+  annotations:
+    ark.mckinsey.com/demo-name: "KYC Demo"
+    ark.mckinsey.com/demo-description: "Know Your Customer agent for identity verification and compliance automation"

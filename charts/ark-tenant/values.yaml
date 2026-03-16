@@ -46,6 +46,20 @@ networkPolicy:
   # - ark-system
   # - monitoring
 
+# AI Gateway token refresh
+# Creates a CronJob that keeps the AIGW API key up to date using SA credentials.
+# SA credentials rotate every 90 days; the CronJob detects this and updates both secrets.
+aigwTokenRefresh:
+  enabled: false
+  clientId: ""
+  clientSecret: ""
+  instanceId: ""
+  aigwSecret: aigw-secret
+  saCredentialsSecret: aigw-sa-credentials
+  schedule: "0 2 * * *"
+  saEndpoint: "https://service-account.prod.ai-gateway.quantumblack.com/api/service-account-credentials"
+  image: bitnami/kubectl:latest
+
 # Builtin tools configuration
 builtinTools:
   create: true

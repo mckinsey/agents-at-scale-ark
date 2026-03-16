@@ -23,8 +23,9 @@ import (
 	"mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/eventing"
-	"mckinsey.com/ark/internal/genai"
 	"mckinsey.com/ark/internal/labels"
+	arkmcp "mckinsey.com/ark/internal/mcp"
+	"mckinsey.com/ark/internal/resolution"
 )
 
 const (
@@ -111,7 +112,7 @@ func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer arkv1
 		if err := r.reconcileConditionsAddressResolutionFailed(ctx, &mcpServer, err); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: mcpServer.Spec.PollInterval.Duration}, nil
+		return ctrl.Result{RequeueAfter: getPollInterval(mcpServer.Spec.PollInterval)}, nil
 	}
 
 	mcpServer.Status.ResolvedAddress = resolvedAddress
@@ -124,7 +125,7 @@ func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer arkv1
 		if err := r.deleteAllMCPTools(ctx, mcpServer.Namespace, mcpServer.Name); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: mcpServer.Spec.PollInterval.Duration}, nil
+		return ctrl.Result{RequeueAfter: getPollInterval(mcpServer.Spec.PollInterval)}, nil
 	}
 
 	mcpTools, err := mcpClient.ListTools(ctx)
@@ -132,7 +133,7 @@ func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer arkv1
 		if err := r.reconcileConditionsToolListingFailed(ctx, &mcpServer, err); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: mcpServer.Spec.PollInterval.Duration}, nil
+		return ctrl.Result{RequeueAfter: getPollInterval(mcpServer.Spec.PollInterval)}, nil
 	}
 
 	toolsChanged, err := r.createTools(ctx, &mcpServer, mcpTools)
@@ -140,7 +141,7 @@ func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer arkv1
 		if err := r.reconcileConditionsToolCreationFailed(ctx, &mcpServer, err); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: mcpServer.Spec.PollInterval.Duration}, nil
+		return ctrl.Result{RequeueAfter: getPollInterval(mcpServer.Spec.PollInterval)}, nil
 	}
 
 	return r.finalizeMCPServerProcessing(ctx, mcpServer, len(mcpTools), toolsChanged)
@@ -249,8 +250,8 @@ func (r *MCPServerReconciler) updateStatus(ctx context.Context, mcpServer *arkv1
 	return err
 }
 
-func (r *MCPServerReconciler) createMCPClient(ctx context.Context, mcpServer *arkv1alpha1.MCPServer) (*genai.MCPClient, error) {
-	mcpURL, err := genai.BuildMCPServerURL(ctx, r.Client, mcpServer)
+func (r *MCPServerReconciler) createMCPClient(ctx context.Context, mcpServer *arkv1alpha1.MCPServer) (*arkmcp.MCPClient, error) {
+	mcpURL, err := arkmcp.BuildMCPServerURL(ctx, r.Client, mcpServer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build MCP server URL: %v", err)
 	}
@@ -275,7 +276,7 @@ func (r *MCPServerReconciler) createMCPClient(ctx context.Context, mcpServer *ar
 	}
 
 	// MCP settings are not needed for listing tools, etc.
-	mcpClient, err := genai.NewMCPClient(ctx, mcpURL, headers, mcpServer.Spec.Transport, timeout, genai.MCPSettings{})
+	mcpClient, err := arkmcp.NewMCPClient(ctx, mcpURL, headers, mcpServer.Spec.Transport, timeout, arkmcp.MCPSettings{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create MCP client: %w", err)
 	}
@@ -283,7 +284,7 @@ func (r *MCPServerReconciler) createMCPClient(ctx context.Context, mcpServer *ar
 }
 
 func (r *MCPServerReconciler) resolveHeaders(ctx context.Context, mcpServer *arkv1alpha1.MCPServer) (map[string]string, error) {
-	headers, err := genai.ResolveHeaders(ctx, r.Client, mcpServer.Spec.Headers, mcpServer.Namespace)
+	headers, err := resolution.ResolveHeaders(ctx, r.Client, mcpServer.Spec.Headers, mcpServer.Namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -296,7 +297,7 @@ func (r *MCPServerReconciler) finalizeMCPServerProcessing(ctx context.Context, m
 	}
 
 	// fetch tools according to polling interval or default interval
-	return ctrl.Result{RequeueAfter: mcpServer.Spec.PollInterval.Duration}, nil
+	return ctrl.Result{RequeueAfter: getPollInterval(mcpServer.Spec.PollInterval)}, nil
 }
 
 func (r *MCPServerReconciler) createTools(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, mcpTools []*mcp.Tool) (bool, error) {

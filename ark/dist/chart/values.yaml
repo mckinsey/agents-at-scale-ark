@@ -10,6 +10,8 @@ controllerManager:
       - "--leader-elect"
       - "--metrics-bind-address=:8443"
       - "--health-probe-bind-address=:8081"
+    env:
+      ARK_MODEL_PROBE_TIMEOUT_SECONDS: "60"
     resources:
       limits:
         cpu: 500m
@@ -18,14 +20,18 @@ controllerManager:
         cpu: 10m
         memory: 64Mi
     livenessProbe:
-      initialDelaySeconds: 15
+      initialDelaySeconds: 60
       periodSeconds: 20
+      timeoutSeconds: 10
+      failureThreshold: 3
       httpGet:
         path: /healthz
         port: 8081
     readinessProbe:
-      initialDelaySeconds: 5
+      initialDelaySeconds: 30
       periodSeconds: 10
+      timeoutSeconds: 10
+      failureThreshold: 3
       httpGet:
         path: /readyz
         port: 8081
@@ -40,6 +46,9 @@ controllerManager:
       type: RuntimeDefault
   terminationGracePeriodSeconds: 10
   serviceAccountName: ark-controller
+
+completions:
+  addr: "http://ark-completions.ark-system:9090" # NOSONAR - cluster-internal service communication
 
 # [RBAC]: To enable RBAC (Permissions) configurations
 rbac:
@@ -60,15 +69,14 @@ rbac:
 
 # [CRDs]: To enable the CRDs
 crd:
-  # This option determines whether the CRDs are included
-  # in the installation process.
+  # This option determines whether the CRDs are included in the installation.
+  # NOTE: CRDs are automatically disabled when storage.backend is not "etcd"
+  # (e.g., postgresql), since the embedded apiserver serves the APIs.
   enable: true
 
   # Enabling this option adds the "helm.sh/resource-policy": keep
   # annotation to the CRD, ensuring it remains installed even when
   # the Helm release is uninstalled.
-  # NOTE: Removing the CRDs will also remove all cert-manager CR(s)
-  # (Certificates, Issuers, ...) due to garbage collection.
   keep: true
 
 # [METRICS]: Set to true to generate manifests for exporting metrics.
@@ -112,3 +120,42 @@ customCACert:
   enabled: false
   secretName: "custom-ca-cert"
   key: "ca.crt"
+
+# [MODEL-URL-SECURITY]: Model URL security configuration
+# Opt-in domain whitelist: When enabled, restricts to specific domains
+# Opt-in private IP allowlist: When enabled, allows specific internal IP ranges
+modelUrlSecurity:
+  configMapName: "model-url-security"
+  domainWhitelist:
+    enabled: false
+    key: "whitelisted-domains"
+  privateIPAllowlist:
+    enabled: false
+    key: "allowed-private-ips"
+
+# [TELEMETRY]: Telemetry and tracing configuration
+telemetry:
+  tenantRouting:
+    # Enable per-tenant OTEL endpoint discovery from Secrets.
+    # When enabled, the controller looks for Secrets named "otel-environment-variables"
+    # in each namespace containing OTEL_EXPORTER_OTLP_ENDPOINT and optional
+    # OTEL_EXPORTER_OTLP_HEADERS, then routes traces to those endpoints.
+    otelDiscovery: false
+# [STORAGE]: Storage backend configuration for embedded API server
+# When backend is set to "postgresql", an embedded API server is started
+# and Ark resources are stored in PostgreSQL instead of etcd via CRDs.
+# NOTE: When using postgresql, CRDs are automatically skipped and APIService
+# resources are created to route API requests to the embedded apiserver.
+storage:
+  # Options: "etcd" (default, uses CRDs), "postgresql"
+  backend: "etcd"
+  apiserver:
+    port: 6443
+  postgresql:
+    host: ""
+    port: 5432
+    database: "ark"
+    user: ""
+    passwordSecretName: ""
+    passwordSecretKey: "password"
+    sslMode: "disable"
