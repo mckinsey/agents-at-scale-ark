@@ -32,12 +32,6 @@ type QueryRecorder interface {
 	// RecordTokenUsage records LLM token consumption.
 	RecordTokenUsage(span Span, promptTokens, completionTokens, totalTokens int64)
 
-	// RecordSessionID associates a span with a session for multi-query tracking.
-	RecordSessionID(span Span, sessionID string)
-
-	// RecordConversationID associates a span with a conversation for multi-query tracking.
-	RecordConversationID(span Span, conversationID string)
-
 	// RecordSuccess marks a span as successfully completed.
 	RecordSuccess(span Span)
 

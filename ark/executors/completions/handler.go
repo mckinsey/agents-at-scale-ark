@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/openai/openai-go"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -14,6 +15,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
+	"mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
 )
@@ -101,13 +103,13 @@ func (h *Handler) ProcessMessage(
 	defer state.querySpan.End()
 	defer state.targetSpan.End()
 
-	responseMessages, err := h.dispatchTarget(ctx, state)
+	execResult, responseMessages, err := h.dispatchTarget(ctx, state)
 	if err != nil {
 		state.finalizeStream(ctx, nil)
 		return nil, fmt.Errorf("execution failed: %w", err)
 	}
 
-	return h.buildA2AResponse(ctx, state, responseMessages), nil
+	return h.buildA2AResponse(ctx, state, responseMessages, execResult), nil
 }
 
 func (h *Handler) resolveQueryAndTarget(ctx context.Context, message protocol.Message) (*arkv1alpha1.Query, *arkv1alpha1.QueryTarget, error) {
@@ -135,6 +137,13 @@ func (h *Handler) resolveQueryAndTarget(ctx context.Context, message protocol.Me
 			Name: meta.Target.Name,
 		}
 	}
+	if target == nil && query.Spec.Selector != nil {
+		resolved, err := h.resolveSelector(ctx, &query)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to resolve selector for query %s/%s: %w", meta.Query.Namespace, meta.Query.Name, err)
+		}
+		target = resolved
+	}
 	if target == nil {
 		return nil, nil, fmt.Errorf("query %s/%s has no target", meta.Query.Namespace, meta.Query.Name)
 	}
@@ -153,7 +162,10 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 	if sessionId == "" {
 		sessionId = string(query.UID)
 	}
-	h.telemetry.QueryRecorder().RecordSessionID(querySpan, sessionId)
+	ctx = WithQueryContext(ctx, string(query.UID), sessionId, query.Name)
+	if a2aContextID, ok := query.Annotations[annotations.A2AContextID]; ok && a2aContextID != "" {
+		ctx = WithA2AContextID(ctx, a2aContextID)
+	}
 
 	inputMessages, err := GetQueryInputMessages(ctx, *query, h.k8sClient)
 	if err != nil {
@@ -205,13 +217,14 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 	return ctx, state, nil
 }
 
-func (h *Handler) dispatchTarget(ctx context.Context, state *executionState) ([]Message, error) {
+func (h *Handler) dispatchTarget(ctx context.Context, state *executionState) (*ExecutionResult, []Message, error) {
+	var execResult *ExecutionResult
 	var responseMessages []Message
 	var err error
 
 	switch state.target.Type {
 	case ToolTypeAgent, ToolTypeTeam:
-		_, responseMessages, err = h.executeMember(ctx, state)
+		execResult, responseMessages, err = h.executeMember(ctx, state)
 	case "model":
 		responseMessages, err = h.executeModel(ctx, state.query, state.target.Name, state.inputMessages, state.memoryMessages, state.eventStream)
 	case "tool":
@@ -224,13 +237,13 @@ func (h *Handler) dispatchTarget(ctx context.Context, state *executionState) ([]
 		h.telemetry.QueryRecorder().RecordError(state.targetSpan, err)
 		h.telemetry.QueryRecorder().RecordError(state.querySpan, err)
 		StreamError(ctx, state.eventStream, err, "execution_failed", state.target.Name)
-		return nil, err
+		return nil, nil, err
 	}
 
-	return responseMessages, nil
+	return execResult, responseMessages, nil
 }
 
-func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, responseMessages []Message) *taskmanager.MessageProcessingResult {
+func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, responseMessages []Message, execResult *ExecutionResult) *taskmanager.MessageProcessingResult {
 	responseContent := extractAssistantText(responseMessages)
 	h.telemetry.QueryRecorder().RecordOutput(state.targetSpan, responseContent)
 	h.telemetry.QueryRecorder().RecordRootOutput(state.querySpan, responseContent)
@@ -249,22 +262,7 @@ func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, r
 		h.telemetry.QueryRecorder().RecordTokenUsage(state.querySpan, tokenSummary.PromptTokens, tokenSummary.CompletionTokens, tokenSummary.TotalTokens)
 	}
 
-	responseMeta := map[string]any{}
-	if tokenSummary.TotalTokens > 0 {
-		responseMeta["tokenUsage"] = map[string]any{
-			"prompt_tokens":     tokenSummary.PromptTokens,
-			"completion_tokens": tokenSummary.CompletionTokens,
-			"total_tokens":      tokenSummary.TotalTokens,
-		}
-	}
-	if state.conversationId != "" {
-		responseMeta["conversationId"] = state.conversationId
-	}
-
-	serializedMessages := serializeResponseMessages(responseMessages)
-	if serializedMessages != "" {
-		responseMeta["messages"] = json.RawMessage(serializedMessages)
-	}
+	responseMeta := buildResponseMeta(state, execResult, responseMessages, tokenSummary)
 
 	responseMessage := protocol.NewMessage(
 		protocol.MessageRoleAgent,
@@ -272,7 +270,7 @@ func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, r
 	)
 	if len(responseMeta) > 0 {
 		responseMessage.Metadata = map[string]any{
-			arka2a.ArkMetadataKey: responseMeta,
+			arka2a.QueryExtensionMetadataKey: responseMeta,
 		}
 	}
 
@@ -423,25 +421,105 @@ func (h *Handler) executeTool(
 	return []Message{NewAssistantMessage(result.Content)}, nil
 }
 
+func buildResponseMeta(state *executionState, execResult *ExecutionResult, responseMessages []Message, tokenSummary arkv1alpha1.TokenUsage) map[string]any {
+	responseMeta := map[string]any{}
+	if tokenSummary.TotalTokens > 0 {
+		responseMeta["tokenUsage"] = map[string]any{
+			"prompt_tokens":     tokenSummary.PromptTokens,
+			"completion_tokens": tokenSummary.CompletionTokens,
+			"total_tokens":      tokenSummary.TotalTokens,
+		}
+	}
+	if state.conversationId != "" {
+		responseMeta["conversationId"] = state.conversationId
+	}
+	if execResult != nil && execResult.A2AResponse != nil {
+		a2aMeta := map[string]string{}
+		if execResult.A2AResponse.ContextID != "" {
+			a2aMeta["contextId"] = execResult.A2AResponse.ContextID
+		}
+		if execResult.A2AResponse.TaskID != "" {
+			a2aMeta["taskId"] = execResult.A2AResponse.TaskID
+		}
+		if len(a2aMeta) > 0 {
+			responseMeta["a2a"] = a2aMeta
+		}
+	}
+	if serialized := serializeResponseMessages(responseMessages); serialized != "" {
+		responseMeta["messages"] = json.RawMessage(serialized)
+	}
+	return responseMeta
+}
+
+func (h *Handler) resolveSelector(ctx context.Context, query *arkv1alpha1.Query) (*arkv1alpha1.QueryTarget, error) {
+	labelSelector, err := metav1.LabelSelectorAsSelector(query.Spec.Selector)
+	if err != nil {
+		return nil, fmt.Errorf("invalid label selector: %w", err)
+	}
+	opts := &client.ListOptions{
+		Namespace:     query.Namespace,
+		LabelSelector: labelSelector,
+	}
+
+	checks := []struct {
+		list    client.ObjectList
+		typ     string
+		getName func() string
+	}{
+		{&arkv1alpha1.AgentList{}, ToolTypeAgent, nil},
+		{&arkv1alpha1.TeamList{}, ToolTypeTeam, nil},
+		{&arkv1alpha1.ModelList{}, "model", nil},
+		{&arkv1alpha1.ToolList{}, "tool", nil},
+	}
+	checks[0].getName = func() string { return firstItemName(checks[0].list.(*arkv1alpha1.AgentList).Items) }
+	checks[1].getName = func() string { return firstItemName(checks[1].list.(*arkv1alpha1.TeamList).Items) }
+	checks[2].getName = func() string { return firstItemName(checks[2].list.(*arkv1alpha1.ModelList).Items) }
+	checks[3].getName = func() string { return firstItemName(checks[3].list.(*arkv1alpha1.ToolList).Items) }
+
+	for _, c := range checks {
+		if err := h.k8sClient.List(ctx, c.list, opts); err != nil {
+			continue
+		}
+		if name := c.getName(); name != "" {
+			return &arkv1alpha1.QueryTarget{Type: c.typ, Name: name}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no matching resources found for selector")
+}
+
+func firstItemName[T any, PT interface {
+	*T
+	GetName() string
+}](items []T) string {
+	if len(items) > 0 {
+		return PT(&items[0]).GetName()
+	}
+	return ""
+}
+
+// Query extension spec: ark/api/extensions/query/v1/
 func extractArkMetadata(message protocol.Message) (*arkMetadata, error) {
 	if message.Metadata == nil {
 		return nil, fmt.Errorf("message has no metadata")
 	}
 
-	arkData, ok := message.Metadata[arka2a.ArkMetadataKey]
+	refData, ok := message.Metadata[arka2a.QueryExtensionMetadataKey]
 	if !ok {
-		return nil, fmt.Errorf("message metadata missing %s key", arka2a.ArkMetadataKey)
+		return nil, fmt.Errorf("message metadata missing %s key", arka2a.QueryExtensionMetadataKey)
 	}
 
-	raw, err := json.Marshal(arkData)
+	raw, err := json.Marshal(refData)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal ark metadata: %w", err)
+		return nil, fmt.Errorf("failed to marshal query ref: %w", err)
 	}
 
-	var meta arkMetadata
-	if err := json.Unmarshal(raw, &meta); err != nil {
-		return nil, fmt.Errorf("failed to parse ark metadata: %w", err)
+	var ref queryRef
+	if err := json.Unmarshal(raw, &ref); err != nil {
+		return nil, fmt.Errorf("failed to parse query ref: %w", err)
 	}
+
+	meta := arkMetadata{Query: ref}
 
 	return &meta, nil
 }

@@ -23,7 +23,8 @@ go test ./executors/completions/...  # Run tests
 
 - The engine is stateless from Query CR perspective — receives context via A2A metadata, executes, returns results
 - The controller is the sole writer to Query CR status
-- Agent execution routes based on ExecutionEngine spec (local, A2A, named engine)
+- Agent execution routes based on ExecutionEngine spec (local or A2A). Named execution engines are dispatched directly by the controller.
+- Traces are linked to the controller's root span via W3C traceparent propagation. Session ID flows via baggage.
 - Team execution supports sequential, round-robin, selector, and graph strategies
 
 ## Dependencies

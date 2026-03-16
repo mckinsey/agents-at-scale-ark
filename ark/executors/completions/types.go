@@ -3,6 +3,7 @@ package completions
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/openai/openai-go"
 )
@@ -49,10 +50,12 @@ type ToolExecutor interface {
 	Execute(ctx context.Context, call ToolCall) (ToolResult, error)
 }
 
+const terminateTeamMessage = "TerminateTeam"
+
 type TerminateTeam struct{}
 
 func (e *TerminateTeam) Error() string {
-	return "TerminateTeam"
+	return terminateTeamMessage
 }
 
 func IsTerminateTeam(err error) bool {
@@ -61,4 +64,31 @@ func IsTerminateTeam(err error) bool {
 	}
 	var terminateErr *TerminateTeam
 	return errors.As(err, &terminateErr)
+}
+
+// TerminateTeamWithReason wraps TerminateTeam with additional context
+// This allows programmatic termination without using the terminate tool
+type TerminateTeamWithReason struct {
+	Reason string
+	base   TerminateTeam
+}
+
+func (e *TerminateTeamWithReason) Error() string {
+	if e.Reason != "" {
+		return fmt.Sprintf("%s: %s", terminateTeamMessage, e.Reason)
+	}
+	return terminateTeamMessage
+}
+
+// Unwrap returns the wrapped TerminateTeam error
+// This makes IsTerminateTeam() return true for TerminateTeamWithReason
+func (e *TerminateTeamWithReason) Unwrap() error {
+	return &e.base
+}
+
+// NewTerminateTeamWithReason creates a new termination error with context
+func NewTerminateTeamWithReason(reason string) error {
+	return &TerminateTeamWithReason{
+		Reason: reason,
+	}
 }

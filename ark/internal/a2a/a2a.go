@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -20,10 +21,13 @@ import (
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/resolution"
-	"mckinsey.com/ark/internal/telemetry"
 )
 
-const ArkMetadataKey = "ark.mckinsey.com/execution-engine"
+// Query extension spec: ark/api/extensions/query/v1/
+const (
+	QueryExtensionURI         = "https://github.com/mckinsey/agents-at-scale-ark/tree/main/ark/api/extensions/query/v1"
+	QueryExtensionMetadataKey = QueryExtensionURI + "/ref"
+)
 
 const (
 	AgentCardPathVersion2 = "/.well-known/agent.json"
@@ -92,7 +96,18 @@ func CreateA2AClient(ctx context.Context, k8sClient client.Client, rpcURL string
 		timeout = time.Until(deadline)
 	}
 
+	httpClient := &http.Client{
+		Timeout: timeout,
+		Transport: otelhttp.NewTransport(http.DefaultTransport,
+			otelhttp.WithSpanNameFormatter(func(_ string, _ *http.Request) string {
+				return "a2a.send"
+			}),
+		),
+	}
+
 	var clientOptions []a2aclient.Option
+	clientOptions = append(clientOptions, a2aclient.WithHTTPClient(httpClient))
+
 	if len(headers) > 0 {
 		resolvedHeaders, err := resolveA2AHeaders(ctx, k8sClient, headers, namespace)
 		if err != nil {
@@ -102,13 +117,9 @@ func CreateA2AClient(ctx context.Context, k8sClient client.Client, rpcURL string
 			return nil, err
 		}
 
-		httpClient := &http.Client{Timeout: timeout}
-		clientOptions = append(clientOptions, a2aclient.WithHTTPClient(httpClient))
 		clientOptions = append(clientOptions, a2aclient.WithHTTPReqHandler(&customA2ARequestHandler{
 			headers: resolvedHeaders,
 		}))
-	} else {
-		clientOptions = append(clientOptions, a2aclient.WithTimeout(timeout))
 	}
 
 	a2aClient, err := a2aclient.NewA2AClient(rpcURL, clientOptions...)
@@ -166,13 +177,6 @@ func (h *customA2ARequestHandler) Handle(ctx context.Context, httpClient *http.C
 	for name, value := range h.headers {
 		req.Header.Set(name, value)
 	}
-
-	headerMap := make(map[string]string)
-	telemetry.InjectOTELHeaders(ctx, headerMap)
-	for name, value := range headerMap {
-		req.Header.Set(name, value)
-	}
-
 	return httpClient.Do(req)
 }
 
@@ -303,17 +307,18 @@ func createA2ARequest(ctx context.Context, agentCardURL string, headers []arkv1p
 		}
 	}
 
-	headerMap := make(map[string]string)
-	telemetry.InjectOTELHeaders(ctx, headerMap)
-	for name, value := range headerMap {
-		req.Header.Set(name, value)
-	}
-
 	return req, nil
 }
 
 func executeA2ARequest(ctx context.Context, req *http.Request, a2aRecorder eventing.A2aRecorder) (*A2AAgentCard, error) {
-	httpClient := &http.Client{Timeout: 30 * time.Second}
+	httpClient := &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: otelhttp.NewTransport(http.DefaultTransport,
+			otelhttp.WithSpanNameFormatter(func(_ string, _ *http.Request) string {
+				return "a2a.discover"
+			}),
+		),
+	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		if a2aRecorder != nil {

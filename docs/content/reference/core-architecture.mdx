@@ -82,6 +82,7 @@ sequenceDiagram
     participant ArkAPI as Embedded Ark API Server
     participant ArkDB as PostgreSQL
     participant Controller as Ark Controller
+    participant Engine as Completions Engine
     participant Model as Model Provider
 
     Note over KubeAPI,ArkAPI: Kubernetes Aggregation Layer<br/>proxies ark.mckinsey.com requests
@@ -100,8 +101,10 @@ sequenceDiagram
     ArkAPI->>ArkDB: Retrieve Query
     ArkDB-->>ArkAPI: Query data
     ArkAPI-->>Controller: Query data
-    Controller->>Model: LLM API call
-    Model-->>Controller: Response
+    Controller->>Engine: A2A SendMessage
+    Engine->>Model: LLM API call
+    Model-->>Engine: Response
+    Engine-->>Controller: A2A Response
     Controller->>ArkAPI: Update Query status
     ArkAPI->>ArkDB: Store result
 ```
@@ -144,9 +147,10 @@ flowchart TB
 
         subgraph controller["Ark Controller"]
             ctrl_reconcile["Reconciliation"]
-            ctrl_query["Query execution"]
             ctrl_webhook["Webhooks"]
         end
+
+        completions["Completions Engine"]
 
         subgraph etcd_box["etcd"]
             etcd_k8s["pods, services, deployments"]
@@ -155,13 +159,14 @@ flowchart TB
 
         kubectl --> apiserver
         apiserver <--> controller
+        controller -- "A2A" --> completions
         apiserver --> etcd_box
     end
 ```
 
 **Characteristics:**
 - Single storage backend for all resources
-- Controller-based query execution (sequential)
+- Controller delegates query execution to completions engine via A2A
 - Simple deployment, no additional infrastructure
 - Standard Kubernetes CRD pattern
 
@@ -186,10 +191,11 @@ flowchart TB
 
         subgraph controller["Ark Controller Pod"]
             ctrl_reconcile["Reconciliation"]
-            ctrl_query["Query execution"]
             ctrl_webhook["Webhooks"]
             embedded_api["Embedded ark-apiserver<br/>(port 6443)"]
         end
+
+        completions["Completions Engine"]
 
         subgraph etcd_box["etcd"]
             etcd_k8s["pods, services,<br/>deployments, configmaps"]
@@ -204,12 +210,14 @@ flowchart TB
         apiserver --> embedded_api
         embedded_api --> postgres
         ctrl_reconcile <--> embedded_api
+        ctrl_reconcile -- "A2A" --> completions
     end
 ```
 
 **Characteristics:**
 - Dedicated storage for Ark resources in PostgreSQL
 - Embedded API server within controller pod
+- Controller delegates query execution to completions engine via A2A
 - PostgreSQL LISTEN/NOTIFY for watch events
 - Keyset pagination for efficient LIST operations
 
