@@ -95,9 +95,9 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 build: validate-chart-crds manifests generate fmt vet ## Build manager binary.
 	go build $(LDFLAGS) -o bin/manager cmd/main.go
 
-.PHONY: build-query-engine
-build-query-engine: fmt vet ## Build query engine binary.
-	go build $(LDFLAGS) -o bin/query-engine cmd/query-engine/main.go
+.PHONY: build-completions
+build-completions: fmt vet ## Build completions engine binary.
+	go build $(LDFLAGS) -o bin/completions cmd/completions/main.go
 
 .PHONY: run
 run: manifests generate fmt vet
@@ -146,16 +146,16 @@ build-container: ## Build the ark-controller
 		-t $(IMAGE):$(IMAGE_TAG) \
 		-f Dockerfile .
 
-QUERY_ENGINE_IMAGE ?= ark-query-engine
-QUERY_ENGINE_IMAGE_TAG ?= latest
+COMPLETIONS_IMAGE ?= ark-completions
+COMPLETIONS_IMAGE_TAG ?= latest
 
-.PHONY: build-query-engine-container
-build-query-engine-container: ## Build the ark-query-engine container
+.PHONY: build-completions-container
+build-completions-container: ## Build the ark-completions container
 	$(CONTAINER_TOOL) build \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
-		-t $(QUERY_ENGINE_IMAGE):$(QUERY_ENGINE_IMAGE_TAG) \
-		-f Dockerfile.query-engine .
+		-t $(COMPLETIONS_IMAGE):$(COMPLETIONS_IMAGE_TAG) \
+		-f Dockerfile.completions .
 
 .PHONY: deploy
 deploy: manifests ## Deploy controller and cert-manager to the K8s cluster specified in ~/.kube/config.
