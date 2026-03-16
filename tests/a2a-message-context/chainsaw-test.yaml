@@ -59,7 +59,7 @@ spec:
             name: message-counter-first
           status:
             (response != null): true
-            (contains(response.content, '1 message(s) received')): true
+            (contains(response.content || '', '1 message(s) received')): true
     catch:
     - events: {}
     - describe:
@@ -106,7 +106,7 @@ spec:
             (conditions[?type == 'Completed']):
             - status: 'True'
             (response != null): true
-            (contains(response.content, '2 message(s) received')): true
+            (contains(response.content || '', '2 message(s) received')): true
     catch:
     - events: {}
     - describe:
