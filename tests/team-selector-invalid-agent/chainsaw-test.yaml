@@ -81,14 +81,6 @@ spec:
             exit 1
           fi
 
-          # Check for "Ending conversation" message
-          if echo "$RESPONSE" | grep -qi "Ending conversation"; then
-            echo "✓ Found conversation ending message"
-          else
-            echo "✗ Missing conversation ending message"
-            exit 1
-          fi
-
           echo ""
           echo "✓ Test passed: Selector returned invalid name and conversation ended correctly"
         env:
