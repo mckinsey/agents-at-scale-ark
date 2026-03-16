@@ -9,9 +9,9 @@ export function SelectorFailureEvent({
   message,
   className,
 }: Readonly<SelectorFailureEventProps>) {
-  const match = message?.match(/returned (.+)$/);
+  const match = message?.match(/invalid agent name: (.+)$/);
   const selectedName = match ? match[1] : 'unknown';
-  const label = `Selector returned invalid agent: ${selectedName}`;
+  const label = `Selector returned invalid agent: ${selectedName}. Ending conversation`;
 
   return (
     <div

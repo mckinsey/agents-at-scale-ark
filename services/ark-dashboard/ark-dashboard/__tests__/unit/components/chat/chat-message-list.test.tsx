@@ -369,7 +369,7 @@ describe('ChatMessageList', () => {
         { role: 'user', content: 'Hello' } as ExtendedChatMessage,
         {
           role: 'system',
-          content: 'Selector did not choose valid agent: returned invalid-agent',
+          content: 'Selector returned invalid agent name: invalid-agent',
         } as ExtendedChatMessage,
         {
           role: 'assistant',
@@ -381,7 +381,7 @@ describe('ChatMessageList', () => {
       renderChatMessageList({ messages, strategy: 'selector' });
 
       expect(
-        screen.getByText('Selector returned invalid agent: invalid-agent'),
+        screen.getByText('Selector returned invalid agent: invalid-agent. Ending conversation'),
       ).toBeInTheDocument();
     });
 

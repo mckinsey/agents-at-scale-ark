@@ -34,7 +34,7 @@ type InvalidAgentError struct {
 }
 
 func (e *InvalidAgentError) Error() string {
-	return fmt.Sprintf("selector returned invalid agent name: %s", e.SelectedName)
+	return fmt.Sprintf("Selector returned invalid agent name: %s", e.SelectedName)
 }
 
 func buildHistory(messages []Message) string {
@@ -242,7 +242,7 @@ func (t *Team) handleMemberSelectionError(ctx context.Context, err error, newMes
 	var invalidAgentErr *InvalidAgentError
 	switch {
 	case errors.As(err, &invalidAgentErr):
-		warningContent := fmt.Sprintf("Selector returned invalid agent name: %s. Ending conversation", invalidAgentErr.SelectedName)
+		warningContent := fmt.Sprintf("Selector returned invalid agent name: %s", invalidAgentErr.SelectedName)
 		warningMessage := NewSystemMessage(warningContent)
 		*newMessages = append(*newMessages, warningMessage)
 

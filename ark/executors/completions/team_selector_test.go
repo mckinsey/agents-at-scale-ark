@@ -612,7 +612,7 @@ func TestHandleMemberSelectionError(t *testing.T) {
 func TestInvalidAgentError(t *testing.T) {
 	err := &InvalidAgentError{SelectedName: "invalid-agent"}
 	errMsg := err.Error()
-	assert.Equal(t, errMsg, "selector returned invalid agent name: invalid-agent", "Wrong error message from InvalidAgent")
+	assert.Equal(t, errMsg, "Selector returned invalid agent name: invalid-agent", "Wrong error message from InvalidAgent")
 }
 
 func TestStartTurnTelemetry(t *testing.T) {
@@ -872,7 +872,7 @@ func TestExecuteSelector_WithInvalidAgentSelection(t *testing.T) {
 	for _, msg := range messages {
 		if msg.OfSystem != nil {
 			content := msg.OfSystem.Content.OfString.Value
-			if content == "Selector returned invalid agent name: invalid-agent. Ending conversation" {
+			if content == "Selector returned invalid agent name: invalid-agent" {
 				foundWarning = true
 				break
 			}

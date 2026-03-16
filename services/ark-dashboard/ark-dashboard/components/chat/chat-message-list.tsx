@@ -120,7 +120,7 @@ function determineMessageFlags(
   const isMaxTurnsMessage =
     msg.role === 'system' && content.includes('maximum turns limit');
   const isSelectorFailureMessage =
-    msg.role === 'system' && content.includes('Selector did not choose valid agent');
+    msg.role === 'system' && content.includes('Selector returned invalid agent name');
   const hasToolCalls =
     debugMode && !!toolCallsWithResults && toolCallsWithResults.length > 0;
   const hasContent =
