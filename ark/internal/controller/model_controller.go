@@ -17,9 +17,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	completions "mckinsey.com/ark/executors/completions"
 	"mckinsey.com/ark/internal/eventing"
 	eventnoop "mckinsey.com/ark/internal/eventing/noop"
-	"mckinsey.com/ark/internal/genai"
 	"mckinsey.com/ark/internal/telemetry"
 	telenoop "mckinsey.com/ark/internal/telemetry/noop"
 )
@@ -98,15 +98,15 @@ func addJitter(d time.Duration) time.Duration {
 	return d + time.Duration(jitter)
 }
 
-func (r *ModelReconciler) probeModel(ctx context.Context, model arkv1alpha1.Model) genai.ProbeResult {
+func (r *ModelReconciler) probeModel(ctx context.Context, model arkv1alpha1.Model) ProbeResult {
 	noopTelemetryRecorder := telenoop.NewModelRecorder()
 	noopEventingRecorder := eventnoop.NewModelRecorder()
-	resolvedModel, err := genai.LoadModel(ctx, r.Client, &arkv1alpha1.AgentModelRef{
+	resolvedModel, err := completions.LoadModel(ctx, r.Client, &arkv1alpha1.AgentModelRef{
 		Name:      model.Name,
 		Namespace: model.Namespace,
 	}, model.Namespace, nil, noopTelemetryRecorder, noopEventingRecorder)
 	if err != nil {
-		return genai.ProbeResult{
+		return ProbeResult{
 			Available:     false,
 			Message:       err.Error(),
 			DetailedError: err,
@@ -120,7 +120,7 @@ func (r *ModelReconciler) probeModel(ctx context.Context, model arkv1alpha1.Mode
 		}
 	}
 
-	result := genai.ProbeModel(ctx, resolvedModel, timeout)
+	result := ProbeModel(ctx, resolvedModel, timeout)
 	return result
 }
 

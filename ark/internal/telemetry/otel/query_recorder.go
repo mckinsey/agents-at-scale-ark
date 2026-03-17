@@ -81,18 +81,6 @@ func (r *queryRecorder) RecordTokenUsage(span telemetry.Span, promptTokens, comp
 	)
 }
 
-func (r *queryRecorder) RecordSessionID(span telemetry.Span, sessionID string) {
-	if sessionID != "" {
-		span.SetAttributes(telemetry.String(telemetry.AttrSessionID, sessionID))
-	}
-}
-
-func (r *queryRecorder) RecordConversationID(span telemetry.Span, conversationID string) {
-	if conversationID != "" {
-		span.SetAttributes(telemetry.String(telemetry.AttrConversationID, conversationID))
-	}
-}
-
 func (r *queryRecorder) RecordSuccess(span telemetry.Span) {
 	span.SetStatus(telemetry.StatusOk, "success")
 }

@@ -54,7 +54,7 @@ spec:
     type: agent
 ```
 
-**Implementation**: `runtime/internal/genai/team.go:53`
+**Implementation**: `ark/executors/completions/team.go`
 - Processes members one by one in array order
 - Each member receives complete message history from previous members
 - Execution stops on first error or termination
@@ -78,7 +78,7 @@ spec:
     type: agent
 ```
 
-**Implementation**: `runtime/internal/genai/team.go:67`
+**Implementation**: `ark/executors/completions/team.go`
 - Continuously cycles through all members
 - Requires `maxTurns` to prevent infinite loops
 - Each turn processes all members in sequence
@@ -110,7 +110,7 @@ spec:
     type: agent
 ```
 
-**Implementation**: `runtime/internal/genai/team_selector.go:66`
+**Implementation**: `ark/executors/completions/team_selector.go`
 - Uses AI agent to select next participant
 - Template-based prompts with conversation history
 - Fallback to first member if selection fails
@@ -149,7 +149,7 @@ spec:
       to: writer
 ```
 
-**Implementation**: `runtime/internal/genai/team_graph.go:10`
+**Implementation**: `ark/executors/completions/team_graph.go`
 - Follows directed graph edges for member transitions
 - Starts with first member in members array
 - Execution stops when no outgoing edge exists or team termination
@@ -187,7 +187,7 @@ spec:
         to: writer
 ```
 
-**Implementation**: `runtime/internal/genai/team_selector.go:237`
+**Implementation**: `ark/executors/completions/team_selector.go`
 - Uses selector agent to choose next participant
 - Graph constraints limit available candidates
 - Single legal transition: skips selector agent (optimization)
