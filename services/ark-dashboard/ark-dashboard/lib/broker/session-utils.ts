@@ -93,14 +93,14 @@ function getInputFromEvent(data: unknown): string | undefined {
   if (!data || typeof data !== 'object') return undefined;
   const record = data as Record<string, unknown>;
 
-  if (typeof record.input === 'string' && record.input) {
-    return record.input;
+  if (typeof record.input === 'string' && record.input.trim()) {
+    return record.input.trim();
   }
 
   if (record.data && typeof record.data === 'object') {
     const inner = record.data as Record<string, unknown>;
-    if (typeof inner.input === 'string' && inner.input) {
-      return inner.input;
+    if (typeof inner.input === 'string' && inner.input.trim()) {
+      return inner.input.trim();
     }
   }
 
