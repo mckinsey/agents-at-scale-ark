@@ -4,6 +4,7 @@ import type { PropsWithChildren } from 'react';
 import { Toaster } from 'sonner';
 
 import { SettingsKeyboardShortcut } from '@/components/settings-modal/settings-keyboard-shortcut';
+import { NavigationTracker } from '@/hooks/use-navigation-history';
 import { AnalyticsProvider } from '@/lib/analytics/provider';
 import { ChatProvider } from '@/lib/chat-context';
 import { NamespaceProvider } from '@/providers/NamespaceProvider';
@@ -36,6 +37,7 @@ export function GlobalProviders({ children }: PropsWithChildren) {
           </QueryClientProvider>
         </AuthProvider>
         <SettingsKeyboardShortcut />
+        <NavigationTracker />
         <Toaster richColors closeButton visibleToasts={5} />
       </ThemeProvider>
     </JotaiProvider>

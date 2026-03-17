@@ -4,6 +4,7 @@ import { Provider, createStore } from 'jotai';
 import { useRouter } from 'next/navigation';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { hasSoftNavigatedAtom } from '@/atoms/navigation-history';
 import type { SettingPage } from '@/atoms/settings-modal';
 import { SettingsSidebar } from '@/components/settings-modal/settings-sidebar';
 
@@ -64,11 +65,8 @@ describe('SettingsSidebar', () => {
     expect(mockReplace).toHaveBeenCalledWith('/settings/memory');
   });
 
-  it('should call router.back() when close button is clicked and history exists', async () => {
-    Object.defineProperty(window, 'history', {
-      value: { length: 3 },
-      writable: true,
-    });
+  it('should call router.back() when close button is clicked and soft navigation occurred', async () => {
+    store.set(hasSoftNavigatedAtom, true);
 
     const user = userEvent.setup();
     renderWithStore();
@@ -79,12 +77,7 @@ describe('SettingsSidebar', () => {
     expect(mockPush).not.toHaveBeenCalled();
   });
 
-  it('should navigate to home when close button is clicked and no history exists', async () => {
-    Object.defineProperty(window, 'history', {
-      value: { length: 1 },
-      writable: true,
-    });
-
+  it('should navigate to home when close button is clicked on direct navigation', async () => {
     const user = userEvent.setup();
     renderWithStore();
 
