@@ -528,42 +528,42 @@ func TestWatch_CrossReplicaBurst(t *testing.T) {
 	}
 drained2:
 
-	var wg sync.WaitGroup
+	var created atomic.Int32
 	for i := range count {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			name := fmt.Sprintf("burst-cross-%d", idx)
-			obj := &integrationTestObject{
-				APIVersion: "ark.mckinsey.com/v1alpha1",
-				Kind:       kind,
-				Metadata: struct {
-					Name            string            `json:"name"`
-					Namespace       string            `json:"namespace"`
-					UID             string            `json:"uid"`
-					ResourceVersion string            `json:"resourceVersion,omitempty"`
-					Labels          map[string]string `json:"labels,omitempty"`
-				}{
-					Name:      name,
-					Namespace: ns,
-					UID:       fmt.Sprintf("uid-burst-cross-%d", idx),
-				},
-				Spec: map[string]interface{}{"index": idx},
-			}
-			_ = replicaA.Create(ctx, kind, ns, name, obj)
-		}(i)
+		name := fmt.Sprintf("burst-cross-%d", i)
+		obj := &integrationTestObject{
+			APIVersion: "ark.mckinsey.com/v1alpha1",
+			Kind:       kind,
+			Metadata: struct {
+				Name            string            `json:"name"`
+				Namespace       string            `json:"namespace"`
+				UID             string            `json:"uid"`
+				ResourceVersion string            `json:"resourceVersion,omitempty"`
+				Labels          map[string]string `json:"labels,omitempty"`
+			}{
+				Name:      name,
+				Namespace: ns,
+				UID:       fmt.Sprintf("uid-burst-cross-%d", i),
+			},
+			Spec: map[string]interface{}{"index": i},
+		}
+		if err := replicaA.Create(ctx, kind, ns, name, obj); err == nil {
+			created.Add(1)
+		}
 	}
-	wg.Wait()
 
-	t.Logf("Burst-created %d resources on replica A, waiting for replica B...", count)
+	actual := int(created.Load())
+	t.Logf("Created %d/%d resources on replica A, waiting for replica B...", actual, count)
 
-	received := 0
+	seen := make(map[string]bool)
 	deadline := time.After(45 * time.Second)
-	for received < count {
+	for len(seen) < actual {
 		select {
 		case ev := <-w.ResultChan():
 			if ev.Type == watch.Added || ev.Type == watch.Modified {
-				received++
+				if obj, ok := ev.Object.(*integrationTestObject); ok {
+					seen[obj.Metadata.Name] = true
+				}
 			}
 		case <-deadline:
 			goto timeout2
@@ -571,15 +571,17 @@ drained2:
 	}
 timeout2:
 
-	t.Logf("Replica B received %d/%d events from burst", received, count)
-
-	if received >= count {
-		t.Log("All events delivered cross-replica under burst")
-	}
-
-	dbCount := 0
+	var dbCount int
 	replicaB.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM resources WHERE kind = $1 AND namespace = $2", kind, ns).Scan(&dbCount)
-	t.Logf("Database has %d resources (source of truth)", dbCount)
+
+	t.Logf("Replica B saw %d unique resources, DB has %d, attempted %d", len(seen), dbCount, count)
+
+	if len(seen) < dbCount {
+		t.Errorf("Replica B missed %d resources that exist in DB", dbCount-len(seen))
+	}
+	if len(seen) == dbCount {
+		t.Log("Replica B saw every resource in the database — cross-replica delivery complete")
+	}
 
 	replicaA.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
 }
