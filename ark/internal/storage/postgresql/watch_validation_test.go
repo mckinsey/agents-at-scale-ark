@@ -585,3 +585,71 @@ timeout2:
 
 	replicaA.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
 }
+
+func TestWatch_CrossReplicaDelete(t *testing.T) {
+	replicaA := newTestBackend(t)
+	defer replicaA.Close()
+	replicaB := newTestBackend(t)
+	defer replicaB.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	kind := "CrossDeleteTest"
+	ns := "delete-replica-test"
+
+	replicaA.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
+
+	createTestResource(t, replicaA, kind, ns, "to-be-deleted")
+
+	w, err := replicaB.Watch(ctx, kind, ns, storage.WatchOptions{})
+	if err != nil {
+		t.Fatalf("Watch on replica B failed: %v", err)
+	}
+	defer w.Stop()
+
+	gotAdded := false
+	initDeadline := time.After(5 * time.Second)
+	for !gotAdded {
+		select {
+		case ev := <-w.ResultChan():
+			if ev.Type == watch.Added {
+				t.Log("Replica B saw initial ADDED event")
+				gotAdded = true
+			}
+		case <-initDeadline:
+			t.Fatal("Timeout waiting for initial ADDED event on replica B")
+		}
+	}
+
+	time.Sleep(1 * time.Second)
+
+	if err := replicaA.Delete(ctx, kind, ns, "to-be-deleted"); err != nil {
+		t.Fatalf("Delete on replica A failed: %v", err)
+	}
+
+	gotDelete := false
+	deadline := time.After(10 * time.Second)
+	for {
+		select {
+		case ev := <-w.ResultChan():
+			if ev.Type == watch.Deleted {
+				obj := ev.Object.(*integrationTestObject)
+				t.Logf("Replica B received DELETED event for %s", obj.Metadata.Name)
+				gotDelete = true
+				goto done
+			}
+		case <-deadline:
+			goto done
+		}
+	}
+done:
+
+	if !gotDelete {
+		t.Error("Replica B never received DELETED event — cross-replica delete delivery is broken")
+	} else {
+		t.Log("Cross-replica delete delivery confirmed")
+	}
+
+	replicaA.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
+}

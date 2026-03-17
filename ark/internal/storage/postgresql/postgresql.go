@@ -656,10 +656,27 @@ func (p *PostgreSQLBackend) notifyWatchers(kind, namespace string, eventType wat
 
 func (p *PostgreSQLBackend) nudgeWatchers(payload string) {
 	var notification struct {
-		Kind      string `json:"kind"`
-		Namespace string `json:"namespace"`
+		Operation       string `json:"operation"`
+		Kind            string `json:"kind"`
+		Namespace       string `json:"namespace"`
+		Name            string `json:"name"`
+		ResourceVersion int64  `json:"resource_version"`
 	}
 	if err := json.Unmarshal([]byte(payload), &notification); err != nil {
+		return
+	}
+
+	if notification.Operation == "DELETE" {
+		obj := p.converter.NewObject(notification.Kind)
+		if obj == nil {
+			return
+		}
+		if accessor, err := meta.Accessor(obj); err == nil {
+			accessor.SetName(notification.Name)
+			accessor.SetNamespace(notification.Namespace)
+			accessor.SetResourceVersion(fmt.Sprintf("%d", notification.ResourceVersion))
+		}
+		p.notifyWatchers(notification.Kind, notification.Namespace, watch.Deleted, obj)
 		return
 	}
 
