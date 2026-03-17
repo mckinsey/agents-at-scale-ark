@@ -12,7 +12,7 @@ Develop and live-reload ARK services directly in your Kubernetes cluster using D
 ## Prerequisites
 - A running Kubernetes cluster (e.g., minikube)
 - kubectl, uv and DevSpace installed
-- Docker running locally
+- Docker running locally with BuildKit enabled
 
 ## One-time setup
 ```bash
@@ -130,6 +130,8 @@ More details on how the Ark SDK is generated and used is at the [Ark SDK Develop
 ```bash
 devspace deploy
 ```
+
+This builds all images, deploys to the cluster, and streams service logs. Press `Ctrl+C` to stop log streaming.
 
 ## Clean up
 ```bash
