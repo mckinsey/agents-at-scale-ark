@@ -115,7 +115,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
             selectorPrompt:
               teamData.selector?.selectorPrompt ||
               (teamData.strategy === 'selector' ? DEFAULT_SELECTOR_PROMPT : ''),
-            enableTerminateTool: teamData.selector?.enableTerminateTool ?? true,
+            enableTerminateTool: teamData.selector?.enableTerminateTool ?? false,
           });
         } else {
           const agentsData = await agentsService.getAll();

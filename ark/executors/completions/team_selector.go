@@ -102,8 +102,8 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, e
 		}
 	}
 
-	// Add terminate tool if enabled (defaults to true when nil)
-	if t.Selector.EnableTerminateTool == nil || *t.Selector.EnableTerminateTool {
+	// Add terminate tool if enabled (defaults to false when nil)
+	if t.Selector.EnableTerminateTool != nil && *t.Selector.EnableTerminateTool {
 		terminateTool := arkv1alpha1.AgentTool{
 			Type: "builtin",
 			Name: "terminate",
