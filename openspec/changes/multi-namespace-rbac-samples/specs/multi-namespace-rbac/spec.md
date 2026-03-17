@@ -76,12 +76,25 @@ The manifest SHALL contain:
 - **THEN** `GET /api/v1/namespaces` returns all namespaces in the cluster
 
 ### Requirement: Tenant namespace management documentation
-The documentation SHALL include a page at `docs/content/operations-guide/tenant-namespace-management.mdx` that:
-- Explains the default single-namespace behaviour (no ClusterRole needed)
-- Presents a table with columns for manifest name, description, and link to the sample file in the repository
-- Describes when to use each tier
-- Notes that the ark-api chart itself should never be deployed with cluster-wide permissions in production
-- Includes the "Setting Up Tenant Namespaces" and "Using the Tenant Service Account" content currently in `deploying-ark.mdx`
+The documentation SHALL include a page at `docs/content/operations-guide/tenant-namespace-management.mdx` that opens with:
+
+1. A simple ASCII or Mermaid diagram showing the tenant isolation model:
+   - A cluster containing multiple isolated tenants (namespaces)
+   - A cluster administrator who manages tenants
+   - Visual separation between tenants to convey isolation
+2. A brief explanation that:
+   - Tenants are the fundamental isolation unit in Ark — each tenant is a Kubernetes namespace
+   - Tenants can represent projects, teams, or environments
+   - By default tenants are fully isolated from each other
+   - Cluster administrators manage tenants and can grant cross-namespace access via RBAC
+   - More empowered tenants (e.g., those that can see multiple namespaces) are created by the cluster administrator applying additional RBAC manifests
+
+The page SHALL then continue with:
+- Default single-namespace behaviour (no ClusterRole needed)
+- A table with columns for manifest name, description, and link to the sample file in the repository
+- When to use each tier
+- A note that the ark-api chart itself should never be deployed with cluster-wide permissions in production
+- The "Setting Up Tenant Namespaces" and "Using the Tenant Service Account" content currently in `deploying-ark.mdx`
 
 The `deploying-ark.mdx` page SHALL be updated to replace the moved sections with a brief note and link to the new tenant management page.
 
@@ -90,6 +103,7 @@ The `_meta.js` SHALL include the new page under the "Platform operations" separa
 #### Scenario: Operator reads documentation
 - **WHEN** an operator navigates to the operations guide
 - **THEN** they find a "Tenant Namespace Management" page under "Platform operations"
+- **AND** the page opens with a diagram showing isolated tenants in a cluster
 - **AND** the page contains a table linking all four sample manifests with descriptions
 
 #### Scenario: Deploying Ark page cross-links
