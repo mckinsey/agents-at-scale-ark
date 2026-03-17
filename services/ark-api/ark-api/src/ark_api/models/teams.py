@@ -40,7 +40,7 @@ class TeamResponse(BaseModel):
     description: Optional[str] = None
     strategy: Optional[str] = None
     members_count: Optional[int] = None
-    loops: bool = False
+    loops: Optional[bool] = None
     status: Optional[str] = None
 
 
