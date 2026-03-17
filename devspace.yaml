@@ -14,8 +14,8 @@ dependencies:
     path: ./services/ark-api
   ark-dashboard:
     path: ./services/ark-dashboard
-  argo-workflows:
-    path: ./services/argo-workflows
+#  argo-workflows:
+#    path: ./services/argo-workflows
 #  ark-api-a2a:
 #    path: ./services/ark-api-a2a
 #  ark-mcp:
@@ -129,6 +129,11 @@ pipelines:
     fi
 
     run_dependency_pipelines --all --exclude ark-controller --pipeline=deploy
+
+    echo ""
+    echo "All services deployed. Streaming logs from namespace ${DEVSPACE_NAMESPACE} (Ctrl+C to stop)..."
+    echo ""
+    kubectl logs -f -n "${DEVSPACE_NAMESPACE}" --all-containers --prefix --max-log-requests=10 -l app
   dev: |-
 
     if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
