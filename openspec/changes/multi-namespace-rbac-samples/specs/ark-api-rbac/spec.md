@@ -34,8 +34,28 @@ The `GET /api/v1/namespaces` endpoint SHALL return a list of namespaces the serv
 - **AND** a client calls `GET /api/v1/namespaces`
 - **THEN** the endpoint returns all namespaces in the cluster
 
-### Requirement: Namespace creation permission gated
-The `POST /api/v1/namespaces` endpoint SHALL only succeed when the service account has explicit Kubernetes permission to create namespaces. When the service account lacks this permission, the endpoint SHALL return a clear error.
+### Requirement: Context response includes capabilities
+The `GET /api/v1/context` endpoint SHALL return a `capabilities` object in the response that includes `can_create_namespace: bool`.
+
+The API SHALL check whether the service account has Kubernetes permission to create namespaces (via SelfSubjectAccessReview or equivalent). If the check fails or is unavailable, `can_create_namespace` SHALL default to `false`.
+
+#### Scenario: Service account with namespace create permission
+- **WHEN** the service account has a ClusterRole granting `create` on `namespaces`
+- **AND** a client calls `GET /api/v1/context`
+- **THEN** the response includes `"capabilities": {"can_create_namespace": true}`
+
+#### Scenario: Service account without namespace create permission
+- **WHEN** the service account has only namespace-scoped permissions
+- **AND** a client calls `GET /api/v1/context`
+- **THEN** the response includes `"capabilities": {"can_create_namespace": false}`
+
+#### Scenario: SelfSubjectAccessReview unavailable
+- **WHEN** the SelfSubjectAccessReview API is unavailable or returns an error
+- **AND** a client calls `GET /api/v1/context`
+- **THEN** the response includes `"capabilities": {"can_create_namespace": false}`
+
+### Requirement: Namespace creation documented as permission-gated
+The `POST /api/v1/namespaces` endpoint SHALL remain in the API. It succeeds or fails based on the service account's Kubernetes permissions. Documentation SHALL note that namespace creation requires the full admin manifest (tier 4).
 
 #### Scenario: Service account with namespace create permission
 - **WHEN** the service account has a ClusterRole granting `create` on `namespaces`
@@ -45,7 +65,7 @@ The `POST /api/v1/namespaces` endpoint SHALL only succeed when the service accou
 #### Scenario: Service account without namespace create permission
 - **WHEN** the service account has only namespace-scoped permissions
 - **AND** a client calls `POST /api/v1/namespaces` with `{"name": "new-ns"}`
-- **THEN** the endpoint returns a 403 error with a message indicating insufficient permissions
+- **THEN** the Kubernetes API returns a 403 error which is passed through to the client
 
 ### Requirement: devspace.yaml does not set cluster-wide RBAC
 The `services/ark-api/devspace.yaml` SHALL NOT set `rbac.clusterWide` or any cluster-scoped RBAC configuration. Local development on minikube works without explicit cluster RBAC because the minikube user has cluster-admin permissions.

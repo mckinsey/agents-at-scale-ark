@@ -4,28 +4,33 @@ Each Ark tenant is deployed into its own Kubernetes namespace via the `ark-tenan
 
 Currently, the ark-api chart includes an optional `rbac.clusterWide: true` toggle that creates a `ClusterRole` granting full CRUD on Ark resources across all namespaces. This is bundled inside the tenant's own chart, meaning a single misconfiguration gives a tenant cluster-wide write access. The `devspace.yaml` for local development sets this to `true` by default.
 
-The `list_namespaces()` API endpoint calls `v1.list_namespace()` (a cluster-scoped Kubernetes API) and returns a hard 403 error when the service account lacks cluster permissions. The `create_namespace()` endpoint can create arbitrary Kubernetes namespaces.
+The `list_namespaces()` API endpoint calls `v1.list_namespace()` (a cluster-scoped Kubernetes API) and returns a hard error when the service account lacks cluster permissions. The `create_namespace()` endpoint can create arbitrary Kubernetes namespaces — this is fine, but should be documented as requiring explicit permission.
+
+The dashboard sidebar currently shows the namespace as static text. There is no UI to switch between namespaces.
+
+Existing docs have tenant setup content split across `deploying-ark.mdx` (Setting Up Tenant Namespaces, Using the Tenant Service Account) and `authentication.mdx` (API Key Namespace Scoping). The tenant setup content should be consolidated into a dedicated page.
 
 ## Goals / Non-Goals
 
 **Goals:**
-- Provide sample RBAC manifests for four tiers of namespace access (discovery, explicit list, label-based, full admin)
-- Document when to use each tier under operations guide / tenant management
+- Provide sample RBAC manifests in `samples/tenant-management/` for four tiers of namespace access
+- Consolidate tenant management docs into a dedicated operations guide page
 - Remove the ClusterRole from the ark-api chart so tenants can never accidentally get cluster-wide access from their own deployment
 - Make `list_namespaces()` gracefully return the context namespace when cluster permissions are unavailable
-- Gate `create_namespace()` so it only works when the service account has explicit permission
+- Extend `GET /api/v1/context` to report whether the service account can create namespaces
+- Add a namespace dropdown to the dashboard sidebar for switching between available namespaces
 
 **Non-Goals:**
 - Building a Helm chart or CLI for applying these RBAC manifests (samples are `kubectl apply` only)
-- Changing how the dashboard tracks or switches namespaces (it already works via `?namespace=X`)
-- Implementing namespace-level authorization in the ark-api beyond what Kubernetes RBAC provides
 - Multi-cluster support
+- Automating RoleBinding creation based on namespace labels (convention only, documented)
+- Changing how the ark-api handles the `?namespace=X` parameter on resource endpoints (already works)
 
 ## Decisions
 
 ### 1. Sample manifests over a Helm chart
 
-Provide raw YAML manifests in `samples/multi-namespace/` rather than a Helm chart.
+Provide raw YAML manifests in `samples/tenant-management/` rather than a Helm chart.
 
 **Rationale:** RBAC grants are a one-shot admin operation. Raw manifests are transparent, auditable, and require no additional tooling. Operators can see exactly what permissions are being granted. A Helm chart can be added later if there's demand.
 
@@ -38,13 +43,13 @@ Structure the samples as four escalating tiers rather than a single configurable
 | Tier | Manifest | What it grants |
 |------|----------|---------------|
 | 1 | `01-namespace-reader.yaml` | `ClusterRole` + `ClusterRoleBinding` granting only `get, list` on namespaces. Enables namespace discovery in dashboard. |
-| 2 | `02-specific-namespaces.yaml` | `RoleBinding` in each target namespace referencing the existing `ark-tenant-role` `ClusterRole`. Grants Ark resource access in named namespaces. |
-| 3 | `03-namespace-label-selector.yaml` | Same as tier 2 but uses namespace labels and a `ClusterRole` scoped to namespaces with a specific label. Demonstrates auto-discovery pattern. |
+| 2 | `02-specific-namespaces.yaml` | `RoleBinding` in each target namespace referencing the existing `ark-tenant-role` ClusterRole. Grants Ark resource access in named namespaces. |
+| 3 | `03-namespace-label-selector.yaml` | Same as tier 2 but uses namespace labels as a convention. The admin applies a RoleBinding in each labelled namespace. |
 | 4 | `04-full-admin.yaml` | `ClusterRole` + `ClusterRoleBinding` granting full Ark access across all namespaces plus namespace creation. Platform admin only. |
 
 **Rationale:** Each tier is independently applicable. An operator can apply tier 1 alone (discovery), or tier 1 + tier 2 (discovery + specific access). Clear escalation path.
 
-**Note on tier 3:** Kubernetes RBAC does not natively support label-based namespace scoping on Roles/RoleBindings. The manifest will demonstrate the pattern using namespace labels as a convention — the admin applies a `RoleBinding` in each labelled namespace. The docs will note this is a convention enforced by the operator, not by Kubernetes itself.
+**Note on tier 3:** Kubernetes RBAC does not natively support label-based namespace scoping on Roles/RoleBindings. The manifest demonstrates the pattern using namespace labels as a convention — the admin applies a RoleBinding in each labelled namespace. The docs note this is a convention enforced by the operator, not by Kubernetes itself.
 
 ### 3. Graceful 403 fallback in list_namespaces()
 
@@ -60,11 +65,47 @@ Delete the `{{- if .Values.rbac.clusterWide }}` block from `rbac.yaml` and the `
 
 **Alternative considered:** Keep the toggle but default to `false`. Rejected because even having the option in the chart creates risk — it's one `--set rbac.clusterWide=true` away from a security issue.
 
-### 5. Documentation location
+### 5. Capabilities in the context response
 
-Add a new page at `docs/content/operations-guide/tenant-namespace-management.mdx` with a table linking each sample manifest.
+Extend `GET /api/v1/context` to return a `capabilities` object:
 
-**Rationale:** The operations guide already has a "Setting Up Tenant Namespaces" section in `deploying-ark.mdx`. A dedicated page for multi-namespace management keeps the deployment docs focused on initial setup while giving namespace management the space it needs. The `_meta.js` will place it under the "Platform operations" separator near "Deploying ARK".
+```json
+{
+  "namespace": "default",
+  "cluster": "minikube",
+  "read_only_mode": false,
+  "capabilities": {
+    "can_create_namespace": true
+  }
+}
+```
+
+The API checks whether the service account has `create` permission on namespaces using a Kubernetes `SelfSubjectAccessReview` (or a try/catch on a dry-run create). This is better than checking in the `list_namespaces()` endpoint because the context endpoint is already the place the dashboard goes to understand "what can I do?".
+
+**Rationale:** The dashboard needs to know whether to show the "Create Namespace" button. Rather than attempting a create and handling the error, the context response tells the dashboard up front what's available. This is a read-only permission check, not an action.
+
+### 6. Dashboard namespace dropdown
+
+Replace the static namespace text in the sidebar header (currently lines 256-273 of `app-sidebar.tsx`) with a dropdown/select that:
+
+1. On mount, calls `GET /api/v1/namespaces` to get the list of available namespaces
+2. Shows a dropdown with the current namespace selected
+3. On selection, updates `?namespace=X` via the existing `setNamespace()` from `NamespaceProvider`
+4. Shows a "Create Namespace" option at the bottom when `capabilities.can_create_namespace` is true (opens the existing `NamespaceEditor`)
+5. When only one namespace is available, still shows the dropdown but with just one option (consistent UI)
+
+The `NamespaceProvider` will be updated to actually call `namespacesService.getAll()` (the `useGetAllNamespaces` hook already exists but is unused) and populate `availableNamespaces` from the API response instead of the current hardcoded single-item array.
+
+### 7. Documentation consolidation
+
+Create a new page at `docs/content/operations-guide/tenant-namespace-management.mdx` that:
+
+- Moves the "Setting Up Tenant Namespaces" and "Using the Tenant Service Account" sections from `deploying-ark.mdx`
+- Adds the multi-namespace access tiers with a table linking to each sample manifest
+- Leaves a brief note + link in `deploying-ark.mdx` pointing to the new page
+- Does NOT move the API Key Namespace Scoping section from `authentication.mdx` (it's correctly in the auth context, but should cross-link)
+
+Add the page to `_meta.js` under the "Platform operations" separator, after "Deploying ARK".
 
 ## Risks / Trade-offs
 
@@ -72,6 +113,6 @@ Add a new page at `docs/content/operations-guide/tenant-namespace-management.mdx
 
 **Tier 3 (label-based) is a convention, not enforced by Kubernetes** → Clearly document that the admin must apply RoleBindings to matching namespaces. Kubernetes RBAC doesn't auto-bind based on namespace labels. Future work could automate this with an operator.
 
-**`create_namespace()` will fail for most tenants** → This is the desired behaviour. The endpoint returns a clear error when permissions are insufficient. Document that namespace creation requires tier 4 (full admin) access.
+**SelfSubjectAccessReview may not be available in all clusters** → Fall back to `can_create_namespace: false` if the check fails. This is the safe default.
 
 **Local dev on non-minikube clusters** → If a developer uses a cluster where their service account doesn't have cluster-admin, `list_namespaces()` will gracefully return just their namespace. This is correct behaviour, not a bug.
