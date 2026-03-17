@@ -18,9 +18,16 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { trackEvent } from '@/lib/analytics/singleton';
 import {
+  getSessionDisplayNameFromEntries,
   groupEntriesBySession,
   sortEntriesByTimestampAndSequence,
 } from '@/lib/broker/session-utils';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { type Memory, memoriesService } from '@/lib/services/memories';
 
@@ -552,6 +559,10 @@ function SessionsView({
             <>
               {sortedSessions.map(([sessionId, sessionEntries]) => {
                 const isSessionExpanded = expandedSessions.has(sessionId);
+                const displayName = getSessionDisplayNameFromEntries(
+                  sessionEntries,
+                  sessionId,
+                );
                 return (
                   <div
                     key={sessionId}
@@ -564,9 +575,18 @@ function SessionsView({
                       ) : (
                         <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
                       )}
-                      <span className="font-semibold">
-                        Session: {sessionId}
-                      </span>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="font-semibold">
+                              Session: {displayName}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{sessionId}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                       <span className="text-muted-foreground ml-auto">
                         ({sessionEntries.length} events)
                       </span>
