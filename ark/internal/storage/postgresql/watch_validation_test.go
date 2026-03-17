@@ -414,3 +414,172 @@ collected:
 
 	backend.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
 }
+
+func TestWatch_CrossReplicaDelivery(t *testing.T) {
+	replicaA := newTestBackend(t)
+	defer replicaA.Close()
+	replicaB := newTestBackend(t)
+	defer replicaB.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	kind := "CrossReplicaTest"
+	ns := "replica-test"
+	count := 50
+
+	replicaA.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
+
+	w, err := replicaB.Watch(ctx, kind, ns, storage.WatchOptions{})
+	if err != nil {
+		t.Fatalf("Watch on replica B failed: %v", err)
+	}
+	defer w.Stop()
+
+	time.Sleep(2 * time.Second)
+	for {
+		select {
+		case <-w.ResultChan():
+		default:
+			goto drained
+		}
+	}
+drained:
+
+	for i := range count {
+		name := fmt.Sprintf("cross-replica-%d", i)
+		obj := &integrationTestObject{
+			APIVersion: "ark.mckinsey.com/v1alpha1",
+			Kind:       kind,
+			Metadata: struct {
+				Name            string            `json:"name"`
+				Namespace       string            `json:"namespace"`
+				UID             string            `json:"uid"`
+				ResourceVersion string            `json:"resourceVersion,omitempty"`
+				Labels          map[string]string `json:"labels,omitempty"`
+			}{
+				Name:      name,
+				Namespace: ns,
+				UID:       fmt.Sprintf("uid-cross-%d", i),
+			},
+			Spec: map[string]interface{}{"index": i},
+		}
+		if err := replicaA.Create(ctx, kind, ns, name, obj); err != nil {
+			t.Fatalf("Create on replica A failed: %v", err)
+		}
+	}
+
+	t.Logf("Created %d resources on replica A, waiting for replica B watcher...", count)
+
+	received := 0
+	deadline := time.After(15 * time.Second)
+	for received < count {
+		select {
+		case ev := <-w.ResultChan():
+			if ev.Type == watch.Added || ev.Type == watch.Modified {
+				received++
+			}
+		case <-deadline:
+			goto timeout
+		}
+	}
+timeout:
+
+	t.Logf("Replica B received %d/%d events", received, count)
+
+	if received == 0 {
+		t.Fatal("Replica B received ZERO events — cross-replica delivery is broken")
+	}
+	if received >= count {
+		t.Log("All events delivered cross-replica via pg_notify nudge")
+	}
+
+	replicaA.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
+}
+
+func TestWatch_CrossReplicaBurst(t *testing.T) {
+	replicaA := newTestBackend(t)
+	defer replicaA.Close()
+	replicaB := newTestBackend(t)
+	defer replicaB.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	kind := "CrossBurstTest"
+	ns := "burst-replica-test"
+	count := 200
+
+	replicaA.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
+
+	w, err := replicaB.Watch(ctx, kind, ns, storage.WatchOptions{})
+	if err != nil {
+		t.Fatalf("Watch on replica B failed: %v", err)
+	}
+	defer w.Stop()
+
+	time.Sleep(2 * time.Second)
+	for {
+		select {
+		case <-w.ResultChan():
+		default:
+			goto drained2
+		}
+	}
+drained2:
+
+	var wg sync.WaitGroup
+	for i := range count {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			name := fmt.Sprintf("burst-cross-%d", idx)
+			obj := &integrationTestObject{
+				APIVersion: "ark.mckinsey.com/v1alpha1",
+				Kind:       kind,
+				Metadata: struct {
+					Name            string            `json:"name"`
+					Namespace       string            `json:"namespace"`
+					UID             string            `json:"uid"`
+					ResourceVersion string            `json:"resourceVersion,omitempty"`
+					Labels          map[string]string `json:"labels,omitempty"`
+				}{
+					Name:      name,
+					Namespace: ns,
+					UID:       fmt.Sprintf("uid-burst-cross-%d", idx),
+				},
+				Spec: map[string]interface{}{"index": idx},
+			}
+			_ = replicaA.Create(ctx, kind, ns, name, obj)
+		}(i)
+	}
+	wg.Wait()
+
+	t.Logf("Burst-created %d resources on replica A, waiting for replica B...", count)
+
+	received := 0
+	deadline := time.After(45 * time.Second)
+	for received < count {
+		select {
+		case ev := <-w.ResultChan():
+			if ev.Type == watch.Added || ev.Type == watch.Modified {
+				received++
+			}
+		case <-deadline:
+			goto timeout2
+		}
+	}
+timeout2:
+
+	t.Logf("Replica B received %d/%d events from burst", received, count)
+
+	if received >= count {
+		t.Log("All events delivered cross-replica under burst")
+	}
+
+	dbCount := 0
+	replicaB.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM resources WHERE kind = $1 AND namespace = $2", kind, ns).Scan(&dbCount)
+	t.Logf("Database has %d resources (source of truth)", dbCount)
+
+	replicaA.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
+}

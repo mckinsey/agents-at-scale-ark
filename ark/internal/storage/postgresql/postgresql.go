@@ -178,7 +178,11 @@ func (p *PostgreSQLBackend) listenForNotifications() {
 		select {
 		case <-p.ctx.Done():
 			return
-		case <-listener.Notify:
+		case n := <-listener.Notify:
+			if n == nil {
+				continue
+			}
+			p.nudgeWatchers(n.Extra)
 		case <-time.After(90 * time.Second):
 			if err := listener.Ping(); err != nil {
 				klog.Warningf("Failed to ping listener: %v", err)
@@ -534,6 +538,7 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 	w := &postgresWatcher{
 		ch:      ch,
 		outCh:   make(chan watch.Event, 100),
+		nudgeCh: make(chan struct{}, 1),
 		backend: p,
 		key:     key,
 		kind:    kind,
@@ -641,6 +646,34 @@ func (p *PostgreSQLBackend) notifyWatchers(kind, namespace string, eventType wat
 	}
 }
 
+func (p *PostgreSQLBackend) nudgeWatchers(payload string) {
+	var notification struct {
+		Kind      string `json:"kind"`
+		Namespace string `json:"namespace"`
+	}
+	if err := json.Unmarshal([]byte(payload), &notification); err != nil {
+		return
+	}
+
+	key := fmt.Sprintf("%s/%s", notification.Kind, notification.Namespace)
+	allKey := fmt.Sprintf("%s/", notification.Kind)
+
+	p.mu.RLock()
+	watchers := make([]*postgresWatcher, 0, len(p.watchers[key])+len(p.watchers[allKey]))
+	watchers = append(watchers, p.watchers[key]...)
+	if notification.Namespace != "" {
+		watchers = append(watchers, p.watchers[allKey]...)
+	}
+	p.mu.RUnlock()
+
+	for _, w := range watchers {
+		select {
+		case w.nudgeCh <- struct{}{}:
+		default:
+		}
+	}
+}
+
 func (p *PostgreSQLBackend) removeWatcher(key string, w *postgresWatcher) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -673,6 +706,7 @@ func (p *PostgreSQLBackend) getMaxResourceVersion() (int64, error) {
 type postgresWatcher struct {
 	ch         chan watch.Event // internal buffer: notifyWatchers writes here
 	outCh      chan watch.Event // consumer-facing: only run() writes/closes this
+	nudgeCh    chan struct{}    // pg_notify signal: triggers immediate catch-up
 	backend    *PostgreSQLBackend
 	key        string
 	kind       string
@@ -681,7 +715,7 @@ type postgresWatcher struct {
 	done       chan struct{}
 	stopped    atomic.Bool
 	closed     sync.Once
-	lastSeenRV atomic.Int64 // high-water-mark for relist delta queries
+	lastSeenRV atomic.Int64 // high-water-mark for catch-up delta queries
 }
 
 func (w *postgresWatcher) send(event watch.Event) {
@@ -737,6 +771,8 @@ func (w *postgresWatcher) run() {
 		case <-bookmarkTicker.C:
 			w.sendBookmark()
 		case <-relistTicker.C:
+			w.relist()
+		case <-w.nudgeCh:
 			w.relist()
 		}
 	}
