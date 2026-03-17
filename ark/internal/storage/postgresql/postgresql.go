@@ -555,6 +555,12 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 		done:    make(chan struct{}),
 	}
 
+	p.mu.Lock()
+	p.watchers[key] = append(p.watchers[key], w)
+	p.mu.Unlock()
+
+	go w.run()
+
 	existing, _, err := p.List(ctx, kind, namespace, storage.ListOptions{
 		LabelSelector: opts.LabelSelector,
 		FieldSelector: opts.FieldSelector,
@@ -563,15 +569,9 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 		for _, obj := range existing {
 			ev := watch.Event{Type: watch.Added, Object: obj}
 			w.trackResourceVersion(ev)
-			ch <- ev
+			w.send(ev)
 		}
 	}
-
-	p.mu.Lock()
-	p.watchers[key] = append(p.watchers[key], w)
-	p.mu.Unlock()
-
-	go w.run()
 	return w, nil
 }
 
