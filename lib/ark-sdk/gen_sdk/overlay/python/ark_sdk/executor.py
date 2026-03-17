@@ -8,8 +8,6 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
-ARK_METADATA_KEY = "ark.mckinsey.com/execution-engine"
-
 
 class Parameter(BaseModel):
     """Parameter for agent configuration."""

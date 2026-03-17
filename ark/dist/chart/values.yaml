@@ -47,21 +47,8 @@ controllerManager:
   terminationGracePeriodSeconds: 10
   serviceAccountName: ark-controller
 
-queryEngine:
-  enabled: true
-  container:
-    image:
-      repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-query-engine
-      pullPolicy: IfNotPresent
-    port: 9090
-    resources:
-      limits:
-        cpu: 500m
-        memory: 256Mi
-      requests:
-        cpu: 10m
-        memory: 64Mi
-        ephemeral-storage: 128Mi
+completions:
+  addr: "http://ark-completions.ark-system:9090" # NOSONAR - cluster-internal service communication
 
 # [RBAC]: To enable RBAC (Permissions) configurations
 rbac:

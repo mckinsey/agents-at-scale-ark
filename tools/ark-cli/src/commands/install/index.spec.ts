@@ -69,6 +69,12 @@ describe('install command', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    for (const key of Object.keys(mockArkServices)) {
+      delete (mockArkServices as any)[key];
+    }
+    for (const key of Object.keys(mockArkDependencies)) {
+      delete (mockArkDependencies as any)[key];
+    }
     mockGetClusterInfo.mockResolvedValue({
       context: 'test-cluster',
       type: 'minikube',
@@ -495,17 +501,59 @@ describe('install command', () => {
   });
 
   describe('interactive install', () => {
-    it('prompts for components when no service name and no -y flag', async () => {
-      mockGetInstallableServices.mockReturnValue({
+    const setupInteractiveMocks = () => {
+      Object.assign(mockArkServices, {
+        'ark-controller': {
+          name: 'ark-controller',
+          helmReleaseName: 'ark-controller',
+          chartPath: './charts/ark-controller',
+          namespace: 'ark-system',
+          category: 'core',
+          description: 'Core Ark controller',
+          enabled: true,
+          mandatory: true,
+        },
         'ark-api': {
           name: 'ark-api',
           helmReleaseName: 'ark-api',
           chartPath: './charts/ark-api',
           namespace: 'ark-system',
-          category: 'core',
+          category: 'service',
           description: 'API service',
+          enabled: true,
         },
       });
+      Object.assign(mockArkDependencies, {
+        'cert-manager-repo': {
+          name: 'cert-manager-repo',
+          command: 'helm',
+          args: ['repo', 'add', 'jetstack', 'https://charts.jetstack.io'],
+          description: 'Add Jetstack Helm repository',
+        },
+        'helm-repo-update': {
+          name: 'helm-repo-update',
+          command: 'helm',
+          args: ['repo', 'update'],
+          description: 'Update Helm repositories',
+        },
+        'cert-manager': {
+          name: 'cert-manager',
+          command: 'helm',
+          args: ['upgrade', '--install', 'cert-manager', 'jetstack/cert-manager'],
+          description: 'Certificate management',
+        },
+        'gateway-api-crds': {
+          name: 'gateway-api-crds',
+          command: 'kubectl',
+          args: ['apply', '-f', 'https://example.com/gateway-api.yaml'],
+          description: 'Gateway API CRDs',
+        },
+      });
+      mockGetInstallableServices.mockReturnValue(mockArkServices);
+    };
+
+    it('prompts for components when no service name and no -y flag', async () => {
+      setupInteractiveMocks();
       mockPrompt.mockResolvedValue({components: ['ark-api']});
       mockExeca.mockResolvedValue({stdout: ''});
 
@@ -515,39 +563,20 @@ describe('install command', () => {
       expect(mockPrompt).toHaveBeenCalled();
     });
 
-    it('exits when no components selected', async () => {
-      mockGetInstallableServices.mockReturnValue({
-        'ark-api': {
-          name: 'ark-api',
-          helmReleaseName: 'ark-api',
-          chartPath: './charts/ark-api',
-          namespace: 'ark-system',
-          category: 'core',
-          description: 'API service',
-        },
-      });
+    it('installs mandatory components even when no optional components selected', async () => {
+      setupInteractiveMocks();
       mockPrompt.mockResolvedValue({components: []});
+      mockExeca.mockResolvedValue({stdout: ''});
 
       const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test']);
 
-      await expect(
-        command.parseAsync(['node', 'test'])
-      ).rejects.toThrow('process.exit called');
-      expect(mockOutput.warning).toHaveBeenCalledWith('No components selected. Exiting.');
-      expect(mockExit).toHaveBeenCalledWith(0);
+      expect(mockPrompt).toHaveBeenCalled();
+      expect(mockExeca).toHaveBeenCalled();
     });
 
     it('handles Ctrl-C gracefully during component selection', async () => {
-      mockGetInstallableServices.mockReturnValue({
-        'ark-api': {
-          name: 'ark-api',
-          helmReleaseName: 'ark-api',
-          chartPath: './charts/ark-api',
-          namespace: 'ark-system',
-          category: 'core',
-          description: 'API service',
-        },
-      });
+      setupInteractiveMocks();
       const exitError = new Error('User cancelled');
       (exitError as any).name = 'ExitPromptError';
       mockPrompt.mockRejectedValue(exitError);

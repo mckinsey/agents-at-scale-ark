@@ -80,12 +80,15 @@ helm upgrade --install ark-controller ./dist/chart \
   --set controllerManager.container.image.repository="${REGISTRY}/ark-controller" \
   --set controllerManager.container.image.tag="${ARK_IMAGE_TAG}" \
   --set controllerManager.container.image.pullPolicy=IfNotPresent \
-  --set queryEngine.enabled=true \
-  --set queryEngine.container.image.repository="${REGISTRY}/ark-query-engine" \
-  --set queryEngine.container.image.tag="${ARK_IMAGE_TAG}" \
-  --set queryEngine.container.image.pullPolicy=IfNotPresent \
   --set rbac.enable=true \
   --set rbac.impersonation.enabled=true
+
+helm upgrade --install ark-completions ./executors/completions/chart \
+  --namespace ark-system \
+  --wait --timeout=300s \
+  --set image.repository="${REGISTRY}/ark-completions" \
+  --set image.tag="${ARK_IMAGE_TAG}" \
+  --set image.pullPolicy=IfNotPresent
 
 # Apply coverage configuration if requested
 if [ "${INSTALL_COVERAGE}" = "true" ]; then

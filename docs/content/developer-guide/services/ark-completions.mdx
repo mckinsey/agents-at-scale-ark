@@ -1,0 +1,93 @@
+# Ark Completions Engine
+
+Execution engine that runs the LLM turn loop, tool execution, team orchestration, memory, and streaming for Ark queries.
+
+- Deployed as a standalone service in `ark-system`
+- Communicates with the controller via A2A protocol over K8s service
+- Handles built-in agent, team, model, and tool execution (agents with an `executionEngine` are dispatched directly by the controller)
+- Streams chunks directly to ark-broker
+
+## Architecture
+
+The controller delegates query execution to the completions engine via A2A `SendMessage`. The engine reads CRDs using its own K8s client, executes the turn loop, and returns results.
+
+```
+Kubernetes Cluster (ark-system namespace)
+┌─────────────────────┐    K8s Service     ┌─────────────────────────┐
+│  Controller Pod      │    (A2A)           │  Completions Pod         │
+│  (reconciler)        │──────────────────►│  (ark-completions:9090)  │
+│       │              │◄──────────────────│       │                  │
+│  - watch CRs         │                    │  - agent loop            │
+│  - resolve target    │                    │  - team orchestration    │
+│  - write status      │                    │  - tool execution        │
+│                      │                    │  - LLM providers         │
+│                      │                    │  - memory load/save      │
+│                      │                    │  - stream -> ark-broker  │
+└─────────────────────┘                    └─────────────────────────┘
+```
+
+## Configuration
+
+The completions engine is deployed as a standalone Helm chart.
+
+### Helm Values
+
+```yaml
+image:
+  repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-completions
+  pullPolicy: IfNotPresent
+  tag: ""
+port: 9090
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 10m
+    memory: 64Mi
+serviceAccountName: ark-completions
+```
+
+Helm chart location: `ark/executors/completions/chart/`
+
+### Controller Flag
+
+The controller connects to the engine via the `--completions-addr` flag (default: `http://ark-completions.ark-system:9090`).
+
+## Source Code
+
+The completions engine source is in `ark/executors/completions/`.
+
+## Local Development
+
+In dev mode, the completions engine runs as a standalone pod with independent code sync and restart.
+
+```bash
+cd ark
+devspace dev
+```
+
+DevSpace deploys the engine using the chart at `ark/executors/completions/chart/`. The controller's `--completions-addr` is set to `http://ark-completions.ark-system:9090`.
+
+Changes to engine code restart only the engine pod. Changes to controller code restart only the controller pod.
+
+## A2A Message Contract
+
+The controller sends the same fat metadata contract used by external execution engines (Python SDK's `BaseExecutor`), extended with a query reference:
+
+```json
+{
+  "role": "user",
+  "parts": [{ "text": "<user input>" }],
+  "metadata": {
+    "ark.mckinsey.com/execution-engine": {
+      "agent": { "name": "...", "namespace": "..." },
+      "tools": [],
+      "history": [],
+      "query": { "name": "q-123", "namespace": "default" }
+    }
+  }
+}
+```
+
+The engine reads the Query CR and target CRDs using its K8s client for tool execution, MCP discovery, memory, and streaming config.

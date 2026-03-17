@@ -185,14 +185,6 @@ export async function installArk(
 
   // If not using -y flag, show checklist interface
   if (!options.yes) {
-    console.log(chalk.cyan.bold('\nSelect components to install:'));
-    console.log(
-      chalk.gray(
-        'Use arrow keys to navigate, space to toggle, enter to confirm\n'
-      )
-    );
-
-    // Build choices for the checkbox prompt
     const coreServices = Object.values(arkServices)
       .filter((s) => s.category === 'core')
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -201,30 +193,42 @@ export async function installArk(
       .filter((s) => s.category === 'service')
       .sort((a, b) => a.name.localeCompare(b.name));
 
+    const mandatoryServiceNames = [...coreServices, ...otherServices]
+      .filter((s) => s.mandatory)
+      .map((s) => s.helmReleaseName);
+
+    console.log(chalk.cyan.bold('\nSelect components to install:'));
+    console.log(
+      chalk.gray(
+        'Use arrow keys to navigate, space to toggle, enter to confirm\n'
+      )
+    );
+
+    const formatServiceChoice = (service: ArkService) => {
+      if (service.mandatory) {
+        return new inquirer.Separator(
+          `${chalk.dim.green('◉')} ${chalk.dim(`${service.name} - ${service.description}`)}`
+        );
+      }
+      return {
+        name: `${service.name} ${chalk.gray(`- ${service.description}`)}`,
+        value: service.helmReleaseName,
+        checked: Boolean(service.enabled),
+      };
+    };
+
     const allChoices = [
       new inquirer.Separator(chalk.bold('──── Dependencies ────')),
-      {
-        name: `cert-manager ${chalk.gray('- Certificate management')}`,
-        value: 'cert-manager',
-        checked: true,
-      },
-      {
-        name: `gateway-api ${chalk.gray('- Gateway API CRDs')}`,
-        value: 'gateway-api',
-        checked: true,
-      },
+      new inquirer.Separator(
+        `${chalk.dim.green('◉')} ${chalk.dim('cert-manager - Certificate management')}`
+      ),
+      new inquirer.Separator(
+        `${chalk.dim.green('◉')} ${chalk.dim('gateway-api - Gateway API CRDs')}`
+      ),
       new inquirer.Separator(chalk.bold('──── Ark Core ────')),
-      ...coreServices.map((service) => ({
-        name: `${service.name} ${chalk.gray(`- ${service.description}`)}`,
-        value: service.helmReleaseName,
-        checked: Boolean(service.enabled),
-      })),
+      ...coreServices.map(formatServiceChoice),
       new inquirer.Separator(chalk.bold('──── Ark Services ────')),
-      ...otherServices.map((service) => ({
-        name: `${service.name} ${chalk.gray(`- ${service.description}`)}`,
-        value: service.helmReleaseName,
-        checked: Boolean(service.enabled),
-      })),
+      ...otherServices.map(formatServiceChoice),
     ];
 
     let selectedComponents: string[];
@@ -238,12 +242,12 @@ export async function installArk(
           pageSize: 15,
         },
       ]);
-      selectedComponents = answers.components;
-
-      if (selectedComponents.length === 0) {
-        output.warning('No components selected. Exiting.');
-        process.exit(0);
-      }
+      selectedComponents = [
+        'cert-manager',
+        'gateway-api',
+        ...mandatoryServiceNames,
+        ...answers.components,
+      ];
     } catch (error) {
       // Handle Ctrl-C gracefully
       if (error && (error as {name?: string}).name === 'ExitPromptError') {

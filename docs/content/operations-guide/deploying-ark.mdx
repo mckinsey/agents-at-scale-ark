@@ -92,13 +92,18 @@ helm upgrade --install \
   --create-namespace \
   --set controllerManager.container.image.repository=your-registry.com/ark-controller \
   --set controllerManager.container.image.tag=0.1.21 \
-  --set queryEngine.container.image.repository=your-registry.com/ark-query-engine \
-  --set queryEngine.container.image.tag=0.1.21 \
   --set containerRegistry.enabled=true \
   --set containerRegistry.server=your-registry.com \
   --set containerRegistry.username=your_username \
   --set containerRegistry.password=your_token \
   --set rbac.enable=true
+
+helm upgrade --install \
+  ark-completions oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-completions \
+  --version 0.1.31 \
+  --namespace ark-system \
+  --set image.repository=your-registry.com/ark-completions \
+  --set image.tag=0.1.21
 ```
 
 If you need to transfer containers between registries, use the transfer script:

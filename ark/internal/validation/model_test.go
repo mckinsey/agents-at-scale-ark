@@ -10,7 +10,6 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
-	"mckinsey.com/ark/internal/genai"
 )
 
 func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
@@ -23,7 +22,7 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
 			Spec: arkv1alpha1.ModelSpec{
 				Model: arkv1alpha1.ValueSource{Value: "gpt-4o"},
-				Type:  genai.ModelTypeCompletions,
+				Type:  ModelTypeCompletions,
 			},
 		}
 		_, err := v.ValidateModel(ctx, model)
@@ -37,7 +36,7 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
 			Spec: arkv1alpha1.ModelSpec{
 				Model: arkv1alpha1.ValueSource{Value: "gpt-4o"},
-				Type:  genai.ProviderOpenAI,
+				Type:  ProviderOpenAI,
 			},
 		}
 		_, err := v.ValidateModel(ctx, model)
@@ -68,7 +67,7 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
 			Spec: arkv1alpha1.ModelSpec{
 				Model:    arkv1alpha1.ValueSource{Value: "model"},
-				Provider: genai.ProviderAzure,
+				Provider: ProviderAzure,
 			},
 		}
 		_, err := v.ValidateModel(ctx, model)
@@ -82,7 +81,7 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
 			Spec: arkv1alpha1.ModelSpec{
 				Model:    arkv1alpha1.ValueSource{Value: "model"},
-				Provider: genai.ProviderOpenAI,
+				Provider: ProviderOpenAI,
 			},
 		}
 		_, err := v.ValidateModel(ctx, model)
@@ -96,7 +95,7 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
 			Spec: arkv1alpha1.ModelSpec{
 				Model:    arkv1alpha1.ValueSource{Value: "model"},
-				Provider: genai.ProviderBedrock,
+				Provider: ProviderBedrock,
 			},
 		}
 		_, err := v.ValidateModel(ctx, model)
@@ -110,7 +109,7 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
 			Spec: arkv1alpha1.ModelSpec{
 				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
-				Provider: genai.ProviderAzure,
+				Provider: ProviderAzure,
 				Config: arkv1alpha1.ModelConfig{
 					Azure: &arkv1alpha1.AzureModelConfig{
 						BaseURL: arkv1alpha1.ValueSource{Value: "https://my-resource.openai.azure.com"},
@@ -130,7 +129,7 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
 			Spec: arkv1alpha1.ModelSpec{
 				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
-				Provider: genai.ProviderAzure,
+				Provider: ProviderAzure,
 				Config: arkv1alpha1.ModelConfig{
 					Azure: &arkv1alpha1.AzureModelConfig{
 						BaseURL: arkv1alpha1.ValueSource{Value: "https://my-resource.openai.azure.com"},
@@ -152,7 +151,7 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
 			Spec: arkv1alpha1.ModelSpec{
 				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
-				Provider: genai.ProviderAzure,
+				Provider: ProviderAzure,
 				Config: arkv1alpha1.ModelConfig{
 					Azure: &arkv1alpha1.AzureModelConfig{
 						BaseURL: arkv1alpha1.ValueSource{Value: "https://my-resource.openai.azure.com"},
@@ -174,7 +173,7 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
 			Spec: arkv1alpha1.ModelSpec{
 				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
-				Provider: genai.ProviderAzure,
+				Provider: ProviderAzure,
 				Config: arkv1alpha1.ModelConfig{
 					Azure: &arkv1alpha1.AzureModelConfig{
 						BaseURL: arkv1alpha1.ValueSource{Value: "https://my-resource.openai.azure.com"},
@@ -198,7 +197,7 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
 			Spec: arkv1alpha1.ModelSpec{
 				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
-				Provider: genai.ProviderAzure,
+				Provider: ProviderAzure,
 				Config: arkv1alpha1.ModelConfig{
 					Azure: &arkv1alpha1.AzureModelConfig{
 						BaseURL: arkv1alpha1.ValueSource{Value: "https://my-resource.openai.azure.com"},
@@ -223,7 +222,7 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
 			Spec: arkv1alpha1.ModelSpec{
 				Model:    arkv1alpha1.ValueSource{Value: "claude"},
-				Provider: genai.ProviderBedrock,
+				Provider: ProviderBedrock,
 				Config: arkv1alpha1.ModelConfig{
 					Bedrock: &arkv1alpha1.BedrockModelConfig{
 						Region: &arkv1alpha1.ValueSource{Value: "us-east-1"},
@@ -242,7 +241,7 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
 			Spec: arkv1alpha1.ModelSpec{
 				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
-				Provider: genai.ProviderAzure,
+				Provider: ProviderAzure,
 				Config: arkv1alpha1.ModelConfig{
 					Azure: &arkv1alpha1.AzureModelConfig{
 						BaseURL: arkv1alpha1.ValueSource{Value: "https://my-resource.openai.azure.com"},
@@ -263,7 +262,7 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
 			Spec: arkv1alpha1.ModelSpec{
 				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
-				Provider: genai.ProviderOpenAI,
+				Provider: ProviderOpenAI,
 				Config: arkv1alpha1.ModelConfig{
 					OpenAI: &arkv1alpha1.OpenAIModelConfig{
 						BaseURL: arkv1alpha1.ValueSource{Value: "https://api.openai.com"},
@@ -290,7 +289,7 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 			},
 			Spec: arkv1alpha1.ModelSpec{
 				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
-				Provider: genai.ProviderOpenAI,
+				Provider: ProviderOpenAI,
 				Config: arkv1alpha1.ModelConfig{
 					OpenAI: &arkv1alpha1.OpenAIModelConfig{
 						BaseURL: arkv1alpha1.ValueSource{Value: "https://api.openai.com"},
@@ -313,7 +312,7 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
 			Spec: arkv1alpha1.ModelSpec{
 				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
-				Provider: genai.ProviderOpenAI,
+				Provider: ProviderOpenAI,
 				Config: arkv1alpha1.ModelConfig{
 					OpenAI: &arkv1alpha1.OpenAIModelConfig{
 						BaseURL: arkv1alpha1.ValueSource{Value: "https://api.openai.com/v1"},
@@ -333,7 +332,7 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
 			Spec: arkv1alpha1.ModelSpec{
 				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
-				Provider: genai.ProviderOpenAI,
+				Provider: ProviderOpenAI,
 				Config: arkv1alpha1.ModelConfig{
 					OpenAI: &arkv1alpha1.OpenAIModelConfig{
 						BaseURL: arkv1alpha1.ValueSource{Value: "http://api.openai.com/v1"},
@@ -356,7 +355,7 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
 			Spec: arkv1alpha1.ModelSpec{
 				Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
-				Provider: genai.ProviderAzure,
+				Provider: ProviderAzure,
 				Config: arkv1alpha1.ModelConfig{
 					Azure: &arkv1alpha1.AzureModelConfig{
 						BaseURL: arkv1alpha1.ValueSource{Value: "https://my-resource.openai.azure.com/openai/deployments/gpt-4"},
