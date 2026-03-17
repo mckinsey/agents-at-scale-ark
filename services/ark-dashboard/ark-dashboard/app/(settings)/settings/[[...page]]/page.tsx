@@ -36,7 +36,7 @@ export default function SettingsPage() {
   }, [isValidPage, router]);
 
   return (
-    <div className="-m-10 flex h-[calc(100vh-1rem)] overflow-hidden">
+    <div className="bg-sidebar flex h-full w-full overflow-hidden">
       <SettingsSidebar activePage={activePage} />
       <SettingsContent activePage={activePage} />
     </div>

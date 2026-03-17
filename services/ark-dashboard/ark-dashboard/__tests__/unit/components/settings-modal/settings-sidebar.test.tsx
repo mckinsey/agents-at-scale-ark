@@ -14,12 +14,16 @@ vi.mock('next/navigation', () => ({
 describe('SettingsSidebar', () => {
   let store: ReturnType<typeof createStore>;
   const mockPush = vi.fn();
+  const mockReplace = vi.fn();
+  const mockBack = vi.fn();
 
   beforeEach(() => {
     store = createStore();
     vi.clearAllMocks();
     (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
       push: mockPush,
+      replace: mockReplace,
+      back: mockBack,
     });
   });
 
@@ -57,15 +61,36 @@ describe('SettingsSidebar', () => {
 
     await user.click(screen.getByText('Memory'));
 
-    expect(mockPush).toHaveBeenCalledWith('/settings/memory');
+    expect(mockReplace).toHaveBeenCalledWith('/settings/memory');
   });
 
-  it('should navigate to home when close button is clicked', async () => {
+  it('should call router.back() when close button is clicked and history exists', async () => {
+    Object.defineProperty(window, 'history', {
+      value: { length: 3 },
+      writable: true,
+    });
+
+    const user = userEvent.setup();
+    renderWithStore();
+
+    await user.click(screen.getByLabelText('Close settings'));
+
+    expect(mockBack).toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('should navigate to home when close button is clicked and no history exists', async () => {
+    Object.defineProperty(window, 'history', {
+      value: { length: 1 },
+      writable: true,
+    });
+
     const user = userEvent.setup();
     renderWithStore();
 
     await user.click(screen.getByLabelText('Close settings'));
 
     expect(mockPush).toHaveBeenCalledWith('/');
+    expect(mockBack).not.toHaveBeenCalled();
   });
 });

@@ -19,11 +19,15 @@ export function SettingsSidebar({ activePage }: SettingsSidebarProps) {
   const isMarketplaceEnabled = useAtomValue(isMarketplaceEnabledAtom);
 
   const handleSettingClick = (settingKey: SettingPage) => {
-    router.push(`/settings/${settingKey}`);
+    router.replace(`/settings/${settingKey}`);
   };
 
   const handleClose = () => {
-    router.push('/');
+    if (window.history.length <= 1) {
+      router.push('/');
+    } else {
+      router.back();
+    }
   };
 
   return (
