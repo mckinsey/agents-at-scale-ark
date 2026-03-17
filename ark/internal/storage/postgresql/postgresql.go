@@ -24,12 +24,14 @@ import (
 const jsonNull = "null"
 
 type Config struct {
-	Host     string
-	Port     int
-	Database string
-	User     string
-	Password string
-	SSLMode  string
+	Host         string
+	Port         int
+	Database     string
+	User         string
+	Password     string
+	SSLMode      string
+	MaxOpenConns int
+	MaxIdleConns int
 }
 
 type PostgreSQLBackend struct {
@@ -60,8 +62,14 @@ func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	db.SetMaxOpenConns(200)
-	db.SetMaxIdleConns(50)
+	if cfg.MaxOpenConns == 0 {
+		cfg.MaxOpenConns = 40
+	}
+	if cfg.MaxIdleConns == 0 {
+		cfg.MaxIdleConns = cfg.MaxOpenConns / 2
+	}
+	db.SetMaxOpenConns(cfg.MaxOpenConns)
+	db.SetMaxIdleConns(cfg.MaxIdleConns)
 	db.SetConnMaxLifetime(30 * time.Minute)
 	db.SetConnMaxIdleTime(5 * time.Minute)
 
