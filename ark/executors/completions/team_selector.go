@@ -102,6 +102,17 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, e
 		}
 	}
 
+	// Add terminate tool if enabled (defaults to true when nil)
+	if t.Selector.EnableTerminateTool == nil || *t.Selector.EnableTerminateTool {
+		terminateTool := arkv1alpha1.AgentTool{
+			Type: "builtin",
+			Name: "terminate",
+		}
+		if err := agent.Tools.registerTool(ctx, t.Client, terminateTool, t.Namespace, t.telemetry, t.eventing); err != nil {
+			return nil, fmt.Errorf("failed to register terminate tool for selector: %w", err)
+		}
+	}
+
 	// Cache the loaded agent for subsequent turns
 	t.selectorAgent = agent
 

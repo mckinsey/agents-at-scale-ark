@@ -93,6 +93,8 @@ spec:
                 properties:
                   agent:
                     type: string
+                  enableTerminateTool:
+                    type: boolean
                   selectorPrompt:
                     type: string
                   tools:

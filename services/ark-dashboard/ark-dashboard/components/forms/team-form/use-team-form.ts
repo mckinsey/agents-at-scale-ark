@@ -32,6 +32,7 @@ const teamFormSchema = z.object({
   maxTurns: z.string().optional(),
   selectorAgent: z.string().optional(),
   selectorPrompt: z.string().optional(),
+  enableTerminateTool: z.boolean().optional(),
 });
 
 export type TeamFormValues = z.infer<typeof teamFormSchema>;
@@ -70,6 +71,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
       maxTurns: '',
       selectorAgent: '',
       selectorPrompt: '',
+      enableTerminateTool: true,
     },
   });
 
@@ -113,6 +115,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
             selectorPrompt:
               teamData.selector?.selectorPrompt ||
               (teamData.strategy === 'selector' ? DEFAULT_SELECTOR_PROMPT : ''),
+            enableTerminateTool: teamData.selector?.enableTerminateTool ?? true,
           });
         } else {
           const agentsData = await agentsService.getAll();
@@ -156,10 +159,11 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
             loops: values.loops,
             maxTurns: values.maxTurns ? parseInt(values.maxTurns) : null,
             selector:
-              values.selectorAgent || values.selectorPrompt
+              values.selectorAgent || values.selectorPrompt || values.enableTerminateTool !== undefined
                 ? {
                     agent: values.selectorAgent || undefined,
                     selectorPrompt: values.selectorPrompt || undefined,
+                    enableTerminateTool: values.enableTerminateTool,
                   }
                 : null,
             graph: graphEdges.length > 0 ? { edges: graphEdges } : null,
@@ -179,10 +183,11 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
             loops: values.loops,
             maxTurns: values.maxTurns ? parseInt(values.maxTurns) : undefined,
             selector:
-              values.selectorAgent || values.selectorPrompt
+              values.selectorAgent || values.selectorPrompt || values.enableTerminateTool !== undefined
                 ? {
                     agent: values.selectorAgent || undefined,
                     selectorPrompt: values.selectorPrompt || undefined,
+                    enableTerminateTool: values.enableTerminateTool,
                   }
                 : undefined,
             graph: graphEdges.length > 0 ? { edges: graphEdges } : undefined,
