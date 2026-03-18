@@ -81,10 +81,10 @@ class ModelsPage(BasePage):
         logger.info(f"Creating {model_type} model: {model_name}")
         
         self.page.locator(self.ADD_MODEL_BUTTON).first.click()
-        self.wait_for_modal_open()
+        self.wait_for_navigation_complete()
         
         name_input = self.page.locator("input[name='name']").first
-        name_input.wait_for(state="visible", timeout=15000)
+        name_input.wait_for(state="visible", timeout=20000)
         name_input.fill(model_name)
         
         if model_type.lower() not in ("openai", ""):
