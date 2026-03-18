@@ -4,9 +4,9 @@ import {
   Bot,
   ChevronLeft,
   ChevronRight,
-  Presentation,
   Search,
   Server,
+  SquarePlay,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -160,7 +160,7 @@ export default function MarketplacePage() {
                 ? ''
                 : 'text-muted-foreground hover:text-foreground',
             )}>
-            <Presentation className="h-3.5 w-3.5" />
+            <SquarePlay className="h-3.5 w-3.5" />
             Demos
           </Button>
           <Button
