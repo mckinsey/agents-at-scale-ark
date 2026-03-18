@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import copy from 'copy-to-clipboard';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import type { MarketplaceItem } from '@/lib/api/generated/marketplace-types';
@@ -10,9 +11,11 @@ import { MarketplaceItemCard } from './marketplace-item-card';
 
 vi.mock('@/lib/services/marketplace-hooks');
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('copy-to-clipboard');
 
 const mockMutateAsync = vi.fn();
 const mockUseInstallMarketplaceItem = vi.mocked(useInstallMarketplaceItem);
+const mockCopy = vi.mocked(copy);
 
 function makeItem(overrides?: Partial<MarketplaceItem>): MarketplaceItem {
   return {
@@ -294,15 +297,15 @@ describe('InstallCommandDialog', () => {
     return allButtons.filter(b => b !== closeBtn);
   }
 
-  it('copy to clipboard calls writeText and shows success toast', async () => {
+  it('copy to clipboard calls copy library and shows success toast', async () => {
     const { toast } = await import('sonner');
+
+    mockCopy.mockReturnValue(true);
 
     await openDialogWithCommands({
       arkCommand: 'ark install test',
       helmCommand: 'helm install test',
     });
-
-    const spy = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
 
     const copyButtons = getCopyButtonsInDialog();
     expect(copyButtons.length).toBe(2);
@@ -310,20 +313,19 @@ describe('InstallCommandDialog', () => {
     fireEvent.click(copyButtons[0]);
 
     await waitFor(() => {
-      expect(spy).toHaveBeenCalledWith('ark install test');
+      expect(mockCopy).toHaveBeenCalledWith('ark install test');
     });
     expect(toast.success).toHaveBeenCalledWith('Command copied to clipboard');
-    spy.mockRestore();
   });
 
   it('copy failure shows error toast', async () => {
     const { toast } = await import('sonner');
 
+    mockCopy.mockReturnValue(false);
+
     await openDialogWithCommands({
       arkCommand: 'ark install test',
     });
-
-    const spy = vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new Error('Clipboard denied'));
 
     const copyButtons = getCopyButtonsInDialog();
     expect(copyButtons.length).toBe(1);
@@ -332,7 +334,6 @@ describe('InstallCommandDialog', () => {
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith('Failed to copy to clipboard');
     });
-    spy.mockRestore();
   });
 
   it('shows both helm and ark command sections', async () => {

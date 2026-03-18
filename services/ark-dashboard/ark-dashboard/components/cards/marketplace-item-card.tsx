@@ -3,6 +3,7 @@
 import { Bot, Check, Copy, Loader2, Server, Terminal } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import copyToClipboard from 'copy-to-clipboard';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -262,11 +263,11 @@ function InstallCommandDialog({
   };
   itemName: string;
 }) {
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
+  const handleCopy = (text: string) => {
+    const success = copyToClipboard(text);
+    if (success) {
       toast.success('Command copied to clipboard');
-    } catch {
+    } else {
       toast.error('Failed to copy to clipboard');
     }
   };
@@ -298,7 +299,7 @@ function InstallCommandDialog({
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => copyToClipboard(installCommand.arkCommand!)}>
+                  onClick={() => handleCopy(installCommand.arkCommand!)}>
                   <Copy className="h-4 w-4" />
                 </Button>
               </div>
@@ -315,7 +316,7 @@ function InstallCommandDialog({
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => copyToClipboard(installCommand.helmCommand!)}>
+                  onClick={() => handleCopy(installCommand.helmCommand!)}>
                   <Copy className="h-4 w-4" />
                 </Button>
               </div>
