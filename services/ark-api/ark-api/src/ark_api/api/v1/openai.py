@@ -25,6 +25,7 @@ from ...utils.parse_duration import parse_duration_to_seconds
 from ...utils.query_targets import parse_model_to_query_target
 from ...utils.query_watch import watch_query_completion
 from ...utils.streaming import StreamingErrorResponse, create_single_chunk_sse_response
+from ...utils.streaming_support import check_streaming_support
 
 router = APIRouter(prefix="/openai/v1", tags=["OpenAI"])
 logger = logging.getLogger(__name__)
@@ -254,19 +255,30 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletion:
                     ark_client, query_name, model, messages, timeout_seconds
                 )
 
-            # Streaming was requested - check if streaming backend is available
-            # Define Server-Sent Events (SSE) headers for streaming responses
-            # These headers ensure the connection stays open and data is not cached
             sse_headers = {
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
             }
 
+            supports_streaming = await check_streaming_support(
+                target.type, target.name, namespace
+            )
+            if not supports_streaming:
+                logger.info(
+                    f"Target {target.type}/{target.name} does not support streaming, falling back to polling"
+                )
+                completion = await watch_query_completion(
+                    ark_client, query_name, model, messages, timeout_seconds
+                )
+                sse_lines = create_single_chunk_sse_response(completion)
+                return StreamingResponse(
+                    iter(sse_lines), media_type="text/event-stream", headers=sse_headers
+                )
+
             api = k8s_client.ApiClient()
             v1 = k8s_client.CoreV1Api(api)
             streaming_config = await get_streaming_config(v1, namespace)
 
-            # If no config or not enabled, fall back to polling
             if not streaming_config or not streaming_config.enabled:
                 logger.info("No streaming backend configured, falling back to polling")
                 completion = await watch_query_completion(

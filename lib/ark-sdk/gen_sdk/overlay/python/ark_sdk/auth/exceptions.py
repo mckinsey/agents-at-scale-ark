@@ -5,7 +5,10 @@ from fastapi import HTTPException
 
 class AuthenticationError(Exception):
     """Base exception for authentication errors."""
-    pass
+
+    def __init__(self, message=None, details=None):
+        super().__init__(message)
+        self.details = details
 
 
 class TokenValidationError(AuthenticationError):

@@ -98,6 +98,24 @@ spec:
 
 Queries targeting `my-agent` will be routed to your engine via A2A.
 
+## Streaming Support
+
+If your engine writes streaming chunks to the broker (via the memory event stream), opt in by adding the `streaming-supported` annotation to your `ExecutionEngine` resource:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1prealpha1
+kind: ExecutionEngine
+metadata:
+  name: my-engine
+  annotations:
+    ark.mckinsey.com/streaming-supported: "true"
+spec:
+  address:
+    value: "http://my-engine-service:8000"
+```
+
+Without this annotation, streaming requests are handled transparently — clients still receive a valid SSE response, just without incremental chunks.
+
 ## Key Types
 
 Import from `ark_sdk.executor`:
