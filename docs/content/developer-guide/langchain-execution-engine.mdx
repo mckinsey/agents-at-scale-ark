@@ -49,6 +49,12 @@ spec:
   description: "LangChain Executor - A2A server with RAG support"
 ```
 
+## Streaming
+
+The LangChain executor does not write streaming chunks to the broker. When a client requests streaming, Ark automatically falls back to polling and returns the complete response as a single-chunk SSE response. No configuration is needed — this is the default behavior for execution engines without the `ark.mckinsey.com/streaming-supported` annotation.
+
+See [Building Execution Engines](/developer-guide/building-execution-engines#streaming-support) for details.
+
 ## RAG Support
 
 Enable RAG for an agent by adding the label:
