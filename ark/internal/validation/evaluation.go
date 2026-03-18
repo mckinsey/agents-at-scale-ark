@@ -105,7 +105,7 @@ func validateEvaluatorParameters(evaluation *arkv1alpha1.Evaluation) error {
 		if param.Name == "" {
 			return fmt.Errorf("evaluator parameter[%d]: name cannot be empty", i)
 		}
-		if param.Value == "" {
+		if param.Value == "" && param.ValueFrom == nil {
 			return fmt.Errorf("evaluator parameter[%d]: value cannot be empty", i)
 		}
 	}
