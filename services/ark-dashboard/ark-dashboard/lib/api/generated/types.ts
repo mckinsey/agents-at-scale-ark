@@ -4081,6 +4081,8 @@ export interface components {
             enableTerminateTool?: boolean | null;
             /** Selectorprompt */
             selectorPrompt?: string | null;
+            /** Terminateprompt */
+            terminatePrompt?: string | null;
         };
         /**
          * ServiceListResponse

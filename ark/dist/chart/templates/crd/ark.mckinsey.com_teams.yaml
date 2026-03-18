@@ -97,6 +97,8 @@ spec:
                     type: boolean
                   selectorPrompt:
                     type: string
+                  terminatePrompt:
+                    type: string
                   tools:
                     items:
                       properties:
