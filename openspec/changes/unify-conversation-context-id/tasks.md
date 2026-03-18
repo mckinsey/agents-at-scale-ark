@@ -10,13 +10,14 @@
 - [ ] 2.2 Update `ProcessMessage` signature or extract contextId from `protocol.Message` before passing to `setupExecution`
 - [ ] 2.3 Add unit tests for: A2A message with contextId, without contextId (fallback), neither source has value
 
-## 3. Python SDK — Surface conversation_id to named engines
+## 3. Python SDK — Surface conversationId to named engines
 
-- [ ] 3.1 Add `conversation_id: str = ""` field to `ExecutionEngineRequest` in `lib/ark-sdk/gen_sdk/overlay/python/ark_sdk/executor.py`
-- [ ] 3.2 Update `A2AExecutorAdapter.execute()` in `executor_app.py` to extract `context_id` from incoming A2A message and pass through to `resolve_query()`
-- [ ] 3.3 Update `resolve_query()` and `_resolve_from_query()` in `extensions/query.py` to accept and pass conversation_id into `ExecutionEngineRequest`
-- [ ] 3.4 Update `A2AExecutorAdapter.execute()` to set `context_id` on the outgoing A2A response message
-- [ ] 3.5 Add tests for conversation_id extraction, passthrough, and response round-trip
+- [ ] 3.1 Remove `history` field from `ExecutionEngineRequest` and delete `_build_history()` in `lib/ark-sdk/gen_sdk/overlay/python/ark_sdk/executor.py` and `extensions/query.py`
+- [ ] 3.2 Add `conversationId: str = ""` field to `ExecutionEngineRequest` in `executor.py`
+- [ ] 3.3 Update `A2AExecutorAdapter.execute()` in `executor_app.py` to extract `context_id` from incoming A2A message and pass through to `resolve_query()`
+- [ ] 3.4 Update `resolve_query()` and `_resolve_from_query()` in `extensions/query.py` to accept and pass conversationId into `ExecutionEngineRequest`
+- [ ] 3.5 Update `A2AExecutorAdapter.execute()` to set `context_id` on the outgoing A2A response message
+- [ ] 3.6 Add tests for history removal, conversationId extraction, passthrough, and response round-trip
 
 ## 4. CRD Godoc Comments
 

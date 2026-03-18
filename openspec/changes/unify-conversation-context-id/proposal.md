@@ -6,8 +6,9 @@ The controller now communicates exclusively via A2A protocol, but `conversationI
 
 - Controller sends `spec.conversationId` as A2A `Message.ContextID` when dispatching to any engine
 - Completions engine reads conversation ID from incoming A2A message instead of fetching it from Query CR
-- Python SDK (`ExecutionEngineRequest`) gains a `conversation_id` field
+- Python SDK (`ExecutionEngineRequest`) gains a `conversationId` field
 - Python SDK (`A2AExecutorAdapter`) extracts `context_id` from A2A message and sets it on response
+- Python SDK removes dead `history` field from `ExecutionEngineRequest` — `_build_history()` always returns `[]` and was never wired up
 - `a2a-context-id` annotation remains functional but becomes the advanced override for sub-agent dispatch (hop 2), not the primary conversation threading mechanism
 - Documentation restructured: `conversationId` elevated to universal conversation concept, `a2a-context-id` annotation demoted to advanced use case
 
@@ -17,7 +18,7 @@ The controller now communicates exclusively via A2A protocol, but `conversationI
 - `a2a-conversation-threading`: Controller sends conversationId as A2A contextId and engines receive it via protocol message
 
 ### Modified Capabilities
-- `a2a-query-extension`: Python SDK executor types gain conversation_id field; A2AExecutorAdapter reads/writes context_id on A2A messages
+- `a2a-query-extension`: Python SDK executor types gain conversationId field; A2AExecutorAdapter reads/writes context_id on A2A messages
 - `executor-developer-guide`: Guide updated to explain conversation threading for named engines
 
 ## Impact

@@ -60,18 +60,21 @@ if conversationId == "" {
 
 **Note**: The completions engine still fetches the Query CR for everything else (target, session ID, memory config, input messages, annotations, telemetry). Only the conversationId source changes.
 
-### 4. Python SDK adds conversation_id to ExecutionEngineRequest
+### 4. Python SDK removes dead history field and adds conversationId
 
 ```python
 class ExecutionEngineRequest(BaseModel):
     agent: AgentConfig
     userInput: Message
-    history: List[Message]
     tools: List[ToolDefinition] = []
-    conversation_id: str = ""  # from A2A contextId
+    conversationId: str = ""  # from A2A contextId
 ```
 
-**Why**: Named engines need the conversation ID to implement their own stateful behavior. Adding it to the existing request type is the minimal change. Default empty string means existing executors don't break.
+`history` is removed — `_build_history()` always returned `[]` and was never wired to any memory/conversation source. Named engines that need history should use `conversationId` to fetch it from their own storage.
+
+**Why**: Named engines need the conversation ID to implement their own stateful behavior. Removing the dead field avoids the false promise that the SDK provides history. Default empty string on `conversationId` means existing executors don't break.
+
+**Alternative considered**: Wiring `history` to actually load messages from broker using `conversationId`. Rejected because named engines manage their own state — the SDK shouldn't impose a specific memory backend.
 
 ### 5. Python SDK A2AExecutorAdapter reads/writes context_id
 
@@ -91,6 +94,8 @@ The controller's `extractEngineResponseMeta()` already extracts A2A contextId fr
 
 **[Risk] Named engines return unexpected contextId** → A named engine might return a different context ID than what was sent (e.g., its own internal session ID). This is actually correct behavior — the engine owns its state. Mitigation: Document that engines may return a different contextId and clients should use the returned value for follow-up.
 
-**[Risk] Python SDK backwards compatibility** → Adding `conversation_id` to `ExecutionEngineRequest` with a default value means existing executors continue to work. Mitigation: Field defaults to empty string, no code changes required in existing engines.
+**[Risk] Python SDK backwards compatibility** → Adding `conversationId` to `ExecutionEngineRequest` with a default value means existing executors continue to work. Mitigation: Field defaults to empty string, no code changes required in existing engines.
 
 **[Trade-off] Two status fields with same value** → `status.conversationId` and `status.a2a.contextId` may contain the same value at hop 1. This is intentional duplication to maintain backwards compatibility. Collapsing them is a future CRD API change.
+
+**[Cleanup] Python SDK `history` field is a dead placeholder** → `ExecutionEngineRequest.history` exists but `_build_history()` always returns `[]`. The SDK never loads conversation history — that was the completions engine's job via broker/memory. The field and `_build_history()` are removed as part of this change. Named engines that need history should use `conversationId` to fetch it from their own storage.
