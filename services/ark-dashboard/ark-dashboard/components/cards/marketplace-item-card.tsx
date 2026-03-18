@@ -3,6 +3,7 @@
 import { Bot, Check, Copy, ExternalLink, Loader2, Server, Terminal } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import copyToClipboard from 'copy-to-clipboard';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import type { MarketplaceItem } from '@/lib/api/generated/marketplace-types';
 import { useInstallMarketplaceItem } from '@/lib/services/marketplace-hooks';
 import { cn } from '@/lib/utils';
@@ -163,6 +170,25 @@ export function MarketplaceItemCard({
       </CardHeader>
 
       <CardContent className="flex-1 space-y-4">
+        {/* Source */}
+        {item.source && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="text-xs text-muted-foreground cursor-default">
+                  <span>Source: </span>
+                  <span className="truncate inline-block max-w-[calc(100%-60px)] align-bottom">
+                    {item.source}
+                  </span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-md">
+                <p className="break-all">{item.source}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+
         {/* Tags */}
         {item.tags.length > 0 && (
           <div className="flex flex-wrap gap-2">
@@ -249,11 +275,11 @@ function InstallCommandDialog({
   };
   itemName: string;
 }) {
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
+  const handleCopy = (text: string) => {
+    const success = copyToClipboard(text);
+    if (success) {
       toast.success('Command copied to clipboard');
-    } catch {
+    } else {
       toast.error('Failed to copy to clipboard');
     }
   };
@@ -285,7 +311,7 @@ function InstallCommandDialog({
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => copyToClipboard(installCommand.arkCommand!)}>
+                  onClick={() => handleCopy(installCommand.arkCommand!)}>
                   <Copy className="h-4 w-4" />
                 </Button>
               </div>
@@ -302,7 +328,7 @@ function InstallCommandDialog({
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => copyToClipboard(installCommand.helmCommand!)}>
+                  onClick={() => handleCopy(installCommand.helmCommand!)}>
                   <Copy className="h-4 w-4" />
                 </Button>
               </div>
