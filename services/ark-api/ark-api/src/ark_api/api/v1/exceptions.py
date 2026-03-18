@@ -110,13 +110,28 @@ def handle_k8s_errors(
                 logger.error(f"Unexpected error during {operation} {resource_type}: {e}")
                 logger.exception("Full traceback:")
 
+                # Handle ark-sdk "not found" exceptions
+                error_msg = str(e)
+                if "not found in namespace" in error_msg.lower():
+                    # Extract resource name from ark-sdk error message
+                    resource_name = kwargs.get(f"{resource_type}_name", "")
+                    namespace = kwargs.get("namespace", "")
+
+                    detail = f"{resource_type.title()} "
+                    if resource_name:
+                        detail += f"'{resource_name}' "
+                    detail += "not found"
+                    if namespace:
+                        detail += f" in namespace {namespace}"
+                    raise HTTPException(status_code=404, detail=detail)
+
                 original_exception = e.__cause__ or e.__context__
                 if isinstance(original_exception, (ApiException, SyncApiException)):
                     if original_exception.status == 422:
                         raise HTTPException(status_code=422, detail=_extract_error_detail(original_exception))
                     elif original_exception.status == 403:
                         raise HTTPException(status_code=403, detail=_extract_error_detail(original_exception))
-                
+
                 raise HTTPException(
                     status_code=500,
                     detail="Internal server error"
