@@ -12,6 +12,7 @@ controllerManager:
       - "--health-probe-bind-address=:8081"
     env:
       ARK_MODEL_PROBE_TIMEOUT_SECONDS: "60"
+      ARK_A2A_DISCOVERY_TIMEOUT: "30"
     resources:
       limits:
         cpu: 500m
