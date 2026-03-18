@@ -69,7 +69,7 @@ deployments:
               - "--leader-elect"
               - "--metrics-bind-address=:8443"
               - "--health-probe-bind-address=:8081"
-              - "--completions-addr=http://ark-completions.ark-system:9090"
+              - "--completions-addr=http://ark-completions.ark-system"
             resources:
               limits:
                 memory: "4096Mi"
@@ -116,7 +116,7 @@ dev:
       - |
         cd /app
         mkdir -p internal/apiserver/crds && cp config/crd/bases/*.yaml internal/apiserver/crds/
-        GOTOOLCHAIN=auto go run cmd/main.go --leader-elect=false --completions-addr=http://ark-completions.ark-system:9090
+        GOTOOLCHAIN=auto go run cmd/main.go --leader-elect=false --completions-addr=http://ark-completions.ark-system
     namespace: ark-system
     logs:
       lastLines: 50
@@ -190,4 +190,4 @@ profiles:
             ARK_POSTGRES_PASSWORD=arkdev123 \
             ARK_POSTGRES_SSL_MODE=disable \
             ARK_APISERVER_PORT=6443 \
-            go run cmd/main.go --leader-elect=false --completions-addr=http://ark-completions.ark-system:9090
+            go run cmd/main.go --leader-elect=false --completions-addr=http://ark-completions.ark-system

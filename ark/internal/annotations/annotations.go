@@ -55,8 +55,9 @@ const (
 
 // Streaming annotations
 const (
-	StreamingEnabled = ARKPrefix + "streaming-enabled"
-	StreamingURL     = ARKPrefix + "streaming-url"
+	StreamingEnabled   = ARKPrefix + "streaming-enabled"
+	StreamingURL       = ARKPrefix + "streaming-url"
+	StreamingSupported = ARKPrefix + "streaming-supported"
 )
 
 // Migration annotations - used by mutating webhooks to record deprecation warnings.

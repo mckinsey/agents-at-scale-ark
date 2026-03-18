@@ -197,6 +197,8 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		}
 	}
 
+	queryInput := extractUserInput(opCtx, obj, r.Client)
+
 	opCtx, dispatchSpan := r.Telemetry.Tracer().Start(opCtx, fmt.Sprintf("query.%s.dispatch", obj.Name),
 		telemetry.WithSpanKind(telemetry.SpanKindChain),
 		telemetry.WithAttributes(
@@ -259,7 +261,17 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	_ = r.updateStatusWithDuration(opCtx, &obj, queryStatus, duration)
 
 	log.Info("query execution completed", "query", obj.Name, "status", queryStatus, "duration", duration.Duration)
-	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", nil)
+
+	var operationData map[string]string
+	if queryInput != "" {
+		const maxDisplayInputLength = 48
+		displayInput := queryInput
+		if len(displayInput) > maxDisplayInputLength {
+			displayInput = displayInput[:maxDisplayInputLength-3] + "..."
+		}
+		operationData = map[string]string{"input": displayInput}
+	}
+	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", operationData)
 }
 
 func (r *QueryReconciler) resolveDispatchAddress(ctx context.Context, target arkv1alpha1.QueryTarget, namespace string) (string, error) {

@@ -1,24 +1,21 @@
 """Authentication configuration for ARK SDK."""
 
-from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 
 class AuthConfig(BaseSettings):
     """Configuration for authentication."""
-    
-    # JWT settings
+
+    model_config = SettingsConfigDict(env_prefix="ARK_", case_sensitive=False)
+
     jwt_algorithm: str = "RS256"
-    
-    # Authentication settings
-    issuer: Optional[str] = Field(None, env="OIDC_ISSUER_URL")
-    audience: Optional[str] = Field(None, env="OIDC_APPLICATION_ID")
+    issuer: Optional[str] = None
+    audience: Optional[str] = None
     jwks_url: Optional[str] = None
-    
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # Convert empty strings to None
         if self.issuer == "":
             self.issuer = None
         if self.audience == "":
