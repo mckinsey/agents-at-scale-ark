@@ -5,7 +5,7 @@ The completions engine SHALL provide a `ProtocolTeamMember` interface that opera
 
 #### Scenario: Agent implements ProtocolTeamMember
 - **WHEN** an agent implements `ProtocolTeamMember.Execute`
-- **THEN** it receives `protocol.Message` inputs and returns `[]protocol.Message` results
+- **THEN** it receives `protocol.Message` inputs and returns `(*ExecutionResult, error)`
 - **AND** the internal OpenAI API call path converts at the provider boundary only
 
 #### Scenario: Mixed interface team execution

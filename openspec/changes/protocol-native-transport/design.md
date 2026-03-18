@@ -104,7 +104,7 @@ Step 8 (Handler boundary)          — depends on Steps 6, 7
 Step 9 (Compatibility governance)  — ongoing, parallel to all steps
 ```
 
-Step 1 merges first. Steps 2 and 3 can proceed in parallel after Step 1. Steps 4 and 5 can proceed in parallel after Steps 2/3. Steps 6, 7, 8 are sequential. Step 9 is ongoing.
+Step 1 merges first. Steps 2, 3, and 5 can proceed in parallel after Step 1. Step 4 can proceed after Steps 1 and 2. Steps 6, 7, 8 are sequential. Step 9 is ongoing.
 
 Implementation tasks live in child change sets; see `protocol-native-transport/tasks.md` for the stage-to-change-set mapping.
 

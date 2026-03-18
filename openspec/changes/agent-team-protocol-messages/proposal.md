@@ -4,7 +4,7 @@
 
 ## What Changes
 
-- Define `ProtocolTeamMember` interface with `Execute` accepting `protocol.Message` inputs and returning `[]protocol.Message`
+- Define `ProtocolTeamMember` interface with `Execute` accepting `protocol.Message` inputs and returning `(*ExecutionResult, error)`
 - Add `ProtocolAgent` methods (`executeLocallyProtocol`, `prepareMessagesProtocol`) that operate on `protocol.Message`
 - Implement adapter methods that bridge between `Message` (OpenAI) and `protocol.Message` for existing callers
 - Update team orchestration (`team.go`, `team_graph.go`, `team_selector.go`) to support either interface through a shared dispatcher

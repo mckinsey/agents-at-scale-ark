@@ -20,7 +20,7 @@ This is the umbrella change set. Implementation tasks live in their owning child
 
 - Step 1 merges first (foundation, no behavioral change).
 - Steps 2 and 3 can run in parallel after Step 1.
-- Steps 4 and 5 can run in parallel after Steps 2/3.
+- Step 4 can run after Steps 1 and 2. Step 5 can run in parallel with Steps 2 and 3 (depends only on Step 1).
 - Steps 6, 7, 8 are sequential.
 - Step 9 is ongoing alongside all steps.
 

@@ -63,7 +63,7 @@ Selection criteria: whether external Go consumers need to import extension types
 
 ### 6. Python SDK parity
 
-**Decision**: Mirror the isolation in the Python SDK with a base `Extension` protocol class (defining `uri`, `metadata_key`, `validate_payload`), a `Registry` class, and per-extension submodules (`query/v1`, `team_attribution/v1`). An external extension adapter provides schema-only validation.
+**Decision**: Mirror the isolation in the Python SDK with a base `Extension` protocol class (defining `uri`, `metadata_key`, `validate_payload`), a `Registry` class, and per-extension submodules (e.g., `ark_sdk/extensions/query/v1.py`, `ark_sdk/extensions/team_attribution/v1.py`). Submodule names use underscores per Python convention; extension URIs remain hyphenated (`team-attribution/v1`). An external extension adapter provides schema-only validation.
 
 **Rationale**: SDK consumers need the same extension isolation. Consistent patterns across Go and Python reduce cognitive overhead for engine authors.
 

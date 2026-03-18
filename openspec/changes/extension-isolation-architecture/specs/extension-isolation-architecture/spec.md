@@ -57,8 +57,8 @@ The Python SDK SHALL provide equivalent extension isolation with a base `Extensi
 
 #### Scenario: Python SDK extension registration
 - **WHEN** the Python SDK is imported
-- **THEN** built-in extensions (`query/v1`, `team_attribution/v1`) are registered
-- **AND** `registry.get(uri)` returns the extension instance
+- **THEN** built-in extensions (`query/v1`, `team-attribution/v1`) are registered
+- **AND** `registry.get(uri)` returns the extension instance by its canonical URI
 
 ### Requirement: Extension version coexistence
 Multiple versions of the same extension SHALL coexist in the registry simultaneously.
