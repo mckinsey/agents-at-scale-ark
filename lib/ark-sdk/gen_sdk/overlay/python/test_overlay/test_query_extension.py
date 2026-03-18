@@ -258,6 +258,82 @@ class TestResolveModelWithSecrets(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(request.agent.model.config["openai"]["properties"]["temperature"], 0.7)
 
 
+class TestConversationIdPassthrough(unittest.IsolatedAsyncioTestCase):
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
+    @patch("ark_sdk.client.with_ark_client")
+    async def test_conversation_id_passed_to_request(self, mock_with_client, mock_init_k8s):
+        mock_ark = AsyncMock()
+
+        mock_query = MagicMock()
+        mock_query.metadata = {"name": "q1"}
+        mock_query.spec.target.type = "agent"
+        mock_query.spec.target.name = "a1"
+        mock_query.spec.parameters = None
+
+        mock_agent = MagicMock()
+        mock_agent.metadata = {"name": "a1", "labels": {}}
+        mock_agent.spec.prompt = "hello"
+        mock_agent.spec.description = ""
+        mock_agent.spec.model_ref = None
+        mock_agent.spec.parameters = None
+        mock_agent.spec.tools = None
+
+        mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
+        mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
+
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = mock_ark
+        mock_ctx.__aexit__.return_value = False
+        mock_with_client.return_value = mock_ctx
+
+        ref = QueryRef(name="q1", namespace="default")
+        request = await resolve_query(ref, "hi", conversation_id="conv-123")
+
+        self.assertEqual(request.conversationId, "conv-123")
+
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
+    @patch("ark_sdk.client.with_ark_client")
+    async def test_empty_conversation_id_default(self, mock_with_client, mock_init_k8s):
+        mock_ark = AsyncMock()
+
+        mock_query = MagicMock()
+        mock_query.metadata = {"name": "q1"}
+        mock_query.spec.target.type = "agent"
+        mock_query.spec.target.name = "a1"
+        mock_query.spec.parameters = None
+
+        mock_agent = MagicMock()
+        mock_agent.metadata = {"name": "a1", "labels": {}}
+        mock_agent.spec.prompt = "hello"
+        mock_agent.spec.description = ""
+        mock_agent.spec.model_ref = None
+        mock_agent.spec.parameters = None
+        mock_agent.spec.tools = None
+
+        mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
+        mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
+
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = mock_ark
+        mock_ctx.__aexit__.return_value = False
+        mock_with_client.return_value = mock_ctx
+
+        ref = QueryRef(name="q1", namespace="default")
+        request = await resolve_query(ref, "hi")
+
+        self.assertEqual(request.conversationId, "")
+
+
+class TestHistoryFieldRemoved(unittest.TestCase):
+    def test_request_has_no_history_field(self):
+        from ark_sdk.executor import ExecutionEngineRequest
+        self.assertFalse(hasattr(ExecutionEngineRequest.model_fields, "history"))
+
+    def test_request_has_conversation_id_field(self):
+        from ark_sdk.executor import ExecutionEngineRequest
+        self.assertIn("conversationId", ExecutionEngineRequest.model_fields)
+
+
 class TestExtensionConstants(unittest.TestCase):
     def test_uri_matches_github_path(self):
         self.assertIn("mckinsey/agents-at-scale-ark", QUERY_EXTENSION_URI)
