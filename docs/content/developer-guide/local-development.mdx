@@ -70,7 +70,7 @@ Switching between storage backends is destructive. Resources created with etcd (
 
 The completions engine runs as a standalone pod. This allows independent code sync and restart — changing engine code only restarts the engine, not the controller.
 
-DevSpace deploys the engine using the chart at `executors/completions/chart/`. The controller connects via `--completions-addr=http://ark-completions.ark-system:9090`.
+DevSpace deploys the engine using the chart at `executors/completions/chart/`. The controller connects via `--completions-addr=http://ark-completions.ark-system`.
 
 ```bash
 # Both controller and completions engine start with devspace dev

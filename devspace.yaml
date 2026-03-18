@@ -56,6 +56,17 @@ vars:
 commands:
   routes:
     ./services/localhost-gateway/scripts/show-routes.sh
+  routes-forward: |-
+    kill $(lsof -ti :8080) 2>/dev/null || true
+    echo "Starting port-forward on localhost:8080..."
+    nohup kubectl port-forward -n ark-system service/localhost-gateway-nginx 8080:80 > /dev/null 2>&1 &
+    sleep 1
+    PID=$(lsof -ti :8080)
+    if [ -n "$PID" ]; then
+      echo "Port-forward running in background (PID: $PID)"
+    else
+      echo "Failed to start port-forward. Is the gateway deployed?"
+    fi
 
 profiles:
   - name: enable-cert-manager

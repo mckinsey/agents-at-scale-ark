@@ -78,8 +78,9 @@ class TestExtractQueryRef(unittest.TestCase):
 
 
 class TestResolveQuery(unittest.IsolatedAsyncioTestCase):
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
     @patch("ark_sdk.client.with_ark_client")
-    async def test_resolves_agent_target(self, mock_with_client):
+    async def test_resolves_agent_target(self, mock_with_client, mock_init_k8s):
         mock_ark = AsyncMock()
 
         mock_query = MagicMock()
@@ -113,8 +114,9 @@ class TestResolveQuery(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(request.userInput.role, "user")
         self.assertEqual(request.userInput.content, "hello")
 
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
     @patch("ark_sdk.client.with_ark_client")
-    async def test_raises_on_non_agent_target(self, mock_with_client):
+    async def test_raises_on_non_agent_target(self, mock_with_client, mock_init_k8s):
         mock_ark = AsyncMock()
 
         mock_query = MagicMock()
@@ -202,8 +204,9 @@ class TestResolveValueSource(unittest.IsolatedAsyncioTestCase):
 
 
 class TestResolveModelWithSecrets(unittest.IsolatedAsyncioTestCase):
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
     @patch("ark_sdk.client.with_ark_client")
-    async def test_resolves_model_with_api_key(self, mock_with_client):
+    async def test_resolves_model_with_api_key(self, mock_with_client, mock_init_k8s):
         mock_ark = AsyncMock()
 
         mock_query = MagicMock()
