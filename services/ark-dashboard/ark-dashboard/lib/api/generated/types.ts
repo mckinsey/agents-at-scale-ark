@@ -4882,6 +4882,8 @@ export interface components {
         TeamResponse: {
             /** Description */
             description?: string | null;
+            /** Loops */
+            loops?: boolean | null;
             /** Members Count */
             members_count?: number | null;
             /** Name */
