@@ -21,6 +21,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import type { MarketplaceItem } from '@/lib/api/generated/marketplace-types';
 import { useInstallMarketplaceItem } from '@/lib/services/marketplace-hooks';
 import { cn } from '@/lib/utils';
@@ -163,6 +169,25 @@ export function MarketplaceItemCard({
       </CardHeader>
 
       <CardContent className="flex-1 space-y-4">
+        {/* Source */}
+        {item.source && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="text-xs text-muted-foreground cursor-default">
+                  <span>Source: </span>
+                  <span className="truncate inline-block max-w-[calc(100%-60px)] align-bottom">
+                    {item.source}
+                  </span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-md">
+                <p className="break-all">{item.source}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+
         {/* Tags */}
         {item.tags.length > 0 && (
           <div className="flex flex-wrap gap-2">
