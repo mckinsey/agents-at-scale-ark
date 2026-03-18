@@ -1,6 +1,6 @@
 ## Context
 
-After steps 4a and 4b, the agent/team orchestration layer and memory interface can produce and consume `protocol.Message`. The handler is the boundary between internal engine logic and the A2A task manager. Currently, `buildA2AResponse` converts OpenAI messages to protocol messages. With protocol messages available internally, the conversion direction should be inverted: protocol is the primary type, with OpenAI serialization only for backward-compatible `response.raw`.
+After Steps 6 and 7, the agent/team orchestration layer and memory interface can produce and consume `protocol.Message`. The handler is the boundary between internal engine logic and the A2A task manager. Currently, `buildA2AResponse` converts OpenAI messages to protocol messages. With protocol messages available internally, the conversion direction should be inverted: protocol is the primary type, with OpenAI serialization only for backward-compatible `response.raw`.
 
 ## Goals / Non-Goals
 
@@ -33,8 +33,27 @@ After steps 4a and 4b, the agent/team orchestration layer and memory interface c
 
 **Rationale**: During migration, some execution paths produce OpenAI messages and others produce protocol messages. The dual-carry pattern avoids forcing all paths to change simultaneously.
 
+### 4. Shared conversion matrix semantics
+
+**Decision**: Handler conversion uses the same required-lossless semantic matrix as memory boundary conversion: role, text parts, DataParts, and extension-scoped attribution are preserved on protocol paths; compatibility-only lossy behavior is explicit.
+
+**Rationale**: Handler and memory boundaries must not preserve different subsets of semantics or downstream parity becomes non-deterministic.
+
+### 5. Native-first extension scope at handler boundary
+
+**Decision**: Handler boundary behavior stays protocol-native first and does not define additional extension contracts for history or callback-loop semantics.
+
+**Rationale**: Those semantics are already covered by core protocol constructs; extra handler-local extension contracts would duplicate semantics and increase compatibility burden.
+
+### 6. Canonical-to-compat mapping policy
+
+**Decision**: Compatibility output fields (including `assistant.name`) are derived from canonical protocol semantics, including extension-scoped attribution where present.
+
+**Rationale**: This keeps provider-specific compatibility output downstream of protocol semantics and avoids reintroducing provider-native source-of-truth behavior.
+
 ## Risks
 
-**[Conversion parity]** — The `protocolToOpenAIJSON` serializer must produce output equivalent to what the previous direct-serialization path produced. Mitigation: comparison tests against known-good outputs from the existing path.
+**[Conversion parity]** — The `protocolToOpenAIJSON` serializer must produce output equivalent to what the previous direct-serialization path produced while preserving extension attribution mapping. Mitigation: comparison tests against known-good outputs from the existing path and attribution-aware fixtures.
+This mitigates the `Conversion parity` risk using shared fixture matrix and deterministic protocol-to-compat equivalence checks.
 
 **[Result complexity]** — `ExecutionResult` with two message fields increases structural complexity. Mitigation: clearly documented which field takes precedence; the OpenAI field is deprecated once all paths produce protocol messages.

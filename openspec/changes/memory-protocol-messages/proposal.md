@@ -9,6 +9,9 @@
 - Implement these methods in `memory_http.go` with conversion at the HTTP boundary (serialize protocol messages to the existing wire format for storage, deserialize on retrieval)
 - Implement these methods in `memory_noop.go` as no-ops
 - Add adapter methods that allow existing `AddMessages`/`GetMessages` callers to work unchanged
+- Define required-lossless conversion semantics for role, DataParts, and extension-scoped attribution
+- Apply native-first extension scope: history behavior remains on core A2A task/message semantics; no dedicated history extension for current scope
+- Preserve minimum extension inventory semantics (`query/v1`, `team-attribution/v1`) where present across memory boundaries
 
 ## Non-goals
 
@@ -23,6 +26,8 @@
 - Messages stored via `AddProtocolMessages` are retrievable via `GetMessages` (and vice versa), enabling mixed callers
 - The memory service API (HTTP endpoints, request/response schemas) is unchanged
 - Mixed deployments with engines using either method set are fully supported
+- Conversion matrix documents required-lossless versus compatibility-only lossy mappings
+- Missing extension declaration evidence is surfaced via `soft_fail_warn` telemetry in compatibility governance paths
 
 ## Impact
 

@@ -1,6 +1,6 @@
 ## Why
 
-The completions execution engine uses `completions.Message` (alias for `openai.ChatCompletionMessageParamUnion`) as its internal transport. This type flows through agent execution, team orchestration, memory persistence, streaming, and handler response building. The controller has already been decoupled (#1396 input path, #1379 response path), but everything inside the engine boundary still operates on OpenAI shapes.
+The completions execution engine uses `completions.Message` (alias for `openai.ChatCompletionMessageParamUnion`) as its internal transport. This type flows through agent execution, team orchestration, memory persistence, streaming, and handler response building. The controller input and response paths are already decoupled from provider-specific message reconstruction, but everything inside the engine boundary still operates on OpenAI shapes.
 
 Non-OpenAI execution engines must emulate OpenAI union shapes to participate. Internal components that should be engine-agnostic are locked to one provider's type system.
 
@@ -13,13 +13,16 @@ Migrate internal transport to `protocol.Message` through independently mergeable
 - Convert agent/team execution interfaces to protocol-typed signatures with adapter fallback
 - Migrate memory interface to protocol messages with conversion at HTTP wire boundary
 - Invert handler boundary to accept protocol messages directly, deriving legacy format for backward compatibility
+- Establish extension-scoped team/member attribution semantics as the canonical identity model for protocol messages
+- Apply a native-A2A-first extension filter: use core role/parts/task semantics first, and keep the extension set minimal (`query/v1`, `team-attribution/v1`)
+- Add controller-side Agent Card capability verification for extension declarations with soft-fail warning/telemetry policy during mixed deployments
 - Establish compatibility lifecycle governance for all adapters introduced during migration
 
 Each step adds new protocol-native paths alongside existing ones. Legacy paths are maintained as long-lived compatibility code, not temporary scaffolding.
 
 ## Non-goals
 
-- Changing the A2A extension schema or QueryRef contract
+- Changing the existing QueryRef extension contract
 - Modifying controller dispatch or address resolution (already A2A-native)
 - Adopting gRPC, protobuf, or alternative wire formats
 - Removing legacy compatibility paths (tracked separately as future retirement gates)
@@ -32,6 +35,8 @@ Every step introduces adapters that bridge protocol-native and legacy paths. The
 - Legacy paths receive parity and safety fixes only; new features target protocol-native paths
 - Mixed-deployment support (new controller + old engine, old controller + new engine) is a hard requirement
 - Retirement of any adapter requires adoption evidence and is proposed as a standalone work item
+- OpenAI `assistant.name` is compatibility output; canonical team attribution is extension-scoped in protocol messages
+- Missing extension declaration at dispatch time records warning/telemetry and continues dispatch under `soft_fail_warn` policy
 
 ## Impact
 

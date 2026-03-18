@@ -1,6 +1,6 @@
 ## Context
 
-Steps 1 through 4 each introduce compatibility adapters: dual-write response paths, type conversion bridges, interface adapters, and fallback parsing logic. These adapters are necessary for non-breaking migration. This step defines how they are organized, tested, and eventually retired.
+Steps 2 through 8 each introduce compatibility adapters: dual-write response paths, type conversion bridges, interface adapters, and fallback parsing logic. These adapters are necessary for non-breaking migration. This step defines how they are organized, tested, and eventually retired.
 
 ## Goals / Non-Goals
 
@@ -11,7 +11,7 @@ Steps 1 through 4 each introduce compatibility adapters: dual-write response pat
 - Documented retirement criteria with measurable thresholds
 
 **Non-Goals:**
-- Implementing new adapters (done in steps 1–4)
+- Implementing new adapters (done in Steps 2–8)
 - Setting firm removal dates (depends on adoption telemetry)
 - Creating migration tooling for external consumers
 
@@ -41,8 +41,23 @@ Steps 1 through 4 each introduce compatibility adapters: dual-write response pat
 
 **Rationale**: Measurable criteria prevent premature removal. The two-cycle observation window accounts for staggered rollouts.
 
+### 5. Capability-verifier telemetry as governance input
+
+**Decision**: Compatibility governance tracks controller-side extension capability-verifier outcomes (`soft_fail_warn` counts, missing declaration URIs, affected targets) alongside adapter path metrics.
+
+**Rationale**: Extension declaration health is part of migration readiness; retirement decisions should not be made without visibility into capability mismatches.
+This mitigates the `Capability declaration mismatch drift` risk with explicit telemetry-evidence requirement before retirement moves.
+
+### 6. Native-first extension inventory guardrail
+
+**Decision**: Governance documentation treats the extension inventory as minimal (`query/v1`, `team-attribution/v1`) unless a new semantic-gap decision explicitly expands scope.
+
+**Rationale**: Keeping a narrow extension inventory reduces long-term compatibility burden and minimizes adapter surface area.
+
 ## Risks
 
 **[Governance overhead]** — Testing and maintaining adapters adds ongoing cost. Mitigation: the parity tests also serve as regression tests, providing value beyond governance.
+Mitigation outcome: accepted for cross-cutting `Compatibility drift` and `Verification gaps` through parity+matrix evidence requirements.
 
 **[Criteria ambiguity]** — Telemetry thresholds depend on instrumentation that may not exist yet. Mitigation: the first task includes adding basic adapter path telemetry.
+Mitigation outcome: accepted for `Sequencing drift` and retirement-gate clarity by requiring dependency-order and validation evidence before promotion.

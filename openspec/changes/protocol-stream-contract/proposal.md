@@ -8,6 +8,9 @@ The current streaming path uses `ChunkWithMetadata` which wraps `openai.ChatComp
 - Update `streamContentChunk` and related functions in `a2a_execution.go` to emit `ProtocolStreamEvent` alongside `ChunkWithMetadata`
 - Add a stream adapter in the handler that converts `ChunkWithMetadata` to `ProtocolStreamEvent` at the engine boundary
 - Update the controller's stream consumer to accept `ProtocolStreamEvent` when available, falling back to `ChunkWithMetadata` for backward compatibility
+- Add deterministic pair correlation metadata for dual-emitted legacy/protocol events
+- Keep stream semantics native-first: no stream-specific extension is introduced unless parity gaps cannot be expressed with protocol events + existing attribution extension
+- Require parity checks to validate extension-scoped attribution semantics across paired events
 
 ## Non-goals
 
@@ -22,6 +25,8 @@ The current streaming path uses `ChunkWithMetadata` which wraps `openai.ChatComp
 - Controllers that do not understand `ProtocolStreamEvent` continue to work with `ChunkWithMetadata`
 - The SSE wire format is extended (new event type), not modified
 - Mixed deployments with older controllers or executors are unaffected
+- Event pairs can be validated one-to-one without relying on timing alone
+- Missing attribution extension declaration is surfaced as telemetry while stream processing continues in compatibility mode
 
 ## Impact
 

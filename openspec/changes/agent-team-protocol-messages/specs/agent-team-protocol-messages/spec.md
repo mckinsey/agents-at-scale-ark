@@ -26,6 +26,33 @@ Adapters SHALL convert between `Message` (OpenAI-typed) and `protocol.Message` w
 - **THEN** TextParts map to text content, DataParts with tool-call data map to tool calls
 - **AND** converting back produces an equivalent `protocol.Message`
 
+### Requirement: Team member attribution semantics
+Team/member attribution SHALL be represented as extension-scoped semantics with a stable schema.
+This requirement mitigates the `Team member identity semantics` risk.
+
+#### Scenario: Team member produces assistant turn
+- **WHEN** a team member emits an assistant turn in protocol history
+- **THEN** the message carries attribution payload under the configured extension schema
+- **AND** the message declares the extension URI in `extensions`
+
+#### Scenario: Compatibility path uses OpenAI output
+- **WHEN** protocol messages are converted to OpenAI messages for compatibility consumers
+- **THEN** attribution semantics map to OpenAI `assistant.name`
+- **AND** converting back restores equivalent attribution semantics in protocol form
+
+### Requirement: Native-first capability scope
+Team orchestration SHALL keep non-attribution semantics native to A2A unless a specific gap is proven.
+
+#### Scenario: History semantics in team loops
+- **WHEN** team history is accumulated across turns
+- **THEN** history semantics are represented with native protocol messages and task context
+- **AND** no additional history-specific extension is required for current scope
+
+#### Scenario: Attribution capability declaration missing
+- **WHEN** dispatch targets a team path that expects `team-attribution/v1` but Agent Card declaration is absent
+- **THEN** capability verification records structured warning telemetry
+- **AND** dispatch continues under `soft_fail_warn` policy
+
 ## MODIFIED Requirements
 
 ### Requirement: Team orchestration dispatch

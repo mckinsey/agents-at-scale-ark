@@ -9,6 +9,7 @@ Each step in the protocol-native transport migration introduces compatibility ad
 - Create a mixed-deployment testing matrix: test configurations that exercise combinations of new and old controllers, executors, and clients
 - Document retirement criteria: measurable conditions (telemetry thresholds, version support windows, migration completion) under which specific adapters may be deprecated and eventually removed
 - Add adapter inventory documentation tracking each adapter's purpose, introduction step, and status
+- Include extension capability-verifier telemetry in governance evidence for migration and retirement decisions
 
 ## Non-goals
 
@@ -22,6 +23,7 @@ Each step in the protocol-native transport migration introduces compatibility ad
 - No behavioral changes to any adapter — this step is governance and testing infrastructure only
 - Retirement criteria are documented but no removal timeline is committed
 - Mixed-deployment testing validates that all supported deployment combinations work correctly
+- Capability declaration mismatches recorded via `soft_fail_warn` telemetry are tracked as migration signals, not immediate failure conditions
 
 ## Impact
 

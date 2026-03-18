@@ -13,7 +13,7 @@
 
 - Removing `GetInputMessages` / `SetInputMessages` (required for backward compatibility)
 - Changing the CRD schema or stored JSON format
-- Modifying how the controller reads input (already decoupled via step 1a)
+- Modifying how the controller reads input (already decoupled via Step 2)
 
 ## Compatibility Contract
 

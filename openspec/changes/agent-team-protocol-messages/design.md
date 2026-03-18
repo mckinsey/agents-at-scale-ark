@@ -34,8 +34,29 @@ The completions engine's agent and team orchestration layer uses `Message` (an a
 
 **Rationale**: Centralizes the interface detection logic. As more members adopt `ProtocolTeamMember`, the adapter path is exercised less frequently.
 
+### 4. Canonical team attribution semantics
+
+**Decision**: Team/member attribution is represented as extension-scoped semantics on protocol messages with a stable schema. OpenAI `assistant.name` remains a compatibility mapping only.
+
+**Rationale**: `Message.role` captures actor class (`user`/`agent`) but not specific member provenance in multi-agent loops. Extension-scoped attribution prevents hidden metadata contracts and keeps selector/team history behavior deterministic.
+This mitigates the `Team member identity semantics` risk with schema fields `member.name`, `member.type`, and optional `member.path`.
+
+### 5. Native-first scope around teams/history/callback loops
+
+**Decision**: This change introduces extension semantics only for team/member attribution. History flow and callback-loop semantics remain on native A2A task/message constructs unless future gaps are demonstrated.
+
+**Rationale**: Keeping extension scope narrow prevents unnecessary contract surface area and aligns with protocol portability goals.
+
+### 6. Capability verification linkage
+
+**Decision**: Team-attribution semantics include a controller-side Agent Card capability check. Missing extension declarations are handled with `soft_fail_warn` and dispatch continues.
+
+**Rationale**: Mixed deployments require observability without hard breaks; telemetry-backed soft-fail behavior supports staged migration.
+
 ## Risks
 
 **[Conversion overhead]** — Converting messages at each team member call adds CPU cost. Mitigation: the conversion is lightweight (JSON marshal/unmarshal of message content) and team member calls already involve network/LLM latency.
 
 **[Interface proliferation]** — Two parallel interfaces increases API surface. Mitigation: once all members implement `ProtocolTeamMember`, the `TeamMember` interface becomes part of the compatibility layer, not the active path.
+
+**[Attribution drift]** — Team member identity may diverge between protocol and OpenAI paths. Mitigation: canonical extension schema with explicit mapping rules and parity tests.

@@ -27,4 +27,26 @@ The completions handler SHALL emit both `ChunkWithMetadata` and `ProtocolStreamE
 #### Scenario: Both event types emitted per chunk
 - **WHEN** the engine produces a streaming chunk
 - **THEN** the handler emits both a `ChunkWithMetadata` and a corresponding `ProtocolStreamEvent`
-- **AND** the content, role, and metadata are equivalent across both events
+- **AND** the content, role, and extension-scoped attribution semantics are equivalent across both events
+
+### Requirement: Deterministic stream event pairing
+Dual-emitted stream events SHALL include deterministic correlation for parity verification.
+This requirement mitigates the `Event ordering` risk.
+
+#### Scenario: Correlate paired legacy and protocol events
+- **WHEN** a pair of events is emitted for a single source chunk
+- **THEN** both events include the same pairing identifier or sequence metadata
+- **AND** test and consumer logic can verify one-to-one semantic equivalence without relying on arrival timing alone
+
+### Requirement: Native-first stream extension scope
+Streaming semantics SHALL use protocol-native event structure before introducing additional extension contracts.
+
+#### Scenario: Evaluate stream semantic gap
+- **WHEN** stream parity requirements are reviewed
+- **THEN** protocol event fields plus existing extension attribution are evaluated first
+- **AND** no new stream-specific extension is introduced unless an unresolved semantic gap is documented
+
+#### Scenario: Attribution declaration mismatch during stream handling
+- **WHEN** stream parity expects attribution semantics and target capability declaration is missing
+- **THEN** the system records `soft_fail_warn` telemetry for the missing extension declaration
+- **AND** stream processing continues through compatibility output paths

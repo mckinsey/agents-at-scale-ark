@@ -10,6 +10,9 @@ The controller reconstructs OpenAI-compatible JSON from `protocol.Message` objec
 - Track `responseMessagesV1` presence for protocol-native clients without converting or inspecting its contents
 - Move OpenAI-to-protocol conversion (`openAIToProtocolResponseMessages`) into the completions handler, where provider types are in scope
 - Implement metadata merge strategy in `extractArkPayloadMap` to combine information from both `QueryExtensionMetadataKey` and `ExecutionContextExtensionURI`
+- Add explicit metadata precedence table and structured conflict telemetry for merge decisions
+- Add controller-adjacent Agent Card capability verifier integration points for extension declaration checks
+- Use `soft_fail_warn` policy for missing required extension declarations during mixed deployments
 
 ## Non-goals
 
@@ -24,6 +27,8 @@ The controller reconstructs OpenAI-compatible JSON from `protocol.Message` objec
 - Both paths are populated (dual-write) so consumers can migrate at their own pace
 - Metadata from both legacy and extension-based sources is merged, preserving all existing metadata fields
 - Mixed deployments unaffected — the controller accepts both metadata formats
+- Merge conflicts are resolved deterministically and are observable via telemetry
+- Capability declaration mismatches are observable via structured telemetry and do not block dispatch under `soft_fail_warn`
 
 ## Impact
 

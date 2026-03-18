@@ -11,7 +11,8 @@ Agent and team execution loops SHALL operate on `protocol.Message` as their inte
 #### Scenario: Team orchestration accumulates protocol history
 - **WHEN** a team runs multiple member executions
 - **THEN** history is accumulated as `[]protocol.Message`
-- **AND** assistant identity is carried in message metadata
+- **AND** team/member attribution is carried as extension-scoped semantics with a documented schema
+- **AND** OpenAI `assistant.name` is treated as a compatibility mapping target, not the canonical source of attribution
 
 #### Scenario: Existing OpenAI-typed interface still works
 - **WHEN** a caller invokes the existing OpenAI-typed `Execute` method
@@ -83,3 +84,25 @@ All compatibility adapters introduced during migration SHALL be maintained as fi
 - **WHEN** a proposal is made to remove a compatibility adapter
 - **THEN** evidence of zero remaining consumers SHALL be provided
 - **AND** the removal SHALL be tracked as a separate work item
+
+### Requirement: Extension-governed team attribution
+Turn attribution semantics beyond `Message.role` SHALL be represented as extension-governed data and declared explicitly.
+This requirement mitigates the `Protocol message expressiveness` risk.
+
+#### Scenario: Attribution semantics present on protocol message
+- **WHEN** a protocol message carries team/member attribution
+- **THEN** the message declares the extension URI in `extensions`
+- **AND** the attribution payload is schema-defined and namespaced by that extension
+
+### Requirement: Native-first extension scoping
+Extension usage SHALL be gated by native-A2A-first semantics and minimal inventory policy.
+
+#### Scenario: Evaluate extension need for a capability
+- **WHEN** Ark defines semantics for teams, history, or callback loop behavior
+- **THEN** core A2A role/parts/task semantics are used first
+- **AND** an extension is introduced only for residual semantics not representable natively
+
+#### Scenario: Controller verifies extension capability at dispatch
+- **WHEN** dispatch requires an extension URI for request semantics
+- **THEN** controller-side Agent Card capability verification checks `capabilities.extensions` for the URI
+- **AND** missing declaration records warning/telemetry and continues dispatch under `soft_fail_warn` policy

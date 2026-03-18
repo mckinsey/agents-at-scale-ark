@@ -17,3 +17,7 @@
 - [ ] 3.2 Round-trip tests: `SetProtocolInputMessages` → `GetInputMessages` produces equivalent content
 - [ ] 3.3 Edge case tests: empty messages, tool-call messages, multi-part content arrays
 - [ ] 3.4 Run existing query controller and completions tests to verify no regressions
+
+## 4. Risk-tracked actions
+
+- [ ] 4.1 Document preserved-field inventory: which OpenAI-only fields must survive protocol round-trip for compatibility consumers (risk: Conversion fidelity)

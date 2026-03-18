@@ -8,6 +8,9 @@
 - Add `ProtocolAgent` methods (`executeLocallyProtocol`, `prepareMessagesProtocol`) that operate on `protocol.Message`
 - Implement adapter methods that bridge between `Message` (OpenAI) and `protocol.Message` for existing callers
 - Update team orchestration (`team.go`, `team_graph.go`, `team_selector.go`) to support either interface through a shared dispatcher
+- Define extension-scoped team/member attribution semantics and adapter mapping to OpenAI `assistant.name`
+- Keep extension scope narrow: no new history or callback-loop extension unless native A2A semantics prove insufficient
+- Require capability-verifier integration so missing `team-attribution/v1` declaration is observable via soft-fail warning telemetry
 
 ## Non-goals
 
@@ -22,6 +25,8 @@
 - Team orchestration supports both interface variants through dispatch logic
 - Adapter methods bridge between types with full fidelity (roles, content, tool calls preserved)
 - Mixed deployments where some agents implement `ProtocolTeamMember` and others implement `TeamMember` are explicitly supported
+- Team attribution remains semantically equivalent across protocol and compatibility paths
+- Missing attribution extension declaration is treated as `soft_fail_warn` during mixed deployments and logged with structured telemetry
 
 ## Impact
 

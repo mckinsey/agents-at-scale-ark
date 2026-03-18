@@ -30,3 +30,18 @@
 - [ ] 5.3 Integration tests for handler with protocol-message-producing agents
 - [ ] 5.4 Integration tests for handler with legacy OpenAI-message-producing agents (adapter path)
 - [ ] 5.5 Run existing handler and e2e tests to verify no regressions
+
+## 6. Semantic fidelity alignment
+
+- [ ] 6.1 Align handler conversion rules with memory required-lossless conversion matrix
+- [ ] 6.2 Add attribution mapping fixtures for protocol extension semantics <-> OpenAI compatibility fields
+- [ ] 6.3 Add tests asserting deterministic behavior for documented compatibility-only lossy mappings
+
+## 7. Native-first extension scope alignment
+
+- [ ] 7.1 Document that handler introduces no additional history/callback-loop extension contracts for current scope
+- [ ] 7.2 Add assertions that compatibility fields are derived from canonical protocol semantics (including extension attribution)
+
+## 8. Risk-tracked actions
+
+- [ ] 8.1 Decide whether to add static analysis (linter rule or code review check) to prevent accidental direct access to deprecated OpenAI-first `ExecutionResult` fields (risk: Result complexity)

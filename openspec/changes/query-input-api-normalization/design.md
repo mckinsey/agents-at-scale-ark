@@ -23,7 +23,7 @@ The Query CRD stores input messages as `runtime.RawExtension` — opaque JSON. T
 
 ### 2. Conversion direction
 
-**Decision**: `GetProtocolInputMessages` deserializes raw JSON into protocol messages using the same raw-JSON-to-protocol mapping established in step 1a's resolver.
+**Decision**: `GetProtocolInputMessages` deserializes raw JSON into protocol messages using the same raw-JSON-to-protocol mapping established in the controller input decoupling step (Step 2).
 
 **Rationale**: Reusing the same mapping logic ensures consistency between what the controller sees (via resolver) and what the engine sees (via accessor).
 

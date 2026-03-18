@@ -34,6 +34,25 @@ The `MemoryInterface` provides message persistence for agent conversations. The 
 
 **Rationale**: During migration, different callers may use different method variants. Interoperability prevents data access gaps.
 
+### 4. Conversion matrix and lossless classes
+
+**Decision**: The memory boundary defines explicit conversion classes: required-lossless semantics (role, text parts, extension attribution, structured DataParts) and compatibility-only lossy semantics for legacy output where unavoidable.
+
+**Rationale**: Cross-method interoperability is not sufficient unless the preserved semantics are explicitly defined and testable across both protocol and compatibility paths.
+
+### 5. Native-first history semantics
+
+**Decision**: History persistence remains modeled by native A2A task/message constructs. This step does not introduce a history-specific extension contract.
+
+**Rationale**: Existing protocol message and context semantics are sufficient for history behavior; new extensions are reserved for proven semantic gaps.
+
+### 6. Minimum extension inventory preservation
+
+**Decision**: Memory conversion matrices explicitly preserve semantics for the canonical extension set (`query/v1`, `team-attribution/v1`) when those payloads are present.
+
+**Rationale**: Narrow inventory and explicit preservation rules keep conversion behavior deterministic across protocol and compatibility paths.
+
 ## Risks
 
-**[Conversion loss]** — Protocol messages may contain DataParts or extensions that don't map cleanly to the OpenAI wire format. Mitigation: DataParts are serialized as JSON metadata alongside text content; `GetMessages` callers see the text content and `GetProtocolMessages` callers see the full structured data.
+**[Conversion loss]** — Protocol messages may contain DataParts or extensions that don't map cleanly to the OpenAI wire format. Mitigation: explicit conversion matrix with required-lossless semantics, plus fixture-based parity tests for protocol and compatibility retrieval paths.
+This mitigates the `Conversion loss` risk with shared matrix rules and required-lossless field class.

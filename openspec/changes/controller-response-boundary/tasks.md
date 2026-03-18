@@ -20,8 +20,8 @@
 
 ## 4. Metadata merge
 
-- [ ] 4.1 Implement `extractArkPayloadMap` merging both `QueryExtensionMetadataKey` and `ExecutionContextExtensionURI`
-- [ ] 4.2 Add generic extension helpers to `ark/internal/a2a/extensions.go`
+- [ ] 4.1 Implement `extractArkPayloadMap` merging metadata from all registry extensions (after Step 1, metadata keys come from `registry.Get()`; include `ExecutionContextExtensionURI` if present per `extension-isolation-architecture` task 7.1 disposition)
+- [ ] 4.2 Add generic extension helpers to `ark/internal/a2a/extensions.go` (helpers use registry for metadata key discovery)
 
 ## 5. Testing
 
@@ -29,3 +29,21 @@
 - [ ] 5.2 Unit tests for `buildFallbackRaw` covering text-only and missing content cases
 - [ ] 5.3 Unit tests for metadata merge with overlapping and disjoint sources
 - [ ] 5.4 E2E verification that `response.raw` and `responseMessagesV1` are both populated correctly
+
+## 6. Metadata precedence governance
+
+- [ ] 6.1 Document and implement explicit metadata precedence table for merge conflicts
+- [ ] 6.2 Emit structured conflict telemetry (key, winner, loser, query context)
+- [ ] 6.3 Add tests validating deterministic precedence and telemetry output
+
+## 7. Capability verification and soft-fail policy
+
+Depends on: `extension-isolation-architecture` (Step 1) for `registry.AgentCardDeclarations()`. Escalation threshold governance is owned by `compat-lifecycle-management` (Step 9) task 7.4.
+
+- [ ] 7.1 Add/validate controller-adjacent Agent Card extension capability verifier integration points (uses registry from Step 1)
+- [ ] 7.2 Emit `soft_fail_warn` telemetry for missing extension declarations at dispatch
+- [ ] 7.3 Add tests for deterministic warning behavior (dispatch continues, telemetry emitted)
+
+## 8. Risk-tracked actions
+
+- [ ] 8.1 Document fallback policy scope: when `buildFallbackRaw` is acceptable vs when missing `messages` metadata is an executor bug (risk: Fallback fidelity)
