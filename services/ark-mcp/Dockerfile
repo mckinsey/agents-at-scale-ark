@@ -18,14 +18,13 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 COPY ark-mcp/pyproject.toml ark-mcp/uv.lock ./
 
 # Copy wheel files
-COPY ark-mcp/out/ark*.whl /tmp/wheels/
+COPY ark-mcp/out/ark*.whl ./
 
 # Copy source code only (not pyproject.toml again)
 COPY ark-mcp/src/ ./src/
 
-# Add ark-sdk wheel as a dependency and sync all dependencies
-RUN uv add file://$(ls /tmp/wheels/ark*.whl) && \
-    uv sync --frozen --no-install-project
+# Sync all dependencies
+RUN uv sync --frozen --no-install-project
 
 # Set up directories for non-root user
 RUN mkdir -p /home/arkmcp/.cache/uv && \
