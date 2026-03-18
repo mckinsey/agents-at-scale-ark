@@ -1047,6 +1047,29 @@ class TestAgentsEndpoint(unittest.TestCase):
         # Verify the delete was called correctly
         mock_client.agents.a_delete.assert_called_once_with("test-agent")
 
+    @patch('ark_api.api.v1.agents.with_ark_client')
+    def test_get_agent_not_in_namespace_returns_404(self, mock_ark_client):
+        """Test that fetching an agent absent from the requested namespace returns 404 not 500.
+
+        Regression test for: GET resource by name without ?namespace returns HTTP 500 instead of 404.
+        The ark-sdk wraps Kubernetes ApiException(404) in a plain Exception, which bypasses the
+        direct ApiException handler. This test verifies the fallback handler resolves it correctly.
+        """
+        from kubernetes.client.exceptions import ApiException as SyncApiException
+
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        api_exception = SyncApiException(status=404, reason="Not Found")
+        wrapped = Exception("Agent 'my-ns-agent' not found in namespace 'default'")
+        wrapped.__context__ = api_exception
+        mock_client.agents.a_get = AsyncMock(side_effect=wrapped)
+
+        response = self.client.get("/v1/agents/my-ns-agent")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("not found", response.json()["detail"].lower())
+
 
 class TestModelsEndpoint(unittest.TestCase):
     """Test cases for the /namespaces/{namespace}/models endpoint."""
