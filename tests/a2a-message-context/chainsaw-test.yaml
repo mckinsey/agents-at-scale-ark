@@ -105,6 +105,14 @@ spec:
           status:
             (conditions[?type == 'Completed']):
             - status: 'True'
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: message-counter-second
+          status:
             (response != null): true
             (contains(response.content, '2 message(s) received')): true
     catch:

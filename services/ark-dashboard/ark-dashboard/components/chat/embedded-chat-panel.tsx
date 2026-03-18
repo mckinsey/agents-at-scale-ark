@@ -15,6 +15,13 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { getSessionDisplayNameFromEntries } from '@/lib/broker/session-utils';
 import { type BrokerStatus, proxyService } from '@/lib/services/proxy';
 import type { GraphEdge } from '@/lib/types/chat-message';
 
@@ -419,6 +426,10 @@ function DebugStreamView({
             {Array.from(groupedEntries.entries()).map(
               ([sessionId, sessionEntries]) => {
                 const isSessionExpanded = expandedSessions.has(sessionId);
+                const displayName = getSessionDisplayNameFromEntries(
+                  sessionEntries,
+                  sessionId,
+                );
                 return (
                   <div key={sessionId} className="mb-2">
                     <div
@@ -429,7 +440,16 @@ function DebugStreamView({
                       ) : (
                         <ChevronRight className="text-muted-foreground h-3 w-3 shrink-0" />
                       )}
-                      <span>Session: {sessionId}</span>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span>Session: {displayName}</span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{sessionId}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                       <span className="text-muted-foreground ml-auto text-xs">
                         {sessionEntries.length}{' '}
                         {sessionEntries.length === 1 ? 'entry' : 'entries'}

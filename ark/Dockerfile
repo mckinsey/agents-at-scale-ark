@@ -19,6 +19,7 @@ RUN go mod download
 # Copy the go source
 COPY cmd/main.go cmd/main.go
 COPY api/ api/
+COPY executors/ executors/
 COPY internal/ internal/
 COPY config/crd/bases/ internal/apiserver/crds/
 COPY version.txt version.txt

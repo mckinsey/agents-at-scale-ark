@@ -19,7 +19,6 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/common"
-	"mckinsey.com/ark/internal/genai"
 )
 
 const (
@@ -426,7 +425,7 @@ func (r *EvaluationReconciler) processDirectEvaluation(ctx context.Context, eval
 	log.Info("Parameters converted to map", "evaluation", evaluation.Name, "paramMap", paramMap, "finalParametersCount", len(finalParameters))
 
 	// Build unified evaluation request
-	request := genai.UnifiedEvaluationRequest{
+	request := UnifiedEvaluationRequest{
 		Type: evaluation.Spec.Type,
 		Config: map[string]interface{}{
 			"input":  evaluation.Spec.Config.Input,
@@ -443,7 +442,7 @@ func (r *EvaluationReconciler) processDirectEvaluation(ctx context.Context, eval
 	log.Info("Using timeout for direct evaluation", "evaluation", evaluation.Name, "timeout", timeout)
 
 	// Call unified endpoint
-	response, err := genai.CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, request, evaluation.Namespace, timeout)
+	response, err := CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, request, evaluation.Namespace, timeout)
 	if err != nil {
 		log.Error(err, "Failed to call unified evaluator", "evaluation", evaluation.Name)
 		if err := r.updateStatus(ctx, evaluation, statusError, fmt.Sprintf("Evaluator call failed: %v", err)); err != nil {
@@ -635,7 +634,7 @@ func (r *EvaluationReconciler) processQueryEvaluation(ctx context.Context, evalu
 		parameters["queryRef"] = fmt.Sprintf("%s/%s", queryRef.Namespace, queryRef.Name)
 	}
 
-	request := genai.UnifiedEvaluationRequest{
+	request := UnifiedEvaluationRequest{
 		Type: "query",
 		Config: map[string]interface{}{
 			"queryRef": queryRef,
@@ -651,7 +650,7 @@ func (r *EvaluationReconciler) processQueryEvaluation(ctx context.Context, evalu
 	log.Info("Using timeout for query evaluation", "evaluation", evaluation.Name, "timeout", timeout)
 
 	// Call unified evaluator endpoint
-	response, err := genai.CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, request, evaluation.Namespace, timeout)
+	response, err := CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, request, evaluation.Namespace, timeout)
 	if err != nil {
 		log.Error(err, "Failed to call unified direct evaluator for query evaluation", "evaluation", evaluation.Name)
 		if err := r.updateStatus(ctx, evaluation, statusError, fmt.Sprintf("Query evaluation failed: %v", err)); err != nil {
@@ -726,7 +725,7 @@ func (r *EvaluationReconciler) updateStatus(ctx context.Context, evaluation arkv
 	})
 }
 
-func (r *EvaluationReconciler) updateEvaluationComplete(ctx context.Context, evaluation arkv1alpha1.Evaluation, response *genai.EvaluationResponse, message string) error {
+func (r *EvaluationReconciler) updateEvaluationComplete(ctx context.Context, evaluation arkv1alpha1.Evaluation, response *EvaluationResponse, message string) error {
 	log := logf.FromContext(ctx)
 
 	evalKey := client.ObjectKey{
@@ -734,39 +733,22 @@ func (r *EvaluationReconciler) updateEvaluationComplete(ctx context.Context, eva
 		Namespace: evaluation.Namespace,
 	}
 
-	// Use retry logic for atomic updates
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		// Fetch the latest version
 		latest := &arkv1alpha1.Evaluation{}
 		if err := r.Get(ctx, evalKey, latest); err != nil {
 			log.Error(err, "failed to get latest Evaluation for completion update", "evaluation", evaluation.Name)
 			return err
 		}
 
-		// Update annotations if metadata exists
 		if len(response.Metadata) > 0 {
-			if latest.Annotations == nil {
-				latest.Annotations = make(map[string]string)
-			}
-			for key, value := range response.Metadata {
-				annotationKey := fmt.Sprintf("evaluation.metadata/%s", key)
-				latest.Annotations[annotationKey] = value
-				log.V(1).Info("Adding metadata as annotation", "evaluation", evaluation.Name, "key", annotationKey, "value", value)
-			}
-
-			// Update the main object with annotations
-			if err := r.Update(ctx, latest); err != nil {
-				log.V(1).Info("failed to update Evaluation annotations (will retry)", "evaluation", evaluation.Name, "error", err)
+			if err := r.updateEvaluationAnnotations(ctx, latest, response.Metadata); err != nil {
 				return err
 			}
-
-			// Re-fetch after annotation update to ensure we have the latest version
 			if err := r.Get(ctx, evalKey, latest); err != nil {
 				return err
 			}
 		}
 
-		// Update all status fields atomically
 		latest.Status.Score = response.Score
 		latest.Status.Passed = response.Passed
 		latest.Status.TokenUsage = response.TokenUsage
@@ -775,7 +757,6 @@ func (r *EvaluationReconciler) updateEvaluationComplete(ctx context.Context, eva
 
 		r.setConditionCompleted(latest, metav1.ConditionTrue, "EvaluationCompleted", message)
 
-		// Update status subresource
 		if err := r.Status().Update(ctx, latest); err != nil {
 			log.V(1).Info("Status update failed (will retry)", "evaluation", evaluation.Name, "error", err)
 			return err
@@ -784,6 +765,23 @@ func (r *EvaluationReconciler) updateEvaluationComplete(ctx context.Context, eva
 		log.Info("Completed Evaluation atomically", "evaluation", evaluation.Name, "score", response.Score, "passed", response.Passed, "phase", statusDone)
 		return nil
 	})
+}
+
+func (r *EvaluationReconciler) updateEvaluationAnnotations(ctx context.Context, latest *arkv1alpha1.Evaluation, metadata map[string]string) error {
+	log := logf.FromContext(ctx)
+	if latest.Annotations == nil {
+		latest.Annotations = make(map[string]string)
+	}
+	for key, value := range metadata {
+		annotationKey := fmt.Sprintf("evaluation.metadata/%s", key)
+		latest.Annotations[annotationKey] = value
+		log.V(1).Info("Adding metadata as annotation", "evaluation", latest.Name, "key", annotationKey, "value", value)
+	}
+	if err := r.Update(ctx, latest); err != nil {
+		log.V(1).Info("failed to update Evaluation annotations (will retry)", "evaluation", latest.Name, "error", err)
+		return err
+	}
+	return nil
 }
 
 func (r *EvaluationReconciler) ensureChildEvaluations(ctx context.Context, parentEvaluation arkv1alpha1.Evaluation) (bool, error) {
@@ -980,7 +978,7 @@ func (r *EvaluationReconciler) processBaselineEvaluation(ctx context.Context, ev
 	log.Info("Built parameters for baseline evaluation", "evaluation", evaluation.Name, "parameters", paramMap)
 
 	// Build unified evaluation request for baseline evaluation
-	request := genai.UnifiedEvaluationRequest{
+	request := UnifiedEvaluationRequest{
 		Type:          "baseline",
 		Config:        map[string]interface{}{}, // Baseline has empty config
 		Parameters:    paramMap,
@@ -994,7 +992,7 @@ func (r *EvaluationReconciler) processBaselineEvaluation(ctx context.Context, ev
 	log.Info("Using timeout for baseline evaluation", "evaluation", evaluation.Name, "timeout", timeout)
 
 	// Call unified evaluator endpoint
-	response, err := genai.CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, request, evaluation.Namespace, timeout)
+	response, err := CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, request, evaluation.Namespace, timeout)
 	if err != nil {
 		log.Error(err, "Failed to call unified evaluator for baseline evaluation", "evaluation", evaluation.Name)
 		if err := r.updateStatus(ctx, evaluation, statusError, fmt.Sprintf("Baseline evaluation failed: %v", err)); err != nil {
@@ -1062,7 +1060,7 @@ func (r *EvaluationReconciler) processEventEvaluation(ctx context.Context, evalu
 	}
 
 	// Build unified request
-	unifiedRequest := genai.UnifiedEvaluationRequest{
+	unifiedRequest := UnifiedEvaluationRequest{
 		Type:          "event",
 		Config:        config,
 		Parameters:    paramMap,
@@ -1079,7 +1077,7 @@ func (r *EvaluationReconciler) processEventEvaluation(ctx context.Context, evalu
 	log.Info("Using timeout for event evaluation", "evaluation", evaluation.Name, "timeout", timeout)
 
 	// Call the evaluator service
-	response, err := genai.CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, unifiedRequest, evaluation.Namespace, timeout)
+	response, err := CallUnifiedEvaluator(ctx, r.Client, evaluation.Spec.Evaluator, unifiedRequest, evaluation.Namespace, timeout)
 	if err != nil {
 		log.Error(err, "Failed to call evaluator for event evaluation")
 		if err := r.updateStatus(ctx, evaluation, statusError, fmt.Sprintf("Evaluation failed: %v", err)); err != nil {
@@ -1121,7 +1119,7 @@ func (r *EvaluationReconciler) addContextToParameters(ctx context.Context, evalu
 	}
 
 	// Use context retrieval helper to extract only true contextual background information
-	helper := genai.NewContextHelper(r.Client)
+	helper := NewContextHelper(r.Client)
 	extractedContext, contextSource := helper.ExtractContextualBackground(ctx, evaluation)
 
 	// Add context to parameters if extracted

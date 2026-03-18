@@ -1,0 +1,27 @@
+FROM golang:1.24.13-bookworm AS builder
+ARG TARGETOS
+ARG TARGETARCH
+ARG VERSION=dev
+ARG GIT_COMMIT=unknown
+
+WORKDIR /workspace
+ENV GOTOOLCHAIN=auto
+COPY go.mod go.mod
+COPY go.sum go.sum
+RUN go mod download
+
+COPY cmd/completions/ cmd/completions/
+COPY api/ api/
+COPY executors/ executors/
+COPY internal/ internal/
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} GOTOOLCHAIN=auto go build \
+    -ldflags "-X main.Version=${VERSION} -X main.GitCommit=${GIT_COMMIT}" \
+    -a -o completions cmd/completions/main.go
+
+FROM gcr.io/distroless/static:nonroot
+WORKDIR /
+COPY --from=builder /workspace/completions .
+USER 65532:65532
+
+ENTRYPOINT ["/completions"]

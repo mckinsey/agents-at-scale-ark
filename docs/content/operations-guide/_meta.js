@@ -8,6 +8,7 @@ export default {
   'build-pipelines': 'Build Pipelines',
 
   '---security': { type: 'separator', title: 'Security and assurance' },
+  'model-url-security': 'Model URL Security',
   'penetration-testing-reports': 'Penetration Testing Reports',
   'code-analysis-reports': 'Code Analysis Reports',
   'artifact-analysis-reports': 'Artifact Analysis Reports',

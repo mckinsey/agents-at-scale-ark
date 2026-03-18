@@ -66,7 +66,10 @@ class APIClient {
 
         let errorMessage = `HTTP error! status: ${response.status}`;
         if (typeof errorData === 'object' && errorData !== null) {
-          if ('message' in errorData && errorData.message) {
+          // Check for common error message fields
+          if ('detail' in errorData && errorData.detail) {
+            errorMessage = String(errorData.detail);
+          } else if ('message' in errorData && errorData.message) {
             errorMessage = String(errorData.message);
           } else if ('reason' in errorData && errorData.reason) {
             errorMessage = String(errorData.reason);

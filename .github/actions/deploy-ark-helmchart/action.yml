@@ -126,21 +126,22 @@ runs:
         CHART="./${{ steps.download_chart.outputs.chart_name }}"
         IMAGE_REPO="${{ inputs.image_repository }}"
         IMAGE_TAG="${{ inputs.clean_version }}"
-        QUERY_ENGINE_REPO="${IMAGE_REPO/ark-controller/ark-query-engine}"
+        COMPLETIONS_REPO="${IMAGE_REPO/ark-controller/ark-completions}"
         set -euo pipefail
-        # Deploy with permissive impersonation by default
         helm upgrade --install ark-controller "${CHART}" \
           --namespace "${{ inputs.namespace }}" \
           --create-namespace \
           --set rbac.enable=${{ inputs.rbac_enable }} \
           --set rbac.impersonation.enabled=true \
-          --set queryEngine.enabled=true \
           --timeout="${{ inputs.timeout }}" \
           $( [ -n "${IMAGE_REPO}" ] && echo "--set controllerManager.container.image.repository=${IMAGE_REPO}" ) \
           $( [ -n "${IMAGE_TAG}" ] && echo "--set controllerManager.container.image.tag=${IMAGE_TAG}" ) \
-          $( [ -n "${QUERY_ENGINE_REPO}" ] && echo "--set queryEngine.container.image.repository=${QUERY_ENGINE_REPO}" ) \
-          $( [ -n "${IMAGE_TAG}" ] && echo "--set queryEngine.container.image.tag=${IMAGE_TAG}" ) \
           $( [ -n "${{ inputs.container_registry_server }}" ] && echo "--set containerRegistry.enabled=true --set containerRegistry.server=${{ inputs.container_registry_server }} --set containerRegistry.username=${{ inputs.container_registry_username }} --set containerRegistry.password=${{ inputs.container_registry_password }}" )
+        helm upgrade --install ark-completions oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-completions --version "${IMAGE_TAG}" \
+          --namespace "${{ inputs.namespace }}" \
+          --timeout="${{ inputs.timeout }}" \
+          $( [ -n "${COMPLETIONS_REPO}" ] && echo "--set image.repository=${COMPLETIONS_REPO}" ) \
+          $( [ -n "${IMAGE_TAG}" ] && echo "--set image.tag=${IMAGE_TAG}" )
 
     - name: Wait for deployment readiness
       shell: bash
