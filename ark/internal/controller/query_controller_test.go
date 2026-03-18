@@ -218,20 +218,17 @@ var _ = Describe("Query Controller Message Serialization", func() {
 				completions.Message(openai.ToolMessage("tool-content", "tool-1")),
 			}
 
-			jsonStr, err := serializeMessages(messages)
-			Expect(err).NotTo(HaveOccurred())
+			jsonStr := serializeMessages(messages)
 			Expect(jsonStr).To(ContainSubstring("assistant"))
 			Expect(jsonStr).To(ContainSubstring("user"))
 			Expect(jsonStr).To(ContainSubstring("system"))
 			Expect(jsonStr).To(ContainSubstring("tool"))
 		})
 
-		It("should return error for unknown message types", func() {
-			// Create a message with no known type
+		It("should return empty array for unknown message types", func() {
 			messages := []completions.Message{{}}
-			_, err := serializeMessages(messages)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(Equal("unknown message type encountered during serialization"))
+			jsonStr := serializeMessages(messages)
+			Expect(jsonStr).To(Equal("null"))
 		})
 	})
 })

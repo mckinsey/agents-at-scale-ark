@@ -3,7 +3,8 @@ image:
   tag: ""
   pullPolicy: IfNotPresent
 
-port: 9090
+port: 80
+targetPort: 9090
 
 serviceAccountName: ark-controller
 

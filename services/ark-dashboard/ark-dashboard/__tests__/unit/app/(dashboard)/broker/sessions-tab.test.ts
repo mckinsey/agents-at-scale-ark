@@ -1,15 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   extractQueryIdAndSessionId,
+  getSessionDisplayNameFromEntries,
   groupEntriesBySession,
   sortEntriesByTimestampAndSequence,
 } from '@/lib/broker/session-utils';
-
-interface StreamEntry {
-  id: string;
-  timestamp: string;
-  data: unknown;
-}
+import type { StreamEntry } from '@/lib/broker/session-utils';
 
 describe('Sessions Tab Functionality', () => {
   describe('extractQueryIdAndSessionId', () => {
@@ -482,6 +478,105 @@ describe('Sessions Tab Functionality', () => {
       const grouped = groupEntriesBySession(entries, queryToSessionMap);
 
       expect(grouped['session-1']).toHaveLength(3);
+    });
+  });
+
+  describe('getSessionDisplayNameFromEntries', () => {
+    it('should return sessionId when entries are empty', () => {
+      const result = getSessionDisplayNameFromEntries([], 'session-123');
+      expect(result).toBe('session-123');
+    });
+
+    it('should return sessionId when no entry has input', () => {
+      const entries: StreamEntry[] = [
+        {
+          id: '1',
+          timestamp: '2024-01-15T10:00:00.000Z',
+          data: { data: { sessionId: 'session-1' } },
+        },
+        {
+          id: '2',
+          timestamp: '2024-01-15T10:01:00.000Z',
+          data: { someOtherField: 'value' },
+        },
+      ];
+      const result = getSessionDisplayNameFromEntries(entries, 'session-123');
+      expect(result).toBe('session-123');
+    });
+
+    it('should return input from first entry with data.input', () => {
+      const entries: StreamEntry[] = [
+        {
+          id: '1',
+          timestamp: '2024-01-15T10:00:00.000Z',
+          data: { input: 'What is 2+2?' },
+        },
+        {
+          id: '2',
+          timestamp: '2024-01-15T10:01:00.000Z',
+          data: { input: 'Another question' },
+        },
+      ];
+      const result = getSessionDisplayNameFromEntries(entries, 'session-123');
+      expect(result).toBe('What is 2+2?');
+    });
+
+    it('should return input from nested data.data.input', () => {
+      const entries: StreamEntry[] = [
+        {
+          id: '1',
+          timestamp: '2024-01-15T10:00:00.000Z',
+          data: { data: { input: 'Nested user question' } },
+        },
+      ];
+      const result = getSessionDisplayNameFromEntries(entries, 'session-123');
+      expect(result).toBe('Nested user question');
+    });
+
+    it('should truncate long input to 48 characters with ellipsis', () => {
+      const longInput =
+        'This is a very long user input that exceeds the maximum display length limit';
+      const entries: StreamEntry[] = [
+        {
+          id: '1',
+          timestamp: '2024-01-15T10:00:00.000Z',
+          data: { input: longInput },
+        },
+      ];
+      const result = getSessionDisplayNameFromEntries(entries, 'session-123');
+      expect(result).toHaveLength(48);
+      expect(result.endsWith('...')).toBe(true);
+      expect(result).toBe(longInput.slice(0, 45) + '...');
+    });
+
+    it('should not truncate input that is exactly 48 characters', () => {
+      const exactInput = 'A'.repeat(48);
+      const entries: StreamEntry[] = [
+        {
+          id: '1',
+          timestamp: '2024-01-15T10:00:00.000Z',
+          data: { input: exactInput },
+        },
+      ];
+      const result = getSessionDisplayNameFromEntries(entries, 'session-123');
+      expect(result).toBe(exactInput);
+    });
+
+    it('should skip entries without input and use the first one that has it', () => {
+      const entries: StreamEntry[] = [
+        {
+          id: '1',
+          timestamp: '2024-01-15T10:00:00.000Z',
+          data: { data: { sessionId: 'session-1' } },
+        },
+        {
+          id: '2',
+          timestamp: '2024-01-15T10:01:00.000Z',
+          data: { input: 'Found it!' },
+        },
+      ];
+      const result = getSessionDisplayNameFromEntries(entries, 'session-123');
+      expect(result).toBe('Found it!');
     });
   });
 
