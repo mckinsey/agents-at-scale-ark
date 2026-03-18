@@ -1,4 +1,4 @@
-import {describe, it, expect, beforeEach, afterEach, jest} from '@jest/globals';
+import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import chalk from 'chalk';
 import output from './output.js';
 
@@ -7,16 +7,16 @@ describe('output', () => {
   let consoleLogSpy: any;
 
   beforeEach(() => {
-    consoleErrorSpy = jest
+    consoleErrorSpy = vi
       .spyOn(console, 'error')
       .mockImplementation(() => undefined as any);
-    consoleLogSpy = jest
+    consoleLogSpy = vi
       .spyOn(console, 'log')
       .mockImplementation(() => undefined as any);
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('error', () => {

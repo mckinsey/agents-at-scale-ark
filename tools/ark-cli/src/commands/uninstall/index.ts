@@ -48,9 +48,7 @@ async function uninstallArk(
       const service = await getMarketplaceItem(serviceName);
 
       if (!service) {
-        output.error(
-          `marketplace item '${serviceName}' not found`
-        );
+        output.error(`marketplace item '${serviceName}' not found`);
         output.info('available marketplace items:');
         const marketplaceServices = await getAllMarketplaceServices();
         if (marketplaceServices) {
@@ -112,7 +110,7 @@ async function uninstallArk(
   const serviceEntries = Object.entries(services).reverse();
 
   for (const [, service] of serviceEntries) {
-    let shouldUninstall = false;
+    let shouldUninstall: boolean;
 
     try {
       // Ask for confirmation

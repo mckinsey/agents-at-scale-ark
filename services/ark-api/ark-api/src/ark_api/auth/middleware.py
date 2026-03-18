@@ -134,7 +134,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 else:
                     # Validate JWT token using ark_sdk validator
                     validator = TokenValidator()
-                    await validator.validate_token(token)
+                    validator.validate_token(token)
                     auth_success = True
                     logger.debug("JWT authentication successful")
                     

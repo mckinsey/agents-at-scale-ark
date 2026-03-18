@@ -105,6 +105,12 @@ jobs:
           if [ -n "$NEW_VIOLATIONS" ]; then
             echo "New violations found:"
             echo "$NEW_VIOLATIONS"
+
+            # Export NEW_VIOLATIONS for use in next step
+            echo "NEW_VIOLATIONS<<EOF" >> $GITHUB_ENV
+            echo "$NEW_VIOLATIONS" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+
             echo "Checking new violations against whitelist..."
               while read -r violation; do
                 if ! grep -q "$violation" "$WHITELIST"; then
@@ -121,7 +127,14 @@ jobs:
             echo "The following violations were eliminated: $REMOVED_VIOLATIONS."
           else
             echo "No new violations found."
-          fi  
+          fi
+
+      - name: Create GitHub issue for new CVE violations
+        if: always() && env.NEW_VIOLATIONS != ''
+        uses: ./.github/actions/create-cve-issues
+        with:
+          new_violations: ${{ env.NEW_VIOLATIONS }}
+          scan_json: ${{ env.SCAN_JSON }}  
 
   # Build and test Ark itself.
   build-and-test-ark:
@@ -130,7 +143,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24.13"
+          go-version: "1.25.8"
           cache: true
           cache-dependency-path: |
             ark/go.sum
@@ -172,7 +185,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24.13"
+          go-version: "1.25.8"
           cache: true
           cache-dependency-path: |
             ark/go.sum
@@ -225,6 +238,9 @@ jobs:
         include:
           - path: ark
             image: ark-controller
+          - path: ark
+            image: ark-completions
+            dockerfile: Dockerfile.completions
           - path: services/ark-api
             image: ark-api
             prebuild: "make ark-api-deps && mkdir -p services/ark-api/ark-api/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/out/"
@@ -234,9 +250,6 @@ jobs:
           - path: services/ark-evaluator
             image: ark-evaluator
             prebuild: "make ark-evaluator-deps"
-          - path: services/executor-langchain
-            image: executor-langchain
-            prebuild: "make executor-langchain-deps && mkdir -p services/executor-langchain/build-context && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/executor-langchain/build-context/"
           - path: services/ark-broker/ark-broker
             image: ark-broker
           - path: samples/a2a/langchain-weather-agent
@@ -282,6 +295,7 @@ jobs:
           platforms: linux/amd64
           push: true
           prebuild: ${{ matrix.prebuild }}
+          dockerfile: ${{ matrix.dockerfile || 'Dockerfile' }}
 
   xray-container-scan:
     needs: [setup-container-cache-registry, build-containers]
@@ -292,10 +306,10 @@ jobs:
       matrix:
         image:
           - ark-controller
+          - ark-completions
           - ark-api
           - ark-dashboard
           - ark-evaluator
-          - executor-langchain
           - ark-broker
           - langchain-weather-agent
           - ark-mcp
@@ -330,6 +344,9 @@ jobs:
 
       - name: Build libraries
         run: make libs-build-all
+
+      - name: Test libraries
+        run: make libs-test-all
 
       - name: Upload library artifacts
         uses: actions/upload-artifact@v4
@@ -577,18 +594,7 @@ jobs:
         run: |
           cd tests
           mkdir -p /tmp/chainsaw-report
-          # Use special config for evaluated tests with longer timeouts and sequential execution
-          MAX_RETRIES=3
-          RETRY_DELAY=30
-          for ((attempt=1; attempt<=$MAX_RETRIES; attempt++)); do
-            if chainsaw test --config .chainsaw-evaluated.yaml --selector 'evaluated=true'; then
-              exit 0
-            fi
-            if [ $attempt -lt $MAX_RETRIES ]; then
-              sleep $RETRY_DELAY
-            fi
-          done
-          exit 1
+          chainsaw test --config .chainsaw-evaluated.yaml --selector 'evaluated=true'
 
       - uses: ./.github/actions/collect-coverage-e2e
         with:
@@ -767,6 +773,15 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: tests/pytest/ui-tests/requirements.txt
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('tests/pytest/ui-tests/requirements.txt') }}
 
       - name: Install UI test dependencies
         run: |
@@ -797,7 +812,7 @@ jobs:
         run: |
           cd tests/pytest/ui-tests
           mkdir -p screenshots
-          pytest tests/ -v --tb=short
+          pytest tests/ -n 4 --dist loadgroup -v --tb=short --log-cli-level=INFO
 
       - name: Upload test screenshots
         if: always()
@@ -877,7 +892,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
         run: |
           cd tests/pytest/cli-tests/tests
-          pytest test_file_gateway.py -v --tb=short
+          pytest test_file_gateway.py -n 2 --dist loadscope -v --tb=short
 
       - name: Upload CLI test logs
         if: always()
@@ -894,6 +909,7 @@ jobs:
         chart:
           # Package only the essential charts.
           - { name: ark-controller, path: ark/dist/chart }
+          - { name: ark-completions, path: ark/executors/completions/chart }
           - { name: ark-api, path: services/ark-api/chart }
           - { name: ark-dashboard, path: services/ark-dashboard/chart }
           - { name: ark-mcp, path: services/ark-mcp/chart }
@@ -978,14 +994,11 @@ jobs:
           cd tools/ark-cli
           npm test
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+      - uses: ./.github/actions/collect-coverage
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          slug: ${{ github.repository }}
-          directory: tools/ark-cli/artifacts/coverage
-          name: ark-cli
-          flags: ark-cli
+          source-path: tools/ark-cli/artifacts/coverage/
+          artifact-folder: ark-cli/unit-tests
+          artifact-suffix: ark-cli-unit
 
       - name: Create NPM package tarball
         run: |
@@ -1031,7 +1044,7 @@ jobs:
       - name: Setup Go for coverage tools
         uses: actions/setup-go@v5
         with:
-          go-version: "1.24.13"
+          go-version: "1.25.8"
 
       - name: Install Python coverage tools
         run: |
@@ -1079,7 +1092,7 @@ jobs:
           directory: ./coverage-artifacts
           fail_ci_if_error: false
           verbose: true
-          flags: combined-coverage
+          flags: ark-cli,combined-coverage
 
   check-release:
     needs:
@@ -1246,7 +1259,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24.13'
+          go-version: '1.25.8'
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6

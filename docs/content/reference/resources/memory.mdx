@@ -29,23 +29,35 @@ spec:
 
 Memory can be specified in a query resource. If a Memory resource named `default` exists in the namespace, it will be automatically selected for queries that don't explicitly specify a memory.
 
-Memory in a query resource:
+Memory works with all query target types — agents, models, and tools. When a `conversationId` is provided, messages are persisted to the memory chain regardless of the target type.
+
+Memory in a query to a tool:
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
-  name: chat-with-memory
+  name: tool-with-memory
 spec:
-  input: "What did we discuss earlier?"
+  input: "Remember this message for later"
   target:
-    - name: my-agent
-  memory:
-    name: ark-broker
-  # Optional: specify session ID to group related queries for tracking
-  sessionId: "my-session"
-  # Optional: specify conversation ID for memory continuity
-  # If not provided, a new conversation ID will be generated
+    type: tool
+    name: noop
+  conversationId: "my-conversation"
+```
+
+A follow-up query to an agent on the same conversation ID will have access to the tool query's messages:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: follow-up-agent-query
+spec:
+  input: "What was the last message?"
+  target:
+    type: agent
+    name: my-agent
   conversationId: "my-conversation"
 ```
 
@@ -53,10 +65,11 @@ Memory can also be specified via the CLIs:
 
 ```bash
 # Using fark
-fark query --input "Continue our conversation" --session-id "my-session" --conversation-id "my-conversation" my-agent
+fark query --input "Start our conversation" --conversation-id "my-conversation" my-agent
 
 # Using ark
-ark query agent/my-agent "Continue our conversation" --session-id "my-session" --conversation-id "my-conversation"
+ark query tool/noop "Remember this message for later" --conversation-id "my-conversation" 
+ark query agent/my-agent "What was the last message?" --conversation-id "my-conversation"
 ```
 
 **Session ID vs Conversation ID:**

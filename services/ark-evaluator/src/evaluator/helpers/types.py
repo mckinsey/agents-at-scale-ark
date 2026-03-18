@@ -99,7 +99,7 @@ class ParsedEvent(BaseModel):
                     metadata = EventMetadata(**metadata_dict)
                     logger.info(f"DEBUG: Parsed nested metadata: {metadata}")
                 # If no 'Metadata' field, treat the entire message as metadata (direct format)
-                elif any(key in message_data for key in ['toolName', 'agentName', 'parameters', 'duration']):
+                elif any(key in message_data for key in ['toolName', 'agentName', 'parameters', 'duration', 'durationMs']):
                     # This looks like direct metadata format
                     logger.info(f"DEBUG: Detected direct metadata format with keys: {list(message_data.keys())}")
                     

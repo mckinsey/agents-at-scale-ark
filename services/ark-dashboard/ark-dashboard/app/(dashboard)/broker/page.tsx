@@ -4,7 +4,6 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,14 +18,18 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { trackEvent } from '@/lib/analytics/singleton';
 import {
+  getSessionDisplayNameFromEntries,
   groupEntriesBySession,
   sortEntriesByTimestampAndSequence,
 } from '@/lib/broker/session-utils';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { type Memory, memoriesService } from '@/lib/services/memories';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-];
 
 interface StreamEntry {
   id: string;
@@ -556,6 +559,10 @@ function SessionsView({
             <>
               {sortedSessions.map(([sessionId, sessionEntries]) => {
                 const isSessionExpanded = expandedSessions.has(sessionId);
+                const displayName = getSessionDisplayNameFromEntries(
+                  sessionEntries,
+                  sessionId,
+                );
                 return (
                   <div
                     key={sessionId}
@@ -568,9 +575,18 @@ function SessionsView({
                       ) : (
                         <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
                       )}
-                      <span className="font-semibold">
-                        Session: {sessionId}
-                      </span>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="font-semibold">
+                              Session: {displayName}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{sessionId}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                       <span className="text-muted-foreground ml-auto">
                         ({sessionEntries.length} events)
                       </span>
@@ -650,8 +666,9 @@ export default function BrokerPage() {
 
   return (
     <>
-      <PageHeader breadcrumbs={breadcrumbs} currentPage="Broker" />
-      <div className="flex flex-1 flex-col gap-4 p-4">
+      <PageHeader breadcrumbs={BASE_BREADCRUMBS} currentPage="Broker" />
+      <div className="flex flex-1 flex-col gap-4">
+        <h1 className="text-xl">Broker</h1>
         <Tabs
           defaultValue="traces"
           className="flex-1"

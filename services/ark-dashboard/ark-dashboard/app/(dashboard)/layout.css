@@ -1,0 +1,29 @@
+[data-slot="sidebar-gap"] {
+  transition: width 800ms cubic-bezier(0.25, 1.2, 0.5, 1) !important;
+}
+
+[data-sidebar="menu-button"]:not([data-size="lg"]) {
+  transition: width 800ms cubic-bezier(0.25, 1.2, 0.5, 1),
+              height 800ms cubic-bezier(0.25, 1.2, 0.5, 1),
+              padding 800ms cubic-bezier(0.25, 1.2, 0.5, 1) !important;
+  overflow: hidden !important;
+}
+
+[data-sidebar="menu-button"]:not([data-size="lg"]) > span,
+[data-sidebar="menu-button"]:not([data-size="lg"]) > div {
+  transition: opacity 600ms ease-out,
+              transform 800ms cubic-bezier(0.25, 1.2, 0.5, 1) !important;
+  white-space: nowrap !important;
+}
+
+.group[data-state="collapsed"] [data-sidebar="menu-button"]:not([data-size="lg"]) > span:not(:has(svg)),
+.group[data-state="collapsed"] [data-sidebar="menu-button"]:not([data-size="lg"]) > div:has(span) {
+  opacity: 0 !important;
+  transform: translateX(-10px) !important;
+}
+
+.group[data-state="expanded"] [data-sidebar="menu-button"]:not([data-size="lg"]) > span:not(:has(svg)),
+.group[data-state="expanded"] [data-sidebar="menu-button"]:not([data-size="lg"]) > div:has(span) {
+  opacity: 1 !important;
+  transform: translateX(0) !important;
+}

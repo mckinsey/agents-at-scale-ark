@@ -1,26 +1,26 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 import {Command} from 'commander';
 
-const mockExecuteQuery = jest.fn() as any;
-const mockParseTarget = jest.fn() as any;
+const mockExecuteQuery = vi.fn() as any;
+const mockParseTarget = vi.fn() as any;
 
-jest.unstable_mockModule('../../lib/executeQuery.js', () => ({
+vi.mock('../../lib/executeQuery.js', () => ({
   executeQuery: mockExecuteQuery,
   parseTarget: mockParseTarget,
 }));
 
 const mockOutput = {
-  error: jest.fn(),
+  error: vi.fn(),
 };
-jest.unstable_mockModule('../../lib/output.js', () => ({
+vi.mock('../../lib/output.js', () => ({
   default: mockOutput,
 }));
 
-const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+const mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {
   throw new Error('process.exit called');
 }) as any);
 
-const mockConsoleError = jest
+const mockConsoleError = vi
   .spyOn(console, 'error')
   .mockImplementation(() => {});
 
@@ -28,7 +28,7 @@ const {createQueryCommand} = await import('./index.js');
 
 describe('createQueryCommand', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should create a query command', () => {
@@ -116,6 +116,66 @@ describe('createQueryCommand', () => {
       message: 'Hello world',
       outputFormat: undefined,
       sessionId: 'my-session-123',
+    });
+  });
+
+  it('should pass conversation-id option to executeQuery', async () => {
+    mockParseTarget.mockReturnValue({
+      type: 'agent',
+      name: 'test-agent',
+    });
+
+    mockExecuteQuery.mockResolvedValue(undefined);
+
+    const command = createQueryCommand({} as any);
+
+    await command.parseAsync([
+      'node',
+      'test',
+      'agent/test-agent',
+      'Hello world',
+      '--conversation-id',
+      'my-conversation-456',
+    ]);
+
+    expect(mockParseTarget).toHaveBeenCalledWith('agent/test-agent');
+    expect(mockExecuteQuery).toHaveBeenCalledWith({
+      targetType: 'agent',
+      targetName: 'test-agent',
+      message: 'Hello world',
+      outputFormat: undefined,
+      conversationId: 'my-conversation-456',
+    });
+  });
+
+  it('should pass both session-id and conversation-id options to executeQuery', async () => {
+    mockParseTarget.mockReturnValue({
+      type: 'agent',
+      name: 'test-agent',
+    });
+
+    mockExecuteQuery.mockResolvedValue(undefined);
+
+    const command = createQueryCommand({} as any);
+
+    await command.parseAsync([
+      'node',
+      'test',
+      'agent/test-agent',
+      'Hello world',
+      '--session-id',
+      'my-session-123',
+      '--conversation-id',
+      'my-conversation-456',
+    ]);
+
+    expect(mockExecuteQuery).toHaveBeenCalledWith({
+      targetType: 'agent',
+      targetName: 'test-agent',
+      message: 'Hello world',
+      outputFormat: undefined,
+      sessionId: 'my-session-123',
+      conversationId: 'my-conversation-456',
     });
   });
 

@@ -44,8 +44,16 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
   return (
     <>
       <div
+        role="link"
+        tabIndex={0}
         className="bg-card hover:bg-accent/5 flex w-full cursor-pointer flex-wrap items-center gap-4 rounded-md border px-4 py-3 transition-colors"
-        onClick={() => router.push(`/agents/${agent.name}`)}>
+        onClick={() => router.push(`/agents/${encodeURIComponent(agent.name)}`)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            router.push(`/agents/${encodeURIComponent(agent.name)}`);
+          }
+        }}>
         <div className="flex flex-grow items-center gap-3 overflow-hidden">
           <IconComponent className="text-muted-foreground h-5 w-5 flex-shrink-0" />
 

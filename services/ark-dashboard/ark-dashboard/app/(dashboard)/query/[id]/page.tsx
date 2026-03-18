@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/tooltip';
 import type { components } from '@/lib/api/generated/types';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { useMarkdownProcessor } from '@/lib/hooks/use-markdown-processor';
 import {
   agentsService,
@@ -50,11 +51,6 @@ import {
   transformQueryParametersToApi,
 } from '@/lib/utils/query-parameters';
 import { simplifyDuration } from '@/lib/utils/time';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-  { href: '/queries', label: 'Queries' },
-];
 
 // Component for rendering response content
 function ResponseContent({
@@ -490,6 +486,7 @@ function QueryDetailContent() {
         timeout: query.timeout,
         ttl: query.ttl,
         sessionId: query.sessionId,
+        ...(query.conversationId && { conversationId: query.conversationId }),
         memory: query.memory,
         ...(apiParameters.length > 0 && { parameters: apiParameters }),
         ...(streaming && {
@@ -686,11 +683,18 @@ function QueryDetailContent() {
     );
   }
 
+  const breadcrumbs: BreadcrumbElement[] = [
+    ...BASE_BREADCRUMBS,
+    { href: '/queries', label: 'Queries' },
+  ];
+
+  const pageTitle = isNew ? 'New Query' : query?.name || queryId;
+
   return (
     <>
       <PageHeader
         breadcrumbs={breadcrumbs}
-        currentPage={isNew ? 'New Query' : query.name}
+        currentPage={pageTitle}
         actions={
           <>
             {!isNew && <QueryEvaluationActions queryName={queryId} />}
@@ -742,7 +746,7 @@ function QueryDetailContent() {
                   </a>
                 </div>
               </div>
-              <table className="w-full table-fixed">
+              <table className="w-full">
                 <tbody>
                   <QueryNameField
                     mode={mode}
@@ -796,7 +800,19 @@ function QueryDetailContent() {
                     }
                     label="Session ID"
                     placeholder="Default: Auto-generated"
-                    tooltip="Identifier for grouping related queries, used for conversation memory"
+                    tooltip="Identifier for grouping related queries"
+                  />
+                  <QueryNameField
+                    mode={mode}
+                    value={query.conversationId}
+                    onChange={conversationId =>
+                      setQuery(prev =>
+                        prev ? { ...prev, conversationId } : null,
+                      )
+                    }
+                    label="Conversation ID"
+                    placeholder="Default: Auto-generated"
+                    tooltip="Identifier for conversation history and memory chain"
                   />
                 </tbody>
               </table>

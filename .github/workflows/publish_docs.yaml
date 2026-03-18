@@ -28,23 +28,27 @@ jobs:
         with:
           node-version: "22.x"
 
-      - name: Build Docs
+      - name: Setup environment
         run: |
-          cd docs
           npm ci
-          npm i pagefind @pagefind/linux-x64 && npm run build
-        env:
-          NEXT_PUBLIC_BASE_PATH: ${{ vars.DOCS_SITE_BASE_PATH || '' }}
-      
+          npm i pagefind @pagefind/linux-x64
+        working-directory: docs
+
       - name: Validate Internal Documentation Links
         run: |
-          # Rebuild docs without base path for link checking
-          echo "Rebuilding docs without base path for link validation..."
+          # Build docs without base path for link checking
+          echo "Building docs without base path for link validation..."
           npm run build
           echo "Checking for broken links..."
           npm run check-links
         working-directory: docs
 
+      - name: Build Docs
+        run: |
+          npm run build
+        env:
+          NEXT_PUBLIC_BASE_PATH: ${{ vars.DOCS_SITE_BASE_PATH || '' }}
+      
       - name: Upload Site Artifact
         uses: actions/upload-pages-artifact@v3
         with:

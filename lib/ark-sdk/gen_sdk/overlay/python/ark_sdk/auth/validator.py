@@ -88,7 +88,7 @@ class TokenValidator:
             logger.error(f"Failed to get signing key: {e}")
             raise TokenValidationError(f"Failed to get signing key: {e}")
     
-    async def validate_token(self, token: str) -> Dict[str, Any]:
+    def validate_token(self, token: str) -> Dict[str, Any]:
         """
         Validate a JWT token.
 

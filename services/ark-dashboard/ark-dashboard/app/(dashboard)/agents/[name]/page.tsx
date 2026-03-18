@@ -6,7 +6,7 @@ import { AgentForm, AgentFormMode } from '@/components/forms/agent-form';
 
 export default function AgentViewPage() {
   const params = useParams();
-  const agentName = params.name as string;
+  const agentName = decodeURIComponent(params.name as string);
 
   return <AgentForm mode={AgentFormMode.VIEW} agentName={agentName} />;
 }

@@ -25,17 +25,16 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
     - apply:
-        file: manifests/*.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          metadata:
-            name: test-baseline-model
-          status:
-            conditions:
-            - type: ModelAvailable
-              status: "True"
+        file: manifests/a0[1-4]-*.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-baseline-model
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
     - assert:
         resource:
           apiVersion: v1
@@ -51,15 +50,17 @@ spec:
           jsonPath:
             path: '{.status.phase}'
             value: 'ready'
+    - apply:
+        file: manifests/a05-evaluation.yaml
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
         timeout: 7m
         name: test-baseline-evaluation
         for:
-          jsonPath:
-            path: '{.status.phase}'
-            value: 'done'
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -123,3 +124,11 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Evaluation
         name: test-baseline-evaluation
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
