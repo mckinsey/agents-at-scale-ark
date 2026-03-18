@@ -345,6 +345,9 @@ jobs:
       - name: Build libraries
         run: make libs-build-all
 
+      - name: Test libraries
+        run: make libs-test-all
+
       - name: Upload library artifacts
         uses: actions/upload-artifact@v4
         with:

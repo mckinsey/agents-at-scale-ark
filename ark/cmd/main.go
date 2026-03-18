@@ -130,7 +130,7 @@ func parseFlags() struct {
 	flag.BoolVar(&cfg.enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.BoolVar(&showVersion, "version", false, "Show version information and exit")
-	flag.StringVar(&cfg.completionsAddr, "completions-addr", "http://ark-completions.ark-system:9090",
+	flag.StringVar(&cfg.completionsAddr, "completions-addr", "http://ark-completions.ark-system",
 		"Address of the completions engine for A2A communication")
 
 	zapOpts := zap.Options{Development: false}
