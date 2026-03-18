@@ -93,23 +93,24 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, e
 		return nil, fmt.Errorf("failed to create selector agent: %w", err)
 	}
 
-	// Register additional tools specific to selector usage
-	if t.Selector.Tools != nil && len(t.Selector.Tools) > 0 {
-		for _, tool := range t.Selector.Tools {
-			if err := agent.Tools.registerTool(ctx, t.Client, tool, t.Namespace, t.telemetry, t.eventing); err != nil {
-				return nil, fmt.Errorf("failed to register selector tool %s: %w", tool.Name, err)
-			}
-		}
+	// Build list of tools to register for selector usage
+	selectorTools := make([]arkv1alpha1.AgentTool, 0)
+	if t.Selector.Tools != nil {
+		selectorTools = append(selectorTools, t.Selector.Tools...)
 	}
 
 	// Add terminate tool if enabled (defaults to false when nil)
 	if t.Selector.EnableTerminateTool != nil && *t.Selector.EnableTerminateTool {
-		terminateTool := arkv1alpha1.AgentTool{
+		selectorTools = append(selectorTools, arkv1alpha1.AgentTool{
 			Type: "builtin",
 			Name: "terminate",
-		}
-		if err := agent.Tools.registerTool(ctx, t.Client, terminateTool, t.Namespace, t.telemetry, t.eventing); err != nil {
-			return nil, fmt.Errorf("failed to register terminate tool for selector: %w", err)
+		})
+	}
+
+	// Register all selector-specific tools
+	for _, tool := range selectorTools {
+		if err := agent.Tools.registerTool(ctx, t.Client, tool, t.Namespace, t.telemetry, t.eventing); err != nil {
+			return nil, fmt.Errorf("failed to register selector tool %s: %w", tool.Name, err)
 		}
 	}
 
