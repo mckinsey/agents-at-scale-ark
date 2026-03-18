@@ -100,8 +100,6 @@ Queries targeting `my-agent` will be routed to your engine via A2A.
 
 ## Streaming Support
 
-By default, named execution engines do not support streaming. When the dashboard or an OpenAI-compatible client requests `stream: true`, Ark falls back to polling for the query result and returns it as a single-chunk SSE response.
-
 If your engine writes streaming chunks to the broker (via the memory event stream), opt in by adding the `streaming-supported` annotation to your `ExecutionEngine` resource:
 
 ```yaml
