@@ -48,7 +48,7 @@ controllerManager:
   serviceAccountName: ark-controller
 
 completions:
-  addr: "http://ark-completions.ark-system:9090" # NOSONAR - cluster-internal service communication
+  addr: "http://ark-completions.ark-system" # NOSONAR - cluster-internal service communication
 
 # [RBAC]: To enable RBAC (Permissions) configurations
 rbac:

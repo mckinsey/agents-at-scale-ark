@@ -15,7 +15,7 @@ The controller delegates query execution to the completions engine via A2A `Send
 Kubernetes Cluster (ark-system namespace)
 ┌─────────────────────┐    K8s Service     ┌─────────────────────────┐
 │  Controller Pod      │    (A2A)           │  Completions Pod         │
-│  (reconciler)        │──────────────────►│  (ark-completions:9090)  │
+│  (reconciler)        │──────────────────►│  (ark-completions:80)    │
 │       │              │◄──────────────────│       │                  │
 │  - watch CRs         │                    │  - agent loop            │
 │  - resolve target    │                    │  - team orchestration    │
@@ -37,7 +37,8 @@ image:
   repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-completions
   pullPolicy: IfNotPresent
   tag: ""
-port: 9090
+port: 80
+targetPort: 9090
 resources:
   limits:
     cpu: 500m
@@ -52,7 +53,7 @@ Helm chart location: `ark/executors/completions/chart/`
 
 ### Controller Flag
 
-The controller connects to the engine via the `--completions-addr` flag (default: `http://ark-completions.ark-system:9090`).
+The controller connects to the engine via the `--completions-addr` flag (default: `http://ark-completions.ark-system`).
 
 ## Source Code
 
@@ -67,7 +68,7 @@ cd ark
 devspace dev
 ```
 
-DevSpace deploys the engine using the chart at `ark/executors/completions/chart/`. The controller's `--completions-addr` is set to `http://ark-completions.ark-system:9090`.
+DevSpace deploys the engine using the chart at `ark/executors/completions/chart/`. The controller's `--completions-addr` is set to `http://ark-completions.ark-system`.
 
 Changes to engine code restart only the engine pod. Changes to controller code restart only the controller pod.
 
