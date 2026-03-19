@@ -254,6 +254,8 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	}
 	if engineMeta.ConversationId != "" {
 		obj.Status.ConversationId = engineMeta.ConversationId
+	} else if engineMeta.A2AContextID != "" {
+		obj.Status.ConversationId = engineMeta.A2AContextID
 	}
 
 	queryStatus := r.determineQueryStatus(response)
@@ -322,9 +324,17 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 	}
 
 	userText := extractUserInput(ctx, query, r.Client)
-	message := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
-		protocol.NewTextPart(userText),
-	})
+	var message protocol.Message
+	if query.Spec.ConversationId != "" {
+		conversationId := query.Spec.ConversationId
+		message = protocol.NewMessageWithContext(protocol.MessageRoleUser, []protocol.Part{
+			protocol.NewTextPart(userText),
+		}, nil, &conversationId)
+	} else {
+		message = protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+			protocol.NewTextPart(userText),
+		})
+	}
 	message.Metadata = metadata
 	message.Extensions = []string{arka2a.QueryExtensionURI}
 

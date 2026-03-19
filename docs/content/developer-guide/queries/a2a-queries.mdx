@@ -75,11 +75,13 @@ The A2ATask will show phase `completed` with the message history and artifacts f
 
 ## Stateful Messages
 
-A2A servers respond to messages with a `contextId`. ARK stores this ID in the query's `status.a2a.contextId` field. To provide continuity across a set of interactions, set the `ark.mckinsey.com/a2a-context-id` annotation when creating queries, as per the [A2A Protocol - Group Related Interactions documentation](https://a2a-protocol.org/latest/topics/life-of-a-task/#group-related-interactions).
+Ark sends `spec.conversationId` to all execution engines as the A2A `contextId`. This is the primary mechanism for conversation threading — use it for multi-turn interactions with any engine (completions or named).
 
 The pattern:
-- **Input**: Set `ark.mckinsey.com/a2a-context-id` annotation when creating a query
-- **Output**: Read context ID from `status.a2a.contextId` after query completes
+- **Input**: Set `spec.conversationId` when creating a query
+- **Output**: Read the returned conversation ID from `status.conversationId` (or `status.a2a.contextId`) after query completes
+
+> **Advanced: sub-agent context override.** The `ark.mckinsey.com/a2a-context-id` annotation sets the A2A contextId for the *second hop* — when the completions engine dispatches to sub-agents. For most use cases, `spec.conversationId` is sufficient.
 
 The `message-counter-agent` can be used to test this functionality. Send an initial message:
 
