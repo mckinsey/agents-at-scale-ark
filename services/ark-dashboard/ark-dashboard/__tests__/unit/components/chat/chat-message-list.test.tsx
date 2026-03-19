@@ -364,6 +364,27 @@ describe('ChatMessageList', () => {
       expect(screen.getByText('Maximum turns reached (3)')).toBeInTheDocument();
     });
 
+    it('should render selector failure event when invalid agent selected', () => {
+      const messages: ExtendedChatMessage[] = [
+        { role: 'user', content: 'Hello' } as ExtendedChatMessage,
+        {
+          role: 'system',
+          content: 'Selector returned invalid agent name: invalid-agent',
+        } as ExtendedChatMessage,
+        {
+          role: 'assistant',
+          content: 'Response from fallback',
+          name: 'agent-a',
+        } as ExtendedChatMessage,
+      ];
+
+      renderChatMessageList({ messages, strategy: 'selector' });
+
+      expect(
+        screen.getByText('Selector returned invalid agent: invalid-agent. Ending conversation'),
+      ).toBeInTheDocument();
+    });
+
     it('should not render selector transitions for non-selector strategy', () => {
       const messages: ExtendedChatMessage[] = [
         { role: 'user', content: 'Hello' } as ExtendedChatMessage,

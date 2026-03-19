@@ -1,0 +1,14 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: test-selector-team
+spec:
+  members:
+    - name: agent-a
+      type: agent
+    - name: agent-b
+      type: agent
+  strategy: selector
+  selector:
+    agent: selector-agent
+  description: Team with selector that will return invalid agent name
