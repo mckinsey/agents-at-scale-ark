@@ -79,6 +79,8 @@ type QuerySpec struct {
 	SessionId string `json:"sessionId,omitempty"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MinLength=1
+	// ConversationId is sent as A2A ContextID when dispatching to execution engines.
+	// Engines use it for conversation threading (e.g., memory lookup, session management).
 	ConversationId string `json:"conversationId,omitempty"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default="720h"
@@ -96,7 +98,9 @@ type QuerySpec struct {
 // A2AMetadata contains optional A2A protocol metadata
 type A2AMetadata struct {
 	// +kubebuilder:validation:Optional
-	// ContextID from the A2A protocol when the target is an A2A agent
+	// ContextID returned by the execution engine via A2A protocol response.
+	// For the completions engine this is the broker conversation UUID.
+	// For named engines this is whatever context ID the engine returned.
 	ContextID string `json:"contextId,omitempty"`
 	// +kubebuilder:validation:Optional
 	// TaskID from the A2A protocol when the target is an A2A agent and a task was created

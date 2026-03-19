@@ -170,7 +170,7 @@ Example response:
 
 ARK extends the OpenAI API with a `metadata` field to pass Kubernetes annotations to the underlying Query resource.
 
-Use the `queryAnnotations` field with a JSON string containing annotation key-value pairs:
+Use the `conversationId` field for multi-turn conversations, and `queryAnnotations` for custom Kubernetes annotations:
 
 ```bash
 curl -X POST http://localhost:8000/openai/v1/chat/completions \
@@ -179,18 +179,18 @@ curl -X POST http://localhost:8000/openai/v1/chat/completions \
     "model": "agent/my-agent",
     "messages": [{"role": "user", "content": "Hello"}],
     "metadata": {
-      "queryAnnotations": "{\"ark.mckinsey.com/a2a-context-id\": \"ctx-abc123\"}"
+      "conversationId": "conv-abc123"
     }
   }'
 ```
 
-The `queryAnnotations` value is parsed as JSON and applied as annotations to the Query resource. This format works with standard OpenAI SDKs since metadata fields accept string values.
+The `conversationId` is sent to the execution engine as A2A `contextId` for conversation threading. The `queryAnnotations` field can pass additional Kubernetes annotations to the Query resource. This format works with standard OpenAI SDKs since metadata fields accept string values.
 
 See [Streaming Responses](/developer-guide/queries/streaming#the-ark-metadata-field) for how metadata is returned in responses.
 
 #### Response Metadata
 
-Responses include an `ark` field with query metadata including status, token usage, and A2A context IDs:
+Responses include an `ark` field with query metadata including status, token usage, and conversation ID:
 
 <Tabs items={['Non-streaming', 'Streaming']}>
   <Tabs.Tab>
@@ -201,8 +201,8 @@ Responses include an `ark` field with query metadata including status, token usa
     )
 
     print(response.choices[0].message.content)
-    # Access A2A context ID for multi-turn conversations
-    context_id = response.ark['completedQuery']['status']['a2a']['contextId']
+    # Access conversation ID for multi-turn conversations
+    conversation_id = response.ark['completedQuery']['status']['conversationId']
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -220,7 +220,7 @@ Responses include an `ark` field with query metadata including status, token usa
 
         # Final chunk contains complete query object
         if hasattr(chunk, 'ark') and chunk.ark.get('completedQuery'):
-            context_id = chunk.ark['completedQuery']['status']['a2a']['contextId']
+            conversation_id = chunk.ark['completedQuery']['status']['conversationId']
     ```
   </Tabs.Tab>
 </Tabs>
