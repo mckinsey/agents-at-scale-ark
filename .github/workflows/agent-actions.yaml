@@ -8,6 +8,7 @@ on:
         type: choice
         options:
           - dependabot
+          - triage-prs
         required: true
 
 permissions:
@@ -37,4 +38,30 @@ jobs:
             Skip any PRs that modify .github/workflows/ files (these need manual
             merge due to GitHub token scope requirements) and note them in the PR
             description.
+          claude_args: "--dangerously-skip-permissions --max-turns 30"
+
+  triage-prs:
+    if: inputs.task == 'triage-prs'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.AGENT_ACTIONS_ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.AGENT_ACTIONS_GH_TOKEN }}
+          prompt: |
+            List all open PRs in this repo using gh pr list. For each PR, check
+            the diff with gh pr diff. If the PR touches RBAC, security, auth,
+            permissions, roles, or secrets (look for changes to RBAC manifests,
+            auth middleware, token handling, secret references, ClusterRole,
+            Role, RoleBinding, ServiceAccount permissions, or security policies),
+            add a comment on the PR:
+
+            "@dwmkerr FYI please assess for security"
+
+            Only comment once per PR — check existing comments first with
+            gh pr view --comments to avoid duplicates. Skip Dependabot PRs.
           claude_args: "--dangerously-skip-permissions --max-turns 30"
