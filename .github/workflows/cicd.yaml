@@ -345,7 +345,7 @@ jobs:
         run: make libs-test-all
 
       - name: Upload library artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: out-libs-${{ github.sha }}
           path: out/
@@ -767,7 +767,7 @@ jobs:
 
       - name: Upload test screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ui-test-screenshots-${{ github.sha }}
           path: tests/pytest/ui-tests/screenshots/
@@ -847,7 +847,7 @@ jobs:
 
       - name: Upload CLI test logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cli-test-logs-${{ github.sha }}
           path: tests/pytest/cli-tests/tests/*.log
@@ -885,7 +885,7 @@ jobs:
           helm package .
 
       - name: Upload ${{ matrix.chart.name }} Chart
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.chart.name }}-${{ github.sha }}
           path: ${{ matrix.chart.path }}/${{ matrix.chart.name }}-*.tgz
@@ -967,7 +967,7 @@ jobs:
           ls -la ../../out/ark-cli.tgz
 
       - name: Upload ARK CLI Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ark-cli-${{ github.sha }}
           path: out/ark-cli.tgz
@@ -1304,7 +1304,7 @@ jobs:
 
       - name: Upload verification test logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ark-installation-verification-logs-${{ github.sha }}
           path: tests/pytest/*.log
