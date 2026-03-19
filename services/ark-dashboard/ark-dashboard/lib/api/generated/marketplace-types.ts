@@ -8,6 +8,7 @@ export interface MarketplaceItem {
   version: string;
   author: string;
   repository?: string;
+  source?: string;
   documentation?: string;
   installCommand?: string;
   status: MarketplaceItemStatus;
