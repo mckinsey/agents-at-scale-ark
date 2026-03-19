@@ -5,6 +5,7 @@ package completions
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"text/template"
 
@@ -837,6 +838,132 @@ func TestLoadSelectorAgent_RequiresSelectorSpec(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "selector agent must be specified")
+}
+
+func TestSelectMember_SelectorPrompt(t *testing.T) {
+	enableTerminate := true
+	disableTerminate := false
+
+	members := []TeamMember{
+		&mockTeamMember{name: "agent1"},
+	}
+
+	tests := []struct {
+		name               string
+		selector           *arkv1alpha1.TeamSelectorSpec
+		wantPromptPrefix   string
+		wantPromptContains string
+		wantNoPrefix       string
+	}{
+		{
+			name:               "default selector prompt when no selector spec",
+			selector:           nil,
+			wantPromptContains: "role play game",
+		},
+		{
+			name: "custom selector prompt",
+			selector: &arkv1alpha1.TeamSelectorSpec{
+				SelectorPrompt: "Custom prompt: {{.Participants}}",
+			},
+			wantPromptContains: "Custom prompt:",
+		},
+		{
+			name: "default terminate prompt prepended when enableTerminateTool is true",
+			selector: &arkv1alpha1.TeamSelectorSpec{
+				EnableTerminateTool: &enableTerminate,
+			},
+			wantPromptPrefix:   defaultTerminatePrompt,
+			wantPromptContains: "role play game",
+		},
+		{
+			name: "custom terminate prompt prepended when provided",
+			selector: &arkv1alpha1.TeamSelectorSpec{
+				EnableTerminateTool: &enableTerminate,
+				TerminatePrompt:     "Call stop() when done.",
+			},
+			wantPromptPrefix:   "Call stop() when done.",
+			wantPromptContains: "role play game",
+		},
+		{
+			name: "terminate prompt not prepended when enableTerminateTool is false",
+			selector: &arkv1alpha1.TeamSelectorSpec{
+				EnableTerminateTool: &disableTerminate,
+				TerminatePrompt:     "Call stop() when done.",
+			},
+			wantPromptContains: "role play game",
+			wantNoPrefix:       "Call stop() when done.",
+		},
+		{
+			name: "terminate prompt not prepended when enableTerminateTool is nil",
+			selector: &arkv1alpha1.TeamSelectorSpec{
+				TerminatePrompt: "Call stop() when done.",
+			},
+			wantPromptContains: "role play game",
+			wantNoPrefix:       "Call stop() when done.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockSelector := &mockSelectorAgent{returnName: "agent1"}
+			team := &Team{
+				Members:       members,
+				Selector:      tt.selector,
+				selectorAgent: mockSelector,
+			}
+
+			ctx := context.Background()
+			tmpl, err := team.setupSelectorTemplate()
+			require.NoError(t, err)
+
+			_, _ = team.selectMember(ctx, []Message{}, tmpl, "agent1", "agent1", members)
+
+			require.NotEmpty(t, mockSelector.capturedHistory)
+			require.NotNil(t, mockSelector.capturedHistory[0].OfSystem)
+			prompt := mockSelector.capturedHistory[0].OfSystem.Content.OfString.Value
+
+			assert.Contains(t, prompt, tt.wantPromptContains)
+
+			if tt.wantPromptPrefix != "" {
+				assert.True(t, strings.HasPrefix(prompt, tt.wantPromptPrefix),
+					"expected prompt to start with %q, got: %q", tt.wantPromptPrefix, prompt)
+			}
+
+			if tt.wantNoPrefix != "" {
+				assert.False(t, strings.HasPrefix(prompt, tt.wantNoPrefix),
+					"expected prompt NOT to start with %q", tt.wantNoPrefix)
+			}
+		})
+	}
+}
+
+func TestSelectMember_TerminatePromptFormat(t *testing.T) {
+	enableTerminate := true
+	members := []TeamMember{&mockTeamMember{name: "agent1"}}
+
+	mockSelector := &mockSelectorAgent{returnName: "agent1"}
+	team := &Team{
+		Members: members,
+		Selector: &arkv1alpha1.TeamSelectorSpec{
+			EnableTerminateTool: &enableTerminate,
+			TerminatePrompt:     "Custom terminate.",
+		},
+		selectorAgent: mockSelector,
+	}
+
+	ctx := context.Background()
+	tmpl, err := team.setupSelectorTemplate()
+	require.NoError(t, err)
+
+	_, _ = team.selectMember(ctx, []Message{}, tmpl, "agent1", "agent1", members)
+
+	require.NotEmpty(t, mockSelector.capturedHistory)
+	prompt := mockSelector.capturedHistory[0].OfSystem.Content.OfString.Value
+
+	parts := strings.SplitN(prompt, "\n\n", 2)
+	require.Len(t, parts, 2, "expected terminate prompt and selector prompt separated by double newline")
+	assert.Equal(t, "Custom terminate.", parts[0])
+	assert.Contains(t, parts[1], "role play game")
 }
 
 func TestExecuteSelector_WithInvalidAgentSelection(t *testing.T) {
