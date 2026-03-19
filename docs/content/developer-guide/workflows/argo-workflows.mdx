@@ -147,8 +147,7 @@ argo template list
 
 # Run a workflow.
 argo submit --from workflowtemplate/query-fanout-template \
-  -p question="Describe how to monitor argo workflows from the command-line" \
-  -p evaluator-model="default"
+  -p question="Describe how to monitor argo workflows from the command-line"
 
 # Watch workflow progress
 argo watch @latest
@@ -164,7 +163,7 @@ This workflow demonstrates how to run Ark and Argo operations:
 2. Lists Ark models
 3. Fan-out a workflow into a step per model
 4. Run Ark queries
-5. Fan-in and evalate results (quality, token count, etc)
+5. Fan-in and compare results (quality, token count, etc)
 
 ## Samples
 

@@ -14,16 +14,14 @@ dependencies:
     path: ./services/ark-api
   ark-dashboard:
     path: ./services/ark-dashboard
-  argo-workflows:
-    path: ./services/argo-workflows
+#  argo-workflows:
+#    path: ./services/argo-workflows
 #  ark-api-a2a:
 #    path: ./services/ark-api-a2a
 #  ark-mcp:
 #    path: ./services/ark-mcp
 #  mcp-filesystem:
 #    path: ./mcp/filesystem-mcp
-#  ark-evaluator:
-#    path: ./services/ark-evaluator
 # Observability services. Uncomment to enable locally. Only phoenix or langfuse is needed
 # phoenix service for observability. phoenix has a hook to restart ark-controller to pick up its url
 # phoenix:
@@ -56,6 +54,17 @@ vars:
 commands:
   routes:
     ./services/localhost-gateway/scripts/show-routes.sh
+  routes-forward: |-
+    kill $(lsof -ti :8080) 2>/dev/null || true
+    echo "Starting port-forward on localhost:8080..."
+    nohup kubectl port-forward -n ark-system service/localhost-gateway-nginx 8080:80 > /dev/null 2>&1 &
+    sleep 1
+    PID=$(lsof -ti :8080)
+    if [ -n "$PID" ]; then
+      echo "Port-forward running in background (PID: $PID)"
+    else
+      echo "Failed to start port-forward. Is the gateway deployed?"
+    fi
 
 profiles:
   - name: enable-cert-manager
@@ -129,6 +138,11 @@ pipelines:
     fi
 
     run_dependency_pipelines --all --exclude ark-controller --pipeline=deploy
+
+    echo ""
+    echo "All services deployed. Streaming logs from namespace ${DEVSPACE_NAMESPACE} (Ctrl+C to stop)..."
+    echo ""
+    kubectl logs -f -n "${DEVSPACE_NAMESPACE}" --all-containers --prefix --max-log-requests=10 -l app
   dev: |-
 
     if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then

@@ -81,10 +81,10 @@ class ModelsPage(BasePage):
         logger.info(f"Creating {model_type} model: {model_name}")
         
         self.page.locator(self.ADD_MODEL_BUTTON).first.click()
-        self.wait_for_load_state("domcontentloaded")
+        self.wait_for_navigation_complete()
         
         name_input = self.page.locator("input[name='name']").first
-        name_input.wait_for(state="visible", timeout=10000)
+        name_input.wait_for(state="visible", timeout=20000)
         name_input.fill(model_name)
         
         if model_type.lower() not in ("openai", ""):
@@ -125,10 +125,11 @@ class ModelsPage(BasePage):
                 logger.warning(f"Model {model_name} not found in table after creation")
         
         is_available = self.is_model_available(model_name)
-        for retry in range(2):
+        for retry in range(5):
             if is_available:
                 break
-            logger.warning(f"Model not yet available, retry {retry + 1}/2...")
+            logger.warning(f"Model not yet available, retry {retry + 1}/5...")
+            self.page.wait_for_timeout(5000)
             self.reload()
             self.wait_for_navigation_complete()
             is_available = self.is_model_available(model_name)

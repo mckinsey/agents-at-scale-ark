@@ -11,9 +11,7 @@ ResourceType = Literal[
     "queries",
     "a2a",
     "mcpservers",
-    "workflows",
-    "evaluators",
-    "evaluations"
+    "workflows"
 ]
 
 ALL_RESOURCE_TYPES = list(get_args(ResourceType))

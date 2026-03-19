@@ -35,6 +35,15 @@ type QueryTarget struct {
 	Name string `json:"name"`
 }
 
+// QueryRef references a Query resource by name and namespace.
+type QueryRef struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+	// +kubebuilder:validation:Optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
 type MemoryRef struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1

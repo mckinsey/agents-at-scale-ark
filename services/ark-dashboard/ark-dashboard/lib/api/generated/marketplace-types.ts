@@ -8,6 +8,7 @@ export interface MarketplaceItem {
   version: string;
   author: string;
   repository?: string;
+  source?: string;
   documentation?: string;
   installCommand?: string;
   status: MarketplaceItemStatus;
@@ -34,7 +35,8 @@ export type MarketplaceItemType =
   | 'service'
   | 'component'
   | 'template'
-  | 'plugin';
+  | 'plugin'
+  | 'demo';
 
 export type MarketplaceItemStatus =
   | 'available'

@@ -34,8 +34,6 @@ func TestRegistryTypeConverter_NewObject(t *testing.T) {
 		{"Tool", &arkv1alpha1.Tool{}},
 		{"Memory", &arkv1alpha1.Memory{}},
 		{"MCPServer", &arkv1alpha1.MCPServer{}},
-		{"Evaluation", &arkv1alpha1.Evaluation{}},
-		{"Evaluator", &arkv1alpha1.Evaluator{}},
 		{"A2ATask", &arkv1alpha1.A2ATask{}},
 		{"A2AServer", &arkv1prealpha1.A2AServer{}},
 		{"ExecutionEngine", &arkv1prealpha1.ExecutionEngine{}},

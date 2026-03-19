@@ -5,7 +5,7 @@ description: Comprehensive testing guide for ARK applications using Chainsaw and
 
 # End-to-End Testing
 
-ARK uses [Chainsaw](https://github.com/kyverno/chainsaw) to declaratively create resources, run scripts, and validate resources. For example, we can create agents, teams, and queries and validate the statuses of each and the success state of a query or evaluation.
+ARK uses [Chainsaw](https://github.com/kyverno/chainsaw) to declaratively create resources, run scripts, and validate resources. For example, we can create agents, teams, and queries and validate the statuses of each and the success state of a query.
 
 ## Setup
 
@@ -41,8 +41,6 @@ k3d cluster create ark-e2e
 # Run LLM tests. Requires model credentials to be configured.
 (cd tests && chainsaw test --selector 'llm')
 
-# Run evaluated tests (requires evals to be setup)
-(cd tests && chainsaw test --selector 'evaluated')
 ```
 
 ### Model Tests
@@ -228,21 +226,6 @@ queries                      | ✅ Passed
 models                       | ✅ Passed
 
 ```
-3. **Include the evaluation summary with the `--append-evals` flag:**
-
-   ```bash
-    python3 scripts/chainsaw_summary.py --append-evals 
-   ```
-
-#### Example Output
-
-```
-Evaluation                | Score     | Evaluator
---------------------------------------------------
-chicago-weather-query     | 30       | evaluator-llm
-research-query            | 95       | evaluator-llm
-```
-
 ### Common Issues
 
 **Environment Variables Not Set**

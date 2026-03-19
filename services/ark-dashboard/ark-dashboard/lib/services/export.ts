@@ -15,13 +15,8 @@ export type TeamListResponse = components['schemas']['TeamListResponse'];
 export type QueryListResponse = components['schemas']['QueryListResponse'];
 export type MCPServerListResponse =
   components['schemas']['MCPServerListResponse'];
-export type EvaluatorListResponse =
-  components['schemas']['EvaluatorListResponse'];
 export type A2AServerListResponse =
   components['schemas']['A2AServerListResponse'];
-// Note: WorkflowTemplateListResponse doesn't exist in current API
-export type EvaluationListResponse =
-  components['schemas']['EvaluationListResponse'];
 
 // Export configuration types
 export interface ExportConfig {
@@ -32,8 +27,6 @@ export interface ExportConfig {
   a2a?: boolean;
   mcp?: boolean;
   workflows?: boolean;
-  evaluators?: boolean;
-  evaluations?: boolean;
 }
 
 export interface ExportItem {
@@ -51,8 +44,6 @@ export interface ResourceExportData {
   a2a?: ExportItem[];
   mcpservers?: ExportItem[];
   workflows?: ExportItem[];
-  evaluators?: ExportItem[];
-  evaluations?: ExportItem[];
 }
 
 export type ResourceType =
@@ -63,8 +54,7 @@ export type ResourceType =
   | 'a2a'
   | 'mcpservers'
   | 'workflows'
-  | 'evaluators'
-  | 'evaluations';
+;
 
 // Export request/response types
 export interface ExportRequest {
@@ -102,8 +92,6 @@ export const exportService = {
       apiClient.get<QueryListResponse>('/api/v1/queries'),
       apiClient.get<A2AServerListResponse>('/api/v1/a2a-servers'),
       apiClient.get<MCPServerListResponse>('/api/v1/mcp-servers'),
-      apiClient.get<EvaluatorListResponse>('/api/v1/evaluators'),
-      apiClient.get<EvaluationListResponse>('/api/v1/evaluations'),
       workflowTemplatesService.list(),
     ]);
 

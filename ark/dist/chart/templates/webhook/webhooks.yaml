@@ -97,27 +97,6 @@ webhooks:
           - v1alpha1
         resources:
           - agents
-  - name: vevaluator-v1alpha1.kb.io
-    clientConfig:
-      service:
-        name: ark-webhook-service
-        namespace: {{ .Release.Namespace }}
-        path: /validate-ark-mckinsey-com-v1alpha1-evaluator
-    failurePolicy: {{ .Values.webhook.failurePolicy | default "Fail" }}
-    timeoutSeconds: {{ .Values.webhook.timeoutSeconds | default 10 }}
-    sideEffects: None
-    admissionReviewVersions:
-      - v1
-    rules:
-      - operations:
-          - CREATE
-          - UPDATE
-        apiGroups:
-          - ark.mckinsey.com
-        apiVersions:
-          - v1alpha1
-        resources:
-          - evaluators
   - name: vmcpserver-v1.kb.io
     clientConfig:
       service:

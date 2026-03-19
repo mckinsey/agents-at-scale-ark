@@ -10,8 +10,6 @@ resources:
 - bases/ark.mckinsey.com_teams.yaml
 - bases/ark.mckinsey.com_a2aservers.yaml
 - bases/ark.mckinsey.com_mcpservers.yaml
-- bases/ark.mckinsey.com_evaluators.yaml
-- bases/ark.mckinsey.com_evaluations.yaml
 # Pre-alpha resources
 - bases/ark.mckinsey.com_executionengines.yaml
 # Alpha resources (Memory)
