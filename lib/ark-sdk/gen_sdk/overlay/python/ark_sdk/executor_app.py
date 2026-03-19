@@ -47,9 +47,12 @@ class A2AExecutorAdapter(AgentExecutor):
 
     async def execute(self, context: Any, event_queue: EventQueue) -> None:
         user_text = context.get_user_input()
+        conversation_id = ""
+        if hasattr(context.message, "context_id") and context.message.context_id:
+            conversation_id = context.message.context_id
 
         query_ref = extract_query_ref(context.message)
-        request = await resolve_query(query_ref, user_text)
+        request = await resolve_query(query_ref, user_text, conversation_id=conversation_id)
 
         try:
             response_messages = await self.executor.execute_agent(request)
@@ -58,13 +61,14 @@ class A2AExecutorAdapter(AgentExecutor):
                 if msg.role == "assistant" and msg.content:
                     response_text += msg.content
 
-            await event_queue.enqueue_event(
-                A2AMessage(
-                    role="agent",
-                    parts=[Part(root=TextPart(text=response_text))],
-                    message_id=context.message.message_id + "-response" if hasattr(context.message, "message_id") else "response",
-                )
+            response_msg = A2AMessage(
+                role="agent",
+                parts=[Part(root=TextPart(text=response_text))],
+                message_id=context.message.message_id + "-response" if hasattr(context.message, "message_id") else "response",
             )
+            if conversation_id:
+                response_msg.context_id = conversation_id
+            await event_queue.enqueue_event(response_msg)
         except Exception as e:
             logger.error(f"Execution failed: {e}", exc_info=True)
             await event_queue.enqueue_event(
