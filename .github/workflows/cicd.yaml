@@ -106,23 +106,30 @@ jobs:
             echo "New violations found:"
             echo "$NEW_VIOLATIONS"
 
-            # Export NEW_VIOLATIONS for use in next step
-            echo "NEW_VIOLATIONS<<EOF" >> $GITHUB_ENV
-            echo "$NEW_VIOLATIONS" >> $GITHUB_ENV
-            echo "EOF" >> $GITHUB_ENV
-
             echo "Checking new violations against whitelist..."
-              while read -r violation; do
-                if ! grep -q "$violation" "$WHITELIST"; then
-                  echo "New violation not whitelisted: $violation"
-                  FAIL=1
-                fi
-              done <<< "$NEW_VIOLATIONS"
-
-              if [ "$FAIL" -eq 1 ]; then
-                echo "❌ Failing due to unwhitelisted new violations."
-                exit 1
+            FILTERED_VIOLATIONS=""
+            while read -r violation; do
+              if grep -q "$violation" "$WHITELIST"; then
+                echo "Whitelisted violation (skipping): $violation"
+              else
+                echo "New violation not whitelisted: $violation"
+                FILTERED_VIOLATIONS="${FILTERED_VIOLATIONS}${violation}"$'\n'
+                FAIL=1
               fi
+            done <<< "$NEW_VIOLATIONS"
+            NEW_VIOLATIONS="$FILTERED_VIOLATIONS"
+
+            # Export only unwhitelisted violations for use in next step
+            if [ -n "$NEW_VIOLATIONS" ]; then
+              echo "NEW_VIOLATIONS<<EOF" >> $GITHUB_ENV
+              printf '%s' "$NEW_VIOLATIONS" >> $GITHUB_ENV
+              echo "EOF" >> $GITHUB_ENV
+            fi
+
+            if [ "$FAIL" -eq 1 ]; then
+              echo "❌ Failing due to unwhitelisted new violations."
+              exit 1
+            fi
           elif [ -n "$REMOVED_VIOLATIONS" ]; then
             echo "The following violations were eliminated: $REMOVED_VIOLATIONS."
           else
