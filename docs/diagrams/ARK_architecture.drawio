@@ -94,7 +94,7 @@
         <mxCell id="19-sXC8jk-j0Vb7tvCS7-6" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
           <mxGeometry x="190" y="366.01999666722213" width="120" height="59.98000333277788" as="geometry" />
         </mxCell>
-        <mxCell id="6zsBtuXpNgQ3kBbkU9dt-118" value="&lt;div style=&quot;line-height: normal; margin: 3pt 0in; text-indent: 0in; direction: ltr; unicode-bidi: embed; word-break: normal;&quot; class=&quot;O0&quot;&gt;ARK evaluator&lt;/div&gt;" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" parent="1" vertex="1">
+        <mxCell id="6zsBtuXpNgQ3kBbkU9dt-118" value="" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" parent="1" vertex="1">
           <mxGeometry x="-634" y="380" width="88" height="30" as="geometry" />
         </mxCell>
         <mxCell id="6zsBtuXpNgQ3kBbkU9dt-194" value="tenant namespace(s)" style="text;html=1;whiteSpace=wrap;strokeColor=default;fillColor=default;align=center;verticalAlign=middle;rounded=0;" parent="1" vertex="1">
@@ -250,7 +250,7 @@
         <mxCell id="6zsBtuXpNgQ3kBbkU9dt-227" value="Tools" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
           <mxGeometry x="-220" y="510" width="100" height="40" as="geometry" />
         </mxCell>
-        <mxCell id="6zsBtuXpNgQ3kBbkU9dt-230" value="Evaluators/&lt;br&gt;Evaluations" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+        <mxCell id="6zsBtuXpNgQ3kBbkU9dt-230" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;" parent="1" vertex="1">
           <mxGeometry x="-112" y="510" width="100" height="40" as="geometry" />
         </mxCell>
         <mxCell id="6zsBtuXpNgQ3kBbkU9dt-228" value="MCP Servers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">

@@ -1,8 +1,9 @@
 'use client';
 
-import { Bot, Check, Copy, Loader2, Server, Terminal } from 'lucide-react';
+import { Bot, Check, Copy, ExternalLink, Loader2, Server, Terminal } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import copyToClipboard from 'copy-to-clipboard';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -214,26 +215,38 @@ export function MarketplaceItemCard({
         <div className="flex w-full items-center justify-between">
           <div className="text-xs text-muted-foreground">v{item.version}</div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8"
-            onClick={handleInstall}
-            disabled={isInstalling || localStatus === 'installed'}>
-            {localStatus === 'installed' && (
-              <>
-                Installed
-                <Check className="ml-1 h-3 w-3" />
-              </>
-            )}
-            {isInstalling && localStatus !== 'installed' && (
-              <>
-                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                Loading...
-              </>
-            )}
-            {!isInstalling && localStatus !== 'installed' && 'Get'}
-          </Button>
+          {item.type === 'demo' ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={() => item.repository && window.open(item.repository, '_blank')}
+              disabled={!item.repository}>
+              View
+              <ExternalLink className="ml-1 h-3 w-3" />
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={handleInstall}
+              disabled={isInstalling || localStatus === 'installed'}>
+              {localStatus === 'installed' && (
+                <>
+                  Installed
+                  <Check className="ml-1 h-3 w-3" />
+                </>
+              )}
+              {isInstalling && localStatus !== 'installed' && (
+                <>
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                  Loading...
+                </>
+              )}
+              {!isInstalling && localStatus !== 'installed' && 'Get'}
+            </Button>
+          )}
         </div>
       </CardFooter>
 
@@ -262,11 +275,11 @@ function InstallCommandDialog({
   };
   itemName: string;
 }) {
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
+  const handleCopy = (text: string) => {
+    const success = copyToClipboard(text);
+    if (success) {
       toast.success('Command copied to clipboard');
-    } catch {
+    } else {
       toast.error('Failed to copy to clipboard');
     }
   };
@@ -298,7 +311,7 @@ function InstallCommandDialog({
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => copyToClipboard(installCommand.arkCommand!)}>
+                  onClick={() => handleCopy(installCommand.arkCommand!)}>
                   <Copy className="h-4 w-4" />
                 </Button>
               </div>
@@ -315,7 +328,7 @@ function InstallCommandDialog({
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => copyToClipboard(installCommand.helmCommand!)}>
+                  onClick={() => handleCopy(installCommand.helmCommand!)}>
                   <Copy className="h-4 w-4" />
                 </Button>
               </div>

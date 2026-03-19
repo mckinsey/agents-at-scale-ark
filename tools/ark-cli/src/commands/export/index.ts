@@ -13,7 +13,6 @@ const RESOURCE_ORDER = [
   'models',
   'agents',
   'teams',
-  'evaluators',
   'mcpservers',
   'a2aservers',
 ];

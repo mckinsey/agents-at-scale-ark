@@ -50,7 +50,7 @@ SLEEP_INTERVAL=2
 for i in $(seq 1 $MAX_PERMISSION_ATTEMPTS); do
   echo "Attempt $i/$MAX_PERMISSION_ATTEMPTS: Checking if permissions are active..."
 
-  # Test if the service account can get queries (critical permission for evaluator)
+  # Test if the service account can get queries
   if kubectl auth can-i get queries.ark.mckinsey.com \
     --as="system:serviceaccount:${SA_NAMESPACE}:${SERVICE_ACCOUNT}" \
     -n "$CHECK_NAMESPACE" >/dev/null 2>&1; then

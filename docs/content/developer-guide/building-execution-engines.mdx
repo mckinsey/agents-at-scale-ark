@@ -29,7 +29,7 @@ class MyExecutor(BaseExecutor):
         # request.agent has the agent config (name, prompt, model, parameters)
         # request.userInput has the user message
         # request.tools has available tool definitions
-        # request.history has conversation history
+        # request.conversationId has the conversation threading ID (from A2A contextId)
         prompt = self._resolve_prompt(request.agent)
         return [Message(role="assistant", content=f"Echo: {request.userInput.content}")]
 
@@ -57,9 +57,9 @@ The engine serves an agent card at `/.well-known/agent-card.json` that declares 
 When Ark dispatches a query to your engine:
 
 1. The A2A message carries a `QueryRef` (name + namespace) via the query extension
-2. The SDK extracts the QueryRef and fetches the full Query CRD from the cluster
-3. The SDK resolves the agent config, model, tools, and history from the Query's target
-4. Your `execute_agent()` receives a fully populated `ExecutionEngineRequest`
+2. The SDK extracts the QueryRef and the A2A `contextId` (conversation threading)
+3. The SDK fetches the Query CRD and resolves agent config, model, and tools
+4. Your `execute_agent()` receives a fully populated `ExecutionEngineRequest` with `conversationId`
 
 You never interact with the extension directly — the SDK handles resolution transparently.
 
@@ -116,6 +116,22 @@ spec:
 
 Without this annotation, streaming requests are handled transparently — clients still receive a valid SSE response, just without incremental chunks.
 
+## Conversation Threading
+
+When a query includes `spec.conversationId`, the controller sends it to your engine as the A2A `contextId`. The SDK extracts it and populates `request.conversationId`.
+
+Use this for stateful engines that need multi-turn support:
+
+```python
+class StatefulExecutor(BaseExecutor):
+    async def execute_agent(self, request: ExecutionEngineRequest) -> list[Message]:
+        session = self.get_or_create_session(request.conversationId)
+        response = session.process(request.userInput.content)
+        return [Message(role="assistant", content=response)]
+```
+
+If `conversationId` is empty, the query is a single-turn interaction. The conversation ID returned via A2A response is stored in `status.conversationId` for clients to use in follow-up queries.
+
 ## Key Types
 
 Import from `ark_sdk.executor`:
@@ -123,7 +139,7 @@ Import from `ark_sdk.executor`:
 | Type | Purpose |
 |------|---------|
 | `BaseExecutor` | Abstract base class — implement `execute_agent()` |
-| `ExecutionEngineRequest` | Input to your executor (agent, tools, history, userInput) |
+| `ExecutionEngineRequest` | Input to your executor (agent, tools, userInput, conversationId) |
 | `AgentConfig` | Agent name, namespace, prompt, model, parameters |
 | `Message` | Conversation message (role + content) |
 | `ToolDefinition` | Tool name, description, parameters schema |

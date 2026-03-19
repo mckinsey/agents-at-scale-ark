@@ -26,20 +26,6 @@ export {
   type MemoryUpdateRequest,
 } from './memories';
 export { namespacesService, type Namespace } from './namespaces';
-export {
-  evaluationsService,
-  type Evaluation,
-  type EvaluationDetailResponse,
-  type EvaluationFilter,
-  type QueryEvaluationSummary,
-} from './evaluations';
-export {
-  evaluatorsService,
-  type Evaluator,
-  type EvaluatorDetailResponse,
-  type EvaluatorCreateRequest,
-  type EvaluatorUpdateRequest,
-} from './evaluators';
 export { enginesService, type Engine } from './engines';
 export { mcpServersService, type MCPServer } from './mcp-servers';
 export { toolsService, type Tool } from './tools';

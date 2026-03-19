@@ -59,6 +59,7 @@ def extract_query_ref(message: Any) -> QueryRef:
 async def resolve_query(
     query_ref: QueryRef,
     user_input: str,
+    conversation_id: str = "",
 ) -> ExecutionEngineRequest:
     """Resolve a QueryRef into a full ExecutionEngineRequest by fetching CRDs from the cluster.
 
@@ -71,10 +72,10 @@ async def resolve_query(
     await init_k8s()
     async with with_ark_client(query_ref.namespace, V1_ALPHA1) as ark:
         query = await ark.queries.a_get(query_ref.name, query_ref.namespace)
-        return await _resolve_from_query(ark, query, query_ref.namespace, user_input)
+        return await _resolve_from_query(ark, query, query_ref.namespace, user_input, conversation_id)
 
 
-async def _resolve_from_query(ark, query, namespace: str, user_input: str) -> ExecutionEngineRequest:
+async def _resolve_from_query(ark, query, namespace: str, user_input: str, conversation_id: str = "") -> ExecutionEngineRequest:
     target = query.spec.target
     if not target:
         raise ValueError(f"Query '{query.metadata['name']}' has no target")
@@ -87,13 +88,12 @@ async def _resolve_from_query(ark, query, namespace: str, user_input: str) -> Ex
     agent = await ark.agents.a_get(target.name, namespace)
     agent_config = await _build_agent_config(ark, agent, query, namespace)
     tools = await _build_tool_definitions(ark, agent, namespace)
-    history = _build_history()
 
     return ExecutionEngineRequest(
         agent=agent_config,
         userInput=Message(role="user", content=user_input),
-        history=history,
         tools=tools,
+        conversationId=conversation_id,
     )
 
 
@@ -307,5 +307,3 @@ async def _build_tool_definitions(ark, agent, namespace: str) -> List[ToolDefini
     return tools
 
 
-def _build_history() -> List[Message]:
-    return []

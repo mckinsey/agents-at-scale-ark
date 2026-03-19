@@ -65,7 +65,6 @@ Pydantic model class names **MUST be globally unique** across all model files. W
 | File | Naming Pattern | Examples |
 |------|---------------|----------|
 | `agents.py` | `Agent*` | `AgentHeader`, `AgentValueFrom`, `AgentParameter` |
-| `evaluators.py` | `Evaluator*` | `EvaluatorParameter`, `EvaluatorValueSource` |
 | `mcp_servers.py` | `MCPServer*` | `MCPServerHeader`, `MCPServerValueSource` |
 | `queries.py` | `Query*` | `QueryParameter`, `QueryLabelSelector` |
 | `models.py` | `Model*` | `ModelValueSource` |

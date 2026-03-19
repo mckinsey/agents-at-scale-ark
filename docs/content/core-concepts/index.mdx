@@ -9,7 +9,6 @@ ARK is a platform designed to provide reliable, production-grade infrastructure 
 - [Platform-agnostic agent operations](../reference/query-execution).
 - [Standardized deployment patterns](../operations-guide/deploying-ark).
 - [Transparent orchestration](../developer-guide/observability).
-- [Built-in evaluation capabilities](../reference/evaluations/evaluations).
 - [Extensible tool integration](../reference/resources/tools).
 - [Multi-agent coordination](../user-guide/teams).
 - [Custom headers support](../user-guide/overrides) (e.g., request tracing, custom metadata).
@@ -41,8 +40,6 @@ ARK's core resources represent the fundamental abstractions for building agentic
 - [**Tools**](../user-guide/tools/): Define custom tools and MCP tool references for agents.
 - [**MCPServers**](../user-guide/tools/): Configure Model Context Protocol servers for external integrations.
 - **Memory**: Persistent storage for agent conversations and state.
-- **Evaluator**: Services for assessing and scoring agent performance.
-- **Evaluation**: Define evaluation configurations and results.
 - **ExecutionEngine**: Specialized runtimes for different agent frameworks.
 - **A2AServer**: Agent-to-agent communication services.
 
@@ -60,7 +57,6 @@ ARK includes supporting services that extend the platform's capabilities:
 - **ark-api**: REST API for managing ARK resources (includes A2A Gateway for agent-to-agent communication).
 - **ark-dashboard**: Web-based management interface.
 - **ark-mcp**: MCP server integration service.
-- **ark-evaluator**: Holistic evaluation and scoring service.
 - **localhost-gateway**: Local development gateway (only on local).
 - **ark-broker**: Memory storage with streaming support.
 

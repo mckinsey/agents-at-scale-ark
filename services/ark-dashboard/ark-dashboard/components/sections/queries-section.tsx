@@ -13,7 +13,6 @@ import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { toast } from 'sonner';
 
 import { NamespacedLink } from '@/components/namespaced-link';
-import { EvaluationStatusIndicator } from '@/components/evaluation';
 import { Button } from '@/components/ui/button';
 import {
   Empty,
@@ -377,9 +376,6 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(
                         <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
                           Token Usage (Prompt / Completion)
                         </th>
-                        <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
-                          Evaluations
-                        </th>
                         <th className="px-3 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">
                           Status
                         </th>
@@ -392,7 +388,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(
                       {sortedQueries.length === 0 ? (
                         <tr>
                           <td
-                            colSpan={11}
+                            colSpan={10}
                             className="px-3 py-8 text-center text-xs text-gray-500 dark:text-gray-400">
                             <Empty>
                               <EmptyHeader>
@@ -490,14 +486,6 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(
                               </td>
                               <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
                                 {formatTokenUsage(query)}
-                              </td>
-                              <td className="px-3 py-3 align-middle text-sm text-gray-900 dark:text-gray-100">
-                                <div className="flex items-center justify-center">
-                                  <EvaluationStatusIndicator
-                                    queryName={query.name}
-                                    compact={true}
-                                  />
-                                </div>
                               </td>
                               <td className="px-3 py-3 text-center">
                                 {getStatusBadge(getStatus(query), query.name)}

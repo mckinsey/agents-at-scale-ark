@@ -14,8 +14,6 @@ rules:
   - agents
   - a2aservers
   - a2atasks
-  - evaluators
-  - evaluations
   - executionengines
   - mcpservers
   - memories
@@ -39,8 +37,6 @@ rules:
   - agents/status
   - a2aservers/status
   - a2atasks/status
-  - evaluations/status
-  - evaluators/status
   - executionengines/status
   - mcpservers/status
   - memories/status
@@ -51,8 +47,6 @@ rules:
   - agents/finalizers
   - a2aservers/finalizers
   - a2atasks/finalizers
-  - evaluators/finalizers
-  - evaluations/finalizers
   - executionengines/finalizers
   - mcpservers/finalizers
   - memories/finalizers
