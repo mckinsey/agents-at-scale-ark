@@ -59,6 +59,8 @@ Each marketplace item in `marketplace.json` already specifies this metadata:
 
 Dashboard queries Helm release Secrets using label selectors to determine installation status — no Helm CLI required.
 
+**Simplified Detection:** Check if Secret exists with label `status=deployed`. No need to decode Secret data (base64/gzip parsing) — the status is available as a label.
+
 ### Option B: Label-Based Detection
 
 Add standardized labels to marketplace charts, query labeled Deployments.
@@ -102,6 +104,28 @@ kubectl get deployments -n phoenix \
 | **Querying** | Secrets API | Deployments API |
 | **RBAC** | Read secrets | Read deployments |
 
+### Detection Logic
+
+**Priority order** (backward compatible):
+1. Check Ark CRDs first (agents, mcpservers, a2aservers, workflows, models)
+2. If no CRD found, check Helm release (for infrastructure services)
+3. Mark as installed if either exists
+
+**Why this works:**
+- Infrastructure services (phoenix, a2a-inspector, mcp-inspector) don't create Ark CRDs
+- Agent/MCP services create CRDs, so CRD check finds them
+- No conflicts: if service creates a CRD, it's found in step 1
+
+### Performance & Caching
+
+**Current behavior:**
+- Marketplace manifest: Cached 1 hour
+- Installation status: Fetched on-demand (when user visits marketplace page)
+- No continuous polling
+
+**Impact:**
+- Adding Helm Secret query is comparable to existing CRD queries (both use label selectors)
+
 ## Capabilities
 
 ### New Capabilities (Option A)
@@ -116,19 +140,25 @@ kubectl get deployments -n phoenix \
 
 ## Impact
 
+### RBAC
+
+**No changes needed:**
+- Dashboard queries ark-api (not K8s directly)
+- ark-api already has `secrets: [get, list]` permission
+- Existing RBAC is sufficient for Option A
+
 ### Option A: Helm Releases
 
 #### Dashboard (`services/ark-dashboard/ark-dashboard/`)
 
 **`lib/services/marketplace-fetcher.ts`:**
 - `getInstalledMarketplaceItems()` — Add Helm release query alongside CRD checks
-- Query: `GET /api/v1/namespaces/[namespace]/secrets?labelSelector=owner=helm,name=[helmReleaseName]`
-- Parse release status from Secret data (requires base64 decode + gzip decompress)
+- Query: `GET /api/v1/namespaces/[namespace]/secrets?labelSelector=owner=helm,name=[helmReleaseName],status=deployed`
+- Check if Secret exists (no data decoding needed — status is in labels)
 
 **`lib/services/kubernetes.ts` (new):**
-- `checkHelmRelease(releaseName, namespace): Promise<HelmReleaseStatus>` — Helper to query Secrets API
-- Returns: `{ exists: boolean, status: 'deployed' | 'failed' | 'pending' }`
-- Decoding pattern: [base64 → gzip → JSON](https://gist.github.com/DzeryCZ/c4adf39d4a1a99ae6e594a183628eaee)
+- `checkHelmRelease(releaseName, namespace): Promise<boolean>` — Helper to query Secrets API
+- Returns: `boolean` (true if deployed Secret exists)
 
 ### Option B: Labels
 
@@ -160,7 +190,7 @@ global:
 
 **`services/ark-api/src/ark_api/api/v1/helm.py` (new):**
 - `GET /api/v1/helm-releases?namespace=[ns]` — Centralizes Helm release querying
-- Returns: `[{ name, namespace, status, version }]`
+- Returns: `[{ name, namespace, status }]`
 - Dashboard uses this instead of direct K8s Secrets queries
 - Benefits: Centralized RBAC, caching, error handling
 
@@ -176,7 +206,6 @@ global:
 
 **Option A: Helm Release Detection**
 - [Helm Storage Using Secrets](https://codeengineered.com/blog/2020/helm-secret-storage/) - How Helm v3 stores releases as Kubernetes Secrets with standard labels
-- [Decoding Helm Release Data](https://gist.github.com/DzeryCZ/c4adf39d4a1a99ae6e594a183628eaee) - Parsing Helm release status from Secret data (base64 → gzip → JSON)
 
 **Option B: Label-Based Detection**
 - [Labels vs Annotations Best Practices](https://komodor.com/blog/best-practices-guide-for-kubernetes-labels-and-annotations/) - Why labels are queryable and annotations are not
