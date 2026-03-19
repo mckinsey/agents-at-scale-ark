@@ -188,7 +188,6 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
                 : undefined,
             graph: graphEdges.length > 0 ? { edges: graphEdges } : undefined,
           });
-          toast.success('Team created successfully');
           onSuccessRef.current?.();
         }
       } catch (error) {
