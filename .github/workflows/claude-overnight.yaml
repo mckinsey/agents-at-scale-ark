@@ -1,0 +1,44 @@
+name: Claude Overnight Automation
+
+on:
+  schedule:
+    # Run at 2 AM UTC daily (overnight for most team timezones)
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "Task to run (e.g. 'dependabot', 'all')"
+        required: false
+        default: "all"
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  consolidate-dependabot:
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' &&
+       (inputs.task == 'dependabot' || inputs.task == 'all'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.CLAUDE_GH_TOKEN }}
+          prompt: |
+            Use the /dependabot skill to consolidate all open Dependabot PRs
+            into a single integration/dependabot branch and create a consolidated
+            PR into main. If an integration/dependabot branch and PR already exist,
+            merge any new Dependabot PRs into it and update the PR description.
+
+            Skip any PRs that modify .github/workflows/ files (these need manual
+            merge due to GitHub token scope requirements) and note them in the PR
+            description.
+          claude_args: "--dangerously-skip-permissions --max-turns 30"
