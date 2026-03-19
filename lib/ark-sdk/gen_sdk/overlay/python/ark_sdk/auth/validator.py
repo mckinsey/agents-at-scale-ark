@@ -4,8 +4,11 @@ import logging
 import os
 import json
 from typing import Optional, Dict, Any
-from jose import jwt, jwk
-from jose.exceptions import JWTError, ExpiredSignatureError, JWTClaimsError
+import jwt
+from jwt.exceptions import InvalidTokenError, ExpiredSignatureError, InvalidAudienceError, InvalidIssuerError
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa, ec
+from cryptography.hazmat.backends import default_backend
 import requests
 
 from .exceptions import TokenValidationError, InvalidTokenError as AuthInvalidTokenError, ExpiredTokenError
@@ -63,27 +66,52 @@ class TokenValidator:
             self._jwks_cache = self._fetch_jwks()
         return self._jwks_cache
     
+    def _jwk_to_pem(self, jwk_dict: Dict[str, Any]) -> str:
+        """Convert JWK to PEM format."""
+        kty = jwk_dict.get('kty')
+
+        if kty == 'RSA':
+            # RSA key
+            from jwt.algorithms import RSAAlgorithm
+            public_key = RSAAlgorithm.from_jwk(json.dumps(jwk_dict))
+            pem = public_key.public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo
+            )
+            return pem.decode('utf-8')
+        elif kty == 'EC':
+            # EC key
+            from jwt.algorithms import ECAlgorithm
+            public_key = ECAlgorithm.from_jwk(json.dumps(jwk_dict))
+            pem = public_key.public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo
+            )
+            return pem.decode('utf-8')
+        else:
+            raise TokenValidationError(f"Unsupported key type: {kty}")
+
     def _get_signing_key(self, token: str) -> str:
         """Get the signing key for a JWT token from JWKS."""
         try:
             # Decode header to get kid (key ID)
             unverified_header = jwt.get_unverified_header(token)
             kid = unverified_header.get('kid')
-            
+
             if not kid:
                 raise TokenValidationError("Token header does not contain 'kid'")
-            
+
             # Get JWKS
             jwks = self._get_jwks()
-            
+
             # Find the key with matching kid
             for key in jwks.get('keys', []):
                 if key.get('kid') == kid:
-                    # Construct the key
-                    return jwk.construct(key).to_pem().decode('utf-8')
-            
+                    # Convert JWK to PEM
+                    return self._jwk_to_pem(key)
+
             raise TokenValidationError(f"Unable to find key with kid: {kid}")
-            
+
         except Exception as e:
             logger.error(f"Failed to get signing key: {e}")
             raise TokenValidationError(f"Failed to get signing key: {e}")
@@ -94,7 +122,7 @@ class TokenValidator:
 
         Args:
             token: The JWT token to validate
-        
+
         Returns:
             The decoded token payload
 
@@ -132,10 +160,10 @@ class TokenValidator:
         except ExpiredSignatureError as e:
             logger.warning(f"Token expired: {e}")
             raise ExpiredTokenError("Token has expired")
-        except JWTClaimsError as e:
+        except (InvalidAudienceError, InvalidIssuerError) as e:
             logger.warning(f"Invalid token claims: {e}")
             raise AuthInvalidTokenError("Invalid token claims")
-        except JWTError as e:
+        except InvalidTokenError as e:
             logger.warning(f"JWT error: {e}")
             raise AuthInvalidTokenError("Invalid token")
         except Exception as e:
