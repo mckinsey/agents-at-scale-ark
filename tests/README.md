@@ -35,7 +35,6 @@ End-to-end tests for Agents at Scale (ARK) using Chainsaw testing framework.
 
 | Resource Type | Current Tests | Available Samples | Coverage Status |
 |---------------|---------------|-------------------|-----------------|
-| **Evaluator** | 0 | 2+ | 🔴 **No Coverage** |
 | **Memory** | 0 | 1+ | 🔴 **No Coverage** |
 | **MCPServer** | 0 | 3+ | 🔴 **No Coverage** |
 | **ExecutionEngine** | 0 | 3+ | 🔴 **No Coverage** |
@@ -51,11 +50,6 @@ End-to-end tests for Agents at Scale (ARK) using Chainsaw testing framework.
 - [ ] **`memory-basic/`** - Basic postgres memory with session isolation
 - [ ] **`memory-session-continuity/`** - Session continuity across queries  
 - [ ] **`memory-cross-session/`** - Multi-user session isolation
-
-#### Evaluator Integration Tests
-- [ ] **`evaluator-basic/`** - Single LLM evaluator with queries
-- [ ] **`evaluator-multiple/`** - Multiple evaluator selection
-- [ ] **`evaluator-label-selector/`** - Label-based evaluator discovery
 
 #### MCP Server Integration Tests
 - [ ] **`mcp-filesystem/`** - Local filesystem MCP server
@@ -93,8 +87,6 @@ End-to-end tests for Agents at Scale (ARK) using Chainsaw testing framework.
 #### Advanced Query Patterns  
 - [ ] **`query-service-account/`** - Service account integration
 - [ ] **`query-timeout-retry/`** - Timeout and retry logic
-- [ ] **`query-evaluation-flow/`** - Query → Evaluator integration
-
 ### Phase 5: Security & Performance Testing (Weeks 10-11)
 **Priority: LOW - Production readiness**
 
@@ -162,12 +154,10 @@ test-name/
 
 ### Low Complexity (1-2 days each)
 - Memory basic integration tests
-- Single evaluator tests  
 - Filesystem MCP tests
 - Basic graph/selector team tests
 
 ### Medium Complexity (3-5 days each)  
-- Multi-evaluator coordination tests
 - Remote MCP with authentication tests
 - Complex team strategy tests
 - Multi-provider model tests
@@ -205,5 +195,5 @@ When adding new tests:
 
 - **Tests Implemented**: 15+ test scenarios
 - **Resource Types Covered**: 6/9 (67%)
-- **Critical Gaps**: Memory, Evaluator, MCP, ExecutionEngine
-- **Next Priority**: Phase 1 (Memory, Evaluator, MCP integration)
+- **Critical Gaps**: Memory, MCP, ExecutionEngine
+- **Next Priority**: Phase 1 (Memory, MCP integration)

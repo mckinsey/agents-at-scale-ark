@@ -143,16 +143,6 @@ spec:
     - error:
         file: manifests/invalid-tool-mcp-missing-tool-name.yaml
 
-  # Evaluator validation failures
-  - name: test-evaluator-missing-address
-    try:
-    - error:
-        file: manifests/invalid-evaluator-missing-address.yaml
-  - name: test-evaluator-invalid-model
-    try:
-    - error:
-        file: manifests/invalid-evaluator-invalid-model.yaml
-
   # MCPServer validation failures
   - name: test-mcpserver-missing-address
     try:

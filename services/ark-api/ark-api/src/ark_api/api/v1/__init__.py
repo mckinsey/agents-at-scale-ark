@@ -16,8 +16,6 @@ from .conversations import router as conversations_router
 from .system_info import router as system_info_router
 from .ark_services import router as ark_services_router
 from .events import router as events_router
-from .evaluations import router as evaluations_router
-from .evaluators import router as evaluators_router
 from .api_keys import router as api_keys_router
 from .a2a_tasks import router as a2a_tasks_router
 from .resources import router as resources_router
@@ -46,8 +44,6 @@ router.include_router(conversations_router)
 router.include_router(system_info_router)
 router.include_router(ark_services_router)
 router.include_router(events_router)
-router.include_router(evaluations_router)
-router.include_router(evaluators_router)
 router.include_router(api_keys_router)
 router.include_router(resources_router)
 router.include_router(broker_router)

@@ -32,9 +32,8 @@ const (
 	Resources = ARKPrefix + "resources"
 )
 
-// Evaluation annotations
+// Query annotations
 const (
-	Evaluator       = ARKPrefix + "evaluator"
 	Query           = ARKPrefix + "query"
 	Auto            = ARKPrefix + "auto"
 	QueryGeneration = ARKPrefix + "query-generation"

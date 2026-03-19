@@ -35,7 +35,8 @@ export type MarketplaceItemType =
   | 'service'
   | 'component'
   | 'template'
-  | 'plugin';
+  | 'plugin'
+  | 'demo';
 
 export type MarketplaceItemStatus =
   | 'available'

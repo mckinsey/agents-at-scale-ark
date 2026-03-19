@@ -34,8 +34,6 @@ const mockResources = {
   a2a: [],
   mcp: [],
   workflows: [],
-  evaluators: [],
-  evaluations: [],
 };
 
 describe('ExportPage', () => {

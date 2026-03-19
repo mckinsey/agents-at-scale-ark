@@ -117,7 +117,6 @@ docs/content/
 **Organized by type**:
 - **Interfaces**: ARK APIs.
 - **Kubernetes API**: CRDs, resources.
-- **Evaluations**: Guides, event-based evaluations.
 - **System behavior**: Query execution, relationships.
 - **Operations**: Upgrading, troubleshooting.
 - **Project**: Contributors.

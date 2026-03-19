@@ -151,7 +151,6 @@ async def wait_for_query_completion_sdk(
                 "phase": phase,
                 "status": status,
                 "responses": status.get("responses", []),
-                "evaluations": status.get("evaluations", []),
                 "tokenUsage": status.get("tokenUsage", {}),
                 "success": phase == "done"
             }

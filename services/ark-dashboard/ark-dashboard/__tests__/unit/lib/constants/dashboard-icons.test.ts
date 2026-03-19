@@ -13,10 +13,8 @@ describe('dashboard-icons', () => {
       expect(DASHBOARD_SECTIONS.teams).toBeDefined();
       expect(DASHBOARD_SECTIONS.models).toBeDefined();
       expect(DASHBOARD_SECTIONS.secrets).toBeDefined();
-      expect(DASHBOARD_SECTIONS.evaluators).toBeDefined();
       expect(DASHBOARD_SECTIONS['workflow-templates']).toBeDefined();
       expect(DASHBOARD_SECTIONS.queries).toBeDefined();
-      expect(DASHBOARD_SECTIONS.evaluations).toBeDefined();
       expect(DASHBOARD_SECTIONS.events).toBeDefined();
       expect(DASHBOARD_SECTIONS.memory).toBeDefined();
       expect(DASHBOARD_SECTIONS.files).toBeDefined();
@@ -28,7 +26,6 @@ describe('dashboard-icons', () => {
       expect(DASHBOARD_SECTIONS.services).toBeDefined();
       expect(DASHBOARD_SECTIONS['api-keys']).toBeDefined();
       expect(DASHBOARD_SECTIONS.sessions).toBeDefined();
-      expect(DASHBOARD_SECTIONS.evals).toBeDefined();
     });
 
     it('should have correct structure for each section', () => {

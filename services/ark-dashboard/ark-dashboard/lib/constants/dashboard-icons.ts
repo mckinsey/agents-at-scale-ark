@@ -1,9 +1,7 @@
 import {
   Activity,
-  BarChart,
   Bot,
   Calendar,
-  CheckCircle,
   ClipboardList,
   Database,
   Download,
@@ -106,24 +104,6 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     icon: Activity,
     group: 'monitoring',
     enablerFeature: BROKER_FEATURE_KEY,
-  },
-  evals: {
-    key: 'evals',
-    title: 'Evals',
-    icon: BarChart,
-    group: 'monitoring',
-  },
-  evaluators: {
-    key: 'evaluators',
-    title: 'Evaluators',
-    icon: CheckCircle,
-    group: 'configurations',
-  },
-  evaluations: {
-    key: 'evaluations',
-    title: 'Evaluations',
-    icon: BarChart,
-    group: 'monitoring',
   },
 
   // Operations
