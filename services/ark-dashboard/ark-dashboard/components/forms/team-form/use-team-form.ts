@@ -25,7 +25,7 @@ Make sure to choose the role which is best suited to respond to the most recent 
 Read the above conversation. Then select the next role from {{.Participants}} to play. Only return the role.`;
 
 export const DEFAULT_TERMINATE_PROMPT =
-  'Use the terminate tool if the conversation has finished.';
+  'If no further responses are needed to reply to the most recent user message, call the terminate tool.';
 
 const teamFormSchema = z.object({
   name: kubernetesNameSchema,

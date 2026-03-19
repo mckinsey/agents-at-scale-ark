@@ -23,7 +23,7 @@ Read the following conversation. Then select the next role from {{.Participants}
 
 Read the above conversation. Then select the next role from {{.Participants}} to play. Only return the role.`
 
-const defaultTerminatePrompt = `If the conversation has reached its conclusion and no further responses are needed, call the terminate tool.`
+const defaultTerminatePrompt = `If no further responses are needed to reply to the most recent user message, call the terminate tool.`
 
 type SelectorTemplateData struct {
 	Roles        string
