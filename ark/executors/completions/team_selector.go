@@ -23,6 +23,8 @@ Read the following conversation. Then select the next role from {{.Participants}
 
 Read the above conversation. Then select the next role from {{.Participants}} to play. Only return the role.`
 
+const defaultTerminatePrompt = `If the conversation has reached its conclusion and no further responses are needed, call the terminate tool.`
+
 type SelectorTemplateData struct {
 	Roles        string
 	Participants string
@@ -134,12 +136,21 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 		return nil, err
 	}
 
+	selectorMessage := buf.String()
+	if t.Selector != nil && t.Selector.EnableTerminateTool != nil && *t.Selector.EnableTerminateTool {
+		terminatePrompt := defaultTerminatePrompt
+		if t.Selector.TerminatePrompt != "" {
+			terminatePrompt = t.Selector.TerminatePrompt
+		}
+		selectorMessage = terminatePrompt + "\n\n" + selectorMessage
+	}
+
 	selectorAgent, err := t.loadSelectorAgent(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	result, err := selectorAgent.Execute(ctx, NewUserMessage("Select the next participant to respond."), []Message{NewSystemMessage(buf.String())}, nil, nil)
+	result, err := selectorAgent.Execute(ctx, NewUserMessage("Select the next participant to respond."), []Message{NewSystemMessage(selectorMessage)}, nil, nil)
 	if err != nil {
 		if IsTerminateTeam(err) {
 			return nil, err
