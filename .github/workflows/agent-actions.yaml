@@ -1,15 +1,14 @@
-name: Claude Overnight Automation
+name: Agent Actions
 
 on:
-  schedule:
-    # Run at 2 AM UTC daily (overnight for most team timezones)
-    - cron: "0 2 * * *"
   workflow_dispatch:
     inputs:
       task:
-        description: "Task to run (e.g. 'dependabot', 'all')"
-        required: false
-        default: "all"
+        description: "Task to run"
+        type: choice
+        options:
+          - dependabot
+        required: true
 
 permissions:
   contents: write
@@ -18,10 +17,7 @@ permissions:
 
 jobs:
   consolidate-dependabot:
-    if: >-
-      github.event_name == 'schedule' ||
-      (github.event_name == 'workflow_dispatch' &&
-       (inputs.task == 'dependabot' || inputs.task == 'all'))
+    if: inputs.task == 'dependabot'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,8 +26,8 @@ jobs:
 
       - uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.CLAUDE_GH_TOKEN }}
+          anthropic_api_key: ${{ secrets.AGENT_ACTIONS_ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.AGENT_ACTIONS_GH_TOKEN }}
           prompt: |
             Use the /dependabot skill to consolidate all open Dependabot PRs
             into a single integration/dependabot branch and create a consolidated
