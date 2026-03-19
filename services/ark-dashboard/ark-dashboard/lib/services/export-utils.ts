@@ -9,9 +9,7 @@ import type {
   TeamListResponse,
   QueryListResponse,
   MCPServerListResponse,
-  EvaluatorListResponse,
   A2AServerListResponse,
-  EvaluationListResponse,
   ResourceExportData,
   ExportItem,
 } from '@/lib/services/export';
@@ -46,8 +44,6 @@ export function processResourceResponses(
     queries,
     a2aServers,
     mcpServers,
-    evaluators,
-    evaluations,
     workflowTemplates,
   ] = results;
 
@@ -81,16 +77,6 @@ export function processResourceResponses(
   // Process MCP servers
   if (mcpServers.status === 'fulfilled' && mcpServers.value?.items) {
     data.mcpservers = mapToExportItems(mcpServers.value.items, 'mcpservers');
-  }
-
-  // Process evaluators
-  if (evaluators.status === 'fulfilled' && evaluators.value?.items) {
-    data.evaluators = mapToExportItems(evaluators.value.items, 'evaluator');
-  }
-
-  // Process evaluations
-  if (evaluations.status === 'fulfilled' && evaluations.value?.items) {
-    data.evaluations = mapToExportItems(evaluations.value.items, 'evaluation');
   }
 
   // Process workflow templates if included (only in client-side export)
@@ -141,8 +127,6 @@ export function createResourceSummary(data: ResourceExportData): Record<string, 
     queries: data.queries?.length || 0,
     a2a: data.a2a?.length || 0,
     mcpservers: data.mcpservers?.length || 0,
-    evaluators: data.evaluators?.length || 0,
-    evaluations: data.evaluations?.length || 0,
     workflows: data.workflows?.length || 0,
   };
 }

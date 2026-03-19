@@ -48,7 +48,13 @@ class ToolsPage(BasePage):
         rand = random.randint(100, 999)
         return f"{prefix}-{date_str}{rand}"
     
+    def _goto_tools(self) -> None:
+        self.page.goto("http://localhost:3274/tools")
+        self.wait_for_navigation_complete()
+        self.wait_for_element(self.ADD_TOOL_BUTTON, timeout=10000)
+
     def is_tool_in_table(self, tool_name: str, retries: int = 3) -> bool:
+        self._goto_tools()
         for attempt in range(retries):
             try:
                 self.page.get_by_text(tool_name, exact=False).first.wait_for(state="visible", timeout=10000)
@@ -57,9 +63,7 @@ class ToolsPage(BasePage):
                 logger.debug(f"Tool {tool_name} not visible on attempt {attempt + 1}/{retries}: {e}")
                 if attempt < retries - 1:
                     logger.info(f"Tool {tool_name} not found, retrying ({attempt + 1}/{retries})...")
-                    self.page.reload()
-                    self.wait_for_navigation_complete()
-                    self.wait_for_element(self.ADD_TOOL_BUTTON, timeout=10000)
+                    self._goto_tools()
         return False
     
     def create_http_tool_with_verification(self, tool_name: str, description: str, url: str) -> dict:
@@ -88,11 +92,20 @@ class ToolsPage(BasePage):
         type_trigger.click()
         
         self.wait_for_dropdown_options()
-        http_option = self.page.get_by_role("option", name="HTTP", exact=True)
-        if http_option.count() > 0:
-            http_option.click()
-        else:
-            self.page.locator("[role='option']:has-text('HTTP')").first.click()
+        for attempt in range(3):
+            try:
+                http_option = self.page.get_by_role("option", name="HTTP", exact=True)
+                if http_option.count() == 0:
+                    http_option = self.page.locator("[role='option']:has-text('HTTP')").first
+                http_option.wait_for(state="visible", timeout=5000)
+                self.page.wait_for_timeout(300)
+                http_option.click(force=True, timeout=5000)
+                break
+            except Exception as e:
+                logger.info(f"HTTP option click failed (attempt {attempt + 1}/3): {e}")
+                if attempt < 2:
+                    type_trigger.click()
+                    self.wait_for_dropdown_options()
         
         description_input = self.page.locator("input#description, input[name='description'], [role='dialog'] input:nth-of-type(2)").first
         description_input.wait_for(state="visible", timeout=5000)

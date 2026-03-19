@@ -31,7 +31,7 @@
         <mxCell id="BrEKt-sjprVkLCfW9coZ-11" value="&lt;font&gt;&lt;b&gt;Query Engines&lt;/b&gt;&lt;br&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;verticalAlign=middle;" parent="1" vertex="1">
           <mxGeometry x="60" y="210" width="80" height="40" as="geometry" />
         </mxCell>
-        <mxCell id="BrEKt-sjprVkLCfW9coZ-12" value="&lt;font&gt;&lt;b&gt;Evaluators / Evaluations&lt;/b&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;verticalAlign=middle;" parent="1" vertex="1">
+        <mxCell id="BrEKt-sjprVkLCfW9coZ-12" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;fontSize=10;verticalAlign=middle;" parent="1" vertex="1">
           <mxGeometry x="420" y="210" width="80" height="40" as="geometry" />
         </mxCell>
         <mxCell id="BrEKt-sjprVkLCfW9coZ-13" value="&lt;font&gt;&lt;b&gt;Memory&lt;/b&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;verticalAlign=middle;" parent="1" vertex="1">
@@ -52,7 +52,7 @@
         <mxCell id="GjzOAwkxd7Iusa0UOkDc-3" value="&lt;font&gt;&lt;b&gt;Dashboard&lt;/b&gt;&lt;br&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;fontColor=#333333;strokeColor=#666666;verticalAlign=middle;fontSize=10;" vertex="1" parent="1">
           <mxGeometry x="150" y="92.5" width="80" height="40" as="geometry" />
         </mxCell>
-        <mxCell id="GjzOAwkxd7Iusa0UOkDc-4" value="&lt;b&gt;Evaluator&lt;/b&gt;&lt;div&gt;LLM / Cost&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;fontColor=#333333;strokeColor=#666666;verticalAlign=middle;fontSize=10;" vertex="1" parent="1">
+        <mxCell id="GjzOAwkxd7Iusa0UOkDc-4" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;fontColor=#333333;strokeColor=none;verticalAlign=middle;fontSize=10;" vertex="1" parent="1">
           <mxGeometry x="330" y="92.5" width="80" height="40" as="geometry" />
         </mxCell>
         <mxCell id="GjzOAwkxd7Iusa0UOkDc-5" value="&lt;font&gt;&lt;b&gt;Gateway&lt;/b&gt;&lt;br&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;fontColor=#333333;strokeColor=#666666;verticalAlign=middle;fontSize=10;" vertex="1" parent="1">

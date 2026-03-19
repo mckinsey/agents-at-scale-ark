@@ -32,7 +32,7 @@ _ark_completion() {
   
   case \${COMP_CWORD} in
     1)
-      opts="agents chat cluster completion config dashboard docs evaluation export generate import install marketplace memory models queries query routes status targets teams tools uninstall help"
+      opts="agents chat cluster completion config dashboard docs export generate import install marketplace memory models queries query routes status targets teams tools uninstall help"
       COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
       return 0
       ;;
@@ -168,7 +168,6 @@ _ark() {
         'config[Configuration management]' \\
         'dashboard[Open ARK dashboard]' \\
         'docs[Open ARK documentation]' \\
-        'evaluation[Execute evaluations against evaluators]' \\
         'export[Export ARK resources to a file]' \\
         'generate[Generate ARK resources]' \\
         'import[Import ARK resources from a file]' \\

@@ -12,7 +12,7 @@ interface GitHubMarketplaceItem {
   name: string;
   displayName?: string;
   description: string;
-  type?: 'service' | 'agent';
+  type?: 'service' | 'agent' | 'demo';
   version?: string;
   author?: string;
   homepage?: string;
@@ -87,9 +87,10 @@ function mapCategoryFromGitHub(category?: string): MarketplaceCategory {
   return 'tools'; // default category
 }
 
-function mapTypeFromGitHub(type?: 'service' | 'agent'): MarketplaceItemType {
+function mapTypeFromGitHub(type?: 'service' | 'agent' | 'demo'): MarketplaceItemType {
   if (type === 'agent') return 'template';
   if (type === 'service') return 'service';
+  if (type === 'demo') return 'demo';
   return 'component'; // default type
 }
 
@@ -297,14 +298,6 @@ async function getInstalledMarketplaceItems(): Promise<Set<string>> {
       for (const model of resources.models) {
         installedItems.add(model.name.toLowerCase());
         installedItems.add(generateItemIdFromName(model.name));
-      }
-    }
-
-    // Check evaluators
-    if (resources.evaluators) {
-      for (const evaluator of resources.evaluators) {
-        installedItems.add(evaluator.name.toLowerCase());
-        installedItems.add(generateItemIdFromName(evaluator.name));
       }
     }
 

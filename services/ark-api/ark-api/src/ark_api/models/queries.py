@@ -107,8 +107,6 @@ class QueryCreateRequest(BaseModel):
     ttl: Optional[str] = None
     cancel: Optional[bool] = None
     overrides: Optional[List[AgentOverride]] = None
-    evaluators: Optional[List[Memory]] = None
-    evaluatorSelector: Optional[QueryLabelSelector] = None
     metadata: Optional[Dict[str, Any]] = None
 
 

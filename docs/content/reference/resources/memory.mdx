@@ -74,7 +74,7 @@ ark query agent/my-agent "What was the last message?" --conversation-id "my-conv
 
 **Session ID vs Conversation ID:**
 - **sessionId**: Groups related queries for tracking and telemetry purposes
-- **conversationId**: Associates queries with a specific memory/conversation thread for context continuity
+- **conversationId**: Conversation threading identifier sent to all execution engines as A2A `contextId`. The completions engine uses it for memory continuity; named engines can use it for their own session management.
 
 When creating a query in the dashboard it is also possible to specify the memory resource. Note that in the dashbhoard 'chat' window, no memory is used, messages are simply stored client-side as is common for chat applications.
 

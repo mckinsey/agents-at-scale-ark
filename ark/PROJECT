@@ -77,13 +77,4 @@ resources:
   kind: Memory
   path: mckinsey.com/ark/api/v1alpha1
   version: v1alpha1
-- api:
-    crdVersion: v1
-    namespaced: true
-  controller: true
-  domain: mckinsey
-  group: ark
-  kind: Evaluator
-  path: mckinsey.com/ark/api/v1alpha1
-  version: v1alpha1
 version: "3"

@@ -10,9 +10,7 @@ import type {
   TeamListResponse,
   QueryListResponse,
   MCPServerListResponse,
-  EvaluatorListResponse,
   A2AServerListResponse,
-  EvaluationListResponse,
   ResourceExportData,
 } from '@/lib/services/export';
 import {
@@ -34,9 +32,6 @@ export const exportServiceServer = {
       serverApiClient.get<QueryListResponse>('/v1/queries'),
       serverApiClient.get<A2AServerListResponse>('/v1/a2a-servers'),
       serverApiClient.get<MCPServerListResponse>('/v1/mcp-servers'),
-      serverApiClient.get<EvaluatorListResponse>('/v1/evaluators'),
-      serverApiClient.get<EvaluationListResponse>('/v1/evaluations'),
-      // Note: WorkflowTemplates would need similar handling
       null, // Placeholder for workflow templates to match the array structure
     ]);
 
@@ -50,8 +45,6 @@ export const exportServiceServer = {
       'queries',
       'a2aServers',
       'mcpServers',
-      'evaluators',
-      'evaluations',
       'workflowTemplates',
     ];
     logFailedFetches(results, labels);
