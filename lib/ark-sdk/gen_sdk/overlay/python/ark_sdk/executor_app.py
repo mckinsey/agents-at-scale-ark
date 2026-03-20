@@ -111,11 +111,31 @@ class HealthFilter(logging.Filter):
         return not (hasattr(record, "getMessage") and "/health" in record.getMessage())
 
 
+def _get_tracer():
+    """Get an OTEL tracer if available, otherwise return None."""
+    if not _otel_enabled:
+        return None
+    try:
+        from opentelemetry import trace
+        return trace.get_tracer("ark-sdk")
+    except Exception:
+        return None
+
+
 class A2AExecutorAdapter(AgentExecutor):
     def __init__(self, executor: BaseExecutor):
         self.executor = executor
 
     async def execute(self, context: Any, event_queue: EventQueue) -> None:
+        tracer = _get_tracer()
+        if tracer:
+            from opentelemetry import trace
+            with tracer.start_as_current_span("ark.executor.execute", kind=trace.SpanKind.INTERNAL):
+                await self._do_execute(context, event_queue)
+        else:
+            await self._do_execute(context, event_queue)
+
+    async def _do_execute(self, context: Any, event_queue: EventQueue) -> None:
         user_text = context.get_user_input()
         conversation_id = ""
         if hasattr(context.message, "context_id") and context.message.context_id:
