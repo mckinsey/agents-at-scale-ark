@@ -18,13 +18,6 @@ export const ARK_ANNOTATIONS = {
   SERVICE: `${ARK_PREFIX}service`,
   RESOURCES: `${ARK_PREFIX}resources`,
 
-  // Evaluation annotations
-  EVALUATOR: `${ARK_PREFIX}evaluator`,
-  QUERY: `${ARK_PREFIX}query`,
-  AUTO: `${ARK_PREFIX}auto`,
-  QUERY_GENERATION: `${ARK_PREFIX}query-generation`,
-  QUERY_PHASE: `${ARK_PREFIX}query-phase`,
-
   // Streaming annotations
   STREAMING_ENABLED: `${ARK_PREFIX}streaming-enabled`,
 } as const;

@@ -41,16 +41,6 @@ export const mockServices = {
     update: vi.fn(),
     delete: vi.fn(),
   },
-  evaluatorsService: {
-    getAll: vi.fn().mockResolvedValue([]),
-    get: vi.fn(),
-    create: vi.fn(),
-  },
-  evaluationsService: {
-    getAll: vi.fn().mockResolvedValue([]),
-    get: vi.fn(),
-    create: vi.fn(),
-  },
   queriesService: {
     getAll: vi.fn().mockResolvedValue([]),
     get: vi.fn(),
@@ -89,12 +79,6 @@ export const mockModel = {
 export const mockSecret = {
   id: 'secret-1',
   name: 'test-secret',
-};
-
-export const mockEvaluator = {
-  id: 'evaluator-1',
-  name: 'test-evaluator',
-  model: 'test-model',
 };
 
 export const fillInput = async (

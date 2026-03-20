@@ -8,9 +8,6 @@ export default {
   crds: 'Custom Resource Definitions',
   resources: 'Resources',
 
-  '---evaluations': { type: 'separator', title: 'Evaluations' },
-  evaluations: 'Evaluations',
-
   '---behaviour': { type: 'separator', title: 'System behaviour' },
   'core-architecture': 'Core Architecture',
   'query-execution': 'Query Execution Flow',

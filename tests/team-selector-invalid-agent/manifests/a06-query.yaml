@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: test-invalid-selector-query
+spec:
+  input: Help me with a task
+  target:
+    type: team
+    name: test-selector-team
