@@ -10,6 +10,7 @@ Execution engines (CRD `v1prealpha1`) lack dedicated API endpoints. They are onl
 - Let users see execution engines and their health status in the dashboard
 - Let users select execution engines from a validated dropdown when configuring agents
 - Follow existing dashboard patterns (services, hooks, sections, cards) for consistency
+- Agent availability reflects execution engine existence and readiness, matching the model/tool dependency pattern
 
 **Non-Goals:**
 - Create/edit execution engines in the dashboard (kubectl is sufficient while experimental)
@@ -60,6 +61,18 @@ Use colored dots consistent with K8s conventions:
 
 Shown in both the dropdown options and the list page cards.
 
+### 6. Agent controller watches ExecutionEngine resources
+
+The agent controller currently checks model, tool, and A2AServer dependencies but not execution engines. This creates a gap where an agent references a deleted or unhealthy engine but still reports as "Available" — queries then fail at runtime.
+
+Add to the agent reconciler:
+- `checkExecutionEngineDependency()` — validates the referenced engine exists and has phase "ready". Returns `"ExecutionEngineNotFound"` or `"ExecutionEngineNotReady"` reasons.
+- `Watches(&arkv1prealpha1.ExecutionEngine{}, ...)` — triggers agent re-reconciliation when an engine is created, updated, or deleted.
+- `findAgentsForExecutionEngine()` and `agentDependsOnExecutionEngine()` — maps engine events to dependent agents using the existing `findAgentsForDependency()` helper.
+- RBAC marker for `executionengines` get/list/watch.
+
+This mirrors the model dependency pattern exactly: check existence, check readiness condition (phase for engines), and watch for changes.
+
 ## Risks / Trade-offs
 
 **Manual types may drift from CRD** → Mitigated by the type being simple (5 fields). When promoting to dedicated API endpoints, generated types will replace manual ones.
@@ -67,3 +80,5 @@ Shown in both the dropdown options and the list page cards.
 **Generic resource API returns all fields including full spec.address ValueSource** → Service extracts only what the UI needs. No sensitive data exposure risk since the dashboard already requires authentication.
 
 **No create/edit means users must switch to kubectl** → Acceptable for experimental. The list page with status visibility already adds significant value over pure kubectl.
+
+**ExecutionEngine is v1prealpha1, Agent is v1alpha1** → Cross-version dependency is already precedented by A2AServer (also v1prealpha1) being watched by the agent controller.
