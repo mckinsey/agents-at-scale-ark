@@ -1,3 +1,5 @@
+'use client';
+
 import { NoDefaultModelAlert } from '@/components/alerts';
 import {
   HomepageAgentsCard,
@@ -8,6 +10,7 @@ import {
   HomepageWorkflowTemplatesCard,
 } from '@/components/cards';
 import { PageHeader } from '@/components/common/page-header';
+import { ExportBanner } from '@/components/export-banner';
 
 export default function HomePage() {
   return (
@@ -22,7 +25,8 @@ export default function HomePage() {
             Monitor and manage your AI infrastructure from one central location.
           </p>
         </section>
-        <section>
+        <section className="space-y-4">
+          <ExportBanner />
           <NoDefaultModelAlert />
         </section>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">

@@ -133,7 +133,8 @@ export function useChatSession({
   const handleStreamChatResponse = useCallback(
     async (userMessage: string) => {
       const messageArray = buildChatMessages(chatMessages, userMessage);
-      let currentMessageIndex = chatMessages.length + 1;
+      const turnStartIndex = chatMessages.length + 1;
+      let currentMessageIndex = turnStartIndex;
 
       updateChatMessages(prev => [
         ...prev,
@@ -146,6 +147,7 @@ export function useChatSession({
         type: 'function';
         function: { name: string; arguments: string };
       }> = [];
+      const pendingSystemMessages: Array<string> = [];
 
       let hasError = false;
       let errorMessage = '';
@@ -167,7 +169,7 @@ export function useChatSession({
               content: accumulatedContent,
               tool_calls:
                 accumulatedToolCalls.length > 0
-                  ? accumulatedToolCalls
+                  ? [...accumulatedToolCalls]
                   : undefined,
             } as ExtendedChatMessage;
             if (currentAgent) {
@@ -177,6 +179,23 @@ export function useChatSession({
             return updated;
           });
         }
+      };
+
+      const addSystemMessagesAndNewAssistant = () => {
+        const systemMsgCount = pendingSystemMessages.length;
+        updateChatMessages(prev => {
+          const systemMsgs = pendingSystemMessages.map(content => ({
+            role: 'system' as const,
+            content,
+          }));
+          return [
+            ...prev,
+            ...systemMsgs,
+            { role: 'assistant', content: '' } as ExtendedChatMessage,
+          ];
+        });
+        pendingSystemMessages.length = 0;
+        currentMessageIndex += systemMsgCount + 1;
       };
 
       for await (const chunk of chatService.streamChatResponse(
@@ -233,21 +252,33 @@ export function useChatSession({
         }
 
         if ('ark' in chunk) {
-          const arkData = chunk.ark as { agent?: string };
+          const arkData = chunk.ark as { agent?: string; systemMessage?: string };
+
+          // Accumulate system messages to add with next assistant message
+          if (arkData.systemMessage) {
+            pendingSystemMessages.push(arkData.systemMessage);
+          }
+
           const chunkAgent = arkData.agent;
 
-          if (chunkAgent && (chunkAgent !== currentAgent || turnComplete)) {
+          // Check if we need to start a new assistant message
+          const isNewAgent = chunkAgent && chunkAgent !== currentAgent;
+          const isNewTurn = chunkAgent === currentAgent && turnComplete;
+
+          if (isNewAgent || isNewTurn) {
+            // Finalize previous message if it exists
             if (currentAgent) {
               finalizeCurrentMessage();
               accumulatedContent = '';
               accumulatedToolCalls.length = 0;
-              currentMessageIndex++;
-              updateChatMessages(prev => [
-                ...prev,
-                { role: 'assistant', content: '' } as ExtendedChatMessage,
-              ]);
             }
-            currentAgent = chunkAgent;
+
+            // Add system messages + new assistant message
+            addSystemMessagesAndNewAssistant();
+
+            if (isNewAgent) {
+              currentAgent = chunkAgent;
+            }
             turnComplete = false;
           }
         }
@@ -258,24 +289,33 @@ export function useChatSession({
         }
 
         if (delta?.tool_calls) {
-          let index = accumulatedToolCalls.length - 1;
           for (const toolCallDelta of delta.tool_calls) {
-            if (toolCallDelta.function?.name) {
-              index += 1;
+            let existingIndex = -1;
+
+            if (toolCallDelta.id) {
+              existingIndex = accumulatedToolCalls.findIndex(
+                tc => tc.id === toolCallDelta.id,
+              );
+            }
+
+            if (existingIndex === -1 && toolCallDelta.function?.name) {
               accumulatedToolCalls.push({
                 id: toolCallDelta.id || '',
                 type: 'function',
                 function: { name: toolCallDelta.function.name, arguments: '' },
               });
+              existingIndex = accumulatedToolCalls.length - 1;
             }
 
-            if (toolCallDelta.id) {
-              accumulatedToolCalls[index].id = toolCallDelta.id;
-            }
+            if (existingIndex !== -1) {
+              if (toolCallDelta.id) {
+                accumulatedToolCalls[existingIndex].id = toolCallDelta.id;
+              }
 
-            if (toolCallDelta.function?.arguments) {
-              accumulatedToolCalls[index].function.arguments +=
-                toolCallDelta.function.arguments;
+              if (toolCallDelta.function?.arguments) {
+                accumulatedToolCalls[existingIndex].function.arguments +=
+                  toolCallDelta.function.arguments;
+              }
             }
           }
         }
@@ -298,12 +338,24 @@ export function useChatSession({
         });
 
         const finishReason = typedChunk?.choices?.[0]?.finish_reason;
-        if (finishReason) {
+        if (finishReason === 'stop') {
           turnComplete = true;
         }
       }
 
       finalizeCurrentMessage();
+
+      // Add any remaining pending system messages
+      if (pendingSystemMessages.length > 0) {
+        updateChatMessages(prev => {
+          const systemMsgs = pendingSystemMessages.map(content => ({
+            role: 'system' as const,
+            content,
+          }));
+          return [...prev, ...systemMsgs];
+        });
+        pendingSystemMessages.length = 0;
+      }
 
       if (hasError) {
         const hasTerminateToolCall = accumulatedToolCalls.some(
@@ -327,34 +379,52 @@ export function useChatSession({
       }
 
       if (completedQueryMessages.length > 0) {
-        const systemMessages = completedQueryMessages.filter(
-          msg => msg.role === 'system',
-        );
-        if (systemMessages.length > 0) {
-          updateChatMessages(prev => [
-            ...prev,
-            ...systemMessages.map(
-              msg =>
-                ({
-                  role: 'system',
-                  content: msg.content || '',
-                }) as ExtendedChatMessage,
-            ),
-          ]);
-        }
-      }
-
-      if (accumulatedToolCalls.length > 0) {
         updateChatMessages(prev => {
-          const newMessages = [...prev];
-          accumulatedToolCalls.forEach(toolCall => {
-            newMessages.push({
-              role: 'tool',
-              tool_call_id: toolCall.id,
-              content: `Called ${toolCall.function.name} with ${toolCall.function.arguments}`,
-            } as ExtendedChatMessage);
+          // Preserve previous turns, replace only current turn with complete message chain
+          const beforeThisTurn = prev.slice(0, turnStartIndex);
+          const converted: ExtendedChatMessage[] = [];
+
+          completedQueryMessages.forEach(msg => {
+            if (msg.role === 'system') {
+              converted.push({
+                role: 'system',
+                content: msg.content || '',
+              } as ExtendedChatMessage);
+            } else if (msg.role === 'tool') {
+              converted.push({
+                role: 'tool',
+                content: msg.content || '',
+                tool_call_id:
+                  (msg as { tool_call_id?: string }).tool_call_id || '',
+              } as ExtendedChatMessage);
+            } else if (msg.role === 'assistant') {
+              const toolCalls = (
+                msg as {
+                  tool_calls?: Array<{
+                    id: string;
+                    type: string;
+                    function: { name: string; arguments: string };
+                  }>;
+                }
+              ).tool_calls;
+
+              converted.push({
+                role: 'assistant',
+                content: msg.content || '',
+                name: msg.name,
+                tool_calls: toolCalls
+                  ? toolCalls.map(tc => ({
+                      id: tc.id,
+                      type: 'function' as const,
+                      function: tc.function,
+                    }))
+                  : undefined,
+              } as ExtendedChatMessage);
+            }
           });
-          return newMessages;
+
+          const updated = [...beforeThisTurn, ...converted];
+          return updated;
         });
       }
     },

@@ -12,7 +12,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	"mckinsey.com/ark/internal/genai"
 	"mckinsey.com/ark/internal/validation"
 )
 
@@ -42,7 +41,7 @@ var _ = Describe("Tool Webhook", func() {
 					Namespace: "default",
 				},
 				Spec: arkv1alpha1.ToolSpec{
-					Type: genai.ToolTypeTeam,
+					Type: validation.ToolTypeTeam,
 					Team: &arkv1alpha1.TeamToolRef{
 						Name: "test-team",
 					},
@@ -61,7 +60,7 @@ var _ = Describe("Tool Webhook", func() {
 					Namespace: "default",
 				},
 				Spec: arkv1alpha1.ToolSpec{
-					Type: genai.ToolTypeTeam,
+					Type: validation.ToolTypeTeam,
 					Team: &arkv1alpha1.TeamToolRef{
 						Name: "",
 					},

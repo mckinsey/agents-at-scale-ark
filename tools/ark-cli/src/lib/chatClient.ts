@@ -8,10 +8,12 @@ export {QueryTarget};
 export interface ChatConfig {
   streamingEnabled: boolean;
   currentTarget?: QueryTarget;
-  a2aContextId?: string;
   sessionId?: string;
   conversationId?: string;
   queryTimeout?: string;
+  // Advanced: override A2A contextId for sub-agent dispatch (hop 2).
+  // For most multi-turn use cases, conversationId is sufficient.
+  a2aContextId?: string;
 }
 
 export interface ToolCall {

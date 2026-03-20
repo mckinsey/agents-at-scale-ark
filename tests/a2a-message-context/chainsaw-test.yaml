@@ -76,6 +76,11 @@ spec:
             echo "ERROR: contextId not set in response a2a metadata" >&2
             exit 1
           fi
+          CONV_ID=$(kubectl get query message-counter-first -n $NAMESPACE -o jsonpath='{.status.conversationId}')
+          if [ -z "$CONV_ID" ]; then
+            echo "ERROR: conversationId not set in status" >&2
+            exit 1
+          fi
           printf '%s' "$CONTEXT_ID"
         env:
         - name: NAMESPACE
@@ -105,6 +110,14 @@ spec:
           status:
             (conditions[?type == 'Completed']):
             - status: 'True'
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: message-counter-second
+          status:
             (response != null): true
             (contains(response.content, '2 message(s) received')): true
     catch:
@@ -113,3 +126,12 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: message-counter-second
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

@@ -5,11 +5,10 @@ import {
   Activity,
   AlertCircle,
   Bot,
-  Check,
   ChevronsLeft,
   ChevronsRight,
-  ChevronsUpDown,
   ChevronsUpDownIcon,
+  Download,
   File,
   HelpCircle,
   Home,
@@ -17,9 +16,9 @@ import {
   LogOut,
   Moon,
   MoreHorizontal,
-  Plus,
   Server,
   Settings,
+  Store,
   Sun,
   Workflow,
   Wrench,
@@ -179,8 +178,7 @@ export function AppSidebar() {
     item => item.key === currentSection,
   );
   const isMonitoringSection =
-    MONITORING_SECTIONS.some(item => item.key === currentSection) ||
-    currentSection === 'evals';
+    MONITORING_SECTIONS.some(item => item.key === currentSection);
 
   const [agentBuilderOpen, setAgentBuilderOpen] = useState(
     isAgentBuilderSection,
@@ -229,9 +227,7 @@ export function AppSidebar() {
     return sections.some(item => item.key === current);
   };
 
-  const enabledMonitoringSections = MONITORING_SECTIONS.filter(
-    item => item.key !== 'evaluators' && item.key !== 'evaluations',
-  );
+  const enabledMonitoringSections = MONITORING_SECTIONS;
 
   return (
     <div>
@@ -239,77 +235,35 @@ export function AppSidebar() {
         <SidebarHeader>
           <SidebarMenu>
             <SidebarMenuItem>
-              <DropdownMenu modal={false}>
-                <DropdownMenuTrigger asChild>
-                  <SidebarMenuButton
-                    size="lg"
-                    className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground !p-0 group-data-[collapsible=icon]:!h-12">
-                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
-                      <Image
-                        src={
-                          isExperimentalDarkModeEnabled
-                            ? qbLogoDark
-                            : qbLogoLight
-                        }
-                        alt="QB Logo"
-                        width={32}
-                        height={32}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-0.5 leading-none">
-                      <span className="text-sidebar-accent-foreground font-medium">
-                        ARK Dashboard
-                      </span>
-                      <span className="text-xs">
-                        {isPending
-                          ? 'Loading...'
-                          : availableNamespaces.length === 0
-                            ? 'No namespaces'
-                            : namespace}
-                      </span>
-                    </div>
-                    <ChevronsUpDown className="ml-auto" />
-                    {availableNamespaces.length === 0 && !loading && (
-                      <AlertCircle className="h-4 w-4 text-red-500" />
-                    )}
-                  </SidebarMenuButton>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  className="w-[--radix-dropdown-menu-trigger-width]"
-                  align="end"
-                  side="right">
-                  <DropdownMenuLabel>Namespaces</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {loading ? (
-                    <DropdownMenuItem disabled>
-                      Loading namespaces...
-                    </DropdownMenuItem>
-                  ) : availableNamespaces.length === 0 ? (
-                    <DropdownMenuItem disabled>
-                      No namespaces available
-                    </DropdownMenuItem>
-                  ) : (
-                    <>
-                      {availableNamespaces.map(ns => (
-                        <DropdownMenuItem
-                          key={ns.name}
-                          onSelect={() => setNamespace(ns.name)}>
-                          {ns.name}
-                          {ns.name === namespace && (
-                            <Check className="ml-auto h-4 w-4" />
-                          )}
-                        </DropdownMenuItem>
-                      ))}
-                    </>
-                  )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onSelect={() => setNamespaceEditorOpen(true)}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Namespace
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <SidebarMenuButton
+                size="lg"
+                className="!p-0 group-data-[collapsible=icon]:!h-12">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
+                  <Image
+                    src={
+                      isExperimentalDarkModeEnabled ? qbLogoDark : qbLogoLight
+                    }
+                    alt="QB Logo"
+                    width={32}
+                    height={32}
+                  />
+                </div>
+                <div className="flex flex-col gap-0.5 leading-none">
+                  <span className="text-sidebar-accent-foreground font-medium">
+                    ARK Dashboard
+                  </span>
+                  <span className="text-xs">
+                    {isPending
+                      ? 'Loading...'
+                      : availableNamespaces.length === 0
+                        ? 'No namespaces'
+                        : namespace}
+                  </span>
+                </div>
+                {availableNamespaces.length === 0 && !loading && (
+                  <AlertCircle className="h-4 w-4 text-red-500" />
+                )}
+              </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>
@@ -396,6 +350,15 @@ export function AppSidebar() {
             />
 
             <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={() => navigateToSection('marketplace')}
+                isActive={getCurrentSection() === 'marketplace'}>
+                <Store />
+                <span>Marketplace</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
               <Popover open={morePopoverOpen} onOpenChange={setMorePopoverOpen}>
                 <PopoverTrigger asChild>
                   <SidebarMenuButton isActive={morePopoverOpen}>
@@ -426,6 +389,15 @@ export function AppSidebar() {
                       className="hover:bg-accent hover:text-accent-foreground flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm">
                       <ListTodo className="h-4 w-4" />
                       <span>A2A Tasks</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        navigateToSection('export');
+                        setMorePopoverOpen(false);
+                      }}
+                      className="hover:bg-accent hover:text-accent-foreground flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm">
+                      <Download className="h-4 w-4" />
+                      <span>Exports</span>
                     </button>
                   </div>
                 </PopoverContent>

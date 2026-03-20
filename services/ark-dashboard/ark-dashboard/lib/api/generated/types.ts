@@ -656,130 +656,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/evaluations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Evaluations
-         * @description List all evaluations in a namespace.
-         */
-        get: operations["list_evaluations_v1_evaluations_get"];
-        put?: never;
-        /**
-         * Create Evaluation
-         * @description Create a new evaluation.
-         */
-        post: operations["create_evaluation_v1_evaluations_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/evaluations/{name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Evaluation
-         * @description Get details of a specific evaluation.
-         */
-        get: operations["get_evaluation_v1_evaluations__name__get"];
-        /**
-         * Update Evaluation
-         * @description Update an existing evaluation.
-         */
-        put: operations["update_evaluation_v1_evaluations__name__put"];
-        post?: never;
-        /**
-         * Delete Evaluation
-         * @description Delete an evaluation.
-         */
-        delete: operations["delete_evaluation_v1_evaluations__name__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/evaluations/{name}/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /**
-         * Cancel Evaluation
-         * @description Cancel a running evaluation.
-         */
-        patch: operations["cancel_evaluation_v1_evaluations__name__cancel_patch"];
-        trace?: never;
-    };
-    "/v1/evaluators": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Evaluators
-         * @description List all evaluators in a namespace.
-         */
-        get: operations["list_evaluators_v1_evaluators_get"];
-        put?: never;
-        /**
-         * Create Evaluator
-         * @description Create a new evaluator.
-         */
-        post: operations["create_evaluator_v1_evaluators_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/evaluators/{name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Evaluator
-         * @description Get details of a specific evaluator.
-         */
-        get: operations["get_evaluator_v1_evaluators__name__get"];
-        /**
-         * Update Evaluator
-         * @description Update an existing evaluator.
-         */
-        put: operations["update_evaluator_v1_evaluators__name__put"];
-        post?: never;
-        /**
-         * Delete Evaluator
-         * @description Delete an evaluator.
-         */
-        delete: operations["delete_evaluator_v1_evaluators__name__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/events": {
         parameters: {
             query?: never;
@@ -832,6 +708,58 @@ export interface paths {
         get: operations["get_event_v1_events__event_name__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/export/last-export-time": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Last Export Time
+         * @description Get the timestamp of the last export.
+         *
+         *     Returns:
+         *         Export history with last export timestamp
+         */
+        get: operations["get_last_export_time_v1_export_last_export_time_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/export/resources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export Resources
+         * @description Export Ark resources as a ZIP file.
+         *
+         *     Args:
+         *         body: Export request with optional resource types, IDs, and namespace
+         *             - If resource_types is not specified or empty, exports all resource types
+         *             - If resource_ids is specified, exports only those specific resources
+         *         namespace: Namespace to export from (overrides body.namespace)
+         *
+         *     Returns:
+         *         ZIP file containing YAML files organized by resource type
+         */
+        post: operations["export_resources_v1_export_resources_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1968,7 +1896,7 @@ export interface components {
             pollInterval?: string | null;
             /** Priority */
             priority?: number | null;
-            queryRef: components["schemas"]["QueryRef-Output"];
+            queryRef: components["schemas"]["QueryRef"];
             status?: components["schemas"]["A2ATaskStatus"] | null;
             /** Taskid */
             taskId: string;
@@ -2043,7 +1971,7 @@ export interface components {
             namespace: string;
             /** Phase */
             phase?: string | null;
-            queryRef?: components["schemas"]["QueryRef-Output"] | null;
+            queryRef?: components["schemas"]["QueryRef"] | null;
             /** Taskid */
             taskId: string;
         };
@@ -2644,72 +2572,6 @@ export interface components {
             tenantId: string | components["schemas"]["ModelValueSource"];
         };
         /**
-         * BaselineEvaluationMetadata
-         * @description Enhanced metadata for baseline evaluations.
-         */
-        BaselineEvaluationMetadata: {
-            /** Baseline Metadata */
-            baseline_metadata?: {
-                [key: string]: unknown;
-            } | null;
-            /** Baseline Passed */
-            baseline_passed?: boolean | null;
-            /** Baseline Score */
-            baseline_score?: number | null;
-            /** Comparison Threshold */
-            comparison_threshold?: number | null;
-            /** Current Passed */
-            current_passed?: boolean | null;
-            /** Current Score */
-            current_score?: number | null;
-            /** Improvement */
-            improvement?: number | null;
-        };
-        /**
-         * BatchEvaluationMetadata
-         * @description Enhanced metadata for batch evaluations.
-         */
-        BatchEvaluationMetadata: {
-            /** Average Score */
-            average_score?: number | null;
-            /** Batch Passed */
-            batch_passed?: boolean | null;
-            /** Completed Evaluations */
-            completed_evaluations?: number | null;
-            /** Evaluation Results */
-            evaluation_results?: {
-                [key: string]: unknown;
-            }[] | null;
-            /** Failed Evaluations */
-            failed_evaluations?: number | null;
-            /** Max Score */
-            max_score?: number | null;
-            /** Min Score */
-            min_score?: number | null;
-            /** Pending Evaluations */
-            pending_evaluations?: number | null;
-            /** Total Evaluations */
-            total_evaluations?: number | null;
-        };
-        /**
-         * BatchResult
-         * @description Result from batch evaluation.
-         */
-        BatchResult: {
-            /** Evaluatorname */
-            evaluatorName: string;
-            /** Message */
-            message?: string | null;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            } | null;
-            /** Passed */
-            passed?: boolean | null;
-            /** Score */
-            score?: number | null;
-        };
-        /**
          * BedrockConfig
          * @description Bedrock model configuration.
          */
@@ -2728,22 +2590,6 @@ export interface components {
             sessionToken?: string | components["schemas"]["ModelValueSource"] | null;
             /** Temperature */
             temperature?: string | null;
-        };
-        /**
-         * CategoryBreakdown
-         * @description Category-wise breakdown of evaluation results.
-         */
-        CategoryBreakdown: {
-            /** Category */
-            category: string;
-            /** Description */
-            description?: string | null;
-            /** Passed */
-            passed?: boolean | null;
-            /** Score */
-            score?: number | null;
-            /** Weight */
-            weight?: number | null;
         };
         /**
          * ChatCompletion
@@ -3114,20 +2960,6 @@ export interface components {
              */
             role: "user";
         };
-        /**
-         * ChildEvaluationStatus
-         * @description Status of child evaluations in batch mode.
-         */
-        ChildEvaluationStatus: {
-            /** Completed */
-            completed: number;
-            /** Failed */
-            failed: number;
-            /** Pending */
-            pending: number;
-            /** Total */
-            total: number;
-        };
         /** Choice */
         Choice: {
             /**
@@ -3232,414 +3064,6 @@ export interface components {
             name: string;
         };
         /**
-         * DirectEvaluationMetadata
-         * @description Enhanced metadata for direct evaluations.
-         */
-        DirectEvaluationMetadata: {
-            /** Confidence Score */
-            confidence_score?: number | null;
-            /** Evaluation Duration */
-            evaluation_duration?: number | null;
-            /** Input Length */
-            input_length?: number | null;
-            /** Model Used */
-            model_used?: string | null;
-            /** Output Length */
-            output_length?: number | null;
-            /** Reasoning Quality */
-            reasoning_quality?: number | null;
-        };
-        /**
-         * EnhancedEvaluationDetailResponse
-         * @description Enhanced detailed evaluation response with metadata.
-         */
-        EnhancedEvaluationDetailResponse: {
-            /** Batchresults */
-            batchResults?: components["schemas"]["BatchResult"][] | null;
-            childEvaluationStatus?: components["schemas"]["ChildEvaluationStatus"] | null;
-            enhanced_metadata?: components["schemas"]["UnifiedEvaluationMetadata"] | null;
-            /** Metadata */
-            metadata: {
-                [key: string]: unknown;
-            };
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace: string;
-            /** Spec */
-            spec: {
-                [key: string]: unknown;
-            };
-            /** Status */
-            status?: {
-                [key: string]: unknown;
-            } | null;
-            tokenUsage?: components["schemas"]["TokenUsage"] | null;
-        };
-        /**
-         * EnhancedEvaluationListResponse
-         * @description Enhanced response for listing evaluations with metadata.
-         */
-        EnhancedEvaluationListResponse: {
-            /** Count */
-            count: number;
-            /** Items */
-            items: components["schemas"]["EnhancedEvaluationResponse"][];
-        };
-        /**
-         * EnhancedEvaluationResponse
-         * @description Enhanced evaluation response with metadata for list operations.
-         */
-        EnhancedEvaluationResponse: {
-            /** Conditions */
-            conditions?: {
-                [key: string]: unknown;
-            }[] | null;
-            enhanced_metadata?: components["schemas"]["UnifiedEvaluationMetadata"] | null;
-            /** Message */
-            message?: string | null;
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace: string;
-            /** Passed */
-            passed?: boolean | null;
-            /** Phase */
-            phase?: string | null;
-            /** Score */
-            score?: string | null;
-            /** Type */
-            type: string;
-        };
-        /**
-         * EvaluationConfig
-         * @description Unified evaluation configuration supporting all types.
-         */
-        EvaluationConfig: {
-            /** Evaluations */
-            evaluations?: components["schemas"]["EvaluationRef"][] | null;
-            /** Input */
-            input?: string | null;
-            /** Output */
-            output?: string | null;
-            queryRef?: components["schemas"]["QueryRef-Input"] | null;
-            /** Rules */
-            rules?: {
-                [key: string]: unknown;
-            }[] | null;
-        };
-        /**
-         * EvaluationCreateRequest
-         * @description Request body for creating an evaluation.
-         */
-        EvaluationCreateRequest: {
-            config: components["schemas"]["EvaluationConfig"];
-            evaluator: components["schemas"]["EvaluatorReference"];
-            /** Name */
-            name: string;
-            /**
-             * Timeout
-             * @default 5m
-             */
-            timeout: string | null;
-            /**
-             * Ttl
-             * @default 720h
-             */
-            ttl: string | null;
-            /** @default direct */
-            type: components["schemas"]["EvaluationType"] | null;
-        };
-        /**
-         * EvaluationDetailResponse
-         * @description Detailed evaluation response model.
-         */
-        EvaluationDetailResponse: {
-            /** Batchresults */
-            batchResults?: components["schemas"]["BatchResult"][] | null;
-            childEvaluationStatus?: components["schemas"]["ChildEvaluationStatus"] | null;
-            /** Metadata */
-            metadata: {
-                [key: string]: unknown;
-            };
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace: string;
-            /** Spec */
-            spec: {
-                [key: string]: unknown;
-            };
-            /** Status */
-            status?: {
-                [key: string]: unknown;
-            } | null;
-            tokenUsage?: components["schemas"]["TokenUsage"] | null;
-        };
-        /**
-         * EvaluationListResponse
-         * @description Response for listing evaluations.
-         */
-        EvaluationListResponse: {
-            /** Count */
-            count: number;
-            /** Items */
-            items: components["schemas"]["EvaluationResponse"][];
-        };
-        /**
-         * EvaluationRef
-         * @description Reference to an evaluation for batch aggregation.
-         */
-        EvaluationRef: {
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace?: string | null;
-        };
-        /**
-         * EvaluationResponse
-         * @description Basic evaluation response for list operations.
-         */
-        EvaluationResponse: {
-            /** Conditions */
-            conditions?: {
-                [key: string]: unknown;
-            }[] | null;
-            /** Message */
-            message?: string | null;
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace: string;
-            /** Passed */
-            passed?: boolean | null;
-            /** Phase */
-            phase?: string | null;
-            /** Score */
-            score?: string | null;
-            /** Type */
-            type: string;
-        };
-        /**
-         * EvaluationType
-         * @description Evaluation types.
-         * @enum {string}
-         */
-        EvaluationType: "direct" | "baseline" | "query" | "batch" | "event";
-        /**
-         * EvaluationUpdateRequest
-         * @description Request body for updating an evaluation.
-         */
-        EvaluationUpdateRequest: {
-            config?: components["schemas"]["EvaluationConfig"] | null;
-            evaluator?: components["schemas"]["EvaluatorReference"] | null;
-            /** Timeout */
-            timeout?: string | null;
-            /** Ttl */
-            ttl?: string | null;
-            type?: components["schemas"]["EvaluationType"] | null;
-        };
-        /**
-         * EvaluatorConfigMapKeyRef
-         * @description Reference to a key in a ConfigMap.
-         */
-        EvaluatorConfigMapKeyRef: {
-            /** Key */
-            key: string;
-            /**
-             * Name
-             * @default
-             */
-            name: string;
-            /** Optional */
-            optional?: boolean | null;
-        };
-        /**
-         * EvaluatorCreateRequest
-         * @description Request body for creating an evaluator.
-         */
-        EvaluatorCreateRequest: {
-            address: components["schemas"]["EvaluatorValueSource"];
-            /** Description */
-            description?: string | null;
-            /** Name */
-            name: string;
-            /** Parameters */
-            parameters?: components["schemas"]["EvaluatorParameter"][] | null;
-            selector?: components["schemas"]["ResourceSelector"] | null;
-        };
-        /**
-         * EvaluatorDetailResponse
-         * @description Detailed evaluator response model.
-         */
-        EvaluatorDetailResponse: {
-            /** Metadata */
-            metadata: {
-                [key: string]: unknown;
-            };
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace: string;
-            /** Spec */
-            spec: {
-                [key: string]: unknown;
-            };
-            /** Status */
-            status?: {
-                [key: string]: unknown;
-            } | null;
-        };
-        /**
-         * EvaluatorLabelSelector
-         * @description Label selector for resources.
-         */
-        EvaluatorLabelSelector: {
-            /** Matchexpressions */
-            matchExpressions?: components["schemas"]["EvaluatorLabelSelectorRequirement"][] | null;
-            /** Matchlabels */
-            matchLabels?: {
-                [key: string]: string;
-            } | null;
-        };
-        /**
-         * EvaluatorLabelSelectorRequirement
-         * @description A label selector requirement.
-         */
-        EvaluatorLabelSelectorRequirement: {
-            /** Key */
-            key: string;
-            /** Operator */
-            operator: string;
-            /** Values */
-            values?: string[] | null;
-        };
-        /**
-         * EvaluatorListResponse
-         * @description Response for listing evaluators.
-         */
-        EvaluatorListResponse: {
-            /** Count */
-            count: number;
-            /** Items */
-            items: components["schemas"]["EvaluatorResponse"][];
-        };
-        /**
-         * EvaluatorParameter
-         * @description Parameter for evaluator configuration.
-         */
-        EvaluatorParameter: {
-            /** Name */
-            name: string;
-            /** Value */
-            value?: string | null;
-            valueFrom?: components["schemas"]["EvaluatorValueFrom"] | null;
-        };
-        /**
-         * EvaluatorReference
-         * @description Reference to an evaluator.
-         */
-        EvaluatorReference: {
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace?: string | null;
-            /** Parameters */
-            parameters?: {
-                [key: string]: unknown;
-            }[] | null;
-        };
-        /**
-         * EvaluatorResponse
-         * @description Basic evaluator response for list operations.
-         */
-        EvaluatorResponse: {
-            /** Address */
-            address?: string | null;
-            /** Description */
-            description?: string | null;
-            /** Message */
-            message?: string | null;
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace: string;
-            /** Phase */
-            phase?: string | null;
-        };
-        /**
-         * EvaluatorSecretKeyRef
-         * @description Reference to a key in a Secret.
-         */
-        EvaluatorSecretKeyRef: {
-            /** Key */
-            key: string;
-            /**
-             * Name
-             * @default
-             */
-            name: string;
-            /** Optional */
-            optional?: boolean | null;
-        };
-        /**
-         * EvaluatorUpdateRequest
-         * @description Request body for updating an evaluator.
-         */
-        EvaluatorUpdateRequest: {
-            address?: components["schemas"]["EvaluatorValueSource"] | null;
-            /** Description */
-            description?: string | null;
-            /** Parameters */
-            parameters?: components["schemas"]["EvaluatorParameter"][] | null;
-            selector?: components["schemas"]["ResourceSelector"] | null;
-        };
-        /**
-         * EvaluatorValueFrom
-         * @description Reference to external sources for parameter values.
-         */
-        EvaluatorValueFrom: {
-            configMapKeyRef?: components["schemas"]["EvaluatorConfigMapKeyRef"] | null;
-            secretKeyRef?: components["schemas"]["EvaluatorSecretKeyRef"] | null;
-        };
-        /**
-         * EvaluatorValueSource
-         * @description Source for a value - either direct or from external reference.
-         */
-        EvaluatorValueSource: {
-            /** Value */
-            value?: string | null;
-            valueFrom?: components["schemas"]["EvaluatorValueFrom"] | null;
-        };
-        /**
-         * EventEvaluationMetadata
-         * @description Enhanced metadata for event-based evaluations.
-         */
-        EventEvaluationMetadata: {
-            /** Events Analyzed */
-            events_analyzed?: number | null;
-            /** Failed Rules */
-            failed_rules?: number | null;
-            /** Min Score Threshold */
-            min_score_threshold?: number | null;
-            /** Passed Rules */
-            passed_rules?: number | null;
-            /** Query Name */
-            query_name?: string | null;
-            /** Rule Results */
-            rule_results?: {
-                [key: string]: unknown;
-            }[] | null;
-            /** Session Id */
-            session_id?: string | null;
-            /** Total Rules */
-            total_rules?: number | null;
-            /** Total Weight */
-            total_weight?: number | null;
-            /** Weighted Score */
-            weighted_score?: number | null;
-        };
-        /**
          * EventListResponse
          * @description Response model for listing events.
          */
@@ -3702,6 +3126,46 @@ export interface components {
             name: string;
             /** Namespace */
             namespace?: string | null;
+        };
+        /**
+         * ExportHistoryResponse
+         * @description Response model for export history.
+         */
+        ExportHistoryResponse: {
+            /**
+             * Export Count
+             * @description Total number of exports performed
+             * @default 0
+             */
+            export_count: number;
+            /**
+             * Last Export
+             * @description Timestamp of the last export
+             */
+            last_export?: string | null;
+        };
+        /**
+         * ExportRequest
+         * @description Request model for exporting resources.
+         */
+        ExportRequest: {
+            /**
+             * Namespace
+             * @description Namespace to export from (defaults to current context)
+             */
+            namespace?: string | null;
+            /**
+             * Resource Ids
+             * @description Optional map of resource type to specific resource IDs to export
+             */
+            resource_ids?: {
+                [key: string]: string[];
+            } | null;
+            /**
+             * Resource Types
+             * @description List of resource types to export. If not specified, exports all resource types
+             */
+            resource_types?: ("agents" | "teams" | "models" | "queries" | "a2a" | "mcpservers" | "workflows")[] | null;
         };
         /**
          * File
@@ -4298,9 +3762,6 @@ export interface components {
             cancel?: boolean | null;
             /** Conversationid */
             conversationId?: string | null;
-            evaluatorSelector?: components["schemas"]["QueryLabelSelector"] | null;
-            /** Evaluators */
-            evaluators?: components["schemas"]["Memory"][] | null;
             /** Input */
             input: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam-Input"] | components["schemas"]["ChatCompletionAssistantMessageParam-Input"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[];
             memory?: components["schemas"]["Memory"] | null;
@@ -4369,26 +3830,6 @@ export interface components {
             type: components["schemas"]["InputType"] | null;
         };
         /**
-         * QueryEvaluationMetadata
-         * @description Enhanced metadata for query-based evaluations.
-         */
-        QueryEvaluationMetadata: {
-            /** Execution Time */
-            execution_time?: number | null;
-            /** Query Name */
-            query_name?: string | null;
-            /** Query Namespace */
-            query_namespace?: string | null;
-            /** Query Status */
-            query_status?: string | null;
-            /** Response Quality */
-            response_quality?: number | null;
-            /** Response Target */
-            response_target?: string | null;
-            /** Tokens Used */
-            tokens_used?: number | null;
-        };
-        /**
          * QueryLabelSelector
          * @description Label selector for resources.
          */
@@ -4446,21 +3887,9 @@ export interface components {
         };
         /**
          * QueryRef
-         * @description Reference to a query for evaluation.
-         */
-        "QueryRef-Input": {
-            /** Name */
-            name: string;
-            /** Namespace */
-            namespace?: string | null;
-            /** Responsetarget */
-            responseTarget?: string | null;
-        };
-        /**
-         * QueryRef
          * @description Reference to a Query.
          */
-        "QueryRef-Output": {
+        QueryRef: {
             /** Name */
             name: string;
             /** Namespace */
@@ -4573,15 +4002,6 @@ export interface components {
          * @enum {string}
          */
         Resource: "a2a" | "mcp" | "services";
-        /**
-         * ResourceSelector
-         * @description Selector for automatic evaluation of resources.
-         */
-        ResourceSelector: {
-            labelSelector?: components["schemas"]["EvaluatorLabelSelector"] | null;
-            /** Resource */
-            resource: string;
-        };
         /**
          * SecretCreateRequest
          * @description Request model for creating a secret.
@@ -4808,18 +4228,6 @@ export interface components {
             /** Strategy */
             strategy?: string | null;
         };
-        /**
-         * TokenUsage
-         * @description Token usage metrics.
-         */
-        TokenUsage: {
-            /** Completiontokens */
-            completionTokens?: number | null;
-            /** Prompttokens */
-            promptTokens?: number | null;
-            /** Totaltokens */
-            totalTokens?: number | null;
-        };
         /** ToolDetailResponse */
         ToolDetailResponse: {
             /** Annotations */
@@ -4881,25 +4289,6 @@ export interface components {
             token: string;
         } & {
             [key: string]: unknown;
-        };
-        /**
-         * UnifiedEvaluationMetadata
-         * @description Unified metadata model that can contain any evaluation type metadata.
-         */
-        UnifiedEvaluationMetadata: {
-            baseline_metadata?: components["schemas"]["BaselineEvaluationMetadata"] | null;
-            batch_metadata?: components["schemas"]["BatchEvaluationMetadata"] | null;
-            /** Category Breakdown */
-            category_breakdown?: components["schemas"]["CategoryBreakdown"][] | null;
-            /** Custom Fields */
-            custom_fields?: {
-                [key: string]: unknown;
-            } | null;
-            direct_metadata?: components["schemas"]["DirectEvaluationMetadata"] | null;
-            /** Evaluation Type */
-            evaluation_type?: string | null;
-            event_metadata?: components["schemas"]["EventEvaluationMetadata"] | null;
-            query_metadata?: components["schemas"]["QueryEvaluationMetadata"] | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -6170,398 +5559,6 @@ export interface operations {
             };
         };
     };
-    list_evaluations_v1_evaluations_get: {
-        parameters: {
-            query?: {
-                /** @description Include enhanced metadata from annotations */
-                enhanced?: boolean;
-                /** @description Filter evaluations by query reference name */
-                query_ref?: string;
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EvaluationListResponse"] | components["schemas"]["EnhancedEvaluationListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_evaluation_v1_evaluations_post: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EvaluationCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EvaluationDetailResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_evaluation_v1_evaluations__name__get: {
-        parameters: {
-            query?: {
-                /** @description Include enhanced metadata from annotations */
-                enhanced?: boolean;
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EvaluationDetailResponse"] | components["schemas"]["EnhancedEvaluationDetailResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_evaluation_v1_evaluations__name__put: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EvaluationUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EvaluationDetailResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_evaluation_v1_evaluations__name__delete: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    cancel_evaluation_v1_evaluations__name__cancel_patch: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EvaluationDetailResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_evaluators_v1_evaluators_get: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EvaluatorListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_evaluator_v1_evaluators_post: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EvaluatorCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EvaluatorDetailResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_evaluator_v1_evaluators__name__get: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EvaluatorDetailResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_evaluator_v1_evaluators__name__put: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EvaluatorUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EvaluatorDetailResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_evaluator_v1_evaluators__name__delete: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_events_v1_events_get: {
         parameters: {
             query?: {
@@ -6626,6 +5623,60 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["EventResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_last_export_time_v1_export_last_export_time_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportHistoryResponse"];
+                };
+            };
+        };
+    };
+    export_resources_v1_export_resources_post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request */
+                namespace?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

@@ -244,7 +244,7 @@ export function SelectorDetailPanel({
         <div className="bg-muted/50 rounded p-3 text-xs">
           <div className="mb-1 font-medium">Selector Preview:</div>
           <div className="text-muted-foreground">
-            This evaluator will target{' '}
+            This will target{' '}
             <span className="font-medium">{selector.resource}</span> resources
             {labelCount > 0 && (
               <>

@@ -8,7 +8,6 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
-	"mckinsey.com/ark/internal/genai"
 )
 
 func TestDefaultAgent(t *testing.T) {
@@ -76,13 +75,13 @@ func TestDefaultAgent(t *testing.T) {
 func TestDefaultModel(t *testing.T) {
 	t.Run("migrates deprecated type to provider", func(t *testing.T) {
 		model := &arkv1alpha1.Model{
-			Spec: arkv1alpha1.ModelSpec{Type: genai.ProviderOpenAI},
+			Spec: arkv1alpha1.ModelSpec{Type: ProviderOpenAI},
 		}
 		DefaultModel(model)
-		if model.Spec.Provider != genai.ProviderOpenAI {
+		if model.Spec.Provider != ProviderOpenAI {
 			t.Fatal("expected provider to be set")
 		}
-		if model.Spec.Type != genai.ModelTypeCompletions {
+		if model.Spec.Type != ModelTypeCompletions {
 			t.Fatal("expected type to be reset to completions")
 		}
 		if model.Annotations[annotations.MigrationWarningPrefix+"provider"] == "" {
@@ -93,12 +92,12 @@ func TestDefaultModel(t *testing.T) {
 	t.Run("does not migrate when provider is set", func(t *testing.T) {
 		model := &arkv1alpha1.Model{
 			Spec: arkv1alpha1.ModelSpec{
-				Provider: genai.ProviderAzure,
-				Type:     genai.ModelTypeCompletions,
+				Provider: ProviderAzure,
+				Type:     ModelTypeCompletions,
 			},
 		}
 		DefaultModel(model)
-		if model.Spec.Provider != genai.ProviderAzure {
+		if model.Spec.Provider != ProviderAzure {
 			t.Fatal("should not change provider")
 		}
 	})

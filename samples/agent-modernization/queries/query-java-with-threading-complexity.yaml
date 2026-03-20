@@ -4,7 +4,6 @@ metadata:
   name: java-with-threading-complexity
   namespace: default
   labels:
-    evaluation_required: "true"
     environment: "development"
     agent-type: "java-modernizer"
 spec:

@@ -113,10 +113,6 @@ spec:
                     type: string
                   namespace:
                     type: string
-                  responseTarget:
-                    description: Target name to match against query responses (e.g.,
-                      "weather-agent", "summary-team")
-                    type: string
                 required:
                 - name
                 type: object

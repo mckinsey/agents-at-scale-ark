@@ -54,8 +54,8 @@ class ExecutionEngineRequest(BaseModel):
     """Request to execute an agent."""
     agent: AgentConfig
     userInput: Message
-    history: List[Message]
     tools: List[ToolDefinition] = []
+    conversationId: str = ""
 
 
 class ExecutionEngineResponse(BaseModel):

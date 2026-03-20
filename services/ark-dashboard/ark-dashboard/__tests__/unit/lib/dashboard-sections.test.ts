@@ -51,7 +51,6 @@ describe('Dashboard Sections - enabledWhen', () => {
       expect(monitoringKeys).toContain('sessions');
       expect(monitoringKeys).toContain('events');
       expect(monitoringKeys).toContain('broker');
-      expect(monitoringKeys).toContain('evals');
     });
 
     it('should only contain sections with group "monitoring"', () => {
@@ -71,7 +70,6 @@ describe('Dashboard Sections - enabledWhen', () => {
       const configKeys = configSections.map(s => s.key);
       expect(configKeys).toContain('models');
       expect(configKeys).toContain('secrets');
-      expect(configKeys).toContain('evaluators');
     });
   });
 
@@ -113,6 +111,7 @@ describe('Dashboard Sections - enabledWhen', () => {
 
       const serviceKeys = serviceSections.map(s => s.key);
       expect(serviceKeys).toContain('api-keys');
+      expect(serviceKeys).toContain('export');
     });
   });
 });
