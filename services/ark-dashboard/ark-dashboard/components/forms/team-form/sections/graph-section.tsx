@@ -84,26 +84,6 @@ export function GraphSection({
 
   return (
     <div className="space-y-4">
-      {unreachableAgents.length > 0 && (
-        <Alert variant="warning">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            The following agents are not reachable from the starting agent:{' '}
-            {unreachableAgents.map(m => m.name).join(', ')}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {agentsWithNoOutgoing.length > 0 && (
-        <Alert variant="warning">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            The following agents have no outgoing edges and will end graph execution:{' '}
-            {agentsWithNoOutgoing.map(m => m.name).join(', ')}
-          </AlertDescription>
-        </Alert>
-      )}
-
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Network className="text-muted-foreground h-4 w-4" />
@@ -123,6 +103,26 @@ export function GraphSection({
           Add Edge
         </Button>
       </div>
+
+      {unreachableAgents.length > 0 && (
+        <Alert variant="warning">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            The following agents are not reachable from the starting agent:{' '}
+            {unreachableAgents.map(m => m.name).join(', ')}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {agentsWithNoOutgoing.length > 0 && (
+        <Alert variant="warning">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            The following agents have no outgoing edges and will end graph execution:{' '}
+            {agentsWithNoOutgoing.map(m => m.name).join(', ')}
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-2">
         {graphEdges.length === 0 ? (
