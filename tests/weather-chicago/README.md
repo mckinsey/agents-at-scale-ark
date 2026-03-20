@@ -7,7 +7,6 @@ Tests external API integration using sample weather tools.
 - External API calls for geocoding and weather data
 - Real-world data retrieval for Chicago
 - Tool chaining and parameter passing
-- evaluation-llm checks for query response quality
 
 ## Running
 ```bash

@@ -30,11 +30,6 @@ inputs:
     description: 'Install coverage collection components'
     required: false
     default: 'false'
-  install-evaluator:
-    description: 'Install ark-evaluator service for evaluation tests'
-    required: false
-    default: 'false'
-
 runs:
   using: 'composite'
   steps:
@@ -75,8 +70,7 @@ runs:
       shell: bash
       run: |
         ./.github/actions/setup-e2e/setup-local.sh \
-          ${{ inputs.install-coverage == 'true' && '--install-coverage' || '' }} \
-          ${{ inputs.install-evaluator == 'true' && '--install-evaluator' || '' }}
+          ${{ inputs.install-coverage == 'true' && '--install-coverage' || '' }}
       env:
         DOCKER_CICD_CACHE_REGISTRY: ${{ inputs.ci-cache-registry || format('ghcr.io/{0}', github.repository_owner) }}
         DOCKER_CICD_CACHE_REGISTRY_USERNAME: ${{ inputs.ci-cache-registry-username || github.actor }}

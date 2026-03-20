@@ -1,9 +1,7 @@
 'use client';
 
 import {
-  BarChart,
   Bot,
-  CheckCircle,
   Download,
   Loader2,
   Search,
@@ -83,27 +81,11 @@ const resourceSections: ResourceSection[] = [
     description: 'Workflow definitions and templates',
     icon: Workflow,
   },
-  {
-    type: 'evaluators',
-    title: 'Evaluators',
-    description: 'Evaluation criteria and metrics',
-    icon: CheckCircle,
-  },
-  {
-    type: 'evaluations',
-    title: 'Evaluations',
-    description: 'Evaluation results and reports',
-    icon: BarChart,
-  },
 ];
 
 // Helper function to get abbreviated title for mobile view
 const getAbbreviatedTitle = (type: ResourceType, title: string): string => {
   switch (type) {
-    case 'evaluations':
-      return 'Evaluations';
-    case 'evaluators':
-      return 'Evaluators';
     case 'workflows':
       return 'Flows';
     default:

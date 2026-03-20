@@ -22,8 +22,6 @@ dependencies:
 #    path: ./services/ark-mcp
 #  mcp-filesystem:
 #    path: ./mcp/filesystem-mcp
-#  ark-evaluator:
-#    path: ./services/ark-evaluator
 # Observability services. Uncomment to enable locally. Only phoenix or langfuse is needed
 # phoenix service for observability. phoenix has a hook to restart ark-controller to pick up its url
 # phoenix:

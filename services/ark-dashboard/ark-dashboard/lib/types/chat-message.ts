@@ -23,7 +23,11 @@ export interface ArkCompletedQueryData {
 
 export type ArkExtendedChunk = ChatCompletionChunk & {
   error?: { message?: string; code?: string };
-  ark?: ArkCompletedQueryData & { agent?: string; query?: string };
+  ark?: ArkCompletedQueryData & {
+    agent?: string;
+    query?: string;
+    systemMessage?: string;
+  };
 };
 
 export interface GraphEdge {

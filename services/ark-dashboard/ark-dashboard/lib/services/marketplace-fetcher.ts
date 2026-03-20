@@ -1,3 +1,5 @@
+import GitUrlParse from 'git-url-parse';
+
 import type {
   MarketplaceCategory,
   MarketplaceItem,
@@ -10,7 +12,7 @@ interface GitHubMarketplaceItem {
   name: string;
   displayName?: string;
   description: string;
-  type?: 'service' | 'agent';
+  type?: 'service' | 'agent' | 'demo';
   version?: string;
   author?: string;
   homepage?: string;
@@ -48,6 +50,19 @@ interface GitHubMarketplaceManifest {
 const DEFAULT_MARKETPLACE_MANIFEST_URL =
   'https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json';
 
+function extractOrgRepoFromUrl(url: string): string | null {
+  try {
+    const parsed = GitUrlParse(url);
+    if (parsed.full_name) {
+      const parts = parsed.full_name.split('/');
+      return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function mapCategoryFromGitHub(category?: string): MarketplaceCategory {
   const categoryMap: Record<string, MarketplaceCategory> = {
     observability: 'observability',
@@ -72,9 +87,10 @@ function mapCategoryFromGitHub(category?: string): MarketplaceCategory {
   return 'tools'; // default category
 }
 
-function mapTypeFromGitHub(type?: 'service' | 'agent'): MarketplaceItemType {
+function mapTypeFromGitHub(type?: 'service' | 'agent' | 'demo'): MarketplaceItemType {
   if (type === 'agent') return 'template';
   if (type === 'service') return 'service';
+  if (type === 'demo') return 'demo';
   return 'component'; // default type
 }
 
@@ -149,6 +165,7 @@ function getIconForItem(item: GitHubMarketplaceItem): string {
 export function transformGitHubItemToMarketplaceItem(
   item: GitHubMarketplaceItem,
   isInstalled: boolean = false,
+  source?: string,
 ): MarketplaceItem {
   const id = generateItemId(item);
   const now = new Date().toISOString();
@@ -180,6 +197,7 @@ export function transformGitHubItemToMarketplaceItem(
     ),
     createdAt: now,
     updatedAt: now,
+    source: source ?? 'Unknown source',
   };
 }
 
@@ -283,14 +301,6 @@ async function getInstalledMarketplaceItems(): Promise<Set<string>> {
       }
     }
 
-    // Check evaluators
-    if (resources.evaluators) {
-      for (const evaluator of resources.evaluators) {
-        installedItems.add(evaluator.name.toLowerCase());
-        installedItems.add(generateItemIdFromName(evaluator.name));
-      }
-    }
-
     console.log('Found installed marketplace items:', installedItems.size);
     return installedItems;
   } catch (error) {
@@ -323,6 +333,8 @@ export async function fetchMarketplaceItemsFromSource(
   // Get actual installation status from cluster
   const installedItems = await getInstalledMarketplaceItems();
 
+  const urlSource = extractOrgRepoFromUrl(source.url) ?? source.displayName ?? source.name;
+
   return manifest.items.map(item => {
     const itemId = generateItemId(item);
     // Check if item is installed by matching against various forms of the name
@@ -330,10 +342,7 @@ export async function fetchMarketplaceItemsFromSource(
                        installedItems.has(item.name.toLowerCase()) ||
                        installedItems.has(generateItemIdFromName(item.name));
 
-    return {
-      ...transformGitHubItemToMarketplaceItem(item, isInstalled),
-      source: source.displayName ?? source.name,
-    };
+    return transformGitHubItemToMarketplaceItem(item, isInstalled, urlSource);
   });
 }
 

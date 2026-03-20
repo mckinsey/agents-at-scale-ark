@@ -2,10 +2,8 @@ apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   name: weather-chicago
-  labels:
-    evaluated: "true"
 spec:
-  description: Test weather agent evaluation is matching expected format
+  description: Test weather agent with external API tool integration
   steps:
   - name: step-1
     try:
@@ -25,21 +23,6 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
-    - apply:
-        file: manifests/a00-evaluator-llm-rbac.yaml
-    - assert:
-        resource:
-          apiVersion: rbac.authorization.k8s.io/v1
-          kind: RoleBinding
-          metadata:
-            name: evaluator-llm-test-access
-        timeout: 15s
-    - script:
-        content: bash ../helpers/wait-for-rbac.sh evaluator-llm-test-access $NAMESPACE
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-        timeout: 30s
     - apply:
         file: manifests/a01-secret.yaml
     - apply:
@@ -63,20 +46,6 @@ spec:
           status:
             readyReplicas: 1
             availableReplicas: 1
-    # Apply tools and other resources now that mock server is ready
-    - apply:
-        file: manifests/a02-z-evaluator-llm.yaml
-    - wait:
-        apiVersion: ark.mckinsey.com/v1alpha1
-        kind: Evaluator
-        timeout: 3m
-        name: evaluator-llm
-        for:
-          jsonPath:
-            path: '{.status.phase}'
-            value: 'ready'
-    - script:
-        content: bash ../helpers/wait-for-evaluator.sh
     # Create tools using kubectl with template substitution
     - script:
         content: |
@@ -182,64 +151,9 @@ spec:
           condition:
             name: Completed
             value: 'True'
-    - apply:
-        file: manifests/query-evaluation.yaml
-    # Debug evaluation immediately after creation
-    - script:
-        content: |
-          echo "=== Evaluation Created - Initial State ==="
-          sleep 2
-          kubectl get evaluation weather-query-ref-evaluation -n $NAMESPACE -o yaml
-          echo "=== Evaluator Service Status ==="
-          kubectl get evaluator evaluator-llm -n $NAMESPACE -o yaml
-          echo "=== Checking for Evaluator Service Pods ==="
-          kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=evaluator-llm
-    # Monitor evaluation progress before waiting
-    - wait:
-        apiVersion: ark.mckinsey.com/v1alpha1
-        kind: Evaluation
-        timeout: 10m
-        name: weather-query-ref-evaluation
-        for:
-          condition:
-            name: Completed
-            value: 'True'
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Evaluation
-          metadata:
-            name: weather-query-ref-evaluation
-          status:
-            (type(score) == 'string'): true
-            (to_number(score) >= `0.0` && to_number(score) <= `1.0`): true
-            (type(passed) == 'boolean'): true
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Evaluation
-          metadata:
-            name: weather-query-ref-evaluation
-            # Verify that evaluation response metadata is added as annotations
-            (contains(keys(annotations), 'evaluation.metadata/reasoning')): true
     catch:
     - events: {}
     - describe:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: chicago-weather-query
-    - describe:
-        apiVersion: ark.mckinsey.com/v1alpha1
-        kind: Evaluation
-        name: weather-query-ref-evaluation
-    - describe:
-        apiVersion: ark.mckinsey.com/v1alpha1
-        kind: Evaluator
-        name: evaluator-llm
-    cleanup:
-    - script:
-        content: |
-          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
-        env:
-        - name: NAMESPACE
-          value: ($namespace)

@@ -1,0 +1,103 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: team-selector-invalid-agent
+  labels:
+    standard: "true"
+spec:
+  description: Test selector team returning invalid agent name and conversation ending
+  steps:
+  - name: setup-and-test
+    try:
+    # Install mock-llm with custom rules
+    - script:
+        timeout: 90s
+        content: |
+          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.28 \
+            --namespace $NAMESPACE \
+            --values mock-llm-values.yaml
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    # Install ark-tenant for RBAC
+    - script:
+        timeout: 60s
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    # Wait for Model to be available
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: test-model
+          status:
+            conditions:
+            - type: ModelAvailable
+              status: "True"
+    # Apply all manifests
+    - apply:
+        file: manifests/*.yaml
+    # Assert query completes (should terminate after invalid agent name)
+    - assert:
+        timeout: 30s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-invalid-selector-query
+          status:
+            phase: done
+    # Validate response exists and contains warning about invalid agent
+    - assert:
+        timeout: 5s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: test-invalid-selector-query
+          status:
+            (response != null): true
+            (response.target.name): 'test-selector-team'
+    # Validate response contains invalid agent warning in raw field
+    - script:
+        content: |
+          RESPONSE=$(kubectl -n $NAMESPACE get query test-invalid-selector-query -o jsonpath='{.status.response.raw}')
+
+          echo "=== Query Response Raw ==="
+          echo "$RESPONSE"
+          echo "=========================="
+
+          # Check for invalid agent warning message
+          if echo "$RESPONSE" | grep -qi "Selector returned invalid agent name: invalid-agent-name"; then
+            echo "✓ Found invalid agent name warning"
+          else
+            echo "✗ Missing invalid agent name warning"
+            exit 1
+          fi
+
+          echo ""
+          echo "✓ Test passed: Selector returned invalid name and conversation ended correctly"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-invalid-selector-query
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
