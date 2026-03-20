@@ -1,6 +1,7 @@
-import { Network, Trash2 } from 'lucide-react';
+import { AlertCircle, Network, Trash2 } from 'lucide-react';
 import type { UseFormReturn } from 'react-hook-form';
 
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -61,6 +62,25 @@ export function GraphSection({
   const usedFromAgents = new Set(
     graphEdges.filter(e => e.from).map(e => e.from),
   );
+
+  const agentsWithNoOutgoing = selectedStrategy === 'selector'
+    ? selectedMembers
+        .filter(m => m.type === 'agent')
+        .filter(m => !graphEdges.some(e => e.from === m.name))
+    : [];
+
+  const unreachableAgents = (() => {
+    if (selectedStrategy !== 'selector' || graphEdges.length === 0 || selectedMembers.length === 0) return [];
+    const reachable = new Set<string>();
+    const queue = [selectedMembers[0].name];
+    while (queue.length) {
+      const current = queue.shift()!;
+      if (reachable.has(current)) continue;
+      reachable.add(current);
+      graphEdges.filter(e => e.from === current).forEach(e => queue.push(e.to));
+    }
+    return selectedMembers.filter(m => m.type === 'agent' && !reachable.has(m.name));
+  })();
 
   return (
     <div className="space-y-4">
@@ -196,6 +216,26 @@ export function GraphSection({
           </>
         )}
       </p>
+
+      {unreachableAgents.length > 0 && (
+        <Alert variant="warning">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            The following agents are not reachable from the starting agent:{' '}
+            {unreachableAgents.map(m => m.name).join(', ')}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {agentsWithNoOutgoing.length > 0 && (
+        <Alert variant="warning">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            The following agents have no outgoing edges and will end graph execution:{' '}
+            {agentsWithNoOutgoing.map(m => m.name).join(', ')}
+          </AlertDescription>
+        </Alert>
+      )}
     </div>
   );
 }

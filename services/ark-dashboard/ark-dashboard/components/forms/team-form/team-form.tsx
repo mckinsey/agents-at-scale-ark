@@ -31,6 +31,7 @@ import {
   MembersSection,
   SelectorSection,
   StrategySection,
+  WarningsSection,
 } from './sections';
 import { TeamFormMode, type TeamFormProps } from './types';
 import { useTeamForm } from './use-team-form';
@@ -210,6 +211,13 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
         unavailableMembers={unavailableMembers}
         onGraphEdgesChange={setGraphEdges}
         disabled={saving}
+      />
+
+      <WarningsSection
+        agents={agents}
+        selectedMembers={selectedMembers}
+        strategy={form.watch('strategy')}
+        selectorAgent={form.watch('selectorAgent')}
       />
     </>
   );
