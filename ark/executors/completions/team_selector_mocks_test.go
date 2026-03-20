@@ -202,4 +202,3 @@ func (m *mockEventingRecorder) AddCompletionUsage(ctx context.Context, usage ope
 func (m *mockEventingRecorder) GetTokenSummary(ctx context.Context) arkv1alpha1.TokenUsage {
 	return arkv1alpha1.TokenUsage{}
 }
-
