@@ -87,47 +87,17 @@ class SecretsPage(BasePage):
     def create_secret_with_verification(self, prefix: str, env_key: str) -> dict:
         secret_name = self.generate_secret_name(prefix)
         secret_value = self.get_password_from_env(env_key)
-        
+
         logger.info(f"Creating secret: {secret_name} with key: {env_key}")
         logger.info(f"Secret value length: {len(secret_value)}")
-        
+
         self.page.locator(self.ADD_SECRET_BUTTON).first.click()
-        self.wait_for_load_state("domcontentloaded")
-        self.page.locator("input").first.wait_for(state="visible", timeout=10000)
-        
-        current_url = self.page.url
-        logger.info(f"URL after clicking Add Secret: {current_url}")
-        
-        dialog_scope = "[role='dialog']" if "/secrets/new" not in current_url else "main, form"
-        logger.info(f"Using dialog scope: {dialog_scope}")
-        
-        name_input = self.page.locator(f"{dialog_scope} input:not([type='password'])").first
-        name_input.wait_for(state="visible", timeout=10000)
-        
-        password_input = self.page.locator(f"{dialog_scope} input[type='password']").first
-        password_input.wait_for(state="visible", timeout=10000)
-        
-        logger.info(f"Filling name field with: {secret_name}")
-        name_input.fill(secret_name)
-        
-        logger.info("Filling password field")
-        password_input.fill(secret_value)
-        
-        logger.info(f"Form filled - name={secret_name}, password_len={len(secret_value)}")
-        
-        save_selector = f"{dialog_scope} button[type='submit']"
-        
-        save_btn = self.page.locator(save_selector).first
-        save_btn.wait_for(state="visible", timeout=5000)
-        logger.info(f"Clicking save button (disabled={save_btn.get_attribute('disabled')})")
-        save_btn.click()
-        self.page.wait_for_timeout(2000)
-        logger.info(f"URL after save: {self.page.url}, dialog visible: {self.is_visible('[role=dialog]')}")
-        
+        self.wait_for_modal_open()
+
+        inputs = self.page.locator("[role='dialog'] input, [data-slot='dialog-content'] input")
+        inputs.first.wait_for(state="visible", timeout=10000)
         try:
-            self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
-            popup_visible = True
-            logger.info("Success popup appeared after secret creation")
+            inputs.nth(1).wait_for(state="visible", timeout=5000)
         except Exception:
             pass
 
@@ -149,10 +119,10 @@ class SecretsPage(BasePage):
 
         popup_visible = self._check_success_popup()
         self.wait_for_modal_close()
-        
+
         self.navigate_to_secrets_tab()
         in_table = self.is_secret_in_table(secret_name)
-        
+
         return {
             "name": secret_name,
             "expected_name": secret_name,
