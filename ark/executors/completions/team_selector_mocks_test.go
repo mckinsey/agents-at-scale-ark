@@ -51,9 +51,23 @@ func (m *mockSelectorAgent) Execute(ctx context.Context, userInput Message, hist
 		return &ExecutionResult{Messages: []Message{}}, nil
 	}
 	if m.returnTerminateResponse != "" {
+		assistantMsg := Message(openai.ChatCompletionMessageParamUnion{
+			OfAssistant: &openai.ChatCompletionAssistantMessageParam{
+				Name: openai.String("mock-selector"),
+				ToolCalls: []openai.ChatCompletionMessageToolCallParam{
+					{
+						ID: "tool-call-id",
+						Function: openai.ChatCompletionMessageToolCallFunctionParam{
+							Name:      "terminate",
+							Arguments: `{"response":"` + m.returnTerminateResponse + `"}`,
+						},
+					},
+				},
+			},
+		})
 		toolMsg := ToolMessage(m.returnTerminateResponse, "tool-call-id")
 		return &ExecutionResult{
-			Messages: []Message{toolMsg},
+			Messages: []Message{assistantMsg, toolMsg},
 		}, &TerminateTeamWithResponse{Response: m.returnTerminateResponse}
 	}
 	return &ExecutionResult{
@@ -188,3 +202,4 @@ func (m *mockEventingRecorder) AddCompletionUsage(ctx context.Context, usage ope
 func (m *mockEventingRecorder) GetTokenSummary(ctx context.Context) arkv1alpha1.TokenUsage {
 	return arkv1alpha1.TokenUsage{}
 }
+

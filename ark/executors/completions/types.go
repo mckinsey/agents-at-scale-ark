@@ -97,6 +97,7 @@ func NewTerminateTeamWithReason(reason string) error {
 // from the terminate tool's response parameter.
 type TerminateTeamWithResponse struct {
 	Response string
+	Messages []Message
 	base     TerminateTeam
 }
 

@@ -154,7 +154,7 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	if err != nil {
 		if IsTerminateTeam(err) {
 			if response := extractTerminateToolResponse(result); response != "" {
-				return nil, &TerminateTeamWithResponse{Response: response}
+				return nil, &TerminateTeamWithResponse{Response: response, Messages: result.Messages}
 			}
 			return nil, err
 		}
@@ -302,7 +302,14 @@ func (t *Team) handleMemberSelectionError(ctx context.Context, err error, newMes
 	case IsTerminateTeam(err):
 		var withResponse *TerminateTeamWithResponse
 		if errors.As(err, &withResponse) && withResponse.Response != "" {
-			*newMessages = append(*newMessages, NewAssistantMessage(withResponse.Response))
+			*newMessages = append(*newMessages, withResponse.Messages...)
+			if t.eventStream != nil {
+				chunk := NewContentChunk("chatcmpl-terminate", "", withResponse.Response)
+				chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, "", nil)
+				if streamErr := t.eventStream.StreamChunk(ctx, chunkWithMeta); streamErr != nil {
+					logf.FromContext(ctx).Error(streamErr, "failed to stream terminate response")
+				}
+			}
 		}
 		return true, nil
 	default:

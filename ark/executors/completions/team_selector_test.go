@@ -579,11 +579,14 @@ func TestHandleMemberSelectionError(t *testing.T) {
 			wantMessagesAdded: 0,
 		},
 		{
-			name:                "TerminateTeamWithResponse adds assistant message",
-			err:                 &TerminateTeamWithResponse{Response: "Goodbye!"},
+			name: "TerminateTeamWithResponse adds original messages",
+			err: &TerminateTeamWithResponse{
+				Response: "Goodbye!",
+				Messages: []Message{NewAssistantMessage("Goodbye!"), NewSystemMessage("extra")},
+			},
 			wantTerminate:       true,
 			wantReturnErr:       false,
-			wantMessagesAdded:   1,
+			wantMessagesAdded:   2,
 			wantMessageContains: "Goodbye!",
 		},
 		{
@@ -1082,6 +1085,7 @@ func TestExecuteSelector_WithTerminateTool(t *testing.T) {
 	mockMember2 := &mockTeamMember{name: "agent2"}
 
 	mockSelector := &mockSelectorAgent{returnTerminateResponse: "No further responses needed."}
+	stream := &mockEventStream{}
 
 	team := &Team{
 		Name:     "test-team",
@@ -1093,6 +1097,7 @@ func TestExecuteSelector_WithTerminateTool(t *testing.T) {
 		selectorAgent:     mockSelector,
 		telemetryRecorder: &mockTeamRecorder{},
 		eventingRecorder:  &mockEventingRecorder{},
+		eventStream:       stream,
 	}
 
 	ctx := context.Background()
@@ -1104,13 +1109,18 @@ func TestExecuteSelector_WithTerminateTool(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, messages, "terminate response should be included in messages")
 
-	foundResponse := false
+	foundToolCall := false
 	for _, msg := range messages {
-		if msg.OfAssistant != nil && msg.OfAssistant.Content.OfString.Value == "No further responses needed." {
-			foundResponse = true
-			break
+		if msg.OfAssistant != nil && len(msg.OfAssistant.ToolCalls) > 0 {
+			for _, tc := range msg.OfAssistant.ToolCalls {
+				if tc.Function.Name == "terminate" {
+					foundToolCall = true
+					break
+				}
+			}
 		}
 	}
+	assert.True(t, foundToolCall, "Expected to find terminate tool call in messages")
 
-	assert.True(t, foundResponse, "Expected to find terminate response as assistant message")
+	require.Len(t, stream.chunks, 1, "Expected terminate response to be streamed")
 }
