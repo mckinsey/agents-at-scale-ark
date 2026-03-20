@@ -117,47 +117,7 @@ class SecretsPage(BasePage):
         save_button.wait_for(state="visible", timeout=5000)
         save_button.click(force=True)
 
-        self.wait_for_modal_close()
-        self.wait_for_load_state("domcontentloaded")
-        self.page.locator("input").first.wait_for(state="visible", timeout=10000)
-        
-        current_url = self.page.url
-        logger.info(f"URL after clicking Add Secret: {current_url}")
-        
-        dialog_scope = "[role='dialog']" if "/secrets/new" not in current_url else "main, form"
-        logger.info(f"Using dialog scope: {dialog_scope}")
-        
-        name_input = self.page.locator(f"{dialog_scope} input:not([type='password'])").first
-        name_input.wait_for(state="visible", timeout=10000)
-        
-        password_input = self.page.locator(f"{dialog_scope} input[type='password']").first
-        password_input.wait_for(state="visible", timeout=10000)
-        
-        logger.info(f"Filling name field with: {secret_name}")
-        name_input.fill(secret_name)
-        
-        logger.info("Filling password field")
-        password_input.fill(secret_value)
-        
-        logger.info(f"Form filled - name={secret_name}, password_len={len(secret_value)}")
-        
-        save_selector = f"{dialog_scope} button[type='submit']"
-        
-        save_btn = self.page.locator(save_selector).first
-        save_btn.wait_for(state="visible", timeout=5000)
-        logger.info(f"Clicking save button (disabled={save_btn.get_attribute('disabled')})")
-        save_btn.click()
-        self.page.wait_for_timeout(2000)
-        logger.info(f"URL after save: {self.page.url}, dialog visible: {self.is_visible('[role=dialog]')}")
-        
-        try:
-            self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
-            popup_visible = True
-            logger.info("Success popup appeared after secret creation")
-        except Exception:
-            popup_visible = False
-            logger.info("No success popup detected")
-        
+        popup_visible = self._check_success_popup()
         self.wait_for_modal_close()
         
         self.navigate_to_secrets_tab()
