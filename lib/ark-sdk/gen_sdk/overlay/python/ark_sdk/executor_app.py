@@ -4,6 +4,7 @@ Extension spec: ark/api/extensions/query/v1/
 """
 
 import logging
+import os
 from typing import Any, List
 
 import uvicorn
@@ -34,6 +35,75 @@ from .extensions.query import (
 )
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# OTEL — conditional setup shared by all executors
+# ---------------------------------------------------------------------------
+_otel_enabled = False
+
+
+def _init_otel() -> bool:
+    """Initialize OTEL if OTEL_EXPORTER_OTLP_ENDPOINT is set.
+
+    Sets up TracerProvider, OTLP HTTP exporter, W3C propagators, and
+    Starlette instrumentation. Must run before any Starlette app is created.
+    """
+    endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+    if not endpoint:
+        return False
+    try:
+        from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+        try:
+            from opentelemetry.propagate import set_global_textmap
+            from opentelemetry.propagators.composite import CompositePropagator
+            from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+            from opentelemetry.baggage.propagation import W3CBaggagePropagator
+            set_global_textmap(CompositePropagator([
+                TraceContextTextMapPropagator(),
+                W3CBaggagePropagator(),
+            ]))
+        except ImportError:
+            logger.debug("W3C propagators not available, using defaults")
+
+        # Copy baggage entries (e.g. session_id) onto every span as attributes
+        from opentelemetry.sdk.trace import SpanProcessor as _SpanProcessor
+        from opentelemetry import baggage, context
+
+        class BaggageSpanProcessor(_SpanProcessor):
+            def on_start(self, span, parent_context=None):
+                ctx = parent_context or context.get_current()
+                for key, value in baggage.get_all(ctx).items():
+                    span.set_attribute(key, value)
+            def on_end(self, span):
+                pass
+            def shutdown(self):
+                pass
+            def force_flush(self, timeout_millis=None):
+                pass
+
+        provider = TracerProvider()
+        provider.add_span_processor(BaggageSpanProcessor())
+        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+        trace.set_tracer_provider(provider)
+
+        logger.info(f"OTEL tracing enabled, exporting to {endpoint}")
+        return True
+    except Exception:
+        logger.exception("Failed to initialize OTEL tracing")
+        return False
+
+
+_otel_enabled = _init_otel()
+
+
+def is_otel_enabled() -> bool:
+    """Check if OTEL tracing was initialized. Executors use this to
+    conditionally apply their own executor-specific instrumentors."""
+    return _otel_enabled
 
 
 class HealthFilter(logging.Filter):
@@ -147,6 +217,15 @@ class ExecutorApp:
             return JSONResponse({"status": "healthy", "engine": self.engine_name})
 
         app.routes.insert(0, Route("/health", health_check, methods=["GET"]))
+
+        # Wrap app with OTEL ASGI middleware to extract traceparent/baggage
+        if _otel_enabled:
+            try:
+                from opentelemetry.instrumentation.asgi import OpenTelemetryMiddleware
+                app = OpenTelemetryMiddleware(app)
+            except ImportError:
+                logger.debug("opentelemetry-instrumentation-asgi not available")
+
         return app
 
     def run(self, host: str = "0.0.0.0", port: int = 8000) -> None:
