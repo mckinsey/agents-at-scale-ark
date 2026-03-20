@@ -92,10 +92,6 @@ func newArkObject(kind string) client.Object {
 		return &arkv1alpha1.MCPServer{}
 	case "Memory":
 		return &arkv1alpha1.Memory{}
-	case "Evaluator":
-		return &arkv1alpha1.Evaluator{}
-	case "Evaluation":
-		return &arkv1alpha1.Evaluation{}
 	case "A2ATask":
 		return &arkv1alpha1.A2ATask{}
 	case "A2AServer":

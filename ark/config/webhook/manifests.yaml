@@ -36,26 +36,6 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /validate-ark-mckinsey-com-v1alpha1-evaluator
-  failurePolicy: Fail
-  name: vevaluator-v1alpha1.kb.io
-  rules:
-  - apiGroups:
-    - ark.mckinsey.com
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - evaluators
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: webhook-service
-      namespace: system
       path: /validate-ark-mckinsey-com-v1alpha1-mcpserver
   failurePolicy: Fail
   name: vmcpserver-v1.kb.io

@@ -23,10 +23,6 @@ func (v *Validator) Validate(ctx context.Context, obj runtime.Object) ([]string,
 		return v.ValidateTeam(ctx, o)
 	case *arkv1alpha1.MCPServer:
 		return v.ValidateMCPServer(ctx, o)
-	case *arkv1alpha1.Evaluator:
-		return v.ValidateEvaluator(ctx, o)
-	case *arkv1alpha1.Evaluation:
-		return v.ValidateEvaluation(ctx, o)
 	case *arkv1prealpha1.A2AServer:
 		return ValidateA2AServer(o)
 	case *arkv1prealpha1.ExecutionEngine:

@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: agent-b
+spec:
+  description: Second agent in the team
+  prompt: |
+    You are agent B. Respond briefly to help with the task.
+  modelRef:
+    name: test-model

@@ -183,8 +183,7 @@ export function AppSidebar() {
     item => item.key === currentSection,
   );
   const isMonitoringSection =
-    MONITORING_SECTIONS.some(item => item.key === currentSection) ||
-    currentSection === 'evals';
+    MONITORING_SECTIONS.some(item => item.key === currentSection);
 
   const [agentBuilderOpen, setAgentBuilderOpen] = useState(
     isAgentBuilderSection,
@@ -233,9 +232,7 @@ export function AppSidebar() {
     return sections.some(item => item.key === current);
   };
 
-  const enabledMonitoringSections = MONITORING_SECTIONS.filter(
-    item => item.key !== 'evaluators' && item.key !== 'evaluations',
-  );
+  const enabledMonitoringSections = MONITORING_SECTIONS;
 
   return (
     <div>

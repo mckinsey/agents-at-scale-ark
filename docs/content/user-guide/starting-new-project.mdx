@@ -604,29 +604,6 @@ spec:
       name: escalation-handler
 ```
 
-### Add Evaluations
-
-Create evaluation queries to measure performance:
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: eval-customer-support
-spec:
-  input: "Test customer inquiry"
-  target:
-    - kind: Agent
-    name: customer-support
-  evaluations:
-    - evaluatorRef:
-        name: llm-evaluator
-      criteria:
-        - accuracy
-        - helpfulness
-        - professionalism
-```
-
 ## Best Practices
 
 ### 1. Organize by Feature

@@ -4,7 +4,6 @@ metadata:
   name: non-java-python-code
   namespace: default
   labels:
-    evaluation_required: "true"
     agent-type: "java-modernizer"
 spec:
   target:

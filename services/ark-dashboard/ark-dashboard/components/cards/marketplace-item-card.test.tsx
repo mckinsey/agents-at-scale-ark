@@ -93,6 +93,27 @@ describe('MarketplaceItemCard', () => {
     expect(screen.getByText('Agent')).toBeInTheDocument();
   });
 
+  it('renders View button for demo items and opens repository URL', () => {
+    const spy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const demoUrl = 'https://github.com/example/demo';
+
+    renderWithProviders(
+      <MarketplaceItemCard
+        item={makeItem({ type: 'demo', repository: demoUrl })}
+      />,
+    );
+
+    const viewButton = screen.getByRole('button', { name: /view/i });
+    expect(viewButton).toBeInTheDocument();
+    expect(viewButton).not.toBeDisabled();
+
+    fireEvent.click(viewButton);
+
+    expect(spy).toHaveBeenCalledWith(demoUrl, '_blank');
+
+    spy.mockRestore();
+  });
+
   it('renders up to 4 tags', () => {
     renderWithProviders(
       <MarketplaceItemCard

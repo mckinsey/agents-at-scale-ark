@@ -108,8 +108,8 @@ GitHub variables and secrets for ARK build and deployment workflows. All configu
 | `DOCKER_CICD_CACHE_REGISTRY_USERNAME` | Secret (Optional) | Username for CI cache registry authentication | `${{ github.actor }}` |
 | `DOCKER_CICD_CACHE_REGISTRY_PASSWORD` | Secret (Optional) | Password/token for CI cache registry authentication | `${{ secrets.GITHUB_TOKEN }}` |
 | **Azure OpenAI (Testing)** | | |
-| `CICD_AZURE_OPENAI_KEY` | Secret | Azure OpenAI API key for E2E quickstart tests and evaluator | |
-| `CICD_AZURE_OPENAI_BASE_URL` | Secret | Azure OpenAI base URL for E2E quickstart tests and evaluator | |
+| `CICD_AZURE_OPENAI_KEY` | Secret | Azure OpenAI API key for E2E quickstart tests | |
+| `CICD_AZURE_OPENAI_BASE_URL` | Secret | Azure OpenAI base URL for E2E quickstart tests | |
 | **Distribution Environment Deployment** | | |
 | `DEPLOY_CLUSTER_LOGIN_URL` | Secret | Kubernetes cluster login URL for centralized deployment environment | |
 | `DEPLOY_CLUSTER_IDP_ISSUER_URL` | Secret | Identity provider issuer URL for cluster authentication | |

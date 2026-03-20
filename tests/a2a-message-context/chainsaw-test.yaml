@@ -76,6 +76,11 @@ spec:
             echo "ERROR: contextId not set in response a2a metadata" >&2
             exit 1
           fi
+          CONV_ID=$(kubectl get query message-counter-first -n $NAMESPACE -o jsonpath='{.status.conversationId}')
+          if [ -z "$CONV_ID" ]; then
+            echo "ERROR: conversationId not set in status" >&2
+            exit 1
+          fi
           printf '%s' "$CONTEXT_ID"
         env:
         - name: NAMESPACE
