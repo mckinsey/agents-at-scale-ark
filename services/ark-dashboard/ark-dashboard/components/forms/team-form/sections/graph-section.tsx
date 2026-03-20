@@ -63,7 +63,7 @@ export function GraphSection({
     graphEdges.filter(e => e.from).map(e => e.from),
   );
 
-  const agentsWithNoOutgoing = selectedStrategy === 'selector'
+  const agentsWithNoOutgoing = selectedStrategy === 'selector' && graphEdges.length > 0
     ? selectedMembers
         .filter(m => m.type === 'agent')
         .filter(m => !graphEdges.some(e => e.from === m.name))
