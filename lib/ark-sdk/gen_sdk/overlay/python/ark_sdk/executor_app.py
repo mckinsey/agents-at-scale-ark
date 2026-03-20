@@ -91,7 +91,7 @@ def _discover_broker_endpoint() -> str | None:
                                 break
                     except Exception:
                         port = "80"
-                return f"http://{svc_name}.{ns}.svc.cluster.local:{port}/v1/traces"
+                return f"http://{svc_name}.{ns}.svc.cluster.local:{port}/v1/traces"  # NOSONAR — cluster-internal service-to-service traffic
     except Exception as e:
         logger.debug(f"Broker discovery skipped: {e}")
     return None
