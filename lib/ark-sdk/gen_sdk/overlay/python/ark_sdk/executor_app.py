@@ -42,6 +42,61 @@ logger = logging.getLogger(__name__)
 _otel_enabled = False
 
 
+def _discover_broker_endpoint() -> str | None:
+    """Discover ark-broker OTLP endpoint from K8s ConfigMap.
+
+    Looks for a ConfigMap named 'ark-config-broker' in all namespaces,
+    matching the pattern used by the Go controller. Returns the OTLP
+    traces endpoint URL, or None if not found.
+    """
+    try:
+        from kubernetes import client as k8s_client
+        from .k8s import _init_k8s, get_namespace
+        _init_k8s()
+
+        v1 = k8s_client.CoreV1Api()
+        ns = get_namespace()
+        cm = v1.read_namespaced_config_map(name="ark-config-broker", namespace=ns)
+        if cm:
+            cms_items = [cm]
+        else:
+            cms_items = []
+        for cm in cms_items:
+            data = cm.data or {}
+            if data.get("enabled") != "true":
+                continue
+            service_ref = data.get("serviceRef", "")
+            # Parse serviceRef YAML-ish format: "name: <svc>\nport: <port>"
+            svc_name = ""
+            svc_port = ""
+            for line in service_ref.strip().splitlines():
+                key, _, val = line.partition(":")
+                key, val = key.strip(), val.strip().strip('"')
+                if key == "name":
+                    svc_name = val
+                elif key == "port":
+                    svc_port = val
+            if svc_name:
+                ns = cm.metadata.namespace
+                # Resolve named port from the service definition
+                if svc_port.isdigit():
+                    port = svc_port
+                else:
+                    try:
+                        svc = v1.read_namespaced_service(name=svc_name, namespace=ns)
+                        port = "80"
+                        for p in svc.spec.ports or []:
+                            if p.name == svc_port:
+                                port = str(p.port)
+                                break
+                    except Exception:
+                        port = "80"
+                return f"http://{svc_name}.{ns}.svc.cluster.local:{port}/v1/traces"
+    except Exception as e:
+        logger.debug(f"Broker discovery skipped: {e}")
+    return None
+
+
 def _init_otel() -> bool:
     """Initialize OTEL if OTEL_EXPORTER_OTLP_ENDPOINT is set.
 
@@ -87,7 +142,16 @@ def _init_otel() -> bool:
 
         provider = TracerProvider()
         provider.add_span_processor(BaggageSpanProcessor())
+        # Primary exporter — sends to OTEL_EXPORTER_OTLP_ENDPOINT
         provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+
+        # Broker exporter — discover ark-config-broker ConfigMap and send traces there too
+        broker_endpoint = _discover_broker_endpoint()
+        if broker_endpoint:
+            broker_exporter = OTLPSpanExporter(endpoint=broker_endpoint)
+            provider.add_span_processor(BatchSpanProcessor(broker_exporter))
+            logger.info(f"OTEL broker exporter enabled, sending to {broker_endpoint}")
+
         trace.set_tracer_provider(provider)
 
         logger.info(f"OTEL tracing enabled, exporting to {endpoint}")
