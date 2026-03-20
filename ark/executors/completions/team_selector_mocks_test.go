@@ -35,9 +35,10 @@ func (m *mockTeamMember) Execute(ctx context.Context, userInput Message, history
 }
 
 type mockSelectorAgent struct {
-	returnName      string
-	returnEmpty     bool
-	capturedHistory []Message
+	returnName              string
+	returnEmpty             bool
+	returnTerminateResponse string
+	capturedHistory         []Message
 }
 
 func newMockSelectorAgent() *mockSelectorAgent {
@@ -48,6 +49,12 @@ func (m *mockSelectorAgent) Execute(ctx context.Context, userInput Message, hist
 	m.capturedHistory = history
 	if m.returnEmpty {
 		return &ExecutionResult{Messages: []Message{}}, nil
+	}
+	if m.returnTerminateResponse != "" {
+		toolMsg := ToolMessage(m.returnTerminateResponse, "tool-call-id")
+		return &ExecutionResult{
+			Messages: []Message{toolMsg},
+		}, &TerminateTeamWithResponse{Response: m.returnTerminateResponse}
 	}
 	return &ExecutionResult{
 		Messages: []Message{

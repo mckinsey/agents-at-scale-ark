@@ -92,3 +92,18 @@ func NewTerminateTeamWithReason(reason string) error {
 		Reason: reason,
 	}
 }
+
+// TerminateTeamWithResponse wraps TerminateTeam with a user-facing response message
+// from the terminate tool's response parameter.
+type TerminateTeamWithResponse struct {
+	Response string
+	base     TerminateTeam
+}
+
+func (e *TerminateTeamWithResponse) Error() string {
+	return terminateTeamMessage
+}
+
+func (e *TerminateTeamWithResponse) Unwrap() error {
+	return &e.base
+}

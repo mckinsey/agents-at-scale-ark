@@ -153,6 +153,9 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	result, err := selectorAgent.Execute(ctx, NewUserMessage("Select the next participant to respond."), []Message{NewSystemMessage(selectorMessage)}, nil, nil)
 	if err != nil {
 		if IsTerminateTeam(err) {
+			if response := extractTerminateToolResponse(result); response != "" {
+				return nil, &TerminateTeamWithResponse{Response: response}
+			}
 			return nil, err
 		}
 		return nil, fmt.Errorf("selector agent call failed: %w", err)
@@ -273,6 +276,18 @@ func (t *Team) buildLegalTransitionsMap() map[string][]TeamMember {
 	return legalTransitions
 }
 
+func extractTerminateToolResponse(result *ExecutionResult) string {
+	if result == nil {
+		return ""
+	}
+	for i := len(result.Messages) - 1; i >= 0; i-- {
+		if msg := result.Messages[i]; msg.OfTool != nil {
+			return msg.OfTool.Content.OfString.Value
+		}
+	}
+	return ""
+}
+
 func (t *Team) handleMemberSelectionError(ctx context.Context, err error, newMessages *[]Message) (shouldTerminate bool, returnErr error) {
 	var invalidAgentErr *InvalidAgentError
 	switch {
@@ -285,6 +300,10 @@ func (t *Team) handleMemberSelectionError(ctx context.Context, err error, newMes
 		StreamSystemMessage(ctx, t.eventStream, warningContent)
 		return true, nil
 	case IsTerminateTeam(err):
+		var withResponse *TerminateTeamWithResponse
+		if errors.As(err, &withResponse) && withResponse.Response != "" {
+			*newMessages = append(*newMessages, NewAssistantMessage(withResponse.Response))
+		}
 		return true, nil
 	default:
 		return false, err

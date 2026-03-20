@@ -579,6 +579,14 @@ func TestHandleMemberSelectionError(t *testing.T) {
 			wantMessagesAdded: 0,
 		},
 		{
+			name:                "TerminateTeamWithResponse adds assistant message",
+			err:                 &TerminateTeamWithResponse{Response: "Goodbye!"},
+			wantTerminate:       true,
+			wantReturnErr:       false,
+			wantMessagesAdded:   1,
+			wantMessageContains: "Goodbye!",
+		},
+		{
 			name:              "regular error returned as-is",
 			err:               errors.New("some error"),
 			wantTerminate:     false,
@@ -603,7 +611,13 @@ func TestHandleMemberSelectionError(t *testing.T) {
 			}
 			assert.Len(t, newMessages, tt.wantMessagesAdded)
 			if tt.wantMessageContains != "" && len(newMessages) > 0 {
-				content := newMessages[0].OfSystem.Content.OfString.Value
+				msg := newMessages[0]
+				var content string
+				if msg.OfSystem != nil {
+					content = msg.OfSystem.Content.OfString.Value
+				} else if msg.OfAssistant != nil {
+					content = msg.OfAssistant.Content.OfString.Value
+				}
 				assert.Contains(t, content, tt.wantMessageContains)
 			}
 		})
@@ -1007,4 +1021,96 @@ func TestExecuteSelector_WithInvalidAgentSelection(t *testing.T) {
 	}
 
 	assert.True(t, foundWarning, "Expected to find invalid agent warning message in output")
+}
+
+func TestExtractTerminateToolResponse(t *testing.T) {
+	tests := []struct {
+		name     string
+		result   *ExecutionResult
+		wantResp string
+	}{
+		{
+			name:     "nil result returns empty",
+			result:   nil,
+			wantResp: "",
+		},
+		{
+			name:     "empty messages returns empty",
+			result:   &ExecutionResult{Messages: []Message{}},
+			wantResp: "",
+		},
+		{
+			name: "tool message content is returned",
+			result: &ExecutionResult{
+				Messages: []Message{
+					ToolMessage("The answer is 42", "call-id"),
+				},
+			},
+			wantResp: "The answer is 42",
+		},
+		{
+			name: "last tool message is returned when multiple messages",
+			result: &ExecutionResult{
+				Messages: []Message{
+					NewAssistantMessage("thinking..."),
+					ToolMessage("final answer", "call-id"),
+				},
+			},
+			wantResp: "final answer",
+		},
+		{
+			name: "no tool message returns empty",
+			result: &ExecutionResult{
+				Messages: []Message{
+					NewAssistantMessage("just text"),
+				},
+			},
+			wantResp: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractTerminateToolResponse(tt.result)
+			assert.Equal(t, tt.wantResp, got)
+		})
+	}
+}
+
+func TestExecuteSelector_WithTerminateTool(t *testing.T) {
+	mockMember1 := &mockTeamMember{name: "agent1"}
+	mockMember2 := &mockTeamMember{name: "agent2"}
+
+	mockSelector := &mockSelectorAgent{returnTerminateResponse: "No further responses needed."}
+
+	team := &Team{
+		Name:     "test-team",
+		Strategy: "selector",
+		Members: []TeamMember{
+			mockMember1,
+			mockMember2,
+		},
+		selectorAgent:     mockSelector,
+		telemetryRecorder: &mockTeamRecorder{},
+		eventingRecorder:  &mockEventingRecorder{},
+	}
+
+	ctx := context.Background()
+	userInput := NewUserMessage("test message")
+	history := []Message{}
+
+	messages, err := team.executeSelector(ctx, userInput, history)
+
+	require.NoError(t, err)
+	require.NotEmpty(t, messages, "terminate response should be included in messages")
+
+	foundResponse := false
+	for _, msg := range messages {
+		if msg.OfAssistant != nil && msg.OfAssistant.Content.OfString.Value == "No further responses needed." {
+			foundResponse = true
+			break
+		}
+	}
+
+	assert.True(t, foundResponse, "Expected to find terminate response as assistant message")
 }
