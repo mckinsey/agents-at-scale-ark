@@ -89,6 +89,7 @@ export function AgentForm({
     saving,
     agent,
     models,
+    executionEngines,
     availableTools,
     toolsLoading,
     unavailableTools,
@@ -321,6 +322,7 @@ export function AgentForm({
                           <ModelConfigSection
                             form={form}
                             models={models}
+                            executionEngines={executionEngines}
                             showExecutionEngine={
                               isExperimentalExecutionEngineEnabled
                             }
@@ -477,6 +479,7 @@ Environment: {{.environment}}"
                     <ModelConfigSection
                       form={form}
                       models={models}
+                      executionEngines={executionEngines}
                       showExecutionEngine={isExperimentalExecutionEngineEnabled}
                       disabled={isDisabled}
                     />

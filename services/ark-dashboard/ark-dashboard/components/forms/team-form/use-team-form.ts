@@ -148,7 +148,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
       setSaving(true);
       try {
         if (mode === TeamFormMode.VIEW && team) {
-          await teamsService.updateById(team.id, {
+          const updatedTeam = await teamsService.updateById(team.id, {
             description: values.description || undefined,
             members: selectedMembers.length > 0 ? selectedMembers : undefined,
             strategy: values.strategy || undefined,
@@ -164,6 +164,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
           }, { namespace });
 
           const updatedTeam = await teamsService.getByName(teamName!, namespace);
+          
           setTeam(updatedTeam);
           setInitialMembers(selectedMembers);
           setInitialGraphEdges(graphEdges);

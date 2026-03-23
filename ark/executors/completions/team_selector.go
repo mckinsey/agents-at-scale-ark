@@ -3,6 +3,7 @@ package completions
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"text/template"
@@ -11,6 +12,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/telemetry"
 )
 
 const defaultSelectorPrompt = `You are in a role play game. The following roles are available:
@@ -25,6 +27,14 @@ type SelectorTemplateData struct {
 	Roles        string
 	Participants string
 	History      string
+}
+
+type InvalidAgentError struct {
+	SelectedName string
+}
+
+func (e *InvalidAgentError) Error() string {
+	return fmt.Sprintf("Selector returned invalid agent name: %s", e.SelectedName)
 }
 
 func buildHistory(messages []Message) string {
@@ -87,7 +97,7 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, e
 }
 
 //nolint:gocognit // Complex function handling selector agent logic, but cohesive responsibilities
-func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *template.Template, participantsList, rolesList, previousMember string, candidateMembers []TeamMember) (TeamMember, error) {
+func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *template.Template, participantsList, rolesList string, candidateMembers []TeamMember) (TeamMember, error) {
 	history := buildHistory(messages)
 	data := SelectorTemplateData{
 		Roles:        rolesList,
@@ -141,15 +151,10 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 		}
 	}
 
-	// Fallback to first member if not found
 	if len(membersToSearch) > 0 {
-		fallback := membersToSearch[0]
-
-		// Avoid repeating same member
-		if fallback.GetName() == previousMember && len(membersToSearch) > 1 {
-			fallback = membersToSearch[1]
-		}
-		return fallback, nil
+		// This error will allow us to message to the user that the selector's response doesn't match an agent
+		err := &InvalidAgentError{SelectedName: selectedName}
+		return nil, err
 	}
 
 	return nil, fmt.Errorf("no members available")
@@ -161,7 +166,7 @@ func (t *Team) determineNextMember(ctx context.Context, messages []Message, tmpl
 		// No graph constraints: use standard selector (all members available)
 		participantsList := buildParticipants(t.Members)
 		rolesList := buildRoles(t.Members)
-		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, nil)
+		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, nil)
 	}
 	// Graph constraints provided: use legal transitions
 	return t.selectFromGraphConstraints(ctx, messages, tmpl, previousMember, legalTransitions)
@@ -179,7 +184,7 @@ func (t *Team) selectFromGraphConstraints(ctx context.Context, messages []Messag
 		// If this is the first step, choose from all available members
 		participantsList := buildParticipants(t.Members)
 		rolesList := buildRoles(t.Members)
-		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, nil)
+		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, nil)
 	}
 
 	legal := legalTransitions[previousMember]
@@ -196,17 +201,11 @@ func (t *Team) selectFromGraphConstraints(ctx context.Context, messages []Messag
 		// Multiple legal transitions - use selector agent to choose from candidates
 		participantsList := buildParticipants(legal)
 		rolesList := buildRoles(legal)
-		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, previousMember, legal)
+		return t.selectMember(ctx, messages, tmpl, participantsList, rolesList, legal)
 	}
 }
 
-//nolint:gocognit // Complex function orchestrating selector logic with graph constraints, but cohesive responsibilities
-func (t *Team) executeSelector(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
-	// Explicitly add userInput to the history so that the selector has access to it
-	messages := append([]Message{}, history...)
-	messages = append(messages, userInput)
-	var newMessages []Message
-
+func (t *Team) setupSelectorTemplate() (*template.Template, error) {
 	promptTemplate := defaultSelectorPrompt
 	if t.Selector != nil && t.Selector.SelectorPrompt != "" {
 		promptTemplate = t.Selector.SelectorPrompt
@@ -214,75 +213,148 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 
 	tmpl, err := template.New("selector").Parse(promptTemplate)
 	if err != nil {
+		return nil, err
+	}
+	return tmpl, nil
+}
+
+func (t *Team) buildLegalTransitionsMap() map[string][]TeamMember {
+	legalTransitions := make(map[string][]TeamMember)
+	if t.Graph == nil {
+		return legalTransitions
+	}
+
+	memberLookup := make(map[string]TeamMember)
+	for _, member := range t.Members {
+		memberLookup[member.GetName()] = member
+	}
+
+	for _, edge := range t.Graph.Edges {
+		if member, exists := memberLookup[edge.To]; exists {
+			legalTransitions[edge.From] = append(legalTransitions[edge.From], member)
+		}
+	}
+
+	return legalTransitions
+}
+
+func (t *Team) handleMemberSelectionError(ctx context.Context, err error, newMessages *[]Message) (shouldTerminate bool, returnErr error) {
+	var invalidAgentErr *InvalidAgentError
+	switch {
+	case errors.As(err, &invalidAgentErr):
+		warningContent := fmt.Sprintf("Selector returned invalid agent name: %s", invalidAgentErr.SelectedName)
+		warningMessage := NewSystemMessage(warningContent)
+		*newMessages = append(*newMessages, warningMessage)
+
+		// Stream the warning message immediately so it appears during execution
+		StreamSystemMessage(ctx, t.eventStream, warningContent)
+		return true, nil
+	case IsTerminateTeam(err):
+		return true, nil
+	default:
+		return false, err
+	}
+}
+
+type turnTelemetry struct {
+	span    telemetry.Span
+	opData  map[string]string
+	turnNum int
+}
+
+func (t *Team) startTurnTelemetry(ctx context.Context, turn int, memberName, memberType string) (context.Context, turnTelemetry) {
+	turnCtx, turnSpan := t.telemetryRecorder.StartTurn(ctx, turn, memberName, memberType)
+
+	operationData := map[string]string{
+		"teamName": t.Name,
+		"strategy": t.Strategy,
+		"turn":     fmt.Sprintf("%d", turn),
+	}
+	turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s", turn, t.Name), operationData)
+
+	return turnCtx, turnTelemetry{
+		span:    turnSpan,
+		opData:  operationData,
+		turnNum: turn,
+	}
+}
+
+func (t *Team) recordTurnOutput(tel turnTelemetry, newMessages []Message) {
+	if len(newMessages) > 0 {
+		t.telemetryRecorder.RecordTurnOutput(tel.span, newMessages, len(newMessages))
+	}
+}
+
+func (t *Team) completeTurnOnError(ctx context.Context, tel turnTelemetry, err error) (shouldTerminate bool, returnErr error) {
+	t.telemetryRecorder.RecordError(tel.span, err)
+	tel.span.End()
+	t.eventingRecorder.Fail(ctx, "TeamTurn", fmt.Sprintf("Team turn failed: %v", err), err, tel.opData)
+
+	if IsTerminateTeam(err) {
+		return true, nil
+	}
+	return false, err
+}
+
+func (t *Team) completeTurnOnSuccess(ctx context.Context, tel turnTelemetry) {
+	t.telemetryRecorder.RecordSuccess(tel.span)
+	tel.span.End()
+	t.eventingRecorder.Complete(ctx, "TeamTurn", fmt.Sprintf("Team turn %d completed successfully", tel.turnNum), tel.opData)
+}
+
+func (t *Team) checkAndHandleMaxTurns(turn int, newMessages *[]Message) bool {
+	if t.MaxTurns != nil && turn+1 >= *t.MaxTurns {
+		maxTurnsMessage := NewSystemMessage(fmt.Sprintf("Team conversation reached maximum turns limit (%d)", *t.MaxTurns))
+		*newMessages = append(*newMessages, maxTurnsMessage)
+		return true
+	}
+	return false
+}
+
+func (t *Team) executeSelector(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
+	messages := append([]Message{}, history...)
+	messages = append(messages, userInput)
+	var newMessages []Message
+
+	tmpl, err := t.setupSelectorTemplate()
+	if err != nil {
 		return newMessages, err
 	}
 
-	// Build legal transitions map if graph constraints are provided
-	// Map from member name to list of TeamMember objects (not strings)
-	legalTransitions := make(map[string][]TeamMember)
-	if t.Graph != nil {
-		// Build member lookup map for converting names to TeamMember objects
-		memberLookup := make(map[string]TeamMember)
-		for _, member := range t.Members {
-			memberLookup[member.GetName()] = member
-		}
-
-		for _, edge := range t.Graph.Edges {
-			// Convert edge.To (string) to TeamMember object
-			if member, exists := memberLookup[edge.To]; exists {
-				legalTransitions[edge.From] = append(legalTransitions[edge.From], member)
-			}
-		}
-	}
-
+	legalTransitions := t.buildLegalTransitionsMap()
 	previousMember := ""
 
 	for turn := 0; ; turn++ {
-		// Determine next member based on graph constraints (if any)
 		nextMember, err := t.determineNextMember(ctx, messages, tmpl, previousMember, legalTransitions)
 		if err != nil {
-			if IsTerminateTeam(err) {
+			shouldTerminate, returnErr := t.handleMemberSelectionError(ctx, err, &newMessages)
+			if shouldTerminate {
 				return newMessages, nil
 			}
-			return newMessages, err
+			if returnErr != nil {
+				return newMessages, returnErr
+			}
 		}
 
-		// Start turn-level telemetry span
-		turnCtx, turnSpan := t.telemetryRecorder.StartTurn(ctx, turn, nextMember.GetName(), nextMember.GetType())
-
-		operationData := map[string]string{
-			"teamName": t.Name,
-			"strategy": t.Strategy,
-			"turn":     fmt.Sprintf("%d", turn),
-		}
-		turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s", turn, t.Name), operationData)
+		turnCtx, tel := t.startTurnTelemetry(ctx, turn, nextMember.GetName(), nextMember.GetType())
 
 		err = t.executeMemberAndAccumulate(turnCtx, nextMember, userInput, &messages, &newMessages, turn)
 
-		// Record turn output
-		if len(newMessages) > 0 {
-			t.telemetryRecorder.RecordTurnOutput(turnSpan, newMessages, len(newMessages))
-		}
+		t.recordTurnOutput(tel, newMessages)
 
 		if err != nil {
-			t.telemetryRecorder.RecordError(turnSpan, err)
-			turnSpan.End()
-			t.eventingRecorder.Fail(turnCtx, "TeamTurn", fmt.Sprintf("Team turn failed: %v", err), err, operationData)
-			if IsTerminateTeam(err) {
+			shouldTerminate, returnErr := t.completeTurnOnError(turnCtx, tel, err)
+			if shouldTerminate {
 				return newMessages, nil
 			}
-			return newMessages, err
+			return newMessages, returnErr
 		}
 
-		t.telemetryRecorder.RecordSuccess(turnSpan)
-		turnSpan.End()
-		t.eventingRecorder.Complete(turnCtx, "TeamTurn", fmt.Sprintf("Team turn %d completed successfully", turn), operationData)
+		t.completeTurnOnSuccess(turnCtx, tel)
 
 		previousMember = nextMember.GetName()
 
-		if t.MaxTurns != nil && turn+1 >= *t.MaxTurns {
-			maxTurnsMessage := NewSystemMessage(fmt.Sprintf("Team conversation reached maximum turns limit (%d)", *t.MaxTurns))
-			newMessages = append(newMessages, maxTurnsMessage)
+		if t.checkAndHandleMaxTurns(turn, &newMessages) {
 			return newMessages, nil
 		}
 	}

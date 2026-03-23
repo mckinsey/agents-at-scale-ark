@@ -147,6 +147,7 @@ export function useChatSession({
         type: 'function';
         function: { name: string; arguments: string };
       }> = [];
+      const pendingSystemMessages: Array<string> = [];
 
       let hasError = false;
       let errorMessage = '';
@@ -178,6 +179,23 @@ export function useChatSession({
             return updated;
           });
         }
+      };
+
+      const addSystemMessagesAndNewAssistant = () => {
+        const systemMsgCount = pendingSystemMessages.length;
+        updateChatMessages(prev => {
+          const systemMsgs = pendingSystemMessages.map(content => ({
+            role: 'system' as const,
+            content,
+          }));
+          return [
+            ...prev,
+            ...systemMsgs,
+            { role: 'assistant', content: '' } as ExtendedChatMessage,
+          ];
+        });
+        pendingSystemMessages.length = 0;
+        currentMessageIndex += systemMsgCount + 1;
       };
 
       for await (const chunk of chatService.streamChatResponse(
@@ -234,31 +252,33 @@ export function useChatSession({
         }
 
         if ('ark' in chunk) {
-          const arkData = chunk.ark as { agent?: string };
+          const arkData = chunk.ark as { agent?: string; systemMessage?: string };
+
+          // Accumulate system messages to add with next assistant message
+          if (arkData.systemMessage) {
+            pendingSystemMessages.push(arkData.systemMessage);
+          }
+
           const chunkAgent = arkData.agent;
 
-          if (chunkAgent && chunkAgent !== currentAgent) {
+          // Check if we need to start a new assistant message
+          const isNewAgent = chunkAgent && chunkAgent !== currentAgent;
+          const isNewTurn = chunkAgent === currentAgent && turnComplete;
+
+          if (isNewAgent || isNewTurn) {
+            // Finalize previous message if it exists
             if (currentAgent) {
               finalizeCurrentMessage();
               accumulatedContent = '';
               accumulatedToolCalls.length = 0;
-              currentMessageIndex++;
-              updateChatMessages(prev => [
-                ...prev,
-                { role: 'assistant', content: '' } as ExtendedChatMessage,
-              ]);
             }
-            currentAgent = chunkAgent;
-            turnComplete = false;
-          } else if (chunkAgent === currentAgent && turnComplete) {
-            finalizeCurrentMessage();
-            accumulatedContent = '';
-            accumulatedToolCalls.length = 0;
-            currentMessageIndex++;
-            updateChatMessages(prev => [
-              ...prev,
-              { role: 'assistant', content: '' } as ExtendedChatMessage,
-            ]);
+
+            // Add system messages + new assistant message
+            addSystemMessagesAndNewAssistant();
+
+            if (isNewAgent) {
+              currentAgent = chunkAgent;
+            }
             turnComplete = false;
           }
         }
@@ -324,6 +344,18 @@ export function useChatSession({
       }
 
       finalizeCurrentMessage();
+
+      // Add any remaining pending system messages
+      if (pendingSystemMessages.length > 0) {
+        updateChatMessages(prev => {
+          const systemMsgs = pendingSystemMessages.map(content => ({
+            role: 'system' as const,
+            content,
+          }));
+          return [...prev, ...systemMsgs];
+        });
+        pendingSystemMessages.length = 0;
+      }
 
       if (hasError) {
         const hasTerminateToolCall = accumulatedToolCalls.some(
