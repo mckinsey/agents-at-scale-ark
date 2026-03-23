@@ -49,6 +49,7 @@ class APIClient {
     try {
       const response = await fetch(url, {
         ...requestOptions,
+        cache: 'no-store',
         headers: {
           ...this.defaultHeaders,
           ...headers,
