@@ -1,6 +1,7 @@
 import { Settings } from 'lucide-react';
 import type { UseFormReturn } from 'react-hook-form';
 
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   FormControl,
   FormField,
@@ -9,6 +10,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -29,6 +31,7 @@ export function StrategySection({
   disabled,
 }: Readonly<StrategySectionProps>) {
   const selectedStrategy = form.watch('strategy');
+  const loopsChecked = form.watch('loops');
 
   return (
     <div className="space-y-4">
@@ -53,6 +56,9 @@ export function StrategySection({
                 if (value === 'selector' && !form.getValues('selectorPrompt')) {
                   form.setValue('selectorPrompt', DEFAULT_SELECTOR_PROMPT);
                 }
+                if (value !== 'sequential') {
+                  form.setValue('loops', false);
+                }
               }}
               value={field.value}
               disabled={disabled}>
@@ -62,10 +68,9 @@ export function StrategySection({
                 </SelectTrigger>
               </FormControl>
               <SelectContent>
-                <SelectItem value="round-robin">Round Robin</SelectItem>
+                <SelectItem value="sequential">Sequential</SelectItem>
                 <SelectItem value="selector">Selector</SelectItem>
                 <SelectItem value="graph">Graph</SelectItem>
-                <SelectItem value="sequential">Sequential</SelectItem>
               </SelectContent>
             </Select>
             <FormMessage />
@@ -73,17 +78,40 @@ export function StrategySection({
         )}
       />
 
-      {selectedStrategy !== 'sequential' && (
+      {selectedStrategy === 'sequential' && (
+        <FormField
+          control={form.control}
+          name="loops"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-center space-y-0 gap-2">
+              <FormControl>
+                <Checkbox
+                  checked={field.value}
+                  onCheckedChange={checked => {
+                    field.onChange(checked);
+                    if (!checked) {
+                      form.setValue('maxTurns', '');
+                    }
+                  }}
+                  disabled={disabled}
+                />
+              </FormControl>
+              <Label className="text-sm font-normal">
+                Enable loops (cycle through members repeatedly)
+              </Label>
+            </FormItem>
+          )}
+        />
+      )}
+
+      {(loopsChecked || selectedStrategy === 'graph') && (
         <FormField
           control={form.control}
           name="maxTurns"
           render={({ field }) => (
             <FormItem>
               <FormLabel>
-                Max Turns{' '}
-                {selectedStrategy === 'graph' && (
-                  <span className="text-red-500">*</span>
-                )}
+                Max Turns <span className="text-red-500">*</span>
               </FormLabel>
               <FormControl>
                 <Input

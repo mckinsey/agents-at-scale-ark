@@ -84,6 +84,7 @@ const formSchema = z.object({
   name: kubernetesNameSchema,
   description: z.string().optional(),
   strategy: z.string().min(1, 'Strategy is required'),
+  loops: z.boolean(),
   maxTurns: z.string().optional(),
   selectorAgent: z.string().optional(),
   selectorPrompt: z.string().optional(),
@@ -181,7 +182,8 @@ export function TeamEditor({
     defaultValues: {
       name: '',
       description: '',
-      strategy: 'round-robin',
+      strategy: 'sequential',
+      loops: false,
       maxTurns: '',
       selectorAgent: '',
       selectorPrompt: '',
@@ -250,7 +252,8 @@ export function TeamEditor({
       form.reset({
         name: team.name,
         description: team.description ?? '',
-        strategy: team.strategy || 'round-robin',
+        strategy: team.strategy || 'sequential',
+        loops: team.loops ?? false,
         maxTurns: team.maxTurns ? String(team.maxTurns) : '',
         selectorAgent: team.selector?.agent ?? '',
         selectorPrompt:
@@ -384,6 +387,7 @@ export function TeamEditor({
       description: values.description || undefined,
       members: selectedMembers.length > 0 ? selectedMembers : undefined,
       strategy: values.strategy || undefined,
+      loops: values.loops,
       maxTurns: values.maxTurns ? parseInt(values.maxTurns) : undefined,
       selector:
         values.selectorAgent || values.selectorPrompt
@@ -588,10 +592,9 @@ export function TeamEditor({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="round-robin">Round Robin</SelectItem>
+                        <SelectItem value="sequential">Sequential</SelectItem>
                         <SelectItem value="selector">Selector</SelectItem>
                         <SelectItem value="graph">Graph</SelectItem>
-                        <SelectItem value="sequential">Sequential</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />

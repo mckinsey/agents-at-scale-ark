@@ -3,7 +3,9 @@ kind: Team
 metadata:
   name: round-robin-brainstorm-team
 spec:
-  strategy: round-robin
+  strategy: sequential
+  loops: true
+  maxTurns: 3
   members:
     - type: agent
       name: brainstormer
