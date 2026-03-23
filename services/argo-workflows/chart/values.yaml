@@ -1,8 +1,6 @@
 # Argo Workflows configuration. This is config for the actual Argo workflows
 # chart from Argo itself, which is a dependency of our own chart.
 argo-workflows:
-  crds:
-    install: false
   # Single namespace mode. Suitable for development and does not require
   # cluster roles.
   singleNamespace: false

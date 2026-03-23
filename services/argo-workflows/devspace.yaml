@@ -13,13 +13,6 @@ pipelines:
     start_dev argo-server
 
 hooks:
-  - name: install-argo-crds
-    events: ["before:deploy"]
-    command: |-
-      ARGO_VERSION=$(grep -A2 'name: argo-workflows' chart/Chart.yaml | grep 'version:' | head -1 | awk '{print $2}')
-      ARGO_APP_VERSION=$(tar -xzf "chart/charts/argo-workflows-${ARGO_VERSION}.tgz" -O argo-workflows/Chart.yaml | grep appVersion | awk '{print $2}')
-      echo "Installing Argo Workflows CRDs (${ARGO_APP_VERSION})..."
-      kubectl apply --server-side --force-conflicts -k "https://github.com/argoproj/argo-workflows/manifests/base/crds/minimal?ref=${ARGO_APP_VERSION}" || true
   - name: install-minio-operator
     events: ["before:deploy"]
     command: |-
