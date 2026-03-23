@@ -12,11 +12,10 @@ type TeamMember struct {
 }
 
 type TeamSelectorSpec struct {
-	Agent               string      `json:"agent,omitempty"`
-	SelectorPrompt      string      `json:"selectorPrompt,omitempty"`
-	Tools               []AgentTool `json:"tools,omitempty"`
-	EnableTerminateTool *bool       `json:"enableTerminateTool,omitempty"`
-	TerminatePrompt     string      `json:"terminatePrompt,omitempty"`
+	Agent               string `json:"agent,omitempty"`
+	SelectorPrompt      string `json:"selectorPrompt,omitempty"`
+	EnableTerminateTool *bool  `json:"enableTerminateTool,omitempty"`
+	TerminatePrompt     string `json:"terminatePrompt,omitempty"`
 }
 
 type TeamGraphEdge struct {

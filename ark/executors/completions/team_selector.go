@@ -95,12 +95,6 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, e
 		return nil, fmt.Errorf("failed to create selector agent: %w", err)
 	}
 
-	for _, tool := range t.Selector.Tools {
-		if err := agent.Tools.registerTool(ctx, t.Client, tool, t.Namespace, t.telemetry, t.eventing); err != nil {
-			return nil, fmt.Errorf("failed to register selector tool %s: %w", tool.Name, err)
-		}
-	}
-
 	if t.Selector.EnableTerminateTool != nil && *t.Selector.EnableTerminateTool {
 		terminateTool := arkv1alpha1.AgentTool{Type: "builtin", Name: BuiltinToolTerminate}
 		if err := agent.Tools.registerTool(ctx, t.Client, terminateTool, t.Namespace, t.telemetry, t.eventing); err != nil {
