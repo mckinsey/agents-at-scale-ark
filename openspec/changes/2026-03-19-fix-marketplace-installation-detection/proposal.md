@@ -1,5 +1,7 @@
 # Fix marketplace installation detection for infrastructure services
 
+**Decision: Option B - Label-Based Detection** (see design.md for implementation)
+
 ## Why
 
 Infrastructure marketplace services (`phoenix`, `a2a-inspector`, `mcp-inspector`) show as "not installed" in the dashboard even when successfully deployed (Helm releases exist, pods running).
@@ -71,7 +73,6 @@ Add standardized labels to marketplace charts, query labeled Deployments.
 global:
   labels:
     ark.mckinsey.com/marketplace-item: "phoenix"
-    ark.mckinsey.com/marketplace-version: "0.1.5"
 ```
 
 **Apply to deployments in templates:**
@@ -153,7 +154,7 @@ kubectl get deployments -n phoenix \
 
 **`lib/services/marketplace-fetcher.ts`:**
 - `getInstalledMarketplaceItems()` — Add Helm release query alongside CRD checks
-- Query: `GET /api/v1/namespaces/[namespace]/secrets?labelSelector=owner=helm,name=[helmReleaseName],status=deployed`
+- Query: `GET /v1/resources/api/v1/Secret?namespace=[namespace]&labelSelector=owner=helm,name=[helmReleaseName],status=deployed`
 - Check if Secret exists (no data decoding needed — status is in labels)
 
 **`lib/services/kubernetes.ts` (new):**
@@ -180,7 +181,7 @@ global:
 
 **`lib/services/marketplace-fetcher.ts`:**
 - `getInstalledMarketplaceItems()` — Query deployments by label selector
-- Query: `GET /api/v1/namespaces/[namespace]/deployments?labelSelector=ark.mckinsey.com/marketplace-item=[itemName]`
+- Query: `GET /v1/resources/apis/apps/v1/Deployment?namespace=[namespace]&labelSelector=ark.mckinsey.com/marketplace-item=[itemName]`
 
 **`lib/services/kubernetes.ts` (new):**
 - `checkLabeledDeployment(itemName, namespace): Promise<boolean>` — Helper to query Deployments API
