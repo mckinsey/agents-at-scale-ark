@@ -91,9 +91,9 @@ export function useAgentForm({
         ) {
           const [agentData, modelsData, toolsData, enginesData] =
             await Promise.all([
-              agentsService.getByName(agentName),
-              modelsService.getAll(),
-              toolsService.getAll(),
+              agentsService.getByName(agentName, namespace),
+              modelsService.getAll(namespace),
+              toolsService.getAll(namespace),
               isExperimentalExecutionEngineEnabled
                 ? executionEnginesService.getAll()
                 : Promise.resolve([]),
@@ -132,8 +132,8 @@ export function useAgentForm({
           });
         } else {
           const [modelsData, toolsData, enginesData] = await Promise.all([
-            modelsService.getAll(),
-            toolsService.getAll(),
+            modelsService.getAll(namespace),
+            toolsService.getAll(namespace),
             isExperimentalExecutionEngineEnabled
               ? executionEnginesService.getAll()
               : Promise.resolve([]),
