@@ -66,6 +66,9 @@ spec:
                 required:
                 - edges
                 type: object
+              loops:
+                default: false
+                type: boolean
               maxTurns:
                 type: integer
               members:
@@ -90,6 +93,7 @@ spec:
               strategy:
                 type: string
             required:
+            - loops
             - members
             - strategy
             type: object

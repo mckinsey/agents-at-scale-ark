@@ -72,6 +72,86 @@ func TestDefaultAgent(t *testing.T) {
 	})
 }
 
+//nolint:gocognit
+func TestDefaultTeam(t *testing.T) {
+	t.Run("migrates round-robin with maxTurns to sequential with loops", func(t *testing.T) {
+		maxTurns := 5
+		team := &arkv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{Name: "t"},
+			Spec: arkv1alpha1.TeamSpec{
+				Strategy: "round-robin",
+				MaxTurns: &maxTurns,
+			},
+		}
+		DefaultTeam(team)
+		if team.Spec.Strategy != "sequential" {
+			t.Fatalf("expected strategy 'sequential', got '%s'", team.Spec.Strategy)
+		}
+		if !team.Spec.Loops {
+			t.Fatal("expected loops to be true")
+		}
+		if team.Spec.MaxTurns == nil || *team.Spec.MaxTurns != 5 {
+			t.Fatal("expected maxTurns to be preserved")
+		}
+		key := annotations.MigrationWarningPrefix + "round-robin"
+		if team.Annotations[key] == "" {
+			t.Fatal("expected migration warning annotation")
+		}
+	})
+
+	t.Run("migrates round-robin without maxTurns to plain sequential", func(t *testing.T) {
+		team := &arkv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{Name: "t"},
+			Spec: arkv1alpha1.TeamSpec{
+				Strategy: "round-robin",
+			},
+		}
+		DefaultTeam(team)
+		if team.Spec.Strategy != "sequential" {
+			t.Fatalf("expected strategy 'sequential', got '%s'", team.Spec.Strategy)
+		}
+		if team.Spec.Loops {
+			t.Fatal("expected loops to be false")
+		}
+		if team.Spec.MaxTurns != nil {
+			t.Fatal("expected maxTurns to remain nil")
+		}
+		key := annotations.MigrationWarningPrefix + "round-robin"
+		if team.Annotations[key] == "" {
+			t.Fatal("expected migration warning annotation")
+		}
+	})
+
+	t.Run("does not modify sequential strategy", func(t *testing.T) {
+		team := &arkv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{Name: "t"},
+			Spec: arkv1alpha1.TeamSpec{
+				Strategy: "sequential",
+			},
+		}
+		DefaultTeam(team)
+		if team.Spec.Strategy != "sequential" {
+			t.Fatalf("expected strategy 'sequential', got '%s'", team.Spec.Strategy)
+		}
+		if team.Annotations != nil {
+			t.Fatal("expected no annotations")
+		}
+	})
+
+	t.Run("does not modify graph strategy", func(t *testing.T) {
+		team := &arkv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{Name: "t"},
+			Spec: arkv1alpha1.TeamSpec{
+				Strategy: "graph",
+			},
+		}
+		DefaultTeam(team)
+		if team.Spec.Strategy != "graph" {
+			t.Fatalf("expected strategy 'graph', got '%s'", team.Spec.Strategy)
+		}
+	})
+}
+
 func TestDefaultModel(t *testing.T) {
 	t.Run("migrates deprecated type to provider", func(t *testing.T) {
 		model := &arkv1alpha1.Model{

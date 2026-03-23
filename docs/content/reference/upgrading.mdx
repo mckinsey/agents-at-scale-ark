@@ -28,6 +28,68 @@ kubectl delete crd evaluations.ark.mckinsey.com evaluators.ark.mckinsey.com
 
 **If you are not using evaluations**, no action is needed.
 
+## v0.1.51
+
+### Round-Robin Strategy Deprecation
+
+The `round-robin` team strategy has been merged into `sequential` with a new `loops` field.
+
+- `strategy: sequential` (default): executes members once in order
+- `strategy: sequential` with `loops: true` and `maxTurns: N`: cycles through members repeatedly until maxTurns or terminate
+
+**Existing `round-robin` teams** are automatically migrated by the admission webhook:
+- `round-robin` with `maxTurns` becomes `sequential` + `loops: true` (maxTurns preserved)
+- `round-robin` without `maxTurns` becomes plain `sequential` (single pass)
+
+On create or update, you will see a deprecation warning.
+
+<Callout type="warning">
+`strategy: round-robin` will be removed in v1.0.0. Update your team manifests to use `sequential` with `loops: true`.
+</Callout>
+
+**Migration:**
+
+```bash
+# Trigger migration by annotating all teams
+kubectl annotate teams --all 'ark.mckinsey.com/migrate-round-robin-0.1.51=done' --overwrite
+
+# Verify migration
+kubectl get teams -o yaml | grep -A2 strategy
+```
+
+Update your manifests:
+
+```yaml
+# Before
+spec:
+  strategy: round-robin
+  maxTurns: 10
+
+# After
+spec:
+  strategy: sequential
+  loops: true
+  maxTurns: 10
+```
+
+For teams that previously used `round-robin` without `maxTurns` (relying on the terminate tool):
+
+```yaml
+# Before
+spec:
+  strategy: round-robin
+
+# After (single pass - terminates after one cycle)
+spec:
+  strategy: sequential
+
+# Or, to loop with a safety limit:
+spec:
+  strategy: sequential
+  loops: true
+  maxTurns: 20
+```
+
 ## v0.1.50
 
 ### Broker Service Rename
