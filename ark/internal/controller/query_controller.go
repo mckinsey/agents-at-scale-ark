@@ -375,8 +375,7 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 
 	rawJSON := engineMeta.MessagesRaw
 	if rawJSON == "" {
-		responseMessages := []completions.Message{completions.NewAssistantMessage(responseText)}
-		rawJSON = serializeMessages(responseMessages)
+		rawJSON = buildFallbackRaw(responseText)
 	}
 
 	response := &arkv1alpha1.Response{
@@ -404,23 +403,9 @@ func extractUserInput(ctx context.Context, query arkv1alpha1.Query, k8sClient cl
 	return completions.ExtractUserMessageContent(inputMessages)
 }
 
-func serializeMessages(messages []completions.Message) string {
-	var actualMessages []interface{}
-	for _, msg := range messages {
-		switch {
-		case msg.OfAssistant != nil:
-			actualMessages = append(actualMessages, msg.OfAssistant)
-		case msg.OfUser != nil:
-			actualMessages = append(actualMessages, msg.OfUser)
-		case msg.OfSystem != nil:
-			actualMessages = append(actualMessages, msg.OfSystem)
-		case msg.OfTool != nil:
-			actualMessages = append(actualMessages, msg.OfTool)
-		case msg.OfFunction != nil:
-			actualMessages = append(actualMessages, msg.OfFunction)
-		}
-	}
-	rawBytes, err := json.Marshal(actualMessages)
+func buildFallbackRaw(content string) string {
+	msg := []map[string]string{{"role": "assistant", "content": content}}
+	rawBytes, err := json.Marshal(msg)
 	if err != nil {
 		return "[]"
 	}
