@@ -163,8 +163,6 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
             graph: graphEdges.length > 0 ? { edges: graphEdges } : undefined,
           }, { namespace });
 
-          const updatedTeam = await teamsService.getByName(teamName!, namespace);
-          
           setTeam(updatedTeam);
           setInitialMembers(selectedMembers);
           setInitialGraphEdges(graphEdges);
