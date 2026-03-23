@@ -1,0 +1,180 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: team-round-robin-deprecation-warning
+spec:
+  description: Test that deprecated 'round-robin' strategy is migrated to 'sequential' with appropriate warning
+
+  steps:
+  - name: setup-resources
+    try:
+    - script:
+        skipLogOutput: true
+        content: |
+          set -u
+          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
+        outputs:
+        - name: azure
+          value: (json_parse($stdout))
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - apply:
+        file: manifests/*.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: agent-a
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: agent-b
+
+  - name: test-round-robin-with-max-turns-migration
+    try:
+    - script:
+        content: |
+          OUTPUT=$(kubectl apply -f - --namespace $NAMESPACE 2>&1 <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Team
+          metadata:
+            name: test-rr-with-turns
+          spec:
+            strategy: round-robin
+            maxTurns: 5
+            members:
+            - name: agent-a
+              type: agent
+            - name: agent-b
+              type: agent
+          EOF
+          )
+          echo "$OUTPUT"
+
+          if echo "$OUTPUT" | grep -q "round-robin"; then
+            echo "PASS: Warning mentions round-robin"
+          else
+            echo "FAIL: Warning missing round-robin mention"
+            exit 1
+          fi
+
+          if echo "$OUTPUT" | grep -q "deprecated"; then
+            echo "PASS: Warning mentions deprecation"
+          else
+            echo "FAIL: Warning missing deprecation message"
+            exit 1
+          fi
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Team
+          metadata:
+            name: test-rr-with-turns
+          spec:
+            strategy: sequential
+            loops: true
+            maxTurns: 5
+
+  - name: test-round-robin-without-max-turns-migration
+    try:
+    - script:
+        content: |
+          OUTPUT=$(kubectl apply -f - --namespace $NAMESPACE 2>&1 <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Team
+          metadata:
+            name: test-rr-no-turns
+          spec:
+            strategy: round-robin
+            members:
+            - name: agent-a
+              type: agent
+            - name: agent-b
+              type: agent
+          EOF
+          )
+          echo "$OUTPUT"
+
+          if echo "$OUTPUT" | grep -q "deprecated"; then
+            echo "PASS: Warning mentions deprecation"
+          else
+            echo "FAIL: Warning missing deprecation message"
+            exit 1
+          fi
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Team
+          metadata:
+            name: test-rr-no-turns
+          spec:
+            strategy: sequential
+            loops: false
+
+  - name: test-sequential-no-warning
+    try:
+    - script:
+        content: |
+          OUTPUT=$(kubectl apply -f - --namespace $NAMESPACE 2>&1 <<EOF
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Team
+          metadata:
+            name: test-sequential-clean
+          spec:
+            strategy: sequential
+            members:
+            - name: agent-a
+              type: agent
+            - name: agent-b
+              type: agent
+          EOF
+          )
+          echo "$OUTPUT"
+
+          if echo "$OUTPUT" | grep -q "deprecated"; then
+            echo "FAIL: Unexpected deprecation warning for sequential strategy"
+            exit 1
+          else
+            echo "PASS: No deprecation warning for sequential strategy"
+          fi
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Team
+          metadata:
+            name: test-sequential-clean
+          spec:
+            strategy: sequential
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

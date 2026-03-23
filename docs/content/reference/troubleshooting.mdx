@@ -301,6 +301,14 @@ From v0.1.49, MCP server addresses must include the full endpoint path (e.g., `/
 
 Add the path to your MCPServer configuration. See [v0.1.49 Upgrade Guide](/reference/upgrading#v0149) for migration instructions.
 
+## Teams
+
+**Deprecation warning: "strategy 'round-robin' is deprecated"**
+
+Teams using `strategy: round-robin` will show a deprecation warning on create or update. The round-robin strategy has been merged into `sequential` with a `loops` field.
+
+To resolve, update the team manifest to use `strategy: sequential` with `loops: true` and `maxTurns`. See the [v0.1.51 Upgrade Guide](/reference/upgrading#v0151) for migration details.
+
 ## Agents
 
 **Agents without a model show as 'Unavailable'**

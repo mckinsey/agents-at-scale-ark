@@ -102,6 +102,10 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
       lines.push(`  strategy: ${team.strategy}`);
     }
 
+    if (team.loops) {
+      lines.push(`  loops: ${team.loops}`);
+    }
+
     if (team.maxTurns) {
       lines.push(`  maxTurns: ${team.maxTurns}`);
     }

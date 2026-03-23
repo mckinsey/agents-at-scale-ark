@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: query-with-turns
+spec:
+  input: "Process and analyze this data for the team with turns"
+  target:
+    type: team
+    name: team-with-turns
