@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: selector-agent
+spec:
+  description: Selector agent that chooses team members
+  prompt: |
+    Choose the appropriate agent for the task.
+  modelRef:
+    name: test-model

@@ -7,6 +7,7 @@ import { ChatMessage } from '@/components/chat/chat-message';
 import { GraphEnd } from '@/components/chat/graph-end';
 import { GraphTransition } from '@/components/chat/graph-transition';
 import { MaxTurnsEvent } from '@/components/chat/max-turns-event';
+import { SelectorFailureEvent } from '@/components/chat/selector-failure-event';
 import { SelectorTransition } from '@/components/chat/selector-transition';
 import { StrategyIndicator } from '@/components/chat/strategy-indicator';
 import { TerminationEvent } from '@/components/chat/termination-event';
@@ -23,6 +24,119 @@ interface ChatMessageListProps {
   error: string | null;
   viewMode?: 'text' | 'markdown';
   messagesEndRef: RefObject<HTMLDivElement | null>;
+}
+
+function extractMessageContent(msg: ChatCompletionMessageParam): string {
+  if (typeof msg.content === 'string') {
+    return msg.content;
+  }
+  if (Array.isArray(msg.content)) {
+    return msg.content
+      .filter(
+        part =>
+          typeof part === 'object' &&
+          part !== null &&
+          'type' in part &&
+          part.type === 'text',
+      )
+      .map(part =>
+        typeof part === 'object' && part !== null && 'text' in part
+          ? part.text
+          : '',
+      )
+      .join('\n');
+  }
+  return '';
+}
+
+type ToolCall = {
+  id: string;
+  type: 'function';
+  function: { name: string; arguments: string };
+};
+
+function findToolCallResults(
+  toolCalls: ToolCall[] | undefined,
+  messages: ExtendedChatMessage[],
+  currentIndex: number,
+) {
+  return toolCalls?.map(toolCall => {
+    const toolResultMessage = messages
+      .slice(currentIndex + 1)
+      .find(
+        m =>
+          (m as ChatCompletionMessageParam).role === 'tool' &&
+          'tool_call_id' in m &&
+          (m as { tool_call_id: string }).tool_call_id === toolCall.id,
+      ) as ChatCompletionMessageParam | undefined;
+
+    return {
+      ...toolCall,
+      result:
+        toolResultMessage && typeof toolResultMessage.content === 'string'
+          ? toolResultMessage.content
+          : undefined,
+    };
+  });
+}
+
+type ToolCallWithResult = ToolCall & { result?: string };
+
+function extractTerminateInfo(
+  toolCallsWithResults: ToolCallWithResult[] | undefined,
+): { terminateToolCall: unknown; terminateMessage: string | undefined } {
+  const terminateToolCall = toolCallsWithResults?.find(tc => {
+    if ('function' in tc && tc.function) {
+      return tc.function.name === 'terminate';
+    }
+    return false;
+  });
+
+  let terminateMessage: string | undefined;
+  if (terminateToolCall && 'function' in terminateToolCall) {
+    try {
+      const args = JSON.parse(
+        (terminateToolCall as { function: { arguments: string } }).function
+          .arguments,
+      );
+      if (typeof args.response === 'string') {
+        terminateMessage = args.response;
+      }
+    } catch {
+      // fall through
+    }
+  }
+
+  return { terminateToolCall, terminateMessage };
+}
+
+function determineMessageFlags(
+  msg: ChatCompletionMessageParam,
+  content: string,
+  toolCallsWithResults: ToolCallWithResult[] | undefined,
+  terminateToolCall: unknown,
+  debugMode: boolean,
+) {
+  const isMaxTurnsMessage =
+    msg.role === 'system' && content.includes('maximum turns limit');
+  const isSelectorFailureMessage =
+    msg.role === 'system' && content.includes('Selector returned invalid agent name');
+  const hasToolCalls =
+    debugMode && !!toolCallsWithResults && toolCallsWithResults.length > 0;
+  const hasContent =
+    !!content &&
+    content.trim().length > 0 &&
+    !isMaxTurnsMessage &&
+    !isSelectorFailureMessage;
+  const hasTermination = terminateToolCall !== undefined;
+
+  return {
+    isMaxTurnsMessage,
+    isSelectorFailureMessage,
+    hasToolCalls,
+    hasContent,
+    hasTermination,
+  };
 }
 
 export function ChatMessageList({
@@ -72,6 +186,7 @@ export function ChatMessageList({
       terminateToolCall: unknown;
       terminateMessage: string | undefined;
       isMaxTurnsMessage: boolean;
+      isSelectorFailureMessage: boolean;
       hasToolCalls: boolean;
       hasContent: boolean;
       hasTermination: boolean;
@@ -81,84 +196,30 @@ export function ChatMessageList({
       const msg = message as ChatCompletionMessageParam;
       if (msg.role === 'tool') return;
 
-      let content = '';
-      if (typeof msg.content === 'string') {
-        content = msg.content;
-      } else if (Array.isArray(msg.content)) {
-        content = msg.content
-          .filter(
-            part =>
-              typeof part === 'object' &&
-              part !== null &&
-              'type' in part &&
-              part.type === 'text',
-          )
-          .map(part =>
-            typeof part === 'object' && part !== null && 'text' in part
-              ? part.text
-              : '',
-          )
-          .join('\n');
-      }
-
+      const content = extractMessageContent(msg);
       const toolCalls = 'tool_calls' in msg ? msg.tool_calls : undefined;
       const senderName = 'name' in msg ? msg.name : undefined;
 
-      const toolCallsWithResults = toolCalls?.map(toolCall => {
-        const toolResultMessage = messages
-          .slice(index + 1)
-          .find(
-            m =>
-              (m as ChatCompletionMessageParam).role === 'tool' &&
-              'tool_call_id' in m &&
-              (m as { tool_call_id: string }).tool_call_id === toolCall.id,
-          ) as ChatCompletionMessageParam | undefined;
-
-        return {
-          ...toolCall,
-          result:
-            toolResultMessage && typeof toolResultMessage.content === 'string'
-              ? toolResultMessage.content
-              : undefined,
-        };
-      });
-
-      const terminateToolCall = toolCallsWithResults?.find(tc => {
-        if ('function' in tc && tc.function) {
-          return tc.function.name === 'terminate';
-        }
-        return false;
-      });
-
-      let terminateMessage: string | undefined;
-      if (terminateToolCall && 'function' in terminateToolCall) {
-        try {
-          const args = JSON.parse(
-            (terminateToolCall as { function: { arguments: string } }).function
-              .arguments,
-          );
-          if (typeof args.response === 'string') {
-            terminateMessage = args.response;
-          }
-        } catch {
-          // fall through
-        }
-      }
-
-      const isMaxTurnsMessage =
-        msg.role === 'system' && content.includes('maximum turns limit');
-
-      const hasToolCalls =
-        debugMode && !!toolCallsWithResults && toolCallsWithResults.length > 0;
-      const hasContent =
-        !!content && content.trim().length > 0 && !isMaxTurnsMessage;
-      const hasTermination = terminateToolCall !== undefined;
+      const toolCallsWithResults = findToolCallResults(
+        toolCalls as ToolCall[] | undefined,
+        messages,
+        index,
+      );
+      const { terminateToolCall, terminateMessage } = extractTerminateInfo(toolCallsWithResults);
+      const {
+        isMaxTurnsMessage,
+        isSelectorFailureMessage,
+        hasToolCalls,
+        hasContent,
+        hasTermination,
+      } = determineMessageFlags(msg, content, toolCallsWithResults, terminateToolCall, debugMode);
 
       if (
         !hasToolCalls &&
         !hasContent &&
         !hasTermination &&
-        !isMaxTurnsMessage
+        !isMaxTurnsMessage &&
+        !isSelectorFailureMessage
       ) {
         return;
       }
@@ -180,6 +241,7 @@ export function ChatMessageList({
         terminateToolCall,
         terminateMessage,
         isMaxTurnsMessage,
+        isSelectorFailureMessage,
         hasToolCalls,
         hasContent,
         hasTermination,
@@ -335,6 +397,9 @@ export function ChatMessageList({
                   {pm.content}
                 </div>
               ))}
+            {pm.isSelectorFailureMessage && (
+              <SelectorFailureEvent message={pm.content} />
+            )}
           </div>
         );
       })}
