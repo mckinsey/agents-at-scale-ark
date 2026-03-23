@@ -688,6 +688,7 @@ type errorEventStream struct{}
 func (e *errorEventStream) StreamChunk(_ context.Context, _ interface{}) error {
 	return fmt.Errorf("stream error")
 }
+
 func (e *errorEventStream) NotifyCompletion(_ context.Context) error {
 	return fmt.Errorf("notify error")
 }
