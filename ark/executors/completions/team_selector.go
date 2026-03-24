@@ -127,7 +127,7 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 		if t.Selector.TerminatePrompt != "" {
 			terminatePrompt = t.Selector.TerminatePrompt
 		}
-		selectorMessage = terminatePrompt + "\n\n" + selectorMessage
+		selectorMessage = selectorMessage + "\n\n" + terminatePrompt
 	}
 
 	selectorAgent, err := t.loadSelectorAgent(ctx)
