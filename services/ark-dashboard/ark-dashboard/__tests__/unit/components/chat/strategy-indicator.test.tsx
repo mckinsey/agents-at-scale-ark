@@ -4,11 +4,19 @@ import { describe, expect, it } from 'vitest';
 import { StrategyIndicator } from '@/components/chat/strategy-indicator';
 
 describe('StrategyIndicator', () => {
-  it('should render for round-robin strategy', () => {
-    render(<StrategyIndicator strategy="round-robin" />);
+  it('should render for sequential strategy with loops', () => {
+    render(<StrategyIndicator strategy="sequential" loops={true} />);
 
     expect(
-      screen.getByText('Agents respond in round-robin order'),
+      screen.getByText('Agents respond in sequential loop'),
+    ).toBeInTheDocument();
+  });
+
+  it('should render for sequential strategy without loops', () => {
+    render(<StrategyIndicator strategy="sequential" />);
+
+    expect(
+      screen.getByText('Agents respond in sequential order'),
     ).toBeInTheDocument();
   });
 
@@ -39,12 +47,6 @@ describe('StrategyIndicator', () => {
     expect(
       screen.getByText('Agents respond following graph edges'),
     ).toBeInTheDocument();
-  });
-
-  it('should not render for sequential strategy', () => {
-    const { container } = render(<StrategyIndicator strategy="sequential" />);
-
-    expect(container.firstChild).toBeNull();
   });
 
   it('should not render when strategy is undefined', () => {

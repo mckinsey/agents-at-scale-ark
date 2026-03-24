@@ -34,6 +34,26 @@ func DefaultAgent(agent *arkv1alpha1.Agent) {
 	}
 }
 
+func DefaultTeam(team *arkv1alpha1.Team) {
+	if team.Spec.Strategy != StrategyRoundRobin {
+		return
+	}
+
+	if team.Annotations == nil {
+		team.Annotations = make(map[string]string)
+	}
+
+	if team.Spec.MaxTurns != nil {
+		team.Spec.Strategy = StrategySequential
+		team.Spec.Loops = true
+		team.Annotations[annotations.MigrationWarningPrefix+"round-robin"] = "strategy 'round-robin' is deprecated - migrated to 'sequential' with loops: true. Will be removed in v1.0.0"
+	} else {
+		team.Spec.Strategy = StrategySequential
+		team.Spec.Loops = false
+		team.Annotations[annotations.MigrationWarningPrefix+"round-robin"] = "strategy 'round-robin' is deprecated - migrated to 'sequential'. Set loops: true and maxTurns to enable looping. Will be removed in v1.0.0"
+	}
+}
+
 func DefaultModel(model *arkv1alpha1.Model) {
 	if model.Spec.Provider == "" && IsDeprecatedProviderInType(model.Spec.Type) {
 		originalType := model.Spec.Type

@@ -38,11 +38,19 @@ class APIClient {
     let url = `${this.baseURL}${endpoint}`;
 
     // Add query parameters if provided
+    const searchParams = new URLSearchParams();
     if (params) {
-      const searchParams = new URLSearchParams();
       Object.entries(params).forEach(([key, value]) => {
         searchParams.append(key, String(value));
       });
+    }
+
+    // Add cache buster for GET requests
+    if (!options.method || options.method === 'GET') {
+      searchParams.append('_t', Date.now().toString());
+    }
+
+    if (searchParams.toString()) {
       url += `?${searchParams.toString()}`;
     }
 
@@ -53,6 +61,9 @@ class APIClient {
         headers: {
           ...this.defaultHeaders,
           ...headers,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
         },
       });
 

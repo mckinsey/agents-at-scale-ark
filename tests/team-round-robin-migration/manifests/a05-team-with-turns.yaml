@@ -1,0 +1,12 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: team-with-turns
+spec:
+  strategy: round-robin
+  maxTurns: 2
+  members:
+    - type: agent
+      name: agent-a
+    - type: agent
+      name: agent-b
