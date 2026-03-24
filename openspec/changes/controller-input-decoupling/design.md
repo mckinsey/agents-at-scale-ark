@@ -17,9 +17,9 @@ The controller calls `completions.GetQueryInputMessages(ctx, query, k8sClient)` 
 
 ### 1. Shared resolver in `ark/internal/resolution`
 
-**Decision**: Create a new `resolution` package under `ark/internal/` with `ResolveQueryInputText` as the entry point.
+**Decision**: Add `ResolveQueryInputText` to the existing `ark/internal/resolution` package (in a new `query_input.go` file alongside `headers.go`).
 
-**Rationale**: The `internal/` directory is already used for controller and shared utilities. A `resolution` package clearly communicates its purpose and can be imported by both the controller and completions engine.
+**Rationale**: The `resolution` package already provides `ResolveFromConfigMap` and `ResolveFromSecret` (used for header resolution). Adding query input resolution here extends the package's existing responsibility for K8s-aware value resolution.
 
 ### 2. JSON-only message parsing
 
@@ -29,9 +29,9 @@ The controller calls `completions.GetQueryInputMessages(ctx, query, k8sClient)` 
 
 ### 3. Delegate ConfigMap/Secret resolution
 
-**Decision**: `ResolveFromConfigMap` and `ResolveFromSecret` are shared helpers called by both the new resolver and the existing completions `resolveValueFrom`.
+**Decision**: Delegate completions' `resolveConfigMapKeyRef` and `resolveSecretKeyRef` (at `query_parameters.go:72` and `:85`) to the existing shared `resolution.ResolveFromConfigMap` and `resolution.ResolveFromSecret` helpers (at `headers.go:85` and `:66`).
 
-**Rationale**: Both paths need identical K8s resource resolution. Sharing the code eliminates duplication without changing behavior.
+**Rationale**: Both paths perform identical K8s resource lookups. The shared helpers already exist and are used by the A2A header resolution path. Deduplicating the completions copies eliminates drift without changing behavior.
 
 ## Risks
 

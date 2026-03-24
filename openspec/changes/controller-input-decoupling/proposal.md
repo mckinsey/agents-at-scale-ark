@@ -4,10 +4,10 @@ The controller's `extractUserInput` calls `completions.GetQueryInputMessages` to
 
 ## What Changes
 
-- Create `ark/internal/resolution/query_input.go` with `ResolveQueryInputText(ctx, query, k8sClient) (string, error)` — an engine-agnostic resolver that handles both `user` and `messages` query types using only `json.RawMessage` parsing
-- Create `ark/internal/resolution/query_input_test.go` with unit tests covering all query types, parameter sources, and error conditions
-- Update controller `extractUserInput` to call the shared resolver instead of `completions.GetQueryInputMessages`
-- Refactor `completions/query_parameters.go` to delegate ConfigMap/Secret resolution to shared `resolution.ResolveFromConfigMap` / `resolution.ResolveFromSecret` helpers, eliminating duplicate code
+- Add `query_input.go` to the existing `ark/internal/resolution` package with `ResolveQueryInputText(ctx, query, k8sClient) (string, error)` — an engine-agnostic resolver that handles both `user` and `messages` query types using only `json.RawMessage` parsing
+- Add `query_input_test.go` with unit tests covering all query types, parameter sources, and error conditions
+- Update controller `extractUserInput` (at `query_controller.go:399`) to call the shared resolver instead of `completions.GetQueryInputMessages`
+- Refactor completions `resolveConfigMapKeyRef` (at `query_parameters.go:72`) and `resolveSecretKeyRef` (`:85`) to delegate to existing `resolution.ResolveFromConfigMap` and `resolution.ResolveFromSecret` (at `headers.go:85` and `:66`), eliminating duplicate code
 
 ## Non-goals
 
