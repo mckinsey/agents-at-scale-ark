@@ -199,7 +199,7 @@ class ToolsPage(BasePage):
         
         self.wait_for_navigation_complete()
         popup_visible = self._check_success_popup()
-        deleted_from_table = not self.is_tool_in_table(tool_name)
+        deleted_from_table = not self.is_tool_in_table(tool_name, retries=0)
         
         return {
             "tool_name": tool_name,
