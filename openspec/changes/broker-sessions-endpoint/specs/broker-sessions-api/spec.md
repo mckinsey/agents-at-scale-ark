@@ -115,9 +115,35 @@ The sessions store object SHALL reflect the real-time state of all sessions and 
 - **WHEN** a query completes
 - **THEN** the query `phase` SHALL be `"done"` and `completedAt` SHALL be set
 
-#### Scenario: ConversationId attached from events
-- **WHEN** a `MemoryAddMessagesComplete` event arrives for a query
+#### Scenario: ConversationId attached from messages
+- **WHEN** a `POST /messages` arrives with a `conversation_id` matching a known query
 - **THEN** the query's `conversationId` field SHALL be set
+
+---
+
+### Requirement: Side-effect ingestion from existing streams
+The sessions store SHALL be enriched as a side effect of data arriving on the existing `/events` and `/messages` broker routes. No new ingestion path is required.
+
+- `POST /events` → calls `sessions.ingestEvent(event.data)` to create/update sessions and queries
+- `POST /messages` → calls `sessions.ingestMessage(conversationId, queryId)` to attach `conversationId`
+
+Events provide: `sessionId`, query `name`, `agent`, `phase`, `error`. Messages provide: `conversationId`.
+
+#### Scenario: Event creates session and query
+- **WHEN** a `QueryExecutionStart` event arrives with a new `sessionId`
+- **THEN** a new session SHALL be created containing a new query with `phase: "running"`
+
+#### Scenario: Event updates query phase
+- **WHEN** a `QueryExecutionComplete` event arrives for an existing query
+- **THEN** the query `phase` SHALL be updated to `"done"` or `"error"`
+
+#### Scenario: Message attaches conversationId
+- **WHEN** `POST /messages` arrives with `conversation_id` and `query_id`
+- **THEN** the matching query's `conversationId` field SHALL be set
+
+#### Scenario: Existing streams unchanged
+- **WHEN** events or messages are posted to the broker
+- **THEN** the existing `/events` and `/messages` append-only streams SHALL continue to function unchanged
 
 ---
 

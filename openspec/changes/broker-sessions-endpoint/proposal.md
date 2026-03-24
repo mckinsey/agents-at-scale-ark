@@ -29,6 +29,30 @@ A sessions record looks like this:
 
 Sessions contain queries. `name` (matches CRD metadata.name) is the primary key. `conversationId` arrives later and links queries that share the same chat thread. Multiple queries with the same `conversationId` are turns in the same conversation. `conversationId` tells you where to find messages, `name` tells you where to find events and chunks.
 
+### How data flows in
+
+The sessions store is enriched as a side effect of data arriving on existing broker streams. No new ingestion path is needed — the existing `/events` and `/messages` routes call into the sessions broker:
+
+```
+  Controller                    Broker
+  ─────────                    ──────
+       │                          │
+       ├─── POST /events ────────►│──► events stream (append)
+       │                          │──► sessions.ingestEvent()  ─┐
+       │                          │                             │
+       ├─── POST /messages ──────►│──► messages stream (append) │
+       │                          │──► sessions.ingestMessage() │
+       │                          │                             │
+       │                          │   ┌─────────────────────────┘
+       │                          │   ▼
+       │                          │  /sessions store (mutate in place)
+       │                          │   │
+       │                          │   ├──► SSE subscribers
+       │                          │   └──► GET /sessions
+```
+
+Events provide: `sessionId`, `queryName`, `agent`, `phase`, `error`. Messages provide: `conversationId`. Together they build up the session record.
+
 This serves two use cases: **real-time** (subscribe via SSE and watch the record mutate as a session progresses) and **post-hoc** (poll or GET to reconstruct what happened in any past session). A formal specification is needed so consumers can integrate against a stable contract rather than the current implementation.
 
 ## What Changes
