@@ -1,0 +1,47 @@
+ark:
+  model:
+    enabled: true
+    name: test-model
+    type: completions
+    provider: openai
+    model: gpt-4o-mini
+    pollInterval: 3s
+    apiKey: mock-api-key
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+    ephemeral-storage: 128Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+    ephemeral-storage: 128Mi
+
+terminationGracePeriodSeconds: 1
+
+config:
+  rules:
+  # Health/models endpoint for Model availability check
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "gpt-4o-mini",
+              "object": "model",
+              "created": 1686935002,
+              "owned_by": "openai"
+            }
+          ]
+        }
+
+  # Catch-all - return invalid agent name to test termination
+  - path: "/v1/chat/completions"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"invalid-agent-name"},"finish_reason":"stop"}]}'

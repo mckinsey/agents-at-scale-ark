@@ -48,8 +48,8 @@ spec:
   # Optional: session identifier for tracking and telemetry
   sessionId: user-session-123
 
-  # Optional: conversation identifier for memory continuity
-  # If not provided with memory, a new conversation ID will be generated
+  # Optional: conversation threading identifier sent to engines as A2A contextId.
+  # Used by completions engine for memory continuity, available to all engines.
   conversationId: conv-abc123
 
   # Optional: memory storage for conversation history
@@ -253,7 +253,7 @@ spec:
 Ark supports two identifiers for tracking and memory continuity:
 
 - **sessionId**: Groups related queries for tracking and telemetry purposes
-- **conversationId**: Associates queries with a specific memory/conversation thread for context continuity
+- **conversationId**: Conversation threading identifier sent to all execution engines as A2A `contextId`. The completions engine uses it for memory continuity; named engines can use it for their own session management.
 
 ### Using Conversation ID for Memory
 
@@ -486,6 +486,6 @@ status:
     taskId: "task-xyz789"
 ```
 
-- **contextId**: Groups related queries in a conversation thread. Set via `ark.mckinsey.com/a2a-context-id` annotation on query creation.
+- **contextId**: The context ID returned by the execution engine. When `conversationId` is set, it is sent to the engine as the A2A contextId, and the engine's response populates this field. The `ark.mckinsey.com/a2a-context-id` annotation can also be used as an advanced override for sub-agent dispatch.
 - **taskId**: References the A2ATask resource created for this query. See [A2ATask](/reference/resources/a2atask) for details.
 ```

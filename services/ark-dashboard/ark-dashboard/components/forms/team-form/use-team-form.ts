@@ -28,6 +28,7 @@ const teamFormSchema = z.object({
   name: kubernetesNameSchema,
   description: z.string().optional(),
   strategy: z.string().min(1, 'Strategy is required'),
+  loops: z.boolean(),
   maxTurns: z.string().optional(),
   selectorAgent: z.string().optional(),
   selectorPrompt: z.string().optional(),
@@ -64,7 +65,8 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
     defaultValues: {
       name: '',
       description: '',
-      strategy: 'round-robin',
+      strategy: 'sequential',
+      loops: false,
       maxTurns: '',
       selectorAgent: '',
       selectorPrompt: '',
@@ -104,7 +106,8 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
           form.reset({
             name: teamData.name,
             description: teamData.description || '',
-            strategy: teamData.strategy || 'round-robin',
+            strategy: teamData.strategy || 'sequential',
+            loops: teamData.loops ?? false,
             maxTurns: teamData.maxTurns ? String(teamData.maxTurns) : '',
             selectorAgent: teamData.selector?.agent || '',
             selectorPrompt:
@@ -146,22 +149,22 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
       setSaving(true);
       try {
         if (mode === TeamFormMode.VIEW && team) {
-          await teamsService.updateById(team.id, {
+          const updatedTeam = await teamsService.updateById(team.id, {
             description: values.description || undefined,
             members: selectedMembers.length > 0 ? selectedMembers : undefined,
             strategy: values.strategy || undefined,
-            maxTurns: values.maxTurns ? parseInt(values.maxTurns) : undefined,
+            loops: values.loops,
+            maxTurns: values.maxTurns ? parseInt(values.maxTurns) : null,
             selector:
               values.selectorAgent || values.selectorPrompt
                 ? {
                     agent: values.selectorAgent || undefined,
                     selectorPrompt: values.selectorPrompt || undefined,
                   }
-                : undefined,
-            graph: graphEdges.length > 0 ? { edges: graphEdges } : undefined,
+                : null,
+            graph: graphEdges.length > 0 ? { edges: graphEdges } : null,
           });
 
-          const updatedTeam = await teamsService.getByName(teamName!);
           setTeam(updatedTeam);
           setInitialMembers(selectedMembers);
           setInitialGraphEdges(graphEdges);
@@ -173,6 +176,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
             description: values.description || undefined,
             members: selectedMembers,
             strategy: values.strategy,
+            loops: values.loops,
             maxTurns: values.maxTurns ? parseInt(values.maxTurns) : undefined,
             selector:
               values.selectorAgent || values.selectorPrompt
@@ -183,7 +187,6 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
                 : undefined,
             graph: graphEdges.length > 0 ? { edges: graphEdges } : undefined,
           });
-          toast.success('Team created successfully');
           onSuccessRef.current?.();
         }
       } catch (error) {

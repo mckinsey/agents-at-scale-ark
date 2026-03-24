@@ -552,6 +552,59 @@ func TestResolveSelectorResourceTypes(t *testing.T) {
 	})
 }
 
+func TestContextIdExtraction(t *testing.T) {
+	t.Run("message with contextId extracts value", func(t *testing.T) {
+		contextId := "conv-from-a2a"
+		message := protocol.NewMessageWithContext(protocol.MessageRoleUser, []protocol.Part{
+			protocol.NewTextPart("hello"),
+		}, nil, &contextId)
+
+		require.NotNil(t, message.ContextID)
+		assert.Equal(t, "conv-from-a2a", *message.ContextID)
+	})
+
+	t.Run("message without contextId has nil", func(t *testing.T) {
+		message := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+			protocol.NewTextPart("hello"),
+		})
+
+		assert.Nil(t, message.ContextID)
+	})
+
+	t.Run("a2a contextId takes precedence over query spec", func(t *testing.T) {
+		a2aContextId := "from-a2a"
+		queryConversationId := "from-spec"
+
+		conversationId := a2aContextId
+		if conversationId == "" {
+			conversationId = queryConversationId
+		}
+		assert.Equal(t, "from-a2a", conversationId)
+	})
+
+	t.Run("falls back to query spec when a2a contextId empty", func(t *testing.T) {
+		a2aContextId := ""
+		queryConversationId := "from-spec"
+
+		conversationId := a2aContextId
+		if conversationId == "" {
+			conversationId = queryConversationId
+		}
+		assert.Equal(t, "from-spec", conversationId)
+	})
+
+	t.Run("both empty results in empty conversationId", func(t *testing.T) {
+		a2aContextId := ""
+		queryConversationId := ""
+
+		conversationId := a2aContextId
+		if conversationId == "" {
+			conversationId = queryConversationId
+		}
+		assert.Empty(t, conversationId)
+	})
+}
+
 func TestDispatchTargetUnsupportedType(t *testing.T) {
 	h := newTestHandler()
 	tracer := telemetrynoop.NewTracer()

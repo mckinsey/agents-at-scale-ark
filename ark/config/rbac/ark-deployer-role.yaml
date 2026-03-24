@@ -59,7 +59,6 @@ rules:
 - apiGroups: ["ark.mckinsey.com"]
   resources: 
   - "agents"
-  - "evaluators"
   - "mcpservers"
   - "memories"
   - "models"

@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +24,18 @@ import (
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/resolution"
 )
+
+const defaultA2ADiscoveryTimeoutSeconds = 30
+
+func getA2ADiscoveryTimeout() time.Duration {
+	if timeoutStr := os.Getenv("ARK_A2A_DISCOVERY_TIMEOUT"); timeoutStr != "" {
+		if timeoutSec, err := strconv.Atoi(timeoutStr); err == nil && timeoutSec > 0 {
+			logf.Log.V(1).Info("Using custom A2A discovery timeout", "seconds", timeoutSec)
+			return time.Duration(timeoutSec) * time.Second
+		}
+	}
+	return defaultA2ADiscoveryTimeoutSeconds * time.Second
+}
 
 // Query extension spec: ark/api/extensions/query/v1/
 const (
@@ -272,7 +286,7 @@ func ExtractTextFromParts(parts []protocol.Part) string {
 
 func validateA2AClient(address string, headers []arkv1prealpha1.Header, ctx context.Context, k8sClient client.Client, namespace string) error {
 	var clientOptions []a2aclient.Option
-	clientOptions = append(clientOptions, a2aclient.WithTimeout(30*time.Second))
+	clientOptions = append(clientOptions, a2aclient.WithTimeout(getA2ADiscoveryTimeout()))
 
 	if len(headers) > 0 {
 		resolvedHeaders, err := resolveA2AHeaders(ctx, k8sClient, headers, namespace)
@@ -312,7 +326,7 @@ func createA2ARequest(ctx context.Context, agentCardURL string, headers []arkv1p
 
 func executeA2ARequest(ctx context.Context, req *http.Request, a2aRecorder eventing.A2aRecorder) (*A2AAgentCard, error) {
 	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: getA2ADiscoveryTimeout(),
 		Transport: otelhttp.NewTransport(http.DefaultTransport,
 			otelhttp.WithSpanNameFormatter(func(_ string, _ *http.Request) string {
 				return "a2a.discover"

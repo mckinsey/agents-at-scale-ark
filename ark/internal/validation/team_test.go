@@ -305,4 +305,101 @@ func TestValidateTeam(t *testing.T) { //nolint:gocognit
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+
+	t.Run("sequential with loops requires maxTurns", func(t *testing.T) {
+		team := &arkv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default"},
+			Spec: arkv1alpha1.TeamSpec{
+				Strategy: "sequential",
+				Loops:    true,
+				Members: []arkv1alpha1.TeamMember{
+					{Name: "agent1", Type: "agent"},
+				},
+			},
+		}
+		_, err := v.ValidateTeam(ctx, team)
+		if err == nil {
+			t.Fatal("expected error for loops without maxTurns")
+		}
+	})
+
+	t.Run("sequential maxTurns rejected without loops", func(t *testing.T) {
+		maxTurns := 5
+		team := &arkv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default"},
+			Spec: arkv1alpha1.TeamSpec{
+				Strategy: "sequential",
+				MaxTurns: &maxTurns,
+				Members: []arkv1alpha1.TeamMember{
+					{Name: "agent1", Type: "agent"},
+				},
+			},
+		}
+		_, err := v.ValidateTeam(ctx, team)
+		if err == nil {
+			t.Fatal("expected error for maxTurns without loops")
+		}
+	})
+
+	t.Run("valid sequential with loops and maxTurns", func(t *testing.T) {
+		maxTurns := 5
+		team := &arkv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default"},
+			Spec: arkv1alpha1.TeamSpec{
+				Strategy: "sequential",
+				Loops:    true,
+				MaxTurns: &maxTurns,
+				Members: []arkv1alpha1.TeamMember{
+					{Name: "agent1", Type: "agent"},
+				},
+			},
+		}
+		_, err := v.ValidateTeam(ctx, team)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("loops rejected on non-sequential strategy", func(t *testing.T) {
+		team := &arkv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default"},
+			Spec: arkv1alpha1.TeamSpec{
+				Strategy: "selector",
+				Loops:    true,
+				Members: []arkv1alpha1.TeamMember{
+					{Name: "agent1", Type: "agent"},
+				},
+				Selector: &arkv1alpha1.TeamSelectorSpec{Agent: "coordinator"},
+			},
+		}
+		_, err := v.ValidateTeam(ctx, team)
+		if err == nil {
+			t.Fatal("expected error for loops on selector strategy")
+		}
+	})
+
+	t.Run("loops rejected on graph strategy", func(t *testing.T) {
+		maxTurns := 10
+		team := &arkv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default"},
+			Spec: arkv1alpha1.TeamSpec{
+				Strategy: "graph",
+				Loops:    true,
+				MaxTurns: &maxTurns,
+				Members: []arkv1alpha1.TeamMember{
+					{Name: "agent1", Type: "agent"},
+					{Name: "agent2", Type: "agent"},
+				},
+				Graph: &arkv1alpha1.TeamGraphSpec{
+					Edges: []arkv1alpha1.TeamGraphEdge{
+						{From: "agent1", To: "agent2"},
+					},
+				},
+			},
+		}
+		_, err := v.ValidateTeam(ctx, team)
+		if err == nil {
+			t.Fatal("expected error for loops on graph strategy")
+		}
+	})
 }
