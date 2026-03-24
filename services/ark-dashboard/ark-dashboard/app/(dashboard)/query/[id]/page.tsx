@@ -12,7 +12,6 @@ import { ErrorResponseContent } from '@/components/ErrorResponseContent';
 import JsonDisplay from '@/components/JsonDisplay';
 import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
-import { QueryEvaluationActions } from '@/components/query-actions';
 import { QueryMemoryField } from '@/components/query-fields/query-memory-field';
 import { QueryTargetsField } from '@/components/query-fields/query-targets-field';
 import { Button } from '@/components/ui/button';
@@ -34,7 +33,6 @@ import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { useMarkdownProcessor } from '@/lib/hooks/use-markdown-processor';
 import {
   agentsService,
-  evaluationsService,
   memoriesService,
   modelsService,
   teamsService,
@@ -130,12 +128,6 @@ interface QueryStatus {
     };
     content?: string;
   };
-  evaluations?: Array<{
-    evaluatorName?: string;
-    score?: string;
-    passed?: boolean;
-    metadata?: Record<string, string>;
-  }>;
   tokenUsage?: {
     promptTokens?: number;
     completionTokens?: number;
@@ -357,7 +349,6 @@ function QueryDetailContent() {
 
   const [query, setQuery] = useState<TypedQueryDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [evaluationCount, setEvaluationCount] = useState(0);
   const [availableTargets, setAvailableTargets] = useState<
     Array<{ name: string; type: 'agent' | 'model' | 'team' | 'tool' }>
   >([]);
@@ -606,15 +597,6 @@ function QueryDetailContent() {
           ] === 'true';
         setStreaming(isStreamingEnabled);
 
-        // Load evaluation count
-        try {
-          const evaluationSummary =
-            await evaluationsService.getEvaluationSummary(queryId);
-          setEvaluationCount(evaluationSummary.total || 0);
-        } catch (error) {
-          console.error('Failed to load evaluation count:', error);
-          setEvaluationCount(0);
-        }
       } catch (error) {
         toast.error('Failed to Load Query', {
           description:
@@ -697,7 +679,6 @@ function QueryDetailContent() {
         currentPage={pageTitle}
         actions={
           <>
-            {!isNew && <QueryEvaluationActions queryName={queryId} />}
             {isNew && (
               <>
                 <Button
@@ -928,12 +909,6 @@ function QueryDetailContent() {
                       {query.status?.tokenUsage
                         ? `${query.status.tokenUsage.promptTokens || 0} / ${query.status.tokenUsage.completionTokens || 0}`
                         : '—'}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className={FIELD_HEADING_STYLES}>Evaluations</td>
-                    <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                      {evaluationCount}
                     </td>
                   </tr>
                 </tbody>

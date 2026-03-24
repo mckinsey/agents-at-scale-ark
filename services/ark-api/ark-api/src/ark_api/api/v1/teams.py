@@ -43,6 +43,7 @@ def team_to_response(team: dict) -> TeamResponse:
         description=spec.get("description"),
         strategy=spec.get("strategy"),
         members_count=members_count,
+        loops=spec.get("loops", False) if spec.get("strategy") == "sequential" else None,
         status=status.get("phase")
     )
 

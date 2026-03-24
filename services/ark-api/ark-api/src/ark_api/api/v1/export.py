@@ -206,7 +206,7 @@ async def collect_resources(
     # Define which resource types are handled by the ark_client
     standard_resources = {
         "agents", "teams", "models", "queries",
-        "mcpservers", "evaluators", "evaluations"
+        "mcpservers"
     }
 
     async with with_ark_client(namespace, VERSION) as ark_client:

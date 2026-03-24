@@ -286,8 +286,6 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 			Scheme:   mgr.GetScheme(),
 			Eventing: eventingProvider,
 		}},
-		{"Evaluator", &controller.EvaluatorReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
-		{"Evaluation", &controller.EvaluationReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
 		{"A2ATask", &controller.A2ATaskReconciler{
 			Client:   mgr.GetClient(),
 			Scheme:   mgr.GetScheme(),
@@ -318,8 +316,6 @@ func setupWebhooks(mgr ctrl.Manager) {
 		{"Tool", webhookv1.SetupToolWebhookWithManager},
 		{"Model", webhookv1.SetupModelWebhookWithManager},
 		{"MCPServer", webhookv1.SetupMCPServerWebhookWithManager},
-		{"Evaluator", webhookv1.SetupEvaluatorWebhookWithManager},
-		{"Evaluation", webhookv1.SetupEvaluationWebhookWithManager},
 		{"A2AServer", webhookv1prealpha1.SetupA2AServerWebhookWithManager},
 		{"ExecutionEngine", webhookv1prealpha1.SetupExecutionEngineWebhookWithManager},
 	}

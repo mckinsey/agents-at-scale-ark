@@ -1,8 +1,0 @@
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Evaluator
-metadata:
-  name: invalid-evaluator-missing-address
-spec:
-  # Missing required address field - should fail admission
-  modelRef:
-    name: nonexistent-model

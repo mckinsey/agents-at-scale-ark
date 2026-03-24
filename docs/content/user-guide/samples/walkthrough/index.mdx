@@ -1,6 +1,6 @@
 # Research-Analysis-Creation Tutorial
 
-Learn how to build a complete research workflow using ARK's multi-agent capabilities through a hands-on, step-by-step tutorial. This tutorial follows an evaluation-driven methodology where each component is tested individually before progressing to the next step.
+Learn how to build a complete research workflow using ARK's multi-agent capabilities through a hands-on, step-by-step tutorial. This tutorial follows a test-driven methodology where each component is tested individually before progressing to the next step.
 
 ## What You'll Build
 
@@ -51,7 +51,7 @@ samples/walkthrough/
 **Key Benefits:**
 - **Component isolation**: Test each piece individually
 - **Progressive complexity**: Build from simple to complex
-- **Evaluation-driven**: Validate before proceeding
+- **Test-driven**: Validate before proceeding
 - **Maintainable**: Clear organization and documentation
 
 ## Prerequisites

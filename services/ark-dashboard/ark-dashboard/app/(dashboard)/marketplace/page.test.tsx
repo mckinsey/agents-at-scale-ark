@@ -55,15 +55,27 @@ const mockMarketplaceData: MarketplaceResponse = {
       featured: false,
     },
     {
-      id: 'workflow-1',
-      name: 'Test Workflow',
-      description: 'A test workflow item',
-      category: 'workflows',
-      type: 'workflow',
+      id: 'mcp-1',
+      name: 'Test MCP',
+      description: 'A test MCP server item',
+      category: 'mcp-servers',
+      type: 'component',
       version: '1.0.0',
       status: 'available',
       author: 'Test Author',
-      icon: '🔄',
+      icon: '🔌',
+      featured: false,
+    },
+    {
+      id: 'demo-1',
+      name: 'Test Demo',
+      description: 'A test demo item',
+      category: 'demos',
+      type: 'demo',
+      version: '1.0.0',
+      status: 'available',
+      author: 'Test Author',
+      icon: '▶️',
       featured: false,
     },
     {
@@ -79,7 +91,7 @@ const mockMarketplaceData: MarketplaceResponse = {
       featured: true,
     },
   ] as MarketplaceItem[],
-  total: 3,
+  total: 4,
   page: 1,
   pageSize: 10,
 };
@@ -113,11 +125,12 @@ describe('MarketplacePage', () => {
     renderWithProviders(<MarketplacePage />);
 
     // Check that the page title is rendered
-    expect(screen.getByText('Marketplace (3)')).toBeInTheDocument();
+    expect(screen.getByText('Marketplace (4)')).toBeInTheDocument();
 
     // Check that marketplace items are displayed
     expect(screen.getByText('Test Agent')).toBeInTheDocument();
-    expect(screen.getByText('Test Workflow')).toBeInTheDocument();
+    expect(screen.getByText('Test MCP')).toBeInTheDocument();
+    expect(screen.getByText('Test Demo')).toBeInTheDocument();
     expect(screen.getByText('Test Service')).toBeInTheDocument();
   });
 
@@ -152,7 +165,8 @@ describe('MarketplacePage', () => {
     // Check that category filter buttons are present
     expect(screen.getByRole('button', { name: 'All' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Agents/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Workflow/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /MCPs/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Demos/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Services/i })).toBeInTheDocument();
   });
 
