@@ -10,24 +10,24 @@ A sessions record looks like this:
   "name": "session-session-",
   "queries": {
     "openai-query-abc123": {
-      "queryName": "openai-query-abc123",
+      "name": "openai-query-abc123",
       "conversationId": "conv-9f3a21bc",
       "agent": "default/noah",
-      "status": "done",
-      "startedAt": "2026-03-23T10:00:00.000Z",
+      "phase": "done",
+      "createdAt": "2026-03-23T10:00:00.000Z",
       "completedAt": "2026-03-23T10:00:04.300Z"
     },
     "openai-query-def456": {
-      "queryName": "openai-query-def456",
+      "name": "openai-query-def456",
       "conversationId": "conv-9f3a21bc",
-      "status": "running",
-      "startedAt": "2026-03-23T10:00:12.000Z"
+      "phase": "running",
+      "createdAt": "2026-03-23T10:00:12.000Z"
     }
   }
 }
 ```
 
-Sessions contain queries. `queryName` is the primary key. `conversationId` arrives later and links queries that share the same chat thread. Multiple queries with the same `conversationId` are turns in the same conversation. `conversationId` tells you where to find messages, `queryName` tells you where to find events and chunks.
+Sessions contain queries. `name` (matches CRD metadata.name) is the primary key. `conversationId` arrives later and links queries that share the same chat thread. Multiple queries with the same `conversationId` are turns in the same conversation. `conversationId` tells you where to find messages, `name` tells you where to find events and chunks.
 
 This serves two use cases: **real-time** (subscribe via SSE and watch the record mutate as a session progresses) and **post-hoc** (poll or GET to reconstruct what happened in any past session). A formal specification is needed so consumers can integrate against a stable contract rather than the current implementation.
 

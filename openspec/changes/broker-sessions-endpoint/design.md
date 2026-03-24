@@ -24,7 +24,7 @@ A prototype implementation exists. This design formalizes the endpoint as a prod
 
 Sessions is a `Record<sessionId, SessionEntry>` stored in memory and persisted as a single JSON file. This is different from the other broker endpoints which use `BrokerItemStream`.
 
-**Why:** A session mutates over its lifecycle (status changes, queries added, conversationId attached). An append-only stream would require consumers to replay and reduce events to derive current state. A mutable object gives consumers the current state directly.
+**Why:** A session mutates over its lifecycle (phase changes, queries added, conversationId attached). An append-only stream would require consumers to replay and reduce events to derive current state. A mutable object gives consumers the current state directly.
 
 **Alternative considered:** Storing session events in a `BrokerItemStream<SessionEvent>` and deriving the view on read. Rejected because it shifts complexity to every consumer and adds latency for reads.
 
@@ -40,11 +40,11 @@ Other broker endpoints use sequence-number cursors to resume streams. Sessions d
 - On reconnect, the full current state is replayed as individual session events
 - There's no "missed events" problem — clients get the latest state, not a history
 
-### 4. queryName as primary key, conversationId as metadata
+### 4. name as primary key, conversationId as metadata
 
-Queries are the atoms of the data model, keyed by `queryName` directly inside the session. `conversationId` is a field on each query that links queries sharing the same chat thread.
+Queries are the atoms of the data model, keyed by `name` (matches CRD metadata.name) directly inside the session. `conversationId` is a field on each query that links queries sharing the same chat thread.
 
-**Why:** A query exists from the moment its first event arrives, before any `conversationId` is known. Using `queryName` as the key means no re-keying or temporary keys are needed. `conversationId` is simply attached as metadata when the `MemoryAddMessagesComplete` event arrives. Multiple queries with the same `conversationId` represent turns in the same conversation.
+**Why:** A query exists from the moment its first event arrives, before any `conversationId` is known. Using `name` as the key means no re-keying or temporary keys are needed. `conversationId` is simply attached as metadata when the `MemoryAddMessagesComplete` event arrives. Multiple queries with the same `conversationId` represent turns in the same conversation.
 
 ### 5. Deferred persistence
 

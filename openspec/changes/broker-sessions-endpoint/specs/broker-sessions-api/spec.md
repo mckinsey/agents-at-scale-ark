@@ -26,9 +26,9 @@ The sessions store object SHALL reflect the real-time state of all sessions and 
       "name": "session-session-",
       "queries": {
         "openai-query-abc123": {
-          "queryName": "openai-query-abc123",
-          "status": "running",
-          "startedAt": "2026-03-23T10:00:00.000Z",
+          "name": "openai-query-abc123",
+          "phase": "running",
+          "createdAt": "2026-03-23T10:00:00.000Z",
           "lastActivity": "2026-03-23T10:00:00.100Z"
         }
       },
@@ -49,19 +49,19 @@ The sessions store object SHALL reflect the real-time state of all sessions and 
       "name": "session-session-",
       "queries": {
         "openai-query-abc123": {
-          "queryName": "openai-query-abc123",
+          "name": "openai-query-abc123",
           "conversationId": "conv-9f3a21bc",
           "agent": "default/noah",
-          "status": "done",
-          "startedAt": "2026-03-23T10:00:00.000Z",
+          "phase": "done",
+          "createdAt": "2026-03-23T10:00:00.000Z",
           "completedAt": "2026-03-23T10:00:04.300Z",
           "lastActivity": "2026-03-23T10:00:04.300Z"
         },
         "openai-query-def456": {
-          "queryName": "openai-query-def456",
+          "name": "openai-query-def456",
           "conversationId": "conv-9f3a21bc",
-          "status": "running",
-          "startedAt": "2026-03-23T10:00:12.000Z",
+          "phase": "running",
+          "createdAt": "2026-03-23T10:00:12.000Z",
           "lastActivity": "2026-03-23T10:00:12.500Z"
         }
       },
@@ -82,20 +82,20 @@ The sessions store object SHALL reflect the real-time state of all sessions and 
       "name": "session-session-",
       "queries": {
         "openai-query-abc123": {
-          "queryName": "openai-query-abc123",
+          "name": "openai-query-abc123",
           "conversationId": "conv-9f3a21bc",
           "agent": "default/noah",
-          "status": "done",
-          "startedAt": "2026-03-23T10:00:00.000Z",
+          "phase": "done",
+          "createdAt": "2026-03-23T10:00:00.000Z",
           "completedAt": "2026-03-23T10:00:04.300Z",
           "lastActivity": "2026-03-23T10:00:04.300Z"
         },
         "openai-query-def456": {
-          "queryName": "openai-query-def456",
+          "name": "openai-query-def456",
           "conversationId": "conv-9f3a21bc",
           "agent": "default/planner",
-          "status": "done",
-          "startedAt": "2026-03-23T10:00:12.000Z",
+          "phase": "done",
+          "createdAt": "2026-03-23T10:00:12.000Z",
           "completedAt": "2026-03-23T10:00:18.900Z",
           "lastActivity": "2026-03-23T10:00:18.900Z"
         }
@@ -107,13 +107,13 @@ The sessions store object SHALL reflect the real-time state of all sessions and 
 }
 ```
 
-#### Scenario: Query status tracking
+#### Scenario: Query phase tracking
 - **WHEN** a query is running
-- **THEN** the query `status` SHALL be `"running"`
+- **THEN** the query `phase` SHALL be `"running"`
 
 #### Scenario: Query completion
 - **WHEN** a query completes
-- **THEN** the query `status` SHALL be `"done"` and `completedAt` SHALL be set
+- **THEN** the query `phase` SHALL be `"done"` and `completedAt` SHALL be set
 
 #### Scenario: ConversationId attached from events
 - **WHEN** a `MemoryAddMessagesComplete` event arrives for a query
