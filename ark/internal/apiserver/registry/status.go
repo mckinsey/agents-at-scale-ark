@@ -51,14 +51,18 @@ func (s *StatusStorage) NamespaceScoped() bool {
 
 func (s *StatusStorage) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	namespace := getNamespaceFromContext(ctx)
-	return s.backend.Get(storageContext(ctx), s.config.Kind, namespace, name)
+	sctx, cancel := storageContext(ctx)
+	defer cancel()
+	return s.backend.Get(sctx, s.config.Kind, namespace, name)
 }
 
 func (s *StatusStorage) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	start := time.Now()
 	namespace := getNamespaceFromContext(ctx)
 
-	existing, err := s.backend.Get(storageContext(ctx), s.config.Kind, namespace, name)
+	sctx, cancel := storageContext(ctx)
+	defer cancel()
+	existing, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
 	if err != nil {
 		metrics.RecordStorageOperation("update_status", s.config.Kind, "not_found")
 		return nil, false, fmt.Errorf("object not found: %w", err)
@@ -81,13 +85,13 @@ func (s *StatusStorage) Update(ctx context.Context, name string, objInfo rest.Up
 		return nil, false, fmt.Errorf("failed to access object metadata: %w", err)
 	}
 
-	if err := s.backend.UpdateStatus(storageContext(ctx), s.config.Kind, namespace, name, existing); err != nil {
+	if err := s.backend.UpdateStatus(sctx, s.config.Kind, namespace, name, existing); err != nil {
 		return nil, false, handleUpdateError(err, s.config, "update_status", name, start)
 	}
 
 	metrics.RecordStorageOperation("update_status", s.config.Kind, "success")
 	metrics.RecordStorageLatency("update_status", s.config.Kind, start)
-	result, err := s.backend.Get(storageContext(ctx), s.config.Kind, namespace, accessor.GetName())
+	result, err := s.backend.Get(sctx, s.config.Kind, namespace, accessor.GetName())
 	return result, false, err
 }
 
