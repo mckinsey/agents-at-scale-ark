@@ -31,7 +31,9 @@ const (
 )
 
 func storageContext(ctx context.Context) context.Context {
-	return context.WithoutCancel(ctx)
+	//nolint:govet // cancel is not deferred — timeout self-cancels after 30s
+	ctx, _ = context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second) //nolint:govet
+	return ctx
 }
 
 type ResourceConfig struct {

@@ -42,6 +42,7 @@ type PostgreSQLBackend struct {
 	mu        sync.RWMutex
 	ctx       context.Context
 	cancel    context.CancelFunc
+	cachedRV  atomic.Int64
 }
 
 func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error) {
@@ -96,6 +97,7 @@ func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error
 
 	backend.warmPool()
 	go backend.listenForNotifications()
+	go backend.refreshBookmarkLoop()
 
 	return backend, nil
 }
@@ -197,6 +199,30 @@ func (p *PostgreSQLBackend) listenForNotifications() {
 			}
 		}
 	}
+}
+
+func (p *PostgreSQLBackend) refreshBookmarkLoop() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	p.refreshCachedRV()
+
+	for {
+		select {
+		case <-p.ctx.Done():
+			return
+		case <-ticker.C:
+			p.refreshCachedRV()
+		}
+	}
+}
+
+func (p *PostgreSQLBackend) refreshCachedRV() {
+	rv, err := p.getMaxResourceVersion()
+	if err != nil {
+		return
+	}
+	p.cachedRV.Store(rv)
 }
 
 func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name string, obj runtime.Object) error {
@@ -544,15 +570,16 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 	key := fmt.Sprintf("%s/%s", kind, namespace)
 
 	w := &postgresWatcher{
-		ch:      ch,
-		outCh:   make(chan watch.Event, 100),
-		nudgeCh: make(chan struct{}, 1),
-		backend: p,
-		key:     key,
-		kind:    kind,
-		ns:      namespace,
-		ctx:     ctx,
-		done:    make(chan struct{}),
+		ch:          ch,
+		outCh:       make(chan watch.Event, 100),
+		nudgeCh:     make(chan struct{}, 1),
+		backend:     p,
+		key:         key,
+		kind:        kind,
+		ns:          namespace,
+		ctx:         ctx,
+		done:        make(chan struct{}),
+		initialList: true,
 	}
 
 	p.mu.Lock()
@@ -561,17 +588,6 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 
 	go w.run()
 
-	existing, _, err := p.List(ctx, kind, namespace, storage.ListOptions{
-		LabelSelector: opts.LabelSelector,
-		FieldSelector: opts.FieldSelector,
-	})
-	if err == nil {
-		for _, obj := range existing {
-			ev := watch.Event{Type: watch.Added, Object: obj}
-			w.trackResourceVersion(ev)
-			w.send(ev)
-		}
-	}
 	return w, nil
 }
 
@@ -648,9 +664,19 @@ func (p *PostgreSQLBackend) notifyWatchers(kind, namespace string, eventType wat
 	}
 	p.mu.RUnlock()
 
-	event := watch.Event{Type: eventType, Object: obj}
+	if eventType == watch.Deleted {
+		event := watch.Event{Type: eventType, Object: obj}
+		for _, w := range watchers {
+			w.send(event)
+		}
+		return
+	}
+
 	for _, w := range watchers {
-		w.send(event)
+		select {
+		case w.nudgeCh <- struct{}{}:
+		default:
+		}
 	}
 }
 
@@ -729,18 +755,19 @@ func (p *PostgreSQLBackend) getMaxResourceVersion() (int64, error) {
 // send() writes to the internal ch (never closed by Stop), and run() forwards
 // from ch to outCh. This eliminates all send-on-closed-channel races.
 type postgresWatcher struct {
-	ch         chan watch.Event // internal buffer: notifyWatchers writes here
-	outCh      chan watch.Event // consumer-facing: only run() writes/closes this
-	nudgeCh    chan struct{}    // pg_notify signal: triggers immediate catch-up
-	backend    *PostgreSQLBackend
-	key        string
-	kind       string
-	ns         string
-	ctx        context.Context
-	done       chan struct{}
-	stopped    atomic.Bool
-	closed     sync.Once
-	lastSeenRV atomic.Int64 // high-water-mark for catch-up delta queries
+	ch          chan watch.Event
+	outCh       chan watch.Event
+	nudgeCh     chan struct{}
+	backend     *PostgreSQLBackend
+	key         string
+	kind        string
+	ns          string
+	ctx         context.Context
+	done        chan struct{}
+	stopped     atomic.Bool
+	closed      sync.Once
+	lastSeenRV  atomic.Int64
+	initialList bool
 }
 
 func (w *postgresWatcher) send(event watch.Event) {
@@ -770,12 +797,13 @@ func (w *postgresWatcher) ResultChan() <-chan watch.Event {
 func (w *postgresWatcher) run() {
 	defer close(w.outCh)
 
+	w.relist()
 	w.sendBookmark()
 
 	bookmarkTicker := time.NewTicker(30 * time.Second)
 	defer bookmarkTicker.Stop()
 
-	relistTicker := time.NewTicker(30 * time.Second)
+	relistTicker := time.NewTicker(120 * time.Second)
 	defer relistTicker.Stop()
 
 	for {
@@ -785,7 +813,6 @@ func (w *postgresWatcher) run() {
 		case <-w.ctx.Done():
 			return
 		case ev := <-w.ch:
-			w.trackResourceVersion(ev)
 			select {
 			case w.outCh <- ev:
 			case <-w.done:
@@ -804,8 +831,8 @@ func (w *postgresWatcher) run() {
 }
 
 func (w *postgresWatcher) sendBookmark() {
-	rv, err := w.backend.getMaxResourceVersion()
-	if err != nil {
+	rv := w.backend.cachedRV.Load()
+	if rv == 0 {
 		return
 	}
 	obj := w.backend.converter.NewObject(w.kind)
@@ -822,18 +849,7 @@ func (w *postgresWatcher) sendBookmark() {
 	}
 }
 
-func (w *postgresWatcher) trackResourceVersion(ev watch.Event) {
-	if ev.Object == nil {
-		return
-	}
-	accessor, err := meta.Accessor(ev.Object)
-	if err != nil {
-		return
-	}
-	rv, err := strconv.ParseInt(accessor.GetResourceVersion(), 10, 64)
-	if err != nil {
-		return
-	}
+func (w *postgresWatcher) advanceRV(rv int64) {
 	for {
 		current := w.lastSeenRV.Load()
 		if rv <= current {
@@ -882,13 +898,21 @@ func (w *postgresWatcher) relist() {
 			continue
 		}
 
+		eventType := watch.Modified
+		if w.initialList {
+			eventType = watch.Added
+		}
+		w.advanceRV(rv)
 		select {
-		case w.outCh <- watch.Event{Type: watch.Modified, Object: obj}:
-			w.trackResourceVersion(watch.Event{Object: obj})
+		case w.outCh <- watch.Event{Type: eventType, Object: obj}:
 		case <-w.done:
 			return
-		default:
+		case <-w.ctx.Done():
 			return
 		}
+	}
+
+	if w.initialList {
+		w.initialList = false
 	}
 }
