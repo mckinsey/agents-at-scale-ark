@@ -41,7 +41,7 @@ The controller creates a root trace span (`query.dispatch`) for every query exec
 └─────────────────────────┘
 ```
 
-Session ID propagates automatically via W3C `baggage` headers, making it available across all services without manual header injection.
+Ark's session ID propagates automatically via W3C `baggage` headers as `ark.session.id`, making it available across all services without manual header injection. The `ark.` prefix avoids collisions with executor-native `session.id` attributes.
 
 ## Per-Tenant OTEL Routing
 
