@@ -7,9 +7,9 @@ A prototype implementation exists. This design formalizes the endpoint as a prod
 ## Goals / Non-Goals
 
 **Goals:**
-- Stable REST API for querying sessions, conversations, and queries
+- Stable REST API for querying sessions and queries
 - Delta-based SSE so clients can watch individual sessions mutate in real-time
-- Data model that cleanly nests queries inside conversations inside sessions
+- Data model that cleanly nests queries inside sessions
 - File persistence with deferred writes to avoid write amplification
 
 **Non-Goals:**
@@ -40,11 +40,11 @@ Other broker endpoints use sequence-number cursors to resume streams. Sessions d
 - On reconnect, the full current state is replayed as individual session events
 - There's no "missed events" problem — clients get the latest state, not a history
 
-### 4. ConversationId as primary key, queryName as fallback
+### 4. queryName as primary key, conversationId as metadata
 
-Conversations are keyed by `conversationId` in the store. Events that arrive before `conversationId` is known are tracked by `queryName` and merged when the ID arrives.
+Queries are the atoms of the data model, keyed by `queryName` directly inside the session. `conversationId` is a field on each query that links queries sharing the same chat thread.
 
-**Why:** A single chat thread generates multiple queries (each message = new query) that share one `conversationId`. Keying by `conversationId` groups them correctly.
+**Why:** A query exists from the moment its first event arrives, before any `conversationId` is known. Using `queryName` as the key means no re-keying or temporary keys are needed. `conversationId` is simply attached as metadata when the `MemoryAddMessagesComplete` event arrives. Multiple queries with the same `conversationId` represent turns in the same conversation.
 
 ### 5. Deferred persistence
 
@@ -59,7 +59,5 @@ Writes to disk use a 2-second debounce. Multiple rapid `ingestEvent` calls batch
 - **No cursor / no history** → If a session is deleted or mutated, the previous state is lost. Clients always see current state only. → Acceptable for an index; the authoritative data is in the four existing streams.
 
 - **Single file persistence** → The entire store is written on each save. Large stores will slow writes. → Mitigated by deferred saves and the fact that sessions are relatively low-cardinality (hundreds, not millions).
-
-- **Race on conversationId merge** → Events without `conversationId` may arrive concurrently with events that have it, creating temporary duplicate entries. → Mitigated by cleanup sweep in `ingestEvent` that removes orphaned temp entries.
 
 - **No TTL / no eviction** → Sessions accumulate indefinitely. → Future work: add max-age or max-sessions configuration.

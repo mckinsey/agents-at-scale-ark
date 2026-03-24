@@ -1,32 +1,33 @@
 ## Why
 
-Ark processes queries in real time, emitting events, chunks, traces, and messages to the broker's append-only streams. These streams are the raw record — but to answer "what is happening right now?" or "what happened in session X?" a consumer currently has to join and filter four separate streams. The `/sessions` endpoint solves this by maintaining a **live, event-sourced materialized index** of sessions, conversations, and queries. It is updated continuously as events flow in. There is only ever one session record per session — it is simply kept up to date. SSE consumers receive the full session object each time it changes.
+Ark processes queries in real time, emitting events, chunks, traces, and messages to the broker's append-only streams. These streams are the raw record — but to answer "what is happening right now?" or "what happened in session X?" a consumer currently has to join and filter four separate streams. The `/sessions` endpoint solves this by maintaining a **live, event-sourced materialized index** of sessions and queries. It is updated continuously as events flow in. There is only ever one session record per session — it is simply kept up to date. SSE consumers receive the full session object each time it changes.
 
 A sessions record looks like this:
 
 ```json
 {
-  "sessionId": "session-1773840591429",   // stable identifier set by the caller
-  "name": "session-session-",             // auto-generated display name (TBC)
-  "conversations": {
-    "conv-9f3a21bc": {                    // keyed by conversationId once known
-      "conversationId": "conv-9f3a21bc",  // → filter /messages?conversation_id=conv-9f3a21bc
-      "status": "running",               // derived from query statuses below
-      "queries": {
-        "openai-query-abc123": {          // → filter /events?query_id=openai-query-abc123
-          "status": "done",              //   or /stream/openai-query-abc123 for live chunks
-          "completedAt": "2026-03-23T10:00:04.300Z"
-        },
-        "openai-query-def456": {          // second turn in the same conversation (TBC)
-          "status": "running"
-        }
-      }
+  "sessionId": "session-1773840591429",
+  "name": "session-session-",
+  "queries": {
+    "openai-query-abc123": {
+      "queryName": "openai-query-abc123",
+      "conversationId": "conv-9f3a21bc",
+      "agent": "default/noah",
+      "status": "done",
+      "startedAt": "2026-03-23T10:00:00.000Z",
+      "completedAt": "2026-03-23T10:00:04.300Z"
+    },
+    "openai-query-def456": {
+      "queryName": "openai-query-def456",
+      "conversationId": "conv-9f3a21bc",
+      "status": "running",
+      "startedAt": "2026-03-23T10:00:12.000Z"
     }
   }
 }
 ```
 
-It's an index — `conversationId` tells you where to find messages, `queryName` tells you where to find events and chunks.
+Sessions contain queries. `queryName` is the primary key. `conversationId` arrives later and links queries that share the same chat thread. Multiple queries with the same `conversationId` are turns in the same conversation. `conversationId` tells you where to find messages, `queryName` tells you where to find events and chunks.
 
 This serves two use cases: **real-time** (subscribe via SSE and watch the record mutate as a session progresses) and **post-hoc** (poll or GET to reconstruct what happened in any past session). A formal specification is needed so consumers can integrate against a stable contract rather than the current implementation.
 

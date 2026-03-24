@@ -9,38 +9,27 @@ The broker sessions endpoint SHALL return the complete sessions store as a JSON 
 
 #### Scenario: Populated store
 - **WHEN** `GET /v1/broker/sessions` is called after queries have run
-- **THEN** the response is `200` with body containing all sessions and their conversations
+- **THEN** the response is `200` with body containing all sessions and their queries
 
 ---
 
 ### Requirement: Session object lifecycle
-The sessions store object SHALL reflect the real-time state of all sessions, conversations, and queries. The object evolves as events flow through the broker.
+The sessions store object SHALL reflect the real-time state of all sessions and queries. The object evolves as events flow through the broker.
 
-**Early stage** — first event arrives for a new query (no `conversationId` yet):
+**Early stage** — first event arrives for a new query:
 
 ```json
 {
   "sessions": {
-    "session-1773840591429": {
-      "sessionId": "session-1773840591429",
+    "session-123": {
+      "sessionId": "session-123",
       "name": "session-session-",
-      "conversations": {
+      "queries": {
         "openai-query-abc123": {
-          "conversationId": "openai-query-abc123",
-          "name": "noah (openai-query-abc123)",
-          "agent": "default/noah",
-          "targetType": "agent",
+          "queryName": "openai-query-abc123",
           "status": "running",
-          "createdAt": "2026-03-23T10:00:00.000Z",
-          "lastActivity": "2026-03-23T10:00:00.100Z",
-          "queries": {
-            "openai-query-abc123": {
-              "queryName": "openai-query-abc123",
-              "queryNamespace": "default",
-              "status": "running",
-              "startedAt": "2026-03-23T10:00:00.000Z"
-            }
-          }
+          "startedAt": "2026-03-23T10:00:00.000Z",
+          "lastActivity": "2026-03-23T10:00:00.100Z"
         }
       },
       "createdAt": "2026-03-23T10:00:00.000Z",
@@ -50,38 +39,30 @@ The sessions store object SHALL reflect the real-time state of all sessions, con
 }
 ```
 
-**Mid stage** — `MemoryAddMessagesComplete` event arrives, attaching the real `conversationId`. A second query starts in the same conversation:
+**Mid stage** — `conversationId` arrives, second query starts:
 
 ```json
 {
   "sessions": {
-    "session-1773840591429": {
-      "sessionId": "session-1773840591429",
+    "session-123": {
+      "sessionId": "session-123",
       "name": "session-session-",
-      "conversations": {
-        "conv-9f3a21bc": {
+      "queries": {
+        "openai-query-abc123": {
+          "queryName": "openai-query-abc123",
           "conversationId": "conv-9f3a21bc",
-          "name": "noah (openai-query-abc123)",
           "agent": "default/noah",
-          "targetType": "agent",
+          "status": "done",
+          "startedAt": "2026-03-23T10:00:00.000Z",
+          "completedAt": "2026-03-23T10:00:04.300Z",
+          "lastActivity": "2026-03-23T10:00:04.300Z"
+        },
+        "openai-query-def456": {
+          "queryName": "openai-query-def456",
+          "conversationId": "conv-9f3a21bc",
           "status": "running",
-          "createdAt": "2026-03-23T10:00:00.000Z",
-          "lastActivity": "2026-03-23T10:00:12.500Z",
-          "queries": {
-            "openai-query-abc123": {
-              "queryName": "openai-query-abc123",
-              "queryNamespace": "default",
-              "status": "done",
-              "startedAt": "2026-03-23T10:00:00.000Z",
-              "completedAt": "2026-03-23T10:00:04.300Z"
-            },
-            "openai-query-def456": {
-              "queryName": "openai-query-def456",
-              "queryNamespace": "default",
-              "status": "running",
-              "startedAt": "2026-03-23T10:00:12.000Z"
-            }
-          }
+          "startedAt": "2026-03-23T10:00:12.000Z",
+          "lastActivity": "2026-03-23T10:00:12.500Z"
         }
       },
       "createdAt": "2026-03-23T10:00:00.000Z",
@@ -91,39 +72,32 @@ The sessions store object SHALL reflect the real-time state of all sessions, con
 }
 ```
 
-**Late stage** — all queries done, conversation complete:
+**Late stage** — all queries done:
 
 ```json
 {
   "sessions": {
-    "session-1773840591429": {
-      "sessionId": "session-1773840591429",
+    "session-123": {
+      "sessionId": "session-123",
       "name": "session-session-",
-      "conversations": {
-        "conv-9f3a21bc": {
+      "queries": {
+        "openai-query-abc123": {
+          "queryName": "openai-query-abc123",
           "conversationId": "conv-9f3a21bc",
-          "name": "noah (openai-query-abc123)",
           "agent": "default/noah",
-          "targetType": "agent",
           "status": "done",
-          "createdAt": "2026-03-23T10:00:00.000Z",
-          "lastActivity": "2026-03-23T10:00:18.900Z",
-          "queries": {
-            "openai-query-abc123": {
-              "queryName": "openai-query-abc123",
-              "queryNamespace": "default",
-              "status": "done",
-              "startedAt": "2026-03-23T10:00:00.000Z",
-              "completedAt": "2026-03-23T10:00:04.300Z"
-            },
-            "openai-query-def456": {
-              "queryName": "openai-query-def456",
-              "queryNamespace": "default",
-              "status": "done",
-              "startedAt": "2026-03-23T10:00:12.000Z",
-              "completedAt": "2026-03-23T10:00:18.900Z"
-            }
-          }
+          "startedAt": "2026-03-23T10:00:00.000Z",
+          "completedAt": "2026-03-23T10:00:04.300Z",
+          "lastActivity": "2026-03-23T10:00:04.300Z"
+        },
+        "openai-query-def456": {
+          "queryName": "openai-query-def456",
+          "conversationId": "conv-9f3a21bc",
+          "agent": "default/planner",
+          "status": "done",
+          "startedAt": "2026-03-23T10:00:12.000Z",
+          "completedAt": "2026-03-23T10:00:18.900Z",
+          "lastActivity": "2026-03-23T10:00:18.900Z"
         }
       },
       "createdAt": "2026-03-23T10:00:00.000Z",
@@ -133,17 +107,17 @@ The sessions store object SHALL reflect the real-time state of all sessions, con
 }
 ```
 
-#### Scenario: Conversation status derives from query statuses
-- **WHEN** any query in a conversation has `status: "running"`
-- **THEN** the conversation `status` SHALL be `"running"`
+#### Scenario: Query status tracking
+- **WHEN** a query is running
+- **THEN** the query `status` SHALL be `"running"`
 
-#### Scenario: Conversation completes when all queries complete
-- **WHEN** all queries in a conversation have `status: "done"` or `"error"`
-- **THEN** the conversation `status` SHALL reflect the latest query's status
+#### Scenario: Query completion
+- **WHEN** a query completes
+- **THEN** the query `status` SHALL be `"done"` and `completedAt` SHALL be set
 
 #### Scenario: ConversationId attached from events
 - **WHEN** a `MemoryAddMessagesComplete` event arrives for a query
-- **THEN** the conversation SHALL be re-keyed from the temporary `queryName` key to the real `conversationId`
+- **THEN** the query's `conversationId` field SHALL be set
 
 ---
 
@@ -155,11 +129,11 @@ The sessions endpoint SHALL support `?watch=true` to stream session changes via 
 ```
 : connected
 
-data: {"sessionId":"session-1773840591429","session":{...full SessionEntry...}}
+data: {"sessionId":"session-123","session":{...full SessionEntry...}}
 
 : heartbeat
 
-data: {"sessionId":"session-1773840591429","session":{...updated SessionEntry...}}
+data: {"sessionId":"session-123","session":{...updated SessionEntry...}}
 ```
 
 **Why delta, not full store:** The sessions object grows as the system runs. Sending the full store on every change would be O(sessions) per event. Sending only the changed session is O(1) and lets clients do a simple replace: `localSessions[event.sessionId] = event.session`.
@@ -195,19 +169,6 @@ The endpoint SHALL support retrieving a single session by ID.
 #### Scenario: Session not found
 - **WHEN** `GET /v1/broker/sessions/sessions/:session_id` is called for an unknown session
 - **THEN** the response is `404` with `{ "error": "Session not found" }`
-
----
-
-### Requirement: Conversation retrieval
-The endpoint SHALL support finding a conversation by its `conversationId` across all sessions.
-
-#### Scenario: Conversation found
-- **WHEN** `GET /v1/broker/sessions/conversations/:conversation_id` is called
-- **THEN** the response is `200` with the `ConversationEntry` plus `sessionId` field
-
-#### Scenario: Conversation not found
-- **WHEN** the `conversationId` does not exist in any session
-- **THEN** the response is `404` with `{ "error": "Conversation not found" }`
 
 ---
 
