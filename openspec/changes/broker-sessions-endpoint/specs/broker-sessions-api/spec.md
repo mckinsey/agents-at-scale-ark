@@ -116,7 +116,7 @@ The sessions store object SHALL reflect the real-time state of all sessions and 
 - **THEN** the query `phase` SHALL be `"done"` and `completedAt` SHALL be set
 
 #### Scenario: ConversationId attached from messages
-- **WHEN** a `POST /messages` arrives with a `conversation_id` matching a known query
+- **WHEN** `POST /messages` arrives with a `conversation_id` and `query_id` matching a known query
 - **THEN** the query's `conversationId` field SHALL be set
 
 ---
@@ -129,13 +129,36 @@ The sessions store SHALL be enriched as a side effect of data arriving on the ex
 
 Events provide: `sessionId`, query `name`, `agent`, `phase`, `error`. Messages provide: `conversationId`.
 
+**Event reason → session mutation mapping:**
+
+| Event reason | Mutation |
+|---|---|
+| `QueryExecutionStart` | Create session (if new `sessionId`), create query with `phase: "running"` |
+| `AgentExecutionStart` | Set `agent` field on query (e.g. `"default/noah"`) |
+| `LLMCallStart`, `ToolCallStart`, `MemoryGetMessagesStart` | Update `lastActivity` |
+| `LLMCallComplete`, `ToolCallComplete`, `MemoryGetMessagesComplete` | Update `lastActivity` |
+| `MemoryAddMessagesComplete` | Set `conversationId` on query (only event that carries it) |
+| `QueryExecutionComplete` (no error) | Set `phase: "done"`, set `completedAt` |
+| `QueryExecutionComplete` (with error) | Set `phase: "error"`, set `error` message |
+| Any reason containing `Error` | Set `phase: "error"`, set `error` message |
+
+**Message ingestion:**
+
+| Route | Mutation |
+|---|---|
+| `POST /messages` with `conversation_id` + `query_id` | Set `conversationId` on matching query, update `lastActivity` |
+
 #### Scenario: Event creates session and query
 - **WHEN** a `QueryExecutionStart` event arrives with a new `sessionId`
 - **THEN** a new session SHALL be created containing a new query with `phase: "running"`
 
+#### Scenario: Agent execution populates agent field
+- **WHEN** an `AgentExecutionStart` event arrives with an `agent` field
+- **THEN** the query's `agent` field SHALL be set (e.g. `"default/noah"`)
+
 #### Scenario: Event updates query phase
 - **WHEN** a `QueryExecutionComplete` event arrives for an existing query
-- **THEN** the query `phase` SHALL be updated to `"done"` or `"error"`
+- **THEN** the query `phase` SHALL be updated to `"done"` (no error) or `"error"` (with error)
 
 #### Scenario: Message attaches conversationId
 - **WHEN** `POST /messages` arrives with `conversation_id` and `query_id`
@@ -189,11 +212,11 @@ data: {"sessionId":"session-123","session":{...updated SessionEntry...}}
 The endpoint SHALL support retrieving a single session by ID.
 
 #### Scenario: Session exists
-- **WHEN** `GET /v1/broker/sessions/sessions/:session_id` is called for an existing session
+- **WHEN** `GET /v1/broker/sessions/:session_id` is called for an existing session
 - **THEN** the response is `200` with the full `SessionEntry` object
 
 #### Scenario: Session not found
-- **WHEN** `GET /v1/broker/sessions/sessions/:session_id` is called for an unknown session
+- **WHEN** `GET /v1/broker/sessions/:session_id` is called for an unknown session
 - **THEN** the response is `404` with `{ "error": "Session not found" }`
 
 ---

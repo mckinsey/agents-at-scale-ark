@@ -2,7 +2,7 @@
 
 The ark-broker currently has four append-only streams: events, messages, traces, chunks. Each uses `BrokerItemStream<T>` with sequence numbers, cursor-based pagination, and SSE watch. The `/sessions` endpoint is a different pattern — a single mutable JSON object (the sessions store) that is updated in-place as events flow in.
 
-A prototype implementation exists. This design formalizes the endpoint as a production-ready broker feature.
+This design formalizes the endpoint for implementation.
 
 ## Goals / Non-Goals
 
