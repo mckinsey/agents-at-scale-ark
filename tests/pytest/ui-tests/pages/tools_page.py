@@ -13,7 +13,7 @@ class ToolsPage(BasePage):
 
     ADD_TOOL_BUTTON = "button:has-text('Add Tool'), button:has-text('Create Tool'), button:has-text('New Tool')"
     TOOL_NAME_INPUT = "input[name='name'], input[placeholder*='name' i], input#name, [role='dialog'] input:first-of-type"
-    SUCCESS_POPUP = "[role='alert'], [role='status'], .notification, .toast, div:has-text('success'), div:has-text('Success'), div:has-text('created'), div:has-text('Created')"
+    POPUP = "body > section > ol > li"
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
     CONFIRM_DELETE_BUTTON = "button:has-text('Delete'), button:has-text('Confirm'), button:has-text('Yes')"
     
@@ -214,9 +214,14 @@ class ToolsPage(BasePage):
     
     def _check_success_popup(self) -> bool:
         try:
-            self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
+            popup_locator = self.page.locator(self.POPUP).first
+            popup_locator.wait_for(state="visible", timeout=5000)
+            logger.info(popup_locator.all_text_contents())
+            logger.info(popup_locator.aria_snapshot())
+            popup_locator.screenshot(path="tests/pytest/ui-tests/screenshots/tool_popup.png")
             return True
         except:
+            logger.exception("Error finding tool page popup")
             return False
     
     def create_tool_for_test(self, prefix: str, test_data_key: str = "get_coordinates"):
