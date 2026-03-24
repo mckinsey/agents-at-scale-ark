@@ -178,6 +178,138 @@ var _ = Describe("Team Webhook", func() {
 		})
 	})
 
+	Context("Sequential strategy with loops", func() {
+		It("Should accept sequential with loops and maxTurns", func() {
+			maxTurns := 5
+			obj.Spec.Strategy = validation.StrategySequential
+			obj.Spec.Loops = true
+			obj.Spec.MaxTurns = &maxTurns
+			obj.Spec.Members = []arkv1alpha1.TeamMember{
+				{Name: "researcher", Type: "agent"},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("Should reject sequential with loops but no maxTurns", func() {
+			obj.Spec.Strategy = validation.StrategySequential
+			obj.Spec.Loops = true
+			obj.Spec.Members = []arkv1alpha1.TeamMember{
+				{Name: "researcher", Type: "agent"},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("maxTurns is required when loops is enabled"))
+		})
+
+		It("Should reject sequential with maxTurns but no loops", func() {
+			maxTurns := 5
+			obj.Spec.Strategy = validation.StrategySequential
+			obj.Spec.MaxTurns = &maxTurns
+			obj.Spec.Members = []arkv1alpha1.TeamMember{
+				{Name: "researcher", Type: "agent"},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("maxTurns can only be set when loops is enabled"))
+		})
+
+		It("Should reject loops on selector strategy", func() {
+			obj.Spec.Strategy = "selector"
+			obj.Spec.Loops = true
+			obj.Spec.Members = []arkv1alpha1.TeamMember{
+				{Name: "researcher", Type: "agent"},
+			}
+			obj.Spec.Selector = &arkv1alpha1.TeamSelectorSpec{Agent: "coordinator"}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("loops can only be used with the 'sequential' strategy"))
+		})
+	})
+
+	Context("Round-robin migration via defaulter", func() {
+		var defaulter *validation.WebhookDefaulter
+
+		BeforeEach(func() {
+			defaulter = &validation.WebhookDefaulter{}
+		})
+
+		It("Should migrate round-robin with maxTurns to sequential with loops", func() {
+			maxTurns := 5
+			team := &arkv1alpha1.Team{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-team",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.TeamSpec{
+					Strategy: "round-robin",
+					MaxTurns: &maxTurns,
+					Members: []arkv1alpha1.TeamMember{
+						{Name: "researcher", Type: "agent"},
+					},
+				},
+			}
+
+			err := defaulter.Default(ctx, team)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(team.Spec.Strategy).To(Equal("sequential"))
+			Expect(team.Spec.Loops).To(BeTrue())
+			Expect(team.Spec.MaxTurns).ToNot(BeNil())
+			Expect(*team.Spec.MaxTurns).To(Equal(5))
+			Expect(team.Annotations).To(HaveKey(ContainSubstring("migration-warning-round-robin")))
+		})
+
+		It("Should migrate round-robin without maxTurns to plain sequential", func() {
+			team := &arkv1alpha1.Team{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-team",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.TeamSpec{
+					Strategy: "round-robin",
+					Members: []arkv1alpha1.TeamMember{
+						{Name: "researcher", Type: "agent"},
+					},
+				},
+			}
+
+			err := defaulter.Default(ctx, team)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(team.Spec.Strategy).To(Equal("sequential"))
+			Expect(team.Spec.Loops).To(BeFalse())
+			Expect(team.Spec.MaxTurns).To(BeNil())
+			Expect(team.Annotations).To(HaveKey(ContainSubstring("migration-warning-round-robin")))
+		})
+
+		It("Should return migration warning when round-robin is migrated", func() {
+			team := &arkv1alpha1.Team{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-team",
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.TeamSpec{
+					Strategy: "round-robin",
+					Members: []arkv1alpha1.TeamMember{
+						{Name: "researcher", Type: "agent"},
+					},
+				},
+			}
+
+			err := defaulter.Default(ctx, team)
+			Expect(err).ToNot(HaveOccurred())
+
+			warnings, err := validator.ValidateCreate(ctx, team)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(warnings).To(HaveLen(1))
+			Expect(warnings[0]).To(ContainSubstring("round-robin"))
+			Expect(warnings[0]).To(ContainSubstring("deprecated"))
+		})
+	})
+
 	Context("Graph strategy validation (should remain strict)", func() {
 		It("Should reject multiple edges from same source for graph strategy", func() {
 			By("creating a graph team with multiple edges from same source")

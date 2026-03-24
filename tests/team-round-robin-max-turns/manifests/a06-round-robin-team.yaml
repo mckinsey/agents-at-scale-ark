@@ -3,7 +3,8 @@ kind: Team
 metadata:
   name: round-robin-max-turns-team
 spec:
-  strategy: round-robin
+  strategy: sequential
+  loops: true
   maxTurns: 2
   members:
     - type: agent

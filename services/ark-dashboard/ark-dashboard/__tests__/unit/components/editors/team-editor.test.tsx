@@ -141,11 +141,11 @@ describe('TeamEditor', () => {
       expect(screen.getByRole('combobox')).toBeInTheDocument();
     });
 
-    it('should default to round-robin strategy', async () => {
+    it('should default to sequential strategy', async () => {
       render(<TeamEditor {...defaultProps} />);
 
       const combobox = screen.getByRole('combobox');
-      expect(combobox).toHaveTextContent('Round Robin');
+      expect(combobox).toHaveTextContent('Sequential');
     });
   });
 
@@ -167,7 +167,8 @@ describe('TeamEditor', () => {
         expect(defaultProps.onSave).toHaveBeenCalledWith(
           expect.objectContaining({
             name: 'my-team',
-            strategy: 'round-robin',
+            strategy: 'sequential',
+            loops: false,
             members: expect.arrayContaining([
               expect.objectContaining({ name: 'test-agent-1' }),
             ]),
@@ -274,7 +275,7 @@ describe('TeamEditor', () => {
       name: 'existing-team',
       namespace: 'default',
       description: 'Existing team description',
-      strategy: 'round-robin',
+      strategy: 'sequential',
       members: [{ name: 'test-agent-1', type: 'agent' as const }],
     };
 
