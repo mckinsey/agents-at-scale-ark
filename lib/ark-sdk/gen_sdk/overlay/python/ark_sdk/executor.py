@@ -33,11 +33,13 @@ class AgentConfig(BaseModel):
     labels: Dict[str, str] = {}
 
 
-class ToolDefinition(BaseModel):
-    """Tool definition for agent capabilities."""
+class MCPServerConfig(BaseModel):
     name: str
-    description: str
-    parameters: Dict[str, Any] = {}
+    url: str
+    transport: str = "http"
+    timeout: str = "30s"
+    headers: Dict[str, str] = {}
+    tools: List[str] = []
 
 
 class Message(BaseModel):
@@ -54,7 +56,7 @@ class ExecutionEngineRequest(BaseModel):
     """Request to execute an agent."""
     agent: AgentConfig
     userInput: Message
-    tools: List[ToolDefinition] = []
+    mcpServers: List[MCPServerConfig] = []
     conversationId: str = ""
 
 
