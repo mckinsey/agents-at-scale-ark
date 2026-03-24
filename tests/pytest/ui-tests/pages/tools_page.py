@@ -47,14 +47,8 @@ class ToolsPage(BasePage):
         date_str = datetime.now().strftime("%d%m%y%H%M%S")
         rand = random.randint(100, 999)
         return f"{prefix}-{date_str}{rand}"
-    
-    def _goto_tools(self) -> None:
-        self.page.goto("http://localhost:3274/tools")
-        self.wait_for_navigation_complete()
-        self.wait_for_element(self.ADD_TOOL_BUTTON, timeout=10000)
 
     def is_tool_in_table(self, tool_name: str, retries: int = 3) -> bool:
-        self._goto_tools()
         for attempt in range(retries):
             try:
                 self.page.get_by_text(tool_name, exact=False).first.wait_for(state="visible", timeout=10000)
@@ -63,7 +57,8 @@ class ToolsPage(BasePage):
                 logger.debug(f"Tool {tool_name} not visible on attempt {attempt + 1}/{retries}: {e}")
                 if attempt < retries - 1:
                     logger.info(f"Tool {tool_name} not found, retrying ({attempt + 1}/{retries})...")
-                    self._goto_tools()
+                    self.page.reload()
+                    self.wait_for_navigation_complete()
         return False
     
     def create_http_tool_with_verification(self, tool_name: str, description: str, url: str) -> dict:
@@ -150,9 +145,6 @@ class ToolsPage(BasePage):
         logger.info(f"Success popup visible: {popup_visible}")
         
         self.wait_for_modal_close()
-        
-        logger.info(f"Navigating back to tools list...")
-        self.navigate_to_tools_tab()
         
         in_table = self.is_tool_in_table(tool_name)
         logger.info(f"Tool '{tool_name}' in table after creation: {in_table}")

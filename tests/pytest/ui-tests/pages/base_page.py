@@ -51,6 +51,7 @@ class BasePage:
         try:
             self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=timeout)
         except:
+            logger.info("Modal did not close")
             self.page.keyboard.press("Escape")
             self.wait_for_element_hidden("[data-slot='dialog-overlay'], [role='dialog']")
     
