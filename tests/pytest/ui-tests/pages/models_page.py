@@ -34,8 +34,8 @@ class ModelsPage(BasePage):
     def navigate_to_models_tab(self) -> None:
         dashboard = DashboardPage(self.page)
         self.page.goto(f"{dashboard.base_url}/models")
-        self.wait_for_navigation_complete()
-        self.wait_for_element(self.ADD_MODEL_BUTTON, timeout=10000)
+        # full page has not loaded until the networkidle state, unfortunately
+        self.wait_for_load_state("networkidle")
     
     def generate_model_name(self, prefix: str = "model") -> str:
         date_str = datetime.now().strftime("%d%m%y%H%M%S")
@@ -111,18 +111,11 @@ class ModelsPage(BasePage):
             popup_visible = True
         except:
             popup_visible = False
-        
-        logger.info(f"Navigating back to models list...")
-        self.navigate_to_models_tab()
-        
+
         in_table = self.is_model_in_table(model_name)
         
-        try:
-            self.page.get_by_text(model_name, exact=True).first.wait_for(state="visible", timeout=10000)
-        except:
-            logger.info(f"Model {model_name} not found with exact match, checking if it exists in table...")
-            if not self.is_model_in_table(model_name):
-                logger.warning(f"Model {model_name} not found in table after creation")
+        if not in_table:
+            logger.warning(f"Model {model_name} not found in table after creation")
         
         is_available = self.is_model_available(model_name)
         for retry in range(5):
