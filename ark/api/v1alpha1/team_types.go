@@ -26,12 +26,14 @@ type TeamGraphSpec struct {
 }
 
 type TeamSpec struct {
-	Members     []TeamMember      `json:"members"`
-	Strategy    string            `json:"strategy"`
-	Description string            `json:"description,omitempty"`
-	MaxTurns    *int              `json:"maxTurns,omitempty"`
-	Selector    *TeamSelectorSpec `json:"selector,omitempty"`
-	Graph       *TeamGraphSpec    `json:"graph,omitempty"`
+	Members     []TeamMember `json:"members"`
+	Strategy    string       `json:"strategy"`
+	Description string       `json:"description,omitempty"`
+	// +kubebuilder:default=false
+	Loops    bool              `json:"loops"`
+	MaxTurns *int              `json:"maxTurns,omitempty"`
+	Selector *TeamSelectorSpec `json:"selector,omitempty"`
+	Graph    *TeamGraphSpec    `json:"graph,omitempty"`
 }
 
 type TeamStatus struct {

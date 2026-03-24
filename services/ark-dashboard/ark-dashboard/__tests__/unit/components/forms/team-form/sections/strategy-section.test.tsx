@@ -18,7 +18,7 @@ const schema = z.object({
 });
 
 function Wrapper({
-  defaultStrategy = 'round-robin',
+  defaultStrategy = 'sequential',
   disabled = false,
 }: {
   defaultStrategy?: string;
@@ -54,13 +54,13 @@ describe('StrategySection', () => {
     expect(screen.getByRole('combobox')).toBeInTheDocument();
   });
 
-  it('should default to round-robin', () => {
+  it('should default to sequential', () => {
     render(<Wrapper />);
-    expect(screen.getByRole('combobox')).toHaveTextContent('Round Robin');
+    expect(screen.getByRole('combobox')).toHaveTextContent('Sequential');
   });
 
-  it('should show max turns field for non-sequential strategies', () => {
-    render(<Wrapper defaultStrategy="round-robin" />);
+  it('should show max turns field for graph strategy', () => {
+    render(<Wrapper defaultStrategy="graph" />);
     expect(screen.getByText('Max Turns')).toBeInTheDocument();
   });
 

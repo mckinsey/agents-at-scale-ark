@@ -1653,8 +1653,7 @@ export interface paths {
          * @description Create a new Team CR.
          *
          *     Supports various execution strategies:
-         *     - sequential: Members execute in order
-         *     - round-robin: Members take turns
+         *     - sequential: Members execute in order (set loops=true with maxTurns for cycling)
          *     - graph: Custom workflow defined by graph edges
          *     - selector: AI-powered member selection (can be combined with graph constraints)
          *
@@ -4139,6 +4138,11 @@ export interface components {
             /** Description */
             description?: string | null;
             graph?: components["schemas"]["Graph"] | null;
+            /**
+             * Loops
+             * @default false
+             */
+            loops: boolean;
             /** Maxturns */
             maxTurns?: number | null;
             /** Members */
@@ -4158,6 +4162,11 @@ export interface components {
             /** Description */
             description?: string | null;
             graph?: components["schemas"]["Graph"] | null;
+            /**
+             * Loops
+             * @default false
+             */
+            loops: boolean;
             /** Maxturns */
             maxTurns?: number | null;
             /** Members */
@@ -4201,6 +4210,8 @@ export interface components {
         TeamResponse: {
             /** Description */
             description?: string | null;
+            /** Loops */
+            loops?: boolean | null;
             /** Members Count */
             members_count?: number | null;
             /** Name */
@@ -4220,6 +4231,11 @@ export interface components {
             /** Description */
             description?: string | null;
             graph?: components["schemas"]["Graph"] | null;
+            /**
+             * Loops
+             * @default false
+             */
+            loops: boolean;
             /** Maxturns */
             maxTurns?: number | null;
             /** Members */

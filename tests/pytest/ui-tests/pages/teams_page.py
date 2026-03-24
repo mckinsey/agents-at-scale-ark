@@ -24,7 +24,7 @@ class TeamsPage(BasePage):
     TEST_DATA = {
         "default": {
             "description": "Resolve customer queries",
-            "strategy": "Round Robin",
+            "strategy": "Sequential",
             "max_turns": "5"
         }
     }
@@ -90,22 +90,20 @@ class TeamsPage(BasePage):
 
         logger.info(f"Selecting member: {member_name}")
         try:
-            member_checkbox = self.page.locator(f"div:has-text('{member_name}') input[type='checkbox'], label:has-text('{member_name}') input[type='checkbox']").first
-            member_checkbox.wait_for(state="visible", timeout=10000)
-            if member_checkbox.is_visible():
-                member_checkbox.click()
-            else:
-                all_checkboxes = self.page.locator("button[role='checkbox']")
-                if all_checkboxes.count() > 0:
-                    all_checkboxes.first.click()
+            member_label = self.page.locator(f"label:has-text('{member_name}')").first
+            member_label.wait_for(state="visible", timeout=10000)
+            member_label.click()
+            logger.info(f"Selected member via label click: {member_name}")
         except Exception as e:
-            logger.warning(f"Could not select member checkbox: {e}")
+            logger.warning(f"Could not select member via label: {e}")
             try:
-                all_checkboxes = self.page.locator("button[role='checkbox']")
-                if all_checkboxes.count() > 0:
-                    all_checkboxes.first.click()
-            except Exception:
-                pass
+                member_row = self.page.locator(f"div:has(div:text('{member_name}'))").first
+                checkbox = member_row.locator("button[role='checkbox']").first
+                checkbox.wait_for(state="visible", timeout=5000)
+                checkbox.click()
+                logger.info(f"Selected member via checkbox button: {member_name}")
+            except Exception as e2:
+                logger.warning(f"Could not select member via checkbox button: {e2}")
 
         logger.info("Clicking Create Team button")
         self.page.locator("button:has-text('Create Team')").first.click()
@@ -144,16 +142,20 @@ class TeamsPage(BasePage):
 
         logger.info(f"Selecting member: {member_name}")
         try:
-            checkbox = self.page.locator(f"tr:has-text('{member_name}') input[type='checkbox'], div:has-text('{member_name}') input[type='checkbox'], label:has-text('{member_name}') input[type='checkbox']").first
-            checkbox.wait_for(state="visible", timeout=10000)
-            if checkbox.is_visible():
-                checkbox.check()
-            else:
-                all_checkboxes = self.page.locator("[role='dialog'] input[type='checkbox']")
-                if all_checkboxes.count() > 0:
-                    all_checkboxes.first.check()
+            member_label = self.page.locator(f"label:has-text('{member_name}')").first
+            member_label.wait_for(state="visible", timeout=10000)
+            member_label.click()
+            logger.info(f"Selected member via label click: {member_name}")
         except Exception as e:
-            logger.warning(f"Could not select member checkbox: {e}")
+            logger.warning(f"Could not select member via label: {e}")
+            try:
+                member_row = self.page.locator(f"div:has(div:text('{member_name}'))").first
+                checkbox = member_row.locator("button[role='checkbox']").first
+                checkbox.wait_for(state="visible", timeout=5000)
+                checkbox.click()
+                logger.info(f"Selected member via checkbox button: {member_name}")
+            except Exception as e2:
+                logger.warning(f"Could not select member via checkbox button: {e2}")
 
         save_button = self.page.locator("[role='dialog'] button:has-text('Create'), [data-slot='dialog-content'] button:has-text('Create')").first
         if not save_button.is_visible():
@@ -208,13 +210,18 @@ class TeamsPage(BasePage):
 
         self.wait_for_modal_open()
         confirm_dialog_visible = self.page.locator(self.CONFIRM_DELETE_DIALOG).first.is_visible()
-        confirm_button_visible = self.page.locator(self.CONFIRM_DELETE_BUTTON).first.is_visible()
+
+        scoped_confirm = "[role='alertdialog'] button:has-text('Delete'), [role='dialog'] button:has-text('Delete'), [role='alertdialog'] button:has-text('Confirm'), [role='dialog'] button:has-text('Confirm'), [role='alertdialog'] button:has-text('Yes'), [role='dialog'] button:has-text('Yes')"
+        confirm_button_visible = self.page.locator(scoped_confirm).first.is_visible()
 
         if confirm_button_visible:
-            self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
+            btn = self.page.locator(scoped_confirm).first
+            btn.wait_for(state="visible", timeout=5000)
+            btn.click(force=True)
 
         self.wait_for_load_state("domcontentloaded")
         popup_visible = self._check_success_popup()
+        self.navigate_to_teams_tab()
         deleted_from_table = not self.is_team_in_table(team_name)
 
         return {
@@ -242,4 +249,143 @@ class TeamsPage(BasePage):
             return True
         except PlaywrightTimeoutError:
             logger.debug("Success popup not visible")
+            return False
+
+    def get_strategy_options(self) -> list[str]:
+        self.page.locator(self.ADD_TEAM_BUTTON).first.click()
+        self.wait_for_load_state("domcontentloaded")
+        self.page.locator("input").first.wait_for(state="visible", timeout=10000)
+
+        trigger = self.page.locator("[role='combobox'], button:has-text('Select a strategy')").first
+        trigger.click()
+        self.page.locator("[role='option']").first.wait_for(state="visible", timeout=5000)
+        options = [
+            opt.inner_text()
+            for opt in self.page.locator("[role='option']").all()
+        ]
+        self.page.keyboard.press("Escape")
+        self.wait_for_modal_close()
+        return options
+
+    def is_loops_checkbox_visible(self) -> bool:
+        return self.is_visible("label:has-text('Enable loops')", timeout=3000)
+
+    def is_loops_checkbox_checked(self) -> bool:
+        checkbox = self.page.locator(
+            "label:has-text('Enable loops')"
+        ).locator("xpath=preceding-sibling::input[@type='checkbox']").first
+        return checkbox.is_checked()
+
+    def is_max_turns_field_visible(self) -> bool:
+        return self.is_visible("input[name='maxTurns'], input[type='number']", timeout=8000)
+
+    def select_strategy_in_form(self, strategy: str) -> None:
+        trigger = self.page.locator("[role='combobox'], button:has-text('Select a strategy')").first
+        trigger.click()
+        self.page.locator("[role='option']").first.wait_for(state="visible", timeout=5000)
+        self.page.locator(f"[role='option']:has-text('{strategy}')").first.click()
+        self.page.locator("[role='option']").first.wait_for(state="hidden", timeout=5000)
+
+    def toggle_loops_checkbox(self) -> None:
+        checkbox = self.page.locator(
+            "label:has-text('Enable loops')"
+        ).locator("xpath=preceding-sibling::input[@type='checkbox']").first
+        current = checkbox.is_checked()
+        if current:
+            checkbox.uncheck()
+        else:
+            checkbox.check()
+        self.page.wait_for_timeout(300)
+
+    def create_sequential_loops_team(self, team_name: str, member_name: str, max_turns: str, loops: bool = True) -> dict:
+        logger.info(f"Creating sequential+loops team: {team_name}, loops={loops}")
+
+        self.page.locator(self.ADD_TEAM_BUTTON).first.click()
+        self.wait_for_load_state("domcontentloaded")
+        self.page.locator("input").first.wait_for(state="visible", timeout=10000)
+
+        if "/teams/new" in self.page.url:
+            name_input = self.page.locator("input[name='name']")
+        else:
+            name_input = self.page.locator("input").first
+
+        name_input.wait_for(state="visible", timeout=10000)
+        name_input.fill(team_name)
+
+        self.select_strategy_in_form("Sequential")
+
+        loops_visible = self.is_loops_checkbox_visible()
+        if loops and loops_visible:
+            checkbox = self.page.locator(
+                "label:has-text('Enable loops')"
+            ).locator("xpath=preceding-sibling::input[@type='checkbox']").first
+            checkbox.dispatch_event("click")
+            self.page.locator("input[name='maxTurns'], input[type='number']").first.wait_for(
+                state="visible", timeout=8000
+            )
+
+        max_turns_visible = self.is_max_turns_field_visible()
+        if loops and max_turns_visible:
+            self.page.locator("input[name='maxTurns'], input[type='number']").first.fill(max_turns)
+
+        try:
+            member_label = self.page.locator(f"label:has-text('{member_name}')").first
+            member_label.wait_for(state="visible", timeout=10000)
+            member_label.click()
+        except Exception as e:
+            logger.warning(f"Could not select member via label: {e}")
+            try:
+                member_row = self.page.locator(f"div:has(div:text('{member_name}'))").first
+                member_row.locator("button[role='checkbox']").first.click()
+            except Exception as e2:
+                logger.warning(f"Could not select member via checkbox: {e2}")
+
+        create_btn = self.page.locator(
+            "button:has-text('Create Team'), [role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']"
+        ).first
+        create_btn.scroll_into_view_if_needed()
+        create_btn.click(force=True)
+        self.wait_for_load_state("domcontentloaded")
+
+        popup_visible = False
+        try:
+            popup = self.page.locator(self.SUCCESS_POPUP).first
+            popup.wait_for(state="visible", timeout=10000)
+            popup_text = popup.inner_text().lower()
+            is_error = any(w in popup_text for w in ("error", "fail", "denied", "invalid", "cannot", "only be set"))
+            popup_visible = not is_error
+        except PlaywrightTimeoutError:
+            pass
+
+        self.wait_for_modal_close()
+        self.navigate_to_teams_tab()
+        in_table = self.is_team_in_table(team_name)
+
+        return {
+            "name": team_name,
+            "loops": loops,
+            "loops_checkbox_visible": loops_visible,
+            "max_turns_visible": max_turns_visible,
+            "popup_visible": popup_visible,
+            "in_table": in_table,
+        }
+
+    def get_team_row_strategy_text(self, team_name: str) -> str:
+        try:
+            name_el = self.page.get_by_text(team_name, exact=True).first
+            name_el.wait_for(state="visible", timeout=10000)
+            row = name_el.locator("xpath=ancestor::div[contains(@class,'rounded-md') and contains(@class,'border')][1]")
+            return row.inner_text()
+        except Exception as e:
+            logger.warning(f"Could not get row text for team {team_name}: {e}")
+            return ""
+
+    def is_deprecation_badge_visible(self, team_name: str) -> bool:
+        try:
+            name_el = self.page.get_by_text(team_name, exact=True).first
+            name_el.wait_for(state="visible", timeout=10000)
+            row = name_el.locator("xpath=ancestor::div[contains(@class,'rounded-md') and contains(@class,'border')][1]")
+            return row.locator("[data-slot='badge'], span:has-text('Deprecated'), span:has-text('deprecated')").first.is_visible()
+        except Exception as e:
+            logger.warning(f"Could not check deprecation badge for {team_name}: {e}")
             return False
