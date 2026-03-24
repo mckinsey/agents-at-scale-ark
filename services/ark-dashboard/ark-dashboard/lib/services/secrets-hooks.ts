@@ -8,6 +8,8 @@ import type { Secret, SecretDetailResponse } from './secrets';
 
 export const GET_ALL_SECRETS_QUERY_KEY = 'get-all-secrets';
 export const CREATE_SECRET_MUTATION_KEY = 'create-secret';
+export const UPDATE_SECRET_MUTATION_KEY = 'update-secret';
+export const DELETE_SECRET_MUTATION_KEY = 'delete-secret';
 
 export const useGetAllSecrets = () => {
   return useQuery({
@@ -81,6 +83,87 @@ export const useCreateSecret = (props: UseCreateSecretProps) => {
       });
     },
     // Always refetch after error or success:
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: [GET_ALL_SECRETS_QUERY_KEY] });
+    },
+  });
+};
+
+type UseUpdateSecretProps = {
+  onSuccess?: (data: SecretDetailResponse) => void;
+};
+
+export const useUpdateSecret = (props: UseUpdateSecretProps) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationKey: [UPDATE_SECRET_MUTATION_KEY],
+    mutationFn: ({ name, password }: { name: string; password: string }) => {
+      return secretsService.update(name, password);
+    },
+    onSuccess: data => {
+      toast.success('Secret Updated', {
+        description: `Successfully updated secret ${data.name}`,
+      });
+
+      if (props.onSuccess) {
+        props.onSuccess(data);
+      }
+    },
+    onError: (error, data) => {
+      const getMessage = () => {
+        if (error instanceof APIError && error.status === 404) {
+          return `Secret "${data.name}" not found.`;
+        }
+        if (error instanceof Error) {
+          return error.message;
+        }
+        return 'An unexpected error occurred';
+      };
+
+      toast.error(`Failed to update Secret: ${data.name}`, {
+        description: getMessage(),
+      });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: [GET_ALL_SECRETS_QUERY_KEY] });
+    },
+  });
+};
+
+type UseDeleteSecretProps = {
+  onSuccess?: () => void;
+};
+
+export const useDeleteSecret = (props?: UseDeleteSecretProps) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationKey: [DELETE_SECRET_MUTATION_KEY],
+    mutationFn: (name: string) => {
+      return secretsService.delete(name);
+    },
+    onSuccess: () => {
+      toast.success('Secret Deleted', {
+        description: 'Successfully deleted the secret',
+      });
+
+      if (props?.onSuccess) {
+        props.onSuccess();
+      }
+    },
+    onError: error => {
+      const getMessage = () => {
+        if (error instanceof Error) {
+          return error.message;
+        }
+        return 'An unexpected error occurred';
+      };
+
+      toast.error('Failed to delete Secret', {
+        description: getMessage(),
+      });
+    },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: [GET_ALL_SECRETS_QUERY_KEY] });
     },
