@@ -26,7 +26,6 @@ $ kubectl get agents,mcpservers,a2aservers -A | grep phoenix
 - Infrastructure services show correct installation status in marketplace UI
 - Solution uses explicit marketplace labels for unambiguous detection
 - Detection works for both CRD-based services and infrastructure services
-- Backward compatible with existing CRD detection
 - Performance remains comparable to current implementation
 
 **Non-Goals:**
@@ -72,17 +71,14 @@ global:
 
 **Why `ark.mckinsey.com/marketplace-item`**: Explicit marketplace identification prevents collisions with user-deployed resources.
 
-### 3. Dashboard queries both CRDs and labeled Deployments
+### 3. Dashboard queries labeled Deployments for infrastructure services
 
-Detection logic priority order (backward compatible):
-1. Check Ark CRDs first (agents, mcpservers, a2aservers, workflows, models) via export service
-2. If no CRD found AND item has `ark.helmReleaseName` metadata, check for labeled Deployment
-3. Mark as installed if either exists
+For infrastructure services that have `ark.helmReleaseName` metadata in marketplace.json, dashboard checks for labeled Deployments to determine installation status.
 
-**Why this works**:
-- Agent/MCP services create CRDs → found in step 1
-- Infrastructure services (phoenix, a2a-inspector, mcp-inspector) don't create CRDs → fall through to step 2
-- No conflicts: If service creates a CRD, it's found at step 1 and step 2 never runs
+Detection approach:
+- Infrastructure services (phoenix, a2a-inspector, mcp-inspector) don't create Ark CRDs
+- Instead, query for Deployments with `ark.mckinsey.com/marketplace-item` label
+- Deployment status (Available=True) indicates successful installation
 
 ### 4. Query Deployments by label selector via ark-api
 
@@ -124,17 +120,12 @@ The `ark.mckinsey.com/marketplace-item` label value must match the marketplace i
 - Generic Helm charts won't show install status until labeled
 - Requires clear documentation and CI validation tooling
 
-### Graceful Degradation
+### Label Requirement
 
-Items WITHOUT the label:
-- Won't show correct install status (always "available")
-- Can still be installed via install command
-- Appear in marketplace catalog
-
-Items WITH the label:
-- Show correct install status
-- Enable future marketplace features
-- Explicit marketplace member
+All marketplace items must include the `ark.mckinsey.com/marketplace-item` label:
+- Required for correct installation status detection
+- Enables marketplace features
+- Establishes explicit marketplace membership
 
 ### Technical Risks
 
@@ -142,7 +133,7 @@ Items WITH the label:
 
 **[Risk] Only labeled deployments detected** → StatefulSets/DaemonSets without Deployment won't be detected. Mitigation: Current infrastructure services use Deployments. Can expand query later if needed.
 
-**[Risk] Cross-repo coordination** → Dashboard and marketplace charts must align. Mitigation: Dashboard degrades gracefully (shows "not installed"), charts can update independently.
+**[Risk] Cross-repo coordination** → Dashboard and marketplace charts must align. Mitigation: Dashboard shows correct status once charts include required labels.
 
 **[Performance] Additional API calls** → Only for items with helmReleaseName and no CRD. Comparable to existing CRD queries. No polling - on-demand only.
 

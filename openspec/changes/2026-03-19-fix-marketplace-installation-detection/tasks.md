@@ -77,6 +77,7 @@
 
 ## 10. Ark Dashboard Documentation (this repo)
 
-- [ ] 10.1 Document curated marketplace model in Ark docs: explain why label is required
+- [ ] 10.1 Document curated marketplace model in Ark docs: explain label requirement for installation detection
 - [ ] 10.2 Add "Custom Marketplace Sources" section explaining label requirement for third-party marketplaces
-- [ ] 10.3 Document graceful degradation: unlabeled items appear but show incorrect status
+- [ ] 10.3 Document that marketplace items must include `ark.mckinsey.com/marketplace-item` label for status detection
+- [ ] 10.4 Add troubleshooting note on marketplace labeling requirements to Ark documentation
