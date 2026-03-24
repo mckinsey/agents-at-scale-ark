@@ -304,7 +304,7 @@ class AgentsPage(BasePage):
         
         self.wait_for_load_state("domcontentloaded")
         popup_visible = self._check_success_popup()
-        deleted_from_table = not self.is_agent_in_table(agent_name)
+        deleted_from_table = not self.is_agent_in_table(agent_name, retries=0)
         
         return {
             "agent_name": agent_name,

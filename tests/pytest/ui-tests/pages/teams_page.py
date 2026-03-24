@@ -222,7 +222,7 @@ class TeamsPage(BasePage):
         self.wait_for_load_state("domcontentloaded")
         popup_visible = self._check_success_popup()
         self.navigate_to_teams_tab()
-        deleted_from_table = not self.is_team_in_table(team_name)
+        deleted_from_table = not self.is_team_in_table(team_name, retries=0)
 
         return {
             "team_name": team_name,

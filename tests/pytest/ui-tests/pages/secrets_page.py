@@ -156,7 +156,7 @@ class SecretsPage(BasePage):
         
         self.wait_for_load_state("domcontentloaded")
         popup_visible = self._check_success_popup()
-        deleted_from_table = not self.is_secret_in_table(secret_name)
+        deleted_from_table = not self.is_secret_in_table(secret_name, retries=0)
         
         return {
             "secret_name": secret_name,
