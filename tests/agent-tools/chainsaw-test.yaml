@@ -52,7 +52,7 @@ spec:
           value: ($namespace)
     - script:
         content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+          helm template ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE | kubectl apply -f -
         env:
         - name: NAMESPACE
           value: ($namespace)
@@ -140,7 +140,6 @@ spec:
     - script:
         content: |
           helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
-          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
         env:
         - name: NAMESPACE
           value: ($namespace)

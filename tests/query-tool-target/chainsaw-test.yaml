@@ -36,7 +36,7 @@ spec:
     try:
     - script:
         content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+          helm template ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE | kubectl apply -f -
         env:
         - name: NAMESPACE
           value: ($namespace)
@@ -107,10 +107,3 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: tool-target-query
-    cleanup:
-    - script:
-        content: |
-          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
-        env:
-        - name: NAMESPACE
-          value: ($namespace)

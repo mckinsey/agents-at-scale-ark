@@ -23,7 +23,7 @@ spec:
           value: (json_parse($stdout))
     - script:
         content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+          helm template ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE | kubectl apply -f -
         env:
         - name: NAMESPACE
           value: ($namespace)
@@ -43,6 +43,7 @@ spec:
     - apply:
         file: manifests/a04-query.yaml
 
+
   - name: verify-model-ready
     try:
     - wait:
@@ -54,8 +55,8 @@ spec:
         for:
           condition:
             name: ModelAvailable
-            value: 'True' 
-    
+            value: 'True'
+
   - name: verify-agent-created
     try:
     - assert:
@@ -65,7 +66,7 @@ spec:
           metadata:
             name: structured-output-test-agent
             namespace: ($namespace)
-    
+
   - name: verify-query-completion
     try:
     - assert:
