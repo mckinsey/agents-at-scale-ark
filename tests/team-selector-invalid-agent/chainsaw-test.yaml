@@ -16,7 +16,7 @@ spec:
           helm template mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
             --version 0.1.28 \
             --namespace $NAMESPACE \
-            --values mock-llm-values.yaml | kubectl apply -f -
+            --values mock-llm-values.yaml | kubectl apply -n $NAMESPACE -f -
         env:
         - name: NAMESPACE
           value: ($namespace)
