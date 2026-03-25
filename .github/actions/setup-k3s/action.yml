@@ -154,11 +154,17 @@ runs:
     #
     # ref: https://rancher.com/docs/k3s/latest/en/installation/network-options/
     #
+    - name: Cache Calico manifest
+      uses: actions/cache@v4
+      with:
+        path: /tmp/calico.yaml
+        key: calico-v3.28.1
+
     - name: Setup calico
       run: |
         echo "::group::Setup calico"
         # Download calico.yaml k8s and split into separate manifests
-        curl -sfL --output /tmp/calico.yaml https://raw.githubusercontent.com/projectcalico/calico/v3.28.1/manifests/calico.yaml
+        [ -f /tmp/calico.yaml ] || curl -sfL --output /tmp/calico.yaml https://raw.githubusercontent.com/projectcalico/calico/v3.28.1/manifests/calico.yaml
         mkdir calico
         cd calico
         yq -s '"\(.kind)-\(.metadata.name).yaml"' /tmp/calico.yaml
