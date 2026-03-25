@@ -325,13 +325,6 @@ class AgentsPage(BasePage):
             "deleted_from_table": False
         }
     
-    def _check_success_popup(self) -> bool:
-        try:
-            self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
-            return True
-        except:
-            return False
-    
     def _close_dialog_if_open(self) -> None:
         for attempt in range(3):
             try:

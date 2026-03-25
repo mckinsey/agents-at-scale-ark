@@ -180,14 +180,7 @@ class ModelsPage(BasePage):
             "popup_visible": False,
             "deleted_from_table": False
         }
-    
-    def _check_success_popup(self) -> bool:
-        try:
-            self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
-            return True
-        except:
-            return False
-    
+
     def create_model_for_test(self, prefix: str, secret_name: str, secrets_page):
         model_data = self.TEST_DATA["openai"]
         
