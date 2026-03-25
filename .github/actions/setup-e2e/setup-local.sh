@@ -14,6 +14,7 @@ REGISTRY_USERNAME="${DOCKER_CICD_CACHE_REGISTRY_USERNAME:?required}"
 REGISTRY_PASSWORD="${DOCKER_CICD_CACHE_REGISTRY_PASSWORD:?required}"
 ARK_IMAGE_TAG="${ARK_IMAGE_TAG:-local-test}"
 INSTALL_COVERAGE="false"
+STORAGE_BACKEND="etcd"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -22,9 +23,14 @@ while [[ $# -gt 0 ]]; do
       INSTALL_COVERAGE="true"
       shift
       ;;
+    --storage-backend)
+      STORAGE_BACKEND="$2"
+      shift 2
+      ;;
     -h|--help)
-      echo "Usage: $0 [--install-coverage]"
+      echo "Usage: $0 [--install-coverage] [--storage-backend etcd|postgresql]"
       echo "  --install-coverage   Install coverage collection components"
+      echo "  --storage-backend    Storage backend to use (default: etcd)"
       exit 0
       ;;
     *)
@@ -38,6 +44,7 @@ echo "=== Local ARK E2E Setup ==="
 echo "Registry: ${REGISTRY}"
 echo "ARK Image Tag: ${ARK_IMAGE_TAG}"
 echo "Install Coverage: ${INSTALL_COVERAGE}"
+echo "Storage Backend: ${STORAGE_BACKEND}"
 echo
 
 # Check kubectl context
@@ -62,19 +69,43 @@ fi
 echo "=== Installing Gateway API CRDs ==="
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
 
+if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
+  echo "=== Installing PostgreSQL (ark-storage-dev) ==="
+  helm upgrade --install ark-storage-dev "${REPO_ROOT}/charts/ark-storage-dev" \
+    --namespace ark-system \
+    --create-namespace \
+    --wait --timeout=120s
+
+  echo "=== Waiting for PostgreSQL Pod Readiness ==="
+  kubectl -n ark-system wait --for=condition=ready pod -l app=ark-storage-dev --timeout=120s
+fi
+
 echo "=== Installing ARK Controller ==="
 cd "${REPO_ROOT}/ark"
 
-# Deploy controller with impersonation enabled for E2E tests
-helm upgrade --install ark-controller ./dist/chart \
-  --namespace ark-system \
-  --create-namespace \
-  --wait --timeout=300s \
-  --set controllerManager.container.image.repository="${REGISTRY}/ark-controller" \
-  --set controllerManager.container.image.tag="${ARK_IMAGE_TAG}" \
-  --set controllerManager.container.image.pullPolicy=IfNotPresent \
-  --set rbac.enable=true \
+HELM_ARGS=(
+  --namespace ark-system
+  --create-namespace
+  --wait --timeout=300s
+  --set controllerManager.container.image.repository="${REGISTRY}/ark-controller"
+  --set controllerManager.container.image.tag="${ARK_IMAGE_TAG}"
+  --set controllerManager.container.image.pullPolicy=IfNotPresent
+  --set rbac.enable=true
   --set rbac.impersonation.enabled=true
+)
+
+if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
+  HELM_ARGS+=(
+    --set storage.backend=postgresql
+    --set storage.postgresql.host=ark-storage-dev
+    --set storage.postgresql.port=5432
+    --set storage.postgresql.database=ark
+    --set storage.postgresql.user=postgres
+    --set storage.postgresql.passwordSecretName=ark-storage-dev-password
+  )
+fi
+
+helm upgrade --install ark-controller ./dist/chart "${HELM_ARGS[@]}"
 
 helm upgrade --install ark-completions ./executors/completions/chart \
   --namespace ark-system \
@@ -95,6 +126,40 @@ fi
 # Wait for ARK deployment to be ready
 echo "=== Waiting for ARK Deployment ==="
 kubectl -n ark-system wait --for=condition=available --timeout=300s deployment/ark-controller
+
+if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
+  echo "=== Verifying PostgreSQL Backend ==="
+  RETRIES=0
+  MAX_RETRIES=30
+  until kubectl api-resources --api-group=ark.mckinsey.com -o name 2>/dev/null | grep -q "agents\."; do
+    RETRIES=$((RETRIES + 1))
+    if [ "$RETRIES" -ge "$MAX_RETRIES" ]; then
+      echo "ERROR: ark.mckinsey.com API group did not become available after ${MAX_RETRIES} attempts"
+      echo "Controller logs:"
+      kubectl -n ark-system logs deployment/ark-controller --tail=50
+      exit 1
+    fi
+    echo "Waiting for aggregated API server to register... (attempt ${RETRIES}/${MAX_RETRIES})"
+    sleep 10
+  done
+  echo "ark.mckinsey.com API group registered"
+
+  echo "=== Waiting for APIService availability ==="
+  kubectl wait --for=condition=Available apiservice v1alpha1.ark.mckinsey.com --timeout=120s
+  kubectl wait --for=condition=Available apiservice v1prealpha1.ark.mckinsey.com --timeout=120s 2>/dev/null || true
+
+  echo "=== Warming up aggregated API server ==="
+  for i in $(seq 1 5); do
+    kubectl get agents.ark.mckinsey.com -A --request-timeout=10s &>/dev/null && break
+    sleep 2
+  done
+
+  if kubectl get crd agents.ark.mckinsey.com &>/dev/null; then
+    echo "ERROR: CRD agents.ark.mckinsey.com exists — controller is using etcd, not PostgreSQL aggregated API server"
+    exit 1
+  fi
+  echo "PostgreSQL backend verified (no CRDs present, API served via aggregated API server)"
+fi
 
 echo
 echo "=== Setup Complete! ==="
