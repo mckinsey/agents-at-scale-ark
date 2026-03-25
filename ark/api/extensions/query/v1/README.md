@@ -64,4 +64,16 @@ X-A2A-Extensions: https://github.com/mckinsey/agents-at-scale-ark/tree/main/ark/
 
 ## Resolution
 
-Receivers use the QueryRef to look up the full Query CRD from the Kubernetes cluster. The Query resource contains the agent configuration, tools, history, and all other execution context. The Python SDK handles this resolution transparently — engine authors receive a fully populated `ExecutionEngineRequest` without needing to interact with the extension directly.
+Only a QueryRef (name + namespace) crosses the A2A boundary. The controller sends no agent config, model credentials, tool definitions, or MCP server details over the wire.
+
+The executor resolves all resources locally from the cluster using its pod's service account:
+
+1. Fetch the Query CRD using the QueryRef
+2. Fetch the referenced Agent CRD
+3. Resolve the Model CRD (including API keys from Secrets)
+4. Resolve MCPServer CRDs referenced by the agent's MCP-type tools (including headers from Secrets)
+5. Build the `ExecutionEngineRequest` in-process
+
+Secrets never traverse the A2A boundary — they are read from Kubernetes within the executor pod.
+
+The Python SDK handles this resolution transparently via the query extension. Engine authors receive a fully populated `ExecutionEngineRequest` from the SDK without interacting with the extension or Kubernetes APIs directly.

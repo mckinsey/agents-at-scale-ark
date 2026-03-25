@@ -94,9 +94,9 @@ sequenceDiagram
     ArkAPI-->>KubeAPI: Success
     KubeAPI-->>User: Query created
 
-    Note over ArkDB,Controller: LISTEN/NOTIFY triggers watch event
+    Note over ArkAPI,Controller: Direct in-process notification
 
-    ArkDB-->>Controller: Watch notification
+    ArkAPI-->>Controller: Watch event (from write path)
     Controller->>ArkAPI: Get Query details
     ArkAPI->>ArkDB: Retrieve Query
     ArkDB-->>ArkAPI: Query data
@@ -107,22 +107,38 @@ sequenceDiagram
     Engine-->>Controller: A2A Response
     Controller->>ArkAPI: Update Query status
     ArkAPI->>ArkDB: Store result
+
+    Note over ArkDB: pg_notify signals other replicas<br/>for cross-replica event delivery
 ```
+
+### Watch Event Delivery
+
+The PostgreSQL backend uses a three-layer event delivery pipeline:
+
+1. **Same-replica (instant)**: Write operations (`Create`, `Update`, `Delete`) notify watchers directly via goroutine after the DB operation succeeds. The object is reconstructed from `INSERT/UPDATE ... RETURNING` data — no separate query needed.
+
+2. **Cross-replica (~1-5ms)**: A PostgreSQL trigger fires `pg_notify` on every write. Other replicas' listeners receive the signal and trigger an immediate high-water-mark catch-up query (`WHERE resource_version > lastSeen`). For `DELETE` operations, the notification payload is used to build a stub and deliver the event directly (deleted rows can't be queried).
+
+3. **Safety net (≤30s)**: Each watcher runs a periodic catch-up sweep using the same high-water-mark query. Catches any events missed for any reason.
+
+The watcher uses a dual-channel design for panic safety: an internal `ch` (writers send here, never closed) and a consumer-facing `outCh` (only the `run()` goroutine writes and closes). `resource_version` uses PostgreSQL's global sequence (`nextval`) for globally unique values across all rows.
 
 ### Scalability
 
 The aggregated architecture enables:
 
-- **Ark Core replicas**: One leader (reconciliation), multiple non-leaders (webhooks, metrics, embedded apiserver)
+- **Ark Core replicas**: One leader (reconciliation), multiple non-leaders (webhooks, metrics, embedded apiserver). Cross-replica watch events delivered via pg_notify signaling.
 - **Efficient storage**: PostgreSQL handles Ark resource storage more efficiently than etcd for large datasets
 - **Database replicas**: PostgreSQL replication for read scalability
+- **Connection pool**: Configurable per replica (default 40), sized for multi-replica deployments against typical `max_connections=100`
 
 ### Benefits
 
 - **Kubernetes-native extension**: Uses standard Kubernetes aggregation layer pattern for seamless API integration
 - **Better scalability**: PostgreSQL handles Ark resource storage more efficiently than etcd for large datasets
 - **Efficient LIST operations**: Keyset pagination and indexes for fast queries
-- **Real-time watches**: PostgreSQL LISTEN/NOTIFY for efficient watch events
+- **Reliable watches**: Direct notification from write path + high-water-mark catch-up for self-healing event delivery
+- **Multi-replica ready**: pg_notify signaling for cross-replica event delivery without polling
 - **Enhanced observability**: Database schema supports advanced observability views
 - **etcd relief**: Reduces load on etcd by storing only core Kubernetes resources
 
@@ -202,7 +218,7 @@ flowchart TB
         end
 
         subgraph postgres["PostgreSQL"]
-            pg_features["Keyset pagination<br/>LISTEN/NOTIFY<br/>Soft deletes"]
+            pg_features["Keyset pagination<br/>pg_notify signaling<br/>Global resource versioning"]
         end
 
         kubectl --> apiserver
@@ -218,7 +234,8 @@ flowchart TB
 - Dedicated storage for Ark resources in PostgreSQL
 - Embedded API server within controller pod
 - Controller delegates query execution to completions engine via A2A
-- PostgreSQL LISTEN/NOTIFY for watch events
+- Direct in-process watch events + pg_notify for cross-replica delivery
+- High-water-mark catch-up sweep as self-healing safety net
 - Keyset pagination for efficient LIST operations
 
 **When to use:**
@@ -302,10 +319,40 @@ helm install ark ./ark/dist/chart -n ark-system \
 
 When using PostgreSQL backend, Ark CRDs are not installed (resources are stored in PostgreSQL instead of etcd). The embedded API server registers as a Kubernetes aggregated API server.
 
+### Multi-Replica Deployment
+
+To run multiple Ark controller replicas with the PostgreSQL backend:
+
+```yaml
+storage:
+  backend: "postgresql"
+  postgresql:
+    host: "postgresql.ark-system.svc.cluster.local"
+    port: 5432
+    database: "ark"
+    user: "ark"
+    passwordSecretName: "postgresql-credentials"
+
+controllerManager:
+  replicas: 2
+
+queryEngine:
+  enabled: true
+  container:
+    port: 9090
+```
+
+Each replica connects to the same PostgreSQL database. Event delivery across replicas uses pg_notify signaling — when replica A writes a resource, replica B receives the notification within ~1-5ms and runs a catch-up query to fetch the new data. Only one replica runs as leader (controller reconciliation), but all replicas serve API requests, webhooks, and watch streams.
+
+**Connection pool sizing**: Each replica uses up to `MaxOpenConns` database connections (default 40). With `max_connections=100` on PostgreSQL, 2 replicas use 80 connections, leaving 20 for admin and monitoring. Adjust `MaxOpenConns` based on your replica count and PostgreSQL `max_connections`.
+
 ### Available Storage Backends
 
 The PostgreSQL storage backend implements the storage interface (`ark/internal/storage/interface.go`) with:
+- Direct notification from write path for instant same-replica event delivery
+- pg_notify signaling for cross-replica event delivery
+- High-water-mark catch-up sweep as safety net (every 30s, O(changed) not O(total))
+- Globally unique resource versions via PostgreSQL sequence (`nextval`)
 - Keyset pagination for efficient LIST operations
-- LISTEN/NOTIFY for real-time watch events
 - Composite indexes for fast queries
-- Connection pooling
+- Configurable connection pooling (default 40 open / 20 idle per replica)

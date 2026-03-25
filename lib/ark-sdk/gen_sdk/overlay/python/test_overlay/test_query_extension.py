@@ -334,6 +334,272 @@ class TestHistoryFieldRemoved(unittest.TestCase):
         self.assertIn("conversationId", ExecutionEngineRequest.model_fields)
 
 
+class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
+    def _make_tool_crd(self, tool_type, server_name=None, mcp_tool_name=None):
+        tool_crd = MagicMock()
+        tool_crd.spec.type = tool_type
+        if tool_type == "mcp" and server_name:
+            mcp_ref = MagicMock()
+            server_ref = MagicMock()
+            server_ref.name = server_name
+            server_ref.namespace = None
+            mcp_ref.mcp_server_ref = server_ref
+            mcp_ref.mcpServerRef = None
+            mcp_ref.tool_name = mcp_tool_name
+            mcp_ref.toolName = None
+            tool_crd.spec.mcp = mcp_ref
+        else:
+            tool_crd.spec.mcp = None
+        return tool_crd
+
+    def _make_mcp_server_crd(self, address="http://server:8080/mcp", transport="http", timeout="30s", headers=None):
+        server_crd = MagicMock()
+        server_crd.spec.address = SimpleNamespace(value=address, value_from=None)
+        server_crd.spec.transport = transport
+        server_crd.spec.timeout = timeout
+        if headers:
+            server_crd.spec.headers = [
+                SimpleNamespace(name=k, value=SimpleNamespace(value=v, value_from=None))
+                for k, v in headers.items()
+            ]
+        else:
+            server_crd.spec.headers = None
+        return server_crd
+
+    def _make_agent_tool(self, name):
+        tool = MagicMock()
+        tool.name = name
+        return tool
+
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
+    @patch("ark_sdk.client.with_ark_client")
+    async def test_single_server_multiple_tools(self, mock_with_client, mock_init_k8s):
+        mock_ark = AsyncMock()
+
+        mock_query = MagicMock()
+        mock_query.metadata = {"name": "q1"}
+        mock_query.spec.target.type = "agent"
+        mock_query.spec.target.name = "a1"
+        mock_query.spec.parameters = None
+
+        mock_agent = MagicMock()
+        mock_agent.metadata = {"name": "a1", "labels": {}}
+        mock_agent.spec.prompt = "hello"
+        mock_agent.spec.description = ""
+        mock_agent.spec.model_ref = None
+        mock_agent.spec.parameters = None
+        mock_agent.spec.tools = [
+            self._make_agent_tool("github-mcp-search-repos"),
+            self._make_agent_tool("github-mcp-create-issue"),
+        ]
+
+        tool_crd_1 = self._make_tool_crd("mcp", "github-mcp", "search_repos")
+        tool_crd_2 = self._make_tool_crd("mcp", "github-mcp", "create_issue")
+        server_crd = self._make_mcp_server_crd(
+            address="http://github-mcp:8080/mcp",
+            headers={"Authorization": "Bearer token123"},
+        )
+
+        mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
+        mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
+        mock_ark.tools.a_get = AsyncMock(side_effect=[tool_crd_1, tool_crd_2])
+        mock_ark.mcpservers.a_get = AsyncMock(return_value=server_crd)
+
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = mock_ark
+        mock_ctx.__aexit__.return_value = False
+        mock_with_client.return_value = mock_ctx
+
+        ref = QueryRef(name="q1", namespace="default")
+        request = await resolve_query(ref, "hi")
+
+        self.assertEqual(len(request.mcpServers), 1)
+        server = request.mcpServers[0]
+        self.assertEqual(server.name, "github-mcp")
+        self.assertEqual(server.url, "http://github-mcp:8080/mcp")
+        self.assertEqual(server.transport, "http")
+        self.assertIn("search_repos", server.tools)
+        self.assertIn("create_issue", server.tools)
+        self.assertEqual(server.headers["Authorization"], "Bearer token123")
+
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
+    @patch("ark_sdk.client.with_ark_client")
+    async def test_multiple_servers(self, mock_with_client, mock_init_k8s):
+        mock_ark = AsyncMock()
+
+        mock_query = MagicMock()
+        mock_query.metadata = {"name": "q1"}
+        mock_query.spec.target.type = "agent"
+        mock_query.spec.target.name = "a1"
+        mock_query.spec.parameters = None
+
+        mock_agent = MagicMock()
+        mock_agent.metadata = {"name": "a1", "labels": {}}
+        mock_agent.spec.prompt = "hello"
+        mock_agent.spec.description = ""
+        mock_agent.spec.model_ref = None
+        mock_agent.spec.parameters = None
+        mock_agent.spec.tools = [
+            self._make_agent_tool("github-mcp-search"),
+            self._make_agent_tool("slack-mcp-send"),
+        ]
+
+        tool_crd_1 = self._make_tool_crd("mcp", "github-mcp", "search")
+        tool_crd_2 = self._make_tool_crd("mcp", "slack-mcp", "send_message")
+        github_server = self._make_mcp_server_crd("http://github:8080/mcp", "http")
+        slack_server = self._make_mcp_server_crd("http://slack:9000/mcp", "sse", "60s")
+
+        mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
+        mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
+        mock_ark.tools.a_get = AsyncMock(side_effect=[tool_crd_1, tool_crd_2])
+        mock_ark.mcpservers.a_get = AsyncMock(side_effect=[github_server, slack_server])
+
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = mock_ark
+        mock_ctx.__aexit__.return_value = False
+        mock_with_client.return_value = mock_ctx
+
+        ref = QueryRef(name="q1", namespace="default")
+        request = await resolve_query(ref, "hi")
+
+        self.assertEqual(len(request.mcpServers), 2)
+        names = {s.name for s in request.mcpServers}
+        self.assertEqual(names, {"github-mcp", "slack-mcp"})
+
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
+    @patch("ark_sdk.client.with_ark_client")
+    async def test_mixed_tool_types_only_mcp_included(self, mock_with_client, mock_init_k8s):
+        mock_ark = AsyncMock()
+
+        mock_query = MagicMock()
+        mock_query.metadata = {"name": "q1"}
+        mock_query.spec.target.type = "agent"
+        mock_query.spec.target.name = "a1"
+        mock_query.spec.parameters = None
+
+        mock_agent = MagicMock()
+        mock_agent.metadata = {"name": "a1", "labels": {}}
+        mock_agent.spec.prompt = "hello"
+        mock_agent.spec.description = ""
+        mock_agent.spec.model_ref = None
+        mock_agent.spec.parameters = None
+        mock_agent.spec.tools = [
+            self._make_agent_tool("github-mcp-search"),
+            self._make_agent_tool("weather-api"),
+        ]
+
+        mcp_tool = self._make_tool_crd("mcp", "github-mcp", "search")
+        http_tool = self._make_tool_crd("http")
+        server_crd = self._make_mcp_server_crd("http://github:8080/mcp")
+
+        mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
+        mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
+        mock_ark.tools.a_get = AsyncMock(side_effect=[mcp_tool, http_tool])
+        mock_ark.mcpservers.a_get = AsyncMock(return_value=server_crd)
+
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = mock_ark
+        mock_ctx.__aexit__.return_value = False
+        mock_with_client.return_value = mock_ctx
+
+        ref = QueryRef(name="q1", namespace="default")
+        request = await resolve_query(ref, "hi")
+
+        self.assertEqual(len(request.mcpServers), 1)
+        self.assertEqual(request.mcpServers[0].name, "github-mcp")
+        self.assertEqual(request.mcpServers[0].tools, ["search"])
+
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
+    @patch("ark_sdk.client.with_ark_client")
+    async def test_server_not_found_skipped_with_warning(self, mock_with_client, mock_init_k8s):
+        mock_ark = AsyncMock()
+
+        mock_query = MagicMock()
+        mock_query.metadata = {"name": "q1"}
+        mock_query.spec.target.type = "agent"
+        mock_query.spec.target.name = "a1"
+        mock_query.spec.parameters = None
+
+        mock_agent = MagicMock()
+        mock_agent.metadata = {"name": "a1", "labels": {}}
+        mock_agent.spec.prompt = "hello"
+        mock_agent.spec.description = ""
+        mock_agent.spec.model_ref = None
+        mock_agent.spec.parameters = None
+        mock_agent.spec.tools = [
+            self._make_agent_tool("missing-server-tool"),
+            self._make_agent_tool("good-server-tool"),
+        ]
+
+        missing_tool = self._make_tool_crd("mcp", "missing-mcp", "some_tool")
+        good_tool = self._make_tool_crd("mcp", "good-mcp", "good_tool")
+        good_server = self._make_mcp_server_crd("http://good:8080/mcp")
+
+        mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
+        mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
+        mock_ark.tools.a_get = AsyncMock(side_effect=[missing_tool, good_tool])
+        mock_ark.mcpservers.a_get = AsyncMock(side_effect=[
+            Exception("not found"),
+            good_server,
+        ])
+
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = mock_ark
+        mock_ctx.__aexit__.return_value = False
+        mock_with_client.return_value = mock_ctx
+
+        ref = QueryRef(name="q1", namespace="default")
+        with self.assertLogs("ark_sdk.extensions.query", level="WARNING") as log:
+            request = await resolve_query(ref, "hi")
+
+        self.assertEqual(len(request.mcpServers), 1)
+        self.assertEqual(request.mcpServers[0].name, "good-mcp")
+        self.assertTrue(any("missing-mcp" in msg for msg in log.output))
+
+    @patch("ark_sdk.k8s.init_k8s", new_callable=AsyncMock)
+    @patch("ark_sdk.client.with_ark_client")
+    async def test_server_with_unresolvable_address_skipped(self, mock_with_client, mock_init_k8s):
+        mock_ark = AsyncMock()
+
+        mock_query = MagicMock()
+        mock_query.metadata = {"name": "q1"}
+        mock_query.spec.target.type = "agent"
+        mock_query.spec.target.name = "a1"
+        mock_query.spec.parameters = None
+
+        mock_agent = MagicMock()
+        mock_agent.metadata = {"name": "a1", "labels": {}}
+        mock_agent.spec.prompt = "hello"
+        mock_agent.spec.description = ""
+        mock_agent.spec.model_ref = None
+        mock_agent.spec.parameters = None
+        mock_agent.spec.tools = [self._make_agent_tool("bad-tool")]
+
+        tool_crd = self._make_tool_crd("mcp", "bad-mcp", "tool")
+        bad_server = MagicMock()
+        bad_server.spec.address = SimpleNamespace(value=None, value_from=None)
+        bad_server.spec.transport = "http"
+        bad_server.spec.timeout = "30s"
+        bad_server.spec.headers = None
+
+        mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
+        mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
+        mock_ark.tools.a_get = AsyncMock(return_value=tool_crd)
+        mock_ark.mcpservers.a_get = AsyncMock(return_value=bad_server)
+
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = mock_ark
+        mock_ctx.__aexit__.return_value = False
+        mock_with_client.return_value = mock_ctx
+
+        ref = QueryRef(name="q1", namespace="default")
+        with self.assertLogs("ark_sdk.extensions.query", level="WARNING") as log:
+            request = await resolve_query(ref, "hi")
+
+        self.assertEqual(len(request.mcpServers), 0)
+        self.assertTrue(any("no resolvable address" in msg for msg in log.output))
+
+
 class TestExtensionConstants(unittest.TestCase):
     def test_uri_matches_github_path(self):
         self.assertIn("mckinsey/agents-at-scale-ark", QUERY_EXTENSION_URI)
