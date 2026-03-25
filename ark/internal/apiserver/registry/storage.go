@@ -30,10 +30,8 @@ const (
 	defaultNamespace = "default"
 )
 
-func storageContext(ctx context.Context) context.Context {
-	//nolint:govet // cancel is not deferred — timeout self-cancels after 30s
-	ctx, _ = context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second) //nolint:govet
-	return ctx
+func storageContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 }
 
 type ResourceConfig struct {
@@ -92,7 +90,9 @@ func (s *GenericStorage) GetSingularName() string {
 func (s *GenericStorage) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	start := time.Now()
 	namespace := getNamespace(ctx)
-	obj, err := s.backend.Get(storageContext(ctx), s.config.Kind, namespace, name)
+	sctx, cancel := storageContext(ctx)
+	defer cancel()
+	obj, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
 	if err != nil {
 		metrics.RecordStorageOperation("get", s.config.Kind, "error")
 		metrics.RecordStorageLatency("get", s.config.Kind, start)
@@ -118,7 +118,9 @@ func (s *GenericStorage) List(ctx context.Context, options *metainternalversion.
 		opts.Continue = options.Continue
 	}
 
-	objects, continueToken, err := s.backend.List(storageContext(ctx), s.config.Kind, namespace, opts)
+	sctx, cancel := storageContext(ctx)
+	defer cancel()
+	objects, continueToken, err := s.backend.List(sctx, s.config.Kind, namespace, opts)
 	if err != nil {
 		metrics.RecordStorageOperation("list", s.config.Kind, "error")
 		metrics.RecordStorageLatency("list", s.config.Kind, start)
@@ -164,7 +166,9 @@ func (s *GenericStorage) Create(ctx context.Context, obj runtime.Object, createV
 		accessor.SetCreationTimestamp(metav1.Now())
 	}
 
-	if err := s.backend.Create(storageContext(ctx), s.config.Kind, accessor.GetNamespace(), accessor.GetName(), obj); err != nil {
+	sctx, cancel := storageContext(ctx)
+	defer cancel()
+	if err := s.backend.Create(sctx, s.config.Kind, accessor.GetNamespace(), accessor.GetName(), obj); err != nil {
 		metrics.RecordStorageOperation("create", s.config.Kind, "error")
 		metrics.RecordStorageLatency("create", s.config.Kind, start)
 		return nil, fmt.Errorf("failed to create %s: %w", s.config.SingularName, err)
@@ -179,7 +183,9 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 	start := time.Now()
 	namespace := getNamespace(ctx)
 
-	existing, err := s.backend.Get(storageContext(ctx), s.config.Kind, namespace, name)
+	sctx, cancel := storageContext(ctx)
+	defer cancel()
+	existing, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
 	if err != nil {
 		if forceAllowCreate {
 			obj, err := objInfo.UpdatedObject(ctx, nil)
@@ -206,7 +212,7 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 		}
 	}
 
-	if err := s.backend.Update(storageContext(ctx), s.config.Kind, namespace, name, updated); err != nil {
+	if err := s.backend.Update(sctx, s.config.Kind, namespace, name, updated); err != nil {
 		return nil, false, handleUpdateError(err, s.config, "update", name, start)
 	}
 
@@ -220,7 +226,9 @@ func (s *GenericStorage) Delete(ctx context.Context, name string, deleteValidati
 	start := time.Now()
 	namespace := getNamespace(ctx)
 
-	existing, err := s.backend.Get(storageContext(ctx), s.config.Kind, namespace, name)
+	sctx, cancel := storageContext(ctx)
+	defer cancel()
+	existing, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
 	if err != nil {
 		metrics.RecordStorageOperation("delete", s.config.Kind, "not_found")
 		return nil, false, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}, name)
@@ -233,7 +241,7 @@ func (s *GenericStorage) Delete(ctx context.Context, name string, deleteValidati
 		}
 	}
 
-	if err := s.backend.Delete(storageContext(ctx), s.config.Kind, namespace, name); err != nil {
+	if err := s.backend.Delete(sctx, s.config.Kind, namespace, name); err != nil {
 		metrics.RecordStorageOperation("delete", s.config.Kind, "error")
 		metrics.RecordStorageLatency("delete", s.config.Kind, start)
 		return nil, false, fmt.Errorf("failed to delete %s: %w", s.config.SingularName, err)
