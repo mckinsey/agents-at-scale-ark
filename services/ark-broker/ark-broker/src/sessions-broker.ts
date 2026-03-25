@@ -1,7 +1,8 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
-import { EventEmitter } from 'events';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { EventEmitter } from 'node:events';
 import type { QueryPhase, SessionEventData } from './types.js';
+import { QueryPhases, EventReasons, ERROR_REASON_SUFFIX } from './types.js';
 
 export interface QueryEntry {
   /** Query resource name from the Ark CRD */
@@ -46,11 +47,11 @@ export interface SessionsStore {
  */
 export class SessionsBroker {
   private store: SessionsStore = { sessions: {} };
-  private emitter = new EventEmitter();
+  private readonly emitter = new EventEmitter();
   private dirty = false;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(private path?: string) {
+  constructor(private readonly path?: string) {
     if (path) {
       console.log(`[Sessions] persistence enabled at ${path}`);
       this.loadFromDisk();
@@ -62,7 +63,7 @@ export class SessionsBroker {
     try {
       if (existsSync(this.path)) {
         const data = JSON.parse(readFileSync(this.path, 'utf-8'));
-        if (data && data.sessions) {
+        if (data?.sessions) {
           this.store = data;
           const sessionCount = Object.keys(this.store.sessions).length;
           const queryCount = Object.values(this.store.sessions)
@@ -89,6 +90,35 @@ export class SessionsBroker {
     }, 2000);
   }
 
+  private resolveQueryPhase(reason: string, errorMsg?: string): QueryPhase {
+    if (reason === EventReasons.QueryExecutionComplete) {
+      return errorMsg ? QueryPhases.Error : QueryPhases.Done;
+    }
+    if (reason.includes(ERROR_REASON_SUFFIX)) {
+      return QueryPhases.Error;
+    }
+    return QueryPhases.Running;
+  }
+
+  private updateExistingQuery(existing: QueryEntry, phase: QueryPhase, agent?: string, conversationId?: string, errorMsg?: string): void {
+    const now = new Date().toISOString();
+    existing.lastActivity = now;
+    if (conversationId && !existing.conversationId) {
+      existing.conversationId = conversationId;
+    }
+    if (agent && !existing.agent) {
+      existing.agent = agent;
+    }
+    if (phase === QueryPhases.Error) {
+      existing.phase = QueryPhases.Error;
+      existing.error = errorMsg;
+      existing.completedAt = now;
+    } else if (phase === QueryPhases.Done && existing.phase !== QueryPhases.Error) {
+      existing.phase = QueryPhases.Done;
+      existing.completedAt = now;
+    }
+  }
+
   applyEvent(eventData: Partial<SessionEventData>): void {
     const { sessionId, queryName } = eventData;
     if (!sessionId || !queryName) return;
@@ -111,30 +141,11 @@ export class SessionsBroker {
     const session = this.store.sessions[sessionId];
     session.lastActivity = now;
 
-    let queryPhase: 'pending' | 'running' | 'done' | 'error' | 'canceled' | 'unknown' = 'running';
-    if (reason === 'QueryExecutionComplete') {
-      queryPhase = errorMsg ? 'error' : 'done';
-    } else if (reason.includes('Error')) {
-      queryPhase = 'error';
-    }
+    const queryPhase = this.resolveQueryPhase(reason, errorMsg);
 
     const existing = session.queries[queryName];
     if (existing) {
-      existing.lastActivity = now;
-      if (conversationId && !existing.conversationId) {
-        existing.conversationId = conversationId;
-      }
-      if (agent && !existing.agent) {
-        existing.agent = agent;
-      }
-      if (queryPhase === 'error') {
-        existing.phase = 'error';
-        existing.error = errorMsg;
-        existing.completedAt = now;
-      } else if (queryPhase === 'done' && existing.phase !== 'error') {
-        existing.phase = 'done';
-        existing.completedAt = now;
-      }
+      this.updateExistingQuery(existing, queryPhase, agent, conversationId, errorMsg);
     } else {
       session.queries[queryName] = {
         name: queryName,
@@ -145,7 +156,7 @@ export class SessionsBroker {
         phase: queryPhase,
         error: errorMsg,
         createdAt: now,
-        completedAt: queryPhase !== 'running' ? now : undefined,
+        completedAt: queryPhase === QueryPhases.Running ? undefined : now,
         lastActivity: now,
       };
     }

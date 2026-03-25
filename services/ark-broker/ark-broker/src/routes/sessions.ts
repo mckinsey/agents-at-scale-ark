@@ -13,9 +13,12 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
       const filterSessionId = req.query['session_id'] as string | undefined;
 
       const store = sessionsBroker.getAll();
-      const initialSessions = filterSessionId
-        ? (store.sessions[filterSessionId] ? { [filterSessionId]: store.sessions[filterSessionId] } : {})
-        : store.sessions;
+      let initialSessions = store.sessions;
+      if (filterSessionId) {
+        initialSessions = store.sessions[filterSessionId]
+          ? { [filterSessionId]: store.sessions[filterSessionId] }
+          : {};
+      }
       const replayItems = Object.entries(initialSessions).map(([sid, session]) => ({ sessionId: sid, session }));
 
       streamSSE({

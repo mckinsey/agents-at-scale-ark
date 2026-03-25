@@ -3,6 +3,22 @@
 
 export type QueryPhase = 'pending' | 'running' | 'done' | 'error' | 'canceled' | 'unknown';
 
+export const QueryPhases = {
+  Pending: 'pending',
+  Running: 'running',
+  Done: 'done',
+  Error: 'error',
+  Canceled: 'canceled',
+  Unknown: 'unknown',
+} as const satisfies Record<string, QueryPhase>;
+
+export const EventReasons = {
+  QueryExecutionComplete: 'QueryExecutionComplete',
+  AgentExecutionStart: 'AgentExecutionStart',
+} as const;
+
+export const ERROR_REASON_SUFFIX = 'Error';
+
 export type QueryEventReason =
   | 'QueryExecutionStart'
   | 'QueryExecutionComplete'
