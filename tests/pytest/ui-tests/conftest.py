@@ -214,7 +214,6 @@ def pytest_runtest_makereport(item, call):
     
     if rep.when == "call" and rep.failed:
         page = item.funcargs.get("page")
-        logger.warning(f"Page: {page}")
         if page:
             try:
                 # Ensure screenshots directory exists
@@ -226,5 +225,3 @@ def pytest_runtest_makereport(item, call):
                 logger.info(f"Screenshot saved: {screenshot_path}")
             except Exception as e:
                 logger.error(f"Failed to save screenshot: {e}")
-        else:
-            logger.warning(f"item.funcargs: {item.funcargs}")
