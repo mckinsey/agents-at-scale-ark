@@ -4,6 +4,7 @@ Extension spec: ark/api/extensions/query/v1/
 """
 
 import logging
+import os
 from typing import Any, List
 
 import uvicorn
@@ -35,10 +36,154 @@ from .extensions.query import (
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# OTEL — conditional setup shared by all executors
+# ---------------------------------------------------------------------------
+_otel_enabled = False
+
+
+def _discover_broker_endpoint() -> str | None:
+    """Discover ark-broker OTLP endpoint from K8s ConfigMap.
+
+    Looks for a ConfigMap named 'ark-config-broker' in all namespaces,
+    matching the pattern used by the Go controller. Returns the OTLP
+    traces endpoint URL, or None if not found.
+    """
+    try:
+        from kubernetes import client as k8s_client
+        from .k8s import _init_k8s, get_namespace
+        _init_k8s()
+
+        v1 = k8s_client.CoreV1Api()
+        ns = get_namespace()
+        cm = v1.read_namespaced_config_map(name="ark-config-broker", namespace=ns)
+        if cm:
+            cms_items = [cm]
+        else:
+            cms_items = []
+        for cm in cms_items:
+            data = cm.data or {}
+            if data.get("enabled") != "true":
+                continue
+            service_ref = data.get("serviceRef", "")
+            # Parse serviceRef YAML-ish format: "name: <svc>\nport: <port>"
+            svc_name = ""
+            svc_port = ""
+            for line in service_ref.strip().splitlines():
+                key, _, val = line.partition(":")
+                key, val = key.strip(), val.strip().strip('"')
+                if key == "name":
+                    svc_name = val
+                elif key == "port":
+                    svc_port = val
+            if svc_name:
+                ns = cm.metadata.namespace
+                # Resolve named port from the service definition
+                if svc_port.isdigit():
+                    port = svc_port
+                else:
+                    try:
+                        svc = v1.read_namespaced_service(name=svc_name, namespace=ns)
+                        port = "80"
+                        for p in svc.spec.ports or []:
+                            if p.name == svc_port:
+                                port = str(p.port)
+                                break
+                    except Exception:
+                        port = "80"
+                return f"http://{svc_name}.{ns}.svc.cluster.local:{port}/v1/traces"  # NOSONAR — cluster-internal service-to-service traffic
+    except Exception as e:
+        logger.debug(f"Broker discovery skipped: {e}")
+    return None
+
+
+def _init_otel() -> bool:
+    """Initialize OTEL if OTEL_EXPORTER_OTLP_ENDPOINT is set.
+
+    Sets up TracerProvider, OTLP HTTP exporter, W3C propagators, and
+    Starlette instrumentation. Must run before any Starlette app is created.
+    """
+    endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+    if not endpoint:
+        return False
+    try:
+        from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+        try:
+            from opentelemetry.propagate import set_global_textmap
+            from opentelemetry.propagators.composite import CompositePropagator
+            from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+            from opentelemetry.baggage.propagation import W3CBaggagePropagator
+            set_global_textmap(CompositePropagator([
+                TraceContextTextMapPropagator(),
+                W3CBaggagePropagator(),
+            ]))
+        except ImportError:
+            logger.debug("W3C propagators not available, using defaults")
+
+        # Copy baggage entries (e.g. session_id) onto every span as attributes
+        from opentelemetry.sdk.trace import SpanProcessor as _SpanProcessor
+        from opentelemetry import baggage, context
+
+        class BaggageSpanProcessor(_SpanProcessor):
+            def on_start(self, span, parent_context=None):
+                ctx = parent_context or context.get_current()
+                for key, value in baggage.get_all(ctx).items():
+                    span.set_attribute(key, value)
+            def on_end(self, span):
+                pass
+            def shutdown(self):
+                pass
+            def force_flush(self, timeout_millis=None):
+                pass
+
+        provider = TracerProvider()
+        provider.add_span_processor(BaggageSpanProcessor())
+        # Primary exporter — sends to OTEL_EXPORTER_OTLP_ENDPOINT
+        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+
+        # Broker exporter — discover ark-config-broker ConfigMap and send traces there too
+        broker_endpoint = _discover_broker_endpoint()
+        if broker_endpoint:
+            broker_exporter = OTLPSpanExporter(endpoint=broker_endpoint)
+            provider.add_span_processor(BatchSpanProcessor(broker_exporter))
+            logger.info(f"OTEL broker exporter enabled, sending to {broker_endpoint}")
+
+        trace.set_tracer_provider(provider)
+
+        logger.info(f"OTEL tracing enabled, exporting to {endpoint}")
+        return True
+    except Exception:
+        logger.exception("Failed to initialize OTEL tracing")
+        return False
+
+
+_otel_enabled = _init_otel()
+
+
+def is_otel_enabled() -> bool:
+    """Check if OTEL tracing was initialized. Executors use this to
+    conditionally apply their own executor-specific instrumentors."""
+    return _otel_enabled
+
 
 class HealthFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         return not (hasattr(record, "getMessage") and "/health" in record.getMessage())
+
+
+def _get_tracer():
+    """Get an OTEL tracer if available, otherwise return None."""
+    if not _otel_enabled:
+        return None
+    try:
+        from opentelemetry import trace
+        return trace.get_tracer("ark-sdk")
+    except Exception:
+        return None
 
 
 class A2AExecutorAdapter(AgentExecutor):
@@ -46,6 +191,15 @@ class A2AExecutorAdapter(AgentExecutor):
         self.executor = executor
 
     async def execute(self, context: Any, event_queue: EventQueue) -> None:
+        tracer = _get_tracer()
+        if tracer:
+            from opentelemetry import trace
+            with tracer.start_as_current_span("ark.executor.execute", kind=trace.SpanKind.INTERNAL):
+                await self._do_execute(context, event_queue)
+        else:
+            await self._do_execute(context, event_queue)
+
+    async def _do_execute(self, context: Any, event_queue: EventQueue) -> None:
         user_text = context.get_user_input()
         conversation_id = ""
         if hasattr(context.message, "context_id") and context.message.context_id:
@@ -147,6 +301,15 @@ class ExecutorApp:
             return JSONResponse({"status": "healthy", "engine": self.engine_name})
 
         app.routes.insert(0, Route("/health", health_check, methods=["GET"]))
+
+        # Wrap app with OTEL ASGI middleware to extract traceparent/baggage
+        if _otel_enabled:
+            try:
+                from opentelemetry.instrumentation.asgi import OpenTelemetryMiddleware
+                app = OpenTelemetryMiddleware(app)
+            except ImportError:
+                logger.debug("opentelemetry-instrumentation-asgi not available")
+
         return app
 
     def run(self, host: str = "0.0.0.0", port: int = 8000) -> None:

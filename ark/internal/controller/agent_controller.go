@@ -39,6 +39,7 @@ type AgentReconciler struct {
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=tools,verbs=get;list;watch
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=models,verbs=get;list;watch
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=a2aservers,verbs=get;list;watch
+// +kubebuilder:rbac:groups=ark.mckinsey.com,resources=executionengines,verbs=get;list;watch
 
 //nolint:dupl
 func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -104,6 +105,13 @@ func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alp
 	if agent.Spec.ModelRef != nil {
 		if ok, msg := r.checkModelDependency(ctx, agent); !ok {
 			return false, "ModelNotFound", msg
+		}
+	}
+
+	// Check execution engine dependency
+	if agent.Spec.ExecutionEngine != nil {
+		if available, reason, msg := r.checkExecutionEngineDependency(ctx, agent); !available {
+			return false, reason, msg
 		}
 	}
 
@@ -173,6 +181,33 @@ func (r *AgentReconciler) checkToolDependencies(ctx context.Context, agent *arkv
 	}
 
 	return true, ""
+}
+
+// checkExecutionEngineDependency validates execution engine dependency
+func (r *AgentReconciler) checkExecutionEngineDependency(ctx context.Context, agent *arkv1alpha1.Agent) (bool, string, string) {
+	engineName := agent.Spec.ExecutionEngine.Name
+	engineNamespace := agent.Namespace
+
+	if agent.Spec.ExecutionEngine.Namespace != "" {
+		engineNamespace = agent.Spec.ExecutionEngine.Namespace
+	}
+
+	var engine arkv1prealpha1.ExecutionEngine
+	engineKey := types.NamespacedName{Name: engineName, Namespace: engineNamespace}
+	if err := r.Get(ctx, engineKey, &engine); err != nil {
+		if errors.IsNotFound(err) {
+			msg := fmt.Sprintf("ExecutionEngine '%s' not found in namespace '%s'", engineName, engineNamespace)
+			return false, "ExecutionEngineNotFound", msg
+		}
+		return false, "ExecutionEngineNotFound", fmt.Sprintf("Error checking execution engine: %v", err)
+	}
+
+	if engine.Status.Phase != "ready" {
+		msg := fmt.Sprintf("ExecutionEngine '%s' is not ready (phase: %s)", engineName, engine.Status.Phase)
+		return false, "ExecutionEngineNotReady", msg
+	}
+
+	return true, "", ""
 }
 
 // checkA2AServerDependency validates A2AServer dependency for agents owned by A2AServers
@@ -262,6 +297,11 @@ func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&arkv1prealpha1.A2AServer{},
 			handler.EnqueueRequestsFromMapFunc(r.findAgentsForA2AServer),
 		).
+		// Watch for ExecutionEngine events and reconcile dependent agents
+		Watches(
+			&arkv1prealpha1.ExecutionEngine{},
+			handler.EnqueueRequestsFromMapFunc(r.findAgentsForExecutionEngine),
+		).
 		Named("agent").
 		Complete(r)
 }
@@ -348,6 +388,23 @@ func (r *AgentReconciler) agentDependsOnTool(agent *arkv1alpha1.Agent, toolName 
 // agentDependsOnModel checks if an agent depends on a specific model
 func (r *AgentReconciler) agentDependsOnModel(agent *arkv1alpha1.Agent, modelName string) bool {
 	return agent.Spec.ModelRef != nil && agent.Spec.ModelRef.Name == modelName
+}
+
+// findAgentsForExecutionEngine finds agents that depend on the given execution engine
+func (r *AgentReconciler) findAgentsForExecutionEngine(ctx context.Context, obj client.Object) []reconcile.Request {
+	engine, ok := obj.(*arkv1prealpha1.ExecutionEngine)
+	if !ok {
+		return nil
+	}
+
+	return r.findAgentsForDependency(ctx, engine.Name, engine.Namespace, "executionEngine", func(agent *arkv1alpha1.Agent) bool {
+		return r.agentDependsOnExecutionEngine(agent, engine.Name)
+	})
+}
+
+// agentDependsOnExecutionEngine checks if an agent depends on a specific execution engine
+func (r *AgentReconciler) agentDependsOnExecutionEngine(agent *arkv1alpha1.Agent, engineName string) bool {
+	return agent.Spec.ExecutionEngine != nil && agent.Spec.ExecutionEngine.Name == engineName
 }
 
 // findAgentsForA2AServer finds agents owned by the given A2AServer

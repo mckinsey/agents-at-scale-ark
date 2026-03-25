@@ -126,18 +126,18 @@ describe('ChatMessageList', () => {
         { role: 'user', content: 'Hello' } as ExtendedChatMessage,
       ];
 
-      renderChatMessageList({ messages, strategy: 'round-robin' });
+      renderChatMessageList({ messages, strategy: 'sequential' });
 
       expect(
-        screen.getByText('Agents respond in round-robin order'),
+        screen.getByText('Agents respond in sequential order'),
       ).toBeInTheDocument();
     });
 
     it('should not show strategy indicator when no messages', () => {
-      renderChatMessageList({ strategy: 'round-robin' });
+      renderChatMessageList({ strategy: 'sequential' });
 
       expect(
-        screen.queryByText('Agents respond in round-robin order'),
+        screen.queryByText('Agents respond in sequential order'),
       ).not.toBeInTheDocument();
     });
   });
@@ -400,7 +400,7 @@ describe('ChatMessageList', () => {
         } as ExtendedChatMessage,
       ];
 
-      renderChatMessageList({ messages, strategy: 'round-robin' });
+      renderChatMessageList({ messages, strategy: 'sequential' });
 
       expect(screen.queryByText(/Selector chose/)).not.toBeInTheDocument();
     });
@@ -496,7 +496,7 @@ describe('ChatMessageList', () => {
 
       renderChatMessageList({
         messages,
-        strategy: 'round-robin',
+        strategy: 'sequential',
         graphEdges,
       });
 
