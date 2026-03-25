@@ -42,11 +42,10 @@ spec:
     try:
     - script:
         content: |
-          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+          helm template mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
             --version 0.1.28 \
             --namespace $NAMESPACE \
-            --values mock-llm-values.yaml \
-            --wait --timeout=120s
+            --values mock-llm-values.yaml | kubectl apply -f -
         env:
         - name: NAMESPACE
           value: ($namespace)
@@ -136,10 +135,3 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
 
-    cleanup:
-    - script:
-        content: |
-          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
-        env:
-        - name: NAMESPACE
-          value: ($namespace)

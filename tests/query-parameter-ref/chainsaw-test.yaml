@@ -8,10 +8,10 @@ spec:
       # Install mock-llm with Ark Model and custom config
       - script:
           content: |
-            helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            helm template mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
               --version 0.1.28 \
               --namespace $NAMESPACE \
-              --values mock-llm-values.yaml
+              --values mock-llm-values.yaml | kubectl apply -f -
           env:
           - name: NAMESPACE
             value: ($namespace)
@@ -136,10 +136,3 @@ spec:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
           name: test-query-with-params
-      cleanup:
-      - script:
-          content: |
-            helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
-          env:
-          - name: NAMESPACE
-            value: ($namespace)
