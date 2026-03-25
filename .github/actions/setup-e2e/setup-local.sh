@@ -69,10 +69,7 @@ else
   echo "cert-manager already installed"
 fi
 
-[ -f /tmp/gateway-api-standard-install.yaml ] || \
-  curl -sfL -o /tmp/gateway-api-standard-install.yaml \
-    https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
-kubectl apply -f /tmp/gateway-api-standard-install.yaml &
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml &
 PIDS+=($!)
 
 wait "${PIDS[@]}"
