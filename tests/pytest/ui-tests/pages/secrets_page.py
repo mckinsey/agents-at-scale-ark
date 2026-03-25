@@ -19,7 +19,6 @@ class SecretsPage(BasePage):
     SECRET_VALUE_INPUT = "input[name='value'], textarea[name='value'], input[placeholder*='value' i], input[type='password'], textarea, input[type='text']:last-of-type"
     SAVE_BUTTON = "button:has-text('Save'), button:has-text('Create'), button:has-text('Submit'), button[type='submit']"
     SECRET_FORM = "form, [role='dialog'], [data-testid='secret-form']"
-    SUCCESS_POPUP = "[role='alert'], [role='status'], .notification, .toast, .alert-success, div:has-text('success'), div:has-text('created'), div:has-text('Success'), div:has-text('Created'), div:has-text('updated'), div:has-text('Updated'), div:has-text('deleted'), div:has-text('Deleted')"
     DELETE_ICON_TEMPLATE = "tr:has-text('{secret_name}') svg, tr:has-text('{secret_name}') button[aria-label='Delete'], tr:has-text('{secret_name}') [data-testid='delete-icon']"
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
     CONFIRM_DELETE_BUTTON = "button:has-text('Delete'), button:has-text('Confirm'), button:has-text('Yes')"
@@ -117,7 +116,7 @@ class SecretsPage(BasePage):
         save_button.wait_for(state="visible", timeout=5000)
         save_button.click(force=True)
 
-        popup_visible = self._check_success_popup()
+        popup_visible = self._check_toast_popup()
         self.wait_for_modal_close()
 
         self.navigate_to_secrets_tab()
@@ -155,7 +154,7 @@ class SecretsPage(BasePage):
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
         self.wait_for_load_state("domcontentloaded")
-        popup_visible = self._check_success_popup()
+        popup_visible = self._check_toast_popup()
         deleted_from_table = not self.is_secret_in_table(secret_name, retries=0)
         
         return {
