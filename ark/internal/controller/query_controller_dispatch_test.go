@@ -327,14 +327,14 @@ func TestSessionIDBaggage(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		member, err := baggage.NewMember("session.id", sessionId)
+		member, err := baggage.NewMember("ark.session.id", sessionId)
 		require.NoError(t, err)
 		bag, err := baggage.New(member)
 		require.NoError(t, err)
 		ctx = baggage.ContextWithBaggage(ctx, bag)
 
 		extractedBag := baggage.FromContext(ctx)
-		assert.Equal(t, "explicit-session", extractedBag.Member("session.id").Value())
+		assert.Equal(t, "explicit-session", extractedBag.Member("ark.session.id").Value())
 	})
 
 	t.Run("baggage uses UID when session ID is empty", func(t *testing.T) {
@@ -352,13 +352,13 @@ func TestSessionIDBaggage(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		member, err := baggage.NewMember("session.id", sessionId)
+		member, err := baggage.NewMember("ark.session.id", sessionId)
 		require.NoError(t, err)
 		bag, err := baggage.New(member)
 		require.NoError(t, err)
 		ctx = baggage.ContextWithBaggage(ctx, bag)
 
 		extractedBag := baggage.FromContext(ctx)
-		assert.Equal(t, "uid-123", extractedBag.Member("session.id").Value())
+		assert.Equal(t, "uid-123", extractedBag.Member("ark.session.id").Value())
 	})
 }
