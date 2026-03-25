@@ -9,6 +9,8 @@ import { createStreamRouter } from './routes/stream.js';
 import { createTracesRouter } from './routes/traces.js';
 import { createEventsRouter } from './routes/events.js';
 import { createOTLPRouter } from './routes/otlp.js';
+import { SessionsBroker } from './sessions-broker.js';
+import { createSessionsRouter } from './routes/sessions.js';
 
 const app = express();
 
@@ -21,6 +23,7 @@ const memory = new MemoryBroker(process.env.MEMORY_FILE_PATH, maxMessages);
 const chunks = new CompletionChunkBroker(process.env.STREAM_FILE_PATH, maxChunks);
 const traces = new TraceBroker(process.env.TRACE_FILE_PATH, maxSpans);
 const events = new EventBroker(process.env.EVENT_FILE_PATH, maxEvents);
+const sessions = new SessionsBroker(process.env.SESSIONS_FILE_PATH);
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -34,10 +37,11 @@ app.get('/health', (_req, res) => {
   res.status(200).send('OK');
 });
 
-app.use('/', createMemoryRouter(memory));
+app.use('/', createMemoryRouter(memory, sessions));
 app.use('/stream', createStreamRouter(chunks));
 app.use('/traces', createTracesRouter(traces));
-app.use('/events', createEventsRouter(events));
+app.use('/events', createEventsRouter(events, sessions));
+app.use('/sessions', createSessionsRouter(sessions));
 app.use('/v1', createOTLPRouter(traces));
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -50,4 +54,4 @@ app.use((_req, res) => {
 });
 
 export default app;
-export { memory, chunks, traces, events };
+export { memory, chunks, traces, events, sessions };
