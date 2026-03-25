@@ -1,20 +1,32 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 import { EventEmitter } from 'events';
+import type { QueryPhase, SessionEventData } from './types.js';
 
 export interface QueryEntry {
+  /** Query resource name from the Ark CRD */
   name: string;
+  /** Kubernetes namespace the query belongs to */
   namespace?: string;
+  /** Conversation ID assigned by the memory broker */
   conversationId?: string;
+  /** Name of the agent handling this query */
   agent?: string;
+  /** CRD target type, currently always 'agent' */
   targetType: string;
-  phase: 'pending' | 'running' | 'done' | 'error' | 'canceled' | 'unknown';
+  /** Current lifecycle phase derived from incoming events */
+  phase: QueryPhase;
+  /** Error message if phase is 'error' */
   error?: string;
+  /** ISO timestamp when the query was first seen */
   createdAt: string;
+  /** ISO timestamp when the query reached a terminal phase */
   completedAt?: string;
+  /** ISO timestamp of the most recent event for this query */
   lastActivity: string;
 }
 
+/** A single session containing one or more queries grouped by session ID */
 export interface SessionEntry {
   sessionId: string;
   name: string;
@@ -27,6 +39,11 @@ export interface SessionsStore {
   sessions: Record<string, SessionEntry>;
 }
 
+/**
+ * Live event-sourced materialized index of sessions and queries. Enriched as
+ * events and messages flow through the broker. Consumers can subscribe via SSE
+ * to watch sessions mutate in real-time, or poll/GET for post-hoc analysis.
+ */
 export class SessionsBroker {
   private store: SessionsStore = { sessions: {} };
   private emitter = new EventEmitter();
@@ -72,17 +89,14 @@ export class SessionsBroker {
     }, 2000);
   }
 
-  ingestEvent(eventData: Record<string, unknown>): void {
-    const sessionId = eventData.sessionId as string | undefined;
-    const queryName = eventData.queryName as string | undefined;
+  applyEvent(eventData: Partial<SessionEventData>): void {
+    const { sessionId, queryName } = eventData;
     if (!sessionId || !queryName) return;
 
     const now = new Date().toISOString();
-    const conversationId = eventData.conversationId as string | undefined;
-    const agent = eventData.agent as string | undefined;
-    const queryNamespace = eventData.queryNamespace as string | undefined;
-    const reason = (eventData._reason as string) || '';
-    const errorMsg = eventData.error as string | undefined;
+    const { conversationId, agent, queryNamespace } = eventData;
+    const reason = eventData._reason || '';
+    const errorMsg = eventData.error;
 
     if (!this.store.sessions[sessionId]) {
       this.store.sessions[sessionId] = {
@@ -140,7 +154,7 @@ export class SessionsBroker {
     this.emitter.emit('upsert', { sessionId, queryName });
   }
 
-  ingestMessage(conversationId: string, queryId: string): void {
+  applyMessage(conversationId: string, queryId: string): void {
     for (const session of Object.values(this.store.sessions)) {
       const query = session.queries[queryId];
       if (query) {

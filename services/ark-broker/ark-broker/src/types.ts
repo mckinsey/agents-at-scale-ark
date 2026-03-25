@@ -1,3 +1,38 @@
+// These types must match the Ark CRD field names and values.
+// They will later be replaced by an ark-sdk TypeScript package.
+
+export type QueryPhase = 'pending' | 'running' | 'done' | 'error' | 'canceled' | 'unknown';
+
+export type QueryEventReason =
+  | 'QueryExecutionStart'
+  | 'QueryExecutionComplete'
+  | 'AgentExecutionStart'
+  | 'AgentExecutionComplete'
+  | 'LLMCallStart'
+  | 'LLMCallComplete'
+  | 'LLMCallError'
+  | 'MemoryAddMessagesComplete'
+  | 'MemoryGetMessagesStart'
+  | 'MemoryGetMessagesComplete'
+  | 'ToolCallStart'
+  | 'ToolCallComplete'
+  | 'TeamExecutionStart'
+  | 'TeamExecutionComplete'
+  | 'TeamExecutionError'
+  | 'TeamTurnComplete'
+  | 'TeamTurnError'
+  | 'TeamMemberError';
+
+export interface SessionEventData {
+  sessionId: string;
+  queryName: string;
+  queryNamespace?: string;
+  conversationId?: string;
+  agent?: string;
+  error?: string;
+  _reason?: string;
+}
+
 export type Message = unknown;
 
 export interface StoredMessage {

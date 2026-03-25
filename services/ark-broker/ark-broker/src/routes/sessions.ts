@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { SessionsBroker } from '../sessions-broker.js';
 import { streamSSE } from '../sse.js';
+import type { SessionEventData } from '../types.js';
 
 export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
   const router = Router();
@@ -10,7 +11,6 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
 
     if (watch) {
       const filterSessionId = req.query['session_id'] as string | undefined;
-      console.log(`[SESSIONS] GET /sessions?watch=true${filterSessionId ? `&session_id=${filterSessionId}` : ''} - starting SSE stream`);
 
       const store = sessionsBroker.getAll();
       const initialSessions = filterSessionId
@@ -58,14 +58,15 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
     }
   });
 
+  /** Receives event data to apply to the sessions store */
   router.post('/', (req, res) => {
     try {
-      const data = req.body as Record<string, unknown>;
+      const data = req.body as SessionEventData;
       if (!data.sessionId) {
         res.status(400).json({ error: 'sessionId is required' });
         return;
       }
-      sessionsBroker.ingestEvent(data);
+      sessionsBroker.applyEvent(data);
       sessionsBroker.save();
       res.status(201).json({ status: 'success' });
     } catch (error) {

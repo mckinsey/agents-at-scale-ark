@@ -125,10 +125,10 @@ export function createEventsRouter(events: EventBroker, sessions: SessionsBroker
       events.addEvent(event as EventData);
       events.save();
 
-      sessions.ingestEvent({
+      sessions.applyEvent({
         ...event.data,
         _reason: event.reason,
-      } as Record<string, unknown>);
+      });
 
       res.status(201).json({ status: 'success' });
     } catch (error) {

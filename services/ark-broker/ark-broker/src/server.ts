@@ -4,13 +4,13 @@ import { MemoryBroker } from './memory-broker.js';
 import { CompletionChunkBroker } from './completion-chunk-broker.js';
 import { TraceBroker } from './trace-broker.js';
 import { EventBroker } from './event-broker.js';
+import { SessionsBroker } from './sessions-broker.js';
 import { createMemoryRouter } from './routes/memory.js';
 import { createStreamRouter } from './routes/stream.js';
 import { createTracesRouter } from './routes/traces.js';
 import { createEventsRouter } from './routes/events.js';
-import { createOTLPRouter } from './routes/otlp.js';
-import { SessionsBroker } from './sessions-broker.js';
 import { createSessionsRouter } from './routes/sessions.js';
+import { createOTLPRouter } from './routes/otlp.js';
 
 const app = express();
 
@@ -37,6 +37,8 @@ app.get('/health', (_req, res) => {
   res.status(200).send('OK');
 });
 
+// Sessions broker is passed to events and memory routes so they can enrich
+// the sessions view with incoming event and message data
 app.use('/', createMemoryRouter(memory, sessions));
 app.use('/stream', createStreamRouter(chunks));
 app.use('/traces', createTracesRouter(traces));

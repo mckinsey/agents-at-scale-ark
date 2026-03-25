@@ -12,9 +12,9 @@ describe('SessionsBroker', () => {
     jest.useRealTimers();
   });
 
-  describe('ingestEvent', () => {
+  describe('applyEvent', () => {
     test('creates session and query on first event', () => {
-      broker.ingestEvent({
+      broker.applyEvent({
         sessionId: 'sess-1',
         queryName: 'query-1',
         queryNamespace: 'default',
@@ -36,12 +36,12 @@ describe('SessionsBroker', () => {
     });
 
     test('updates query phase on completion event', () => {
-      broker.ingestEvent({
+      broker.applyEvent({
         sessionId: 'sess-1',
         queryName: 'query-1',
       });
 
-      broker.ingestEvent({
+      broker.applyEvent({
         sessionId: 'sess-1',
         queryName: 'query-1',
         _reason: 'QueryExecutionComplete',
@@ -53,7 +53,7 @@ describe('SessionsBroker', () => {
     });
 
     test('sets agent from event data', () => {
-      broker.ingestEvent({
+      broker.applyEvent({
         sessionId: 'sess-1',
         queryName: 'query-1',
         agent: 'my-agent',
@@ -64,12 +64,12 @@ describe('SessionsBroker', () => {
     });
 
     test('sets error on error events', () => {
-      broker.ingestEvent({
+      broker.applyEvent({
         sessionId: 'sess-1',
         queryName: 'query-1',
       });
 
-      broker.ingestEvent({
+      broker.applyEvent({
         sessionId: 'sess-1',
         queryName: 'query-1',
         _reason: 'QueryExecutionComplete',
@@ -83,7 +83,7 @@ describe('SessionsBroker', () => {
     });
 
     test('sets error phase on reason containing Error', () => {
-      broker.ingestEvent({
+      broker.applyEvent({
         sessionId: 'sess-1',
         queryName: 'query-1',
         _reason: 'AgentExecutionError',
@@ -94,7 +94,7 @@ describe('SessionsBroker', () => {
     });
 
     test('ignores events without sessionId', () => {
-      broker.ingestEvent({
+      broker.applyEvent({
         queryName: 'query-1',
       });
 
@@ -103,7 +103,7 @@ describe('SessionsBroker', () => {
     });
 
     test('ignores events without queryName', () => {
-      broker.ingestEvent({
+      broker.applyEvent({
         sessionId: 'sess-1',
       });
 
@@ -112,13 +112,13 @@ describe('SessionsBroker', () => {
     });
 
     test('does not overwrite agent once set', () => {
-      broker.ingestEvent({
+      broker.applyEvent({
         sessionId: 'sess-1',
         queryName: 'query-1',
         agent: 'first-agent',
       });
 
-      broker.ingestEvent({
+      broker.applyEvent({
         sessionId: 'sess-1',
         queryName: 'query-1',
         agent: 'second-agent',
@@ -129,7 +129,7 @@ describe('SessionsBroker', () => {
     });
 
     test('does not regress done phase to error on subsequent error-reason event', () => {
-      broker.ingestEvent({
+      broker.applyEvent({
         sessionId: 'sess-1',
         queryName: 'query-1',
         _reason: 'QueryExecutionComplete',
@@ -140,7 +140,7 @@ describe('SessionsBroker', () => {
     });
 
     test('strips session- prefix for display name', () => {
-      broker.ingestEvent({
+      broker.applyEvent({
         sessionId: 'session-abc123',
         queryName: 'q1',
       });
@@ -150,7 +150,7 @@ describe('SessionsBroker', () => {
     });
 
     test('keeps name as-is when no session- prefix', () => {
-      broker.ingestEvent({
+      broker.applyEvent({
         sessionId: 'custom-id',
         queryName: 'q1',
       });
@@ -160,39 +160,39 @@ describe('SessionsBroker', () => {
     });
   });
 
-  describe('ingestMessage', () => {
+  describe('applyMessage', () => {
     test('sets conversationId on matching query', () => {
-      broker.ingestEvent({
+      broker.applyEvent({
         sessionId: 'sess-1',
         queryName: 'query-1',
       });
 
-      broker.ingestMessage('conv-abc', 'query-1');
+      broker.applyMessage('conv-abc', 'query-1');
 
       const query = broker.getSession('sess-1')!.queries['query-1'];
       expect(query.conversationId).toBe('conv-abc');
     });
 
     test('does not overwrite existing conversationId', () => {
-      broker.ingestEvent({
+      broker.applyEvent({
         sessionId: 'sess-1',
         queryName: 'query-1',
         conversationId: 'original',
       });
 
-      broker.ingestMessage('new-conv', 'query-1');
+      broker.applyMessage('new-conv', 'query-1');
 
       const query = broker.getSession('sess-1')!.queries['query-1'];
       expect(query.conversationId).toBe('original');
     });
 
     test('does nothing if query not found', () => {
-      broker.ingestEvent({
+      broker.applyEvent({
         sessionId: 'sess-1',
         queryName: 'query-1',
       });
 
-      broker.ingestMessage('conv-abc', 'nonexistent-query');
+      broker.applyMessage('conv-abc', 'nonexistent-query');
 
       const query = broker.getSession('sess-1')!.queries['query-1'];
       expect(query.conversationId).toBeUndefined();
@@ -206,8 +206,8 @@ describe('SessionsBroker', () => {
     });
 
     test('returns populated store after events', () => {
-      broker.ingestEvent({ sessionId: 's1', queryName: 'q1' });
-      broker.ingestEvent({ sessionId: 's2', queryName: 'q2' });
+      broker.applyEvent({ sessionId: 's1', queryName: 'q1' });
+      broker.applyEvent({ sessionId: 's2', queryName: 'q2' });
 
       const store = broker.getAll();
       expect(Object.keys(store.sessions)).toHaveLength(2);
@@ -218,7 +218,7 @@ describe('SessionsBroker', () => {
 
   describe('getSession', () => {
     test('returns session by id', () => {
-      broker.ingestEvent({ sessionId: 'sess-1', queryName: 'q1' });
+      broker.applyEvent({ sessionId: 'sess-1', queryName: 'q1' });
 
       const session = broker.getSession('sess-1');
       expect(session).toBeDefined();
@@ -233,7 +233,7 @@ describe('SessionsBroker', () => {
 
   describe('getQueryByConversationId', () => {
     test('returns query with sessionId for matching conversationId', () => {
-      broker.ingestEvent({
+      broker.applyEvent({
         sessionId: 'sess-1',
         queryName: 'query-1',
         conversationId: 'conv-xyz',
@@ -253,8 +253,8 @@ describe('SessionsBroker', () => {
 
   describe('delete', () => {
     test('clears all sessions', () => {
-      broker.ingestEvent({ sessionId: 's1', queryName: 'q1' });
-      broker.ingestEvent({ sessionId: 's2', queryName: 'q2' });
+      broker.applyEvent({ sessionId: 's1', queryName: 'q1' });
+      broker.applyEvent({ sessionId: 's2', queryName: 'q2' });
 
       broker.delete();
 
@@ -264,11 +264,11 @@ describe('SessionsBroker', () => {
   });
 
   describe('subscribe', () => {
-    test('emits on ingestEvent', () => {
+    test('emits on applyEvent', () => {
       const received: Array<{ sessionId: string; queryName: string }> = [];
       broker.subscribe((data) => received.push(data));
 
-      broker.ingestEvent({ sessionId: 'sess-1', queryName: 'query-1' });
+      broker.applyEvent({ sessionId: 'sess-1', queryName: 'query-1' });
 
       expect(received).toHaveLength(1);
       expect(received[0]).toEqual({ sessionId: 'sess-1', queryName: 'query-1' });
@@ -278,12 +278,12 @@ describe('SessionsBroker', () => {
       const received: Array<{ sessionId: string; queryName: string }> = [];
       const unsub = broker.subscribe((data) => received.push(data));
 
-      broker.ingestEvent({ sessionId: 'sess-1', queryName: 'q1' });
+      broker.applyEvent({ sessionId: 'sess-1', queryName: 'q1' });
       expect(received).toHaveLength(1);
 
       unsub();
 
-      broker.ingestEvent({ sessionId: 'sess-2', queryName: 'q2' });
+      broker.applyEvent({ sessionId: 'sess-2', queryName: 'q2' });
       expect(received).toHaveLength(1);
     });
 
@@ -291,8 +291,8 @@ describe('SessionsBroker', () => {
       const received: Array<{ sessionId: string; queryName: string }> = [];
       broker.subscribe((data) => received.push(data));
 
-      broker.ingestEvent({ queryName: 'q1' });
-      broker.ingestEvent({ sessionId: 's1' });
+      broker.applyEvent({ queryName: 'q1' });
+      broker.applyEvent({ sessionId: 's1' });
 
       expect(received).toHaveLength(0);
     });

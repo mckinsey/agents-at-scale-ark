@@ -69,7 +69,7 @@ export function createMemoryRouter(memory: MemoryBroker, sessions?: SessionsBrok
       memory.save();
 
       if (sessions && conversation_id) {
-        sessions.ingestMessage(conversation_id, query_id);
+        sessions.applyMessage(conversation_id, query_id);
       }
 
       res.status(200).send();
