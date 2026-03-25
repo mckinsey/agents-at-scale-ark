@@ -32,6 +32,14 @@ helm upgrade --install argo-workflows ./chart -n argo-workflows --create-namespa
 
 ## Local Development
 
+From the root of the repo, enable Argo with the `ENABLE_ARGO` env var:
+
+```bash
+ENABLE_ARGO=true devspace dev
+```
+
+Or deploy standalone:
+
 ```bash
 devspace deploy -n argo-workflows
 devspace dev -n argo-workflows  # Port-forward to http://localhost:2746
