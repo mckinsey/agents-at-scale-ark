@@ -1,6 +1,6 @@
 'use client';
 
-import { MessageCircle, Pencil, Trash2, Users } from 'lucide-react';
+import { AlertTriangle, MessageCircle, Pencil, Trash2, Users } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -44,16 +44,20 @@ export function TeamRow({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const memberCount = team.members?.length || 0;
+  const deprecatedStrategies = ['round-robin'];
+  const isDeprecatedStrategy = deprecatedStrategies.includes(
+    team.strategy ?? '',
+  );
+
+  const strategyDisplayMap: Record<string, string> = {
+    sequential: team.loops ? 'Sequential (Loops)' : 'Sequential',
+    selector: 'Selector',
+    graph: 'Graph',
+    'round-robin': 'Round Robin (Deprecated)',
+  };
+
   const strategyDisplay =
-    team.strategy === 'round-robin'
-      ? 'Round Robin'
-      : team.strategy === 'selector'
-        ? 'Selector'
-        : team.strategy === 'graph'
-          ? 'Graph'
-          : team.strategy === 'sequential'
-            ? 'Sequential'
-            : team.strategy || 'No strategy';
+    strategyDisplayMap[team.strategy ?? ''] || team.strategy || 'No strategy';
 
   return (
     <>
@@ -87,6 +91,9 @@ export function TeamRow({
           <span>
             {memberCount} member{memberCount !== 1 ? 's' : ''} ·{' '}
             {strategyDisplay}
+            {isDeprecatedStrategy && (
+              <AlertTriangle className="ml-1 inline h-3.5 w-3.5 text-yellow-500" />
+            )}
           </span>
         </div>
 

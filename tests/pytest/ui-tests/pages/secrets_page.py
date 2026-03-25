@@ -87,23 +87,23 @@ class SecretsPage(BasePage):
     def create_secret_with_verification(self, prefix: str, env_key: str) -> dict:
         secret_name = self.generate_secret_name(prefix)
         secret_value = self.get_password_from_env(env_key)
-        
+
         logger.info(f"Creating secret: {secret_name} with key: {env_key}")
         logger.info(f"Secret value length: {len(secret_value)}")
-        
+
         self.page.locator(self.ADD_SECRET_BUTTON).first.click()
         self.wait_for_modal_open()
-        
+
         inputs = self.page.locator("[role='dialog'] input, [data-slot='dialog-content'] input")
         inputs.first.wait_for(state="visible", timeout=10000)
         try:
             inputs.nth(1).wait_for(state="visible", timeout=5000)
         except Exception:
             pass
-        
+
         input_count = inputs.count()
         logger.info(f"Found {input_count} inputs in dialog")
-        
+
         if input_count >= 2:
             inputs.nth(0).fill(secret_name)
             inputs.nth(1).fill(secret_value)
@@ -112,23 +112,17 @@ class SecretsPage(BasePage):
             textarea = self.page.locator("[role='dialog'] textarea, [data-slot='dialog-content'] textarea").first
             if textarea.is_visible(timeout=2000):
                 textarea.fill(secret_value)
-        
+
         save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
         save_button.wait_for(state="visible", timeout=5000)
         save_button.click(force=True)
-        
+
+        popup_visible = self._check_success_popup()
         self.wait_for_modal_close()
-        self.wait_for_load_state("domcontentloaded")
-        
-        try:
-            self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
-            popup_visible = True
-        except:
-            popup_visible = False
-        
+
         self.navigate_to_secrets_tab()
         in_table = self.is_secret_in_table(secret_name)
-        
+
         return {
             "name": secret_name,
             "expected_name": secret_name,

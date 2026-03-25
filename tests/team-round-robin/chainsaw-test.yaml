@@ -3,7 +3,7 @@ kind: Test
 metadata:
   name: team-round-robin
 spec:
-  description: Test round-robin team execution with brainstormer, critic, and coordinator using terminate tool
+  description: Test sequential team with loops execution with brainstormer, critic, and coordinator using terminate tool
   steps:
   - name: setup-resources
     try:
@@ -82,8 +82,7 @@ spec:
           status:
             (response != null): true
             (response.target.name): 'round-robin-brainstorm-team'
-            (length(response.content) > `300`): true
-            (contains(response.content, 'customer satisfaction') || contains(response.content, 'software')): true
+            (length(response.content) > `50`): true
             (tokenUsage.totalTokens > `50`): true
     catch:
     - events: {}

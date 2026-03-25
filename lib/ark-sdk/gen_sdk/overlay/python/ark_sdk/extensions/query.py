@@ -10,10 +10,10 @@ from typing import Any, Dict, List, Optional
 from ..executor import (
     AgentConfig,
     ExecutionEngineRequest,
+    MCPServerConfig,
     Message,
     Model,
     Parameter,
-    ToolDefinition,
 )
 from ..k8s import SecretClient
 
@@ -63,8 +63,8 @@ async def resolve_query(
 ) -> ExecutionEngineRequest:
     """Resolve a QueryRef into a full ExecutionEngineRequest by fetching CRDs from the cluster.
 
-    Replicates the resolution chain from the Go completions engine:
-    Query CRD → Agent CRD → Model CRD + Tool CRDs → ExecutionEngineRequest
+    Resolution chain: Query CRD → Agent CRD → Model CRD + MCPServer CRDs → ExecutionEngineRequest.
+    Only a QueryRef crosses A2A — all resources are resolved locally from the cluster.
     """
     from ..client import V1_ALPHA1, with_ark_client
     from ..k8s import init_k8s
@@ -87,12 +87,12 @@ async def _resolve_from_query(ark, query, namespace: str, user_input: str, conve
 
     agent = await ark.agents.a_get(target.name, namespace)
     agent_config = await _build_agent_config(ark, agent, query, namespace)
-    tools = await _build_tool_definitions(ark, agent, namespace)
+    mcp_servers = await _build_mcp_servers(ark, agent, namespace)
 
     return ExecutionEngineRequest(
         agent=agent_config,
         userInput=Message(role="user", content=user_input),
-        tools=tools,
+        mcpServers=mcp_servers,
         conversationId=conversation_id,
     )
 
@@ -274,11 +274,48 @@ def _resolve_parameters(
     return resolved
 
 
-async def _build_tool_definitions(ark, agent, namespace: str) -> List[ToolDefinition]:
-    tools = []
-    if not agent.spec.tools:
-        return tools
+async def _resolve_mcp_server(ark, server_name: str, namespace: str) -> Optional[MCPServerConfig]:
+    server_namespace = namespace
+    try:
+        server_crd = await ark.mcpservers.a_get(server_name, server_namespace)
+    except Exception as e:
+        logger.warning(f"Failed to resolve MCPServer '{server_name}': {e}")
+        return None
 
+    spec = server_crd.spec
+    url = await _resolve_value_source(spec.address, server_namespace)
+    if not url:
+        logger.warning(f"MCPServer '{server_name}' has no resolvable address")
+        return None
+
+    headers: Dict[str, str] = {}
+    if spec.headers:
+        for header in spec.headers:
+            header_name = _get_attr_or_key(header, "name")
+            header_value_source = _get_attr_or_key(header, "value")
+            if header_name and header_value_source:
+                resolved = await _resolve_value_source(header_value_source, server_namespace)
+                if resolved:
+                    headers[header_name] = resolved
+
+    transport = getattr(spec, "transport", "http") or "http"
+    timeout = getattr(spec, "timeout", "30s") or "30s"
+
+    return MCPServerConfig(
+        name=server_name,
+        url=url,
+        transport=transport,
+        timeout=timeout,
+        headers=headers,
+        tools=[],
+    )
+
+
+async def _build_mcp_servers(ark, agent, namespace: str) -> List[MCPServerConfig]:
+    if not agent.spec.tools:
+        return []
+
+    server_tools: Dict[str, List[str]] = {}
     for agent_tool in agent.spec.tools:
         tool_name = getattr(agent_tool, "name", None)
         if not tool_name:
@@ -288,22 +325,34 @@ async def _build_tool_definitions(ark, agent, namespace: str) -> List[ToolDefini
             tool_crd = await ark.tools.a_get(tool_name, namespace)
             tool_spec = tool_crd.spec
 
-            description = getattr(agent_tool, "description", None) or tool_spec.description or ""
-            input_schema = tool_spec.input_schema or {}
+            if getattr(tool_spec, "type", None) != "mcp":
+                continue
 
-            display_name = tool_name
-            partial = getattr(agent_tool, "partial", None)
-            if partial and hasattr(partial, "name") and partial.name:
-                display_name = partial.name
+            mcp_ref = getattr(tool_spec, "mcp", None)
+            if not mcp_ref:
+                continue
 
-            tools.append(ToolDefinition(
-                name=display_name,
-                description=description,
-                parameters=input_schema,
-            ))
+            server_ref = getattr(mcp_ref, "mcp_server_ref", None) or getattr(mcp_ref, "mcpServerRef", None)
+            if not server_ref:
+                continue
+
+            server_name = _get_attr_or_key(server_ref, "name")
+            mcp_tool_name = _get_attr_or_key(mcp_ref, "tool_name") or _get_attr_or_key(mcp_ref, "toolName")
+
+            if server_name and mcp_tool_name:
+                if server_name not in server_tools:
+                    server_tools[server_name] = []
+                server_tools[server_name].append(mcp_tool_name)
         except Exception as e:
             logger.warning(f"Failed to resolve tool '{tool_name}': {e}")
 
-    return tools
+    servers: List[MCPServerConfig] = []
+    for server_name, tool_names in server_tools.items():
+        server_config = await _resolve_mcp_server(ark, server_name, namespace)
+        if server_config:
+            server_config.tools = tool_names
+            servers.append(server_config)
+
+    return servers
 
 

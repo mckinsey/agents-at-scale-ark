@@ -16,7 +16,9 @@ spec:
   members:
     - name: agent-rr
       type: agent
-  strategy: "round-robin"
+  strategy: "sequential"
+  loops: true
+  maxTurns: 10
 ---
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query

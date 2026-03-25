@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { APIClient, APIError } from '@/lib/api/client'
 
 // Mock fetch globally
@@ -8,10 +8,16 @@ global.fetch = mockFetch
 describe('APIClient', () => {
   let client: APIClient
   const baseURL = 'http://localhost:8080'
-  
+  const MOCK_TIMESTAMP = 1234567890
+
   beforeEach(() => {
     client = new APIClient(baseURL)
     mockFetch.mockClear()
+    vi.spyOn(Date, 'now').mockReturnValue(MOCK_TIMESTAMP)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   describe('constructor', () => {
@@ -35,13 +41,17 @@ describe('APIClient', () => {
       })
 
       const result = await client.get('/test')
-      
+
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8080/test',
+        `http://localhost:8080/test?_t=${MOCK_TIMESTAMP}`,
         expect.objectContaining({
           method: 'GET',
+          cache: 'no-store',
           headers: expect.objectContaining({
             'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
           }),
         })
       )
@@ -81,10 +91,16 @@ describe('APIClient', () => {
       })
 
       await client.get('/test', { params: { foo: 'bar', baz: 123 } })
-      
+
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8080/test?foo=bar&baz=123',
-        expect.any(Object)
+        `http://localhost:8080/test?foo=bar&baz=123&_t=${MOCK_TIMESTAMP}`,
+        expect.objectContaining({
+          method: 'GET',
+          cache: 'no-store',
+          headers: expect.objectContaining({
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+          }),
+        })
       )
     })
 
@@ -152,8 +168,14 @@ describe('APIClient', () => {
     it('should make GET requests', async () => {
       await client.get('/test')
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8080/test',
-        expect.objectContaining({ method: 'GET' })
+        `http://localhost:8080/test?_t=${MOCK_TIMESTAMP}`,
+        expect.objectContaining({
+          method: 'GET',
+          cache: 'no-store',
+          headers: expect.objectContaining({
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+          }),
+        })
       )
     })
 
