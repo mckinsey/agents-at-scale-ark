@@ -30,6 +30,11 @@ inputs:
     description: 'Install coverage collection components'
     required: false
     default: 'false'
+  storage-backend:
+    description: 'Storage backend to use (etcd or postgresql)'
+    required: false
+    default: 'etcd'
+
 runs:
   using: 'composite'
   steps:
@@ -70,7 +75,8 @@ runs:
       shell: bash
       run: |
         ./.github/actions/setup-e2e/setup-local.sh \
-          ${{ inputs.install-coverage == 'true' && '--install-coverage' || '' }}
+          ${{ inputs.install-coverage == 'true' && '--install-coverage' || '' }} \
+          --storage-backend ${{ inputs.storage-backend }}
       env:
         DOCKER_CICD_CACHE_REGISTRY: ${{ inputs.ci-cache-registry || format('ghcr.io/{0}', github.repository_owner) }}
         DOCKER_CICD_CACHE_REGISTRY_USERNAME: ${{ inputs.ci-cache-registry-username || github.actor }}
