@@ -7,13 +7,21 @@ logger = logging.getLogger(__name__)
 
 
 class BasePage:
-    
+
+    POPUP = "body > section > ol > li"
+
     def __init__(self, page: Page):
         self.page = page
     
     def navigate(self, url: str) -> None:
         self.page.goto(url)
-    
+
+    def _check_success_popup(self) -> bool:
+        popup_locator = self.page.locator(self.POPUP).first
+        popup_locator.wait_for(state="visible", timeout=5000)
+        logger.info(popup_locator.aria_snapshot())
+        return True
+
     def is_visible(self, selector: str, timeout: int = 5000) -> bool:
         try:
             self.page.locator(selector).first.wait_for(state="visible", timeout=timeout)

@@ -243,14 +243,6 @@ class TeamsPage(BasePage):
             "deleted_from_table": False
         }
 
-    def _check_success_popup(self) -> bool:
-        try:
-            self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
-            return True
-        except PlaywrightTimeoutError:
-            logger.debug("Success popup not visible")
-            return False
-
     def get_strategy_options(self) -> list[str]:
         self.page.locator(self.ADD_TEAM_BUTTON).first.click()
         self.wait_for_load_state("domcontentloaded")

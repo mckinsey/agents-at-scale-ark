@@ -177,13 +177,6 @@ class SecretsPage(BasePage):
             "deleted_from_table": False
         }
     
-    def _check_success_popup(self) -> bool:
-        try:
-            self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
-            return True
-        except:
-            return False
-    
     def create_secret_for_test(self, prefix: str, env_key: str):
         self.navigate_to_secrets_tab()
         
