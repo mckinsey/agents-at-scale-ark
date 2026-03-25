@@ -311,8 +311,8 @@ var _ = Describe("Team Webhook", func() {
 	})
 
 	Context("Graph strategy validation (should remain strict)", func() {
-		It("Should reject multiple edges from same source for graph strategy", func() {
-			By("creating a graph team with multiple edges from same source")
+		It("Should reject graph strategy as unsupported", func() {
+			By("creating a team with deprecated graph strategy")
 			obj.Spec.Strategy = "graph"
 			obj.Spec.Members = []arkv1alpha1.TeamMember{
 				{Name: "researcher", Type: "agent"},
@@ -322,15 +322,15 @@ var _ = Describe("Team Webhook", func() {
 			obj.Spec.Graph = &arkv1alpha1.TeamGraphSpec{
 				Edges: []arkv1alpha1.TeamGraphEdge{
 					{From: "researcher", To: "analyst"},
-					{From: "researcher", To: "writer"}, // Multiple edges from same source - NOT allowed for graph
+					{From: "researcher", To: "writer"},
 				},
 			}
 			maxTurns := 10
 			obj.Spec.MaxTurns = &maxTurns
 
 			_, err := validator.ValidateCreate(ctx, obj)
-			Expect(err).To(HaveOccurred(), "graph strategy should reject multiple edges from same source")
-			Expect(err.Error()).To(ContainSubstring("more than one outgoing edge"))
+			Expect(err).To(HaveOccurred(), "graph strategy should be rejected as unsupported")
+			Expect(err.Error()).To(ContainSubstring("unsupported strategy"))
 		})
 	})
 })
