@@ -71,6 +71,12 @@ runs:
         traefik-enabled: false
         k3s-channel: latest
 
+    - name: Cache Gateway API CRDs manifest
+      uses: actions/cache@v4
+      with:
+        path: /tmp/gateway-api-standard-install.yaml
+        key: gateway-api-v1.3.0
+
     - name: Run setup-e2e script
       shell: bash
       run: |
