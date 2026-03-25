@@ -1465,6 +1465,7 @@ export interface paths {
          *         version: API version (e.g., 'v1', 'v1alpha1')
          *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
          *         namespace: The namespace (defaults to current context)
+         *         labelSelector: Kubernetes label selector for filtering resources
          *         workflowName: Filter by workflow name (partial match, case insensitive)
          *         workflowTemplateName: Filter by workflow template name (partial match, case insensitive)
          *         status: Filter by workflow status
@@ -1474,6 +1475,7 @@ export interface paths {
          *
          *     Examples:
          *         - GET /v1/resources/apis/apps/v1/Deployment
+         *         - GET /v1/resources/apis/apps/v1/Deployment?labelSelector=ark.mckinsey.com/marketplace-item=phoenix
          *         - GET /v1/resources/apis/batch/v1/Job
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/Workflow?workflowName=my-workflow&status=running
@@ -7145,6 +7147,8 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Kubernetes label selector (e.g., 'app=nginx,env=prod') */
+                labelSelector?: string | null;
                 /** @description Filter by workflow name (partial match, case insensitive) */
                 workflowName?: string | null;
                 /** @description Filter by workflow template name (partial match, case insensitive) */

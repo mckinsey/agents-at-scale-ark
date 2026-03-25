@@ -22,6 +22,10 @@ vi.mock('@/lib/services/export-server', () => ({
   },
 }))
 
+vi.mock('@/lib/services/kubernetes', () => ({
+  checkLabeledDeployment: vi.fn().mockResolvedValue(false),
+}))
+
 const mockFetch = vi.fn() as Mock
 global.fetch = mockFetch
 
@@ -504,6 +508,120 @@ describe('marketplace-fetcher', () => {
       const langfuseItem = result.find(i => i.id === 'langfuse')
       expect(phoenixItem?.status).toBe('installed')
       expect(langfuseItem?.status).toBe('available')
+    })
+
+    it('checks labeled deployment when CRD not found and item has helmReleaseName', async () => {
+      const { checkLabeledDeployment } = await import('@/lib/services/kubernetes')
+      vi.mocked(checkLabeledDeployment).mockResolvedValueOnce(true)
+
+      mockFetchSuccess(makeManifest([
+        makeGitHubItem({
+          name: 'phoenix',
+          ark: { helmReleaseName: 'phoenix', namespace: 'phoenix' },
+        }),
+      ]))
+
+      const result = await fetchMarketplaceItemsFromSource(defaultSource)
+
+      expect(checkLabeledDeployment).toHaveBeenCalledWith('phoenix', 'phoenix')
+      expect(result[0].status).toBe('installed')
+    })
+
+    it('does not check labeled deployment when CRD is found', async () => {
+      const { exportService } = await import('@/lib/services/export')
+      const { checkLabeledDeployment } = await import('@/lib/services/kubernetes')
+
+      vi.mocked(exportService.fetchAllResources).mockResolvedValueOnce({
+        agents: [{ name: 'phoenix', yaml: '' }],
+      })
+
+      mockFetchSuccess(makeManifest([
+        makeGitHubItem({
+          name: 'phoenix',
+          ark: { helmReleaseName: 'phoenix', namespace: 'phoenix' },
+        }),
+      ]))
+
+      const result = await fetchMarketplaceItemsFromSource(defaultSource)
+
+      expect(checkLabeledDeployment).not.toHaveBeenCalled()
+      expect(result[0].status).toBe('installed')
+    })
+
+    it('marks item as not installed when both CRD and deployment checks fail', async () => {
+      const { checkLabeledDeployment } = await import('@/lib/services/kubernetes')
+      vi.mocked(checkLabeledDeployment).mockResolvedValueOnce(false)
+
+      mockFetchSuccess(makeManifest([
+        makeGitHubItem({
+          name: 'phoenix',
+          ark: { helmReleaseName: 'phoenix', namespace: 'phoenix' },
+        }),
+      ]))
+
+      const result = await fetchMarketplaceItemsFromSource(defaultSource)
+
+      expect(checkLabeledDeployment).toHaveBeenCalledWith('phoenix', 'phoenix')
+      expect(result[0].status).toBe('available')
+    })
+
+    it('does not check labeled deployment when item has no helmReleaseName', async () => {
+      const { checkLabeledDeployment } = await import('@/lib/services/kubernetes')
+
+      mockFetchSuccess(makeManifest([
+        makeGitHubItem({ name: 'phoenix', ark: {} }),
+      ]))
+
+      const result = await fetchMarketplaceItemsFromSource(defaultSource)
+
+      expect(checkLabeledDeployment).not.toHaveBeenCalled()
+      expect(result[0].status).toBe('available')
+    })
+
+    it('does not check labeled deployment when item has no namespace', async () => {
+      const { checkLabeledDeployment } = await import('@/lib/services/kubernetes')
+
+      mockFetchSuccess(makeManifest([
+        makeGitHubItem({
+          name: 'phoenix',
+          ark: { helmReleaseName: 'phoenix' },
+        }),
+      ]))
+
+      const result = await fetchMarketplaceItemsFromSource(defaultSource)
+
+      expect(checkLabeledDeployment).not.toHaveBeenCalled()
+      expect(result[0].status).toBe('available')
+    })
+
+    it('checks multiple infrastructure items concurrently', async () => {
+      const { checkLabeledDeployment } = await import('@/lib/services/kubernetes')
+      vi.mocked(checkLabeledDeployment)
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(true)
+
+      mockFetchSuccess(makeManifest([
+        makeGitHubItem({
+          name: 'phoenix',
+          ark: { helmReleaseName: 'phoenix', namespace: 'phoenix' },
+        }),
+        makeGitHubItem({
+          name: 'a2a-inspector',
+          ark: { helmReleaseName: 'a2a-inspector', namespace: 'a2a-inspector' },
+        }),
+        makeGitHubItem({
+          name: 'mcp-inspector',
+          ark: { helmReleaseName: 'mcp-inspector', namespace: 'mcp-inspector' },
+        }),
+      ]))
+
+      const result = await fetchMarketplaceItemsFromSource(defaultSource)
+
+      expect(checkLabeledDeployment).toHaveBeenCalledTimes(3)
+      expect(result[0].status).toBe('installed')
+      expect(result[1].status).toBe('available')
+      expect(result[2].status).toBe('installed')
     })
   })
 

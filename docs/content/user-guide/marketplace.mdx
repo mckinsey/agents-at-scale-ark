@@ -1,0 +1,309 @@
+---
+title: Marketplace
+description: Discover and install services, tools, and agents from the Ark Marketplace
+---
+
+# Marketplace
+
+The Ark Marketplace provides a curated collection of services, MCP servers, agents, and tools that extend Ark's capabilities. Access the marketplace through the dashboard to discover and install community-contributed components.
+
+## Accessing the Marketplace
+
+1. Open the Ark dashboard:
+   ```bash
+   ark dashboard
+   ```
+
+2. Navigate to **Marketplace** in the sidebar
+
+3. Browse available items by category:
+   - **Services**: Observability platforms, infrastructure components
+   - **Agents**: Pre-built AI agents for specific tasks
+   - **MCPs**: Model Context Protocol servers for tool integration
+   - **Demos**: Example applications and workflows
+
+## Installation Status Detection
+
+The marketplace automatically detects whether items are installed in your cluster using a two-tier detection system:
+
+### Tier 1: ARK Custom Resources
+
+For items that create ARK custom resources (Agents, Models, MCPServers), the marketplace detects installations by querying the Kubernetes API for these CRDs.
+
+### Tier 2: Labeled Deployments
+
+For infrastructure services and tools that only create standard Kubernetes resources (like Phoenix, Langfuse), the marketplace uses label-based detection:
+
+```yaml
+metadata:
+  labels:
+    ark.mckinsey.com/marketplace-item: "service-name"
+```
+
+**Detection Requirements:**
+- Deployment must exist in the namespace specified in marketplace.json
+- Deployment must have the `ark.mckinsey.com/marketplace-item` label
+- Deployment must have `status.conditions[type=Available].status=True`
+
+### Status Indicators
+
+- **Installed** ✅: Service is deployed and running in your cluster
+- **Get** 📥: Service is available but not yet installed
+
+## Installing Marketplace Items
+
+### Using Ark CLI (Recommended)
+
+The simplest way to install marketplace items:
+
+```bash
+ark install marketplace/services/phoenix
+```
+
+This command:
+1. Reads the chart configuration from marketplace.json
+2. Fetches the Helm chart from the OCI registry
+3. Installs to the correct namespace with proper labels
+4. Ensures installation status is detected by the dashboard
+
+### Using Helm Directly
+
+For advanced users, you can use Helm commands directly:
+
+```bash
+helm upgrade --install phoenix \
+  oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/phoenix \
+  --namespace phoenix \
+  --create-namespace
+```
+
+**Note:** The chart must include the marketplace label for status detection to work.
+
+### Installation Commands in Dashboard
+
+Click the "Get" button on any marketplace item to see:
+- Recommended `ark install` command
+- Alternative `helm` command for manual installation
+- Namespace and configuration details
+
+## Custom Marketplace Sources
+
+Ark supports multiple marketplace sources, allowing organizations to create private marketplaces with custom items.
+
+### Adding a Custom Marketplace
+
+1. Open the Ark dashboard
+2. Navigate to **Settings** → **Marketplace**
+3. Click **Add Source**
+4. Enter your marketplace.json URL:
+   ```
+   https://your-org.com/marketplace.json
+   ```
+5. Save and refresh
+
+### marketplace.json Format
+
+Your custom marketplace must follow this structure:
+
+```json
+{
+  "version": "1.0.0",
+  "marketplace": "Your Marketplace Name",
+  "items": [
+    {
+      "name": "your-service",
+      "type": "service",
+      "displayName": "Your Service",
+      "description": "Service description",
+      "version": "1.0.0",
+      "ark": {
+        "chartPath": "oci://your-registry.com/charts/your-service",
+        "namespace": "your-namespace",
+        "helmReleaseName": "your-service",
+        "installArgs": ["--create-namespace"],
+        "k8sServiceName": "your-service",
+        "k8sServicePort": 8080,
+        "k8sDeploymentName": "your-service"
+      }
+    }
+  ]
+}
+```
+
+### Label Requirement for Third-Party Items
+
+**Critical:** For marketplace installation status detection to work, your Helm charts **must** include the marketplace label on deployments:
+
+```yaml
+# values.yaml
+global:
+  labels:
+    ark.mckinsey.com/marketplace-item: "your-service"
+```
+
+```yaml
+# templates/_helpers.tpl
+{{- define "your-service.labels" -}}
+app.kubernetes.io/name: {{ include "your-service.name" . }}
+{{- with .Values.global.labels }}
+{{ toYaml . }}
+{{- end }}
+{{- end }}
+```
+
+**For external OCI charts** (charts you don't control), use the [ark-marketplace-common](https://github.com/mckinsey/agents-at-scale-marketplace/tree/main/charts/ark-marketplace-common) library chart to apply labels via post-install hooks.
+
+## Troubleshooting
+
+### Service Shows "Get" Despite Being Installed
+
+**Symptom:** Service is running in your cluster but dashboard shows it as not installed.
+
+**Cause:** Missing marketplace label on deployment.
+
+**Solution:**
+
+1. **Verify the deployment exists:**
+   ```bash
+   kubectl get deployment -n <namespace> <deployment-name>
+   ```
+
+2. **Check for marketplace label:**
+   ```bash
+   kubectl get deployment -n <namespace> <deployment-name> \
+     -o jsonpath='{.metadata.labels.ark\.mckinsey\.com/marketplace-item}'
+   ```
+
+3. **If label is missing**, manually patch the deployment:
+   ```bash
+   kubectl patch deployment <deployment-name> -n <namespace> \
+     -p '{"metadata":{"labels":{"ark.mckinsey.com/marketplace-item":"<service-name>"}}}'
+   ```
+
+4. **For permanent fix**, update your Helm chart to include the label in values.yaml and templates.
+
+### Wrong Namespace Configuration
+
+**Symptom:** Service installed in one namespace, marketplace.json specifies different namespace.
+
+**Cause:** Namespace mismatch between actual deployment and marketplace configuration.
+
+**Solution:**
+
+1. **Check marketplace.json namespace:**
+   ```bash
+   curl -s https://your-marketplace-url/marketplace.json | \
+     jq '.items[] | select(.name=="service-name") | .ark.namespace'
+   ```
+
+2. **Check actual deployment namespace:**
+   ```bash
+   kubectl get deployment -A -l ark.mckinsey.com/marketplace-item=service-name
+   ```
+
+3. **Either:**
+   - Redeploy to the correct namespace specified in marketplace.json, OR
+   - Update marketplace.json to match where the service is actually deployed
+
+### Label Value Mismatch
+
+**Symptom:** Label exists but doesn't match the item name in marketplace.json.
+
+**Cause:** Label value doesn't match the `name` field in marketplace.json.
+
+**Solution:**
+
+Ensure label value exactly matches the marketplace item name:
+```yaml
+# marketplace.json
+"name": "phoenix"
+
+# Deployment label (must match exactly)
+labels:
+  ark.mckinsey.com/marketplace-item: "phoenix"
+```
+
+### Deployment Not Available
+
+**Symptom:** Deployment has correct label but still shows as not installed.
+
+**Cause:** Deployment condition `Available=True` is not met.
+
+**Solution:**
+
+1. **Check deployment status:**
+   ```bash
+   kubectl get deployment -n <namespace> <deployment-name> \
+     -o jsonpath='{.status.conditions[?(@.type=="Available")]}'
+   ```
+
+2. **Investigate why deployment is not available:**
+   ```bash
+   kubectl describe deployment -n <namespace> <deployment-name>
+   kubectl get pods -n <namespace> -l app=<deployment-name>
+   kubectl logs -n <namespace> -l app=<deployment-name>
+   ```
+
+3. **Fix the underlying issue** (image pull errors, resource constraints, etc.)
+
+### Chart Doesn't Support Custom Labels
+
+**Symptom:** External chart ignores `global.labels` configuration.
+
+**Cause:** Chart templates don't include support for global labels.
+
+**Solution:**
+
+Use the [ark-marketplace-common](https://github.com/mckinsey/agents-at-scale-marketplace/tree/main/charts/ark-marketplace-common) library chart:
+
+1. **Add library dependency** to your wrapper chart:
+   ```yaml
+   # Chart.yaml
+   dependencies:
+     - name: ark-marketplace-common
+       version: "0.1.0"
+       repository: "oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts"
+     - name: external-chart
+       version: "1.0.0"
+       repository: "oci://registry.example.com/charts"
+   ```
+
+2. **Create post-install hook template:**
+   ```yaml
+   # templates/marketplace-label-patch.yaml
+   {{- include "ark-marketplace.labelPatchHook" (dict "Chart" .Chart "Release" .Release "Values" .Values) }}
+   ```
+
+3. **Add label to values:**
+   ```yaml
+   # values.yaml
+   global:
+     labels:
+       ark.mckinsey.com/marketplace-item: "your-service"
+   ```
+
+The library chart will automatically patch the deployment with the marketplace label after installation.
+
+## Best Practices
+
+### For Marketplace Publishers
+
+1. **Always include the marketplace label** in your Helm chart values and templates
+2. **Test installation detection** before publishing to ensure the label is correctly applied
+3. **Use semantic versioning** for chart versions to enable proper upgrades
+4. **Provide clear installation instructions** in your chart README
+5. **Include health checks** to ensure `Available=True` condition is set correctly
+
+### For Marketplace Consumers
+
+1. **Use `ark install` command** when possible for consistent installations
+2. **Verify installation status** in the dashboard after installing
+3. **Check namespace configuration** if status detection doesn't work
+4. **Report issues** to chart maintainers if labels are missing
+
+## Related Documentation
+
+- [Dashboard](/user-guide/dashboard) - Visual interface for managing Ark
+- [Ark CLI](/user-guide/ark-cli) - Command-line tools for Ark management
+- [Deploying Ark](/operations-guide/deploying-ark) - Setting up Ark in your cluster
+- [Marketplace Repository](https://github.com/mckinsey/agents-at-scale-marketplace) - Official marketplace source code

@@ -11,10 +11,9 @@ metadata:
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: ClusterRole
 metadata:
   name: {{ .Values.serviceAccount.name }}-role
-  namespace: {{ .Release.Namespace }}
   annotations:
     {{- with .Values.global.annotations }}
     {{- toYaml . | nindent 4 }}
@@ -36,6 +35,10 @@ rules:
   - apiGroups: [""]
     resources: ["pods", "pods/log"]
     verbs: ["get", "list"]
+  # Permission to read deployments for marketplace installation detection
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list"]
   # Gateway API resources
   - apiGroups: ["gateway.networking.k8s.io"]
     resources: ["httproutes", "gateways"]
@@ -51,10 +54,9 @@ rules:
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: ClusterRoleBinding
 metadata:
   name: {{ .Values.serviceAccount.name }}-binding
-  namespace: {{ .Release.Namespace }}
   annotations:
     {{- with .Values.global.annotations }}
     {{- toYaml . | nindent 4 }}
@@ -64,7 +66,7 @@ subjects:
     name: {{ .Values.serviceAccount.name }}
     namespace: {{ .Release.Namespace }}
 roleRef:
-  kind: Role
+  kind: ClusterRole
   name: {{ .Values.serviceAccount.name }}-role
   apiGroup: rbac.authorization.k8s.io
 {{- end }}

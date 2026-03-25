@@ -1,6 +1,7 @@
 export default {
   '---getting-started': { type: 'separator', title: 'Getting started' },
   dashboard: 'Running the Dashboard',
+  marketplace: 'Marketplace',
   'starting-new-project': 'Starting a New Agentic Project',
   'starting-new-project-example': 'Complete Worked Example',
 

@@ -7,6 +7,7 @@ import type {
 } from '@/lib/api/generated/marketplace-types';
 import { exportService } from '@/lib/services/export';
 import { exportServiceServer } from '@/lib/services/export-server';
+import { checkLabeledDeployment } from '@/lib/services/kubernetes';
 
 interface GitHubMarketplaceItem {
   name: string;
@@ -330,20 +331,31 @@ export async function fetchMarketplaceItemsFromSource(
     return [];
   }
 
-  // Get actual installation status from cluster
+  // Get actual installation status from cluster (checks CRDs)
   const installedItems = await getInstalledMarketplaceItems();
 
   const urlSource = extractOrgRepoFromUrl(source.url) ?? source.displayName ?? source.name;
 
-  return manifest.items.map(item => {
-    const itemId = generateItemId(item);
-    // Check if item is installed by matching against various forms of the name
-    const isInstalled = installedItems.has(itemId) ||
+  const transformedItems = await Promise.all(
+    manifest.items.map(async item => {
+      const itemId = generateItemId(item);
+
+      let isInstalled = installedItems.has(itemId) ||
                        installedItems.has(item.name.toLowerCase()) ||
                        installedItems.has(generateItemIdFromName(item.name));
 
-    return transformGitHubItemToMarketplaceItem(item, isInstalled, urlSource);
-  });
+      let detectionMethod = 'crd';
+
+      if (!isInstalled && item.ark?.helmReleaseName && item.ark?.namespace) {
+        isInstalled = await checkLabeledDeployment(item.name, item.ark.namespace);
+        detectionMethod = isInstalled ? 'labeled-deployment' : 'not-installed';
+      }
+
+      return transformGitHubItemToMarketplaceItem(item, isInstalled, urlSource);
+    })
+  );
+
+  return transformedItems;
 }
 
 export async function getMarketplaceItemsFromSources(

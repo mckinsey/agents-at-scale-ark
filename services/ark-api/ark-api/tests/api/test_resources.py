@@ -1123,6 +1123,57 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
         self.assertIn("Failed to fetch logs", response.text)
 
+    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.get_context')
+    def test_list_grouped_resources_with_label_selector(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
+        """Test listing grouped resources with label selector filter."""
+        mock_get_context.return_value = {"namespace": "phoenix"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+
+        mock_api_resource = AsyncMock()
+        mock_resources = Mock()
+        mock_resources.to_dict.return_value = {
+            "apiVersion": "apps/v1",
+            "kind": "DeploymentList",
+            "items": [
+                {
+                    "metadata": {
+                        "name": "phoenix-deployment",
+                        "labels": {"ark.mckinsey.com/marketplace-item": "phoenix"}
+                    },
+                    "status": {
+                        "conditions": [
+                            {"type": "Available", "status": "True"}
+                        ]
+                    }
+                }
+            ]
+        }
+        mock_api_resource.get = AsyncMock(return_value=mock_resources)
+        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
+
+        response = self.client.get(
+            "/v1/resources/apis/apps/v1/Deployment"
+            "?namespace=phoenix"
+            "&labelSelector=ark.mckinsey.com/marketplace-item=phoenix"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["kind"], "DeploymentList")
+        self.assertEqual(len(data["items"]), 1)
+        self.assertEqual(data["items"][0]["metadata"]["name"], "phoenix-deployment")
+        mock_api_resource.get.assert_called_once_with(
+            namespace="phoenix",
+            label_selector="ark.mckinsey.com/marketplace-item=phoenix"
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
