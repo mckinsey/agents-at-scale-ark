@@ -54,20 +54,25 @@ kubectl get nodes
 echo
 
 
-# Install cert-manager if not present
-echo "=== Installing cert-manager ==="
+# Install cert-manager and Gateway API CRDs in parallel
+echo "=== Installing cert-manager and Gateway API CRDs ==="
+PIDS=()
+
 if ! helm list -n cert-manager | grep -q cert-manager; then
   helm repo add jetstack https://charts.jetstack.io --force-update
   helm upgrade --install cert-manager jetstack/cert-manager \
     --namespace cert-manager \
     --create-namespace \
-    --set crds.enabled=true
+    --set crds.enabled=true &
+  PIDS+=($!)
 else
   echo "cert-manager already installed"
 fi
 
-echo "=== Installing Gateway API CRDs ==="
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml &
+PIDS+=($!)
+
+wait "${PIDS[@]}"
 
 if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
   echo "=== Installing PostgreSQL (ark-storage-dev) ==="
