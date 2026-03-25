@@ -19,7 +19,7 @@ export function spanMatchesSessionId(
 ): boolean {
   if (span.attributes) {
     const sessionAttr = span.attributes.find(
-      (attr) => attr.key === "session.id",
+      (attr) => attr.key === "ark.session.id",
     );
 
     if (sessionAttr?.value?.stringValue === sessionId) {
@@ -29,9 +29,6 @@ export function spanMatchesSessionId(
     if (typeof sessionAttr?.value === "string") {
       return sessionAttr.value === sessionId;
     }
-  }
-  if (span.resource?.session_id === sessionId) {
-    return true;
   }
   return false;
 }

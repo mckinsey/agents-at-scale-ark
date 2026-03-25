@@ -31,7 +31,7 @@ export function extractQueryIdAndSessionId(entry: StreamEntry): {
         if (queryAttr?.value) {
           queryId = queryAttr.value as string;
         }
-        const sessionAttr = attributes.find(attr => attr?.key === 'session.id');
+        const sessionAttr = attributes.find(attr => attr?.key === 'ark.session.id');
         if (sessionAttr?.value) {
           sessionId = sessionAttr.value as string;
           break;

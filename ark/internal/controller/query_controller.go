@@ -191,7 +191,7 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	if sessionId == "" {
 		sessionId = string(obj.UID)
 	}
-	if member, err := baggage.NewMember("session.id", sessionId); err == nil {
+	if member, err := baggage.NewMember("ark.session.id", sessionId); err == nil {
 		if bag, err := baggage.New(member); err == nil {
 			opCtx = baggage.ContextWithBaggage(opCtx, bag)
 		}
