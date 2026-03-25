@@ -21,6 +21,11 @@ vi.mock('@/lib/services/namespaces-hooks', () => ({
     isPending: false,
     error: null,
   })),
+  useGetAllNamespaces: vi.fn(() => ({
+    data: [{ name: 'test-ns' }, { name: 'default' }],
+    isPending: false,
+    error: null,
+  })),
 }));
 
 import { NamespaceProvider, useNamespace } from '@/providers/NamespaceProvider';
