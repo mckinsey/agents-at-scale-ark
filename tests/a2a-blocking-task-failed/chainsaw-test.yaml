@@ -32,7 +32,7 @@ spec:
           metadata:
             name: mock-llm-countdown
           status:
-            (contains(conditions[?type == 'Ready'].status, 'True')): true
+            (contains(conditions[?type == 'Ready'].status || `[]`, 'True')): true
     # Apply Query targeting countdown agent with invalid input
     - apply:
         file: manifests/a01-query.yaml
