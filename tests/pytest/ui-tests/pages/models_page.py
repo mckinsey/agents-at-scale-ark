@@ -18,7 +18,6 @@ class ModelsPage(BasePage):
     API_KEY_SELECT = "button:has-text('Select a secret'), [role='combobox']:has-text('Select')"
     BASE_URL_INPUT = "input[name='baseUrl'], input[placeholder*='url' i], input[type='url']"
     SAVE_BUTTON = "button:has-text('Add Model'), button:has-text('Create'), button:has-text('Save')"
-    SUCCESS_POPUP = "[role='alert'], [role='status'], .notification, .toast, div:has-text('success'), div:has-text('Success'), div:has-text('created'), div:has-text('Created'), div:has-text('deleted'), div:has-text('Deleted')"
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
     CONFIRM_DELETE_BUTTON = "button:has-text('Delete'), button:has-text('Confirm'), button:has-text('Yes')"
     
@@ -106,11 +105,7 @@ class ModelsPage(BasePage):
         
         self.wait_for_navigation_complete()
         
-        try:
-            self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
-            popup_visible = True
-        except:
-            popup_visible = False
+        popup_visible = self._check_toast_popup()
 
         in_table = self.is_model_in_table(model_name)
         
@@ -159,7 +154,7 @@ class ModelsPage(BasePage):
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
         self.wait_for_navigation_complete()
-        popup_visible = self._check_success_popup()
+        popup_visible = self._check_toast_popup()
         deleted_from_table = not self.is_model_in_table(model_name)
         
         return {

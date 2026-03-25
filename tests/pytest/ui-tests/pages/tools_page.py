@@ -140,7 +140,7 @@ class ToolsPage(BasePage):
             error_text = error_banner.inner_text()
             logger.error(f"Tool creation error: {error_text}")
         
-        popup_visible = self._check_success_popup()
+        popup_visible = self._check_toast_popup()
         logger.info(f"Success popup visible: {popup_visible}")
         
         self.wait_for_modal_close()
@@ -189,7 +189,7 @@ class ToolsPage(BasePage):
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
         self.wait_for_navigation_complete()
-        popup_visible = self._check_success_popup()
+        popup_visible = self._check_toast_popup()
         deleted_from_table = not self.is_tool_in_table(tool_name, retries=0)
         
         return {
