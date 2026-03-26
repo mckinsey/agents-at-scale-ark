@@ -667,22 +667,10 @@ jobs:
             --wait \
             --timeout=5m
 
-      - name: Deploy ark-mcp
-        run: |
-          helm upgrade --install ark-mcp services/ark-mcp/chart \
-            --namespace default \
-            --create-namespace \
-            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/ark-mcp" \
-            --set app.image.tag="${{ github.sha }}" \
-            --set app.image.pullPolicy="Always" \
-            --wait \
-            --timeout=5m
-
       - name: Wait for services to be ready
         run: |
           kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
           kubectl wait --for=condition=ready pod -l app=ark-dashboard -n default --timeout=120s
-          kubectl wait --for=condition=ready pod -l app=ark-mcp -n default --timeout=120s
 
       - name: Update Argo Workflows dependencies
         run: |
