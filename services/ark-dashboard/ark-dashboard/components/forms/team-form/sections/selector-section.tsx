@@ -1,4 +1,4 @@
-import { AlertCircle, ChevronDown, ChevronRight, Maximize2, Minimize2, RotateCcw, Settings2, Zap } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronRight, HelpCircle, Maximize2, Minimize2, RotateCcw, Settings2, Zap } from 'lucide-react';
 import { useState } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 
@@ -24,6 +24,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import type { Agent } from '@/lib/services';
 import { cn } from '@/lib/utils';
 
@@ -61,7 +66,9 @@ export function SelectorSection({
 
       <div className="bg-muted/50 rounded-md border p-3">
         <p className="text-muted-foreground mb-3 text-xs">
-          Selector strategy uses an AI agent to choose the next team member.
+          Selector strategy uses an AI agent to choose the next team member. The team stops when
+          an agent calls the <code className="font-mono">terminate</code> tool, or when the
+          maximum number of turns is reached.
         </p>
       </div>
 
@@ -70,9 +77,23 @@ export function SelectorSection({
         name="selectorAgent"
         render={({ field }) => (
           <FormItem>
-            <FormLabel>
-              Selector Agent <span className="text-red-500">*</span>
-            </FormLabel>
+            <div className="flex items-center gap-1.5">
+              <FormLabel>
+                Selector Agent <span className="text-red-500">*</span>
+              </FormLabel>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="text-muted-foreground h-3.5 w-3.5 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-72">
+                  <p>
+                    The agent whose <strong>system prompt</strong> defines its overall role and
+                    behaviour as a selector. At each turn, it receives the selector prompt (below)
+                    as a user message and must reply with the name of the next team member to act.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
             <Select
               onValueChange={field.onChange}
               value={field.value}
@@ -127,7 +148,37 @@ export function SelectorSection({
             render={({ field }) => (
               <FormItem>
                 <div className="flex items-center justify-between">
-                  <FormLabel>Selector Prompt</FormLabel>
+                  <div className="flex items-center gap-1.5">
+                    <FormLabel>Selector Prompt</FormLabel>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="text-muted-foreground h-3.5 w-3.5 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-80">
+                        <p className="mb-1.5">
+                          This template is rendered each turn and sent as a <strong>user
+                          message</strong> to the selector agent. The agent&apos;s own system
+                          prompt sets its role; this prompt provides the per-turn context for
+                          making the selection.
+                        </p>
+                        <p className="mb-1">Available template variables:</p>
+                        <ul className="space-y-0.5">
+                          <li>
+                            <code className="font-mono">{'{{'}.Roles{'}}'}</code> — team members
+                            and their descriptions
+                          </li>
+                          <li>
+                            <code className="font-mono">{'{{'}.Participants{'}}'}</code> — team
+                            member names
+                          </li>
+                          <li>
+                            <code className="font-mono">{'{{'}.History{'}}'}</code> — conversation
+                            history so far
+                          </li>
+                        </ul>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
                   <div className="flex items-center gap-2">
                     {field.value && field.value.length > 0 && (
                       <span className="text-muted-foreground text-xs">
