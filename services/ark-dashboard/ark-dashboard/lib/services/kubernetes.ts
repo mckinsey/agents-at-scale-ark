@@ -1,4 +1,4 @@
-import { apiClient } from '@/lib/api/client';
+import { serverApiClient } from '@/lib/api/server-client';
 
 interface DeploymentCondition {
   type: string;
@@ -47,8 +47,8 @@ export async function checkLabeledDeployment(
       labelSelector,
     });
 
-    const deploymentList = await apiClient.get<DeploymentList>(
-      `/api/v1/resources/apis/apps/v1/Deployment?${params.toString()}`
+    const deploymentList = await serverApiClient.get<DeploymentList>(
+      `/v1/resources/apis/apps/v1/Deployment?${params.toString()}`
     );
 
     if (!deploymentList.items || deploymentList.items.length === 0) {
@@ -68,6 +68,12 @@ export async function checkLabeledDeployment(
 
     return hasAvailableDeployment;
   } catch (error) {
+    // 404 is expected when deployment doesn't exist (item not installed)
+    if (error instanceof Error && 'status' in error && (error as { status?: number }).status === 404) {
+      return false;
+    }
+
+    // Log only unexpected errors
     console.error(
       `Error checking labeled deployment for ${itemName} in namespace ${namespace}:`,
       error

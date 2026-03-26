@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { checkLabeledDeployment } from '@/lib/services/kubernetes'
-import { apiClient } from '@/lib/api/client'
+import { serverApiClient } from '@/lib/api/server-client'
 
-vi.mock('@/lib/api/client', () => ({
-  apiClient: {
+vi.mock('@/lib/api/server-client', () => ({
+  serverApiClient: {
     get: vi.fn(),
   },
 }))
@@ -15,7 +15,7 @@ describe('kubernetes service', () => {
 
   describe('checkLabeledDeployment', () => {
     it('returns true when deployment exists and is available', async () => {
-      vi.mocked(apiClient.get).mockResolvedValueOnce({
+      vi.mocked(serverApiClient.get).mockResolvedValue({
         apiVersion: 'apps/v1',
         kind: 'DeploymentList',
         items: [
@@ -45,13 +45,13 @@ describe('kubernetes service', () => {
       const result = await checkLabeledDeployment('phoenix', 'phoenix')
 
       expect(result).toBe(true)
-      expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/apps/v1/Deployment?namespace=phoenix&labelSelector=ark.mckinsey.com%2Fmarketplace-item%3Dphoenix'
+      expect(serverApiClient.get).toHaveBeenCalledWith(
+        '/v1/resources/apis/apps/v1/Deployment?namespace=phoenix&labelSelector=ark.mckinsey.com%2Fmarketplace-item%3Dphoenix'
       )
     })
 
     it('returns false when deployment exists but is not available', async () => {
-      vi.mocked(apiClient.get).mockResolvedValueOnce({
+      vi.mocked(serverApiClient.get).mockResolvedValue({
         apiVersion: 'apps/v1',
         kind: 'DeploymentList',
         items: [
@@ -81,7 +81,7 @@ describe('kubernetes service', () => {
     })
 
     it('returns false when deployment exists but has no conditions', async () => {
-      vi.mocked(apiClient.get).mockResolvedValueOnce({
+      vi.mocked(serverApiClient.get).mockResolvedValue({
         apiVersion: 'apps/v1',
         kind: 'DeploymentList',
         items: [
@@ -103,7 +103,7 @@ describe('kubernetes service', () => {
     })
 
     it('returns false when no deployments are found', async () => {
-      vi.mocked(apiClient.get).mockResolvedValueOnce({
+      vi.mocked(serverApiClient.get).mockResolvedValue({
         apiVersion: 'apps/v1',
         kind: 'DeploymentList',
         items: [],
@@ -115,7 +115,7 @@ describe('kubernetes service', () => {
     })
 
     it('returns false when items array is missing', async () => {
-      vi.mocked(apiClient.get).mockResolvedValueOnce({
+      vi.mocked(serverApiClient.get).mockResolvedValue({
         apiVersion: 'apps/v1',
         kind: 'DeploymentList',
       })
@@ -126,7 +126,7 @@ describe('kubernetes service', () => {
     })
 
     it('returns false on network error', async () => {
-      vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('Network failure'))
+      vi.mocked(serverApiClient.get).mockRejectedValueOnce(new Error('Network failure'))
 
       const result = await checkLabeledDeployment('phoenix', 'phoenix')
 
@@ -134,7 +134,7 @@ describe('kubernetes service', () => {
     })
 
     it('returns false on API error', async () => {
-      vi.mocked(apiClient.get).mockRejectedValueOnce({
+      vi.mocked(serverApiClient.get).mockRejectedValueOnce({
         status: 500,
         message: 'Internal server error',
       })
@@ -145,7 +145,7 @@ describe('kubernetes service', () => {
     })
 
     it('returns true when at least one deployment is available among multiple', async () => {
-      vi.mocked(apiClient.get).mockResolvedValueOnce({
+      vi.mocked(serverApiClient.get).mockResolvedValue({
         apiVersion: 'apps/v1',
         kind: 'DeploymentList',
         items: [
@@ -190,7 +190,7 @@ describe('kubernetes service', () => {
     })
 
     it('returns false when deployment has Progressing condition but not Available', async () => {
-      vi.mocked(apiClient.get).mockResolvedValueOnce({
+      vi.mocked(serverApiClient.get).mockResolvedValue({
         apiVersion: 'apps/v1',
         kind: 'DeploymentList',
         items: [
@@ -219,7 +219,7 @@ describe('kubernetes service', () => {
     })
 
     it('uses URLSearchParams for label selector encoding', async () => {
-      vi.mocked(apiClient.get).mockResolvedValueOnce({
+      vi.mocked(serverApiClient.get).mockResolvedValue({
         apiVersion: 'apps/v1',
         kind: 'DeploymentList',
         items: [],
@@ -227,16 +227,20 @@ describe('kubernetes service', () => {
 
       await checkLabeledDeployment('test-item', 'test-namespace')
 
-      expect(apiClient.get).toHaveBeenCalledWith(
+      // Service uses server-side client with direct backend path (no /api prefix)
+      expect(serverApiClient.get).toHaveBeenCalledWith(
+        expect.stringContaining('/v1/resources/apis/apps/v1/Deployment')
+      )
+      expect(serverApiClient.get).toHaveBeenCalledWith(
         expect.stringContaining('namespace=test-namespace')
       )
-      expect(apiClient.get).toHaveBeenCalledWith(
+      expect(serverApiClient.get).toHaveBeenCalledWith(
         expect.stringContaining('labelSelector=ark.mckinsey.com%2Fmarketplace-item%3Dtest-item')
       )
     })
 
     it('handles deployment with multiple conditions correctly', async () => {
-      vi.mocked(apiClient.get).mockResolvedValueOnce({
+      vi.mocked(serverApiClient.get).mockResolvedValue({
         apiVersion: 'apps/v1',
         kind: 'DeploymentList',
         items: [
