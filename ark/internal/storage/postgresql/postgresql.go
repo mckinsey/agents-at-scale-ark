@@ -150,12 +150,31 @@ func (p *PostgreSQLBackend) initSchema() error {
 	CREATE OR REPLACE FUNCTION notify_resource_change()
 	RETURNS TRIGGER AS $$
 	BEGIN
+		IF TG_OP = 'DELETE' THEN
+			PERFORM pg_notify('ark_resources', json_build_object(
+				'operation', TG_OP,
+				'kind', OLD.kind,
+				'namespace', OLD.namespace,
+				'name', OLD.name,
+				'resource_version', OLD.resource_version,
+				'uid', OLD.uid,
+				'spec', OLD.spec,
+				'status', OLD.status,
+				'labels', OLD.labels,
+				'annotations', OLD.annotations,
+				'finalizers', OLD.finalizers,
+				'owner_references', OLD.owner_references,
+				'generation', OLD.generation,
+				'created_at', OLD.created_at
+			)::text);
+			RETURN OLD;
+		END IF;
 		PERFORM pg_notify('ark_resources', json_build_object(
 			'operation', TG_OP,
-			'kind', COALESCE(NEW.kind, OLD.kind),
-			'namespace', COALESCE(NEW.namespace, OLD.namespace),
-			'name', COALESCE(NEW.name, OLD.name),
-			'resource_version', COALESCE(NEW.resource_version, OLD.resource_version)
+			'kind', NEW.kind,
+			'namespace', NEW.namespace,
+			'name', NEW.name,
+			'resource_version', NEW.resource_version
 		)::text);
 		RETURN NEW;
 	END;
@@ -171,31 +190,55 @@ func (p *PostgreSQLBackend) initSchema() error {
 }
 
 func (p *PostgreSQLBackend) listenForNotifications() {
-	listener := pq.NewListener(p.connStr, 10*time.Second, time.Minute, func(ev pq.ListenerEventType, err error) {
-		if err != nil {
-			klog.Errorf("PostgreSQL listener error: %v", err)
+	backoff := time.Second
+	maxBackoff := 30 * time.Second
+
+	for {
+		select {
+		case <-p.ctx.Done():
+			return
+		default:
 		}
-	})
 
-	if err := listener.Listen("ark_resources"); err != nil {
-		klog.Errorf("Failed to listen for notifications: %v", err)
-		return
+		listener := pq.NewListener(p.connStr, 10*time.Second, time.Minute, func(ev pq.ListenerEventType, err error) {
+			if err != nil {
+				klog.Errorf("PostgreSQL listener error: %v", err)
+			}
+		})
+
+		if err := listener.Listen("ark_resources"); err != nil {
+			_ = listener.Close()
+			klog.Errorf("Failed to listen for notifications, retrying in %v: %v", backoff, err)
+			select {
+			case <-p.ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
+			backoff = min(backoff*2, maxBackoff)
+			continue
+		}
+
+		backoff = time.Second
+		p.runListener(listener)
+		_ = listener.Close()
 	}
+}
 
-	defer func() { _ = listener.Close() }()
-
+func (p *PostgreSQLBackend) runListener(listener *pq.Listener) {
 	for {
 		select {
 		case <-p.ctx.Done():
 			return
 		case n := <-listener.Notify:
 			if n == nil {
-				continue
+				klog.Warning("PostgreSQL listener connection lost, reconnecting")
+				return
 			}
 			p.nudgeWatchers(n.Extra)
 		case <-time.After(90 * time.Second):
 			if err := listener.Ping(); err != nil {
-				klog.Warningf("Failed to ping listener: %v", err)
+				klog.Warningf("Failed to ping listener, reconnecting: %v", err)
+				return
 			}
 		}
 	}
@@ -300,7 +343,7 @@ func (p *PostgreSQLBackend) Get(ctx context.Context, kind, namespace, name strin
 
 	if err := row.Scan(&rv, &generation, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &updatedAt); err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("not found")
+			return nil, storage.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
@@ -538,7 +581,7 @@ func (p *PostgreSQLBackend) Delete(ctx context.Context, kind, namespace, name st
 
 	affected, _ := result.RowsAffected()
 	if affected == 0 {
-		return fmt.Errorf("not found")
+		return storage.ErrNotFound
 	}
 
 	return nil
@@ -651,25 +694,36 @@ func (p *PostgreSQLBackend) sendDeleteEvent(kind, namespace string, obj runtime.
 
 func (p *PostgreSQLBackend) nudgeWatchers(payload string) {
 	var notification struct {
-		Operation       string `json:"operation"`
-		Kind            string `json:"kind"`
-		Namespace       string `json:"namespace"`
-		Name            string `json:"name"`
-		ResourceVersion int64  `json:"resource_version"`
+		Operation       string          `json:"operation"`
+		Kind            string          `json:"kind"`
+		Namespace       string          `json:"namespace"`
+		Name            string          `json:"name"`
+		ResourceVersion int64           `json:"resource_version"`
+		UID             string          `json:"uid"`
+		Spec            json.RawMessage `json:"spec"`
+		Status          json.RawMessage `json:"status"`
+		Labels          json.RawMessage `json:"labels"`
+		Annotations     json.RawMessage `json:"annotations"`
+		Finalizers      json.RawMessage `json:"finalizers"`
+		OwnerReferences json.RawMessage `json:"owner_references"`
+		Generation      int64           `json:"generation"`
+		CreatedAt       time.Time       `json:"created_at"`
 	}
 	if err := json.Unmarshal([]byte(payload), &notification); err != nil {
 		return
 	}
 
 	if notification.Operation == "DELETE" {
-		obj := p.converter.NewObject(notification.Kind)
+		obj, _ := p.reconstructObject(
+			notification.Kind, notification.Namespace, notification.Name,
+			notification.ResourceVersion, notification.Generation, notification.UID,
+			string(notification.Spec), string(notification.Status),
+			string(notification.Labels), string(notification.Annotations),
+			string(notification.Finalizers), string(notification.OwnerReferences),
+			notification.CreatedAt,
+		)
 		if obj == nil {
 			return
-		}
-		if accessor, err := meta.Accessor(obj); err == nil {
-			accessor.SetName(notification.Name)
-			accessor.SetNamespace(notification.Namespace)
-			accessor.SetResourceVersion(fmt.Sprintf("%d", notification.ResourceVersion))
 		}
 		p.sendDeleteEvent(notification.Kind, notification.Namespace, obj)
 		return
@@ -733,10 +787,11 @@ type postgresWatcher struct {
 	ns          string
 	ctx         context.Context
 	done        chan struct{}
-	stopped     atomic.Bool
-	closed      sync.Once
-	lastSeenRV  atomic.Int64
-	initialList bool
+	stopped            atomic.Bool
+	closed             sync.Once
+	lastSeenRV         atomic.Int64
+	initialList        bool
+	initialListDone    bool
 }
 
 func (w *postgresWatcher) send(event watch.Event) {
@@ -810,7 +865,10 @@ func (w *postgresWatcher) sendBookmark() {
 	}
 	if accessor, aErr := meta.Accessor(obj); aErr == nil {
 		accessor.SetResourceVersion(fmt.Sprintf("%d", rv))
-		accessor.SetAnnotations(map[string]string{"k8s.io/initial-events-end": "true"})
+		if !w.initialListDone {
+			accessor.SetAnnotations(map[string]string{"k8s.io/initial-events-end": "true"})
+			w.initialListDone = true
+		}
 	}
 	select {
 	case w.outCh <- watch.Event{Type: watch.Bookmark, Object: obj}:
