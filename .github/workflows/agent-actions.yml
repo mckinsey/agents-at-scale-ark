@@ -104,7 +104,9 @@ jobs:
             exit 0
           fi
 
-          # For issue/PR events, build context-rich prompt
+          # Build a context-rich prompt from the GitHub event. This is the shell
+          # equivalent of claude-code-action's TypeScript prompt builder:
+          # https://github.com/anthropics/claude-code-action/blob/main/src/create-prompt/index.ts
           if [ "$EVENT_NAME" = "issue_comment" ] || [ "$EVENT_NAME" = "issues" ]; then
             ISSUE_NUMBER=${{ github.event.issue.number }}
             echo "issue_number=$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
