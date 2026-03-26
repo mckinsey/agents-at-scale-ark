@@ -1,0 +1,149 @@
+# Ark Agent - runs Claude Code on GitHub issues and PRs for the Ark team.
+#
+# We can't use external GitHub Actions in this org, so instead of referencing
+# anthropics/claude-code-action via `uses:`, we clone it at runtime and execute
+# directly with bun. This gives us the full upstream feature set (prompt
+# building, comment tracking, diff formatting, MCP servers) without maintaining
+# a fork or shell reimplementation.
+#
+# Source repos:
+#   - https://github.com/anthropics/claude-code-action (cloned at runtime)
+#   - https://github.com/dwmkerr/agent-actions (trigger + access control pattern)
+#
+# See: openspec/changes/2026-03-26-agent-actions/proposal.md
+#
+# Required secrets:
+#   ANTHROPIC_API_KEY       - Anthropic API key for Claude Code
+#   AGENT_GITHUB_TOKEN      - PAT for a bot user (optional, for custom identity)
+#                             Falls back to GITHUB_TOKEN if not set.
+
+name: Ark Agent
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+  issues:
+    types: [opened, labeled]
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: "Prompt to send to Claude Code"
+        required: true
+        type: string
+
+env:
+  TRIGGER_PHRASE: "@ark"
+  ALLOWED_USERS: "dwmkerr,Nab-0,havasik,skazinka,amanvr,peter-kismarczi,daniele-marostica,giorgio-acquati-mck,poornimanagQB"
+  # Pin to a specific tag of claude-code-action. Bump this to pick up upstream changes.
+  CLAUDE_CODE_ACTION_REF: "v1.0.79"
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: read
+  id-token: write
+
+concurrency:
+  group: ark-agent-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  ark-agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check trigger and access
+        id: check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          SENDER: ${{ github.event.sender.login }}
+          COMMENT_BODY: ${{ github.event.comment.body || github.event.review.body || '' }}
+          ISSUE_BODY: ${{ github.event.issue.body || '' }}
+          ISSUE_LABELS: ${{ join(github.event.issue.labels.*.name, ',') }}
+        run: |
+          # workflow_dispatch always passes
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Check the sender is in the allowed users list
+          if ! echo ",$ALLOWED_USERS," | grep -q ",$SENDER,"; then
+            echo "User $SENDER is not in ALLOWED_USERS, skipping"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Check the trigger phrase is present
+          TRIGGERED=false
+          case "$EVENT_NAME" in
+            issue_comment|pull_request_review_comment)
+              echo "$COMMENT_BODY" | grep -q "$TRIGGER_PHRASE" && TRIGGERED=true ;;
+            pull_request_review)
+              echo "$COMMENT_BODY" | grep -q "$TRIGGER_PHRASE" && TRIGGERED=true ;;
+            issues)
+              echo "$ISSUE_LABELS" | grep -q "ark-agent" && TRIGGERED=true
+              echo "$ISSUE_BODY" | grep -q "$TRIGGER_PHRASE" && TRIGGERED=true ;;
+          esac
+
+          echo "run=$TRIGGERED" >> "$GITHUB_OUTPUT"
+          if [ "$TRIGGERED" = "false" ]; then
+            echo "Trigger phrase '$TRIGGER_PHRASE' not found, skipping"
+          fi
+
+      - name: Checkout repository
+        if: steps.check.outputs.run == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          token: ${{ secrets.AGENT_GITHUB_TOKEN || github.token }}
+
+      - name: Setup Node.js
+        if: steps.check.outputs.run == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Clone the upstream claude-code-action repo at the pinned version.
+      # We run it directly instead of using `uses:` because external actions
+      # are blocked in this org. The entrypoint (src/entrypoints/run.ts)
+      # handles everything: prompt building, Claude CLI install, execution,
+      # and comment posting. It reads config from INPUT_* env vars and the
+      # standard GITHUB_* env vars that Actions provides.
+      - name: Clone claude-code-action
+        if: steps.check.outputs.run == 'true'
+        run: |
+          git clone --depth 1 --branch "$CLAUDE_CODE_ACTION_REF" \
+            https://github.com/anthropics/claude-code-action.git \
+            /tmp/claude-code-action
+
+      - name: Install bun
+        if: steps.check.outputs.run == 'true'
+        run: curl -fsSL https://bun.sh/install | bash && echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        if: steps.check.outputs.run == 'true'
+        run: cd /tmp/claude-code-action && bun install --production
+
+      # The entrypoint reads INPUT_* env vars (same as action.yml inputs)
+      # and GITHUB_* vars (provided by Actions). It builds the prompt from
+      # the event context, installs Claude Code CLI, runs it, and posts
+      # the result as a comment.
+      - name: Run Ark Agent
+        if: steps.check.outputs.run == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN || github.token }}
+          # Skip OIDC token exchange — use our PAT or GITHUB_TOKEN directly
+          OVERRIDE_GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN || github.token }}
+          INPUT_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          INPUT_TRIGGER_PHRASE: "@ark"
+          INPUT_PROMPT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prompt || '' }}
+          GITHUB_ACTION_PATH: /tmp/claude-code-action
+        run: cd /tmp/claude-code-action && bun run src/entrypoints/run.ts
