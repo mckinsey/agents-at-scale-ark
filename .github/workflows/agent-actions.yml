@@ -1,8 +1,8 @@
-# Agent Actions - Claude Code integration for the Ark team.
+# Ark Agent - Claude Code integration for the Ark team.
 #
 # Vendored from:
-#   - https://github.com/anthropics/claude-code-action
-#   - https://github.com/dwmkerr/agent-actions
+#   - https://github.com/anthropics/claude-code-action (v1, CLI install + prompt pattern)
+#   - https://github.com/dwmkerr/agent-actions (trigger and access control pattern)
 #
 # See: openspec/changes/2026-03-26-agent-actions/proposal.md
 #
@@ -32,6 +32,7 @@ on:
 env:
   TRIGGER_PHRASE: "@ark"
   ALLOWED_USERS: "dwmkerr,Nab-0,havasik,skazinka,amanvr,peter-kismarczi,daniele-marostica,giorgio-acquati-mck,poornimanagQB"
+  CLAUDE_CODE_VERSION: "2.1.84"
 
 permissions:
   contents: write
@@ -44,7 +45,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  claude:
+  ark-agent:
     if: |
       github.event_name == 'workflow_dispatch' ||
       (
@@ -71,22 +72,182 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Determine prompt
-        id: prompt
+      - name: Install Claude Code CLI
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "text=${{ github.event.inputs.prompt }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event_name }}" = "issue_comment" ]; then
-            echo "text=${{ github.event.comment.body }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event_name }}" = "pull_request_review_comment" ]; then
-            echo "text=${{ github.event.comment.body }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event_name }}" = "pull_request_review" ]; then
-            echo "text=${{ github.event.review.body }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event_name }}" = "issues" ]; then
-            echo "text=${{ github.event.issue.body }}" >> "$GITHUB_OUTPUT"
+          for attempt in 1 2 3; do
+            echo "Installation attempt $attempt..."
+            if curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_CODE_VERSION"; then
+              echo "Claude Code installed successfully"
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Failed to install Claude Code after 3 attempts"
+              exit 1
+            fi
+            sleep 5
+          done
+
+      - name: Build prompt
+        id: prompt
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN || github.token }}
+        run: |
+          PROMPT_FILE=$(mktemp /tmp/ark-agent-prompt-XXXXXX.md)
+          echo "file=$PROMPT_FILE" >> "$GITHUB_OUTPUT"
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            cat <<'PROMPT_EOF' > "$PROMPT_FILE"
+          ${{ github.event.inputs.prompt }}
+          PROMPT_EOF
+            echo "source=dispatch" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
-      # TODO: Install and run Claude Code CLI
-      # TODO: Post response as comment on issue/PR
-      - name: Placeholder
-        run: echo "Agent Actions workflow triggered. Prompt - ${{ steps.prompt.outputs.text }}"
+          # For issue/PR events, build context-rich prompt
+          if [ "$EVENT_NAME" = "issue_comment" ] || [ "$EVENT_NAME" = "issues" ]; then
+            ISSUE_NUMBER=${{ github.event.issue.number }}
+            echo "issue_number=$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
+            echo "source=issue" >> "$GITHUB_OUTPUT"
+
+            # Fetch issue details
+            ISSUE_JSON=$(gh api "repos/${{ github.repository }}/issues/$ISSUE_NUMBER")
+            ISSUE_TITLE=$(echo "$ISSUE_JSON" | jq -r '.title')
+            ISSUE_BODY=$(echo "$ISSUE_JSON" | jq -r '.body // ""')
+
+            # Fetch recent comments
+            COMMENTS=$(gh api "repos/${{ github.repository }}/issues/$ISSUE_NUMBER/comments?per_page=10" \
+              | jq -r '.[] | "**\(.user.login)** (\(.created_at)):\n\(.body)\n---"')
+
+            cat > "$PROMPT_FILE" <<PROMPT_EOF
+          You are the Ark Agent, responding to a GitHub issue.
+
+          ## Issue #${ISSUE_NUMBER}: ${ISSUE_TITLE}
+
+          ${ISSUE_BODY}
+
+          ## Recent Comments
+
+          ${COMMENTS}
+
+          ## Instructions
+
+          Respond to the most recent comment or issue. If asked to make code changes,
+          create a branch and commit. If asked to review, provide analysis. If asked
+          to triage, add appropriate labels and suggest next steps.
+
+          The repository CLAUDE.md files contain project context and conventions.
+          PROMPT_EOF
+
+          elif [ "$EVENT_NAME" = "pull_request_review_comment" ] || [ "$EVENT_NAME" = "pull_request_review" ]; then
+            PR_NUMBER=${{ github.event.pull_request.number }}
+            echo "issue_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+            echo "source=pr" >> "$GITHUB_OUTPUT"
+
+            # Fetch PR details
+            PR_JSON=$(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER")
+            PR_TITLE=$(echo "$PR_JSON" | jq -r '.title')
+            PR_BODY=$(echo "$PR_JSON" | jq -r '.body // ""')
+            PR_DIFF=$(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER" \
+              -H "Accept: application/vnd.github.v3.diff" 2>/dev/null | head -c 50000)
+
+            if [ "$EVENT_NAME" = "pull_request_review_comment" ]; then
+              COMMENT_BODY='${{ github.event.comment.body }}'
+            else
+              COMMENT_BODY='${{ github.event.review.body }}'
+            fi
+
+            cat > "$PROMPT_FILE" <<PROMPT_EOF
+          You are the Ark Agent, responding to a pull request review.
+
+          ## PR #${PR_NUMBER}: ${PR_TITLE}
+
+          ${PR_BODY}
+
+          ## Review Comment
+
+          ${COMMENT_BODY}
+
+          ## Diff (truncated to 50KB)
+
+          \`\`\`diff
+          ${PR_DIFF}
+          \`\`\`
+
+          ## Instructions
+
+          Respond to the review comment. If asked to make changes, commit them to
+          the PR branch. If asked to review, provide detailed analysis of the diff.
+
+          The repository CLAUDE.md files contain project context and conventions.
+          PROMPT_EOF
+          fi
+
+      - name: Post initial comment
+        if: steps.prompt.outputs.source != 'dispatch'
+        id: initial-comment
+        env:
+          GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN || github.token }}
+        run: |
+          ISSUE_NUMBER="${{ steps.prompt.outputs.issue_number }}"
+          COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/$ISSUE_NUMBER/comments" \
+            -f body="> 🤖 Ark Agent is working on this... (run: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}))" \
+            --jq '.id')
+          echo "comment_id=$COMMENT_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Run Claude Code
+        id: claude
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          PROMPT_FILE="${{ steps.prompt.outputs.file }}"
+          OUTPUT_FILE=$(mktemp /tmp/ark-agent-output-XXXXXX.md)
+          echo "output_file=$OUTPUT_FILE" >> "$GITHUB_OUTPUT"
+
+          # Run Claude Code in print mode with the prompt file
+          if claude -p --output-format text < "$PROMPT_FILE" > "$OUTPUT_FILE" 2>&1; then
+            echo "conclusion=success" >> "$GITHUB_OUTPUT"
+          else
+            echo "conclusion=failure" >> "$GITHUB_OUTPUT"
+            echo "Claude Code exited with non-zero status" >> "$OUTPUT_FILE"
+          fi
+
+      - name: Post result comment
+        if: steps.prompt.outputs.source != 'dispatch'
+        env:
+          GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN || github.token }}
+        run: |
+          ISSUE_NUMBER="${{ steps.prompt.outputs.issue_number }}"
+          COMMENT_ID="${{ steps.initial-comment.outputs.comment_id }}"
+          CONCLUSION="${{ steps.claude.outputs.conclusion }}"
+          OUTPUT_FILE="${{ steps.claude.outputs.output_file }}"
+
+          # Truncate output to fit GitHub comment limit (65536 chars)
+          OUTPUT=$(head -c 60000 "$OUTPUT_FILE")
+
+          if [ "$CONCLUSION" = "success" ]; then
+            STATUS="✅ Complete"
+          else
+            STATUS="❌ Failed"
+          fi
+
+          BODY=$(cat <<COMMENT_EOF
+          > 🤖 Ark Agent — ${STATUS} ([run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}))
+
+          ${OUTPUT}
+          COMMENT_EOF
+          )
+
+          # Update the initial comment with the result
+          gh api "repos/${{ github.repository }}/issues/comments/$COMMENT_ID" \
+            -X PATCH -f body="$BODY"
+
+      - name: Write job summary
+        if: always()
+        run: |
+          OUTPUT_FILE="${{ steps.claude.outputs.output_file }}"
+          if [ -f "$OUTPUT_FILE" ]; then
+            echo "## Ark Agent Output" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            head -c 60000 "$OUTPUT_FILE" >> "$GITHUB_STEP_SUMMARY"
+          fi
