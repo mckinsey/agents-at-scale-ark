@@ -3576,7 +3576,7 @@ export interface components {
              * Provider
              * @enum {string}
              */
-            provider: "openai" | "azure" | "bedrock";
+            provider: "openai" | "azure" | "bedrock" | "anthropic";
         };
         /**
          * ModelDetailResponse
@@ -3606,7 +3606,7 @@ export interface components {
              * Provider
              * @enum {string}
              */
-            provider: "openai" | "azure" | "bedrock";
+            provider: "openai" | "azure" | "bedrock" | "anthropic";
             /** Resolved Address */
             resolved_address?: string | null;
             /**
@@ -3656,7 +3656,7 @@ export interface components {
              * Provider
              * @enum {string}
              */
-            provider: "openai" | "azure" | "bedrock";
+            provider: "openai" | "azure" | "bedrock" | "anthropic";
             /**
              * Type
              * @default completions

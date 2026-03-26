@@ -111,6 +111,8 @@ func (m *Model) HealthCheck(ctx context.Context) error {
 		return provider.HealthCheck(ctx)
 	case *BedrockModel:
 		return provider.HealthCheck(ctx)
+	case *AnthropicProvider:
+		return provider.HealthCheck(ctx)
 	default:
 		testMessages := []Message{NewUserMessage("Hello")}
 		_, err := m.ChatCompletion(ctx, testMessages, nil, 1)

@@ -131,6 +131,7 @@ export function ModelConfiguratorForm() {
                     <SelectItem value="openai">OpenAI</SelectItem>
                     <SelectItem value="azure">Azure OpenAI</SelectItem>
                     <SelectItem value="bedrock">AWS Bedrock</SelectItem>
+                    <SelectItem value="anthropic">Anthropic</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -151,7 +152,9 @@ export function ModelConfiguratorForm() {
                         ? 'e.g., gpt-4-turbo-preview'
                         : provider === 'azure'
                           ? 'e.g., gpt-4'
-                          : 'e.g., anthropic.claude-v2'
+                          : provider === 'anthropic'
+                            ? 'e.g., claude-sonnet-4-20250514'
+                            : 'e.g., anthropic.claude-v2'
                     }
                   />
                 </FormControl>
@@ -175,6 +178,13 @@ export function ModelConfiguratorForm() {
           )}
           {provider === 'bedrock' && (
             <AWSBedrockSpecificFields
+              isSecretsPending={isSecretsPending}
+              secrets={secrets}
+              control={form.control}
+            />
+          )}
+          {provider === 'anthropic' && (
+            <AnthropicSpecificFields
               isSecretsPending={isSecretsPending}
               secrets={secrets}
               control={form.control}
@@ -540,6 +550,90 @@ function AWSBedrockSpecificFields({
                 {...field}
                 value={field.value ?? ''}
                 placeholder="arn:aws:bedrock:..."
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+    </>
+  );
+}
+
+type AnthropicSpecificFieldsProps = {
+  isSecretsPending: boolean;
+  secrets?: Secret[];
+  control: Control<FormValues, unknown, FormValues>;
+};
+
+function AnthropicSpecificFields({
+  isSecretsPending,
+  secrets,
+  control,
+}: AnthropicSpecificFieldsProps) {
+  return (
+    <>
+      <FormField
+        control={control}
+        name="secret"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>API Key</FormLabel>
+            <Select onValueChange={field.onChange} value={field.value}>
+              <FormControl>
+                <div className="flex gap-4">
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a secret" />
+                  </SelectTrigger>
+                  <CreateNewSecretButton fieldName="secret" />
+                </div>
+              </FormControl>
+              <SelectContent>
+                {isSecretsPending ? (
+                  <Spinner size="sm" className="mx-auto my-2" />
+                ) : (
+                  <>
+                    {secrets?.map(secret => (
+                      <SelectItem key={secret.name} value={secret.name}>
+                        {secret.name}
+                      </SelectItem>
+                    ))}
+                  </>
+                )}
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={control}
+        name="baseUrl"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Base URL</FormLabel>
+            <FormControl>
+              <Input
+                {...field}
+                value={field.value ?? ''}
+                placeholder="https://api.anthropic.com"
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={control}
+        name="anthropicVersion"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Anthropic Version (Optional)</FormLabel>
+            <FormControl>
+              <Input
+                {...field}
+                value={field.value ?? ''}
+                placeholder="2023-06-01"
               />
             </FormControl>
             <FormMessage />
