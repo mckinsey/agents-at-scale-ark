@@ -15,7 +15,8 @@ class FileGatewayHelper:
     TIMEOUTS = {"install": 300, "pods": 120, "api": 60, "cleanup": 30}
     INTERVALS = {"pod_check": 5, "api_check": 2}
     FILE_GATEWAY_PODS = ['file-gateway-file-api', 'file-gateway-filesystem-mcp', 'file-gateway-versitygw']
-    API_PORT = 8080
+    # 8080 is too likely to be in use, so adding a few
+    API_PORT = 8082
     API_HOST = "localhost"
     DEFAULT_BUCKET = "aas-files"
     DEFAULT_STORAGE_SIZE = "1Gi"
@@ -29,6 +30,7 @@ class FileGatewayHelper:
     def _run_cmd(self, cmd, timeout=None, check=True, capture_output=True):
         """Run subprocess with error handling"""
         try:
+            logger.info(f"Running {' '.join(cmd)}")
             result = subprocess.run(
                 cmd, 
                 capture_output=capture_output, 
@@ -107,7 +109,9 @@ class FileGatewayHelper:
             check=False
         )
         if success and stdout.strip():
-            return stdout.strip().split()
+            pod_names = stdout.strip().split()
+            logger.info(f"Found pods: {pod_names}")
+            return pod_names
         return []
     
     def get_pod_image(self, pod_name):
@@ -226,7 +230,7 @@ class FileGatewayHelper:
         
         for attempt in range(max_retries):
             success, stdout, _ = self._run_cmd(
-                ['kubectl', 'get', 'mcpserver', 'file-gateway-mcpserver', '-o', 'jsonpath={.status.toolCount}'],
+                ['kubectl', 'get', 'mcpserver', 'file-gateway', '-o', 'jsonpath={.status.toolCount}'],
                 check=False
             )
             
@@ -248,7 +252,7 @@ class FileGatewayHelper:
         
         for attempt in range(max_retries):
             success, stdout, _ = self._run_cmd(
-                ['kubectl', 'get', 'mcpserver', 'file-gateway-mcpserver', '-o', 'jsonpath={.status.conditions[?(@.type=="Available")].status}'],
+                ['kubectl', 'get', 'mcpserver', 'file-gateway', '-o', 'jsonpath={.status.conditions[?(@.type=="Available")].status}'],
                 check=False
             )
             
