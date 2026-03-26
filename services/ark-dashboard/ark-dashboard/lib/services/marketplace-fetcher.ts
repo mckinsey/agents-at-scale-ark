@@ -2,7 +2,6 @@ import GitUrlParse from 'git-url-parse';
 
 import type {
   MarketplaceCategory,
-  MarketplaceInstallScope,
   MarketplaceItem,
   MarketplaceItemType,
 } from '@/lib/api/generated/marketplace-types';
