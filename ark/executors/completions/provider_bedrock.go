@@ -130,30 +130,9 @@ func (bm *BedrockModel) ChatCompletionStream(ctx context.Context, messages []Mes
 	if err != nil {
 		return nil, err
 	}
-
-	for _, choice := range completion.Choices {
-		chunk := &openai.ChatCompletionChunk{
-			ID:      completion.ID,
-			Object:  "chat.completion.chunk",
-			Created: completion.Created,
-			Model:   completion.Model,
-			Choices: []openai.ChatCompletionChunkChoice{
-				{
-					Index: choice.Index,
-					Delta: openai.ChatCompletionChunkChoiceDelta{
-						Content: choice.Message.Content,
-						Role:    "assistant",
-					},
-					FinishReason: choice.FinishReason,
-				},
-			},
-		}
-
-		if err := streamFunc(chunk); err != nil {
-			return nil, err
-		}
+	if err := streamCompletionAsChunks(completion, streamFunc); err != nil {
+		return nil, err
 	}
-
 	return completion, nil
 }
 

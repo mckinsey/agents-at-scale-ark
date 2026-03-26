@@ -63,10 +63,10 @@ func TestConvertAnthropicResponse(t *testing.T) {
 
 		result := convertAnthropicResponse(response)
 		assert.Equal(t, "msg_123", result.ID)
-		assert.Contains(t, string(result.Object), "chat.completion")
+		assert.Contains(t, result.Object, "chat.completion")
 		require.Len(t, result.Choices, 1)
 		assert.Equal(t, "Hello!", result.Choices[0].Message.Content)
-		assert.Contains(t, string(result.Choices[0].FinishReason), "stop")
+		assert.Contains(t, result.Choices[0].FinishReason, "stop")
 		assert.Equal(t, int64(10), result.Usage.PromptTokens)
 		assert.Equal(t, int64(5), result.Usage.CompletionTokens)
 		assert.Equal(t, int64(15), result.Usage.TotalTokens)
@@ -84,12 +84,12 @@ func TestConvertAnthropicResponse(t *testing.T) {
 		}
 
 		result := convertAnthropicResponse(response)
-		assert.Contains(t, string(result.Choices[0].FinishReason), "tool_calls")
+		assert.Contains(t, result.Choices[0].FinishReason, "tool_calls")
 		assert.Equal(t, "Let me search for that.", result.Choices[0].Message.Content)
 		require.Len(t, result.Choices[0].Message.ToolCalls, 1)
 		assert.Equal(t, "call_1", result.Choices[0].Message.ToolCalls[0].ID)
 		assert.Equal(t, "search", result.Choices[0].Message.ToolCalls[0].Function.Name)
-		assert.Contains(t, string(result.Choices[0].Message.ToolCalls[0].Type), "function")
+		assert.Contains(t, result.Choices[0].Message.ToolCalls[0].Type, "function")
 	})
 
 	t.Run("maps max_tokens to length", func(t *testing.T) {
@@ -98,7 +98,7 @@ func TestConvertAnthropicResponse(t *testing.T) {
 			Content:    []anthropicContent{{Type: "text", Text: "truncated"}},
 		}
 		result := convertAnthropicResponse(response)
-		assert.Contains(t, string(result.Choices[0].FinishReason), "length")
+		assert.Contains(t, result.Choices[0].FinishReason, "length")
 	})
 }
 

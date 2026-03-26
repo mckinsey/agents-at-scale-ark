@@ -69,9 +69,9 @@ func (ap *AnthropicProvider) ChatCompletion(ctx context.Context, messages []Mess
 
 	resp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("Anthropic API request failed: %w", err)
+		return nil, fmt.Errorf("anthropic API request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -79,7 +79,7 @@ func (ap *AnthropicProvider) ChatCompletion(ctx context.Context, messages []Mess
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Anthropic API returned status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("anthropic API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var response anthropicResponse
@@ -95,30 +95,9 @@ func (ap *AnthropicProvider) ChatCompletionStream(ctx context.Context, messages 
 	if err != nil {
 		return nil, err
 	}
-
-	for _, choice := range completion.Choices {
-		chunk := &openai.ChatCompletionChunk{
-			ID:      completion.ID,
-			Object:  "chat.completion.chunk",
-			Created: completion.Created,
-			Model:   completion.Model,
-			Choices: []openai.ChatCompletionChunkChoice{
-				{
-					Index: choice.Index,
-					Delta: openai.ChatCompletionChunkChoiceDelta{
-						Content: choice.Message.Content,
-						Role:    "assistant",
-					},
-					FinishReason: choice.FinishReason,
-				},
-			},
-		}
-
-		if err := streamFunc(chunk); err != nil {
-			return nil, err
-		}
+	if err := streamCompletionAsChunks(completion, streamFunc); err != nil {
+		return nil, err
 	}
-
 	return completion, nil
 }
 

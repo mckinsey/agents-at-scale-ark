@@ -198,6 +198,32 @@ func buildAnthropicRequest(messages []anthropicMessage, systemPrompt string, too
 	}
 }
 
+func streamCompletionAsChunks(completion *openai.ChatCompletion, streamFunc func(*openai.ChatCompletionChunk) error) error {
+	for _, choice := range completion.Choices {
+		chunk := &openai.ChatCompletionChunk{
+			ID:      completion.ID,
+			Object:  "chat.completion.chunk",
+			Created: completion.Created,
+			Model:   completion.Model,
+			Choices: []openai.ChatCompletionChunkChoice{
+				{
+					Index: choice.Index,
+					Delta: openai.ChatCompletionChunkChoiceDelta{
+						Content: choice.Message.Content,
+						Role:    "assistant",
+					},
+					FinishReason: choice.FinishReason,
+				},
+			},
+		}
+
+		if err := streamFunc(chunk); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func mustMarshalJSON(v interface{}) string {
 	if v == nil {
 		return "{}"
