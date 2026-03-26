@@ -76,6 +76,7 @@ class FileGatewayHelper:
                 ['kubectl', 'get', 'pods', '-l', 'app.kubernetes.io/name=file-gateway', '-o', 'jsonpath={.items[*].status.phase}'],
                 check=False
             )
+            logger.info(stdout)
             if not success:
                 return False
             
