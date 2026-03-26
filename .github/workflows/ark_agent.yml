@@ -154,7 +154,7 @@ jobs:
           INPUT_TRIGGER_PHRASE: "@ark"
           INPUT_PROMPT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prompt || '' }}
           GITHUB_ACTION_PATH: /tmp/claude-code-action
-        run: cd /tmp/claude-code-action && bun run src/entrypoints/run.ts
+        run: bun run /tmp/claude-code-action/src/entrypoints/run.ts
 
       # Post a comment on failure so the user knows something went wrong
       - name: Post failure comment
