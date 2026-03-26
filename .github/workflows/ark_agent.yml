@@ -46,6 +46,7 @@ permissions:
   pull-requests: write
   issues: write
   actions: read
+  id-token: write
 
 concurrency:
   group: ark-agent-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
@@ -139,6 +140,8 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN || github.token }}
+          # Skip OIDC token exchange — use our PAT or GITHUB_TOKEN directly
+          OVERRIDE_GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN || github.token }}
           INPUT_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           INPUT_TRIGGER_PHRASE: "@ark"
           INPUT_PROMPT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prompt || '' }}
