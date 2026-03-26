@@ -16,6 +16,13 @@
 #   ANTHROPIC_API_KEY       - Anthropic API key for Claude Code
 #   AGENT_GITHUB_TOKEN      - PAT for a bot user (optional, for custom identity)
 #                             Falls back to GITHUB_TOKEN if not set.
+#
+# Usage:
+#   Comment "@ark" on any issue or PR to trigger the agent.
+#   Add the "ark-agent" label to an issue to trigger it.
+#   Or dispatch manually:
+#     gh workflow run ark_agent.yml -f prompt="your prompt here"
+#     gh workflow run ark_agent.yml -f prompt="your prompt" -f issue_number=123
 
 name: Ark Agent
 
@@ -34,6 +41,11 @@ on:
         description: "Prompt to send to Claude Code"
         required: true
         type: string
+      issue_number:
+        description: "Issue or PR number to post the result to (optional)"
+        required: false
+        type: string
+        default: ""
 
 env:
   TRIGGER_PHRASE: "@ark"
@@ -97,11 +109,12 @@ jobs:
             echo "Trigger phrase '$TRIGGER_PHRASE' not found, skipping"
           fi
 
+      # Full clone needed — the upstream entrypoint fetches PR branches for diffs
       - name: Checkout repository
         if: steps.check.outputs.run == 'true'
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           token: ${{ secrets.AGENT_GITHUB_TOKEN || github.token }}
 
       - name: Setup Node.js
@@ -147,3 +160,15 @@ jobs:
           INPUT_PROMPT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prompt || '' }}
           GITHUB_ACTION_PATH: /tmp/claude-code-action
         run: cd /tmp/claude-code-action && bun run src/entrypoints/run.ts
+
+      # For workflow_dispatch with an issue_number, post the output as a comment
+      - name: Post dispatch result to issue
+        if: steps.check.outputs.run == 'true' && github.event_name == 'workflow_dispatch' && github.event.inputs.issue_number != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN || github.token }}
+          ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+        run: |
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          gh issue comment "$ISSUE_NUMBER" \
+            --repo "${{ github.repository }}" \
+            --body "> Ark Agent dispatch completed. [View run](${RUN_URL})"
