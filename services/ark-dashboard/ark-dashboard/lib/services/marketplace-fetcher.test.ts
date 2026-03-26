@@ -26,6 +26,12 @@ vi.mock('@/lib/services/kubernetes', () => ({
   checkLabeledDeployment: vi.fn().mockResolvedValue(false),
 }))
 
+vi.mock('@/lib/api/server-client', () => ({
+  serverApiClient: {
+    get: vi.fn().mockResolvedValue({ namespace: 'default', cluster: null, read_only_mode: false }),
+  },
+}))
+
 const mockFetch = vi.fn() as Mock
 global.fetch = mockFetch
 
@@ -517,13 +523,14 @@ describe('marketplace-fetcher', () => {
       mockFetchSuccess(makeManifest([
         makeGitHubItem({
           name: 'phoenix',
-          ark: { helmReleaseName: 'phoenix', namespace: 'phoenix' },
+          installScope: 'namespace',
+          ark: { helmReleaseName: 'phoenix', namespace: 'default' },
         }),
       ]))
 
       const result = await fetchMarketplaceItemsFromSource(defaultSource)
 
-      expect(checkLabeledDeployment).toHaveBeenCalledWith('phoenix', 'phoenix')
+      expect(checkLabeledDeployment).toHaveBeenCalledWith('phoenix', 'default')
       expect(result[0].status).toBe('installed')
     })
 
@@ -550,18 +557,19 @@ describe('marketplace-fetcher', () => {
 
     it('marks item as not installed when both CRD and deployment checks fail', async () => {
       const { checkLabeledDeployment } = await import('@/lib/services/kubernetes')
-      vi.mocked(checkLabeledDeployment).mockResolvedValueOnce(false)
+      vi.mocked(checkLabeledDeployment).mockResolvedValue(false)
 
       mockFetchSuccess(makeManifest([
         makeGitHubItem({
           name: 'phoenix',
-          ark: { helmReleaseName: 'phoenix', namespace: 'phoenix' },
+          installScope: 'namespace',
+          ark: { helmReleaseName: 'phoenix', namespace: 'default' },
         }),
       ]))
 
       const result = await fetchMarketplaceItemsFromSource(defaultSource)
 
-      expect(checkLabeledDeployment).toHaveBeenCalledWith('phoenix', 'phoenix')
+      expect(checkLabeledDeployment).toHaveBeenCalledWith('phoenix', 'default')
       expect(result[0].status).toBe('available')
     })
 
@@ -596,6 +604,7 @@ describe('marketplace-fetcher', () => {
 
     it('checks multiple infrastructure items concurrently', async () => {
       const { checkLabeledDeployment } = await import('@/lib/services/kubernetes')
+      vi.mocked(checkLabeledDeployment).mockReset()
       vi.mocked(checkLabeledDeployment)
         .mockResolvedValueOnce(true)
         .mockResolvedValueOnce(false)
@@ -604,15 +613,18 @@ describe('marketplace-fetcher', () => {
       mockFetchSuccess(makeManifest([
         makeGitHubItem({
           name: 'phoenix',
-          ark: { helmReleaseName: 'phoenix', namespace: 'phoenix' },
+          installScope: 'namespace',
+          ark: { helmReleaseName: 'phoenix', namespace: 'default' },
         }),
         makeGitHubItem({
           name: 'a2a-inspector',
-          ark: { helmReleaseName: 'a2a-inspector', namespace: 'a2a-inspector' },
+          installScope: 'namespace',
+          ark: { helmReleaseName: 'a2a-inspector', namespace: 'default' },
         }),
         makeGitHubItem({
           name: 'mcp-inspector',
-          ark: { helmReleaseName: 'mcp-inspector', namespace: 'mcp-inspector' },
+          installScope: 'namespace',
+          ark: { helmReleaseName: 'mcp-inspector', namespace: 'default' },
         }),
       ]))
 
@@ -622,6 +634,58 @@ describe('marketplace-fetcher', () => {
       expect(result[0].status).toBe('installed')
       expect(result[1].status).toBe('available')
       expect(result[2].status).toBe('installed')
+    })
+
+    it('does not check deployment when namespace does not match current namespace', async () => {
+      const { checkLabeledDeployment } = await import('@/lib/services/kubernetes')
+
+      mockFetchSuccess(makeManifest([
+        makeGitHubItem({
+          name: 'phoenix',
+          ark: { helmReleaseName: 'phoenix', namespace: 'phoenix' },
+        }),
+      ]))
+
+      const result = await fetchMarketplaceItemsFromSource(defaultSource)
+
+      expect(checkLabeledDeployment).not.toHaveBeenCalled()
+      expect(result[0].status).toBe('available')
+    })
+
+    it('does not check deployment for cluster-scoped items', async () => {
+      const { checkLabeledDeployment } = await import('@/lib/services/kubernetes')
+
+      mockFetchSuccess(makeManifest([
+        makeGitHubItem({
+          name: 'prometheus-operator',
+          installScope: 'cluster',
+          ark: { helmReleaseName: 'prometheus', namespace: 'default' },
+        }),
+      ]))
+
+      const result = await fetchMarketplaceItemsFromSource(defaultSource)
+
+      expect(checkLabeledDeployment).not.toHaveBeenCalled()
+      expect(result[0].status).toBe('available')
+      expect(result[0].installScope).toBe('cluster')
+    })
+
+    it('passes installScope to transformed item', async () => {
+      mockFetchSuccess(makeManifest([
+        makeGitHubItem({
+          name: 'namespace-item',
+          installScope: 'namespace',
+        }),
+        makeGitHubItem({
+          name: 'cluster-item',
+          installScope: 'cluster',
+        }),
+      ]))
+
+      const result = await fetchMarketplaceItemsFromSource(defaultSource)
+
+      expect(result[0].installScope).toBe('namespace')
+      expect(result[1].installScope).toBe('cluster')
     })
   })
 

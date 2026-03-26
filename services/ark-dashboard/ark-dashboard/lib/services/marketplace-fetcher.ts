@@ -2,9 +2,11 @@ import GitUrlParse from 'git-url-parse';
 
 import type {
   MarketplaceCategory,
+  MarketplaceInstallScope,
   MarketplaceItem,
   MarketplaceItemType,
 } from '@/lib/api/generated/marketplace-types';
+import { serverApiClient } from '@/lib/api/server-client';
 import { exportService } from '@/lib/services/export';
 import { exportServiceServer } from '@/lib/services/export-server';
 import { checkLabeledDeployment } from '@/lib/services/kubernetes';
@@ -24,6 +26,7 @@ interface GitHubMarketplaceItem {
   icon?: string;
   screenshots?: string[];
   documentation?: string;
+  installScope?: 'namespace' | 'cluster';
   support?: {
     email?: string;
     url?: string;
@@ -50,6 +53,20 @@ interface GitHubMarketplaceManifest {
 
 const DEFAULT_MARKETPLACE_MANIFEST_URL =
   'https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json';
+
+async function getCurrentNamespace(): Promise<string> {
+  try {
+    const context = await serverApiClient.get<{
+      namespace: string;
+      cluster: string | null;
+      read_only_mode: boolean;
+    }>('/v1/context');
+    return context.namespace;
+  } catch (error) {
+    console.error('Failed to fetch context from ark-api, falling back to default:', error);
+    return 'default';
+  }
+}
 
 function extractOrgRepoFromUrl(url: string): string | null {
   try {
@@ -198,6 +215,7 @@ export function transformGitHubItemToMarketplaceItem(
     installCommand: item.ark?.helmReleaseName
       ? `helm install ${item.ark.helmReleaseName} ${item.ark.chartPath ?? ''}`
       : undefined,
+    installScope: item.installScope,
     status: isInstalled ? 'installed' : 'available',
     featured: false,
     downloads: 0,
@@ -347,6 +365,8 @@ export async function fetchMarketplaceItemsFromSource(
 
   const urlSource = extractOrgRepoFromUrl(source.url) ?? source.displayName ?? source.name;
 
+  const currentNamespace = await getCurrentNamespace();
+
   const transformedItems = await Promise.all(
     manifest.items.map(async item => {
       const itemId = generateItemId(item);
@@ -356,7 +376,13 @@ export async function fetchMarketplaceItemsFromSource(
                        installedItems.has(generateItemIdFromName(item.name));
 
       if (!isInstalled && item.ark?.helmReleaseName && item.ark?.namespace) {
-        isInstalled = await checkLabeledDeployment(item.name, item.ark.namespace);
+        const installScope = item.installScope || 'namespace';
+
+        if (installScope === 'namespace' && item.ark.namespace === currentNamespace) {
+          isInstalled = await checkLabeledDeployment(item.name, item.ark.namespace);
+        } else if (installScope === 'cluster') {
+          isInstalled = false;
+        }
       }
 
       return transformGitHubItemToMarketplaceItem(item, isInstalled, urlSource);

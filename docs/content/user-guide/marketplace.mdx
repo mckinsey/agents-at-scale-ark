@@ -42,13 +42,28 @@ metadata:
 
 **Detection Requirements:**
 - Deployment must exist in the namespace specified in marketplace.json
+- **Namespace must match where ark-api is running** (namespace-scoped permissions)
 - Deployment must have the `ark.mckinsey.com/marketplace-item` label
 - Deployment must have `status.conditions[type=Available].status=True`
+
+**Namespace-Scoped Detection:**
+
+Marketplace detection uses namespace-scoped Role permissions. This means:
+- ✅ **Namespace-scoped items**: Detected if installed in the same namespace as ark-api
+- ⚠️ **Cluster-scoped items**: Cannot be automatically detected
+- 🔐 **Security**: No cluster-wide permissions required
 
 ### Status Indicators
 
 - **Installed** ✅: Service is deployed and running in your cluster
 - **Get** 📥: Service is available but not yet installed
+
+### Scope Indicators
+
+Marketplace items display a scope badge indicating installation type:
+
+- **Namespace** 🟣: Installs within a specific namespace (detection supported)
+- **Cluster** 🟠: Installs cluster-wide across all namespaces (manual verification required)
 
 ## Installing Marketplace Items
 
@@ -116,6 +131,7 @@ Your custom marketplace must follow this structure:
       "displayName": "Your Service",
       "description": "Service description",
       "version": "1.0.0",
+      "installScope": "namespace",
       "ark": {
         "chartPath": "oci://your-registry.com/charts/your-service",
         "namespace": "your-namespace",
@@ -129,6 +145,11 @@ Your custom marketplace must follow this structure:
   ]
 }
 ```
+
+**New Field:**
+- `installScope` (optional): Either `"namespace"` or `"cluster"`. Defaults to `"namespace"` if not specified.
+  - Use `"namespace"` for services that deploy to a specific namespace
+  - Use `"cluster"` for operators/tools that install cluster-wide resources
 
 ### Label Requirement for Third-Party Items
 
@@ -201,9 +222,14 @@ app.kubernetes.io/name: {{ include "your-service.name" . }}
    kubectl get deployment -A -l ark.mckinsey.com/marketplace-item=service-name
    ```
 
-3. **Either:**
-   - Redeploy to the correct namespace specified in marketplace.json, OR
-   - Update marketplace.json to match where the service is actually deployed
+3. **Check ark-api namespace:**
+   ```bash
+   kubectl get pods -A -l app.kubernetes.io/name=ark-api
+   ```
+
+4. **Resolution:**
+   - **For namespace-scoped items**: Deploy to the SAME namespace as ark-api for detection to work
+   - **Alternative**: Update marketplace.json to match where the service is actually deployed
 
 ### Label Value Mismatch
 

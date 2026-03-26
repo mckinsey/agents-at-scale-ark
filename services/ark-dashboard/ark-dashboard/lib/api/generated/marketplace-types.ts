@@ -11,6 +11,7 @@ export interface MarketplaceItem {
   source?: string;
   documentation?: string;
   installCommand?: string;
+  installScope?: MarketplaceInstallScope;
   status: MarketplaceItemStatus;
   featured: boolean;
   downloads: number;
@@ -43,6 +44,10 @@ export type MarketplaceItemStatus =
   | 'installed'
   | 'updating'
   | 'deprecated';
+
+export type MarketplaceInstallScope =
+  | 'namespace'
+  | 'cluster';
 
 export interface MarketplaceItemDetail extends MarketplaceItem {
   longDescription: string;

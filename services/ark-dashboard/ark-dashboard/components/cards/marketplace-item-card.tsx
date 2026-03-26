@@ -140,21 +140,47 @@ export function MarketplaceItemCard({
         className,
       )}>
       <CardHeader className="flex-none space-y-3">
-        {/* Type Badge */}
-        <div className="flex items-center justify-between">
-          <div
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium',
-              item.type === 'service'
-                ? 'border-blue-500/30 bg-blue-500/10 text-blue-500 dark:text-blue-400'
-                : item.category === 'agents'
-                  ? 'border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400'
-                  : 'border-border bg-muted text-muted-foreground',
-            )}>
-            {getTypeIcon(item.type)}
-            <span className="capitalize">
-              {item.category === 'agents' ? 'Agent' : item.type}
-            </span>
+        {/* Type Badge and Install Scope */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium',
+                item.type === 'service'
+                  ? 'border-blue-500/30 bg-blue-500/10 text-blue-500 dark:text-blue-400'
+                  : item.category === 'agents'
+                    ? 'border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400'
+                    : 'border-border bg-muted text-muted-foreground',
+              )}>
+              {getTypeIcon(item.type)}
+              <span className="capitalize">
+                {item.category === 'agents' ? 'Agent' : item.type}
+              </span>
+            </div>
+            {item.installScope && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div
+                      className={cn(
+                        'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium',
+                        item.installScope === 'namespace'
+                          ? 'border-purple-500/30 bg-purple-500/10 text-purple-600 dark:text-purple-400'
+                          : 'border-orange-500/30 bg-orange-500/10 text-orange-600 dark:text-orange-400',
+                      )}>
+                      <span className="capitalize">{item.installScope}</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    <p>
+                      {item.installScope === 'namespace'
+                        ? 'Installs within a specific namespace'
+                        : 'Installs cluster-wide across all namespaces'}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
         </div>
 
