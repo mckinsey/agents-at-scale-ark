@@ -13,7 +13,7 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ .Values.serviceAccount.name }}-role
+  name: {{ .Values.serviceAccount.name }}-cluster-role
   annotations:
     {{- with .Values.global.annotations }}
     {{- toYaml . | nindent 4 }}
@@ -56,7 +56,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ .Values.serviceAccount.name }}-binding
+  name: {{ .Values.serviceAccount.name }}-cluster-binding
   annotations:
     {{- with .Values.global.annotations }}
     {{- toYaml . | nindent 4 }}
@@ -67,6 +67,6 @@ subjects:
     namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
-  name: {{ .Values.serviceAccount.name }}-role
+  name: {{ .Values.serviceAccount.name }}-cluster-role
   apiGroup: rbac.authorization.k8s.io
 {{- end }}

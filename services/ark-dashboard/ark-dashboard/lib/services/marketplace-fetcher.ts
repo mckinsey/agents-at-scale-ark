@@ -102,65 +102,76 @@ function generateItemId(item: GitHubMarketplaceItem): string {
     .replace(/^-+|-+$/g, ''); // NOSONAR - This regex is safe from ReDoS, uses anchored patterns with linear complexity
 }
 
+const CATEGORY_ICONS: Record<string, string> = {
+  observability: '📊',
+  tools: '🛠️',
+  'mcp-servers': '🔌',
+  mcp: '🔌',
+  agents: '🤖',
+  agent: '🤖',
+  models: '🧠',
+  model: '🧠',
+  workflows: '🔄',
+  workflow: '🔄',
+  integrations: '🔗',
+  integration: '🔗',
+  development: '💻',
+  testing: '🧪',
+  security: '🔒',
+  monitoring: '📈',
+};
+
+const NAME_ICONS: Record<string, string> = {
+  phoenix: '🔥',
+  langfuse: '📝',
+  'a2a-inspector': '🔍',
+  postgres: '🐘',
+  redis: '💾',
+  kafka: '📨',
+  elasticsearch: '🔎',
+  grafana: '📊',
+  prometheus: '📈',
+};
+
+function getIconByCategory(category?: string): string | null {
+  if (!category) return null;
+  return CATEGORY_ICONS[category.toLowerCase()] ?? null;
+}
+
+function getIconByName(name: string): string | null {
+  const nameLower = name.toLowerCase();
+  for (const [key, icon] of Object.entries(NAME_ICONS)) {
+    if (nameLower.includes(key)) return icon;
+  }
+  return null;
+}
+
+function getIconByType(type?: 'service' | 'agent' | 'demo'): string | null {
+  if (type === 'agent') return '🤖';
+  if (type === 'service') return '⚙️';
+  return null;
+}
+
 function getIconForItem(item: GitHubMarketplaceItem): string {
-  // Check if icon is a placeholder URL
-  if (item.icon?.includes('example.com')) {
-    // Return emoji based on category or type
-    const categoryIcons: Record<string, string> = {
-      observability: '📊',
-      tools: '🛠️',
-      'mcp-servers': '🔌',
-      mcp: '🔌',
-      agents: '🤖',
-      agent: '🤖',
-      models: '🧠',
-      model: '🧠',
-      workflows: '🔄',
-      workflow: '🔄',
-      integrations: '🔗',
-      integration: '🔗',
-      development: '💻',
-      testing: '🧪',
-      security: '🔒',
-      monitoring: '📈',
-    };
-
-    // Try category first, then type
-    if (item.category) {
-      const icon = categoryIcons[item.category.toLowerCase()];
-      if (icon) return icon;
-    }
-
-    // Check name for specific services
-    const nameToIcon: Record<string, string> = {
-      phoenix: '🔥',
-      langfuse: '📝',
-      'a2a-inspector': '🔍',
-      postgres: '🐘',
-      redis: '💾',
-      kafka: '📨',
-      elasticsearch: '🔎',
-      grafana: '📊',
-      prometheus: '📈',
-    };
-
-    const nameLower = item.name.toLowerCase();
-    for (const [key, icon] of Object.entries(nameToIcon)) {
-      if (nameLower.includes(key)) {
-        return icon;
-      }
-    }
-
-    // Default based on type
-    if (item.type === 'agent') return '🤖';
-    if (item.type === 'service') return '⚙️';
-
-    // Final fallback
-    return '📦';
+  // Return original icon if it exists and is not a placeholder
+  if (item.icon && !item.icon.includes('example.com')) {
+    return item.icon;
   }
 
-  // Return original icon if it's not a placeholder
-  return item.icon ?? '📦';
+  // Try category-based icon
+  const categoryIcon = getIconByCategory(item.category);
+  if (categoryIcon) return categoryIcon;
+
+  // Try name-based icon
+  const nameIcon = getIconByName(item.name);
+  if (nameIcon) return nameIcon;
+
+  // Try type-based icon
+  const typeIcon = getIconByType(item.type);
+  if (typeIcon) return typeIcon;
+
+  // Final fallback
+  return '📦';
 }
 
 export function transformGitHubItemToMarketplaceItem(
@@ -344,11 +355,8 @@ export async function fetchMarketplaceItemsFromSource(
                        installedItems.has(item.name.toLowerCase()) ||
                        installedItems.has(generateItemIdFromName(item.name));
 
-      let detectionMethod = 'crd';
-
       if (!isInstalled && item.ark?.helmReleaseName && item.ark?.namespace) {
         isInstalled = await checkLabeledDeployment(item.name, item.ark.namespace);
-        detectionMethod = isInstalled ? 'labeled-deployment' : 'not-installed';
       }
 
       return transformGitHubItemToMarketplaceItem(item, isInstalled, urlSource);

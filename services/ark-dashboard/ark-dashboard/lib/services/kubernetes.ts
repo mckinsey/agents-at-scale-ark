@@ -1,9 +1,4 @@
-import { APIClient } from '@/lib/api/client';
-
-// Create a server-side API client for ark-api
-// Use Kubernetes service DNS when running in cluster, fallback to localhost for local dev
-const ARK_API_URL = process.env.ARK_API_URL || 'http://ark-api.default.svc.cluster.local';
-const arkApiClient = new APIClient(ARK_API_URL);
+import { apiClient } from '@/lib/api/client';
 
 interface DeploymentCondition {
   type: string;
@@ -52,8 +47,8 @@ export async function checkLabeledDeployment(
       labelSelector,
     });
 
-    const deploymentList = await arkApiClient.get<DeploymentList>(
-      `/v1/resources/apis/apps/v1/Deployment?${params.toString()}`
+    const deploymentList = await apiClient.get<DeploymentList>(
+      `/api/v1/resources/apis/apps/v1/Deployment?${params.toString()}`
     );
 
     if (!deploymentList.items || deploymentList.items.length === 0) {
