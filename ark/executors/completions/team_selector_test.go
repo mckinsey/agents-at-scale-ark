@@ -792,7 +792,7 @@ func TestSelectMember_WithInvalidAgent(t *testing.T) {
 	assert.Nil(t, member)
 }
 
-func TestSelectMember_ReturnsErrorOnNoMessages(t *testing.T) {
+func TestSelectMember_ReturnsErrorWhenNoToolCalled(t *testing.T) {
 	members := []TeamMember{
 		&mockTeamMember{name: "agent1"},
 	}
@@ -810,7 +810,7 @@ func TestSelectMember_ReturnsErrorOnNoMessages(t *testing.T) {
 	_, err = team.selectMember(ctx, []Message{}, tmpl, "agent1", "roles", nil)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "selector agent returned no messages")
+	assert.Contains(t, err.Error(), "selector agent did not call a tool")
 }
 
 func TestLoadSelectorAgent_WithMock(t *testing.T) {
@@ -820,7 +820,7 @@ func TestLoadSelectorAgent_WithMock(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	agent, err := team.loadSelectorAgent(ctx)
+	agent, err := team.loadSelectorAgent(ctx, nil)
 
 	require.NoError(t, err)
 	assert.NotNil(t, agent)
@@ -833,7 +833,7 @@ func TestLoadSelectorAgent_RequiresSelectorSpec(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	_, err := team.loadSelectorAgent(ctx)
+	_, err := team.loadSelectorAgent(ctx, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "selector agent must be specified")

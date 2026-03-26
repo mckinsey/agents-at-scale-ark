@@ -47,11 +47,7 @@ func (m *mockSelectorAgent) Execute(ctx context.Context, userInput Message, hist
 	if m.returnEmpty {
 		return &ExecutionResult{Messages: []Message{}}, nil
 	}
-	return &ExecutionResult{
-		Messages: []Message{
-			NewAssistantMessage(m.returnName),
-		},
-	}, nil
+	return &ExecutionResult{Messages: []Message{}}, &SelectNextConversantResult{Conversant: m.returnName}
 }
 
 func (m *mockSelectorAgent) FullName() string {

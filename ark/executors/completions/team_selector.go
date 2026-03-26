@@ -17,11 +17,10 @@ import (
 
 const defaultSelectorPrompt = `You are in a role play game. The following roles are available:
 {{.Roles}}.
-Read the following conversation. Then select the next role from {{.Participants}} to play. Only return the role.
+Read the following conversation and select the next role from {{.Participants}} to play.
+Use the select-next-conversant tool to select the next role, or use the terminate tool to end the conversation.
 
-{{.History}}
-
-Read the above conversation. Then select the next role from {{.Participants}} to play. Only return the role.`
+{{.History}}`
 
 type SelectorTemplateData struct {
 	Roles        string
@@ -70,8 +69,7 @@ func buildRoles(members []TeamMember) string {
 	return strings.Join(roles, ", ")
 }
 
-func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, error) {
-	// Check for override selector agent first (used in tests)
+func (t *Team) loadSelectorAgent(ctx context.Context, candidateMembers []TeamMember) (SelectorAgentInterface, error) {
 	if t.mockSelectorAgent != nil {
 		return t.mockSelectorAgent, nil
 	}
@@ -93,11 +91,29 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, e
 		return nil, fmt.Errorf("failed to create selector agent: %w", err)
 	}
 
+	if agent.Tools != nil {
+		_ = agent.Tools.Close()
+	}
+
+	candidateNames := make([]string, 0, len(candidateMembers))
+	for _, m := range candidateMembers {
+		candidateNames = append(candidateNames, m.GetName())
+	}
+
+	selectorTools := NewToolRegistry(nil, t.telemetry.ToolRecorder(), t.eventing.ToolRecorder())
+	selectorTools.RegisterTool(GetTerminateTool(), &TerminateExecutor{})
+	selectorTools.RegisterTool(GetSelectNextConversantTool(candidateNames), &SelectNextConversantExecutor{})
+	agent.Tools = selectorTools
+
 	return agent, nil
 }
 
-//nolint:gocognit // Complex function handling selector agent logic, but cohesive responsibilities
 func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *template.Template, participantsList, rolesList string, candidateMembers []TeamMember) (TeamMember, error) {
+	membersToSearch := t.Members
+	if candidateMembers != nil {
+		membersToSearch = candidateMembers
+	}
+
 	history := buildHistory(messages)
 	data := SelectorTemplateData{
 		Roles:        rolesList,
@@ -110,54 +126,31 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 		return nil, err
 	}
 
-	selectorAgent, err := t.loadSelectorAgent(ctx)
+	selectorAgent, err := t.loadSelectorAgent(ctx, membersToSearch)
 	if err != nil {
 		return nil, err
 	}
 
-	result, err := selectorAgent.Execute(ctx, NewUserMessage("Select the next participant to respond."), []Message{NewSystemMessage(buf.String())}, nil, nil)
-	if err != nil {
-		if IsTerminateTeam(err) {
-			return nil, err
-		}
-		return nil, fmt.Errorf("selector agent call failed: %w", err)
-	}
+	_, err = selectorAgent.Execute(ctx, NewUserMessage("Select the next participant to respond."), []Message{NewSystemMessage(buf.String())}, nil, nil)
 
-	if len(result.Messages) == 0 {
-		return nil, fmt.Errorf("selector agent returned no messages")
-	}
-
-	var selectedName string
-	lastMsg := result.Messages[len(result.Messages)-1]
-	if lastMsg.OfAssistant != nil && lastMsg.OfAssistant.Content.OfString.Value != "" {
-		selectedName = strings.TrimSpace(lastMsg.OfAssistant.Content.OfString.Value)
+	var selectErr *SelectNextConversantResult
+	switch {
+	case errors.As(err, &selectErr):
 		logger := logf.FromContext(ctx)
-		logger.Info("Selector chose", "selectedName", selectedName)
-
-	} else {
-		return nil, fmt.Errorf("selector agent returned invalid response")
-	}
-
-	// Use candidateMembers if provided, otherwise use all team members
-	membersToSearch := t.Members
-	if candidateMembers != nil {
-		membersToSearch = candidateMembers
-	}
-
-	// Find selected member
-	for _, member := range membersToSearch {
-		if member.GetName() == selectedName {
-			return member, nil
+		logger.Info("Selector chose", "selectedName", selectErr.Conversant)
+		for _, member := range membersToSearch {
+			if member.GetName() == selectErr.Conversant {
+				return member, nil
+			}
 		}
-	}
-
-	if len(membersToSearch) > 0 {
-		// This error will allow us to message to the user that the selector's response doesn't match an agent
-		err := &InvalidAgentError{SelectedName: selectedName}
+		return nil, &InvalidAgentError{SelectedName: selectErr.Conversant}
+	case IsTerminateTeam(err):
 		return nil, err
+	case err != nil:
+		return nil, fmt.Errorf("selector agent call failed: %w", err)
+	default:
+		return nil, fmt.Errorf("selector agent did not call a tool")
 	}
-
-	return nil, fmt.Errorf("no members available")
 }
 
 // determineNextMember routes to the appropriate selection logic based on whether graph constraints exist.

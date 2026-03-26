@@ -3,6 +3,7 @@ package completions
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -367,6 +368,56 @@ func GetTerminateTool() ToolDefinition {
 				},
 			},
 			"required": []string{"response"},
+		},
+	}
+}
+
+type SelectNextConversantResult struct {
+	Conversant string
+}
+
+func (s *SelectNextConversantResult) Error() string {
+	return fmt.Sprintf("selected conversant: %s", s.Conversant)
+}
+
+func IsSelectNextConversant(err error) bool {
+	if err == nil {
+		return false
+	}
+	var selectErr *SelectNextConversantResult
+	return errors.As(err, &selectErr)
+}
+
+type SelectNextConversantExecutor struct{}
+
+func (s *SelectNextConversantExecutor) Execute(_ context.Context, call ToolCall) (ToolResult, error) {
+	var arguments map[string]any
+	if err := json.Unmarshal([]byte(call.Function.Arguments), &arguments); err != nil {
+		logf.Log.Info("Error parsing tool arguments", "ToolCall", call)
+		arguments = make(map[string]any)
+	}
+	if conversant, exists := arguments["conversant"]; exists {
+		if name, ok := conversant.(string); ok {
+			return ToolResult{ID: call.ID, Name: call.Function.Name, Content: name}, &SelectNextConversantResult{Conversant: name}
+		}
+	}
+	return ToolResult{ID: call.ID, Name: call.Function.Name, Content: ""}, fmt.Errorf("no conversant specified")
+}
+
+func GetSelectNextConversantTool(candidateNames []string) ToolDefinition {
+	return ToolDefinition{
+		Name:        "select-next-conversant",
+		Description: "Select the next conversant to speak in the conversation",
+		Parameters: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"conversant": map[string]any{
+					"type":        "string",
+					"description": "The name of the next conversant to select",
+					"enum":        candidateNames,
+				},
+			},
+			"required": []string{"conversant"},
 		},
 	}
 }
