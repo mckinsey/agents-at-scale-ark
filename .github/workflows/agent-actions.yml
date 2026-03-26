@@ -11,7 +11,7 @@
 #   AGENT_GITHUB_TOKEN      - PAT for a bot user (optional, for custom identity)
 #                             Falls back to GITHUB_TOKEN if not set.
 
-name: Agent Actions
+name: Ark Agent
 
 on:
   issue_comment:
@@ -30,7 +30,7 @@ on:
         type: string
 
 env:
-  TRIGGER_PHRASE: "@claude"
+  TRIGGER_PHRASE: "@ark"
   ALLOWED_USERS: "dwmkerr,Nab-0,havasik,skazinka,amanvr,peter-kismarczi,daniele-marostica,giorgio-acquati-mck,poornimanagQB"
 
 permissions:
@@ -49,11 +49,11 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (
         contains(format('{0}', env.ALLOWED_USERS), github.event.sender.login) && (
-          (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-          (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
-          (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
-          (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'claude')) ||
-          (github.event_name == 'issues' && contains(github.event.issue.body, '@claude'))
+          (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@ark')) ||
+          (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@ark')) ||
+          (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@ark')) ||
+          (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'ark-agent')) ||
+          (github.event_name == 'issues' && contains(github.event.issue.body, '@ark'))
         )
       )
     runs-on: ubuntu-latest
