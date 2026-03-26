@@ -6,11 +6,10 @@
 #
 # See: openspec/changes/2026-03-26-agent-actions/proposal.md
 #
-# Identity: Configure a GitHub App for a custom bot identity.
 # Required secrets:
 #   ANTHROPIC_API_KEY       - Anthropic API key for Claude Code
-#   AGENT_APP_ID            - GitHub App ID (optional, for custom identity)
-#   AGENT_APP_PRIVATE_KEY   - GitHub App private key PEM (optional, for custom identity)
+#   AGENT_GITHUB_TOKEN      - PAT for a bot user (optional, for custom identity)
+#                             Falls back to GITHUB_TOKEN if not set.
 
 name: Agent Actions
 
@@ -61,41 +60,11 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Generate GitHub App token
-        id: app-token
-        if: vars.AGENT_APP_ID != ''
-        env:
-          APP_ID: ${{ vars.AGENT_APP_ID }}
-          APP_PRIVATE_KEY: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
-        run: |
-          # Generate JWT for GitHub App authentication
-          NOW=$(date +%s)
-          IAT=$((NOW - 60))
-          EXP=$((NOW + 600))
-          HEADER=$(echo -n '{"alg":"RS256","typ":"JWT"}' | openssl base64 -e -A | tr '+/' '-_' | tr -d '=')
-          PAYLOAD=$(echo -n "{\"iat\":${IAT},\"exp\":${EXP},\"iss\":\"${APP_ID}\"}" | openssl base64 -e -A | tr '+/' '-_' | tr -d '=')
-          SIGNING_INPUT="${HEADER}.${PAYLOAD}"
-          SIGNATURE=$(echo -n "$SIGNING_INPUT" | openssl dgst -sha256 -sign <(echo "$APP_PRIVATE_KEY") | openssl base64 -e -A | tr '+/' '-_' | tr -d '=')
-          JWT="${SIGNING_INPUT}.${SIGNATURE}"
-
-          # Exchange JWT for installation token
-          INSTALLATION_ID=$(curl -s -H "Authorization: Bearer ${JWT}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/installation" | jq -r '.id')
-
-          TOKEN=$(curl -s -X POST \
-            -H "Authorization: Bearer ${JWT}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/app/installations/${INSTALLATION_ID}/access_tokens" | jq -r '.token')
-
-          echo "::add-mask::${TOKEN}"
-          echo "token=${TOKEN}" >> "$GITHUB_OUTPUT"
-
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-          token: ${{ steps.app-token.outputs.token || github.token }}
+          token: ${{ secrets.AGENT_GITHUB_TOKEN || github.token }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
