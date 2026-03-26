@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,6 +23,32 @@ import (
 )
 
 const jsonNull = "null"
+
+func parseLabelSelector(selector string) (map[string]string, error) {
+	if selector == "" {
+		return nil, nil
+	}
+	result := map[string]string{}
+	for _, part := range strings.Split(selector, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if strings.Contains(part, "!=") || strings.Contains(part, " in ") || strings.Contains(part, " notin ") || strings.HasPrefix(part, "!") {
+			return nil, fmt.Errorf("unsupported label selector operator in %q, only equality (=, ==) is supported in SQL", part)
+		}
+		kv := strings.SplitN(part, "=", 2)
+		if len(kv) != 2 {
+			return nil, fmt.Errorf("invalid label selector %q", part)
+		}
+		key := strings.TrimSuffix(strings.TrimSpace(kv[0]), "=")
+		result[strings.TrimSpace(key)] = strings.TrimSpace(kv[1])
+	}
+	if len(result) == 0 {
+		return nil, nil
+	}
+	return result, nil
+}
 
 type Config struct {
 	Host         string
@@ -365,6 +392,19 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 		argIndex++
 	}
 
+	if opts.LabelSelector != "" {
+		labelMap, err := parseLabelSelector(opts.LabelSelector)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to parse label selector: %w", err)
+		}
+		if labelMap != nil {
+			labelJSON, _ := json.Marshal(labelMap)
+			query += fmt.Sprintf(" AND labels @> $%d::jsonb", argIndex)
+			args = append(args, string(labelJSON))
+			argIndex++
+		}
+	}
+
 	if opts.Continue != "" {
 		cursor, err := strconv.ParseInt(opts.Continue, 10, 64)
 		if err == nil && cursor > 0 {
@@ -591,6 +631,11 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 	ch := make(chan watch.Event, 100)
 	key := fmt.Sprintf("%s/%s", kind, namespace)
 
+	labelFilter, err := parseLabelSelector(opts.LabelSelector)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse label selector: %w", err)
+	}
+
 	w := &postgresWatcher{
 		ch:          ch,
 		outCh:       make(chan watch.Event, 100),
@@ -599,6 +644,7 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 		key:         key,
 		kind:        kind,
 		ns:          namespace,
+		labelFilter: labelFilter,
 		ctx:         ctx,
 		done:        make(chan struct{}),
 		initialList: true,
@@ -785,6 +831,7 @@ type postgresWatcher struct {
 	key         string
 	kind        string
 	ns          string
+	labelFilter map[string]string
 	ctx         context.Context
 	done        chan struct{}
 	stopped            atomic.Bool
@@ -897,9 +944,17 @@ func (w *postgresWatcher) relist() {
 		WHERE kind = $1 AND resource_version > $2`
 	args := []interface{}{w.kind, lastRV}
 
+	argIndex := 3
 	if w.ns != "" {
-		query += ` AND namespace = $3`
+		query += fmt.Sprintf(` AND namespace = $%d`, argIndex)
 		args = append(args, w.ns)
+		argIndex++
+	}
+
+	if w.labelFilter != nil {
+		labelJSON, _ := json.Marshal(w.labelFilter)
+		query += fmt.Sprintf(` AND labels @> $%d::jsonb`, argIndex)
+		args = append(args, string(labelJSON))
 	}
 
 	query += ` ORDER BY resource_version ASC`
