@@ -17,7 +17,6 @@ class TeamsPage(BasePage):
     MAX_TURNS_INPUT = "input[name='maxTurns'], input[placeholder*='turns' i], input[type='number'], input[name='max']"
     MEMBERS_SELECT = "button:has-text('Select'), [role='combobox']:has-text('Select'), button:has-text('Add')"
     SAVE_BUTTON = "button:has-text('Add Team'), button:has-text('Create'), button:has-text('Save'), button[type='submit']"
-    SUCCESS_POPUP = "[role='alert'], [role='status'], .notification, .toast, div:has-text('success'), div:has-text('Success'), div:has-text('created'), div:has-text('Created'), div:has-text('deleted'), div:has-text('Deleted')"
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
     CONFIRM_DELETE_BUTTON = "button:has-text('Delete'), button:has-text('Confirm'), button:has-text('Yes')"
 
@@ -109,12 +108,7 @@ class TeamsPage(BasePage):
         self.page.locator("button:has-text('Create Team')").first.click()
         self.wait_for_load_state("domcontentloaded")
 
-        try:
-            self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=10000)
-            popup_visible = True
-        except PlaywrightTimeoutError:
-            popup_visible = False
-
+        popup_visible = self._check_toast_popup()
         self.navigate_to_teams_tab()
         in_table = self.is_team_in_table(team_name)
 
@@ -166,12 +160,7 @@ class TeamsPage(BasePage):
         save_button.click(force=True)
         self.wait_for_load_state("domcontentloaded")
 
-        try:
-            self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
-            popup_visible = True
-        except PlaywrightTimeoutError:
-            logger.debug("Success popup not visible")
-            popup_visible = False
+        popup_visible = self._check_toast_popup()
 
         try:
             self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=10000)
@@ -220,9 +209,9 @@ class TeamsPage(BasePage):
             btn.click(force=True)
 
         self.wait_for_load_state("domcontentloaded")
-        popup_visible = self._check_success_popup()
+        popup_visible = self._check_toast_popup()
         self.navigate_to_teams_tab()
-        deleted_from_table = not self.is_team_in_table(team_name)
+        deleted_from_table = not self.is_team_in_table(team_name, retries=0)
 
         return {
             "team_name": team_name,
@@ -242,14 +231,6 @@ class TeamsPage(BasePage):
             "popup_visible": False,
             "deleted_from_table": False
         }
-
-    def _check_success_popup(self) -> bool:
-        try:
-            self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
-            return True
-        except PlaywrightTimeoutError:
-            logger.debug("Success popup not visible")
-            return False
 
     def get_strategy_options(self) -> list[str]:
         self.page.locator(self.ADD_TEAM_BUTTON).first.click()
@@ -315,14 +296,17 @@ class TeamsPage(BasePage):
         self.select_strategy_in_form("Sequential")
 
         loops_visible = self.is_loops_checkbox_visible()
-        if loops and loops_visible:
-            checkbox = self.page.locator(
-                "label:has-text('Enable loops')"
-            ).locator("xpath=preceding-sibling::input[@type='checkbox']").first
-            checkbox.dispatch_event("click")
-            self.page.locator("input[name='maxTurns'], input[type='number']").first.wait_for(
-                state="visible", timeout=8000
-            )
+        if loops:
+            if loops_visible:
+                checkbox = self.page.locator(
+                    "label:has-text('Enable loops')"
+                ).locator("xpath=preceding-sibling::input[@type='checkbox']").first
+                checkbox.dispatch_event("click")
+                self.page.locator("input[name='maxTurns'], input[type='number']").first.wait_for(
+                    state="visible", timeout=8000
+                )
+            else:
+                logger.warning("Loops checkbox not visible")
 
         max_turns_visible = self.is_max_turns_field_visible()
         if loops and max_turns_visible:
@@ -347,15 +331,7 @@ class TeamsPage(BasePage):
         create_btn.click(force=True)
         self.wait_for_load_state("domcontentloaded")
 
-        popup_visible = False
-        try:
-            popup = self.page.locator(self.SUCCESS_POPUP).first
-            popup.wait_for(state="visible", timeout=10000)
-            popup_text = popup.inner_text().lower()
-            is_error = any(w in popup_text for w in ("error", "fail", "denied", "invalid", "cannot", "only be set"))
-            popup_visible = not is_error
-        except PlaywrightTimeoutError:
-            pass
+        popup_visible = self._check_toast_popup()
 
         self.wait_for_modal_close()
         self.navigate_to_teams_tab()

@@ -1,15 +1,16 @@
 import json
 import logging
-import os
 import pytest
 import subprocess
 import time
 import urllib.request
+from collections import defaultdict
 from pathlib import Path
 from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 
 logger = logging.getLogger(__name__)
 
+REQUIRED_SERVICES = ['ark-dashboard', 'ark-api']
 
 def pytest_addoption(parser):
     try:
@@ -33,21 +34,23 @@ def get_ark_pods():
         return []
     
     pods_data = json.loads(result.stdout)
-    ark_pods = []
+    ark_pods = defaultdict(list)
     
     for pod in pods_data.get('items', []):
-        pod_name = pod['metadata']['name']
-        if any(name in pod_name for name in ['ark-dashboard', 'ark-api', 'ark-mcp']):
+        pod_labels = pod['metadata']['labels']
+        service = pod_labels.get('app.kubernetes.io/name') or pod_labels.get('app')
+        if service in REQUIRED_SERVICES:
             ready = False
             for condition in pod.get('status', {}).get('conditions', []):
                 if condition.get('type') == 'Ready' and condition.get('status') == 'True':
                     ready = True
                     break
-            ark_pods.append({
-                'name': pod_name,
+            ark_pods[service].append({
+                'name': pod['metadata']['name'],
                 'status': pod['status']['phase'],
                 'ready': ready
             })
+    logger.info(f"Ark pod statuses: {ark_pods}")
     
     return ark_pods
 
@@ -57,9 +60,9 @@ def is_ark_running():
     if not pods:
         return False
     
-    required_services = ['ark-dashboard', 'ark-api', 'ark-mcp']
+    required_services = REQUIRED_SERVICES
     for service in required_services:
-        service_pods = [p for p in pods if service in p['name']]
+        service_pods = pods.get(service, [])
         if not any(p['status'] == 'Running' and p['ready'] for p in service_pods):
             return False
     return True
@@ -75,27 +78,14 @@ def install_ark():
 
 def wait_for_pods_ready():
     logger.info("Waiting for ARK pods to be ready...")
-    required_services = ['ark-dashboard', 'ark-api', 'ark-mcp']
     
     for attempt in range(60):
-        pods = get_ark_pods()
-        if not pods:
-            time.sleep(5)
-            continue
-            
-        all_ready = True
-        for service in required_services:
-            service_pods = [p for p in pods if service in p['name']]
-            if not any(p['status'] == 'Running' and p['ready'] for p in service_pods):
-                all_ready = False
-                break
-        
-        if all_ready:
-            ready_pods = [p for p in pods if p['status'] == 'Running' and p['ready']]
-            pod_statuses = [f"{p['name']}: {p['status']}" for p in ready_pods]
-            logger.info(f"Attempt {attempt + 1}/60: {', '.join(pod_statuses)}")
+        logger.info(f"Attempt {attempt + 1}/60")
+        if is_ark_running():
             logger.info("All required ARK services have at least one ready pod")
             return
+        else:
+            logger.info(f"Not yet ready, trying again")
         
         time.sleep(5)
     pytest.exit("ARK pods not ready", returncode=1)
