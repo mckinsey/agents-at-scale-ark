@@ -1,0 +1,92 @@
+# Agent Actions - Claude Code integration for the Ark team.
+#
+# Vendored from:
+#   - https://github.com/anthropics/claude-code-action
+#   - https://github.com/dwmkerr/agent-actions
+#
+# See: openspec/changes/2026-03-26-agent-actions/proposal.md
+#
+# Required secrets:
+#   ANTHROPIC_API_KEY       - Anthropic API key for Claude Code
+#   AGENT_GITHUB_TOKEN      - PAT for a bot user (optional, for custom identity)
+#                             Falls back to GITHUB_TOKEN if not set.
+
+name: Ark Agent
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+  issues:
+    types: [opened, labeled]
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: "Prompt to send to Claude Code"
+        required: true
+        type: string
+
+env:
+  TRIGGER_PHRASE: "@ark"
+  ALLOWED_USERS: "dwmkerr,Nab-0,havasik,skazinka,amanvr,peter-kismarczi,daniele-marostica,giorgio-acquati-mck,poornimanagQB"
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: read
+
+concurrency:
+  group: agent-actions-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  claude:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (
+        contains(format('{0}', env.ALLOWED_USERS), github.event.sender.login) && (
+          (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@ark')) ||
+          (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@ark')) ||
+          (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@ark')) ||
+          (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'ark-agent')) ||
+          (github.event_name == 'issues' && contains(github.event.issue.body, '@ark'))
+        )
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          token: ${{ secrets.AGENT_GITHUB_TOKEN || github.token }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Determine prompt
+        id: prompt
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "text=${{ github.event.inputs.prompt }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "issue_comment" ]; then
+            echo "text=${{ github.event.comment.body }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "pull_request_review_comment" ]; then
+            echo "text=${{ github.event.comment.body }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "pull_request_review" ]; then
+            echo "text=${{ github.event.review.body }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "issues" ]; then
+            echo "text=${{ github.event.issue.body }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # TODO: Install and run Claude Code CLI
+      # TODO: Post response as comment on issue/PR
+      - name: Placeholder
+        run: echo "Agent Actions workflow triggered. Prompt - ${{ steps.prompt.outputs.text }}"
