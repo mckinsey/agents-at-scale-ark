@@ -1465,7 +1465,7 @@ export interface paths {
          *         version: API version (e.g., 'v1', 'v1alpha1')
          *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
          *         namespace: The namespace (defaults to current context)
-         *         labelSelector: Kubernetes label selector for filtering resources
+         *         label_selector: Kubernetes label selector for filtering resources
          *         workflowName: Filter by workflow name (partial match, case insensitive)
          *         workflowTemplateName: Filter by workflow template name (partial match, case insensitive)
          *         status: Filter by workflow status
