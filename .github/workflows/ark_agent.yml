@@ -156,3 +156,15 @@ jobs:
           GITHUB_ACTION_PATH: /tmp/claude-code-action
         run: cd /tmp/claude-code-action && bun run src/entrypoints/run.ts
 
+      # Post a comment on failure so the user knows something went wrong
+      - name: Post failure comment
+        if: failure() && steps.check.outputs.run == 'true' && github.event_name != 'workflow_dispatch'
+        env:
+          GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN || github.token }}
+        run: |
+          ISSUE_NUMBER="${{ github.event.issue.number }}"
+          if [ -n "$ISSUE_NUMBER" ]; then
+            RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            gh api "repos/${{ github.repository }}/issues/$ISSUE_NUMBER/comments" \
+              -f body="> ❌ Ark Agent failed. [View logs](${RUN_URL})"
+          fi
