@@ -48,35 +48,63 @@ permissions:
   actions: read
 
 concurrency:
-  group: agent-actions-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
+  group: ark-agent-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
   cancel-in-progress: false
 
 jobs:
   ark-agent:
-    # NOTE: env context is NOT available in jobs.<id>.if — allowed users must be
-    # inlined here. Update both this list and the env.ALLOWED_USERS value above.
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      (
-        contains('dwmkerr,Nab-0,havasik,skazinka,amanvr,peter-kismarczi,daniele-marostica,giorgio-acquati-mck,poornimanagQB', github.event.sender.login) && (
-          (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@ark')) ||
-          (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@ark')) ||
-          (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@ark')) ||
-          (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'ark-agent')) ||
-          (github.event_name == 'issues' && contains(github.event.issue.body, '@ark'))
-        )
-      )
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
+      - name: Check trigger and access
+        id: check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          SENDER: ${{ github.event.sender.login }}
+          COMMENT_BODY: ${{ github.event.comment.body || github.event.review.body || '' }}
+          ISSUE_BODY: ${{ github.event.issue.body || '' }}
+          ISSUE_LABELS: ${{ join(github.event.issue.labels.*.name, ',') }}
+        run: |
+          # workflow_dispatch always passes
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Check the sender is in the allowed users list
+          if ! echo ",$ALLOWED_USERS," | grep -q ",$SENDER,"; then
+            echo "User $SENDER is not in ALLOWED_USERS, skipping"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Check the trigger phrase is present
+          TRIGGERED=false
+          case "$EVENT_NAME" in
+            issue_comment|pull_request_review_comment)
+              echo "$COMMENT_BODY" | grep -q "$TRIGGER_PHRASE" && TRIGGERED=true ;;
+            pull_request_review)
+              echo "$COMMENT_BODY" | grep -q "$TRIGGER_PHRASE" && TRIGGERED=true ;;
+            issues)
+              echo "$ISSUE_LABELS" | grep -q "ark-agent" && TRIGGERED=true
+              echo "$ISSUE_BODY" | grep -q "$TRIGGER_PHRASE" && TRIGGERED=true ;;
+          esac
+
+          echo "run=$TRIGGERED" >> "$GITHUB_OUTPUT"
+          if [ "$TRIGGERED" = "false" ]; then
+            echo "Trigger phrase '$TRIGGER_PHRASE' not found, skipping"
+          fi
+
       - name: Checkout repository
+        if: steps.check.outputs.run == 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
           token: ${{ secrets.AGENT_GITHUB_TOKEN || github.token }}
 
       - name: Setup Node.js
+        if: steps.check.outputs.run == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -88,15 +116,18 @@ jobs:
       # and comment posting. It reads config from INPUT_* env vars and the
       # standard GITHUB_* env vars that Actions provides.
       - name: Clone claude-code-action
+        if: steps.check.outputs.run == 'true'
         run: |
           git clone --depth 1 --branch "$CLAUDE_CODE_ACTION_REF" \
             https://github.com/anthropics/claude-code-action.git \
             /tmp/claude-code-action
 
       - name: Install bun
+        if: steps.check.outputs.run == 'true'
         run: curl -fsSL https://bun.sh/install | bash && echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
+        if: steps.check.outputs.run == 'true'
         run: cd /tmp/claude-code-action && bun install --production
 
       # The entrypoint reads INPUT_* env vars (same as action.yml inputs)
@@ -104,14 +135,12 @@ jobs:
       # the event context, installs Claude Code CLI, runs it, and posts
       # the result as a comment.
       - name: Run Ark Agent
+        if: steps.check.outputs.run == 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN || github.token }}
-          # claude-code-action reads these INPUT_* vars as if they were action inputs
           INPUT_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           INPUT_TRIGGER_PHRASE: "@ark"
           INPUT_PROMPT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prompt || '' }}
-          # GITHUB_ACTION_PATH is normally set by Actions for composite actions.
-          # Point it at the cloned repo so the entrypoint can find its scripts.
           GITHUB_ACTION_PATH: /tmp/claude-code-action
         run: cd /tmp/claude-code-action && bun run src/entrypoints/run.ts
