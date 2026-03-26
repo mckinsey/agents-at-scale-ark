@@ -2464,6 +2464,20 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * AnthropicConfig
+         * @description Anthropic model configuration.
+         */
+        AnthropicConfig: {
+            /** Apikey */
+            apiKey: string | components["schemas"]["ModelValueSource"];
+            /** Baseurl */
+            baseUrl: string | components["schemas"]["ModelValueSource"];
+            /** Headers */
+            headers?: components["schemas"]["AgentHeader-Input"][] | null;
+            /** Version */
+            version?: string | components["schemas"]["ModelValueSource"] | null;
+        };
+        /**
          * ArkService
          * @description Response model for a single ARK service.
          *
@@ -3558,6 +3572,7 @@ export interface components {
          * @description Model configuration container.
          */
         ModelConfig: {
+            anthropic?: components["schemas"]["AnthropicConfig"] | null;
             azure?: components["schemas"]["AzureConfig"] | null;
             bedrock?: components["schemas"]["BedrockConfig"] | null;
             openai?: components["schemas"]["OpenAIConfig"] | null;
