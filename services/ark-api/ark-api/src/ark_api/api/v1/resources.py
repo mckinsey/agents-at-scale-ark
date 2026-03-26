@@ -162,7 +162,7 @@ async def list_grouped_resources(
     version: str,
     kind: str,
     namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
-    label_selector: Optional[str] = Query(None, description="Kubernetes label selector (e.g., 'app=nginx,env=prod')", alias="labelSelector"),
+    label_selector: Optional[str] = Query(None, alias="labelSelector", description="Kubernetes label selector (e.g., 'app=nginx,env=prod')"),
     workflowName: Optional[str] = Query(None, description="Filter by workflow name (partial match, case insensitive)"),
     workflowTemplateName: Optional[str] = Query(None, description="Filter by workflow template name (partial match, case insensitive)"),
     status: Optional[str] = Query(None, description="Filter by workflow status (case insensitive). Options: running, succeeded, failed (which matches both failed and error), pending")
