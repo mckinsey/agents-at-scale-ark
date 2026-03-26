@@ -28,7 +28,7 @@ class MyExecutor(BaseExecutor):
     async def execute_agent(self, request: ExecutionEngineRequest) -> list[Message]:
         # request.agent has the agent config (name, prompt, model, parameters)
         # request.userInput has the user message
-        # request.tools has available tool definitions
+        # request.mcpServers has MCP server connection info (url, transport, headers, tool allowlist)
         # request.conversationId has the conversation threading ID (from A2A contextId)
         prompt = self._resolve_prompt(request.agent)
         return [Message(role="assistant", content=f"Echo: {request.userInput.content}")]
@@ -56,12 +56,12 @@ The engine serves an agent card at `/.well-known/agent-card.json` that declares 
 
 When Ark dispatches a query to your engine:
 
-1. The A2A message carries a `QueryRef` (name + namespace) via the query extension
+1. The A2A message carries only a `QueryRef` (name + namespace) via the query extension — no agent config, credentials, or tool definitions cross the wire
 2. The SDK extracts the QueryRef and the A2A `contextId` (conversation threading)
-3. The SDK fetches the Query CRD and resolves agent config, model, and tools
+3. Within your executor pod, the SDK fetches the Query CRD and resolves agent config, model (including API keys), and MCP servers from the cluster using the pod's service account
 4. Your `execute_agent()` receives a fully populated `ExecutionEngineRequest` with `conversationId`
 
-You never interact with the extension directly — the SDK handles resolution transparently.
+Secrets never leave the cluster over A2A — they are resolved locally within your executor pod. You never interact with the extension or Kubernetes APIs directly.
 
 ## Extension Spec
 
@@ -139,10 +139,10 @@ Import from `ark_sdk.executor`:
 | Type | Purpose |
 |------|---------|
 | `BaseExecutor` | Abstract base class — implement `execute_agent()` |
-| `ExecutionEngineRequest` | Input to your executor (agent, tools, userInput, conversationId) |
+| `ExecutionEngineRequest` | Input to your executor (agent, mcpServers, userInput, conversationId) |
 | `AgentConfig` | Agent name, namespace, prompt, model, parameters |
 | `Message` | Conversation message (role + content) |
-| `ToolDefinition` | Tool name, description, parameters schema |
+| `MCPServerConfig` | MCP server connection info (name, url, transport, timeout, headers, tools allowlist) |
 | `Model` | Model name, provider type, config |
 
 Import from `ark_sdk.executor_app`:
@@ -150,3 +150,21 @@ Import from `ark_sdk.executor_app`:
 | Type | Purpose |
 |------|---------|
 | `ExecutorApp` | Wraps your executor in an A2A server with health check |
+
+## MCP Tools
+
+When an agent has MCP-type tools, the SDK resolves the MCPServer CRDs and provides connection info via `request.mcpServers`. Each entry contains everything needed to establish an MCP client connection:
+
+```python
+for server in request.mcpServers:
+    # server.name      — MCPServer resource name
+    # server.url       — resolved server address
+    # server.transport — "http" or "sse"
+    # server.timeout   — e.g. "30s"
+    # server.headers   — resolved headers (secrets already dereferenced)
+    # server.tools     — allowlist of tool names this agent can use
+```
+
+Your executor connects to each MCP server using its own MCP client (e.g., via LangChain, CrewAI, or the MCP SDK directly). The `tools` list is an allowlist — only register and use tools that appear in this list, even if the server exposes additional tools.
+
+Non-MCP tool types (http, agent, team, builtin) are not included in `mcpServers`.
