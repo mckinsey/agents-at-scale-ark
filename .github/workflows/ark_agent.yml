@@ -14,8 +14,14 @@
 #
 # Required secrets:
 #   ANTHROPIC_API_KEY       - Anthropic API key for Claude Code
-#   AGENT_GITHUB_TOKEN      - PAT for a bot user (optional, for custom identity)
-#                             Falls back to GITHUB_TOKEN if not set.
+#
+# Optional secrets:
+#   AGENT_GITHUB_TOKEN      - PAT for a bot user identity. If set, overrides
+#                             OIDC App token for all GitHub operations.
+#
+# Authentication: Uses OIDC token exchange via Anthropic's GitHub App by
+# default (same as anthropics/claude-code-action). Set AGENT_GITHUB_TOKEN
+# to override with a PAT instead.
 #
 # Usage:
 #   Comment "@ark" on any issue or PR to trigger the agent.
@@ -148,8 +154,9 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN || github.token }}
-          # Skip OIDC token exchange — use our PAT or GITHUB_TOKEN directly
-          OVERRIDE_GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN || github.token }}
+          # Set OVERRIDE_GITHUB_TOKEN only if AGENT_GITHUB_TOKEN is configured,
+          # otherwise let the OIDC App token flow handle authentication.
+          OVERRIDE_GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
           INPUT_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           INPUT_TRIGGER_PHRASE: "@ark"
           INPUT_PROMPT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prompt || '' }}
