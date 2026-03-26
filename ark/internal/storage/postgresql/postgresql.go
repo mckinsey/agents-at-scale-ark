@@ -621,11 +621,7 @@ func (p *PostgreSQLBackend) Delete(ctx context.Context, kind, namespace, name st
 
 	affected, _ := result.RowsAffected()
 	if affected == 0 {
-<<<<<<< fix/postgresql-combined-fixes
-		return storage.ErrNotFound
-=======
 		return fmt.Errorf("not found")
->>>>>>> main
 	}
 
 	return nil
@@ -775,14 +771,11 @@ func (p *PostgreSQLBackend) nudgeWatchers(payload string) {
 		if obj == nil {
 			return
 		}
-<<<<<<< fix/postgresql-combined-fixes
-=======
 		if accessor, err := meta.Accessor(obj); err == nil {
 			accessor.SetName(notification.Name)
 			accessor.SetNamespace(notification.Namespace)
 			accessor.SetResourceVersion(fmt.Sprintf("%d", notification.ResourceVersion))
 		}
->>>>>>> main
 		p.sendDeleteEvent(notification.Kind, notification.Namespace, obj)
 		return
 	}
