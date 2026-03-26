@@ -53,10 +53,12 @@ concurrency:
 
 jobs:
   ark-agent:
+    # NOTE: env context is NOT available in jobs.<id>.if — allowed users must be
+    # inlined here. Update both this list and the env.ALLOWED_USERS value above.
     if: |
       github.event_name == 'workflow_dispatch' ||
       (
-        contains(format('{0}', env.ALLOWED_USERS), github.event.sender.login) && (
+        contains('dwmkerr,Nab-0,havasik,skazinka,amanvr,peter-kismarczi,daniele-marostica,giorgio-acquati-mck,poornimanagQB', github.event.sender.login) && (
           (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@ark')) ||
           (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@ark')) ||
           (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@ark')) ||
