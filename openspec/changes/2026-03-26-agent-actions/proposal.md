@@ -1,6 +1,6 @@
 ## Why
 
-We want the Ark team to be able to trigger Claude Code from GitHub - via `@claude` mentions on issues and PRs, on failed builds, or on specific PR types like Dependabot. This lets the team triage, suggest fixes, review code, or implement small changes directly from GitHub without needing a local dev environment.
+We want the Ark team to be able to trigger Claude Code from GitHub - via `@ark` mentions on issues and PRs, on failed builds, or on specific PR types like Dependabot. This lets the team triage, suggest fixes, review code, or implement small changes directly from GitHub without needing a local dev environment.
 
 The existing `feat/agent-actions` branch has a basic workflow that calls `dwmkerr/agent-actions`, which wraps `anthropics/claude-code-action`. This won't work in practice - the Ark repo can't use external GitHub Actions. We need to vendor the workflow logic directly.
 
@@ -10,17 +10,17 @@ The Ark GitHub org does not allow referencing external actions (e.g. `uses: dwmk
 
 ## What Changes
 
-### 1. Workflow: `.github/workflows/agent-actions.yml`
+### 1. Workflow: `.github/workflows/agent-actions.yml` ("Ark Agent")
 
 A self-contained workflow that vendors the logic from [`anthropics/claude-code-action`](https://github.com/anthropics/claude-code-action) and [`dwmkerr/agent-actions`](https://github.com/dwmkerr/agent-actions). Attribution to both sources in the workflow file header.
 
 Triggers:
 
-- `issue_comment`, `pull_request_review_comment`, `pull_request_review` - responds to `@claude` mentions
-- `issues` with `opened` and `labeled` - responds to `claude` label or `@claude` in issue body
-- `workflow_dispatch` with inputs: `prompt`, `issue_number`, `branch` - manual runs from Actions tab or `gh workflow run`
-- `workflow_run` on failed CI builds - agent can diagnose and suggest fixes
-- `pull_request` filtered to Dependabot PRs - agent can review, test, and merge dependency updates
+- `issue_comment`, `pull_request_review_comment`, `pull_request_review` - responds to `@ark` mentions
+- `issues` with `opened` and `labeled` - responds to `ark-agent` label or `@ark` in issue body
+- `workflow_dispatch` with inputs: `prompt` - manual runs from Actions tab or `gh workflow run`
+- `workflow_run` on failed CI builds - agent can diagnose and suggest fixes (follow-up)
+- `pull_request` filtered to Dependabot PRs - agent can review, test, and merge dependency updates (follow-up)
 
 ### 2. Claude Code execution
 
@@ -32,21 +32,28 @@ The vendored workflow installs and runs Claude Code directly via `npx @anthropic
 4. Run Claude Code with the prompt, passing `ANTHROPIC_API_KEY` from secrets
 5. Post the response as a comment on the issue/PR
 
-This is what `anthropics/claude-code-action` does under the hood. Vendoring it means copying the core logic into a composite action or shell steps within the workflow.
+This is what `anthropics/claude-code-action` does under the hood. Vendoring it means copying the core logic into shell steps within the workflow.
 
-### 3. Access control
+### 3. Identity
 
-Check `github.event.sender.login` against a configurable `allowed_users` list (env var or workflow input). Reject and comment if the user isn't authorised. Based on the pattern in `dwmkerr/agent-actions/.github/workflows/claude.yml`.
+Use `AGENT_GITHUB_TOKEN` secret - a PAT for a bot user account. All PRs, comments, and commits appear as that user. Falls back to `GITHUB_TOKEN` (github-actions[bot]) if not set.
 
-### 4. Ark-specific context
+### 4. Access control
+
+Check `github.event.sender.login` against `ALLOWED_USERS` env var. Current allowed users: `dwmkerr`, `Nab-0`, `havasik`, `skazinka`, `amanvr`, `peter-kismarczi`, `daniele-marostica`, `giorgio-acquati-mck`, `poornimanagQB`.
+
+### 5. Ark-specific context
 
 The agent runs with the repo checked out, so `CLAUDE.md` is picked up automatically. No extra config needed for basic context.
 
-MCP servers: deferred. The agent runs in a GitHub Actions container with no cluster access, so K8s-dependent MCP servers aren't viable here. File-system and git MCP servers could work but add complexity for limited gain in v1.
+MCP servers: deferred. The agent runs in a GitHub Actions container with no cluster access, so K8s-dependent MCP servers aren't viable here.
 
-### 5. Badge
+### 6. Required secrets
 
-Keep the existing badge in README.md (already on `feat/agent-actions`).
+| Secret | Required | Description |
+|--------|----------|-------------|
+| `ANTHROPIC_API_KEY` | Yes | Anthropic API key for Claude Code |
+| `AGENT_GITHUB_TOKEN` | No | PAT for bot user identity (falls back to `GITHUB_TOKEN`) |
 
 ## Options Considered
 
@@ -70,12 +77,11 @@ Not viable - external actions are blocked.
 
 ## Impact
 
-- `.github/workflows/agent-actions.yml` - rewritten (vendored logic, dispatch trigger, access control)
-- `README.md` - no change (badge already present on feat/agent-actions)
+- `.github/workflows/agent-actions.yml` - new workflow (vendored logic, dispatch trigger, access control)
+- `README.md` - badge update (already on feat/agent-actions)
 
 ## Non-goals
 
 - MCP server integration (follow-up)
-- Custom GitHub App identity (follow-up)
 - Cost tracking / token budgets (follow-up)
 - Running the agent against a live cluster
