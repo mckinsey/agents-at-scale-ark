@@ -31,7 +31,7 @@ on:
 
 env:
   TRIGGER_PHRASE: "@claude"
-  ALLOWED_USERS: "dwmkerr,Nab-0,havasik,skazinka,amanvr,StarkNDJ,peter-kismarczi,daniele-marostica,giorgio-acquati-mck,poornimanagQB,skokaina,paliwalvimal"
+  ALLOWED_USERS: "dwmkerr,Nab-0,havasik,skazinka,amanvr,peter-kismarczi,daniele-marostica,giorgio-acquati-mck,poornimanagQB"
 
 permissions:
   contents: write
