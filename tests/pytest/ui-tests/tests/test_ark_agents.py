@@ -1,3 +1,4 @@
+import logging
 import pytest
 from playwright.sync_api import Page
 from pages.secrets_page import SecretsPage
@@ -5,6 +6,8 @@ from pages.models_page import ModelsPage
 from pages.agents_page import AgentsPage
 from pages.tools_page import ToolsPage
 
+
+logger = logging.getLogger(__name__)
 
 @pytest.fixture(scope="class")
 def agent_test_resources():
@@ -51,9 +54,9 @@ class TestArkAgents:
         assert row_verification["description_visible"], "Agent description should be visible in table row"
         
         if row_verification["model_visible"]:
-            print(f"Model '{model_result['name']}' is visible in agent row")
+            logger.info(f"Model '{model_result['name']}' is visible in agent row")
         else:
-            print(f"Model '{model_result['name']}' not visible in agent row (may be truncated or displayed differently)")
+            logger.info(f"Model '{model_result['name']}' not visible in agent row (may be truncated or displayed differently)")
         
         agent_test_resources["agents"][prefix] = agent_result['name']
     
@@ -72,25 +75,25 @@ class TestArkAgents:
         if not result["delete_available"]:
             pytest.skip("Delete functionality not available")
         
-        print(f"Agent deleted: {agent_name}")
+        logger.info(f"Agent deleted: {agent_name}")
         if result["confirm_dialog_visible"]:
-            print(f"Confirm dialog verified")
+            logger.info(f"Confirm dialog verified")
         if result["confirm_button_visible"]:
-            print(f"Confirm button verified")
+            logger.info(f"Confirm button verified")
         
         models = ModelsPage(page)
         models.navigate_to_models_tab()
         model_name = agent_test_resources["models"].get(prefix)
         model_result = models.delete_model_with_verification(model_name)
         if model_result["delete_available"]:
-            print(f"Model deleted: {model_name}")
+            logger.info(f"Model deleted: {model_name}")
         
         secrets = SecretsPage(page)
         secrets.navigate_to_secrets_tab()
         secret_name = agent_test_resources["secrets"].get(prefix)
         secret_result = secrets.delete_secret_with_verification(secret_name)
         if secret_result["delete_available"]:
-            print(f"Secret deleted: {secret_name}")
+            logger.info(f"Secret deleted: {secret_name}")
     
     @pytest.mark.parametrize("prefix", [
         "agent-tool",
@@ -145,26 +148,26 @@ class TestArkAgents:
         if not result["delete_available"]:
             pytest.skip("Delete functionality not available")
         
-        print(f"Agent deleted: {agent_name}")
+        logger.info(f"Agent deleted: {agent_name}")
         
         tools = ToolsPage(page)
         tools.navigate_to_tools_tab()
         tool_name = agent_test_resources["tools"].get(prefix)
         tool_result = tools.delete_tool_with_verification(tool_name)
         if tool_result["delete_available"]:
-            print(f"Tool deleted: {tool_name}")
+            logger.info(f"Tool deleted: {tool_name}")
         
         models = ModelsPage(page)
         models.navigate_to_models_tab()
         model_name = agent_test_resources["models"].get(prefix)
         model_result = models.delete_model_with_verification(model_name)
         if model_result["delete_available"]:
-            print(f"Model deleted: {model_name}")
+            logger.info(f"Model deleted: {model_name}")
         
         secrets = SecretsPage(page)
         secrets.navigate_to_secrets_tab()
         secret_name = agent_test_resources["secrets"].get(prefix)
         secret_result = secrets.delete_secret_with_verification(secret_name)
         if secret_result["delete_available"]:
-            print(f"Secret deleted: {secret_name}")
+            logger.info(f"Secret deleted: {secret_name}")
 

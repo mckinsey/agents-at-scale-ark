@@ -1,19 +1,34 @@
 import logging
 
-from playwright.sync_api import Page
+from playwright.sync_api import Page, TimeoutError
 
 
 logger = logging.getLogger(__name__)
 
 
 class BasePage:
-    
+
+    POPUP = "[data-sonner-toast]"
+
     def __init__(self, page: Page):
         self.page = page
     
     def navigate(self, url: str) -> None:
         self.page.goto(url)
-    
+
+    def _check_toast_popup(self, timeout: int = 5000) -> bool:
+        # Note: This does not confirm whether the toast shows success, only waits to see it
+        # and logs what it contains.
+        try:
+            popup_locator = self.page.locator(self.POPUP).first
+            popup_locator.wait_for(state="visible", timeout=timeout)
+            logger.info(popup_locator.inner_text())
+            return True
+        except TimeoutError:
+            # we don't necessarily want to break if we don't see the popup, but we should at least log it
+            logger.exception("Did not see expected toast")
+            return False
+
     def is_visible(self, selector: str, timeout: int = 5000) -> bool:
         try:
             self.page.locator(selector).first.wait_for(state="visible", timeout=timeout)
@@ -51,6 +66,7 @@ class BasePage:
         try:
             self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=timeout)
         except:
+            logger.info("Modal did not close")
             self.page.keyboard.press("Escape")
             self.wait_for_element_hidden("[data-slot='dialog-overlay'], [role='dialog']")
     
