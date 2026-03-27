@@ -241,11 +241,11 @@ runs:
     - name: Wait for calico, coredns, metrics server, traefik
       run: |
         echo "::group::Wait for daemonset/calico-node"
-        kubectl rollout status --watch --timeout=10m daemonset/calico-node -n kube-system
+        kubectl rollout status --watch --timeout=5m daemonset/calico-node -n kube-system
         echo "::endgroup::"
 
         echo "::group::Wait for deployment/calico-kube-controllers"
-        kubectl rollout status --watch --timeout=10m deployment/calico-kube-controllers -n kube-system
+        kubectl rollout status --watch --timeout=5m deployment/calico-kube-controllers -n kube-system
         echo "::endgroup::"
 
         echo "::group::Wait for deployment/coredns"
