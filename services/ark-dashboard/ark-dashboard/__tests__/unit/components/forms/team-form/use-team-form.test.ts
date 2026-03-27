@@ -185,6 +185,37 @@ describe('useTeamForm', () => {
     expect(maxTurnsError).toBe('Max turns is required for looping sequential teams');
   });
 
+  it('should require maxTurns when strategy is graph', async () => {
+    const { result } = renderHook(() =>
+      useTeamForm({ mode: TeamFormMode.CREATE }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.state.loading).toBe(false);
+    });
+
+    act(() => {
+      result.current.form.setValue('name', 'valid-name');
+      result.current.form.setValue('strategy', 'graph');
+      result.current.form.setValue('maxTurns', '');
+    });
+
+    let maxTurnsError: string | undefined;
+    await act(async () => {
+      await new Promise<void>(resolve => {
+        result.current.form.handleSubmit(
+          () => resolve(),
+          errors => {
+            maxTurnsError = errors.maxTurns?.message;
+            resolve();
+          },
+        )({ preventDefault: () => {}, stopPropagation: () => {} } as any);
+      });
+    });
+
+    expect(maxTurnsError).toBe('Max turns is required for graph teams');
+  });
+
   it('should not require maxTurns when strategy is sequential and loops is disabled', async () => {
     const { result } = renderHook(() =>
       useTeamForm({ mode: TeamFormMode.CREATE }),

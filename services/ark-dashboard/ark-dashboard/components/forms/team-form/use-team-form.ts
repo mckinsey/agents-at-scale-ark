@@ -42,6 +42,13 @@ const teamFormSchema = z
         path: ['maxTurns'],
       });
     }
+    if (data.strategy === 'graph' && !data.maxTurns) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Max turns is required for graph teams',
+        path: ['maxTurns'],
+      });
+    }
   });
 
 export type TeamFormValues = z.infer<typeof teamFormSchema>;

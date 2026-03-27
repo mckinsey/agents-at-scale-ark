@@ -112,7 +112,8 @@ export function StrategySection({
             <FormItem>
               <FormLabel>
                 Max Turns{' '}
-                {selectedStrategy === 'sequential' && loopsChecked && (
+                {(selectedStrategy === 'graph' ||
+                  (selectedStrategy === 'sequential' && loopsChecked)) && (
                   <span className="text-red-500">*</span>
                 )}
               </FormLabel>

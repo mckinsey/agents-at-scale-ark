@@ -102,11 +102,11 @@ describe('StrategySection', () => {
     });
   });
 
-  it('should not show required indicator on max turns for graph strategy', () => {
+  it('should show required indicator on max turns for graph strategy', () => {
     render(<Wrapper defaultStrategy="graph" />);
     expect(
       screen.getByText('Max Turns').parentElement?.querySelector('.text-red-500'),
-    ).not.toBeInTheDocument();
+    ).toBeInTheDocument();
   });
 
   it('should not show required indicator on max turns for selector strategy', () => {
