@@ -51,7 +51,7 @@ class APIClient {
     }
 
     if (searchParams.toString()) {
-      url += `?${searchParams.toString()}`;
+      url += `${url.includes('?') ? '&' : '?'}${searchParams.toString()}`;
     }
 
     try {
