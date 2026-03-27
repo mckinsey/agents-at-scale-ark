@@ -104,7 +104,7 @@ export function StrategySection({
         />
       )}
 
-      {((selectedStrategy === 'sequential' && loopsChecked) || selectedStrategy !== 'sequential') && (
+      {(selectedStrategy !== 'sequential' || loopsChecked) && (
         <FormField
           control={form.control}
           name="maxTurns"
