@@ -90,6 +90,108 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 		}
 	})
 
+	t.Run("rejects anthropic without config", func(t *testing.T) {
+		model := &arkv1alpha1.Model{
+			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
+			Spec: arkv1alpha1.ModelSpec{
+				Model:    arkv1alpha1.ValueSource{Value: "claude-sonnet-4-20250514"},
+				Provider: ProviderAnthropic,
+			},
+		}
+		_, err := v.ValidateModel(ctx, model)
+		if err == nil {
+			t.Fatal("expected error for anthropic without config")
+		}
+	})
+
+	t.Run("valid anthropic model", func(t *testing.T) {
+		model := &arkv1alpha1.Model{
+			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
+			Spec: arkv1alpha1.ModelSpec{
+				Model:    arkv1alpha1.ValueSource{Value: "claude-sonnet-4-20250514"},
+				Provider: ProviderAnthropic,
+				Config: arkv1alpha1.ModelConfig{
+					Anthropic: &arkv1alpha1.AnthropicModelConfig{
+						BaseURL: arkv1alpha1.ValueSource{Value: "https://api.anthropic.com"},
+						APIKey:  arkv1alpha1.ValueSource{Value: "sk-ant-test"},
+					},
+				},
+			},
+		}
+		_, err := v.ValidateModel(ctx, model)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("valid anthropic model with all fields", func(t *testing.T) {
+		model := &arkv1alpha1.Model{
+			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
+			Spec: arkv1alpha1.ModelSpec{
+				Model:    arkv1alpha1.ValueSource{Value: "claude-sonnet-4-20250514"},
+				Provider: ProviderAnthropic,
+				Config: arkv1alpha1.ModelConfig{
+					Anthropic: &arkv1alpha1.AnthropicModelConfig{
+						BaseURL: arkv1alpha1.ValueSource{Value: "https://api.anthropic.com"},
+						APIKey:  arkv1alpha1.ValueSource{Value: "sk-ant-test"},
+						Version: &arkv1alpha1.ValueSource{Value: "2023-06-01"},
+						Headers: []arkv1alpha1.Header{
+							{Name: "X-Custom", Value: arkv1alpha1.HeaderValue{Value: "val"}},
+						},
+					},
+				},
+			},
+		}
+		_, err := v.ValidateModel(ctx, model)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects anthropic model with HTTP URL", func(t *testing.T) {
+		model := &arkv1alpha1.Model{
+			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
+			Spec: arkv1alpha1.ModelSpec{
+				Model:    arkv1alpha1.ValueSource{Value: "claude-sonnet-4-20250514"},
+				Provider: ProviderAnthropic,
+				Config: arkv1alpha1.ModelConfig{
+					Anthropic: &arkv1alpha1.AnthropicModelConfig{
+						BaseURL: arkv1alpha1.ValueSource{Value: "http://api.anthropic.com"},
+						APIKey:  arkv1alpha1.ValueSource{Value: "sk-ant-test"},
+					},
+				},
+			},
+		}
+		_, err := v.ValidateModel(ctx, model)
+		if err == nil {
+			t.Fatal("expected error for HTTP URL")
+		}
+		if !contains(err.Error(), "must use HTTPS") {
+			t.Fatalf("unexpected error message: %v", err)
+		}
+	})
+
+	t.Run("anthropic validates headers", func(t *testing.T) {
+		model := &arkv1alpha1.Model{
+			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
+			Spec: arkv1alpha1.ModelSpec{
+				Model:    arkv1alpha1.ValueSource{Value: "claude-sonnet-4-20250514"},
+				Provider: ProviderAnthropic,
+				Config: arkv1alpha1.ModelConfig{
+					Anthropic: &arkv1alpha1.AnthropicModelConfig{
+						BaseURL: arkv1alpha1.ValueSource{Value: "https://api.anthropic.com"},
+						APIKey:  arkv1alpha1.ValueSource{Value: "sk-ant-test"},
+						Headers: []arkv1alpha1.Header{{Name: "", Value: arkv1alpha1.HeaderValue{Value: "v"}}},
+					},
+				},
+			},
+		}
+		_, err := v.ValidateModel(ctx, model)
+		if err == nil {
+			t.Fatal("expected error for header without name")
+		}
+	})
+
 	t.Run("rejects bedrock without config", func(t *testing.T) {
 		model := &arkv1alpha1.Model{
 			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},

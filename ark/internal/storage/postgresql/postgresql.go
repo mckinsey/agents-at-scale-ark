@@ -284,11 +284,6 @@ func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name st
 		return fmt.Errorf("failed to insert resource: %w", err)
 	}
 
-	created, _ := p.reconstructObject(kind, namespace, name, rv, generation, resource.Metadata.UID, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON, createdAt)
-	if created != nil {
-		go p.notifyWatchers(kind, namespace, watch.Added, created)
-	}
-
 	return nil
 }
 
@@ -469,11 +464,6 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 		return storage.ErrNotFound
 	}
 
-	current, _ := p.reconstructObject(kind, namespace, name, newRV, newGen, uid, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON, createdAt)
-	if current != nil {
-		go p.notifyWatchers(kind, namespace, watch.Modified, current)
-	}
-
 	return nil
 }
 
@@ -534,17 +524,10 @@ func (p *PostgreSQLBackend) UpdateStatus(ctx context.Context, kind, namespace, n
 		return storage.ErrNotFound
 	}
 
-	current, _ := p.Get(ctx, kind, namespace, name)
-	if current != nil {
-		go p.notifyWatchers(kind, namespace, watch.Modified, current)
-	}
-
 	return nil
 }
 
 func (p *PostgreSQLBackend) Delete(ctx context.Context, kind, namespace, name string) error {
-	obj, _ := p.Get(ctx, kind, namespace, name)
-
 	result, err := p.db.ExecContext(ctx, `
 		DELETE FROM resources
 		WHERE kind = $1 AND namespace = $2 AND name = $3
@@ -556,10 +539,6 @@ func (p *PostgreSQLBackend) Delete(ctx context.Context, kind, namespace, name st
 	affected, _ := result.RowsAffected()
 	if affected == 0 {
 		return fmt.Errorf("not found")
-	}
-
-	if obj != nil {
-		go p.notifyWatchers(kind, namespace, watch.Deleted, obj)
 	}
 
 	return nil
@@ -652,7 +631,7 @@ func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, 
 	return p.converter.Decode(kind, data)
 }
 
-func (p *PostgreSQLBackend) notifyWatchers(kind, namespace string, eventType watch.EventType, obj runtime.Object) {
+func (p *PostgreSQLBackend) sendDeleteEvent(kind, namespace string, obj runtime.Object) {
 	key := fmt.Sprintf("%s/%s", kind, namespace)
 	allKey := fmt.Sprintf("%s/", kind)
 
@@ -664,19 +643,9 @@ func (p *PostgreSQLBackend) notifyWatchers(kind, namespace string, eventType wat
 	}
 	p.mu.RUnlock()
 
-	if eventType == watch.Deleted {
-		event := watch.Event{Type: eventType, Object: obj}
-		for _, w := range watchers {
-			w.send(event)
-		}
-		return
-	}
-
+	event := watch.Event{Type: watch.Deleted, Object: obj}
 	for _, w := range watchers {
-		select {
-		case w.nudgeCh <- struct{}{}:
-		default:
-		}
+		w.send(event)
 	}
 }
 
@@ -702,7 +671,7 @@ func (p *PostgreSQLBackend) nudgeWatchers(payload string) {
 			accessor.SetNamespace(notification.Namespace)
 			accessor.SetResourceVersion(fmt.Sprintf("%d", notification.ResourceVersion))
 		}
-		p.notifyWatchers(notification.Kind, notification.Namespace, watch.Deleted, obj)
+		p.sendDeleteEvent(notification.Kind, notification.Namespace, obj)
 		return
 	}
 
