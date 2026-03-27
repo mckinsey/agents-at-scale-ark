@@ -43,8 +43,8 @@ export const useCreateSecret = (props: UseCreateSecretProps) => {
       // Optimistically update to the new value
       queryClient.setQueryData(
         [GET_ALL_SECRETS_QUERY_KEY],
-        (old: Secret[]): Secret[] => [
-          ...old,
+        (old: Secret[] | undefined): Secret[] => [
+          ...(old ?? []),
           { id: newSecret.name, name: newSecret.name },
         ],
       );

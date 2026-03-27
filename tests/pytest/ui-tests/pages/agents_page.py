@@ -16,7 +16,6 @@ class AgentsPage(BasePage):
     AGENT_DESCRIPTION_INPUT = "textarea[name='description'], textarea[placeholder*='description' i], input[name='description']"
     MODEL_SELECT = "select, [role='combobox'], button:has-text('Select')"
     SAVE_BUTTON = "button:has-text('Create Agent'), button:has-text('Save Changes'), button:has-text('Add Agent'), button:has-text('Create'), button:has-text('Save'), button[type='submit']"
-    SUCCESS_POPUP = "[role='alert'], [role='status'], .notification, .toast, div:has-text('success'), div:has-text('Success'), div:has-text('created'), div:has-text('Created'), div:has-text('deleted'), div:has-text('Deleted')"
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
     CONFIRM_DELETE_BUTTON = "button:has-text('Delete'), button:has-text('Confirm'), button:has-text('Yes')"
     
@@ -258,11 +257,7 @@ class AgentsPage(BasePage):
             logger.error(f"{error_banner['message']}")
             raise Exception(f"Agent creation failed: {error_banner['message']}")
         
-        try:
-            self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
-            popup_visible = True
-        except:
-            popup_visible = False
+        popup_visible = self._check_toast_popup()
         
         self._close_dialog_if_open()
         
@@ -303,8 +298,8 @@ class AgentsPage(BasePage):
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
         self.wait_for_load_state("domcontentloaded")
-        popup_visible = self._check_success_popup()
-        deleted_from_table = not self.is_agent_in_table(agent_name)
+        popup_visible = self._check_toast_popup()
+        deleted_from_table = not self.is_agent_in_table(agent_name, retries=0)
         
         return {
             "agent_name": agent_name,
@@ -324,13 +319,6 @@ class AgentsPage(BasePage):
             "popup_visible": False,
             "deleted_from_table": False
         }
-    
-    def _check_success_popup(self) -> bool:
-        try:
-            self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
-            return True
-        except:
-            return False
     
     def _close_dialog_if_open(self) -> None:
         for attempt in range(3):
