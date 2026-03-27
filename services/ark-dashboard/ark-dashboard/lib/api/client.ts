@@ -34,7 +34,13 @@ class APIClient {
     params?: Record<string, string | number | boolean>,
     method?: string,
   ): string {
-    const url = new URL(endpoint, this.baseURL);
+    const base =
+      this.baseURL.startsWith('http') || this.baseURL.startsWith('//')
+        ? this.baseURL
+        : typeof window !== 'undefined'
+          ? `${window.location.origin}${this.baseURL}`
+          : this.baseURL;
+    const url = new URL(endpoint, base);
 
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
