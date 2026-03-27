@@ -111,7 +111,7 @@ export function StrategySection({
           render={({ field }) => (
             <FormItem>
               <FormLabel>
-                Max Turns <span className="text-red-500">*</span>
+                Max Turns
               </FormLabel>
               <FormControl>
                 <Input
