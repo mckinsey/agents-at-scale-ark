@@ -34,24 +34,19 @@ class APIClient {
     params?: Record<string, string | number | boolean>,
     method?: string,
   ): string {
-    let url = `${this.baseURL}${endpoint}`;
+    const url = new URL(endpoint, this.baseURL);
 
-    const searchParams = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
-        searchParams.append(key, String(value));
+        url.searchParams.append(key, String(value));
       });
     }
 
     if (!method || method === 'GET') {
-      searchParams.append('_t', Date.now().toString());
+      url.searchParams.append('_t', Date.now().toString());
     }
 
-    if (searchParams.toString()) {
-      url += `${url.includes('?') ? '&' : '?'}${searchParams.toString()}`;
-    }
-
-    return url;
+    return url.toString();
   }
 
   private extractErrorMessage(errorData: unknown): string {
@@ -209,7 +204,7 @@ class APIClient {
       });
 
       const contentType = response.headers.get('content-type');
-      const isJSON = contentType?.includes('application/json');
+      const isJSON = contentType?.includes('application/json') ?? false;
 
       if (!response.ok) {
         return await this.handleErrorResponse(response, isJSON, endpoint, method);
