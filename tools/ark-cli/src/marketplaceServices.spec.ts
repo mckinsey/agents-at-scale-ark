@@ -6,16 +6,19 @@ const mockGetMarketplaceServicesFromManifest =
   vi.fn<() => Promise<ServiceCollection | null>>();
 const mockGetMarketplaceAgentsFromManifest =
   vi.fn<() => Promise<ServiceCollection | null>>();
+const mockGetMarketplaceExecutorsFromManifest =
+  vi.fn<() => Promise<ServiceCollection | null>>();
 const mockFetchMarketplaceManifest =
   vi.fn<() => Promise<AnthropicMarketplaceManifest | null>>();
 
 vi.mock('./lib/marketplaceFetcher.js', () => ({
   getMarketplaceServicesFromManifest: mockGetMarketplaceServicesFromManifest,
   getMarketplaceAgentsFromManifest: mockGetMarketplaceAgentsFromManifest,
+  getMarketplaceExecutorsFromManifest: mockGetMarketplaceExecutorsFromManifest,
   fetchMarketplaceManifest: mockFetchMarketplaceManifest,
 }));
 
-const {getAllMarketplaceServices, getMarketplaceItem} = await import(
+const {getAllMarketplaceServices, getAllMarketplaceExecutors, getMarketplaceItem} = await import(
   './marketplaceServices.js'
 );
 
@@ -23,6 +26,7 @@ describe('marketplaceServices', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetMarketplaceServicesFromManifest.mockClear();
+    mockGetMarketplaceExecutorsFromManifest.mockClear();
   });
 
   describe('getAllMarketplaceServices', () => {
@@ -50,6 +54,36 @@ describe('marketplaceServices', () => {
       mockGetMarketplaceServicesFromManifest.mockResolvedValue(null);
 
       const result = await getAllMarketplaceServices();
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('getAllMarketplaceExecutors', () => {
+    it('returns manifest executors when available', async () => {
+      const mockExecutors = {
+        'langchain': {
+          name: 'langchain',
+          helmReleaseName: 'langchain',
+          description: 'LangChain executor',
+          enabled: true,
+          category: 'marketplace',
+          namespace: 'langchain-ns',
+        },
+      };
+
+      mockGetMarketplaceExecutorsFromManifest.mockResolvedValue(mockExecutors);
+
+      const result = await getAllMarketplaceExecutors();
+
+      expect(result).toEqual(mockExecutors);
+      expect(mockGetMarketplaceExecutorsFromManifest).toHaveBeenCalled();
+    });
+
+    it('returns null when manifest unavailable', async () => {
+      mockGetMarketplaceExecutorsFromManifest.mockResolvedValue(null);
+
+      const result = await getAllMarketplaceExecutors();
 
       expect(result).toBeNull();
     });
@@ -99,6 +133,34 @@ describe('marketplaceServices', () => {
       mockGetMarketplaceServicesFromManifest.mockResolvedValue(null);
 
       const result = await getMarketplaceItem('marketplace/services/phoenix');
+
+      expect(result).toBeNull();
+    });
+
+    it('returns executor by path from manifest', async () => {
+      const mockExecutors = {
+        'langchain': {
+          name: 'langchain',
+          helmReleaseName: 'langchain',
+          description: 'LangChain executor',
+          enabled: true,
+          category: 'marketplace',
+        },
+      };
+
+      mockGetMarketplaceExecutorsFromManifest.mockResolvedValue(mockExecutors);
+
+      const result = await getMarketplaceItem(
+        'marketplace/executors/langchain'
+      );
+
+      expect(result).toEqual(mockExecutors['langchain']);
+    });
+
+    it('returns null when executor marketplace unavailable', async () => {
+      mockGetMarketplaceExecutorsFromManifest.mockResolvedValue(null);
+
+      const result = await getMarketplaceItem('marketplace/executors/langchain');
 
       expect(result).toBeNull();
     });

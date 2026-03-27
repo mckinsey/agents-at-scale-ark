@@ -16,6 +16,7 @@ import {
   getMarketplaceItem,
   getAllMarketplaceServices,
   getAllMarketplaceAgents,
+  getAllMarketplaceExecutors,
 } from '../../marketplaceServices.js';
 import {printNextSteps} from '../../lib/nextSteps.js';
 import ora from 'ora';
@@ -140,7 +141,13 @@ export async function installArk(
             output.info(`  marketplace/agents/${name}`);
           }
         }
-        if (!marketplaceServices && !marketplaceAgents) {
+        const marketplaceExecutors = await getAllMarketplaceExecutors();
+        if (marketplaceExecutors) {
+          for (const name of Object.keys(marketplaceExecutors)) {
+            output.info(`  marketplace/executors/${name}`);
+          }
+        }
+        if (!marketplaceServices && !marketplaceAgents && !marketplaceExecutors) {
           output.warning('Marketplace unavailable');
         }
         process.exit(1);
