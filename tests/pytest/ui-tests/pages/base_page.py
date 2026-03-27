@@ -25,9 +25,33 @@ class BasePage:
             logger.info(popup_locator.inner_text())
             return True
         except TimeoutError:
-            # we don't necessarily want to break if we don't see the popup, but we should at least log it
             logger.exception("Did not see expected toast")
+            self._capture_failure_debug("toast_not_visible")
             return False
+
+    def _capture_failure_debug(self, label: str = "failure") -> None:
+        try:
+            screenshot_path = f"/tmp/{label}.png"
+            self.page.screenshot(path=screenshot_path, full_page=True)
+            logger.info(f"Screenshot saved: {screenshot_path}")
+        except Exception as e:
+            logger.warning(f"Screenshot failed: {e}")
+
+        console_messages = getattr(self.page, "_test_console_messages", [])
+        if console_messages:
+            logger.error(f"Browser console errors: {console_messages}")
+
+        try:
+            dialog = self.page.locator("[role='dialog'], [data-slot='dialog-content']").first
+            if dialog.is_visible(timeout=1000):
+                logger.info(f"Dialog still open. Content: {dialog.inner_text()}")
+                field_errors = self.page.locator("[role='dialog'] [role='alert'], [role='dialog'] .error, [role='dialog'] [aria-invalid='true']").all_inner_texts()
+                if field_errors:
+                    logger.error(f"Field validation errors in dialog: {field_errors}")
+            else:
+                logger.info("Dialog is closed")
+        except Exception as e:
+            logger.warning(f"Could not inspect dialog: {e}")
 
     def is_visible(self, selector: str, timeout: int = 5000) -> bool:
         try:

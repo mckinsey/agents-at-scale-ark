@@ -25,6 +25,10 @@ def pytest_addoption(parser):
         parser.addoption("--skip-install", action="store_true", default=False)
     except ValueError:
         pass
+    try:
+        parser.addoption("--log-browser-console", action="store_true", default=False)
+    except ValueError:
+        pass
 
 
 def get_ark_pods():
@@ -201,9 +205,34 @@ def context(browser, request):
 
 
 @pytest.fixture(scope="function")
-def page(context):
+def page(context, request):
     page = context.new_page()
+
+    console_messages = []
+
+    def handle_console(msg):
+        if msg.type in ("error", "warning"):
+            console_messages.append({"type": msg.type, "text": msg.text})
+
+    def handle_response(response):
+        if response.status >= 400:
+            try:
+                body = response.text()
+            except Exception:
+                body = "<unreadable>"
+            logger.warning(f"HTTP {response.status} {response.request.method} {response.url}: {body[:500]}")
+
+    page.on("console", handle_console)
+    page.on("response", handle_response)
+    page._test_console_messages = console_messages
+
     yield page
+
+    if console_messages and request.config.getoption("--log-browser-console"):
+        logger.info("Browser console errors during test:")
+        for message in console_messages:
+            logger.info(f"\t{message}")
+
     page.close()
 
 
