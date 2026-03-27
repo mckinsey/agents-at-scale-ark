@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
@@ -196,31 +196,6 @@ describe('MarketplacePage', () => {
     });
   });
 
-  it('should handle search input', async () => {
-    mockUseGetMarketplaceItems.mockReturnValue({
-      data: mockMarketplaceData,
-      isPending: false,
-      isError: false,
-      error: null,
-      refetch: vi.fn(),
-    } as any);
-
-    renderWithProviders(<MarketplacePage />);
-
-    // Find and type in search input
-    const searchInput = screen.getByPlaceholderText('Search marketplace...');
-    await userEvent.type(searchInput, 'test query');
-
-    // Verify that useGetMarketplaceItems was called with search filter
-    await waitFor(() => {
-      expect(mockUseGetMarketplaceItems).toHaveBeenCalledWith(
-        expect.objectContaining({
-          search: 'test query',
-        })
-      );
-    });
-  });
-
   it('should display loading state', () => {
     mockUseGetMarketplaceItems.mockReturnValue({
       data: undefined,
@@ -295,32 +270,6 @@ describe('MarketplacePage', () => {
         expect(screen.getByText('Page 2 of 3')).toBeInTheDocument();
       });
     }
-  });
-
-  it('should reset to first page when searching', async () => {
-    mockUseGetMarketplaceItems.mockReturnValue({
-      data: mockMarketplaceData,
-      isPending: false,
-      isError: false,
-      error: null,
-      refetch: vi.fn(),
-    } as any);
-
-    renderWithProviders(<MarketplacePage />);
-
-    // Type in search to trigger page reset
-    const searchInput = screen.getByPlaceholderText('Search marketplace...');
-    await userEvent.type(searchInput, 'search term');
-
-    // The component should reset to page 1 (this is internal state, so we verify indirectly)
-    // by checking that the first page of items would be displayed
-    await waitFor(() => {
-      expect(mockUseGetMarketplaceItems).toHaveBeenCalledWith(
-        expect.objectContaining({
-          search: 'search term',
-        })
-      );
-    });
   });
 
   it('should reset to first page when changing category', async () => {

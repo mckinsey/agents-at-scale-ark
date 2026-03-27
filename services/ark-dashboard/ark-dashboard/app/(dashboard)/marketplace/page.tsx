@@ -4,7 +4,6 @@ import {
   Bot,
   ChevronLeft,
   ChevronRight,
-  Search,
   Server,
   SquarePlay,
 } from 'lucide-react';
@@ -13,7 +12,6 @@ import { useState } from 'react';
 import { MarketplaceItemCard } from '@/components/cards/marketplace-item-card';
 import { PageHeader } from '@/components/common/page-header';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import type {
   MarketplaceCategory,
@@ -25,7 +23,6 @@ import { cn } from '@/lib/utils';
 
 export default function MarketplacePage() {
   const [filters, setFilters] = useState<MarketplaceFilters>({});
-  const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6;
@@ -39,15 +36,6 @@ export default function MarketplacePage() {
   const currentItems = data?.items.slice(startIndex, endIndex) || [];
 
   const pageTitle = data ? `Marketplace (${data.items.length})` : 'Marketplace';
-
-  const handleSearch = (value: string) => {
-    setSearchQuery(value);
-    setCurrentPage(1); // Reset to first page on search
-    setFilters(prev => ({
-      ...prev,
-      search: value || undefined,
-    }));
-  };
 
   const handleCategoryChange = (category: string) => {
     setSelectedCategory(category);
@@ -90,20 +78,6 @@ export default function MarketplacePage() {
       <PageHeader
         breadcrumbs={BASE_BREADCRUMBS}
         currentPage="Marketplace"
-        actions={
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search marketplace..."
-                value={searchQuery}
-                onChange={e => handleSearch(e.target.value)}
-                className="w-[300px] pl-10"
-              />
-            </div>
-          </div>
-        }
       />
       <div className="flex flex-1 flex-col">
         <div>
