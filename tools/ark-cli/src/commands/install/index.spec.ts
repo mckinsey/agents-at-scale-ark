@@ -32,11 +32,13 @@ const mockIsMarketplaceService = vi.fn();
 const mockGetMarketplaceItem = vi.fn();
 const mockGetAllMarketplaceServices = vi.fn();
 const mockGetAllMarketplaceAgents = vi.fn();
+const mockGetAllMarketplaceExecutors = vi.fn();
 vi.mock('../../marketplaceServices.js', () => ({
   isMarketplaceService: mockIsMarketplaceService,
   getMarketplaceItem: mockGetMarketplaceItem,
   getAllMarketplaceServices: mockGetAllMarketplaceServices,
   getAllMarketplaceAgents: mockGetAllMarketplaceAgents,
+  getAllMarketplaceExecutors: mockGetAllMarketplaceExecutors,
 }));
 
 const mockOutput = {
@@ -245,6 +247,7 @@ describe('install command', () => {
       phoenix: {name: 'phoenix'},
     });
     mockGetAllMarketplaceAgents.mockResolvedValue(null);
+    mockGetAllMarketplaceExecutors.mockResolvedValue(null);
 
     const command = createInstallCommand(mockConfig);
 
