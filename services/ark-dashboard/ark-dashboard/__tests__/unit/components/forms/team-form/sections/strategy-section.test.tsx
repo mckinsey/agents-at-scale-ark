@@ -64,9 +64,40 @@ describe('StrategySection', () => {
     expect(screen.getByText('Max Turns')).toBeInTheDocument();
   });
 
-  it('should hide max turns field for sequential strategy', () => {
+  it('should show max turns field for selector strategy', () => {
+    render(<Wrapper defaultStrategy="selector" />);
+    expect(screen.getByText('Max Turns')).toBeInTheDocument();
+  });
+
+  it('should hide max turns field for sequential strategy without loops', () => {
     render(<Wrapper defaultStrategy="sequential" />);
     expect(screen.queryByText('Max Turns')).not.toBeInTheDocument();
+  });
+
+  it('should show max turns field for sequential strategy when loops are enabled', async () => {
+    const user = userEvent.setup();
+    render(<Wrapper defaultStrategy="sequential" />);
+
+    await user.click(screen.getByRole('checkbox'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Max Turns')).toBeInTheDocument();
+    });
+  });
+
+  it('should hide max turns field when loops are disabled after being enabled', async () => {
+    const user = userEvent.setup();
+    render(<Wrapper defaultStrategy="sequential" />);
+
+    await user.click(screen.getByRole('checkbox'));
+    await waitFor(() => {
+      expect(screen.getByText('Max Turns')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('checkbox'));
+    await waitFor(() => {
+      expect(screen.queryByText('Max Turns')).not.toBeInTheDocument();
+    });
   });
 
   it('should show required indicator on max turns for graph strategy', () => {
