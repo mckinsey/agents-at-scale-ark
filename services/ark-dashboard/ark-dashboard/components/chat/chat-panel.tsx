@@ -1,13 +1,13 @@
 'use client';
 
 import { RotateCcw, Send } from 'lucide-react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 
 import { ChatMessageList } from '@/components/chat/chat-message-list';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { useChatSession } from '@/lib/hooks';
 import type { GraphEdge } from '@/lib/types/chat-message';
@@ -42,8 +42,18 @@ export function ChatPanel({
 
   const [currentMessage, setCurrentMessage] = useState('');
   const [debugMode, setDebugMode] = useState(true);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const switchId = useId();
+
+  useLayoutEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = '0px';
+    const full = el.scrollHeight;
+    const h = Math.min(Math.max(full, 40), 200);
+    el.style.height = `${h}px`;
+    el.style.overflowY = full > 200 ? 'auto' : 'hidden';
+  }, [currentMessage]);
 
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 100);
@@ -63,8 +73,8 @@ export function ChatPanel({
     await sendMessage(userMessage);
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSendMessage();
     }
@@ -90,17 +100,19 @@ export function ChatPanel({
       </div>
 
       <div className="flex-shrink-0 border-t">
-        <div className="flex gap-2 p-4">
-          <div className="relative flex-1">
-            <Input
+        <div className="flex items-end gap-2 p-4">
+          <div className="relative min-h-0 flex-1">
+            <Textarea
               ref={inputRef}
               placeholder={
                 isProcessing ? 'Processing...' : 'Type your message...'
               }
               value={currentMessage}
               onChange={e => setCurrentMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
+              onKeyDown={handleKeyDown}
               disabled={isProcessing}
+              rows={1}
+              className="max-h-[200px] min-h-10 resize-none overflow-x-hidden break-words"
             />
           </div>
           <Button
