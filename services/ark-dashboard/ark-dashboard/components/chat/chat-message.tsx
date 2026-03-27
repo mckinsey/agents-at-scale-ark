@@ -173,11 +173,11 @@ export function ChatMessage({
               </div>
             )}
             <div className="flex items-center gap-2">
-              <div ref={contentRef} className="min-w-0 flex-1 overflow-x-auto">
+              <div ref={contentRef} className="min-w-0 flex-1">
                 {viewMode === 'markdown' ? (
                   <div className="text-sm break-words">{markdownContent}</div>
                 ) : (
-                  <pre className="m-0 border-0 bg-transparent p-0 font-mono text-sm whitespace-pre-wrap">
+                  <pre className="m-0 border-0 bg-transparent p-0 font-mono text-sm whitespace-pre-wrap break-words">
                     {content}
                   </pre>
                 )}
