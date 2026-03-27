@@ -28,7 +28,17 @@ router = APIRouter(prefix="/export", tags=["export"])
 
 VERSION = "v1alpha1"
 EXPORT_CONFIGMAP_NAME = "ark-export-metadata"
-EXPORT_CONFIGMAP_NAMESPACE = "ark-system"
+
+
+def _get_current_namespace() -> str:
+    try:
+        with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace", "r") as f:
+            return f.read().strip()
+    except Exception:
+        return "default"
+
+
+EXPORT_CONFIGMAP_NAMESPACE = _get_current_namespace()
 
 
 async def get_export_history() -> Dict[str, Any]:  # NOSONAR - Async for consistency with project architecture
@@ -158,11 +168,7 @@ async def _collect_workflows(
             # Determine namespace
             nonlocal namespace
             if not namespace:
-                try:
-                    with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace", "r") as f:
-                        namespace = f.read().strip()
-                except:
-                    namespace = "default"
+                namespace = _get_current_namespace()
 
             # Fetch WorkflowTemplates
             workflow_templates = custom_api.list_namespaced_custom_object(
