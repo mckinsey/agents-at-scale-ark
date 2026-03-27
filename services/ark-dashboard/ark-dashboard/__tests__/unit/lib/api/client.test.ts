@@ -264,10 +264,11 @@ describe('APIClient', () => {
   })
 
   describe('relative baseURL', () => {
-    it('should resolve a relative baseURL against window.location.origin without throwing', async () => {
-      Object.defineProperty(window, 'location', {
+    it('should resolve a relative baseURL against globalThis.location.origin without throwing', async () => {
+      Object.defineProperty(globalThis, 'location', {
         value: { origin: 'http://localhost:3274' },
         writable: true,
+        configurable: true,
       })
 
       const relativeClient = new APIClient('/api/v1/proxy/services')

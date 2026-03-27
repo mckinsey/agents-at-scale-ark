@@ -34,12 +34,10 @@ class APIClient {
     params?: Record<string, string | number | boolean>,
     method?: string,
   ): string {
-    const base =
-      this.baseURL.startsWith('http') || this.baseURL.startsWith('//')
-        ? this.baseURL
-        : typeof window !== 'undefined'
-          ? `${window.location.origin}${this.baseURL}`
-          : this.baseURL;
+    const isAbsolute = this.baseURL.startsWith('http') || this.baseURL.startsWith('//');
+    const base = isAbsolute || typeof globalThis.location === 'undefined'
+      ? this.baseURL
+      : `${globalThis.location.origin}${this.baseURL}`;
     const url = new URL(endpoint, base);
 
     if (params) {
