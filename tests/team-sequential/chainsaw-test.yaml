@@ -26,6 +26,13 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Endpoints
+          metadata:
+            name: mock-llm
+            namespace: ($namespace)
     - apply:
         file: manifests/*.yaml
     - wait:
