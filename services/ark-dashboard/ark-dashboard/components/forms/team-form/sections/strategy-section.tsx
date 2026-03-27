@@ -111,7 +111,10 @@ export function StrategySection({
           render={({ field }) => (
             <FormItem>
               <FormLabel>
-                Max Turns
+                Max Turns{' '}
+                {selectedStrategy === 'sequential' && loopsChecked && (
+                  <span className="text-red-500">*</span>
+                )}
               </FormLabel>
               <FormControl>
                 <Input

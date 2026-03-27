@@ -12,6 +12,7 @@ const schema = z.object({
   name: z.string(),
   description: z.string().optional(),
   strategy: z.string().min(1),
+  loops: z.boolean(),
   maxTurns: z.string().optional(),
   selectorAgent: z.string().optional(),
   selectorPrompt: z.string().optional(),
@@ -30,6 +31,7 @@ function Wrapper({
       name: '',
       description: '',
       strategy: defaultStrategy,
+      loops: false,
       maxTurns: '',
       selectorAgent: '',
       selectorPrompt: '',
@@ -100,13 +102,48 @@ describe('StrategySection', () => {
     });
   });
 
-  it('should not show required indicator on max turns', () => {
+  it('should not show required indicator on max turns for graph strategy', () => {
     render(<Wrapper defaultStrategy="graph" />);
-    const maxTurnsLabel = screen.getByText('Max Turns');
-    const requiredIndicator = maxTurnsLabel.parentElement?.querySelector(
-      '.text-red-500',
-    );
-    expect(requiredIndicator).not.toBeInTheDocument();
+    expect(
+      screen.getByText('Max Turns').parentElement?.querySelector('.text-red-500'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('should not show required indicator on max turns for selector strategy', () => {
+    render(<Wrapper defaultStrategy="selector" />);
+    expect(
+      screen.getByText('Max Turns').parentElement?.querySelector('.text-red-500'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('should show required indicator on max turns for sequential strategy with loops enabled', async () => {
+    const user = userEvent.setup();
+    render(<Wrapper defaultStrategy="sequential" />);
+
+    await user.click(screen.getByRole('checkbox'));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Max Turns').parentElement?.querySelector('.text-red-500'),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('should hide required indicator on max turns when loops are disabled', async () => {
+    const user = userEvent.setup();
+    render(<Wrapper defaultStrategy="sequential" />);
+
+    await user.click(screen.getByRole('checkbox'));
+    await waitFor(() => {
+      expect(
+        screen.getByText('Max Turns').parentElement?.querySelector('.text-red-500'),
+      ).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('checkbox'));
+    await waitFor(() => {
+      expect(screen.queryByText('Max Turns')).not.toBeInTheDocument();
+    });
   });
 
   it('should allow changing strategy', async () => {

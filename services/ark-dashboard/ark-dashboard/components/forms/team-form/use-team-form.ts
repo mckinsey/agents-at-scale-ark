@@ -24,15 +24,25 @@ Make sure to choose the role which is best suited to respond to the most recent 
 
 Read the above conversation. Then select the next role from {{.Participants}} to play. Only return the role.`;
 
-const teamFormSchema = z.object({
-  name: kubernetesNameSchema,
-  description: z.string().optional(),
-  strategy: z.string().min(1, 'Strategy is required'),
-  loops: z.boolean(),
-  maxTurns: z.string().optional(),
-  selectorAgent: z.string().optional(),
-  selectorPrompt: z.string().optional(),
-});
+const teamFormSchema = z
+  .object({
+    name: kubernetesNameSchema,
+    description: z.string().optional(),
+    strategy: z.string().min(1, 'Strategy is required'),
+    loops: z.boolean(),
+    maxTurns: z.string().optional(),
+    selectorAgent: z.string().optional(),
+    selectorPrompt: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.strategy === 'sequential' && data.loops && !data.maxTurns) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Max turns is required for looping sequential teams',
+        path: ['maxTurns'],
+      });
+    }
+  });
 
 export type TeamFormValues = z.infer<typeof teamFormSchema>;
 
