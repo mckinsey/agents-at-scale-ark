@@ -52,6 +52,22 @@ class FileGatewayHelper:
             time_waited += interval
             logger.info(f"{operation_name} in progress... ({time_waited}s elapsed)")
         return False
+
+    def _get_pod_status(self):
+        success, stdout, _ = self._run_cmd(
+            ['kubectl', 'get', 'pods', '-l', 'app.kubernetes.io/name=file-gateway', '-o',
+             'jsonpath={range .items[*]}{.metadata.name}{"\\t"}{.status.phase}{"\\n"}{end}'],
+            check=False
+        )
+        if not success:
+            return False
+
+        lines = [l for l in stdout.strip().splitlines() if l]
+        status_dict = {}
+        for line in lines:
+            key, value = line.split("\t")
+            status_dict[key] = value
+        return status_dict
     
     def install_file_gateway(self):
         """Install File Gateway using ark install command"""
@@ -74,16 +90,9 @@ class FileGatewayHelper:
         logger.info("Verifying File Gateway pods...")
         
         def check_pods():
-            success, stdout, _ = self._run_cmd(
-                ['kubectl', 'get', 'pods', '-l', 'app.kubernetes.io/name=file-gateway', '-o', 'jsonpath={.items[*].status.phase}'],
-                check=False
-            )
-            logger.info(stdout)
-            if not success:
-                return False
-            
-            phases = stdout.strip().split()
-            running_count = sum(1 for phase in phases if phase == 'Running')
+            status_dict = self._get_pod_status()
+            logger.info(status_dict)
+            running_count = sum(1 for status in status_dict.values() if status == 'Running')
             logger.info(f"Found {running_count}/{len(self.FILE_GATEWAY_PODS)} File Gateway pods running")
             return running_count >= len(self.FILE_GATEWAY_PODS)
         
