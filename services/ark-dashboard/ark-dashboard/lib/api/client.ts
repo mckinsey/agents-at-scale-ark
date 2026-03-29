@@ -29,30 +29,166 @@ class APIClient {
     };
   }
 
+  private buildRequestUrl(
+    endpoint: string,
+    params?: Record<string, string | number | boolean>,
+    method?: string,
+  ): string {
+    const url = new URL(endpoint, this.baseURL);
+
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        url.searchParams.append(key, String(value));
+      });
+    }
+
+    if (!method || method === 'GET') {
+      url.searchParams.append('_t', Date.now().toString());
+    }
+
+    return url.toString();
+  }
+
+  private extractErrorMessage(errorData: unknown): string {
+    if (typeof errorData === 'object' && errorData !== null) {
+      if ('detail' in errorData && errorData.detail) {
+        return String(errorData.detail);
+      }
+      if ('message' in errorData && errorData.message) {
+        return String(errorData.message);
+      }
+      if ('reason' in errorData && errorData.reason) {
+        return String(errorData.reason);
+      }
+    }
+    if (typeof errorData === 'string' && errorData) {
+      return errorData;
+    }
+    return 'API request failed';
+  }
+
+  private async handleErrorResponse(
+    response: Response,
+    isJSON: boolean,
+    endpoint: string,
+    method: string,
+  ): Promise<never> {
+    const errorData = isJSON
+      ? await response.json()
+      : await response.text();
+
+    const errorMessage = this.extractErrorMessage(errorData) ||
+      `HTTP error! status: ${response.status}`;
+
+    const apiError = new APIError(errorMessage, response.status, errorData);
+
+    trackError({
+      message: apiError.message,
+      severity: 'error',
+      context: {
+        type: 'api_error',
+        endpoint,
+        method,
+        status: response.status,
+      },
+    });
+
+    throw apiError;
+  }
+
+  private handleKubernetesStatusError(
+    data: unknown,
+    response: Response,
+    endpoint: string,
+    method: string,
+  ): void {
+    if (
+      data &&
+      typeof data === 'object' &&
+      'kind' in data &&
+      data.kind === 'Status' &&
+      'status' in data &&
+      data.status === 'Failure'
+    ) {
+      const errorMessage =
+        'message' in data && data.message
+          ? String(data.message)
+          : 'API request failed';
+      const statusCode =
+        'code' in data && typeof data.code === 'number'
+          ? data.code
+          : response.status;
+
+      const apiError = new APIError(errorMessage, statusCode, data);
+
+      trackError({
+        message: apiError.message,
+        severity: 'error',
+        context: {
+          type: 'api_error',
+          endpoint,
+          method,
+          status: statusCode,
+        },
+      });
+
+      throw apiError;
+    }
+  }
+
+  private async handleSuccessResponse<T>(
+    response: Response,
+    isJSON: boolean,
+    endpoint: string,
+    method: string,
+  ): Promise<T> {
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    if (isJSON) {
+      const data = await response.json();
+      this.handleKubernetesStatusError(data, response, endpoint, method);
+      return data as T;
+    }
+
+    return (await response.text()) as T;
+  }
+
+  private handleNetworkError(
+    error: unknown,
+    endpoint: string,
+    method: string,
+  ): never {
+    if (error instanceof APIError) {
+      throw error;
+    }
+
+    const message =
+      error instanceof Error ? error.message : 'An unknown error occurred';
+
+    trackError({
+      message,
+      stack: error instanceof Error ? error.stack : undefined,
+      severity: 'error',
+      context: {
+        type: 'network_error',
+        endpoint,
+        method,
+      },
+    });
+
+    throw new APIError(message);
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestOptions = {},
   ): Promise<T> {
     const { params, headers, ...requestOptions } = options;
+    const method = requestOptions.method || 'GET';
 
-    let url = `${this.baseURL}${endpoint}`;
-
-    // Add query parameters if provided
-    const searchParams = new URLSearchParams();
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        searchParams.append(key, String(value));
-      });
-    }
-
-    // Add cache buster for GET requests
-    if (!options.method || options.method === 'GET') {
-      searchParams.append('_t', Date.now().toString());
-    }
-
-    if (searchParams.toString()) {
-      url += `?${searchParams.toString()}`;
-    }
+    const url = this.buildRequestUrl(endpoint, params, method);
 
     try {
       const response = await fetch(url, {
@@ -67,112 +203,16 @@ class APIClient {
         },
       });
 
-      // Handle non-JSON responses
       const contentType = response.headers.get('content-type');
-      const isJSON = contentType?.includes('application/json');
+      const isJSON = contentType?.includes('application/json') ?? false;
 
       if (!response.ok) {
-        const errorData = isJSON
-          ? await response.json()
-          : await response.text();
-
-        let errorMessage = `HTTP error! status: ${response.status}`;
-        if (typeof errorData === 'object' && errorData !== null) {
-          // Check for common error message fields
-          if ('detail' in errorData && errorData.detail) {
-            errorMessage = String(errorData.detail);
-          } else if ('message' in errorData && errorData.message) {
-            errorMessage = String(errorData.message);
-          } else if ('reason' in errorData && errorData.reason) {
-            errorMessage = String(errorData.reason);
-          }
-        } else if (typeof errorData === 'string' && errorData) {
-          errorMessage = errorData;
-        }
-
-        const apiError = new APIError(errorMessage, response.status, errorData);
-
-        trackError({
-          message: apiError.message,
-          severity: 'error',
-          context: {
-            type: 'api_error',
-            endpoint,
-            method: requestOptions.method || 'GET',
-            status: response.status,
-          },
-        });
-
-        throw apiError;
+        return await this.handleErrorResponse(response, isJSON, endpoint, method);
       }
 
-      // Handle 204 No Content responses
-      if (response.status === 204) {
-        return undefined as T;
-      }
-
-      // Return parsed JSON or text based on content type
-      if (isJSON) {
-        const data = await response.json();
-
-        // Check if the response is a Kubernetes Status object indicating an error
-        if (
-          data &&
-          typeof data === 'object' &&
-          'kind' in data &&
-          data.kind === 'Status' &&
-          'status' in data &&
-          data.status === 'Failure'
-        ) {
-          const errorMessage =
-            'message' in data && data.message
-              ? String(data.message)
-              : 'API request failed';
-          const statusCode =
-            'code' in data && typeof data.code === 'number'
-              ? data.code
-              : response.status;
-
-          const apiError = new APIError(errorMessage, statusCode, data);
-
-          trackError({
-            message: apiError.message,
-            severity: 'error',
-            context: {
-              type: 'api_error',
-              endpoint,
-              method: requestOptions.method || 'GET',
-              status: statusCode,
-            },
-          });
-
-          throw apiError;
-        }
-
-        return data as T;
-      } else {
-        return (await response.text()) as T;
-      }
+      return await this.handleSuccessResponse<T>(response, isJSON, endpoint, method);
     } catch (error) {
-      if (error instanceof APIError) {
-        throw error;
-      }
-
-      const message =
-        error instanceof Error ? error.message : 'An unknown error occurred';
-
-      trackError({
-        message,
-        stack: error instanceof Error ? error.stack : undefined,
-        severity: 'error',
-        context: {
-          type: 'network_error',
-          endpoint,
-          method: requestOptions.method || 'GET',
-        },
-      });
-
-      throw new APIError(message);
+      return this.handleNetworkError(error, endpoint, method);
     }
   }
 
