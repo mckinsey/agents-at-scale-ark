@@ -14,8 +14,21 @@
 #
 # Required secrets:
 #   ANTHROPIC_API_KEY       - Anthropic API key for Claude Code
-#   AGENT_GITHUB_TOKEN      - PAT for a bot user (optional, for custom identity)
-#                             Falls back to GITHUB_TOKEN if not set.
+#
+# Optional secrets:
+#   AGENT_GITHUB_TOKEN      - PAT for a bot user identity. If set, overrides
+#                             OIDC App token for all GitHub operations.
+#
+# Authentication: Uses OIDC token exchange via Anthropic's GitHub App by
+# default (same as anthropics/claude-code-action). Set AGENT_GITHUB_TOKEN
+# to override with a PAT instead.
+#
+# Usage:
+#   Comment "@ark" on any issue or PR to trigger the agent.
+#   Add the "ark-agent" label to an issue to trigger it.
+#   Or dispatch manually:
+#     gh workflow run ark_agent.yml -f prompt="fix issue #123"
+#     gh workflow run ark_agent.yml -f prompt="triage all unlabeled issues"
 
 name: Ark Agent
 
@@ -31,7 +44,7 @@ on:
   workflow_dispatch:
     inputs:
       prompt:
-        description: "Prompt to send to Claude Code"
+        description: "Prompt to send to Claude Code (e.g. 'fix issue #123')"
         required: true
         type: string
 
@@ -46,6 +59,7 @@ permissions:
   pull-requests: write
   issues: write
   actions: read
+  id-token: write
 
 concurrency:
   group: ark-agent-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
@@ -96,11 +110,12 @@ jobs:
             echo "Trigger phrase '$TRIGGER_PHRASE' not found, skipping"
           fi
 
+      # Full clone needed — the upstream entrypoint fetches PR branches for diffs
       - name: Checkout repository
         if: steps.check.outputs.run == 'true'
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           token: ${{ secrets.AGENT_GITHUB_TOKEN || github.token }}
 
       - name: Setup Node.js
@@ -139,8 +154,24 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN || github.token }}
+          # Set OVERRIDE_GITHUB_TOKEN only if AGENT_GITHUB_TOKEN is configured,
+          # otherwise let the OIDC App token flow handle authentication.
+          OVERRIDE_GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN }}
           INPUT_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           INPUT_TRIGGER_PHRASE: "@ark"
           INPUT_PROMPT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prompt || '' }}
           GITHUB_ACTION_PATH: /tmp/claude-code-action
-        run: cd /tmp/claude-code-action && bun run src/entrypoints/run.ts
+        run: bun run /tmp/claude-code-action/src/entrypoints/run.ts
+
+      # Post a comment on failure so the user knows something went wrong
+      - name: Post failure comment
+        if: failure() && steps.check.outputs.run == 'true' && github.event_name != 'workflow_dispatch'
+        env:
+          GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN || github.token }}
+        run: |
+          ISSUE_NUMBER="${{ github.event.issue.number }}"
+          if [ -n "$ISSUE_NUMBER" ]; then
+            RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            gh api "repos/${{ github.repository }}/issues/$ISSUE_NUMBER/comments" \
+              -f body="> ❌ Ark Agent failed. [View logs](${RUN_URL})"
+          fi

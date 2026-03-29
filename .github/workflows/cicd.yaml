@@ -78,7 +78,7 @@ jobs:
         shell: bash
         run: |
           GITHUB_REPOSITORY="${{ github.repository }}"
-          LAST_RUN_ID=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs?branch=main&status=success&per_page=100" | jq -c '.workflow_runs[] | select(.name == "CI/CD") | .id' | head -n 1)
+          LAST_RUN_ID=$(gh api "/repos/$GITHUB_REPOSITORY/actions/workflows/cicd.yaml/runs?branch=main&status=success&per_page=1" | jq -c '.workflow_runs[0].id')
           
           echo "Downloading artifacts from run ID: $LAST_RUN_ID"
           gh run download "$LAST_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern "xray-scan-results-agents-at-scale-*" --dir ./artifacts

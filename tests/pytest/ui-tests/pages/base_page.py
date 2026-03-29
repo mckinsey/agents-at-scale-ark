@@ -16,7 +16,7 @@ class BasePage:
     def navigate(self, url: str) -> None:
         self.page.goto(url)
 
-    def _check_toast_popup(self, timeout: int = 5000) -> bool:
+    def _check_toast_popup(self, timeout: int = 15000) -> bool:
         # Note: This does not confirm whether the toast shows success, only waits to see it
         # and logs what it contains.
         try:

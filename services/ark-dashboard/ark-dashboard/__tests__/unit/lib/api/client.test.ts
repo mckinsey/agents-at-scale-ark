@@ -104,6 +104,42 @@ describe('APIClient', () => {
       )
     })
 
+    it('should handle endpoints with existing query parameters', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({}),
+      })
+
+      await client.get('/api/marketplace?type=demos')
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `http://localhost:8080/api/marketplace?type=demos&_t=${MOCK_TIMESTAMP}`,
+        expect.objectContaining({
+          method: 'GET',
+        })
+      )
+    })
+
+    it('should handle endpoints with existing query parameters and additional params', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({}),
+      })
+
+      await client.get('/api/marketplace?type=demos', { params: { search: 'test' } })
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `http://localhost:8080/api/marketplace?type=demos&search=test&_t=${MOCK_TIMESTAMP}`,
+        expect.objectContaining({
+          method: 'GET',
+        })
+      )
+    })
+
     it('should handle API errors with JSON response', async () => {
       const errorData = { message: 'Not found', code: 'RESOURCE_NOT_FOUND' }
       mockFetch.mockResolvedValueOnce({

@@ -18,8 +18,8 @@ type execMockTeamMember struct {
 }
 
 func (m *execMockTeamMember) GetName() string        { return m.name }
-func (m *execMockTeamMember) GetType() string         { return MemberTypeAgent }
-func (m *execMockTeamMember) GetDescription() string  { return "" }
+func (m *execMockTeamMember) GetType() string        { return MemberTypeAgent }
+func (m *execMockTeamMember) GetDescription() string { return "" }
 func (m *execMockTeamMember) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	return m.execFunc(ctx, userInput, history, memory, eventStream)
 }
