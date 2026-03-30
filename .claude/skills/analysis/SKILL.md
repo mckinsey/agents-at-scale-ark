@@ -34,7 +34,6 @@ The Ark repository is organized as follows:
   - Webhooks for validation
 
 - **`services/`** - Supporting services (Go, Python, TypeScript)
-  - `postgres-memory/` - Memory persistence
   - `ark-api/` - REST API
 
 - **`samples/`** - Example configurations (YAML)
