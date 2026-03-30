@@ -1,59 +1,59 @@
 ## ADDED Requirements
 
-### Requirement: OpenAI endpoint stores messages in memory service before creating Query
-The ark-api `/openai/v1/chat/completions` endpoint SHALL store the incoming `messages[]` array in the memory service before creating the Query CRD. If a `conversationId` is provided in request metadata, it SHALL append to that conversation. If no `conversationId` is provided, it SHALL create a new conversation and use the returned ID.
+### Requirement: OpenAI endpoints removed from ark-api
+The ark-api SHALL remove the `/openai/v1/chat/completions` POST endpoint, the `/openai/v1/models` GET endpoint, the `ChatCompletionRequest` model, the streaming proxy function, and the `/openai/v1/chat/completions` entry from ReadOnlyMiddleware.
 
-#### Scenario: First message in a new conversation
-- **WHEN** a chat completion request arrives with `messages` array and no `conversationId` in metadata
-- **THEN** the endpoint creates a new conversation in the memory service, stores the messages, and creates a Query with `type: "user"`, the last user message as `spec.input`, and the new `conversationId`
+#### Scenario: Client calls removed completions endpoint
+- **WHEN** a client sends a POST request to `/openai/v1/chat/completions`
+- **THEN** the server returns 404
 
-#### Scenario: Continuation of existing conversation
-- **WHEN** a chat completion request arrives with `messages` array and `conversationId: "conv-123"` in metadata
-- **THEN** the endpoint appends messages to conversation `"conv-123"` in the memory service and creates a Query with `type: "user"`, the last user message as `spec.input`, and `conversationId: "conv-123"`
+#### Scenario: Client calls removed models endpoint
+- **WHEN** a client sends a GET request to `/openai/v1/models`
+- **THEN** the server returns 404
 
-#### Scenario: Single message request
-- **WHEN** a chat completion request arrives with a single user message in `messages[]`
-- **THEN** the endpoint stores that message in the memory service and creates a Query with the message content as `spec.input`
+#### Scenario: Read-only mode no longer whitelists removed endpoint
+- **WHEN** the ark-api is in read-only mode
+- **THEN** the middleware whitelist does not reference `/openai/v1/chat/completions`
 
-### Requirement: OpenAI endpoint extracts last user message as Query input
-The endpoint SHALL extract the text content of the last message with `role: "user"` from the `messages[]` array and use it as the Query's `spec.input` string.
+### Requirement: Dashboard streams via query API and broker proxy
+The dashboard SHALL create queries via `POST /api/v1/queries/` with the streaming annotation (`ark.mckinsey.com/streaming-enabled: "true"`), then consume SSE via `GET /api/v1/broker/chunks?watch=true&query-id={queryName}` through the ark-api broker proxy. The dashboard SHALL NOT call the broker service directly.
 
-#### Scenario: Multiple messages with last being user message
-- **WHEN** `messages` contains `[{role: "user", content: "hello"}, {role: "assistant", content: "hi"}, {role: "user", content: "how are you"}]`
-- **THEN** the Query `spec.input` is `"how are you"`
+#### Scenario: Dashboard sends a streaming chat message
+- **WHEN** a user sends a message in the dashboard with streaming enabled
+- **THEN** the dashboard creates a query via `/api/v1/queries/` with the streaming annotation and streams results from `/api/v1/broker/chunks`
 
-#### Scenario: User message with complex content
-- **WHEN** the last user message has `content` as an array with a text part
-- **THEN** the endpoint extracts the text from the first text-type content part
+#### Scenario: Dashboard sends a non-streaming chat message
+- **WHEN** a user sends a message in the dashboard with streaming disabled
+- **THEN** the dashboard creates a query via `/api/v1/queries/` and polls for the result
 
-### Requirement: OpenAI endpoint creates Query with type user
-The endpoint SHALL always create Queries with `type: "user"` instead of `type: "messages"`. The `spec.input` field SHALL contain the extracted user message string.
+### Requirement: CLI uses query API instead of OpenAI SDK
+The ark-cli SHALL create queries via the query API (`/api/v1/queries/`) instead of wrapping the OpenAI SDK pointing at `/openai/v1`. For streaming, it SHALL use the same broker proxy pattern as the dashboard.
 
-#### Scenario: Query resource created from chat completion request
-- **WHEN** the endpoint creates a Query CRD
-- **THEN** the Query has `spec.type: "user"` and `spec.input` is a string, not a message array
+#### Scenario: CLI sends a query
+- **WHEN** a user runs a query command in ark-cli
+- **THEN** the CLI creates a query via `/api/v1/queries/` with string input
 
-### Requirement: Query response includes conversationId
-The endpoint SHALL include the `conversationId` in the response metadata so clients can continue the conversation.
+#### Scenario: CLI streams a response
+- **WHEN** a user runs a streaming query in ark-cli
+- **THEN** the CLI creates a query with the streaming annotation and consumes SSE from the broker proxy
 
-#### Scenario: Non-streaming response
-- **WHEN** a non-streaming chat completion request completes
-- **THEN** the response includes the `conversationId` in the response object or metadata
+### Requirement: Dashboard API dialog updated
+The dashboard agents-api-dialog SHALL show the query API endpoint and updated code snippets instead of the removed OpenAI endpoint.
 
-#### Scenario: Streaming response final chunk
-- **WHEN** a streaming chat completion completes
-- **THEN** the final SSE chunk includes the `conversationId` for the client to store
+#### Scenario: User views API integration dialog
+- **WHEN** a user opens the API dialog for an agent
+- **THEN** the dialog shows the query API endpoint with updated Python/Go/Bash code snippets
 
 ### Requirement: Dashboard sends single message with conversationId
 The dashboard chat session hook SHALL send only the current user message and a `conversationId` (if continuing a conversation) instead of accumulating and re-sending all messages.
 
 #### Scenario: User sends first message in dashboard
 - **WHEN** a user types a message in a new chat session
-- **THEN** the dashboard sends a request with `messages: [{role: "user", content: "<text>"}]` and no `conversationId`
+- **THEN** the dashboard creates a query with the message as string input and no `conversationId`
 
 #### Scenario: User sends follow-up message in dashboard
 - **WHEN** a user sends a second message in an existing chat session
-- **THEN** the dashboard sends a request with `messages: [{role: "user", content: "<text>"}]` and `conversationId` from the previous response
+- **THEN** the dashboard creates a query with the message as string input and `conversationId` from the previous response
 
 #### Scenario: Dashboard displays conversation history
 - **WHEN** a user views an active conversation
@@ -75,11 +75,11 @@ The Query CRD SHALL remove the `QueryTypeMessages` constant, `type: "messages"` 
 - **THEN** there is no `openai-go` or other LLM provider SDK import
 
 ### Requirement: Mutating webhook migrates type messages queries during deprecation period
-During the deprecation period, a mutating webhook SHALL convert `type: "messages"` queries by extracting the last user message, storing messages in the memory service, rewriting to `type: "user"` with `conversationId`, and adding a migration warning annotation.
+During the deprecation period, a mutating webhook SHALL convert `type: "messages"` queries from direct CRD users by extracting the last user message and rewriting to `type: "user"` with a migration warning annotation.
 
-#### Scenario: Legacy client submits type messages query
-- **WHEN** a Query with `type: "messages"` and a message array is submitted during the deprecation period
-- **THEN** the webhook extracts the last user message, stores messages in memory, rewrites the spec to `type: "user"` with the extracted text and a `conversationId`, and adds a migration warning annotation
+#### Scenario: Direct CRD user submits type messages query
+- **WHEN** a Query with `type: "messages"` and a message array is submitted via kubectl during the deprecation period
+- **THEN** the webhook extracts the last user message, rewrites the spec to `type: "user"` with the extracted text, and adds a migration warning annotation
 
 ### Requirement: Shared query input resolver
 The controller SHALL resolve query input text using `resolution.ResolveQueryInputText` in `ark/internal/resolution/query_input.go` without importing the completions executor package. The resolver SHALL handle string input with Go template parameter expansion, resolving parameter values from inline values, ConfigMap refs, and Secret refs via existing shared helpers.
@@ -124,3 +124,17 @@ The completions handler SHALL reliably populate `messages` metadata in A2A respo
 #### Scenario: Completions handler builds A2A response with empty messages
 - **WHEN** execution returns empty response messages
 - **THEN** the handler includes a minimal fallback message in metadata rather than omitting the field
+
+### Requirement: CI/CD health check updated
+The CI/CD workflow SHALL use a different endpoint for the ark-api health check instead of `/openai/v1/models`.
+
+#### Scenario: CI pipeline verifies ark-api is running
+- **WHEN** the CI/CD pipeline checks ark-api health
+- **THEN** it uses a non-OpenAI endpoint (e.g., `/api/v1/agents/` or a dedicated health endpoint)
+
+### Requirement: Migration guide for external users
+Documentation SHALL include a migration guide for external users who integrated with Ark via the OpenAI SDK, showing how to switch to the query API.
+
+#### Scenario: External user reads migration guide
+- **WHEN** a developer who previously used the OpenAI SDK reads the upgrading docs
+- **THEN** they find step-by-step instructions for migrating to the query API with equivalent code examples

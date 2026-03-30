@@ -65,4 +65,4 @@ The docs SHALL present `conversationId` as the sole conversation threading mecha
 
 #### Scenario: Upgrading guide documents the breaking change
 - **WHEN** a developer reads `docs/content/reference/upgrading.mdx`
-- **THEN** an entry explains that `type: "messages"` is removed, with migration guidance to use `conversationId` + memory service or the OpenAI-compatible endpoint
+- **THEN** an entry explains that `type: "messages"` and the OpenAI-compatible endpoints are removed, with migration guidance to use `conversationId` + memory service via the query API

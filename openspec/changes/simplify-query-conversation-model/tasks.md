@@ -29,7 +29,7 @@
 ## 4. Completions Executor Updates
 
 - [ ] 4.1 Deduplicate `resolveConfigMapKeyRef` (`query_parameters.go:72`) and `resolveSecretKeyRef` (`:85`) to delegate to existing `resolution.ResolveFromConfigMap` and `resolution.ResolveFromSecret`
-- [ ] 4.2 Audit `handler.go` `buildA2AResponse` / `serializeResponseMessages` to ensure `messages` metadata is always populated under `QueryExtensionMetadataKey` (currently returns empty when responseMessages is nil or marshaling fails)
+- [ ] 4.2 Audit `handler.go` `buildA2AResponse` / `serializeResponseMessages` to ensure `messages` metadata is always populated under `QueryExtensionMetadataKey`
 - [ ] 4.3 Update `PrepareExecutionMessages()` in `message_helpers.go` — input is always single user message, history always from memory
 - [ ] 4.4 Remove dual-source message merging logic (no more input messages[] + memory merge)
 - [ ] 4.5 Update `handler.go` `setupExecution()` to not read message array from Query spec
@@ -38,36 +38,61 @@
 - [ ] 4.8 Update `memory_http_test.go` if memory retrieval interface changes
 - [ ] 4.9 Verify `GetQueryInputMessages` still works for engine-internal use (agent prompts, tool bodies)
 
-## 5. ark-api OpenAI Endpoint Translation
+## 5. Remove OpenAI Endpoints from ark-api
 
-- [ ] 5.1 Add memory service client to ark-api for storing messages
-- [ ] 5.2 Update `/openai/v1/chat/completions` to extract last user message from `messages[]`
-- [ ] 5.3 Update endpoint to store messages in memory service and create `type: "user"` Query with `conversationId`
-- [ ] 5.4 Ensure `conversationId` is returned in both streaming and non-streaming responses
-- [ ] 5.5 Update `watch_query_completion()` to not depend on original messages array
-- [ ] 5.6 Update `services/ark-api/ark-api/tests/api/test_openai.py` for new behavior
+- [ ] 5.1 Remove `openai.py` route handler (`/openai/v1/chat/completions` and `/openai/v1/models`)
+- [ ] 5.2 Remove `ChatCompletionRequest` model and OpenAI response types
+- [ ] 5.3 Remove `proxy_streaming_response` function (if not reused by broker proxy)
+- [ ] 5.4 Remove `/openai/v1/chat/completions` from ReadOnlyMiddleware whitelist (`middleware.py:14`)
+- [ ] 5.5 Remove openai router registration from app setup
+- [ ] 5.6 Remove `services/ark-api/ark-api/tests/api/test_openai.py`
+- [ ] 5.7 Update `services/ark-api/ark-api/tests/test_read_only_middleware.py` to remove OpenAI endpoint test
+- [ ] 5.8 Update `services/ark-api/ark-api/src/ark_api/models/queries.py` if `ArkOpenAICompletionsMetadata` is only used by the removed endpoint
 
-## 6. Dashboard Changes
+## 6. Dashboard Migration
 
-- [ ] 6.1 Update `useChatSession` hook to send only current user message + `conversationId`
-- [ ] 6.2 Remove client-side message accumulation from `chatHistoryAtom` in `atoms/chat-history.ts`
-- [ ] 6.3 Add conversation history fetching from API for message display
-- [ ] 6.4 Update `handleStreamChatResponse` to extract and store `conversationId` from responses
-- [ ] 6.5 Update dashboard chat service tests
+- [ ] 6.1 Rewrite `streamChatResponse()` in `chat.ts` to create query via `/api/v1/queries/` with streaming annotation, then stream from `/api/v1/broker/chunks?watch=true&query-id={name}`
+- [ ] 6.2 Update `useChatSession` hook to send only current user message + `conversationId` via query API
+- [ ] 6.3 Remove client-side message accumulation from `chatHistoryAtom` in `atoms/chat-history.ts`
+- [ ] 6.4 Add conversation history fetching from API for message display
+- [ ] 6.5 Update `handleStreamChatResponse` to extract and store `conversationId` from query response
+- [ ] 6.6 Remove `ChatCompletionMessageParam` imports from `chat.ts`, `use-chat-session.ts`, `chat-message.ts`, `chat-message-list.tsx`
+- [ ] 6.7 Rewrite `agents-api-dialog.tsx` to show query API endpoint instead of OpenAI endpoint
+- [ ] 6.8 Rewrite code snippets: `python-snippet.ts`, `go-snippet.ts`, `bash-snippet.ts`
+- [ ] 6.9 Remove `/openai/v1/chat/completions` and `/openai/v1/models` from generated types in `types.ts` (regenerate)
+- [ ] 6.10 Update dashboard streaming tests (`__tests__/unit/services/chat.test.ts`)
+- [ ] 6.11 Update dashboard API dialog tests (`__tests__/unit/components/dialogs/agents-api-dialog.test.tsx`)
+- [ ] 6.12 Update dashboard middleware test (`__tests__/unit/middleware.test.ts:164`)
 
-## 7. E2E Tests and Samples
+## 7. CLI Migration
 
-- [ ] 7.1 Update `tests/query-input-type/` chainsaw tests — remove `type: "messages"` test cases, add `conversationId` continuity tests
-- [ ] 7.2 Update test manifests in `tests/query-input-type/manifests/`
-- [ ] 7.3 Rewrite `samples/queries/query-conversation-messages.yaml` to use `conversationId` pattern
-- [ ] 7.4 Remove broken `samples/queries/query-messages-image-url.yaml`
-- [ ] 7.5 Verify all 55 e2e test directories still pass with `type: "user"` only
+- [ ] 7.1 Rewrite `arkApiClient.ts` to use query API instead of OpenAI SDK wrapper
+- [ ] 7.2 Update `chatClient.ts` to create queries via API and stream via broker proxy
+- [ ] 7.3 Remove `openai` package dependency from ark-cli if no longer needed
+- [ ] 7.4 Update CLI tests for new query creation path
 
-## 8. Documentation
+## 8. CI/CD Updates
 
-- [ ] 8.1 Update `docs/content/reference/resources/query.mdx` — remove `type: "messages"`, document `conversationId` as sole continuity mechanism
-- [ ] 8.2 Update `docs/content/user-guide/queries.mdx` — rewrite "Structured Conversations" section
-- [ ] 8.3 Update `docs/content/developer-guide/queries/a2a-queries.mdx` — update stateful messages section
-- [ ] 8.4 Update `docs/content/developer-guide/building-execution-engines.mdx` — update conversation threading pattern
-- [ ] 8.5 Update `docs/content/reference/ark-apis.mdx` — document ark-api as translation boundary
-- [ ] 8.6 Add migration entry to `docs/content/reference/upgrading.mdx`
+- [ ] 8.1 Update health check in `.github/workflows/cicd.yaml:482` from `/openai/v1/models` to a different endpoint
+- [ ] 8.2 Verify `tests/run-multi-provider.sh` E2E base URL config is unaffected (this is for model providers, not ark-api)
+
+## 9. E2E Tests and Samples
+
+- [ ] 9.1 Update `tests/query-input-type/` chainsaw tests — remove `type: "messages"` test cases, add `conversationId` continuity tests
+- [ ] 9.2 Update test manifests in `tests/query-input-type/manifests/`
+- [ ] 9.3 Rewrite `samples/queries/query-conversation-messages.yaml` to use `conversationId` pattern
+- [ ] 9.4 Remove broken `samples/queries/query-messages-image-url.yaml`
+- [ ] 9.5 Verify all e2e test directories still pass with `type: "user"` only
+
+## 10. Documentation
+
+- [ ] 10.1 Remove "OpenAI-Compatible APIs" section from `docs/content/reference/ark-apis.mdx` (lines 81-296)
+- [ ] 10.2 Remove "Using OpenAI-Compatible Endpoints" section from `docs/content/user-guide/queries.mdx` (lines 126-242)
+- [ ] 10.3 Update `docs/content/developer-guide/queries/streaming.mdx` to show query API + broker proxy pattern
+- [ ] 10.4 Update `docs/content/developer-guide/services/ark-api.mdx` to remove OpenAI routes (lines 64-65)
+- [ ] 10.5 Update `docs/content/reference/resources/query.mdx` — remove `type: "messages"`, document `conversationId` as sole continuity mechanism
+- [ ] 10.6 Update `docs/content/user-guide/queries.mdx` — rewrite "Structured Conversations" section
+- [ ] 10.7 Update `docs/content/developer-guide/queries/a2a-queries.mdx` — update stateful messages section
+- [ ] 10.8 Update `docs/content/developer-guide/building-execution-engines.mdx` — update conversation threading pattern
+- [ ] 10.9 Add migration entry to `docs/content/reference/upgrading.mdx` covering both endpoint removal and `type: "messages"` removal
+- [ ] 10.10 Add migration guide for external OpenAI SDK users with equivalent query API examples
