@@ -78,9 +78,9 @@ Standard REST APIs for managing ARK resources, for example:
 
 Standard Kubernetes REST patterns are followed, such as `POST` to create, `DELETE` to delete.
 
-## OpenAI-Compatible APIs
+## Query API
 
-The `openai/v1/` endpoint has been designed to mimic the [OpenAI API Specification](https://platform.openai.com/docs/api-reference/introduction). This allows Ark resources to be accessed using standard OpenAI compliant tools and SDKs.
+Queries are the primary way to interact with Ark resources. Use the `/v1/queries/` endpoint to create queries with string input and an optional `conversationId` for multi-turn conversations.
 
 ### List Models API
 

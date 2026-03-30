@@ -86,13 +86,13 @@
 
 ## 10. Documentation
 
-- [ ] 10.1 Remove "OpenAI-Compatible APIs" section from `docs/content/reference/ark-apis.mdx` (lines 81-296)
+- [x] 10.1 Remove "OpenAI-Compatible APIs" section from `docs/content/reference/ark-apis.mdx` (lines 81-296)
 - [ ] 10.2 Remove "Using OpenAI-Compatible Endpoints" section from `docs/content/user-guide/queries.mdx` (lines 126-242)
 - [ ] 10.3 Update `docs/content/developer-guide/queries/streaming.mdx` to show query API + broker proxy pattern
-- [ ] 10.4 Update `docs/content/developer-guide/services/ark-api.mdx` to remove OpenAI routes (lines 64-65)
-- [ ] 10.5 Update `docs/content/reference/resources/query.mdx` — remove `type: "messages"`, document `conversationId` as sole continuity mechanism
+- [x] 10.4 Update `docs/content/developer-guide/services/ark-api.mdx` to remove OpenAI routes (lines 64-65)
+- [x] 10.5 Update `docs/content/reference/resources/query.mdx` — remove `type: "messages"`, document `conversationId` as sole continuity mechanism
 - [ ] 10.6 Update `docs/content/user-guide/queries.mdx` — rewrite "Structured Conversations" section
 - [ ] 10.7 Update `docs/content/developer-guide/queries/a2a-queries.mdx` — update stateful messages section
 - [ ] 10.8 Update `docs/content/developer-guide/building-execution-engines.mdx` — update conversation threading pattern
-- [ ] 10.9 Add migration entry to `docs/content/reference/upgrading.mdx` covering both endpoint removal and `type: "messages"` removal
-- [ ] 10.10 Add migration guide for external OpenAI SDK users with equivalent query API examples
+- [x] 10.9 Add migration entry to `docs/content/reference/upgrading.mdx` covering both endpoint removal and `type: "messages"` removal
+- [x] 10.10 Add migration guide for external OpenAI SDK users with equivalent query API examples
