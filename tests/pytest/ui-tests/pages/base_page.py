@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import urlsplit
 
 from playwright.sync_api import Page, TimeoutError
 
@@ -24,16 +25,19 @@ class BasePage:
             popup_locator.wait_for(state="visible", timeout=timeout)
             logger.info(popup_locator.inner_text())
             return True
-        except TimeoutError:
+        except Exception:
             logger.exception("Did not see expected toast")
-            self._capture_failure_debug("toast_not_visible")
+            page_name = urlsplit(self.page.url).path.replace("/", "_")
+            self._capture_failure_debug(f"toast_not_visible{page_name}")
             return False
 
     def _capture_failure_debug(self, label: str = "failure") -> None:
         try:
-            screenshot_path = f"/tmp/{label}.png"
-            self.page.screenshot(path=screenshot_path, full_page=True)
-            logger.info(f"Screenshot saved: {screenshot_path}")
+            screenshots_dir = getattr(self.page, "_screenshots_dir", None)
+            if screenshots_dir:
+                screenshot_path = screenshots_dir / f"{label}.png"
+                self.page.screenshot(path=screenshot_path, full_page=True)
+                logger.info(f"Screenshot saved: {screenshot_path}")
         except Exception as e:
             logger.warning(f"Screenshot failed: {e}")
 

@@ -168,6 +168,13 @@ def ark_setup(request, tmp_path_factory):
 
 
 @pytest.fixture(scope="session")
+def screenshots_dir() -> Path:
+    path = Path("screenshots")
+    path.mkdir(exist_ok=True)
+    return path
+
+
+@pytest.fixture(scope="session")
 def playwright():
     with sync_playwright() as p:
         yield p
@@ -205,8 +212,9 @@ def context(browser, request):
 
 
 @pytest.fixture(scope="function")
-def page(context, request):
+def page(context, request, screenshots_dir):
     page = context.new_page()
+    page._screenshots_dir = screenshots_dir
 
     console_messages = []
 
@@ -243,12 +251,9 @@ def pytest_runtest_makereport(item, call):
     
     if rep.when == "call" and rep.failed:
         page = item.funcargs.get("page")
-        if page:
+        screenshots_dir = item.funcargs.get("screenshots_dir")
+        if page and screenshots_dir:
             try:
-                # Ensure screenshots directory exists
-                screenshots_dir = Path("screenshots")
-                screenshots_dir.mkdir(exist_ok=True)
-                
                 screenshot_path = screenshots_dir / f"{item.name}.png"
                 page.screenshot(path=str(screenshot_path))
                 logger.info(f"Screenshot saved: {screenshot_path}")
