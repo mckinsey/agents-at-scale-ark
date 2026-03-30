@@ -67,8 +67,8 @@
 ## 7. CLI Migration
 
 - [x] 7.1 Rewrite `arkApiClient.ts` to use query API instead of OpenAI SDK wrapper
-- [ ] 7.2 Update `chatClient.ts` to create queries via API and stream via broker proxy
-- [ ] 7.3 Remove `openai` package dependency from ark-cli if no longer needed
+- [x] 7.2 Update `chatClient.ts` to create queries via API and stream via broker proxy
+- [x] 7.3 Remove `openai` package dependency from ark-cli if no longer needed
 - [ ] 7.4 Update CLI tests for new query creation path
 
 ## 8. CI/CD Updates
@@ -88,11 +88,11 @@
 
 - [x] 10.1 Remove "OpenAI-Compatible APIs" section from `docs/content/reference/ark-apis.mdx` (lines 81-296)
 - [x] 10.2 Remove "Using OpenAI-Compatible Endpoints" section from `docs/content/user-guide/queries.mdx` (lines 126-242)
-- [ ] 10.3 Update `docs/content/developer-guide/queries/streaming.mdx` to show query API + broker proxy pattern
+- [x] 10.3 Update `docs/content/developer-guide/queries/streaming.mdx` to show query API + broker proxy pattern
 - [x] 10.4 Update `docs/content/developer-guide/services/ark-api.mdx` to remove OpenAI routes (lines 64-65)
 - [x] 10.5 Update `docs/content/reference/resources/query.mdx` — remove `type: "messages"`, document `conversationId` as sole continuity mechanism
 - [x] 10.6 Update `docs/content/user-guide/queries.mdx` — rewrite "Structured Conversations" section
-- [ ] 10.7 Update `docs/content/developer-guide/queries/a2a-queries.mdx` — update stateful messages section
-- [ ] 10.8 Update `docs/content/developer-guide/building-execution-engines.mdx` — update conversation threading pattern
+- [x] 10.7 Update `docs/content/developer-guide/queries/a2a-queries.mdx` — update stateful messages section
+- [x] 10.8 Update `docs/content/developer-guide/building-execution-engines.mdx` — update conversation threading pattern
 - [x] 10.9 Add migration entry to `docs/content/reference/upgrading.mdx` covering both endpoint removal and `type: "messages"` removal
 - [x] 10.10 Add migration guide for external OpenAI SDK users with equivalent query API examples
