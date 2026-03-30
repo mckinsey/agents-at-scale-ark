@@ -59,8 +59,8 @@ The dashboard chat session hook SHALL send only the current user message and a `
 - **WHEN** a user views an active conversation
 - **THEN** the dashboard fetches message history from the API (backed by memory service) for display
 
-### Requirement: Query CRD removes type messages support
-The Query CRD SHALL remove the `QueryTypeMessages` constant and `type: "messages"` input mode. The `spec.type` field SHALL only accept `"user"` (or empty, defaulting to `"user"`). The `GetInputMessages()` and `SetInputMessages()` methods SHALL be removed from the Query type.
+### Requirement: Query CRD removes type messages support and openai-go import
+The Query CRD SHALL remove the `QueryTypeMessages` constant, `type: "messages"` input mode, `GetInputMessages()`, `SetInputMessages()`, and `GetInputAsGeneric()` methods. The `github.com/openai/openai-go` import SHALL be removed from `api/v1alpha1/query_types.go`. The `spec.type` field SHALL only accept `"user"` (or empty, defaulting to `"user"`).
 
 #### Scenario: Query created with type user
 - **WHEN** a Query CRD is created with `spec.type: "user"` and `spec.input: "hello"`
@@ -70,6 +70,10 @@ The Query CRD SHALL remove the `QueryTypeMessages` constant and `type: "messages
 - **WHEN** a Query CRD is created without `spec.type`
 - **THEN** it defaults to `"user"` and processes normally
 
+#### Scenario: CRD types have no provider SDK dependency
+- **WHEN** a developer inspects the imports of `ark/api/v1alpha1/query_types.go`
+- **THEN** there is no `openai-go` or other LLM provider SDK import
+
 ### Requirement: Mutating webhook migrates type messages queries during deprecation period
 During the deprecation period, a mutating webhook SHALL convert `type: "messages"` queries by extracting the last user message, storing messages in the memory service, rewriting to `type: "user"` with `conversationId`, and adding a migration warning annotation.
 
@@ -77,13 +81,46 @@ During the deprecation period, a mutating webhook SHALL convert `type: "messages
 - **WHEN** a Query with `type: "messages"` and a message array is submitted during the deprecation period
 - **THEN** the webhook extracts the last user message, stores messages in memory, rewrites the spec to `type: "user"` with the extracted text and a `conversationId`, and adds a migration warning annotation
 
+### Requirement: Shared query input resolver
+The controller SHALL resolve query input text using `resolution.ResolveQueryInputText` in `ark/internal/resolution/query_input.go` without importing the completions executor package. The resolver SHALL handle string input with Go template parameter expansion, resolving parameter values from inline values, ConfigMap refs, and Secret refs via existing shared helpers.
+
+#### Scenario: Controller extracts text from query with template parameters
+- **WHEN** a query has `spec.input: "Weather in {{.location}}"` with a parameter `location` referencing a ConfigMap
+- **THEN** the controller calls `resolution.ResolveQueryInputText` which resolves the ConfigMap value and returns the expanded string
+
+#### Scenario: Controller extracts plain text input
+- **WHEN** a query has `spec.input: "hello"` with no parameters
+- **THEN** the resolver returns `"hello"` directly
+
 ### Requirement: Controller does not import completions package
-The query controller SHALL NOT import the completions executor package. User input extraction SHALL read `spec.input` as a string directly (resolving ValueSource references). Response serialization SHALL use a simple utility without completions message types.
+The query controller SHALL NOT import the completions executor package. User input extraction SHALL use the shared resolver. Response serialization SHALL use `buildFallbackRaw` without completions message types.
 
 #### Scenario: Controller processes a query
 - **WHEN** the controller reconciles a Query with `spec.input: "hello"`
-- **THEN** it reads the input string directly, creates an A2A TextPart with `"hello"`, and dispatches without any completions package calls
+- **THEN** it calls the shared resolver, creates an A2A TextPart with `"hello"`, and dispatches without any completions package calls
 
 #### Scenario: Controller serializes response without raw messages from engine
-- **WHEN** the engine response does not include a raw messages JSON
-- **THEN** the controller wraps the response text in a simple JSON structure without using completions message types
+- **WHEN** the engine response does not include `MessagesRaw` in A2A metadata
+- **THEN** the controller calls `buildFallbackRaw` which produces `[{"role":"assistant","content":"<text>"}]` without completions types
+
+#### Scenario: Controller serializes response with raw messages from engine
+- **WHEN** the engine response includes `MessagesRaw` in A2A metadata under `QueryExtensionMetadataKey`
+- **THEN** the controller writes the value directly to `response.raw` with no deserialization
+
+### Requirement: Deduplicated ConfigMap/Secret resolution
+The completions package SHALL delegate ConfigMap and Secret resolution to the shared helpers in `ark/internal/resolution/`. The duplicate `resolveConfigMapKeyRef` (`query_parameters.go:72`) and `resolveSecretKeyRef` (`:85`) SHALL be replaced with calls to `resolution.ResolveFromConfigMap` (`headers.go:85`) and `resolution.ResolveFromSecret` (`headers.go:66`).
+
+#### Scenario: Completions resolves ConfigMap parameter
+- **WHEN** the completions engine resolves a parameter with a ConfigMap reference
+- **THEN** it delegates to `resolution.ResolveFromConfigMap` and returns the same value as the controller resolver would
+
+### Requirement: Executor metadata reliability
+The completions handler SHALL reliably populate `messages` metadata in A2A responses under `QueryExtensionMetadataKey`. The `serializeResponseMessages` function SHALL handle empty response messages gracefully rather than returning an empty string.
+
+#### Scenario: Completions handler builds A2A response with messages
+- **WHEN** the completions handler constructs an A2A response from execution results
+- **THEN** it includes serialized OpenAI-compatible messages under `QueryExtensionMetadataKey`
+
+#### Scenario: Completions handler builds A2A response with empty messages
+- **WHEN** execution returns empty response messages
+- **THEN** the handler includes a minimal fallback message in metadata rather than omitting the field
