@@ -453,9 +453,7 @@ func buildResponseMeta(state *executionState, execResult *ExecutionResult, respo
 			responseMeta["a2a"] = a2aMeta
 		}
 	}
-	if serialized := serializeResponseMessages(responseMessages); serialized != "" {
-		responseMeta["messages"] = json.RawMessage(serialized)
-	}
+	responseMeta["messages"] = json.RawMessage(serializeResponseMessages(responseMessages))
 	return responseMeta
 }
 
@@ -559,11 +557,11 @@ func serializeResponseMessages(messages []Message) string {
 		}
 	}
 	if len(actual) == 0 {
-		return ""
+		return "[]"
 	}
 	data, err := json.Marshal(actual)
 	if err != nil {
-		return ""
+		return "[]"
 	}
 	return string(data)
 }

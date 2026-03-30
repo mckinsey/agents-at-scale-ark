@@ -28,26 +28,26 @@
 
 ## 4. Completions Executor Updates
 
-- [ ] 4.1 Deduplicate `resolveConfigMapKeyRef` (`query_parameters.go:72`) and `resolveSecretKeyRef` (`:85`) to delegate to existing `resolution.ResolveFromConfigMap` and `resolution.ResolveFromSecret`
-- [ ] 4.2 Audit `handler.go` `buildA2AResponse` / `serializeResponseMessages` to ensure `messages` metadata is always populated under `QueryExtensionMetadataKey`
-- [ ] 4.3 Update `PrepareExecutionMessages()` in `message_helpers.go` — input is always single user message, history always from memory
-- [ ] 4.4 Remove dual-source message merging logic (no more input messages[] + memory merge)
-- [ ] 4.5 Update `handler.go` `setupExecution()` to not read message array from Query spec
-- [ ] 4.6 Update `message_helpers_test.go` for simplified message preparation
-- [ ] 4.7 Update `handler_test.go` for new ProcessMessage flow
-- [ ] 4.8 Update `memory_http_test.go` if memory retrieval interface changes
-- [ ] 4.9 Verify `GetQueryInputMessages` still works for engine-internal use (agent prompts, tool bodies)
+- [x] 4.1 Deduplicate `resolveConfigMapKeyRef` (`query_parameters.go:72`) and `resolveSecretKeyRef` (`:85`) to delegate to existing `resolution.ResolveFromConfigMap` and `resolution.ResolveFromSecret`
+- [x] 4.2 Audit `handler.go` `buildA2AResponse` / `serializeResponseMessages` to ensure `messages` metadata is always populated under `QueryExtensionMetadataKey`
+- [x] 4.3 Update `PrepareExecutionMessages()` in `message_helpers.go` — input is always single user message, history always from memory
+- [x] 4.4 Remove dual-source message merging logic (no more input messages[] + memory merge)
+- [x] 4.5 Update `handler.go` `setupExecution()` to not read message array from Query spec
+- [x] 4.6 Update `message_helpers_test.go` for simplified message preparation
+- [x] 4.7 Update `handler_test.go` for new ProcessMessage flow
+- [x] 4.8 Update `memory_http_test.go` if memory retrieval interface changes
+- [x] 4.9 Verify `GetQueryInputMessages` still works for engine-internal use (agent prompts, tool bodies)
 
 ## 5. Remove OpenAI Endpoints from ark-api
 
-- [ ] 5.1 Remove `openai.py` route handler (`/openai/v1/chat/completions` and `/openai/v1/models`)
-- [ ] 5.2 Remove `ChatCompletionRequest` model and OpenAI response types
-- [ ] 5.3 Remove `proxy_streaming_response` function (if not reused by broker proxy)
-- [ ] 5.4 Remove `/openai/v1/chat/completions` from ReadOnlyMiddleware whitelist (`middleware.py:14`)
-- [ ] 5.5 Remove openai router registration from app setup
-- [ ] 5.6 Remove `services/ark-api/ark-api/tests/api/test_openai.py`
-- [ ] 5.7 Update `services/ark-api/ark-api/tests/test_read_only_middleware.py` to remove OpenAI endpoint test
-- [ ] 5.8 Update `services/ark-api/ark-api/src/ark_api/models/queries.py` if `ArkOpenAICompletionsMetadata` is only used by the removed endpoint
+- [x] 5.1 Remove `openai.py` route handler (`/openai/v1/chat/completions` and `/openai/v1/models`)
+- [x] 5.2 Remove `ChatCompletionRequest` model and OpenAI response types
+- [x] 5.3 Remove `proxy_streaming_response` function (if not reused by broker proxy)
+- [x] 5.4 Remove `/openai/v1/chat/completions` from ReadOnlyMiddleware whitelist (`middleware.py:14`)
+- [x] 5.5 Remove openai router registration from app setup
+- [x] 5.6 Remove `services/ark-api/ark-api/tests/api/test_openai.py`
+- [x] 5.7 Update `services/ark-api/ark-api/tests/test_read_only_middleware.py` to remove OpenAI endpoint test
+- [x] 5.8 Update `services/ark-api/ark-api/src/ark_api/models/queries.py` if `ArkOpenAICompletionsMetadata` is only used by the removed endpoint
 
 ## 6. Dashboard Migration
 
