@@ -54,6 +54,9 @@ spec:
                 description: When true, indicates intent to cancel the query
                 type: boolean
               conversationId:
+                description: |-
+                  ConversationId is sent as A2A ContextID when dispatching to execution engines.
+                  Engines use it for conversation threading (e.g., memory lookup, session management).
                 minLength: 1
                 type: string
               input:
@@ -476,8 +479,10 @@ spec:
                       taskId)
                     properties:
                       contextId:
-                        description: ContextID from the A2A protocol when the target
-                          is an A2A agent
+                        description: |-
+                          ContextID returned by the execution engine via A2A protocol response.
+                          For the completions engine this is the broker conversation UUID.
+                          For named engines this is whatever context ID the engine returned.
                         type: string
                       taskId:
                         description: TaskID from the A2A protocol when the target

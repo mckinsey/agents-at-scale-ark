@@ -7,9 +7,10 @@ const (
 
 // Provider constants - specifies which AI provider client to use.
 const (
-	ProviderAzure   = "azure"
-	ProviderOpenAI  = "openai"
-	ProviderBedrock = "bedrock"
+	ProviderAzure     = "azure"
+	ProviderOpenAI    = "openai"
+	ProviderBedrock   = "bedrock"
+	ProviderAnthropic = "anthropic"
 )
 
 // Model type constants - specifies the API capability of the model.
