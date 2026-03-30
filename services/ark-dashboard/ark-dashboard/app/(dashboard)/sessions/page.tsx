@@ -1,5 +1,7 @@
 'use client';
 
+import { Suspense } from 'react';
+
 import { PageHeader } from '@/components/common/page-header';
 import { SessionsSection } from '@/components/sections/sessions-section';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
@@ -12,17 +14,19 @@ export default function SessionsPage() {
   const allSessions = mapArgoWorkflowsToSessions(workflows);
 
   const pageTitle = allSessions
-    ? `Workflow Runs (${allSessions.length})`
-    : 'Workflow Runs';
+    ? `Sessions (${allSessions.length})`
+    : 'Sessions';
 
   return (
     <>
-      <PageHeader breadcrumbs={BASE_BREADCRUMBS} currentPage="Workflow Runs" />
+      <PageHeader breadcrumbs={BASE_BREADCRUMBS} currentPage="Sessions" />
       <div className="flex flex-1 flex-col">
         <div>
           <h1 className="text-xl">{pageTitle}</h1>
         </div>
-        <SessionsSection />
+        <Suspense>
+          <SessionsSection />
+        </Suspense>
       </div>
     </>
   );
