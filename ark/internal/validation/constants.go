@@ -1,9 +1,10 @@
 package validation
 
 const (
-	ProviderAzure   = "azure"
-	ProviderOpenAI  = "openai"
-	ProviderBedrock = "bedrock"
+	ProviderAzure     = "azure"
+	ProviderOpenAI    = "openai"
+	ProviderBedrock   = "bedrock"
+	ProviderAnthropic = "anthropic"
 )
 
 const (

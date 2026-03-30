@@ -4,7 +4,7 @@ metadata:
   name: anthropic-api-key
 type: Opaque
 stringData:
-  # Make sure to use 
+  # Make sure to use
   # export ANTHROPIC_API_KEY="key"
   # envsubst < samples/models/claude.yaml | kubectl apply -f -
   apiKey: ${ANTHROPIC_API_KEY}
@@ -14,13 +14,13 @@ kind: Model
 metadata:
   name: claude
 spec:
-  type: openai
+  provider: anthropic
   model:
     value: claude-opus-4-20250514
   config:
-    openai:
+    anthropic:
       baseUrl:
-        value: "https://api.anthropic.com/v1/"
+        value: "https://api.anthropic.com"
       apiKey:
         valueFrom:
           secretKeyRef:

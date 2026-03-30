@@ -149,10 +149,26 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
   kubectl wait --for=condition=Available apiservice v1prealpha1.ark.mckinsey.com --timeout=120s 2>/dev/null || true
 
   echo "=== Warming up aggregated API server ==="
-  for i in $(seq 1 5); do
-    kubectl get agents.ark.mckinsey.com -A --request-timeout=10s &>/dev/null && break
+  WARMUP_OK=0
+  for i in $(seq 1 30); do
+    if kubectl get agents.ark.mckinsey.com -A --request-timeout=5s &>/dev/null \
+      && kubectl get models.ark.mckinsey.com -A --request-timeout=5s &>/dev/null \
+      && kubectl get queries.ark.mckinsey.com -A --request-timeout=5s &>/dev/null; then
+      WARMUP_OK=$((WARMUP_OK + 1))
+    else
+      WARMUP_OK=0
+    fi
+    if [ "$WARMUP_OK" -ge 3 ]; then
+      echo "Aggregated API server stable (${WARMUP_OK} consecutive successful probes)"
+      break
+    fi
     sleep 2
   done
+  if [ "$WARMUP_OK" -lt 3 ]; then
+    echo "WARNING: Aggregated API server may not be fully stable (only ${WARMUP_OK} consecutive successes)"
+    echo "Controller logs:"
+    kubectl -n ark-system logs deployment/ark-controller --tail=30
+  fi
 
   if kubectl get crd agents.ark.mckinsey.com &>/dev/null; then
     echo "ERROR: CRD agents.ark.mckinsey.com exists — controller is using etcd, not PostgreSQL aggregated API server"
