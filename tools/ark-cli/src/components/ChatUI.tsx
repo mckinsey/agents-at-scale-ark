@@ -621,9 +621,9 @@ const ChatUI: React.FC<ChatUIProps> = ({
         (chunk: string, toolCalls?: ToolCall[], arkMetadata?: ArkMetadata) => {
           // Extract A2A context ID from response
           // Chat TUI always queries a single target, so contextId is in response
-          if (arkMetadata?.completedQuery?.status?.response?.a2a?.contextId) {
-            a2aContextIdRef.current =
-              arkMetadata.completedQuery.status.response.a2a.contextId;
+          const completed = arkMetadata?.completedQuery as {status?: {response?: {a2a?: {contextId?: string}}}} | undefined;
+          if (completed?.status?.response?.a2a?.contextId) {
+            a2aContextIdRef.current = completed.status.response.a2a.contextId;
           }
 
           // Update message progressively as chunks arrive
@@ -721,12 +721,9 @@ const ChatUI: React.FC<ChatUIProps> = ({
 
       let errorMessage = 'Failed to send message';
 
-      // Standard JavaScript errors
-      else if (err instanceof Error) {
+      if (err instanceof Error) {
         errorMessage = err.message;
-      }
-      // String errors from throw statements
-      else if (typeof err === 'string') {
+      } else if (typeof err === 'string') {
         errorMessage = err;
       }
 
