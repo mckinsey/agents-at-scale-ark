@@ -3,10 +3,10 @@
 - [x] 1.1 Remove `QueryTypeMessages` constant and `type: "messages"` support from `ark/api/v1alpha1/query_types.go`
 - [x] 1.2 Remove `GetInputMessages()`, `SetInputMessages()`, and `GetInputAsGeneric()` methods from Query type
 - [x] 1.3 Remove `openai-go` import from `ark/api/v1alpha1/query_types.go`
-- [ ] 1.4 Update query validation in `ark/internal/validation/` to reject `type: "messages"`
-- [ ] 1.5 Add mutating webhook to convert `type: "messages"` queries during deprecation period (extract last user message, add migration warning annotation following `model_webhook.go` pattern)
+- [x] 1.4 Update query validation in `ark/internal/validation/` to reject `type: "messages"`
+- [x] 1.5 Add mutating webhook to convert `type: "messages"` queries during deprecation period (extract last user message, add migration warning annotation following `model_webhook.go` pattern)
 - [ ] 1.6 Regenerate CRDs with `make manifests` and sync to Helm chart
-- [ ] 1.7 Update query webhook tests in `ark/internal/webhook/v1/query_webhook_test.go`
+- [x] 1.7 Update query webhook tests in `ark/internal/webhook/v1/query_webhook_test.go`
 
 ## 2. Shared Query Input Resolver
 
@@ -56,7 +56,7 @@
 - [ ] 6.3 Remove client-side message accumulation from `chatHistoryAtom` in `atoms/chat-history.ts`
 - [ ] 6.4 Add conversation history fetching from API for message display
 - [ ] 6.5 Update `handleStreamChatResponse` to extract and store `conversationId` from query response
-- [ ] 6.6 Remove `ChatCompletionMessageParam` imports from `chat.ts`, `use-chat-session.ts`, `chat-message.ts`, `chat-message-list.tsx`
+- [x] 6.6 Remove `ChatCompletionMessageParam` imports from `chat.ts`, `use-chat-session.ts`, `chat-message.ts`, `chat-message-list.tsx`
 - [x] 6.7 Rewrite `agents-api-dialog.tsx` to show query API endpoint instead of OpenAI endpoint
 - [x] 6.8 Rewrite code snippets: `python-snippet.ts`, `go-snippet.ts`, `bash-snippet.ts`
 - [ ] 6.9 Remove `/openai/v1/chat/completions` and `/openai/v1/models` from generated types in `types.ts` (regenerate)
@@ -66,7 +66,7 @@
 
 ## 7. CLI Migration
 
-- [ ] 7.1 Rewrite `arkApiClient.ts` to use query API instead of OpenAI SDK wrapper
+- [x] 7.1 Rewrite `arkApiClient.ts` to use query API instead of OpenAI SDK wrapper
 - [ ] 7.2 Update `chatClient.ts` to create queries via API and stream via broker proxy
 - [ ] 7.3 Remove `openai` package dependency from ark-cli if no longer needed
 - [ ] 7.4 Update CLI tests for new query creation path
@@ -87,11 +87,11 @@
 ## 10. Documentation
 
 - [x] 10.1 Remove "OpenAI-Compatible APIs" section from `docs/content/reference/ark-apis.mdx` (lines 81-296)
-- [ ] 10.2 Remove "Using OpenAI-Compatible Endpoints" section from `docs/content/user-guide/queries.mdx` (lines 126-242)
+- [x] 10.2 Remove "Using OpenAI-Compatible Endpoints" section from `docs/content/user-guide/queries.mdx` (lines 126-242)
 - [ ] 10.3 Update `docs/content/developer-guide/queries/streaming.mdx` to show query API + broker proxy pattern
 - [x] 10.4 Update `docs/content/developer-guide/services/ark-api.mdx` to remove OpenAI routes (lines 64-65)
 - [x] 10.5 Update `docs/content/reference/resources/query.mdx` — remove `type: "messages"`, document `conversationId` as sole continuity mechanism
-- [ ] 10.6 Update `docs/content/user-guide/queries.mdx` — rewrite "Structured Conversations" section
+- [x] 10.6 Update `docs/content/user-guide/queries.mdx` — rewrite "Structured Conversations" section
 - [ ] 10.7 Update `docs/content/developer-guide/queries/a2a-queries.mdx` — update stateful messages section
 - [ ] 10.8 Update `docs/content/developer-guide/building-execution-engines.mdx` — update conversation threading pattern
 - [x] 10.9 Add migration entry to `docs/content/reference/upgrading.mdx` covering both endpoint removal and `type: "messages"` removal

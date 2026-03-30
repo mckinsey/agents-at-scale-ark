@@ -47,55 +47,25 @@ Check the result:
 kubectl get query query-simple -o yaml
 ```
 
-### Structured Conversations
+### Conversations
 
-The `messages` query type can be used to input a structured conversation (messages array):
+For multi-turn conversations, use `conversationId` to maintain context across queries. The memory service manages conversation history automatically.
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
-  name: conversation-messages
+  name: conversation-followup
   namespace: default
 spec:
-  type: messages
-  input:
-    - role: user
-      content: "Calculate 1+1."
-    - role: assistant
-      content: "2"
-    - role: user
-      content: "Calculate 2+2."
-    - role: assistant
-      content: "4"
-    - role: user
-      content: "What is the sum of all previous sums?"
+  input: "What is the sum of all previous sums?"
+  conversationId: "your-conversation-id-here"
   target:
     type: agent
     name: sample-agent
 ```
 
-Apply this query using kubectl:
-
-```bash
-# Create the 'sample agent' if you haven't already, then run the query.
-kubectl apply -f samples/agents/sample-agent.yaml
-kubectl apply -f samples/queries/query-conversation-messages.yaml
-```
-
-Check the result:
-
-```bash
-kubectl get query conversation-messages -o yaml
-```
-
-The `messages` input type allows you to build up conversation context, by adding the response of each query into an OpenAI message object array.
-
-Notes:
-
-- `type` is optional; if omitted, it defaults to `user` (string input).
-- For `type: messages`, `input` must be an array of objects with `role` and `content` fields.
-- Supported roles: `user`, `assistant`, `system`, and provider-specific roles.
+The `conversationId` is returned in `status.conversationId` after the first query completes. Pass it to subsequent queries to continue the conversation.
 
 ## Using fark CLI
 
@@ -123,11 +93,11 @@ Create a named query:
 fark query my-query
 ```
 
-## Using OpenAI-Compatible Endpoints
+## Using the Query API
 
-The OpenAI-compatible API lets you use familiar tools and libraries to interact with your agents and teams.
+The Query API lets you interact with agents, teams, models, and tools via HTTP.
 
-Explore the [Ark APIs](/reference/ark-apis) docs to see how to run the APIs in detail.
+Explore the [Ark APIs](/reference/ark-apis) docs for complete endpoint documentation.
 
 ### List Available Targets
 
