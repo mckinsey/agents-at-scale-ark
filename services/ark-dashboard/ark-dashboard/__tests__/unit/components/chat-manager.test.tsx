@@ -3,6 +3,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ChatManager from '@/components/chat-manager';
 
+// Mock Jotai
+const mockOpenChatWindows: Array<{
+  name: string;
+  type: string;
+  strategy?: string;
+  graphEdges?: unknown;
+}> = [];
+const mockSetOpenChatWindows = vi.fn();
+
+vi.mock('jotai', () => ({
+  useAtom: vi.fn(() => [mockOpenChatWindows, mockSetOpenChatWindows]),
+}));
+
 // Mock the FloatingChat component
 vi.mock('@/components/floating-chat', () => ({
   default: vi.fn(({ name, onClose }) => (
@@ -10,6 +23,11 @@ vi.mock('@/components/floating-chat', () => ({
       <button onClick={() => onClose(name)}>Close {name}</button>
     </div>
   )),
+}));
+
+// Mock the openChatWindowsAtom
+vi.mock('@/atoms/internal-states', () => ({
+  openChatWindowsAtom: {},
 }));
 
 function dispatchChatEvent(
@@ -28,6 +46,8 @@ const agentDetail = (name: string) => ({
 describe('ChatManager', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockOpenChatWindows.length = 0;
+    sessionStorage.clear();
   });
 
   it('should render without chat windows initially', () => {
@@ -273,6 +293,32 @@ describe('ChatManager', () => {
       expect(
         screen.queryByTestId('floating-chat-toggle-strategy-team'),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  it('should persist open chat windows to sessionStorage', async () => {
+    render(<ChatManager />);
+
+    act(() => {
+      dispatchChatEvent('open-floating-chat', agentDetail('persisted-agent'));
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('floating-chat-persisted-agent'),
+      ).toBeInTheDocument();
+    });
+
+    // Check that setOpenChatWindows was called with the chat window data
+    await waitFor(() => {
+      expect(mockSetOpenChatWindows).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'persisted-agent',
+            type: 'agent',
+          }),
+        ]),
+      );
     });
   });
 });

@@ -70,3 +70,47 @@ export const lastConversationIdAtom = atom(
     }
   },
 );
+
+export interface OpenChatWindow {
+  name: string;
+  type: 'model' | 'team' | 'agent';
+  strategy?: string;
+  graphEdges?: Array<{
+    source: string;
+    target: string;
+    messages: unknown[];
+  }>;
+}
+
+const OPEN_CHAT_WINDOWS_KEY = 'open-chat-windows';
+const openChatWindowsBaseAtom = atom<OpenChatWindow[] | null>(null);
+export const openChatWindowsAtom = atom(
+  get => {
+    const value = get(openChatWindowsBaseAtom);
+    if (value !== null) {
+      return value;
+    }
+
+    // First read - initialize from sessionStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = sessionStorage.getItem(OPEN_CHAT_WINDOWS_KEY);
+        if (stored) {
+          return JSON.parse(stored) as OpenChatWindow[];
+        }
+      } catch {
+        // Ignore parse errors
+      }
+    }
+    return [];
+  },
+  (get, set, newValue: OpenChatWindow[]) => {
+    set(openChatWindowsBaseAtom, newValue);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem(
+        OPEN_CHAT_WINDOWS_KEY,
+        JSON.stringify(newValue),
+      );
+    }
+  },
+);

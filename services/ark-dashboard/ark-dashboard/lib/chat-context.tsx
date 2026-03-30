@@ -9,8 +9,24 @@ interface ChatContextType {
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
+// Initialize open chats from sessionStorage
+const getInitialOpenChats = (): string[] => {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const stored = sessionStorage.getItem('open-chat-windows');
+    if (stored) {
+      const windows = JSON.parse(stored) as Array<{ name: string }>;
+      return windows.map(w => w.name);
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return [];
+};
+
 export function ChatProvider({ children }: { children: React.ReactNode }) {
-  const [openChats, setOpenChats] = useState<string[]>([]);
+  const [openChats, setOpenChats] = useState<string[]>(getInitialOpenChats);
 
   useEffect(() => {
     const handleChatOpened = (event: CustomEvent) => {

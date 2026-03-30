@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useAtom } from 'jotai';
 
 import type { ChatType } from '@/lib/chat-events';
 import type { GraphEdge } from '@/lib/types/chat-message';
+import { openChatWindowsAtom } from '@/atoms/internal-states';
 
 import FloatingChat from './floating-chat';
 
@@ -18,9 +20,40 @@ interface ChatWindow {
 
 export default function ChatManager() {
   const [chatWindows, setChatWindows] = useState<ChatWindow[]>([]);
+  const [openChatWindows, setOpenChatWindows] = useAtom(openChatWindowsAtom);
   const pendingEventsRef = useRef<
     Array<{ type: 'opened' | 'closed'; name: string }>
   >([]);
+  const restoredRef = useRef(false);
+
+  // Restore open chat windows from sessionStorage on mount
+  useEffect(() => {
+    if (!restoredRef.current && openChatWindows.length > 0) {
+      restoredRef.current = true;
+
+      // Restore each chat window
+      openChatWindows.forEach(({ name, type, strategy, graphEdges }) => {
+        window.dispatchEvent(
+          new CustomEvent('open-floating-chat', {
+            detail: { name, type, strategy, graphEdges },
+          }),
+        );
+      });
+    }
+  }, [openChatWindows]);
+
+  // Persist open chat windows to sessionStorage whenever they change
+  useEffect(() => {
+    if (restoredRef.current) {
+      const windowsToStore = chatWindows.map(({ name, type, strategy, graphEdges }) => ({
+        name,
+        type,
+        strategy,
+        graphEdges,
+      }));
+      setOpenChatWindows(windowsToStore);
+    }
+  }, [chatWindows, setOpenChatWindows]);
 
   // Handle pending events after state updates
   useEffect(() => {
