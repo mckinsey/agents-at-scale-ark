@@ -159,7 +159,6 @@ func TestGetQueryInputMessages(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to resolve query input")
 	})
-
 }
 
 func BenchmarkGetQueryInputMessages(b *testing.B) {
