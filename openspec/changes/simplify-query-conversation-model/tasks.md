@@ -1,8 +1,8 @@
 ## 1. Query CRD Changes
 
-- [ ] 1.1 Remove `QueryTypeMessages` constant and `type: "messages"` support from `ark/api/v1alpha1/query_types.go`
-- [ ] 1.2 Remove `GetInputMessages()`, `SetInputMessages()`, and `GetInputAsGeneric()` methods from Query type
-- [ ] 1.3 Remove `openai-go` import from `ark/api/v1alpha1/query_types.go`
+- [x] 1.1 Remove `QueryTypeMessages` constant and `type: "messages"` support from `ark/api/v1alpha1/query_types.go`
+- [x] 1.2 Remove `GetInputMessages()`, `SetInputMessages()`, and `GetInputAsGeneric()` methods from Query type
+- [x] 1.3 Remove `openai-go` import from `ark/api/v1alpha1/query_types.go`
 - [ ] 1.4 Update query validation in `ark/internal/validation/` to reject `type: "messages"`
 - [ ] 1.5 Add mutating webhook to convert `type: "messages"` queries during deprecation period (extract last user message, add migration warning annotation following `model_webhook.go` pattern)
 - [ ] 1.6 Regenerate CRDs with `make manifests` and sync to Helm chart
@@ -10,21 +10,21 @@
 
 ## 2. Shared Query Input Resolver
 
-- [ ] 2.1 Create `ark/internal/resolution/query_input.go` with `ResolveQueryInputText(ctx, query, k8sClient) (string, error)` handling string input + Go template parameter expansion
-- [ ] 2.2 Implement `ExtractFirstUserText` parsing `json.RawMessage` for user message text without OpenAI types (needed during deprecation for webhook conversion)
-- [ ] 2.3 Wire `ResolveQueryInputText` to use existing `resolution.ResolveFromConfigMap` (`headers.go:85`) and `resolution.ResolveFromSecret` (`headers.go:66`)
-- [ ] 2.4 Unit tests for `ResolveQueryInputText` covering plain text, template parameters with ConfigMap/Secret refs, and error conditions
-- [ ] 2.5 Unit tests for `ExtractFirstUserText` covering string content, array-of-parts content, and missing user messages
+- [x] 2.1 Create `ark/internal/resolution/query_input.go` with `ResolveQueryInputText(ctx, query, k8sClient) (string, error)` handling string input + Go template parameter expansion
+- [x] 2.2 Implement `ExtractFirstUserText` parsing `json.RawMessage` for user message text without OpenAI types (needed during deprecation for webhook conversion)
+- [x] 2.3 Wire `ResolveQueryInputText` to use existing `resolution.ResolveFromConfigMap` (`headers.go:85`) and `resolution.ResolveFromSecret` (`headers.go:66`)
+- [x] 2.4 Unit tests for `ResolveQueryInputText` covering plain text, template parameters with ConfigMap/Secret refs, and error conditions
+- [x] 2.5 Unit tests for `ExtractFirstUserText` covering string content, array-of-parts content, and missing user messages
 
 ## 3. Controller Decoupling
 
-- [ ] 3.1 Remove completions package import from `ark/internal/controller/query_controller.go`
-- [ ] 3.2 Rewrite `extractUserInput()` (`query_controller.go:399`) to call `resolution.ResolveQueryInputText` instead of `completions.GetQueryInputMessages` + `completions.ExtractUserMessageContent`
-- [ ] 3.3 Replace `serializeMessages()` (`query_controller.go:407`) with `buildFallbackRaw(responseText string) string` using `json.Marshal` on anonymous struct to produce `[{"role":"assistant","content":"..."}]`
-- [ ] 3.4 Remove `completions.NewAssistantMessage` usage at line 378
-- [ ] 3.5 Unit test for `buildFallbackRaw` covering normal text and empty string
-- [ ] 3.6 Update `query_controller_dispatch_test.go` to reflect simplified dispatch
-- [ ] 3.7 Update `query_controller_test.go` for new input handling
+- [x] 3.1 Remove completions package import from `ark/internal/controller/query_controller.go`
+- [x] 3.2 Rewrite `extractUserInput()` (`query_controller.go:399`) to call `resolution.ResolveQueryInputText` instead of `completions.GetQueryInputMessages` + `completions.ExtractUserMessageContent`
+- [x] 3.3 Replace `serializeMessages()` (`query_controller.go:407`) with `buildFallbackRaw(responseText string) string` using `json.Marshal` on anonymous struct to produce `[{"role":"assistant","content":"..."}]`
+- [x] 3.4 Remove `completions.NewAssistantMessage` usage at line 378
+- [x] 3.5 Unit test for `buildFallbackRaw` covering normal text and empty string
+- [x] 3.6 Update `query_controller_dispatch_test.go` to reflect simplified dispatch
+- [x] 3.7 Update `query_controller_test.go` for new input handling
 
 ## 4. Completions Executor Updates
 
