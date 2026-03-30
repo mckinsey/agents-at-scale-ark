@@ -7,6 +7,7 @@ export const CHAT_HISTORY_KEY = 'agent-chat-history';
 export interface ChatSession {
   messages: ExtendedChatMessage[];
   sessionId: string;
+  conversationId?: string;
 }
 
 type ChatHistoryMap = Record<string, ChatSession>;

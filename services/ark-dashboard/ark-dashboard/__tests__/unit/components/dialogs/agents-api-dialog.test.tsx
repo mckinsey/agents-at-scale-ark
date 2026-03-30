@@ -103,7 +103,7 @@ describe('AgentsAPIDialog', () => {
       />
     );
 
-    const endpoint = screen.getByText('http://localhost:3000/api/openai/v1/chat/completions');
+    const endpoint = screen.getByText('http://localhost:3000/api/v1/queries/');
     expect(endpoint).toBeInTheDocument();
     expect(screen.getByText('Cluster internal')).toBeInTheDocument();
   });
@@ -121,13 +121,13 @@ describe('AgentsAPIDialog', () => {
     const toggle = screen.getByRole('switch');
     // Label always shows "Cluster internal" now
     expect(screen.getByText('Cluster internal')).toBeInTheDocument();
-    expect(screen.getByText('http://localhost:3000/api/openai/v1/chat/completions')).toBeInTheDocument();
+    expect(screen.getByText('http://localhost:3000/api/v1/queries/')).toBeInTheDocument();
 
     await user.click(toggle);
 
     // Label remains "Cluster internal" after toggle
     expect(screen.getByText('Cluster internal')).toBeInTheDocument();
-    expect(screen.getByText('http://ark-api.<namespace>.svc.cluster.local/api/openai/v1/chat/completions')).toBeInTheDocument();
+    expect(screen.getByText('http://ark-api.<namespace>.svc.cluster.local/api/v1/queries/')).toBeInTheDocument();
 
     // Check for the namespace replacement instruction
     const namespaceText = screen.getByText((content, element) => {
@@ -151,7 +151,7 @@ describe('AgentsAPIDialog', () => {
 
     await user.click(endpointCopyButton);
 
-    expect(mockCopy).toHaveBeenCalledWith('http://localhost:3000/api/openai/v1/chat/completions');
+    expect(mockCopy).toHaveBeenCalledWith('http://localhost:3000/api/v1/queries/');
   });
 
   it('should show check icon after copying endpoint', async () => {
@@ -322,7 +322,7 @@ describe('AgentsAPIDialog', () => {
     await user.click(goTab);
 
     const codeBlock = screen.getByText(/package main/).closest('pre');
-    expect(codeBlock?.textContent).toContain('http://ark-api.<namespace>.svc.cluster.local/api/openai/v1/chat/completions');
+    expect(codeBlock?.textContent).toContain('http://ark-api.<namespace>.svc.cluster.local/api/v1/queries/');
   });
 
   it('should call onOpenChange when dialog is closed', async () => {

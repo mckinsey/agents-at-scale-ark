@@ -5,7 +5,7 @@
 - [x] 1.3 Remove `openai-go` import from `ark/api/v1alpha1/query_types.go`
 - [x] 1.4 Update query validation in `ark/internal/validation/` to reject `type: "messages"`
 - [x] 1.5 Add mutating webhook to convert `type: "messages"` queries during deprecation period (extract last user message, add migration warning annotation following `model_webhook.go` pattern)
-- [ ] 1.6 Regenerate CRDs with `make manifests` and sync to Helm chart
+- [x] 1.6 Regenerate CRDs with `make manifests` and sync to Helm chart
 - [x] 1.7 Update query webhook tests in `ark/internal/webhook/v1/query_webhook_test.go`
 
 ## 2. Shared Query Input Resolver
@@ -53,23 +53,23 @@
 
 - [x] 6.1 Rewrite `streamChatResponse()` in `chat.ts` to create query via `/api/v1/queries/` with streaming annotation, then stream from `/api/v1/broker/chunks?watch=true&query-id={name}`
 - [x] 6.2 Update `useChatSession` hook to send only current user message + `conversationId` via query API
-- [ ] 6.3 Remove client-side message accumulation from `chatHistoryAtom` in `atoms/chat-history.ts`
-- [ ] 6.4 Add conversation history fetching from API for message display
-- [ ] 6.5 Update `handleStreamChatResponse` to extract and store `conversationId` from query response
+- [x] 6.3 Remove client-side message accumulation from `chatHistoryAtom` in `atoms/chat-history.ts`
+- [x] 6.4 Add conversation history fetching from API for message display
+- [x] 6.5 Update `handleStreamChatResponse` to extract and store `conversationId` from query response
 - [x] 6.6 Remove `ChatCompletionMessageParam` imports from `chat.ts`, `use-chat-session.ts`, `chat-message.ts`, `chat-message-list.tsx`
 - [x] 6.7 Rewrite `agents-api-dialog.tsx` to show query API endpoint instead of OpenAI endpoint
 - [x] 6.8 Rewrite code snippets: `python-snippet.ts`, `go-snippet.ts`, `bash-snippet.ts`
 - [ ] 6.9 Remove `/openai/v1/chat/completions` and `/openai/v1/models` from generated types in `types.ts` (regenerate)
-- [ ] 6.10 Update dashboard streaming tests (`__tests__/unit/services/chat.test.ts`)
-- [ ] 6.11 Update dashboard API dialog tests (`__tests__/unit/components/dialogs/agents-api-dialog.test.tsx`)
-- [ ] 6.12 Update dashboard middleware test (`__tests__/unit/middleware.test.ts:164`)
+- [x] 6.10 Update dashboard streaming tests (`__tests__/unit/services/chat.test.ts`)
+- [x] 6.11 Update dashboard API dialog tests (`__tests__/unit/components/dialogs/agents-api-dialog.test.tsx`)
+- [x] 6.12 Update dashboard middleware test (`__tests__/unit/middleware.test.ts:164`)
 
 ## 7. CLI Migration
 
 - [x] 7.1 Rewrite `arkApiClient.ts` to use query API instead of OpenAI SDK wrapper
 - [x] 7.2 Update `chatClient.ts` to create queries via API and stream via broker proxy
 - [x] 7.3 Remove `openai` package dependency from ark-cli if no longer needed
-- [ ] 7.4 Update CLI tests for new query creation path
+- [x] 7.4 Update CLI tests for new query creation path
 
 ## 8. CI/CD Updates
 
