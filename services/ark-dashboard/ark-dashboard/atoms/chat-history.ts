@@ -3,6 +3,7 @@ import { atomWithStorage, createJSONStorage } from 'jotai/utils';
 import type { ExtendedChatMessage } from '@/lib/types/chat-message';
 
 export const CHAT_HISTORY_KEY = 'agent-chat-history';
+export const CHAT_WINDOWS_SESSION_KEY = 'chat-windows-state';
 
 export interface ChatSession {
   messages: ExtendedChatMessage[];

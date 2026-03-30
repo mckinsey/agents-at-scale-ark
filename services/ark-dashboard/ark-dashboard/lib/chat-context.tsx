@@ -2,6 +2,8 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
+import { CHAT_WINDOWS_SESSION_KEY } from '@/atoms/chat-history';
+
 interface ChatContextType {
   openChats: string[];
   isOpen: (name: string) => boolean;
@@ -11,6 +13,21 @@ const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [openChats, setOpenChats] = useState<string[]>([]);
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(CHAT_WINDOWS_SESSION_KEY);
+      if (saved) {
+        const windows = JSON.parse(saved) as Array<{ name: string }>;
+        const names = windows.map(w => w.name);
+        if (names.length > 0) {
+          setOpenChats(names);
+        }
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }, []);
 
   useEffect(() => {
     const handleChatOpened = (event: CustomEvent) => {

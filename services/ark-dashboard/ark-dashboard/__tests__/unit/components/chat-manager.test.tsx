@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { CHAT_WINDOWS_SESSION_KEY } from '@/atoms/chat-history';
 import ChatManager from '@/components/chat-manager';
 
 // Mock the FloatingChat component
@@ -28,6 +29,7 @@ const agentDetail = (name: string) => ({
 describe('ChatManager', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
   });
 
   it('should render without chat windows initially', () => {
@@ -273,6 +275,71 @@ describe('ChatManager', () => {
       expect(
         screen.queryByTestId('floating-chat-toggle-strategy-team'),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  it('should persist chat windows to sessionStorage when opened', async () => {
+    render(<ChatManager />);
+
+    act(() => {
+      dispatchChatEvent('open-floating-chat', agentDetail('persist-agent'));
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('floating-chat-persist-agent'),
+      ).toBeInTheDocument();
+    });
+
+    const saved = sessionStorage.getItem(CHAT_WINDOWS_SESSION_KEY);
+    expect(saved).not.toBeNull();
+    const windows = JSON.parse(saved!);
+    expect(windows).toHaveLength(1);
+    expect(windows[0].name).toBe('persist-agent');
+  });
+
+  it('should remove chat window from sessionStorage when closed', async () => {
+    render(<ChatManager />);
+
+    act(() => {
+      dispatchChatEvent('open-floating-chat', agentDetail('close-agent'));
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('floating-chat-close-agent'),
+      ).toBeInTheDocument();
+    });
+
+    act(() => {
+      dispatchChatEvent('toggle-floating-chat', agentDetail('close-agent'));
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId('floating-chat-close-agent'),
+      ).not.toBeInTheDocument();
+    });
+
+    const saved = sessionStorage.getItem(CHAT_WINDOWS_SESSION_KEY);
+    const windows = JSON.parse(saved!);
+    expect(windows).toHaveLength(0);
+  });
+
+  it('should restore chat windows from sessionStorage on mount', async () => {
+    sessionStorage.setItem(
+      CHAT_WINDOWS_SESSION_KEY,
+      JSON.stringify([
+        { id: 'restore-agent-123', name: 'restore-agent', type: 'agent', position: 0 },
+      ]),
+    );
+
+    render(<ChatManager />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('floating-chat-restore-agent'),
+      ).toBeInTheDocument();
     });
   });
 });

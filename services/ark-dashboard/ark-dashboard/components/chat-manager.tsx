@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import { CHAT_WINDOWS_SESSION_KEY } from '@/atoms/chat-history';
 import type { ChatType } from '@/lib/chat-events';
 import type { GraphEdge } from '@/lib/types/chat-message';
 
@@ -21,6 +22,24 @@ export default function ChatManager() {
   const pendingEventsRef = useRef<
     Array<{ type: 'opened' | 'closed'; name: string }>
   >([]);
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(CHAT_WINDOWS_SESSION_KEY);
+      if (saved) {
+        const windows = JSON.parse(saved) as ChatWindow[];
+        if (windows.length > 0) {
+          setChatWindows(windows);
+        }
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }, []);
+
+  useEffect(() => {
+    sessionStorage.setItem(CHAT_WINDOWS_SESSION_KEY, JSON.stringify(chatWindows));
+  }, [chatWindows]);
 
   // Handle pending events after state updates
   useEffect(() => {
