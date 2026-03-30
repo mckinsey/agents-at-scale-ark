@@ -59,7 +59,7 @@
 - [x] 6.6 Remove `ChatCompletionMessageParam` imports from `chat.ts`, `use-chat-session.ts`, `chat-message.ts`, `chat-message-list.tsx`
 - [x] 6.7 Rewrite `agents-api-dialog.tsx` to show query API endpoint instead of OpenAI endpoint
 - [x] 6.8 Rewrite code snippets: `python-snippet.ts`, `go-snippet.ts`, `bash-snippet.ts`
-- [ ] 6.9 Remove `/openai/v1/chat/completions` and `/openai/v1/models` from generated types in `types.ts` (regenerate)
+- [x] 6.9 Remove `/openai/v1/chat/completions` and `/openai/v1/models` from generated types in `types.ts` (regenerate)
 - [x] 6.10 Update dashboard streaming tests (`__tests__/unit/services/chat.test.ts`)
 - [x] 6.11 Update dashboard API dialog tests (`__tests__/unit/components/dialogs/agents-api-dialog.test.tsx`)
 - [x] 6.12 Update dashboard middleware test (`__tests__/unit/middleware.test.ts:164`)
