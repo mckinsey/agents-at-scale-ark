@@ -51,14 +51,14 @@
 
 ## 6. Dashboard Migration
 
-- [ ] 6.1 Rewrite `streamChatResponse()` in `chat.ts` to create query via `/api/v1/queries/` with streaming annotation, then stream from `/api/v1/broker/chunks?watch=true&query-id={name}`
-- [ ] 6.2 Update `useChatSession` hook to send only current user message + `conversationId` via query API
+- [x] 6.1 Rewrite `streamChatResponse()` in `chat.ts` to create query via `/api/v1/queries/` with streaming annotation, then stream from `/api/v1/broker/chunks?watch=true&query-id={name}`
+- [x] 6.2 Update `useChatSession` hook to send only current user message + `conversationId` via query API
 - [ ] 6.3 Remove client-side message accumulation from `chatHistoryAtom` in `atoms/chat-history.ts`
 - [ ] 6.4 Add conversation history fetching from API for message display
 - [ ] 6.5 Update `handleStreamChatResponse` to extract and store `conversationId` from query response
 - [ ] 6.6 Remove `ChatCompletionMessageParam` imports from `chat.ts`, `use-chat-session.ts`, `chat-message.ts`, `chat-message-list.tsx`
-- [ ] 6.7 Rewrite `agents-api-dialog.tsx` to show query API endpoint instead of OpenAI endpoint
-- [ ] 6.8 Rewrite code snippets: `python-snippet.ts`, `go-snippet.ts`, `bash-snippet.ts`
+- [x] 6.7 Rewrite `agents-api-dialog.tsx` to show query API endpoint instead of OpenAI endpoint
+- [x] 6.8 Rewrite code snippets: `python-snippet.ts`, `go-snippet.ts`, `bash-snippet.ts`
 - [ ] 6.9 Remove `/openai/v1/chat/completions` and `/openai/v1/models` from generated types in `types.ts` (regenerate)
 - [ ] 6.10 Update dashboard streaming tests (`__tests__/unit/services/chat.test.ts`)
 - [ ] 6.11 Update dashboard API dialog tests (`__tests__/unit/components/dialogs/agents-api-dialog.test.tsx`)
@@ -73,16 +73,16 @@
 
 ## 8. CI/CD Updates
 
-- [ ] 8.1 Update health check in `.github/workflows/cicd.yaml:482` from `/openai/v1/models` to a different endpoint
-- [ ] 8.2 Verify `tests/run-multi-provider.sh` E2E base URL config is unaffected (this is for model providers, not ark-api)
+- [x] 8.1 Update health check in `.github/workflows/cicd.yaml:482` from `/openai/v1/models` to a different endpoint
+- [x] 8.2 Verify `tests/run-multi-provider.sh` E2E base URL config is unaffected (this is for model providers, not ark-api)
 
 ## 9. E2E Tests and Samples
 
-- [ ] 9.1 Update `tests/query-input-type/` chainsaw tests — remove `type: "messages"` test cases, add `conversationId` continuity tests
-- [ ] 9.2 Update test manifests in `tests/query-input-type/manifests/`
-- [ ] 9.3 Rewrite `samples/queries/query-conversation-messages.yaml` to use `conversationId` pattern
-- [ ] 9.4 Remove broken `samples/queries/query-messages-image-url.yaml`
-- [ ] 9.5 Verify all e2e test directories still pass with `type: "user"` only
+- [x] 9.1 Update `tests/query-input-type/` chainsaw tests — remove `type: "messages"` test cases, add `conversationId` continuity tests
+- [x] 9.2 Update test manifests in `tests/query-input-type/manifests/`
+- [x] 9.3 Rewrite `samples/queries/query-conversation-messages.yaml` to use `conversationId` pattern
+- [x] 9.4 Remove broken `samples/queries/query-messages-image-url.yaml`
+- [x] 9.5 Verify all e2e test directories still pass with `type: "user"` only
 
 ## 10. Documentation
 

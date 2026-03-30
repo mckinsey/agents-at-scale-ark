@@ -1,10 +1,7 @@
 'use client';
 
 import { useAtom, useAtomValue } from 'jotai';
-import type {
-  ChatCompletionChunk,
-  ChatCompletionMessageParam,
-} from 'openai/resources/chat/completions';
+import type { ChatCompletionChunk } from 'openai/resources/chat/completions';
 import type { RefObject } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -199,10 +196,11 @@ export function useChatSession({
       };
 
       for await (const chunk of chatService.streamChatResponse(
-        messageArray as ChatCompletionMessageParam[],
+        userMessage,
         type,
         name,
         sessionId,
+        undefined,
         queryTimeout,
       )) {
         if ('error' in chunk && chunk.error) {
@@ -444,10 +442,11 @@ export function useChatSession({
       const messageArray = buildChatMessages(chatMessages, userMessage);
 
       const query = await chatService.submitChatQuery(
-        messageArray as ChatCompletionMessageParam[],
+        userMessage,
         type,
         name,
         sessionId,
+        undefined,
         undefined,
         queryTimeout,
       );
