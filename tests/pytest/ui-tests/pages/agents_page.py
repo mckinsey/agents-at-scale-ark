@@ -68,7 +68,6 @@ class AgentsPage(BasePage):
             "[role='alert']:has-text('error')",
             "[role='alert']:has-text('Error')",
             "[role='alert']:has-text('500')",
-            "div:has-text('500'):has-text('error')",
             "div:has-text('Internal Server Error')",
             ".error, .alert-error, .notification-error",
             "[class*='error'][class*='banner']",

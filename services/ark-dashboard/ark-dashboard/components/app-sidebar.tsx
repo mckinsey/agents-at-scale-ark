@@ -250,7 +250,7 @@ export function AppSidebar() {
                     }
                     alt="QB Logo"
                     width={32}
-                    height={32}
+                    height={28}
                   />
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
