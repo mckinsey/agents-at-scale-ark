@@ -78,8 +78,10 @@ class ToolsPage(BasePage):
             except:
                 logger.info(f"Name input not visible (attempt {attempt + 1}), retrying click")
                 add_button.click()
-        
+
+        logger.info(f"Tool name should be: {tool_name}")
         name_input.fill(tool_name)
+        logger.info(f"Name in name input is {name_input.input_value()}")
         
         type_trigger = self.page.locator("button#type, button[name='type'], [role='combobox']:has-text('Select'), [data-slot='trigger']").first
         type_trigger.wait_for(state="visible", timeout=5000)
@@ -135,7 +137,7 @@ class ToolsPage(BasePage):
         save_button.scroll_into_view_if_needed()
         save_button.click(force=True)
         
-        error_banner = self.page.locator("[role='alert']:has-text('error'), [role='alert']:has-text('Error'), .error, .toast-error").first
+        error_banner = self.page.locator("[data-sonner-toast][data-type='error'], [role='alert']:not([role='dialog'] *)").first
         if error_banner.count() > 0 and error_banner.is_visible():
             error_text = error_banner.inner_text()
             logger.error(f"Tool creation error: {error_text}")
