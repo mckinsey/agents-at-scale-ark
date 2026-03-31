@@ -1,5 +1,5 @@
 import { createRequire } from 'module';
-import app, { memory, chunks, traces, events } from './server.js';
+import app, { memory, chunks, traces, events, sessions } from './server.js';
 import { setupSwagger } from './swagger.js';
 
 const require = createRequire(import.meta.url);
@@ -20,6 +20,7 @@ const gracefulShutdown = (): void => {
   chunks.save();
   traces.save();
   events.save();
+  sessions.save();
   server.close(() => {
     console.log('Process terminated');
     process.exit(0);
