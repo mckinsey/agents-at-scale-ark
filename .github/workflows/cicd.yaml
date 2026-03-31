@@ -566,7 +566,7 @@ jobs:
 
       - name: Collect cluster logs
         if: always()
-        run: kubectl cluster-info dump --output-directory=/tmp/cluster-logs
+        run: kubectl cluster-info dump --all-namespaces --output-directory=/tmp/cluster-logs
 
       - name: Upload cluster logs
         if: always()
@@ -639,7 +639,7 @@ jobs:
 
       - name: Collect cluster logs
         if: always()
-        run: kubectl cluster-info dump --output-directory=/tmp/cluster-logs
+        run: kubectl cluster-info dump --all-namespaces --output-directory=/tmp/cluster-logs
 
       - name: Upload cluster logs
         if: always()
@@ -809,7 +809,7 @@ jobs:
 
       - name: Collect cluster logs
         if: always()
-        run: kubectl cluster-info dump --output-directory=/tmp/cluster-logs
+        run: kubectl cluster-info dump --all-namespaces --output-directory=/tmp/cluster-logs
 
       - name: Upload cluster logs
         if: always()
@@ -901,7 +901,7 @@ jobs:
 
       - name: Collect cluster logs
         if: always()
-        run: kubectl cluster-info dump --output-directory=/tmp/cluster-logs
+        run: kubectl cluster-info dump --all-namespaces --output-directory=/tmp/cluster-logs
 
       - name: Upload cluster logs
         if: always()
