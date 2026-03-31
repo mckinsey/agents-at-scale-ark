@@ -1,16 +1,29 @@
 """Tests for export API endpoints."""
-import os
-import unittest
-import json
-import zipfile
+import asyncio
 import io
-from unittest.mock import AsyncMock, Mock, patch, MagicMock
+import json
+import os
+import tempfile
+import unittest
+import zipfile
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, Mock, mock_open, patch
+
 from fastapi.testclient import TestClient
+from kubernetes.client.rest import ApiException
 
 os.environ["AUTH_MODE"] = "open"
 
+import ark_api.api.v1.export as export_module
 from ark_api.main import app
+from ark_api.api.v1.export import (
+    _collect_workflows,
+    _get_current_namespace,
+    collect_resources,
+    get_export_history,
+    update_export_history,
+    EXPORT_CONFIGMAP_NAMESPACE,
+)
 
 
 class TestExportEndpoints(unittest.TestCase):
@@ -224,7 +237,6 @@ class TestCollectResources(unittest.TestCase):
     @patch('ark_api.api.v1.export.with_ark_client')
     def test_collect_resources_filters_by_type(self, mock_ark_client_context):
         """Test that collect_resources only collects requested resource types."""
-        import asyncio
         # Setup mock ark_client with all resource types available
         mock_ark_client = AsyncMock()
 
@@ -260,9 +272,6 @@ class TestCollectResources(unittest.TestCase):
         mock_context.__aenter__ = AsyncMock(return_value=mock_ark_client)
         mock_context.__aexit__ = AsyncMock(return_value=None)
         mock_ark_client_context.return_value = mock_context
-
-        # Import the function to test
-        from ark_api.api.v1.export import collect_resources
 
         # Test 1: Request only agents - should NOT call models or teams
         result = asyncio.run(collect_resources(
@@ -314,6 +323,225 @@ class TestCollectResources(unittest.TestCase):
         self.assertIn("models", result)
         self.assertIn("teams", result)
         self.assertEqual(len(result), 3)
+
+
+class TestGetCurrentNamespace(unittest.TestCase):
+    """Tests for the _get_current_namespace helper introduced to fix the
+    hardcoded ark-system namespace bug."""
+
+    def test_reads_namespace_from_token_file(self):
+        """Namespace is read from the service account token file when present."""
+        with patch('builtins.open', mock_open(read_data='my-namespace')):
+            result = _get_current_namespace()
+        self.assertEqual(result, 'my-namespace')
+
+    def test_strips_whitespace_from_namespace(self):
+        """Trailing newline and whitespace are stripped from the token file value."""
+        with patch('builtins.open', mock_open(read_data='  my-namespace\n')):
+            result = _get_current_namespace()
+        self.assertEqual(result, 'my-namespace')
+
+    def test_falls_back_to_default_when_file_missing(self):
+        """Returns 'default' when the service account token file does not exist."""
+        with patch('builtins.open', side_effect=FileNotFoundError()):
+            result = _get_current_namespace()
+        self.assertEqual(result, 'default')
+
+    def test_falls_back_to_default_on_any_read_error(self):
+        """Returns 'default' for any I/O error, not just missing files."""
+        with patch('builtins.open', side_effect=PermissionError()):
+            result = _get_current_namespace()
+        self.assertEqual(result, 'default')
+
+    def test_uses_token_file_namespace_not_ark_system(self):
+        """Namespace is never hardcoded to ark-system."""
+        with patch('builtins.open', mock_open(read_data='operator-namespace')):
+            result = _get_current_namespace()
+        self.assertNotEqual(result, 'ark-system')
+        self.assertEqual(result, 'operator-namespace')
+
+
+class TestExportHistoryNamespace(unittest.TestCase):
+    """Tests that export history ConfigMap operations use the namespace from
+    the service account token, not a hardcoded value."""
+
+    @patch('ark_api.api.v1.export.EXPORT_CONFIGMAP_NAMESPACE', 'token-namespace')
+    @patch('ark_api.api.v1.export.client')
+    def test_get_export_history_reads_from_token_namespace(self, mock_client):
+        """get_export_history reads the ConfigMap from the token-file namespace."""
+        mock_v1 = MagicMock()
+        mock_client.CoreV1Api.return_value = mock_v1
+        mock_cm = MagicMock()
+        mock_cm.data = {'history': json.dumps({
+            'last_export': '2024-01-01T00:00:00',
+            'export_count': 3
+        })}
+        mock_v1.read_namespaced_config_map.return_value = mock_cm
+
+        result = asyncio.run(get_export_history())
+
+        mock_v1.read_namespaced_config_map.assert_called_once_with(
+            name='ark-export-metadata',
+            namespace='token-namespace'
+        )
+        self.assertEqual(result['export_count'], 3)
+
+    @patch('ark_api.api.v1.export.EXPORT_CONFIGMAP_NAMESPACE', 'token-namespace')
+    @patch('ark_api.api.v1.export.client')
+    def test_get_export_history_does_not_use_ark_system(self, mock_client):
+        """get_export_history never reads from the old hardcoded ark-system namespace."""
+        mock_v1 = MagicMock()
+        mock_client.CoreV1Api.return_value = mock_v1
+        mock_v1.read_namespaced_config_map.side_effect = ApiException(status=404)
+
+        asyncio.run(get_export_history())
+
+        call_kwargs = mock_v1.read_namespaced_config_map.call_args.kwargs
+        self.assertNotEqual(call_kwargs['namespace'], 'ark-system')
+
+    @patch('ark_api.api.v1.export.EXPORT_CONFIGMAP_NAMESPACE', 'token-namespace')
+    @patch('ark_api.api.v1.export.client')
+    def test_update_export_history_creates_configmap_in_token_namespace(self, mock_client):
+        """update_export_history creates the ConfigMap in the token-file namespace."""
+        mock_v1 = MagicMock()
+        mock_client.CoreV1Api.return_value = mock_v1
+        mock_client.V1ConfigMap = MagicMock()
+        mock_client.V1ObjectMeta = MagicMock()
+        mock_v1.read_namespaced_config_map.side_effect = ApiException(status=404)
+
+        asyncio.run(update_export_history(
+            datetime(2024, 1, 1, tzinfo=timezone.utc),
+            {'agents': 2}
+        ))
+
+        mock_v1.create_namespaced_config_map.assert_called_once()
+        call_kwargs = mock_v1.create_namespaced_config_map.call_args.kwargs
+        self.assertEqual(call_kwargs['namespace'], 'token-namespace')
+
+    @patch('ark_api.api.v1.export.EXPORT_CONFIGMAP_NAMESPACE', 'token-namespace')
+    @patch('ark_api.api.v1.export.client')
+    def test_update_export_history_patches_configmap_in_token_namespace(self, mock_client):
+        """update_export_history patches an existing ConfigMap in the token-file namespace."""
+        mock_v1 = MagicMock()
+        mock_client.CoreV1Api.return_value = mock_v1
+        existing_cm = MagicMock()
+        existing_cm.data = {'history': '{}'}
+        mock_v1.read_namespaced_config_map.return_value = existing_cm
+
+        asyncio.run(update_export_history(
+            datetime(2024, 1, 1, tzinfo=timezone.utc),
+            {'agents': 2}
+        ))
+
+        mock_v1.patch_namespaced_config_map.assert_called_once()
+        call_kwargs = mock_v1.patch_namespaced_config_map.call_args.kwargs
+        self.assertEqual(call_kwargs['namespace'], 'token-namespace')
+
+
+class TestCollectWorkflowsNamespace(unittest.TestCase):
+    """Tests that _collect_workflows resolves namespace from the token file
+    when no namespace is explicitly provided."""
+
+    @patch('ark_api.api.v1.export._get_current_namespace')
+    @patch('ark_api.api.v1.export.CustomObjectsApi')
+    def test_uses_token_namespace_when_none_provided(self, mock_api_cls, mock_get_ns):
+        """When namespace is None, _collect_workflows reads from the token file."""
+        mock_get_ns.return_value = 'token-namespace'
+        mock_api = MagicMock()
+        mock_api_cls.return_value = mock_api
+        mock_api.list_namespaced_custom_object.return_value = {'items': []}
+
+        asyncio.run(_collect_workflows(namespace=None, resource_ids=None))
+
+        mock_get_ns.assert_called_once()
+        call_kwargs = mock_api.list_namespaced_custom_object.call_args.kwargs
+        self.assertEqual(call_kwargs['namespace'], 'token-namespace')
+
+    @patch('ark_api.api.v1.export._get_current_namespace')
+    @patch('ark_api.api.v1.export.CustomObjectsApi')
+    def test_uses_provided_namespace_without_calling_token_helper(self, mock_api_cls, mock_get_ns):
+        """When namespace is supplied, _collect_workflows does not read the token file."""
+        mock_api = MagicMock()
+        mock_api_cls.return_value = mock_api
+        mock_api.list_namespaced_custom_object.return_value = {'items': []}
+
+        asyncio.run(_collect_workflows(namespace='explicit-ns', resource_ids=None))
+
+        mock_get_ns.assert_not_called()
+        call_kwargs = mock_api.list_namespaced_custom_object.call_args.kwargs
+        self.assertEqual(call_kwargs['namespace'], 'explicit-ns')
+
+    @patch('ark_api.api.v1.export._get_current_namespace')
+    @patch('ark_api.api.v1.export.CustomObjectsApi')
+    def test_never_uses_ark_system_namespace(self, mock_api_cls, mock_get_ns):
+        """The old hardcoded ark-system namespace is never used."""
+        mock_get_ns.return_value = 'default'
+        mock_api = MagicMock()
+        mock_api_cls.return_value = mock_api
+        mock_api.list_namespaced_custom_object.return_value = {'items': []}
+
+        asyncio.run(_collect_workflows(namespace=None, resource_ids=None))
+
+        call_kwargs = mock_api.list_namespaced_custom_object.call_args.kwargs
+        self.assertNotEqual(call_kwargs['namespace'], 'ark-system')
+
+
+class TestExportEndToEnd(unittest.TestCase):
+    """End-to-end tests for the full export flow with namespace resolution."""
+
+    def setUp(self):
+        self.client = TestClient(app)
+
+    @patch('ark_api.api.v1.export.EXPORT_CONFIGMAP_NAMESPACE', 'token-namespace')
+    @patch('ark_api.api.v1.export.update_export_history')
+    @patch('ark_api.api.v1.export.collect_resources')
+    def test_full_export_flow_with_token_namespace(self, mock_collect, mock_update):
+        """Full export POST uses the token-file namespace for history, not ark-system."""
+        sample_agent = {
+            'apiVersion': 'v1alpha1', 'kind': 'Agent',
+            'metadata': {'name': 'my-agent', 'namespace': 'token-namespace'},
+            'spec': {'model': 'gpt-4'}
+        }
+
+        async def mock_collect_resources(*args, **kwargs):
+            return {'agents': [sample_agent]}
+        mock_collect.side_effect = mock_collect_resources
+
+        captured_namespace = []
+
+        async def mock_update_history(timestamp, resource_counts):
+            captured_namespace.append(export_module.EXPORT_CONFIGMAP_NAMESPACE)
+        mock_update.side_effect = mock_update_history
+
+        response = self.client.post('/v1/export/resources', json={})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers['content-type'], 'application/zip')
+        zip_data = io.BytesIO(response.content)
+        with zipfile.ZipFile(zip_data, 'r') as zf:
+            self.assertIn('agents/my-agent.yaml', zf.namelist())
+        self.assertEqual(captured_namespace[0], 'token-namespace')
+        self.assertNotEqual(captured_namespace[0], 'ark-system')
+
+    @patch('ark_api.api.v1.export.EXPORT_CONFIGMAP_NAMESPACE', 'default')
+    @patch('ark_api.api.v1.export.update_export_history')
+    @patch('ark_api.api.v1.export.collect_resources')
+    def test_export_falls_back_to_default_namespace_when_no_token_file(
+        self, mock_collect, mock_update
+    ):
+        """When no token file exists the export still works using 'default' namespace."""
+        async def mock_collect_resources(*args, **kwargs):
+            return {'agents': []}
+        mock_collect.side_effect = mock_collect_resources
+
+        async def mock_update_history(*args, **kwargs):
+            pass
+        mock_update.side_effect = mock_update_history
+
+        response = self.client.post('/v1/export/resources', json={})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(EXPORT_CONFIGMAP_NAMESPACE, 'default')
 
 
 if __name__ == '__main__':
