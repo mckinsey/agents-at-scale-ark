@@ -100,3 +100,23 @@ export async function getMarketplaceAgentsFromManifest(): Promise<ServiceCollect
 
   return Object.keys(agents).length > 0 ? agents : null;
 }
+
+export async function getMarketplaceExecutorsFromManifest(): Promise<ServiceCollection | null> {
+  const manifest = await fetchMarketplaceManifest();
+  if (!manifest || !manifest.items) {
+    return null;
+  }
+
+  const executors: ServiceCollection = {};
+  for (const item of manifest.items) {
+    if (item.ark && item.type === 'executor') {
+      const executorName = item.name
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, '-')
+        .replace(/^-+|-+$/g, '');
+      executors[executorName] = mapMarketplaceItemToArkService(item);
+    }
+  }
+
+  return Object.keys(executors).length > 0 ? executors : null;
+}
