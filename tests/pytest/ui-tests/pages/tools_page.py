@@ -137,7 +137,7 @@ class ToolsPage(BasePage):
         save_button.scroll_into_view_if_needed()
         save_button.click(force=True)
         
-        error_banner = self.page.locator(".text-destructive, .error").first
+        error_banner = self.page.locator("[data-sonner-toast][data-type='error'], [role='alert']:not([role='dialog'] *)").first
         if error_banner.count() > 0 and error_banner.is_visible():
             error_text = error_banner.inner_text()
             logger.error(f"Tool creation error: {error_text}")
