@@ -143,13 +143,6 @@ def test_mcp_server_registered(helper):
     """Test MCP server is registered with ARK"""
     success, tool_count = helper.verify_mcp_server_registered()
     assert success, "MCP server not registered"
-    assert tool_count > 0, "MCP server has no tools"
-
-
-def test_mcp_server_tool_count(helper):
-    """Test MCP server has expected number of tools"""
-    success, tool_count = helper.verify_mcp_server_registered()
-    assert success, "MCP server not registered"
     assert tool_count >= 10, f"MCP server has {tool_count} tools, expected at least 10"
 
 
@@ -190,12 +183,16 @@ def test_file_list(helper):
     assert success, "File listing failed"
     # Use the actual uploaded key
     uploaded_key = getattr(helper, 'last_uploaded_key', 'test-upload.txt')
+    if not uploaded_key:
+        pytest.fail("File was not uploaded, skipping list check")
     assert uploaded_key in file_list, f"Uploaded file {uploaded_key} not found in listing"
 
 
 def test_file_download(helper):
     """Test file download functionality"""
     uploaded_key = getattr(helper, 'last_uploaded_key', 'test-upload.txt')
+    if not uploaded_key:
+        pytest.fail("File was not uploaded, skipping download")
     success, content = helper.download_file(uploaded_key)
     assert success, "File download failed"
     assert len(content) > 0, "Downloaded file is empty"
@@ -223,13 +220,10 @@ def test_file_content_integrity(helper):
 def test_file_delete(helper):
     """Test file deletion functionality"""
     uploaded_key = getattr(helper, 'last_uploaded_key', 'test-upload.txt')
+    if not uploaded_key:
+        pytest.fail("File was not uploaded, skipping delete")
     success = helper.delete_file(uploaded_key)
     assert success, "File deletion failed"
-
-
-def test_file_deleted_verification(helper):
-    """Test file is actually deleted after delete operation"""
-    uploaded_key = getattr(helper, 'last_uploaded_key', 'test-upload.txt')
     _, file_list = helper.list_files()
     assert uploaded_key not in file_list, "File still exists after deletion"
 
