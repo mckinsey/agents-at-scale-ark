@@ -18,8 +18,12 @@ spec:
     try:
     - error:
         file: manifests/invalid-model-invalid-provider.yaml
-  
-  # Agent validation failures  
+  - name: test-model-anthropic-missing-config
+    try:
+    - error:
+        file: manifests/invalid-model-anthropic-missing-config.yaml
+
+  # Agent validation failures
   - name: test-agent-missing-prompt
     try:
     - error:

@@ -225,9 +225,9 @@ Basic Azure OpenAI model configuration.
 - **Use case**: Standard model setup
 
 #### `models/claude.yaml` - Anthropic Claude
-AWS Bedrock Claude model configuration.
-- **Model**: Claude via Bedrock
-- **Prerequisites**: AWS credentials
+Native Anthropic API model configuration.
+- **Model**: Claude via Anthropic API
+- **Prerequisites**: Anthropic API key
 - **Use case**: Claude integration
 
 #### `models/gemini.yaml` - Google Gemini  

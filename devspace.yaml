@@ -50,6 +50,9 @@ vars:
   ENABLE_ARK_TENANT:
     source: env
     default: true
+  ENABLE_ARGO:
+    source: env
+    default: false
 
 commands:
   routes:
@@ -113,6 +116,16 @@ profiles:
                 path: ./charts/ark-tenant
               releaseName: ark-tenant
               upgradeArgs: [ "--install" ]
+  - name: enable-argo
+    activation:
+      - vars:
+          ENABLE_ARGO: true
+    patches:
+      - op: add
+        path: dependencies
+        value:
+          argo-workflows:
+            path: ./services/argo-workflows
 
 pipelines:
   deploy: |-
@@ -137,7 +150,10 @@ pipelines:
       create_deployments ark-tenant
     fi
 
-    run_dependency_pipelines --all --exclude ark-controller --pipeline=deploy
+    if [ "${ENABLE_ARGO}" == "true" ]; then
+      run_dependency_pipelines argo-workflows --pipeline=deploy
+    fi
+    run_dependency_pipelines --all --exclude ark-controller --exclude argo-workflows --pipeline=deploy
 
     echo ""
     echo "All services deployed. Streaming logs from namespace ${DEVSPACE_NAMESPACE} (Ctrl+C to stop)..."
@@ -165,4 +181,7 @@ pipelines:
       create_deployments ark-tenant
     fi
 
-    run_dependency_pipelines --all --exclude ark-controller --pipeline=dev
+    if [ "${ENABLE_ARGO}" == "true" ]; then
+      run_dependency_pipelines argo-workflows --pipeline=dev
+    fi
+    run_dependency_pipelines --all --exclude ark-controller --exclude argo-workflows --pipeline=dev
