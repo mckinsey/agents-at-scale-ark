@@ -564,6 +564,18 @@ jobs:
             chainsaw test --config .chainsaw.yaml --selector '!llm'
           fi
 
+      - name: Collect cluster logs
+        if: always()
+        run: kubectl cluster-info dump --output-directory=/tmp/cluster-logs
+
+      - name: Upload cluster logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cluster-logs-standard-${{ matrix.storage-backend }}-${{ github.sha }}
+          path: /tmp/cluster-logs
+          retention-days: 7
+
       - uses: ./.github/actions/collect-coverage-e2e
         with:
           artifact-name: coverage-reports-standard-${{ matrix.storage-backend }}
@@ -624,6 +636,18 @@ jobs:
           cd tests
           chmod +x llm-tests/run-multi-provider.sh
           ./llm-tests/run-multi-provider.sh
+
+      - name: Collect cluster logs
+        if: always()
+        run: kubectl cluster-info dump --output-directory=/tmp/cluster-logs
+
+      - name: Upload cluster logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cluster-logs-llm-${{ matrix.storage-backend }}-${{ github.sha }}
+          path: /tmp/cluster-logs
+          retention-days: 7
 
       - uses: ./.github/actions/collect-coverage-e2e
         with:
@@ -783,6 +807,18 @@ jobs:
           path: tests/pytest/ui-tests/screenshots/
           retention-days: 7
 
+      - name: Collect cluster logs
+        if: always()
+        run: kubectl cluster-info dump --output-directory=/tmp/cluster-logs
+
+      - name: Upload cluster logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cluster-logs-ui-${{ github.sha }}
+          path: /tmp/cluster-logs
+          retention-days: 7
+
   e2e-cli-tests:
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
@@ -861,6 +897,18 @@ jobs:
         with:
           name: cli-test-logs-${{ github.sha }}
           path: tests/pytest/cli-tests/tests/*.log
+          retention-days: 7
+
+      - name: Collect cluster logs
+        if: always()
+        run: kubectl cluster-info dump --output-directory=/tmp/cluster-logs
+
+      - name: Upload cluster logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cluster-logs-cli-${{ github.sha }}
+          path: /tmp/cluster-logs
           retention-days: 7
 
   build-charts:
