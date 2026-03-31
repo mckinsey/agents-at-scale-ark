@@ -87,8 +87,8 @@ class ToolsPage(BasePage):
         type_trigger.wait_for(state="visible", timeout=15000)
         type_trigger.click()
         
+        self.page.locator("[role='listbox'][data-side]").wait_for(state="visible", timeout=15000)
         http_option = self.page.locator("[role='option']:has-text('HTTP')").first
-        http_option.wait_for(state="visible", timeout=15000)
         http_option.click()
         
         description_input = self.page.locator("input#description, input[name='description'], [role='dialog'] input:nth-of-type(2)").first
