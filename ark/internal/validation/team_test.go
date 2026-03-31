@@ -144,6 +144,25 @@ func TestValidateTeam(t *testing.T) { //nolint:gocognit
 	})
 
 	t.Run("valid selector team", func(t *testing.T) {
+		maxTurns := 10
+		team := &arkv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default"},
+			Spec: arkv1alpha1.TeamSpec{
+				Strategy: "selector",
+				MaxTurns: &maxTurns,
+				Members: []arkv1alpha1.TeamMember{
+					{Name: "agent1", Type: "agent"},
+				},
+				Selector: &arkv1alpha1.TeamSelectorSpec{Agent: "coordinator"},
+			},
+		}
+		_, err := v.ValidateTeam(ctx, team)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("selector strategy requires maxTurns", func(t *testing.T) {
 		team := &arkv1alpha1.Team{
 			ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default"},
 			Spec: arkv1alpha1.TeamSpec{
@@ -155,8 +174,8 @@ func TestValidateTeam(t *testing.T) { //nolint:gocognit
 			},
 		}
 		_, err := v.ValidateTeam(ctx, team)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+		if err == nil {
+			t.Fatal("expected error for missing maxTurns")
 		}
 	})
 

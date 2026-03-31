@@ -86,6 +86,9 @@ func (v *Validator) validateStrategy(ctx context.Context, team *arkv1alpha1.Team
 		if err := v.validateSelectorAgent(ctx, team); err != nil {
 			return err
 		}
+		if team.Spec.MaxTurns == nil {
+			return fmt.Errorf("selector strategy requires maxTurns to prevent infinite execution")
+		}
 		if team.Spec.Graph != nil {
 			return validateGraphForSelector(team)
 		}
