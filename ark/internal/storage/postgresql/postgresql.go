@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,6 +23,32 @@ import (
 )
 
 const jsonNull = "null"
+
+func parseLabelSelector(selector string) (map[string]string, error) {
+	if selector == "" {
+		return nil, nil
+	}
+	result := map[string]string{}
+	for _, part := range strings.Split(selector, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if strings.Contains(part, "!=") || strings.Contains(part, " in ") || strings.Contains(part, " notin ") || strings.HasPrefix(part, "!") {
+			return nil, fmt.Errorf("unsupported label selector operator in %q, only equality (=, ==) is supported", part)
+		}
+		kv := strings.SplitN(part, "=", 2)
+		if len(kv) != 2 {
+			return nil, fmt.Errorf("invalid label selector %q", part)
+		}
+		key := strings.TrimSuffix(strings.TrimSpace(kv[0]), "=")
+		result[strings.TrimSpace(key)] = strings.TrimSpace(kv[1])
+	}
+	if len(result) == 0 {
+		return nil, nil
+	}
+	return result, nil
+}
 
 type Config struct {
 	Host         string
@@ -98,6 +125,7 @@ func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error
 	backend.warmPool()
 	go backend.listenForNotifications()
 	go backend.refreshBookmarkLoop()
+	go backend.cleanupLoop()
 
 	return backend, nil
 }
@@ -136,26 +164,28 @@ func (p *PostgreSQLBackend) initSchema() error {
 		finalizers JSONB DEFAULT '[]',
 		created_at TIMESTAMPTZ DEFAULT NOW(),
 		updated_at TIMESTAMPTZ DEFAULT NOW(),
-		deleted_at TIMESTAMPTZ,
-		UNIQUE(kind, namespace, name)
+		deleted_at TIMESTAMPTZ
 	);
 	ALTER TABLE resources ADD COLUMN IF NOT EXISTS finalizers JSONB DEFAULT '[]';
 	ALTER TABLE resources ADD COLUMN IF NOT EXISTS owner_references JSONB DEFAULT '[]';
+
+	ALTER TABLE resources DROP CONSTRAINT IF EXISTS resources_kind_namespace_name_key;
+	CREATE UNIQUE INDEX IF NOT EXISTS idx_resources_unique_active ON resources(kind, namespace, name) WHERE deleted_at IS NULL;
 
 	CREATE INDEX IF NOT EXISTS idx_resources_kind_namespace ON resources(kind, namespace);
 	CREATE INDEX IF NOT EXISTS idx_resources_kind_namespace_name ON resources(kind, namespace, name);
 	CREATE INDEX IF NOT EXISTS idx_resources_labels ON resources USING GIN(labels);
 	CREATE INDEX IF NOT EXISTS idx_resources_lookup ON resources(kind, namespace, name, resource_version);
+	CREATE INDEX IF NOT EXISTS idx_resources_deleted ON resources(deleted_at) WHERE deleted_at IS NOT NULL;
 
 	CREATE OR REPLACE FUNCTION notify_resource_change()
 	RETURNS TRIGGER AS $$
 	BEGIN
 		PERFORM pg_notify('ark_resources', json_build_object(
-			'operation', TG_OP,
-			'kind', COALESCE(NEW.kind, OLD.kind),
-			'namespace', COALESCE(NEW.namespace, OLD.namespace),
-			'name', COALESCE(NEW.name, OLD.name),
-			'resource_version', COALESCE(NEW.resource_version, OLD.resource_version)
+			'kind', NEW.kind,
+			'namespace', NEW.namespace,
+			'name', NEW.name,
+			'resource_version', NEW.resource_version
 		)::text);
 		RETURN NEW;
 	END;
@@ -163,7 +193,7 @@ func (p *PostgreSQLBackend) initSchema() error {
 
 	DROP TRIGGER IF EXISTS resource_change_trigger ON resources;
 	CREATE TRIGGER resource_change_trigger
-	AFTER INSERT OR UPDATE OR DELETE ON resources
+	AFTER INSERT OR UPDATE ON resources
 	FOR EACH ROW EXECUTE FUNCTION notify_resource_change();
 	`
 	_, err := p.db.Exec(schema)
@@ -171,31 +201,55 @@ func (p *PostgreSQLBackend) initSchema() error {
 }
 
 func (p *PostgreSQLBackend) listenForNotifications() {
-	listener := pq.NewListener(p.connStr, 10*time.Second, time.Minute, func(ev pq.ListenerEventType, err error) {
-		if err != nil {
-			klog.Errorf("PostgreSQL listener error: %v", err)
+	backoff := time.Second
+	maxBackoff := 30 * time.Second
+
+	for {
+		select {
+		case <-p.ctx.Done():
+			return
+		default:
 		}
-	})
 
-	if err := listener.Listen("ark_resources"); err != nil {
-		klog.Errorf("Failed to listen for notifications: %v", err)
-		return
+		listener := pq.NewListener(p.connStr, 10*time.Second, time.Minute, func(ev pq.ListenerEventType, err error) {
+			if err != nil {
+				klog.Errorf("PostgreSQL listener error: %v", err)
+			}
+		})
+
+		if err := listener.Listen("ark_resources"); err != nil {
+			_ = listener.Close()
+			klog.Errorf("Failed to listen for notifications, retrying in %v: %v", backoff, err)
+			select {
+			case <-p.ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
+			backoff = min(backoff*2, maxBackoff)
+			continue
+		}
+
+		backoff = time.Second
+		p.runListener(listener)
+		_ = listener.Close()
 	}
+}
 
-	defer func() { _ = listener.Close() }()
-
+func (p *PostgreSQLBackend) runListener(listener *pq.Listener) {
 	for {
 		select {
 		case <-p.ctx.Done():
 			return
 		case n := <-listener.Notify:
 			if n == nil {
-				continue
+				klog.Warning("PostgreSQL listener connection lost, reconnecting")
+				return
 			}
 			p.nudgeWatchers(n.Extra)
 		case <-time.After(90 * time.Second):
 			if err := listener.Ping(); err != nil {
-				klog.Warningf("Failed to ping listener: %v", err)
+				klog.Warningf("Failed to ping listener, reconnecting: %v", err)
+				return
 			}
 		}
 	}
@@ -223,6 +277,19 @@ func (p *PostgreSQLBackend) refreshCachedRV() {
 		return
 	}
 	p.cachedRV.Store(rv)
+}
+
+func (p *PostgreSQLBackend) cleanupLoop() {
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-p.ctx.Done():
+			return
+		case <-ticker.C:
+			_, _ = p.db.ExecContext(p.ctx, `DELETE FROM resources WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '5 minutes'`)
+		}
+	}
 }
 
 func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name string, obj runtime.Object) error {
@@ -291,7 +358,7 @@ func (p *PostgreSQLBackend) Get(ctx context.Context, kind, namespace, name strin
 	row := p.db.QueryRowContext(ctx, `
 		SELECT resource_version, generation, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, updated_at
 		FROM resources
-		WHERE kind = $1 AND namespace = $2 AND name = $3	`, kind, namespace, name)
+		WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL`, kind, namespace, name)
 
 	var rv, generation int64
 	var uid string
@@ -300,7 +367,7 @@ func (p *PostgreSQLBackend) Get(ctx context.Context, kind, namespace, name strin
 
 	if err := row.Scan(&rv, &generation, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &updatedAt); err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("not found")
+			return nil, storage.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
@@ -312,7 +379,7 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 	query := `
 		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at
 		FROM resources
-		WHERE kind = $1	`
+		WHERE kind = $1 AND deleted_at IS NULL`
 	args := []interface{}{kind}
 	argIndex := 2
 
@@ -320,6 +387,19 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 		query += fmt.Sprintf(" AND namespace = $%d", argIndex)
 		args = append(args, namespace)
 		argIndex++
+	}
+
+	if opts.LabelSelector != "" {
+		labelMap, err := parseLabelSelector(opts.LabelSelector)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to parse label selector: %w", err)
+		}
+		if labelMap != nil {
+			labelJSON, _ := json.Marshal(labelMap)
+			query += fmt.Sprintf(" AND labels @> $%d::jsonb", argIndex)
+			args = append(args, string(labelJSON))
+			argIndex++
+		}
 	}
 
 	if opts.Continue != "" {
@@ -444,7 +524,7 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 			SET spec = $1::jsonb, status = $2::jsonb, labels = $3::jsonb, annotations = $4::jsonb,
 			    finalizers = $5::jsonb, owner_references = $6::jsonb,
 			    generation = generation + 1, resource_version = nextval('resources_resource_version_seq'), updated_at = NOW()
-			WHERE kind = $7 AND namespace = $8 AND name = $9 AND resource_version = $10
+			WHERE kind = $7 AND namespace = $8 AND name = $9 AND resource_version = $10 AND deleted_at IS NULL
 			RETURNING resource_version, generation, uid, created_at
 		)
 		SELECT resource_version, generation, uid, created_at, true FROM upd
@@ -504,7 +584,7 @@ func (p *PostgreSQLBackend) UpdateStatus(ctx context.Context, kind, namespace, n
 		WITH upd AS (
 			UPDATE resources
 			SET status = $1::jsonb, resource_version = nextval('resources_resource_version_seq'), updated_at = NOW()
-			WHERE kind = $2 AND namespace = $3 AND name = $4 AND resource_version = $5
+			WHERE kind = $2 AND namespace = $3 AND name = $4 AND resource_version = $5 AND deleted_at IS NULL
 			RETURNING resource_version
 		)
 		SELECT resource_version, true FROM upd
@@ -529,8 +609,9 @@ func (p *PostgreSQLBackend) UpdateStatus(ctx context.Context, kind, namespace, n
 
 func (p *PostgreSQLBackend) Delete(ctx context.Context, kind, namespace, name string) error {
 	result, err := p.db.ExecContext(ctx, `
-		DELETE FROM resources
-		WHERE kind = $1 AND namespace = $2 AND name = $3
+		UPDATE resources
+		SET deleted_at = NOW(), resource_version = nextval('resources_resource_version_seq'), updated_at = NOW()
+		WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL
 	`, kind, namespace, name)
 	if err != nil {
 		return fmt.Errorf("failed to delete resource: %w", err)
@@ -538,24 +619,28 @@ func (p *PostgreSQLBackend) Delete(ctx context.Context, kind, namespace, name st
 
 	affected, _ := result.RowsAffected()
 	if affected == 0 {
-		return fmt.Errorf("not found")
+		return storage.ErrNotFound
 	}
 
 	return nil
 }
 
 func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, opts storage.WatchOptions) (watch.Interface, error) {
-	ch := make(chan watch.Event, 100)
 	key := fmt.Sprintf("%s/%s", kind, namespace)
 
+	labelFilter, err := parseLabelSelector(opts.LabelSelector)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse label selector: %w", err)
+	}
+
 	w := &postgresWatcher{
-		ch:          ch,
 		outCh:       make(chan watch.Event, 100),
 		nudgeCh:     make(chan struct{}, 1),
 		backend:     p,
 		key:         key,
 		kind:        kind,
 		ns:          namespace,
+		labelFilter: labelFilter,
 		ctx:         ctx,
 		done:        make(chan struct{}),
 		initialList: true,
@@ -574,7 +659,7 @@ func (p *PostgreSQLBackend) GetResourceVersion(ctx context.Context, kind, namesp
 	var rv int64
 	err := p.db.QueryRowContext(ctx, `
 		SELECT resource_version FROM resources
-		WHERE kind = $1 AND namespace = $2 AND name = $3	`, kind, namespace, name).Scan(&rv)
+		WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL`, kind, namespace, name).Scan(&rv)
 	return rv, err
 }
 
@@ -631,47 +716,12 @@ func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, 
 	return p.converter.Decode(kind, data)
 }
 
-func (p *PostgreSQLBackend) sendDeleteEvent(kind, namespace string, obj runtime.Object) {
-	key := fmt.Sprintf("%s/%s", kind, namespace)
-	allKey := fmt.Sprintf("%s/", kind)
-
-	p.mu.RLock()
-	watchers := make([]*postgresWatcher, 0, len(p.watchers[key])+len(p.watchers[allKey]))
-	watchers = append(watchers, p.watchers[key]...)
-	if namespace != "" {
-		watchers = append(watchers, p.watchers[allKey]...)
-	}
-	p.mu.RUnlock()
-
-	event := watch.Event{Type: watch.Deleted, Object: obj}
-	for _, w := range watchers {
-		w.send(event)
-	}
-}
-
 func (p *PostgreSQLBackend) nudgeWatchers(payload string) {
 	var notification struct {
-		Operation       string `json:"operation"`
-		Kind            string `json:"kind"`
-		Namespace       string `json:"namespace"`
-		Name            string `json:"name"`
-		ResourceVersion int64  `json:"resource_version"`
+		Kind      string `json:"kind"`
+		Namespace string `json:"namespace"`
 	}
 	if err := json.Unmarshal([]byte(payload), &notification); err != nil {
-		return
-	}
-
-	if notification.Operation == "DELETE" {
-		obj := p.converter.NewObject(notification.Kind)
-		if obj == nil {
-			return
-		}
-		if accessor, err := meta.Accessor(obj); err == nil {
-			accessor.SetName(notification.Name)
-			accessor.SetNamespace(notification.Namespace)
-			accessor.SetResourceVersion(fmt.Sprintf("%d", notification.ResourceVersion))
-		}
-		p.sendDeleteEvent(notification.Kind, notification.Namespace, obj)
 		return
 	}
 
@@ -719,34 +769,21 @@ func (p *PostgreSQLBackend) getMaxResourceVersion() (int64, error) {
 	return rv.Int64, nil
 }
 
-// postgresWatcher implements watch.Interface with panic-safe channel ownership.
-// The run() goroutine is the sole owner of outCh — only run() closes it on exit.
-// send() writes to the internal ch (never closed by Stop), and run() forwards
-// from ch to outCh. This eliminates all send-on-closed-channel races.
 type postgresWatcher struct {
-	ch          chan watch.Event
-	outCh       chan watch.Event
-	nudgeCh     chan struct{}
-	backend     *PostgreSQLBackend
-	key         string
-	kind        string
-	ns          string
-	ctx         context.Context
-	done        chan struct{}
-	stopped     atomic.Bool
-	closed      sync.Once
-	lastSeenRV  atomic.Int64
-	initialList bool
-}
-
-func (w *postgresWatcher) send(event watch.Event) {
-	if w.stopped.Load() {
-		return
-	}
-	select {
-	case w.ch <- event:
-	default:
-	}
+	outCh           chan watch.Event
+	nudgeCh         chan struct{}
+	backend         *PostgreSQLBackend
+	key             string
+	kind            string
+	ns              string
+	labelFilter     map[string]string
+	ctx             context.Context
+	done            chan struct{}
+	stopped         atomic.Bool
+	closed          sync.Once
+	lastSeenRV      atomic.Int64
+	initialList     bool
+	initialListDone bool
 }
 
 func (w *postgresWatcher) Stop() {
@@ -781,14 +818,6 @@ func (w *postgresWatcher) run() {
 			return
 		case <-w.ctx.Done():
 			return
-		case ev := <-w.ch:
-			select {
-			case w.outCh <- ev:
-			case <-w.done:
-				return
-			case <-w.ctx.Done():
-				return
-			}
 		case <-bookmarkTicker.C:
 			w.sendBookmark()
 		case <-relistTicker.C:
@@ -801,6 +830,9 @@ func (w *postgresWatcher) run() {
 
 func (w *postgresWatcher) sendBookmark() {
 	rv := w.backend.cachedRV.Load()
+	if lastSeen := w.lastSeenRV.Load(); lastSeen > rv {
+		rv = lastSeen
+	}
 	if rv == 0 {
 		return
 	}
@@ -810,7 +842,10 @@ func (w *postgresWatcher) sendBookmark() {
 	}
 	if accessor, aErr := meta.Accessor(obj); aErr == nil {
 		accessor.SetResourceVersion(fmt.Sprintf("%d", rv))
-		accessor.SetAnnotations(map[string]string{"k8s.io/initial-events-end": "true"})
+		if !w.initialListDone {
+			accessor.SetAnnotations(map[string]string{"k8s.io/initial-events-end": "true"})
+			w.initialListDone = true
+		}
 	}
 	select {
 	case w.outCh <- watch.Event{Type: watch.Bookmark, Object: obj}:
@@ -834,14 +869,23 @@ func (w *postgresWatcher) relist() {
 	lastRV := w.lastSeenRV.Load()
 
 	query := `
-		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at
+		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, deleted_at
 		FROM resources
 		WHERE kind = $1 AND resource_version > $2`
 	args := []interface{}{w.kind, lastRV}
+	argIndex := 3
 
 	if w.ns != "" {
-		query += ` AND namespace = $3`
+		query += fmt.Sprintf(` AND namespace = $%d`, argIndex)
 		args = append(args, w.ns)
+		argIndex++
+	}
+
+	if w.labelFilter != nil {
+		labelJSON, _ := json.Marshal(w.labelFilter)
+		query += fmt.Sprintf(` AND labels @> $%d::jsonb`, argIndex)
+		args = append(args, string(labelJSON))
+		_ = argIndex
 	}
 
 	query += ` ORDER BY resource_version ASC`
@@ -857,8 +901,9 @@ func (w *postgresWatcher) relist() {
 		var ns, name, uid string
 		var spec, status, labels, annotations, finalizers, ownerRefs []byte
 		var createdAt time.Time
+		var deletedAt sql.NullTime
 
-		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt); err != nil {
+		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &deletedAt); err != nil {
 			return
 		}
 
@@ -867,10 +912,16 @@ func (w *postgresWatcher) relist() {
 			continue
 		}
 
-		eventType := watch.Modified
-		if w.initialList {
+		var eventType watch.EventType
+		switch {
+		case deletedAt.Valid:
+			eventType = watch.Deleted
+		case w.initialList:
 			eventType = watch.Added
+		default:
+			eventType = watch.Modified
 		}
+
 		w.advanceRV(rv)
 		select {
 		case w.outCh <- watch.Event{Type: eventType, Object: obj}:
