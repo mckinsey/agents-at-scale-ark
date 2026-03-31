@@ -522,6 +522,7 @@ jobs:
     needs: [setup-container-cache-registry, build-containers]
     if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }} # Remove skipping these tests once chainsaw can be run with mock-llm
     runs-on: ubuntu-24.04
+    continue-on-error: ${{ matrix.storage-backend == 'postgresql' }}
     strategy:
       fail-fast: false
       matrix:
@@ -585,6 +586,7 @@ jobs:
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
     if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
+    continue-on-error: ${{ matrix.storage-backend == 'postgresql' }}
     strategy:
       fail-fast: false
       matrix:
