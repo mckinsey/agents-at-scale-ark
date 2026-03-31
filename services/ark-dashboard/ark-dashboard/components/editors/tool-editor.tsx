@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Label } from '@radix-ui/react-label';
 import { Maximize2, Minimize2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import * as z from 'zod';
@@ -135,14 +135,16 @@ export function ToolEditor({
   });
 
   const selectedType = form.watch('type');
+  const { reset } = form;
 
-  useEffect(() => {
-    if (open) {
-      form.reset();
+  const handleOpenChange = (newOpen: boolean) => {
+    if (!newOpen) {
+      reset();
       setIsInputSchemaExpanded(false);
       setIsAnnotationsExpanded(false);
     }
-  }, [open, form]);
+    onOpenChange(newOpen);
+  };
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
     let parsedInputSchema: Record<string, unknown> | undefined;
@@ -182,11 +184,11 @@ export function ToolEditor({
     };
 
     onSave(toolSpec);
-    onOpenChange(false);
+    handleOpenChange(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Create New Tool</DialogTitle>
@@ -464,7 +466,7 @@ export function ToolEditor({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => onOpenChange(false)}
+                onClick={() => handleOpenChange(false)}
                 disabled={form.formState.isSubmitting}>
                 Cancel
               </Button>
