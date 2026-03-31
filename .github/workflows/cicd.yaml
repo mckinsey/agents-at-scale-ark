@@ -522,6 +522,7 @@ jobs:
     needs: [setup-container-cache-registry, build-containers]
     if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }} # Remove skipping these tests once chainsaw can be run with mock-llm
     runs-on: ubuntu-24.04
+    continue-on-error: ${{ matrix.storage-backend == 'postgresql' }}
     strategy:
       fail-fast: false
       matrix:
@@ -564,6 +565,18 @@ jobs:
             chainsaw test --config .chainsaw.yaml --selector '!llm'
           fi
 
+      - name: Collect cluster logs
+        if: always()
+        run: kubectl cluster-info dump --all-namespaces --output-directory=/tmp/cluster-logs
+
+      - name: Upload cluster logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cluster-logs-standard-${{ matrix.storage-backend }}-${{ github.sha }}
+          path: /tmp/cluster-logs
+          retention-days: 7
+
       - uses: ./.github/actions/collect-coverage-e2e
         with:
           artifact-name: coverage-reports-standard-${{ matrix.storage-backend }}
@@ -573,6 +586,7 @@ jobs:
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
     if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
+    continue-on-error: ${{ matrix.storage-backend == 'postgresql' }}
     strategy:
       fail-fast: false
       matrix:
@@ -624,6 +638,18 @@ jobs:
           cd tests
           chmod +x llm-tests/run-multi-provider.sh
           ./llm-tests/run-multi-provider.sh
+
+      - name: Collect cluster logs
+        if: always()
+        run: kubectl cluster-info dump --all-namespaces --output-directory=/tmp/cluster-logs
+
+      - name: Upload cluster logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cluster-logs-llm-${{ matrix.storage-backend }}-${{ github.sha }}
+          path: /tmp/cluster-logs
+          retention-days: 7
 
       - uses: ./.github/actions/collect-coverage-e2e
         with:
@@ -783,6 +809,18 @@ jobs:
           path: tests/pytest/ui-tests/screenshots/
           retention-days: 7
 
+      - name: Collect cluster logs
+        if: always()
+        run: kubectl cluster-info dump --all-namespaces --output-directory=/tmp/cluster-logs
+
+      - name: Upload cluster logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cluster-logs-ui-${{ github.sha }}
+          path: /tmp/cluster-logs
+          retention-days: 7
+
   e2e-cli-tests:
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
@@ -853,7 +891,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
         run: |
           cd tests/pytest/cli-tests/tests
-          pytest test_file_gateway.py -n 2 --dist loadscope -v --tb=short
+          pytest test_file_gateway.py -n 2 --dist loadscope -v --tb=short --log-cli-level=INFO
 
       - name: Upload CLI test logs
         if: always()
@@ -861,6 +899,18 @@ jobs:
         with:
           name: cli-test-logs-${{ github.sha }}
           path: tests/pytest/cli-tests/tests/*.log
+          retention-days: 7
+
+      - name: Collect cluster logs
+        if: always()
+        run: kubectl cluster-info dump --all-namespaces --output-directory=/tmp/cluster-logs
+
+      - name: Upload cluster logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cluster-logs-cli-${{ github.sha }}
+          path: /tmp/cluster-logs
           retention-days: 7
 
   build-charts:
@@ -1106,7 +1156,7 @@ jobs:
       - name: Deploy to GitHub Pages
         if: ${{ !env.ACT }}
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
   release-libs:
     needs: [check-release]
