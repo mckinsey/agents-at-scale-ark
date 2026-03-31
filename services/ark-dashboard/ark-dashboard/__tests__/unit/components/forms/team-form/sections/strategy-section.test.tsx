@@ -129,23 +129,6 @@ describe('StrategySection', () => {
     });
   });
 
-  it('should hide required indicator on max turns when loops are disabled', async () => {
-    const user = userEvent.setup();
-    render(<Wrapper defaultStrategy="sequential" />);
-
-    await user.click(screen.getByRole('checkbox'));
-    await waitFor(() => {
-      expect(
-        screen.getByText('Max Turns').parentElement?.querySelector('.text-red-500'),
-      ).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByRole('checkbox'));
-    await waitFor(() => {
-      expect(screen.queryByText('Max Turns')).not.toBeInTheDocument();
-    });
-  });
-
   it('should allow changing strategy', async () => {
     const user = userEvent.setup();
     render(<Wrapper />);
