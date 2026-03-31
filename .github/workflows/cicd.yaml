@@ -1055,72 +1055,6 @@ jobs:
           verbose: true
           flags: ark-cli,combined-coverage
 
-  create-rc-tag:
-    needs:
-      [
-        build-containers,
-        e2e-smoke-test,
-        e2e-tests-standard,
-        e2e-ui-tests,
-        e2e-cli-tests,
-        e2e-ark-cli,
-        e2e-tests-llm,
-        jfrog-xray-scan,
-        xray-container-scan,
-        build-and-test-ark,
-        build-and-test-services,
-        build-docs,
-        build-charts,
-        build-ark-cli,
-      ]
-    runs-on: ubuntu-24.04
-    if: github.ref == 'refs/heads/release' && !env.ACT
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Compute next RC tag
-        id: rc-tag
-        run: |
-          set -euo pipefail
-          VERSION="v$(cat version.txt | tr -d '\n')"
-          RC_COUNT=$(git tag --list "${VERSION}-rc.*" | wc -l | tr -d ' ')
-          NEXT_RC=$((RC_COUNT + 1))
-          RC_TAG="${VERSION}-rc.${NEXT_RC}"
-          echo "tag=${RC_TAG}" >> $GITHUB_OUTPUT
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "RC tag will be: ${RC_TAG}"
-
-      - name: Create and push RC tag
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag ${{ steps.rc-tag.outputs.tag }}
-          git push origin ${{ steps.rc-tag.outputs.tag }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create GitHub pre-release
-        run: |
-          gh release create ${{ steps.rc-tag.outputs.tag }} \
-            --prerelease \
-            --title "Release Candidate ${{ steps.rc-tag.outputs.tag }}" \
-            --notes "Release candidate for ${{ steps.rc-tag.outputs.version }}.
-
-  **This is a pre-release for regression testing — not for production use.**
-
-  To deploy for regression testing, trigger the [Deploy workflow](../actions/workflows/deploy.yml) with:
-  - \`ark_version\`: \`${{ steps.rc-tag.outputs.tag }}\`
-  - \`deploy_containers\`: true
-  - \`deploy_helm_chart\`: true
-
-  When regression passes, use the [Release Candidate workflow](../actions/workflows/release-candidate.yml) with action \`promote\` to merge to main and trigger the real release."
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   check-release:
     needs:
       [
@@ -1151,17 +1085,18 @@ jobs:
           echo "ℹ️  Skipping release when running locally with 'act'"
           echo "   Release creation requires GitHub tokens that are not available locally"
       - name: Create Release
-        if: ${{ !env.ACT && github.ref == 'refs/heads/main' }}
+        if: ${{ !env.ACT && github.ref == 'refs/heads/release' }}
         uses: googleapis/release-please-action@v4
         id: release-please
         with:
           manifest-file: .github/release-please-manifest.json
           config-file: .github/release-please-config.json
+          target-branch: release
 
   release-docs:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
     concurrency:
       group: "pages"
       cancel-in-progress: true
@@ -1177,7 +1112,7 @@ jobs:
   release-libs:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
     steps:
       - uses: actions/checkout@v4
       
@@ -1211,7 +1146,7 @@ jobs:
   release-charts:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
     strategy:
       matrix:
         chart:
@@ -1243,7 +1178,7 @@ jobs:
   release-ark-cli:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -1277,7 +1212,7 @@ jobs:
   release-fark:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1320,7 +1255,7 @@ jobs:
   run-deploy-workflow:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
     steps:
       - uses: actions/checkout@v4
       
@@ -1340,7 +1275,7 @@ jobs:
   verify-ark-installation:
     needs: [check-release, release-charts, release-ark-cli]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
     steps:
       - uses: actions/checkout@v4
 
