@@ -67,6 +67,16 @@ concurrency:
 
 jobs:
   ark-agent:
+    # Skip known bots to avoid wasting a runner on every automated comment
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.sender.login != 'dependabot[bot]' &&
+        github.event.sender.login != 'mckinsey-sq[bot]' &&
+        github.event.sender.login != 'aas-ark-bot[bot]' &&
+        github.event.sender.login != 'github-actions[bot]' &&
+        github.event.sender.login != 'allcontributors[bot]'
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
