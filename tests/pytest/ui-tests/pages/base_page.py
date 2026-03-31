@@ -49,7 +49,7 @@ class BasePage:
             dialog = self.page.locator("[role='dialog'], [data-slot='dialog-content']").first
             if dialog.is_visible(timeout=1000):
                 logger.info(f"Dialog still open. Content: {dialog.inner_text()}")
-                field_errors = self.page.locator("[role='dialog'] [role='alert'], [role='dialog'] .error, [role='dialog'] [aria-invalid='true']").all_inner_texts()
+                field_errors = self.page.locator("[role='dialog'] [role='alert'], [role='dialog'] .error, [role='dialog'] .text-destructive").all_inner_texts()
                 if field_errors:
                     logger.error(f"Field validation errors in dialog: {field_errors}")
             else:
