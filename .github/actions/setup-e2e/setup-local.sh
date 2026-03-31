@@ -158,16 +158,17 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
     else
       WARMUP_OK=0
     fi
-    if [ "$WARMUP_OK" -ge 3 ]; then
+    if [ "$WARMUP_OK" -ge 10 ]; then
       echo "Aggregated API server stable (${WARMUP_OK} consecutive successful probes)"
       break
     fi
     sleep 2
   done
-  if [ "$WARMUP_OK" -lt 3 ]; then
-    echo "WARNING: Aggregated API server may not be fully stable (only ${WARMUP_OK} consecutive successes)"
+  if [ "$WARMUP_OK" -lt 10 ]; then
+    echo "ERROR: Aggregated API server not stable (only ${WARMUP_OK} consecutive successes)"
     echo "Controller logs:"
     kubectl -n ark-system logs deployment/ark-controller --tail=30
+    exit 1
   fi
 
   if kubectl get crd agents.ark.mckinsey.com &>/dev/null; then
