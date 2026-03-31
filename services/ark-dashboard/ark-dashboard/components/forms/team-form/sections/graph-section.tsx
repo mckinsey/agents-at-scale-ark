@@ -69,10 +69,12 @@ export function GraphSection({
         .filter(m => !graphEdges.some(e => e.from === m.name))
     : [];
 
+  const selectorAgent = form.watch('selectorAgent');
+
   const unreachableAgents = (() => {
-    if (selectedStrategy !== 'selector' || graphEdges.length === 0 || selectedMembers.length === 0) return [];
+    if (selectedStrategy !== 'selector' || graphEdges.length === 0 || selectedMembers.length === 0 || !selectorAgent) return [];
     const reachable = new Set<string>();
-    const queue = [selectedMembers[0].name];
+    const queue = [selectorAgent];
     while (queue.length) {
       const current = queue.shift()!;
       if (reachable.has(current)) continue;
