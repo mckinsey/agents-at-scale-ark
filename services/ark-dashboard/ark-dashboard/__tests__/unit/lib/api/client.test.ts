@@ -104,6 +104,42 @@ describe('APIClient', () => {
       )
     })
 
+    it('should handle endpoints with existing query parameters', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({}),
+      })
+
+      await client.get('/api/marketplace?type=demos')
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `http://localhost:8080/api/marketplace?type=demos&_t=${MOCK_TIMESTAMP}`,
+        expect.objectContaining({
+          method: 'GET',
+        })
+      )
+    })
+
+    it('should handle endpoints with existing query parameters and additional params', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({}),
+      })
+
+      await client.get('/api/marketplace?type=demos', { params: { search: 'test' } })
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `http://localhost:8080/api/marketplace?type=demos&search=test&_t=${MOCK_TIMESTAMP}`,
+        expect.objectContaining({
+          method: 'GET',
+        })
+      )
+    })
+
     it('should handle API errors with JSON response', async () => {
       const errorData = { message: 'Not found', code: 'RESOURCE_NOT_FOUND' }
       mockFetch.mockResolvedValueOnce({
@@ -223,6 +259,32 @@ describe('APIClient', () => {
       expect(mockFetch).toHaveBeenCalledWith(
         'http://localhost:8080/test',
         expect.objectContaining({ method: 'DELETE' })
+      )
+    })
+  })
+
+  describe('relative baseURL', () => {
+    it('should resolve a relative baseURL against globalThis.location.origin without throwing', async () => {
+      Object.defineProperty(globalThis, 'location', {
+        value: { origin: 'http://localhost:3274' },
+        writable: true,
+        configurable: true,
+      })
+
+      const relativeClient = new APIClient('/api/v1/proxy/services')
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ services: [] }),
+      })
+
+      await relativeClient.get('')
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `http://localhost:3274/api/v1/proxy/services?_t=${MOCK_TIMESTAMP}`,
+        expect.anything(),
       )
     })
   })
