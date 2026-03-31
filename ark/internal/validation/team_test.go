@@ -231,5 +231,4 @@ func TestValidateTeam(t *testing.T) { //nolint:gocognit
 			t.Fatal("expected error for loops on selector strategy")
 		}
 	})
-
 }
