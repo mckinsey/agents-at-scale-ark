@@ -1,0 +1,32 @@
+# Namespace Reader
+#
+# Grants a tenant service account read-only access to Kubernetes namespaces.
+# This enables the Ark dashboard and API to discover and list all namespaces
+# in the cluster. Without this, the API/dashboard still work but only show
+# the tenant's own namespace.
+#
+# Change "ark-api-sa" and "default" below to match your tenant's
+# service account name and namespace.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ark-namespace-reader
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ark-namespace-reader-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ark-namespace-reader
+subjects:
+  # Change the service account name and namespace to match your tenant
+  - kind: ServiceAccount
+    name: ark-api-sa
+    namespace: default

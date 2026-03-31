@@ -21,6 +21,7 @@ import {
 
 interface NamespaceContext {
   availableNamespaces: Namespace[];
+  capabilities: { can_create_namespace: boolean };
   createNamespace: (name: string) => void;
   isPending: boolean;
   namespace: string;
@@ -39,6 +40,9 @@ function NamespaceProvider({ children }: PropsWithChildren) {
 
   const [isNamespaceResolved, setIsNamespaceResolved] = useState(false);
   const [readOnlyMode, setReadOnlyMode] = useState(true);
+  const [capabilities, setCapabilities] = useState<{
+    can_create_namespace: boolean;
+  }>({ can_create_namespace: false });
 
   const { data, isPending, error } = useGetContext(namespaceFromQueryParams);
   const {
@@ -143,6 +147,9 @@ function NamespaceProvider({ children }: PropsWithChildren) {
       }
       const newReadOnlyMode = data.read_only_mode ?? false;
       setReadOnlyMode(newReadOnlyMode);
+      if (data.capabilities) {
+        setCapabilities(data.capabilities);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, namespaceFromQueryParams]);
@@ -150,6 +157,7 @@ function NamespaceProvider({ children }: PropsWithChildren) {
   const context = useMemo<NamespaceContext>(
     () => ({
       availableNamespaces,
+      capabilities,
       createNamespace,
       isPending: isPending || isNamespacesPending,
       namespace: namespaceFromQueryParams,
@@ -159,6 +167,7 @@ function NamespaceProvider({ children }: PropsWithChildren) {
     }),
     [
       availableNamespaces,
+      capabilities,
       createNamespace,
       isPending,
       isNamespacesPending,

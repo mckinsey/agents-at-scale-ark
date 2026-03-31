@@ -1,0 +1,65 @@
+# Full Cluster Admin Access
+#
+# WARNING: This grants full cluster-wide Ark access including namespace
+# creation. Use for platform admins only — never for regular tenants.
+#
+# Change "ark-api-sa" and "default" below to match your admin service
+# account name and namespace.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ark-full-admin-namespaces
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ark-full-admin-resources
+rules:
+  - apiGroups: ["ark.mckinsey.com"]
+    resources:
+      - models
+      - agents
+      - queries
+      - teams
+      - tools
+      - workflows
+      - arktemplates
+      - mcpservers
+      - a2aservers
+      - memories
+      - evaluations
+      - evaluators
+      - a2atasks
+      - executionengines
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ark-full-admin-namespaces-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ark-full-admin-namespaces
+subjects:
+  - kind: ServiceAccount
+    name: ark-api-sa
+    namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ark-full-admin-resources-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ark-full-admin-resources
+subjects:
+  - kind: ServiceAccount
+    name: ark-api-sa
+    namespace: default

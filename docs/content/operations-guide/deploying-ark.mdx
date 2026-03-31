@@ -175,45 +175,6 @@ rbac:
 
 When enabled (default), the controller can impersonate any service account specified in queries. When disabled, queries can only run with the controller's own identity. If no `serviceAccount` is specified for a query, no impersonation will occur and the `ark-controller` will execute the query using its own service account.
 
-### Setting Up Tenant Namespaces
+### Tenant Namespaces
 
-The `ark-tenant` Helm chart provisions namespaces for Ark workloads:
-
-```bash
-helm install ark-tenant oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-tenant \
-  -n tenant-1 \
-  --create-namespace \
-  --set serviceAccount.name=ark-tenant
-```
-
-This creates:
-- The namespace (if it doesn't exist)
-- The service account
-- An `ark-tenant-role` with Ark and Kubernetes permissions
-- A RoleBinding linking the service account to the role
-- Builtin tools (`terminate`, `noop`) for agent workflows
-
-Additional options include resource quotas and network policies, which are documented in the chart.
-
-### Using the Tenant Service Account
-
-Configure queries to use the service account:
-
-```yaml
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Query
-metadata:
-  name: my-query
-  namespace: tenant-1
-spec:
-  # Optional - omit to use controller identity.
-  serviceAccount: ark-tenant  
-  input: "Hello from tenant-1"
-  target:
-    type: agent
-    name: my-agent
-```
-
-When no service account is specified, the query runs with the controller's identity. This is suitable for development and single-tenant deployments.
-
-> Note: Future releases will move query execution to per-namespace executor pods, eliminating the need for service account impersonation.
+For multi-tenant deployments, Ark uses Kubernetes namespaces as tenant boundaries with RBAC for isolation and cross-namespace access. See [Tenant and Namespace Management](./tenant-namespace-management) for setup instructions, RBAC tiers, and dashboard namespace configuration.

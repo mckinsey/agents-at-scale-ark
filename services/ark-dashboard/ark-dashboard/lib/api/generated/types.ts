@@ -3039,6 +3039,9 @@ export interface components {
             namespace: string;
             /** Read Only Mode */
             read_only_mode: boolean;
+            capabilities?: {
+                can_create_namespace: boolean;
+            };
         };
         /**
          * ConversationListResponse

@@ -1,0 +1,39 @@
+# Label-Based Namespace Access (Convention)
+#
+# Demonstrates granting access to namespaces matching a label convention.
+# Namespaces labelled with ark.mckinsey.com/tenant identify which tenant
+# should have access.
+#
+# IMPORTANT: This is an operator convention, NOT auto-enforced by Kubernetes
+# RBAC. Labels alone do not grant access. The admin must create a RoleBinding
+# in each labelled namespace for the convention to take effect.
+#
+# Workflow:
+#   1. Label target namespaces with ark.mckinsey.com/tenant: <tenant-name>
+#   2. Create a RoleBinding in each labelled namespace (see template below)
+#
+# Change "ark-api-sa" and "default" to match your tenant's service account
+# name and home namespace.
+
+# Example: namespace with tenant label applied
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-alpha-workspace
+  labels:
+    ark.mckinsey.com/tenant: team-alpha
+---
+# RoleBinding template — apply one of these in each labelled namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-tenant-access
+  namespace: team-alpha-workspace # must match a labelled namespace
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ark-tenant-role
+subjects:
+  - kind: ServiceAccount
+    name: ark-api-sa
+    namespace: default # tenant's home namespace

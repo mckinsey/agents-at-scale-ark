@@ -136,9 +136,3 @@ httpRoute:
 serviceAccount:
   name: ark-api-sa
   create: true
-
-# RBAC configuration
-rbac:
-  # Set to true to enable cluster-wide permissions (read from all namespaces, write to own namespace)
-  # Set to false for namespace-scoped permissions only (default)
-  clusterWide: false

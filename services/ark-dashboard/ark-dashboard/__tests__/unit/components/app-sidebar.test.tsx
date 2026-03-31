@@ -18,6 +18,7 @@ vi.mock('next/image', () => ({
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: vi.fn(() => ({
     availableNamespaces: [{ name: 'default' }],
+    capabilities: { can_create_namespace: false },
     createNamespace: vi.fn(),
     isPending: false,
     namespace: 'default',
@@ -125,6 +126,7 @@ describe('AppSidebar - Files Section', () => {
     const { useNamespace } = await import('@/providers/NamespaceProvider');
     vi.mocked(useNamespace).mockReturnValue({
       availableNamespaces: [],
+      capabilities: { can_create_namespace: false },
       createNamespace: vi.fn(),
       isPending: false,
       namespace: '',
@@ -151,6 +153,7 @@ describe('AppSidebar - Files Section', () => {
     const { useNamespace } = await import('@/providers/NamespaceProvider');
     vi.mocked(useNamespace).mockReturnValue({
       availableNamespaces: [{ name: 'test-namespace' }],
+      capabilities: { can_create_namespace: false },
       createNamespace: vi.fn(),
       isPending: false,
       namespace: 'test-namespace',
@@ -175,6 +178,7 @@ describe('AppSidebar - Files Section', () => {
     const { useNamespace } = await import('@/providers/NamespaceProvider');
     vi.mocked(useNamespace).mockReturnValue({
       availableNamespaces: [{ name: 'default' }],
+      capabilities: { can_create_namespace: false },
       createNamespace: vi.fn(),
       isPending: true,
       namespace: 'default',

@@ -60,8 +60,6 @@ deployments:
                 - DAC_OVERRIDE
         httpRoute:
           enabled: true
-        rbac:
-          clusterWide: true
 
 dev:
   ark-api:
