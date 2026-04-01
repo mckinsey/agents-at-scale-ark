@@ -891,5 +891,18 @@ chainsaw test tests/ --test-dir tests/queries --pause-on-failure
 
 ### Validation
 - Each test should pass independently when run individually
+
+## Playwright UI Testing
+
+### Radix UI Select
+
+Radix UI Select uses Floating UI to position the dropdown portal after mount. Until positioning completes, the portal DOM nodes can be replaced, causing "element was detached from the DOM". Wait for `[role='listbox'][data-side]` — Floating UI sets `data-side` once positioning is done.
+
+```python
+trigger.click()
+page.locator("[role='listbox'][data-side]").wait_for(state="visible", timeout=15000)
+page.locator("[role='option']:has-text('HTTP')").first.click()
+```
+
 - Query tests should reach `phase: done`
 - No RBAC permission errors in events

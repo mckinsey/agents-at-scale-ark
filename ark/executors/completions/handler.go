@@ -57,25 +57,26 @@ type executionState struct {
 	targetSpan     telemetry.Span
 }
 
-func (s *executionState) finalizeStream(ctx context.Context, responseMessages []Message) {
+func (s *executionState) finalizeStream(ctx context.Context, responseMessages []Message, tokenUsage arkv1alpha1.TokenUsage) {
 	if s.eventStream == nil {
 		return
 	}
+	completedQuery := s.query.DeepCopy()
+	completedQuery.Status.Phase = "done"
+	completedQuery.Status.TokenUsage = tokenUsage
 	if len(responseMessages) > 0 {
 		rawJSON := serializeResponseMessages(responseMessages)
-		completedQuery := s.query.DeepCopy()
-		completedQuery.Status.Phase = "done"
 		completedQuery.Status.Response = &arkv1alpha1.Response{
 			Target:  *s.target,
 			Content: extractAssistantText(responseMessages),
 			Raw:     rawJSON,
 			Phase:   "done",
 		}
-		finalChunk := NewContentChunk("chatcmpl-final", s.query.Name, "")
-		wrappedChunk := WrapChunkWithMetadata(ctx, finalChunk, "", completedQuery)
-		if err := s.eventStream.StreamChunk(ctx, wrappedChunk); err != nil {
-			log.Error(err, "failed to send final chunk")
-		}
+	}
+	finalChunk := NewContentChunk("chatcmpl-final", s.query.Name, "")
+	wrappedChunk := WrapChunkWithMetadata(ctx, finalChunk, "", completedQuery)
+	if err := s.eventStream.StreamChunk(ctx, wrappedChunk); err != nil {
+		log.Error(err, "failed to send final chunk")
 	}
 	if completionErr := s.eventStream.NotifyCompletion(ctx); completionErr != nil {
 		log.Error(completionErr, "failed to notify stream completion")
@@ -110,7 +111,7 @@ func (h *Handler) ProcessMessage(
 
 	execResult, responseMessages, err := h.dispatchTarget(ctx, state)
 	if err != nil {
-		state.finalizeStream(ctx, nil)
+		state.finalizeStream(ctx, nil, arkv1alpha1.TokenUsage{})
 		return nil, fmt.Errorf("execution failed: %w", err)
 	}
 
@@ -282,7 +283,7 @@ func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, r
 		}
 	}
 
-	state.finalizeStream(ctx, responseMessages)
+	state.finalizeStream(ctx, responseMessages, tokenSummary)
 
 	return &taskmanager.MessageProcessingResult{
 		Result: &responseMessage,
@@ -453,9 +454,7 @@ func buildResponseMeta(state *executionState, execResult *ExecutionResult, respo
 			responseMeta["a2a"] = a2aMeta
 		}
 	}
-	if serialized := serializeResponseMessages(responseMessages); serialized != "" {
-		responseMeta["messages"] = json.RawMessage(serialized)
-	}
+	responseMeta["messages"] = json.RawMessage(serializeResponseMessages(responseMessages))
 	return responseMeta
 }
 
@@ -559,11 +558,11 @@ func serializeResponseMessages(messages []Message) string {
 		}
 	}
 	if len(actual) == 0 {
-		return ""
+		return "[]"
 	}
 	data, err := json.Marshal(actual)
 	if err != nil {
-		return ""
+		return "[]"
 	}
 	return string(data)
 }
