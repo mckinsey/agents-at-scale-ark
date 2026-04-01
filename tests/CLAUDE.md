@@ -1,6 +1,21 @@
 # Chainsaw Testing Guide
 
-This document covers best practices for writing chainsaw tests in the ARK project.
+This document covers best practices for writing chainsaw tests in the Ark project.
+
+## Test Taxonomy
+
+Tests use labels in `chainsaw-test.yaml` metadata to control when they run.
+
+### Label-Based Selectors
+
+| Label | Meaning | CI Trigger |
+|---|---|---|
+| *(no label)* | Standard tests, use mock-llm | Always runs (`!llm,!postgresql` or `!llm`) |
+| `llm: "true"` | Requires real LLM API keys | `e2e-tests-llm` job only |
+| `multi-provider: "true"` | Runs per-provider via `chainsaw-multi` script | `e2e-tests-llm` job |
+| `postgresql: "true"` | Requires PostgreSQL backend | Excluded from etcd-only runs |
+| `requires-images: "true"` | Requires built container images | Conditional |
+| `standard: "true"` | Explicit standard marker | Always runs |
 
 ### Basic Test Layout
 ```
