@@ -4,7 +4,7 @@ metadata:
   name: streaming-test-role
 rules:
 - apiGroups: ["ark.mckinsey.com"]
-  resources: ["models", "agents", "queries", "teams", "tools", "workflows", "arktemplates", "mcpservers", "a2aservers", "memories", "evaluations", "evaluators", "a2atasks", "executionengines"]
+  resources: ["models", "agents", "queries", "teams", "tools", "workflows", "arktemplates", "mcpservers", "a2aservers", "memories", "a2atasks", "executionengines"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 - apiGroups: [""]
   resources: ["secrets", "configmaps", "services"]

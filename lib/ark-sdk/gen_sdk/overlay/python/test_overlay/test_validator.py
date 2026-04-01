@@ -1,8 +1,8 @@
 """Tests for token validator."""
 import unittest
 from unittest.mock import patch, Mock, AsyncMock, MagicMock
-from jose import jwt
-from jose.exceptions import JWTError, ExpiredSignatureError, JWTClaimsError
+import jwt
+from jwt.exceptions import InvalidTokenError as JWTInvalidTokenError, ExpiredSignatureError, InvalidAudienceError
 from ark_sdk.auth.validator import TokenValidator
 from ark_sdk.auth.config import AuthConfig
 from ark_sdk.auth.exceptions import (
@@ -216,11 +216,11 @@ class TestTokenValidator(unittest.TestCase):
         """Test token validation with invalid token."""
         # Setup mocks
         mock_get_signing_key.return_value = "test-key"
-        mock_decode.side_effect = JWTError("Invalid token")
-        
+        mock_decode.side_effect = JWTInvalidTokenError("Invalid token")
+
         with self.assertRaises(InvalidTokenError) as context:
             self.validator.validate_token("invalid-token")
-        
+
         self.assertIn("Invalid token", str(context.exception))
 
     @patch('ark_sdk.auth.validator.jwt.decode')
@@ -229,11 +229,11 @@ class TestTokenValidator(unittest.TestCase):
         """Test token validation with JWT claims error."""
         # Setup mocks
         mock_get_signing_key.return_value = "test-key"
-        mock_decode.side_effect = JWTClaimsError("Invalid claims")
-        
+        mock_decode.side_effect = InvalidAudienceError("Invalid claims")
+
         with self.assertRaises(InvalidTokenError) as context:
             self.validator.validate_token("malformed-token")
-        
+
         self.assertIn("Invalid token claims", str(context.exception))
 
     @patch('ark_sdk.auth.validator.jwt.decode')

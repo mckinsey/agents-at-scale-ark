@@ -130,7 +130,7 @@ func parseFlags() struct {
 	flag.BoolVar(&cfg.enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.BoolVar(&showVersion, "version", false, "Show version information and exit")
-	flag.StringVar(&cfg.completionsAddr, "completions-addr", "http://ark-completions.ark-system:9090",
+	flag.StringVar(&cfg.completionsAddr, "completions-addr", "http://ark-completions.ark-system",
 		"Address of the completions engine for A2A communication")
 
 	zapOpts := zap.Options{Development: false}
@@ -286,8 +286,6 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 			Scheme:   mgr.GetScheme(),
 			Eventing: eventingProvider,
 		}},
-		{"Evaluator", &controller.EvaluatorReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
-		{"Evaluation", &controller.EvaluationReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
 		{"A2ATask", &controller.A2ATaskReconciler{
 			Client:   mgr.GetClient(),
 			Scheme:   mgr.GetScheme(),
@@ -318,8 +316,6 @@ func setupWebhooks(mgr ctrl.Manager) {
 		{"Tool", webhookv1.SetupToolWebhookWithManager},
 		{"Model", webhookv1.SetupModelWebhookWithManager},
 		{"MCPServer", webhookv1.SetupMCPServerWebhookWithManager},
-		{"Evaluator", webhookv1.SetupEvaluatorWebhookWithManager},
-		{"Evaluation", webhookv1.SetupEvaluationWebhookWithManager},
 		{"A2AServer", webhookv1prealpha1.SetupA2AServerWebhookWithManager},
 		{"ExecutionEngine", webhookv1prealpha1.SetupExecutionEngineWebhookWithManager},
 	}

@@ -60,6 +60,7 @@
     "open": "^10.2.0",
     "openai": "^5.19.1",
     "ora": "^8.2.0",
+    "picomatch": "4.0.4",
     "react": "^19.1.5",
     "yaml": "^2.6.1"
   },
@@ -88,6 +89,7 @@
     "minimatch": "^10.2.3",
     "rollup": "4.59.0",
     "hono": "^4.12.4",
-    "@hono/node-server": "^1.19.10"
+    "@hono/node-server": "^1.19.10",
+    "flatted": "^3.4.2"
   }
 }

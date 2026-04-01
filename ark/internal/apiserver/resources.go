@@ -48,14 +48,6 @@ var V1Alpha1Resources = []ResourceDef{
 		NewFunc: func() runtime.Object { return &arkv1alpha1.MCPServer{} }, NewListFunc: func() runtime.Object { return &arkv1alpha1.MCPServerList{} },
 	},
 	{
-		Kind: "Evaluation", Resource: "evaluations", SingularName: "evaluation", Version: "v1alpha1",
-		NewFunc: func() runtime.Object { return &arkv1alpha1.Evaluation{} }, NewListFunc: func() runtime.Object { return &arkv1alpha1.EvaluationList{} },
-	},
-	{
-		Kind: "Evaluator", Resource: "evaluators", SingularName: "evaluator", Version: "v1alpha1",
-		NewFunc: func() runtime.Object { return &arkv1alpha1.Evaluator{} }, NewListFunc: func() runtime.Object { return &arkv1alpha1.EvaluatorList{} },
-	},
-	{
 		Kind: "A2ATask", Resource: "a2atasks", SingularName: "a2atask", Version: "v1alpha1",
 		NewFunc: func() runtime.Object { return &arkv1alpha1.A2ATask{} }, NewListFunc: func() runtime.Object { return &arkv1alpha1.A2ATaskList{} },
 	},

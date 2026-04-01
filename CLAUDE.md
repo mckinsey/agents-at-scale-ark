@@ -12,8 +12,6 @@
   - Webhooks for validation and admission control
 
 - **`services/`** - Supporting services for Ark (Go, Python, TypeScript)
-  - `postgres-memory/` - Memory persistence service (Go)
-  - `ark-evaluator/` - AI model evaluation and scoring service (Python)
   - `vnext-ui/` - vNext Next.js web interface (TypeScript/React)
   - `ark-sdk-python/` - Python SDK for Ark resources
   - `arkpy/` - Python CLI and API client

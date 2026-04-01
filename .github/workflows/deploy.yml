@@ -93,9 +93,6 @@ jobs:
             image: filesystem-mcp-server
           - path: services/ark-broker/ark-broker
             image: ark-broker
-          - path: services/ark-evaluator
-            image: ark-evaluator
-            prebuild: "make ark-evaluator-deps"
           - path: tools/ark-cli
             image: ark-cli
             prebuild: "make ark-cli-build"
@@ -286,7 +283,7 @@ jobs:
           
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
   deploy-to-npm:
     needs: [resolve_version, deploy]

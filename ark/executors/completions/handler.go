@@ -61,21 +61,21 @@ func (s *executionState) finalizeStream(ctx context.Context, responseMessages []
 	if s.eventStream == nil {
 		return
 	}
+	completedQuery := s.query.DeepCopy()
+	completedQuery.Status.Phase = "done"
 	if len(responseMessages) > 0 {
 		rawJSON := serializeResponseMessages(responseMessages)
-		completedQuery := s.query.DeepCopy()
-		completedQuery.Status.Phase = "done"
 		completedQuery.Status.Response = &arkv1alpha1.Response{
 			Target:  *s.target,
 			Content: extractAssistantText(responseMessages),
 			Raw:     rawJSON,
 			Phase:   "done",
 		}
-		finalChunk := NewContentChunk("chatcmpl-final", s.query.Name, "")
-		wrappedChunk := WrapChunkWithMetadata(ctx, finalChunk, "", completedQuery)
-		if err := s.eventStream.StreamChunk(ctx, wrappedChunk); err != nil {
-			log.Error(err, "failed to send final chunk")
-		}
+	}
+	finalChunk := NewContentChunk("chatcmpl-final", s.query.Name, "")
+	wrappedChunk := WrapChunkWithMetadata(ctx, finalChunk, "", completedQuery)
+	if err := s.eventStream.StreamChunk(ctx, wrappedChunk); err != nil {
+		log.Error(err, "failed to send final chunk")
 	}
 	if completionErr := s.eventStream.NotifyCompletion(ctx); completionErr != nil {
 		log.Error(completionErr, "failed to notify stream completion")
@@ -96,7 +96,12 @@ func (h *Handler) ProcessMessage(
 		return nil, err
 	}
 
-	ctx, state, err := h.setupExecution(ctx, query, target)
+	var a2aContextId string
+	if message.ContextID != nil {
+		a2aContextId = *message.ContextID
+	}
+
+	ctx, state, err := h.setupExecution(ctx, query, target, a2aContextId)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +156,7 @@ func (h *Handler) resolveQueryAndTarget(ctx context.Context, message protocol.Me
 	return &query, target, nil
 }
 
-func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, target *arkv1alpha1.QueryTarget) (context.Context, *executionState, error) {
+func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, target *arkv1alpha1.QueryTarget, a2aContextId string) (context.Context, *executionState, error) {
 	ctx = context.WithValue(ctx, QueryContextKey, query)
 	ctx = h.eventing.QueryRecorder().InitializeQueryContext(ctx, query)
 	ctx = h.eventing.QueryRecorder().StartTokenCollection(ctx)
@@ -173,7 +178,10 @@ func (h *Handler) setupExecution(ctx context.Context, query *arkv1alpha1.Query, 
 		return ctx, nil, fmt.Errorf("failed to get input messages: %w", err)
 	}
 
-	conversationId := query.Spec.ConversationId
+	conversationId := a2aContextId
+	if conversationId == "" {
+		conversationId = query.Spec.ConversationId
+	}
 	memory, err := NewMemoryForQuery(ctx, h.k8sClient, query.Spec.Memory, query.Namespace, conversationId, query.Name, h.eventing.MemoryRecorder())
 	if err != nil {
 		querySpan.End()

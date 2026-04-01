@@ -47,12 +47,15 @@ function NamespaceProvider({ children }: PropsWithChildren) {
 
   const { data, isPending, error } = useGetContext();
 
-  const createQueryString = useCallback((name: string, value: string) => {
-    const params = new URLSearchParams();
-    params.set(name, value);
+  const createQueryString = useCallback(
+    (name: string, value: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set(name, value);
 
-    return params.toString();
-  }, []);
+      return params.toString();
+    },
+    [searchParams],
+  );
 
   const setNamespace = useCallback(
     (namespace: string) => {

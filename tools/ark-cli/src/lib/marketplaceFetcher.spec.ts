@@ -35,6 +35,7 @@ const {
   fetchMarketplaceManifest,
   mapMarketplaceItemToArkService,
   getMarketplaceServicesFromManifest,
+  getMarketplaceExecutorsFromManifest,
 } = await import('./marketplaceFetcher.js');
 
 describe('marketplaceFetcher', () => {
@@ -281,6 +282,88 @@ describe('marketplaceFetcher', () => {
       });
 
       const result = await getMarketplaceServicesFromManifest();
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('getMarketplaceExecutorsFromManifest', () => {
+    it('converts executor items to service collection', async () => {
+      const mockManifest: AnthropicMarketplaceManifest = {
+        version: '1.0.0',
+        marketplace: 'ARK Marketplace',
+        items: [
+          {
+            name: 'langchain',
+            description: 'LangChain executor',
+            type: 'executor',
+            ark: {
+              chartPath: 'oci://registry/langchain',
+              namespace: 'langchain-ns',
+            },
+          },
+          {
+            name: 'claude-agent-sdk',
+            description: 'Claude Agent SDK executor',
+            type: 'executor',
+            ark: {
+              chartPath: 'oci://registry/claude-agent-sdk',
+              namespace: 'claude-ns',
+            },
+          },
+          {
+            name: 'phoenix',
+            description: 'Phoenix service',
+            type: 'service',
+            ark: {
+              chartPath: 'oci://registry/phoenix',
+            },
+          },
+        ],
+      };
+
+      mockAxiosGet.mockResolvedValue({
+        data: mockManifest,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+
+      const result = await getMarketplaceExecutorsFromManifest();
+
+      expect(result).not.toBeNull();
+      expect(result?.['langchain']).toBeDefined();
+      expect(result?.['claude-agent-sdk']).toBeDefined();
+      expect(result?.['phoenix']).toBeUndefined();
+      expect(result?.['langchain']?.description).toBe('LangChain executor');
+    });
+
+    it('returns null when no executor items exist', async () => {
+      const mockManifest: AnthropicMarketplaceManifest = {
+        version: '1.0.0',
+        marketplace: 'ARK Marketplace',
+        items: [
+          {
+            name: 'phoenix',
+            description: 'Phoenix service',
+            type: 'service',
+            ark: {
+              chartPath: 'oci://registry/phoenix',
+            },
+          },
+        ],
+      };
+
+      mockAxiosGet.mockResolvedValue({
+        data: mockManifest,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+
+      const result = await getMarketplaceExecutorsFromManifest();
 
       expect(result).toBeNull();
     });

@@ -16,7 +16,7 @@ describe("Session ID Filtering", () => {
         spanId: "span-1",
         name: "test-span-1",
         attributes: [
-          { key: "session.id", value: { stringValue: "session-123" } },
+          { key: "ark.session.id", value: { stringValue: "session-123" } },
         ],
       };
 
@@ -25,7 +25,7 @@ describe("Session ID Filtering", () => {
         spanId: "span-2",
         name: "test-span-2",
         attributes: [
-          { key: "session.id", value: { stringValue: "session-456" } },
+          { key: "ark.session.id", value: { stringValue: "session-456" } },
         ],
       };
 
@@ -34,7 +34,7 @@ describe("Session ID Filtering", () => {
         spanId: "span-3",
         name: "test-span-3",
         attributes: [
-          { key: "session.id", value: "session-123" } as unknown as {
+          { key: "ark.session.id", value: "session-123" } as unknown as {
             key: string;
             value: any;
           },
@@ -53,38 +53,13 @@ describe("Session ID Filtering", () => {
       expect(response.body.items[1].traceId).toBe("trace-1");
     });
 
-    test("should filter traces by session_id in resource", async () => {
-      const span1: OTELSpan = {
-        traceId: "trace-1",
-        spanId: "span-1",
-        name: "test-span-1",
-        resource: { session_id: "session-123" },
-      };
-
-      const span2: OTELSpan = {
-        traceId: "trace-2",
-        spanId: "span-2",
-        name: "test-span-2",
-        resource: { session_id: "session-456" },
-      };
-
-      traces.addSpan(span1);
-      traces.addSpan(span2);
-
-      const response = await request(app).get("/traces?session_id=session-123");
-
-      expect(response.status).toBe(200);
-      expect(response.body.items).toHaveLength(1);
-      expect(response.body.items[0].traceId).toBe("trace-1");
-    });
-
     test("should return all traces when session_id not provided", async () => {
       const span1: OTELSpan = {
         traceId: "trace-1",
         spanId: "span-1",
         name: "test-span-1",
         attributes: [
-          { key: "session.id", value: { stringValue: "session-123" } },
+          { key: "ark.session.id", value: { stringValue: "session-123" } },
         ],
       };
 
@@ -93,7 +68,7 @@ describe("Session ID Filtering", () => {
         spanId: "span-2",
         name: "test-span-2",
         attributes: [
-          { key: "session.id", value: { stringValue: "session-456" } },
+          { key: "ark.session.id", value: { stringValue: "session-456" } },
         ],
       };
 
@@ -112,7 +87,7 @@ describe("Session ID Filtering", () => {
         spanId: "span-1",
         name: "test-span-1",
         attributes: [
-          { key: "session.id", value: { stringValue: "session-123" } },
+          { key: "ark.session.id", value: { stringValue: "session-123" } },
         ],
       };
 

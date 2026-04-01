@@ -3,14 +3,18 @@ package completions
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/go-logr/logr/funcr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
@@ -551,6 +555,144 @@ func TestResolveSelectorResourceTypes(t *testing.T) {
 		assert.Equal(t, "agent", target.Type)
 	})
 }
+
+func TestContextIdExtraction(t *testing.T) {
+	t.Run("message with contextId extracts value", func(t *testing.T) {
+		contextId := "conv-from-a2a"
+		message := protocol.NewMessageWithContext(protocol.MessageRoleUser, []protocol.Part{
+			protocol.NewTextPart("hello"),
+		}, nil, &contextId)
+
+		require.NotNil(t, message.ContextID)
+		assert.Equal(t, "conv-from-a2a", *message.ContextID)
+	})
+
+	t.Run("message without contextId has nil", func(t *testing.T) {
+		message := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+			protocol.NewTextPart("hello"),
+		})
+
+		assert.Nil(t, message.ContextID)
+	})
+
+	t.Run("a2a contextId takes precedence over query spec", func(t *testing.T) {
+		a2aContextId := "from-a2a"
+		queryConversationId := "from-spec"
+
+		conversationId := a2aContextId
+		if conversationId == "" {
+			conversationId = queryConversationId
+		}
+		assert.Equal(t, "from-a2a", conversationId)
+	})
+
+	t.Run("falls back to query spec when a2a contextId empty", func(t *testing.T) {
+		a2aContextId := ""
+		queryConversationId := "from-spec"
+
+		conversationId := a2aContextId
+		if conversationId == "" {
+			conversationId = queryConversationId
+		}
+		assert.Equal(t, "from-spec", conversationId)
+	})
+
+	t.Run("both empty results in empty conversationId", func(t *testing.T) {
+		a2aContextId := ""
+		queryConversationId := ""
+
+		conversationId := a2aContextId
+		if conversationId == "" {
+			conversationId = queryConversationId
+		}
+		assert.Empty(t, conversationId)
+	})
+}
+
+func TestFinalizeStream(t *testing.T) {
+	target := &arkv1alpha1.QueryTarget{Type: "agent", Name: "my-agent"}
+
+	t.Run("no-op when eventStream is nil", func(t *testing.T) {
+		state := &executionState{
+			query:  arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q1"}},
+			target: target,
+		}
+		state.finalizeStream(context.Background(), nil)
+	})
+
+	t.Run("streams final chunk with no response when messages empty", func(t *testing.T) {
+		stream := &mockEventStream{}
+		state := &executionState{
+			query:       arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q1"}},
+			target:      target,
+			eventStream: stream,
+		}
+		state.finalizeStream(context.Background(), []Message{})
+
+		require.Len(t, stream.chunks, 1)
+		chunk, ok := stream.chunks[0].(ChunkWithMetadata)
+		require.True(t, ok)
+		assert.Equal(t, "chatcmpl-final", chunk.ID)
+		require.NotNil(t, chunk.Ark)
+		require.NotNil(t, chunk.Ark.CompletedQuery)
+		assert.Equal(t, "done", chunk.Ark.CompletedQuery.Status.Phase)
+		assert.Nil(t, chunk.Ark.CompletedQuery.Status.Response)
+	})
+
+	t.Run("streams final chunk with response when messages present", func(t *testing.T) {
+		stream := &mockEventStream{}
+		state := &executionState{
+			query:       arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q1"}},
+			target:      target,
+			eventStream: stream,
+		}
+		state.finalizeStream(context.Background(), []Message{NewAssistantMessage("hello")})
+
+		require.Len(t, stream.chunks, 1)
+		chunk, ok := stream.chunks[0].(ChunkWithMetadata)
+		require.True(t, ok)
+		assert.Equal(t, "chatcmpl-final", chunk.ID)
+		require.NotNil(t, chunk.Ark.CompletedQuery.Status.Response)
+		assert.Equal(t, "done", chunk.Ark.CompletedQuery.Status.Phase)
+		assert.Equal(t, "hello", chunk.Ark.CompletedQuery.Status.Response.Content)
+		assert.Equal(t, "agent", chunk.Ark.CompletedQuery.Status.Response.Target.Type)
+		assert.Equal(t, "my-agent", chunk.Ark.CompletedQuery.Status.Response.Target.Name)
+		assert.Equal(t, "done", chunk.Ark.CompletedQuery.Status.Response.Phase)
+		assert.NotEmpty(t, chunk.Ark.CompletedQuery.Status.Response.Raw)
+	})
+
+	t.Run("logs errors from stream operations", func(t *testing.T) {
+		var loggedMessages []string
+		logger := funcr.New(func(prefix, args string) {
+			loggedMessages = append(loggedMessages, prefix+" "+args)
+		}, funcr.Options{})
+		logf.SetLogger(logger)
+
+		stream := &errorEventStream{}
+		state := &executionState{
+			query:       arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q1"}},
+			target:      target,
+			eventStream: stream,
+		}
+		state.finalizeStream(context.Background(), nil)
+
+		logged := strings.Join(loggedMessages, "\n")
+		assert.Contains(t, logged, "failed to send final chunk")
+		assert.Contains(t, logged, "failed to notify stream completion")
+		assert.Contains(t, logged, "failed to close event stream")
+	})
+}
+
+type errorEventStream struct{}
+
+func (e *errorEventStream) StreamChunk(_ context.Context, _ interface{}) error {
+	return fmt.Errorf("stream error")
+}
+
+func (e *errorEventStream) NotifyCompletion(_ context.Context) error {
+	return fmt.Errorf("notify error")
+}
+func (e *errorEventStream) Close() error { return fmt.Errorf("close error") }
 
 func TestDispatchTargetUnsupportedType(t *testing.T) {
 	h := newTestHandler()

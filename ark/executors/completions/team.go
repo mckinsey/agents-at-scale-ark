@@ -25,6 +25,7 @@ type Team struct {
 	Members           []TeamMember
 	Strategy          string
 	Description       string
+	Loops             bool
 	MaxTurns          *int
 	Selector          *arkv1alpha1.TeamSelectorSpec
 	Graph             *arkv1alpha1.TeamGraphSpec
@@ -36,8 +37,9 @@ type Team struct {
 	Namespace         string
 	memory            MemoryInterface
 	eventStream       EventStreamInterface
-	// mockSelectorAgent is used for testing to inject a mock selector agent
-	mockSelectorAgent SelectorAgentInterface
+	// selectorAgent is a cached selector agent instance (lazily loaded on first use)
+	// Can be pre-set for testing to inject mock implementations
+	selectorAgent SelectorAgentInterface
 }
 
 // FullName returns the namespace/name format for the team
@@ -56,10 +58,8 @@ func (t *Team) Execute(ctx context.Context, userInput Message, history []Message
 
 	var execFunc func(context.Context, Message, []Message) ([]Message, error)
 	switch t.Strategy {
-	case "sequential":
+	case "sequential", "round-robin":
 		execFunc = t.executeSequential
-	case "round-robin":
-		execFunc = t.executeRoundRobin
 	case "selector":
 		execFunc = t.executeSelector
 	case "graph":
@@ -73,16 +73,20 @@ func (t *Team) Execute(ctx context.Context, userInput Message, history []Message
 }
 
 func (t *Team) executeSequential(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
+	loops := t.Loops || t.Strategy == "round-robin"
+
+	if loops {
+		return t.executeSequentialWithLoops(ctx, userInput, history)
+	}
+
 	messages := slices.Clone(history)
 	var newMessages []Message
 
 	for i, member := range t.Members {
-		// Check if context was cancelled
 		if ctx.Err() != nil {
 			return newMessages, ctx.Err()
 		}
 
-		// Start turn-level telemetry span
 		turnCtx, turnSpan := t.telemetryRecorder.StartTurn(ctx, i, member.GetName(), member.GetType())
 
 		operationData := map[string]string{
@@ -94,7 +98,6 @@ func (t *Team) executeSequential(ctx context.Context, userInput Message, history
 
 		err := t.executeMemberAndAccumulate(turnCtx, member, userInput, &messages, &newMessages, i)
 
-		// Record turn output
 		if len(newMessages) > 0 {
 			t.telemetryRecorder.RecordTurnOutput(turnSpan, newMessages, len(newMessages))
 		}
@@ -117,30 +120,26 @@ func (t *Team) executeSequential(ctx context.Context, userInput Message, history
 	return newMessages, nil
 }
 
-func (t *Team) executeRoundRobin(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
+func (t *Team) executeSequentialWithLoops(ctx context.Context, userInput Message, history []Message) ([]Message, error) {
 	messages := slices.Clone(history)
 	var newMessages []Message
 
-	messageCount := 0 // Count individual agent messages
-	memberIndex := 0  // Track which agent should speak next
+	messageCount := 0
+	memberIndex := 0
 
 	for {
-		// Check if context was cancelled
 		if ctx.Err() != nil {
 			return newMessages, ctx.Err()
 		}
 
-		// Check maxTurns before executing
 		if t.MaxTurns != nil && messageCount >= *t.MaxTurns {
 			maxTurnsMessage := NewSystemMessage(fmt.Sprintf("Team conversation reached maximum turns limit (%d)", *t.MaxTurns))
 			newMessages = append(newMessages, maxTurnsMessage)
 			return newMessages, nil
 		}
 
-		// Execute current agent
 		member := t.Members[memberIndex]
 
-		// Start turn-level telemetry span
 		turnCtx, turnSpan := t.telemetryRecorder.StartTurn(ctx, messageCount, member.GetName(), member.GetType())
 
 		operationData := map[string]string{
@@ -152,7 +151,6 @@ func (t *Team) executeRoundRobin(ctx context.Context, userInput Message, history
 
 		err := t.executeMemberAndAccumulate(turnCtx, member, userInput, &messages, &newMessages, messageCount)
 
-		// Record turn output
 		if len(newMessages) > 0 {
 			t.telemetryRecorder.RecordTurnOutput(turnSpan, newMessages, len(newMessages))
 		}
@@ -164,8 +162,6 @@ func (t *Team) executeRoundRobin(ctx context.Context, userInput Message, history
 			if IsTerminateTeam(err) {
 				return newMessages, nil
 			}
-
-			t.telemetryRecorder.RecordError(turnSpan, err)
 			return newMessages, fmt.Errorf("agent %s failed in team %s: %w", member.GetName(), t.FullName(), err)
 		}
 
@@ -173,8 +169,8 @@ func (t *Team) executeRoundRobin(ctx context.Context, userInput Message, history
 		turnSpan.End()
 		t.eventingRecorder.Complete(turnCtx, "TeamTurn", fmt.Sprintf("Team turn %d completed successfully", messageCount), operationData)
 
-		messageCount++                                   // Increment message count
-		memberIndex = (memberIndex + 1) % len(t.Members) // Move to next agent in round-robin
+		messageCount++
+		memberIndex = (memberIndex + 1) % len(t.Members)
 	}
 }
 
@@ -201,6 +197,7 @@ func MakeTeam(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Tea
 		Members:           members,
 		Strategy:          crd.Spec.Strategy,
 		Description:       crd.Spec.Description,
+		Loops:             crd.Spec.Loops,
 		MaxTurns:          crd.Spec.MaxTurns,
 		Selector:          crd.Spec.Selector,
 		Graph:             crd.Spec.Graph,

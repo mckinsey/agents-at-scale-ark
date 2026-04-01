@@ -9,7 +9,6 @@ import {
   useImperativeHandle,
   useState,
 } from 'react';
-import { toast } from 'sonner';
 
 import { SecretEditor } from '@/components/editors';
 import { SecretRow } from '@/components/rows/secret-row';
@@ -24,12 +23,14 @@ import {
 } from '@/components/ui/empty';
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { useDelayedLoading } from '@/lib/hooks';
+import { type Model, modelsService } from '@/lib/services';
 import {
-  type Model,
-  type Secret,
-  modelsService,
-  secretsService,
-} from '@/lib/services';
+  useCreateSecret,
+  useDeleteSecret,
+  useGetAllSecrets,
+  useUpdateSecret,
+} from '@/lib/services/secrets-hooks';
+import type { Secret } from '@/lib/services/secrets';
 
 interface SecretsSectionProps {
   namespace: string;
@@ -39,12 +40,34 @@ export const SecretsSection = forwardRef<
   { openAddEditor: () => void },
   SecretsSectionProps
 >(function SecretsSection({ namespace }, ref) {
-  const [secrets, setSecrets] = useState<Secret[]>([]);
   const [models, setModels] = useState<Model[]>([]);
   const [secretEditorOpen, setSecretEditorOpen] = useState(false);
   const [editingSecret, setEditingSecret] = useState<Secret | null>(null);
-  const [loading, setLoading] = useState(true);
-  const showLoading = useDelayedLoading(loading);
+
+  // Use React Query hooks
+  const {
+    data: secrets = [],
+    isLoading: secretsLoading,
+    error: secretsError,
+  } = useGetAllSecrets();
+
+  const createSecretMutation = useCreateSecret({
+    onSuccess: () => {
+      setSecretEditorOpen(false);
+      setEditingSecret(null);
+    },
+  });
+
+  const updateSecretMutation = useUpdateSecret({
+    onSuccess: () => {
+      setSecretEditorOpen(false);
+      setEditingSecret(null);
+    },
+  });
+
+  const deleteSecretMutation = useDeleteSecret();
+
+  const showLoading = useDelayedLoading(secretsLoading);
 
   const handleOpenAddEditor = useCallback(() => {
     setEditingSecret(null);
@@ -56,98 +79,48 @@ export const SecretsSection = forwardRef<
   }));
 
   useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
+    const loadModels = async () => {
       try {
-        const [secretsData, modelsData] = await Promise.all([
-          secretsService.getAll(),
-          modelsService.getAll(),
-        ]);
-        setSecrets(secretsData);
+        const modelsData = await modelsService.getAll();
         setModels(modelsData);
       } catch (error) {
-        console.error('Failed to load data:', error);
-        toast.error('Failed to Load Data', {
-          description:
-            error instanceof Error
-              ? error.message
-              : 'An unexpected error occurred',
-        });
-      } finally {
-        setLoading(false);
+        console.error('Failed to load models:', error);
       }
     };
 
-    loadData();
+    loadModels();
   }, [namespace]);
 
-  const handleSaveSecret = async (name: string, password: string) => {
-    try {
-      // Check if this is an update (secret with this name already exists)
-      const existingSecret = secrets.find(s => s.name === name);
+  const handleSaveSecret = (name: string, password: string) => {
+    // Check if this is an update (secret with this name already exists)
+    const existingSecret = secrets.find(s => s.name === name);
 
-      if (existingSecret) {
-        await secretsService.update(name, password);
-        toast.success('Secret Updated', {
-          description: `Successfully updated ${name}`,
-        });
-      } else {
-        await secretsService.create(name, password);
-        toast.success('Secret Created', {
-          description: `Successfully created ${name}`,
-        });
-      }
-      // Reload data
-      const updatedSecrets = await secretsService.getAll();
-      setSecrets(updatedSecrets);
-    } catch (error) {
-      const isUpdate = secrets.some(s => s.name === name);
-      toast.error(
-        isUpdate ? 'Failed to Update Secret' : 'Failed to Create Secret',
-        {
-          description:
-            error instanceof Error
-              ? error.message
-              : 'An unexpected error occurred',
-        },
-      );
+    if (existingSecret) {
+      // Use the update mutation hook
+      updateSecretMutation.mutate({ name, password });
+    } else {
+      // Use the create mutation hook
+      createSecretMutation.mutate({ name, password });
     }
   };
 
-  const handleDeleteSecret = async (id: string) => {
-    try {
-      const secret = secrets.find(s => s.id === id);
-      if (!secret) {
-        throw new Error('Secret not found');
-      }
-      await secretsService.delete(secret.name);
-      toast.success('Secret Deleted', {
-        description: 'Successfully deleted the secret',
-      });
-      // Reload data
-      const updatedSecrets = await secretsService.getAll();
-      setSecrets(updatedSecrets);
-    } catch (error) {
-      toast.error('Failed to Delete Secret', {
-        description:
-          error instanceof Error
-            ? error.message
-            : 'An unexpected error occurred',
-      });
+  const handleDeleteSecret = (id: string) => {
+    const secret = secrets.find(s => s.id === id);
+    if (!secret) {
+      return;
     }
+
+    // Use the delete mutation hook
+    deleteSecretMutation.mutate(secret.name);
   };
 
-  if (showLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="py-8 text-center">Loading...</div>
-      </div>
-    );
-  }
-
-  if (secrets.length === 0 && !loading) {
-    return (
-      <>
+  return (
+    <>
+      {showLoading ? (
+        <div className="flex h-full items-center justify-center">
+          <div className="py-8 text-center">Loading...</div>
+        </div>
+      ) : secrets.length === 0 && !secretsLoading ? (
         <Empty>
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -177,49 +150,33 @@ export const SecretsSection = forwardRef<
             </a>
           </Button>
         </Empty>
-        <SecretEditor
-          open={secretEditorOpen}
-          onOpenChange={open => {
-            setSecretEditorOpen(open);
-            if (!open) {
-              setEditingSecret(null);
-            }
-          }}
-          secret={editingSecret}
-          onSave={handleSaveSecret}
-          existingSecrets={secrets}
-        />
-      </>
-    );
-  }
-
-  return (
-    <>
-      <div className="flex h-full flex-col">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex-1" />
-          <Button onClick={handleOpenAddEditor} variant="default">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Secret
-          </Button>
-        </div>
-        <main className="mt-3 flex-1 overflow-auto">
-          <div className="flex flex-row flex-wrap gap-2 pb-6">
-            {secrets.map(secret => (
-              <SecretRow
-                key={secret.id}
-                secret={secret}
-                models={models}
-                onEdit={secretToEdit => {
-                  setEditingSecret(secretToEdit);
-                  setSecretEditorOpen(true);
-                }}
-                onDelete={handleDeleteSecret}
-              />
-            ))}
+      ) : (
+        <div className="flex h-full flex-col">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex-1" />
+            <Button onClick={handleOpenAddEditor} variant="default">
+              <Plus className="mr-2 h-4 w-4" />
+              Add Secret
+            </Button>
           </div>
-        </main>
-      </div>
+          <main className="mt-3 flex-1 overflow-auto">
+            <div className="flex flex-row flex-wrap gap-2 pb-6">
+              {secrets.map(secret => (
+                <SecretRow
+                  key={secret.id}
+                  secret={secret}
+                  models={models}
+                  onEdit={secretToEdit => {
+                    setEditingSecret(secretToEdit);
+                    setSecretEditorOpen(true);
+                  }}
+                  onDelete={handleDeleteSecret}
+                />
+              ))}
+            </div>
+          </main>
+        </div>
+      )}
 
       <SecretEditor
         open={secretEditorOpen}

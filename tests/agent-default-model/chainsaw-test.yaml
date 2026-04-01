@@ -61,7 +61,7 @@ spec:
             name: mock-openai
           status:
             phase: Running
-            (contains(conditions[?type == 'Ready'].status, 'True')): true
+            (contains(conditions[?type == 'Ready'].status || `[]`, 'True')): true
     catch:
     - events: {}
     - describe:
