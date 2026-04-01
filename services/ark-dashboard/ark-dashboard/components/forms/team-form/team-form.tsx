@@ -182,7 +182,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
     <>
       <BasicInfoSection form={form} mode={mode} disabled={saving} />
 
-      <StrategySection form={form} agents={agents} selectedMembers={selectedMembers} disabled={saving} />
+      <StrategySection form={form} selectedMembers={selectedMembers} disabled={saving} />
 
       <MembersSection
         agents={agents}
