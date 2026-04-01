@@ -40,7 +40,7 @@ function Wrapper({
 
   return (
     <Form {...form}>
-      <StrategySection form={form} disabled={disabled} />
+      <StrategySection form={form} selectedMembers={[]} disabled={disabled} />
     </Form>
   );
 }

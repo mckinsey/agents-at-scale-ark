@@ -168,7 +168,7 @@ var _ = Describe("Team Webhook", func() {
 			Expect(err.Error()).To(ContainSubstring("at least one edge"))
 		})
 
-		It("Should allow selector strategy without graph (backward compatibility)", func() {
+		It("Should allow selector strategy without graph", func() {
 			By("creating a selector team without graph")
 			maxTurns := 10
 			obj.Spec.Strategy = validation.StrategySelector
