@@ -103,7 +103,9 @@ var _ = Describe("Team Webhook", func() {
 	Context("Selector strategy with graph constraints", func() {
 		It("Should allow multiple edges from same source for selector strategy", func() {
 			By("creating a selector team with graph that has multiple edges from same source")
+			maxTurns := 10
 			obj.Spec.Strategy = validation.StrategySelector
+			obj.Spec.MaxTurns = &maxTurns
 			obj.Spec.Members = []arkv1alpha1.TeamMember{
 				{Name: "researcher", Type: "agent"},
 				{Name: "analyst", Type: "agent"},
@@ -126,7 +128,9 @@ var _ = Describe("Team Webhook", func() {
 
 		It("Should reject graph edges with invalid member names for selector strategy", func() {
 			By("creating a selector team with graph referencing non-existent members")
+			maxTurns := 10
 			obj.Spec.Strategy = validation.StrategySelector
+			obj.Spec.MaxTurns = &maxTurns
 			obj.Spec.Members = []arkv1alpha1.TeamMember{
 				{Name: "researcher", Type: "agent"},
 			}
@@ -146,7 +150,9 @@ var _ = Describe("Team Webhook", func() {
 
 		It("Should require graph to have at least one edge when provided for selector strategy", func() {
 			By("creating a selector team with empty graph edges")
+			maxTurns := 10
 			obj.Spec.Strategy = validation.StrategySelector
+			obj.Spec.MaxTurns = &maxTurns
 			obj.Spec.Members = []arkv1alpha1.TeamMember{
 				{Name: "researcher", Type: "agent"},
 			}
@@ -164,7 +170,9 @@ var _ = Describe("Team Webhook", func() {
 
 		It("Should allow selector strategy without graph", func() {
 			By("creating a selector team without graph")
+			maxTurns := 10
 			obj.Spec.Strategy = validation.StrategySelector
+			obj.Spec.MaxTurns = &maxTurns
 			obj.Spec.Members = []arkv1alpha1.TeamMember{
 				{Name: "researcher", Type: "agent"},
 			}
