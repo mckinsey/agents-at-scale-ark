@@ -30,7 +30,7 @@
 - [ ] 3.1 Update `getInstalledMarketplaceItems()` in `marketplace-fetcher.ts` to query Helm releases via `/v1/ark-services?list_all_services=true`
 - [ ] 3.2 Check if release name matches `item.ark.helmReleaseName` AND `release.status === 'deployed'`
 - [ ] 3.3 Remove old CRD-based detection logic
-- [ ] 3.6 Add tests: Helm release with status='deployed' detected, Helm release with other status not detected, no matching release returns not installed
+- [ ] 3.4 Add tests: Helm release with status='deployed' detected, Helm release with other status not detected, no matching release returns not installed
 
 ## 4. Service Query and URL Resolution in Dashboard
 
@@ -52,58 +52,36 @@
 
 ## 6. Marketplace Detail Page UI
 
-- [ ] 6.1 Add "Open" button to the detail page (`marketplace/[id]/page.tsx`) — prominent button when `item.uiUrl` is present
+- [ ] 6.1 Add "Open" button to the detail page — prominent button when `item.uiUrl` is present
 - [ ] 6.2 Button opens URL in new tab
 - [ ] 6.3 Add tests: Open button renders with URL, no button when URL absent
 
 ## 7. Marketplace Charts — Service Annotations
 
-### Phoenix
-- [ ] 7.1 Add `uiUrl: ""` to `services/phoenix/chart/values.yaml` with comment explaining usage
-- [ ] 7.2 Update Service template to include annotation: `ark.mckinsey.com/ui-url: "{{ .Values.uiUrl }}"` when `uiUrl` is set
-- [ ] 7.3 Update marketplace.json: add `"ui": { "enabled": true }` to `ark` section
-- [ ] 7.4 Test: `helm install phoenix ./chart --set uiUrl=http://localhost:6006` and verify annotation appears on Service
-
-### Langfuse
-- [ ] 7.5 Add `uiUrl: ""` to `services/langfuse/chart/values.yaml`
-- [ ] 7.6 Update Service template with `ark.mckinsey.com/ui-url` annotation
-- [ ] 7.7 Update marketplace.json: add `"ui": { "enabled": true }`
-- [ ] 7.8 Test deployment and verify annotation
-
-### A2A Inspector
-- [ ] 7.9 Add `uiUrl: ""` to `services/a2a-inspector/chart/values.yaml`
-- [ ] 7.10 Update Service template with `ark.mckinsey.com/ui-url` annotation
-- [ ] 7.11 Update marketplace.json: add `"ui": { "enabled": true }`
-- [ ] 7.12 Test deployment and verify annotation
-
-### MCP Inspector
-- [ ] 7.13 Add `uiUrl: ""` to `services/mcp-inspector/chart/values.yaml`
-- [ ] 7.14 Update Service template with `ark.mckinsey.com/ui-url` annotation
-- [ ] 7.15 Update marketplace.json: add `"ui": { "enabled": true }`
-- [ ] 7.16 Test deployment and verify annotation
+- [ ] 7.1 Add `uiUrl: ""` to `services/.../chart/values.yaml`
+- [ ] 7.2 Update Service template with `ark.mckinsey.com/ui-url` annotation
+- [ ] 7.3 Update marketplace.json: add `"ui": { "enabled": true }`
+- [ ] 7.4 Test deployment and verify annotation
 
 ## 8. Services Page Sunset
 
 - [ ] 8.1 Add "Installed" filter option to the marketplace page — filter items by `status: "installed"`
 - [ ] 8.2 Remove "Services" entry from the dashboard sidebar navigation
-- [ ] 8.4 Remove services page code:
+- [ ] 8.3 Remove services page code:
   - `app/(dashboard)/services/page.tsx`
   - `components/ark-services/ark-services-table.tsx`
   - `components/ark-services/use-ark-services.ts`
   - `lib/services/ark-services.ts` (if no other consumers)
-- [ ] 8.5 Keep `/v1/ark-services` endpoint in ark-api (used by new detection logic)
+- [ ] 8.4 Keep `/v1/ark-services` endpoint in ark-api (used by new detection logic)
 
 ## 9. Integration Testing
 
-- [ ] 9.1 Deploy Phoenix with `--set uiUrl=http://localhost:6006`: verify dashboard shows "Installed" with "Open" button
-- [ ] 9.2 Deploy Phoenix without `uiUrl`: verify shows "Installed" but no "Open" button
-- [ ] 9.3 Deploy Langfuse with URL: verify detection and Open button
-- [ ] 9.4 Deploy A2A Inspector with URL: verify detection and Open button
-- [ ] 9.5 Uninstall Phoenix: verify dashboard shows "Get" status
-- [ ] 9.6 Test Helm release with status != 'deployed' (e.g., 'failed'): should not show as installed
-- [ ] 9.7 Test Service query returns multiple Services: verify first one's URL is used
-- [ ] 9.8 Test namespace limitation: deploy item to different namespace, verify not detected
-- [ ] 9.9 Test scope badges: namespace-scoped items show `[Namespace]` badge, cluster-scoped items show `[Cluster]` badge
+- [ ] 9.1 Deploy Langfuse with URL: verify detection and Open button
+- [ ] 9.2 Deploy A2A Inspector with URL: verify detection and Open button
+- [ ] 9.3 Test Helm release with status != 'deployed' (e.g., 'failed'): should not show as installed
+- [ ] 9.4 Test Service query returns multiple Services: verify first one's URL is used
+- [ ] 9.5 Test namespace limitation: deploy item to different namespace, verify not detected
+- [ ] 9.6 Test scope badges: namespace-scoped items show `[Namespace]` badge, cluster-scoped items show `[Cluster]` badge
 
 ## 10. Documentation
 
@@ -119,7 +97,7 @@
 - [ ] 10.7 Explain namespace limitation for marketplace detection
 - [ ] 10.8 Add user guide: how to configure UI URLs when installing marketplace items
 - [ ] 10.9 Add troubleshooting: "Item shows installed but no Open button" → check `uiUrl` value set
-- [ ] 10.10 Document Services page sunset and redirect to marketplace
+- [ ] 10.10 Document Services page sunset
 
 ## 11. Verification
 
