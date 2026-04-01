@@ -1,5 +1,5 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient, withNamespace } from '@/lib/api/client';
+import { apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
 type QueryListResponse = components['schemas']['QueryListResponse'];
@@ -8,21 +8,14 @@ type QueryCreateRequest = components['schemas']['QueryCreateRequest'];
 type QueryUpdateRequest = components['schemas']['QueryUpdateRequest'];
 
 export const queriesService = {
-  async list(namespace?: string): Promise<QueryListResponse> {
-    const response = await apiClient.get<QueryListResponse>(
-      `/api/v1/queries`,
-      withNamespace(namespace),
-    );
+  async list(): Promise<QueryListResponse> {
+    const response = await apiClient.get<QueryListResponse>(`/api/v1/queries`);
     return response;
   },
 
-  async get(
-    queryName: string,
-    namespace?: string,
-  ): Promise<QueryDetailResponse> {
+  async get(queryName: string): Promise<QueryDetailResponse> {
     const response = await apiClient.get<QueryDetailResponse>(
       `/api/v1/queries/${queryName}`,
-      withNamespace(namespace),
     );
     return response;
   },

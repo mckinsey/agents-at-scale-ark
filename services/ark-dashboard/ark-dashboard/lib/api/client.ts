@@ -20,6 +20,7 @@ interface RequestOptions extends RequestInit {
 class APIClient {
   private baseURL: string;
   private defaultHeaders: HeadersInit;
+  private defaultParams: Record<string, string> = {};
 
   constructor(baseURL: string, defaultHeaders: HeadersInit = {}) {
     this.baseURL = baseURL;
@@ -27,6 +28,14 @@ class APIClient {
       'Content-Type': 'application/json',
       ...defaultHeaders,
     };
+  }
+
+  setDefaultParam(key: string, value: string | undefined) {
+    if (value === undefined) {
+      delete this.defaultParams[key];
+    } else {
+      this.defaultParams[key] = value;
+    }
   }
 
   private buildRequestUrl(
@@ -191,8 +200,9 @@ class APIClient {
   ): Promise<T> {
     const { params, headers, ...requestOptions } = options;
     const method = requestOptions.method || 'GET';
+    const mergedParams = { ...this.defaultParams, ...params };
 
-    const url = this.buildRequestUrl(endpoint, params, method);
+    const url = this.buildRequestUrl(endpoint, mergedParams, method);
 
     try {
       const response = await fetch(url, {
@@ -263,14 +273,6 @@ class APIClient {
   async delete<T>(endpoint: string, options?: RequestOptions): Promise<T> {
     return this.request<T>(endpoint, { ...options, method: 'DELETE' });
   }
-}
-
-export type ServiceOptions = { namespace?: string };
-
-export function withNamespace(
-  namespace?: string,
-): RequestOptions | undefined {
-  return namespace ? { params: { namespace } } : undefined;
 }
 
 // Create and export a singleton instance

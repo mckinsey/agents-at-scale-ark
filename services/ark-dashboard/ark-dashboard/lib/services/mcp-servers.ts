@@ -1,5 +1,5 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient, withNamespace, type ServiceOptions } from '@/lib/api/client';
+import { apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
 export type MCPServerResponse = components['schemas']['MCPServerResponse'];
@@ -39,16 +39,14 @@ export type ValueFrom = {
 // Service for MCP server operations
 export const mcpServersService = {
   // Get all MCP servers in a namespace
-  async getAll(namespace?: string): Promise<MCPServer[]> {
-    const response = await apiClient.get<MCPServerListResponse>(
-      `/api/v1/mcp-servers`,
-      withNamespace(namespace),
-    );
+  async getAll(): Promise<MCPServer[]> {
+    const response =
+      await apiClient.get<MCPServerListResponse>(`/api/v1/mcp-servers`);
 
     const mcpservers = await Promise.all(
       response.items.map(async item => {
         if (item.available !== 'True') {
-          const mcp = await mcpServersService.get(item.name, namespace);
+          const mcp = await mcpServersService.get(item.name);
           item.available = mcp?.available;
         }
         return {
@@ -60,14 +58,10 @@ export const mcpServersService = {
     return mcpservers;
   },
 
-  async get(
-    mcpServerName: string,
-    namespace?: string,
-  ): Promise<MCPServerDetail | null> {
+  async get(mcpServerName: string): Promise<MCPServerDetail | null> {
     try {
       const response = await apiClient.get<MCPServerDetailResponse>(
         `/api/v1/mcp-servers/${mcpServerName}`,
-        withNamespace(namespace),
       );
       return {
         ...response,
@@ -78,11 +72,8 @@ export const mcpServersService = {
     }
   },
 
-  async delete(identifier: string, options?: ServiceOptions): Promise<void> {
-    await apiClient.delete(
-      `/api/v1/mcp-servers/${identifier}`,
-      withNamespace(options?.namespace),
-    );
+  async delete(identifier: string): Promise<void> {
+    await apiClient.delete(`/api/v1/mcp-servers/${identifier}`);
 
     trackEvent({
       name: 'mcp_server_deleted',
@@ -92,14 +83,10 @@ export const mcpServersService = {
     });
   },
 
-  async create(
-    mcpSever: MCPServerCreateRequest,
-    options?: ServiceOptions,
-  ): Promise<MCPServer> {
+  async create(mcpSever: MCPServerCreateRequest): Promise<MCPServer> {
     const response = await apiClient.post<MCPServerDetailResponse>(
       `/api/v1/mcp-servers`,
       mcpSever,
-      withNamespace(options?.namespace),
     );
 
     trackEvent({
@@ -118,12 +105,10 @@ export const mcpServersService = {
   async update(
     mcpServerName: string,
     spec: { spec: MCPServerSpec },
-    options?: ServiceOptions,
   ): Promise<MCPServer> {
     const response = await apiClient.put<MCPServerDetailResponse>(
       `/api/v1/mcp-servers/${mcpServerName}`,
       spec,
-      withNamespace(options?.namespace),
     );
     return {
       ...response,

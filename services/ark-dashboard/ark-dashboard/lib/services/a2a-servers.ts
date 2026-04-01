@@ -1,5 +1,5 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient, withNamespace, type ServiceOptions } from '@/lib/api/client';
+import { apiClient } from '@/lib/api/client';
 
 // A2A Server interface for UI compatibility
 export interface A2AServer {
@@ -61,11 +61,9 @@ export interface A2AServerConfiguration {
 // Service for A2A server operations
 export const A2AServersService = {
   // Get all A2A servers in a namespace
-  async getAll(namespace?: string): Promise<A2AServer[]> {
-    const response = await apiClient.get<A2AServerListResponse>(
-      `/api/v1/a2a-servers`,
-      withNamespace(namespace),
-    );
+  async getAll(): Promise<A2AServer[]> {
+    const response =
+      await apiClient.get<A2AServerListResponse>(`/api/v1/a2a-servers`);
     console.log('A2A Servers:', response.items);
     return response.items.map(item => ({
       ...item,
@@ -73,10 +71,9 @@ export const A2AServersService = {
     }));
   },
 
-  async get(A2AServerName: string, namespace?: string): Promise<A2AServer> {
+  async get(A2AServerName: string): Promise<A2AServer> {
     const response = await apiClient.get<A2AServer>(
       `/api/v1/a2a-servers/${A2AServerName}`,
-      withNamespace(namespace),
     );
     return {
       ...response,
@@ -85,25 +82,18 @@ export const A2AServersService = {
   },
 
   // Delete an A2A server
-  async delete(identifier: string, options?: ServiceOptions): Promise<void> {
-    await apiClient.delete(
-      `/api/v1/a2a-servers/${identifier}`,
-      withNamespace(options?.namespace),
-    );
+  async delete(identifier: string): Promise<void> {
+    await apiClient.delete(`/api/v1/a2a-servers/${identifier}`);
     trackEvent({
       name: 'a2a_server_deleted',
       properties: { serverName: identifier },
     });
   },
 
-  async create(
-    A2ASever: A2AServerConfiguration,
-    options?: ServiceOptions,
-  ): Promise<A2AServer> {
+  async create(A2ASever: A2AServerConfiguration): Promise<A2AServer> {
     const response = await apiClient.post<A2AServer>(
       `/api/v1/a2a-servers`,
       A2ASever,
-      withNamespace(options?.namespace),
     );
     trackEvent({
       name: 'a2a_server_created',
@@ -118,12 +108,10 @@ export const A2AServersService = {
   async update(
     A2AServerName: string,
     spec: { spec: A2AServerSpec },
-    options?: ServiceOptions,
   ): Promise<A2AServer> {
     const response = await apiClient.put<A2AServer>(
       `/api/v1/a2a-servers/${A2AServerName}`,
       spec,
-      withNamespace(options?.namespace),
     );
     trackEvent({
       name: 'a2a_server_updated',

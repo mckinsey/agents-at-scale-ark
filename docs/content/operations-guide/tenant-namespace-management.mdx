@@ -1,14 +1,35 @@
 # Tenant and Namespace Management
 
-Each Ark tenant is a Kubernetes namespace. By default, tenants are fully isolated — a tenant's service account can only access resources in its own namespace.
+Ark uses Kubernetes namespaces as tenants. Each namespace is an isolated environment with its own agents, models, tools, and queries. Isolation is enforced at the Kubernetes level via RBAC.
 
-The Ark dashboard and API layer accept a `?namespace=` query parameter on all resource endpoints. This allows a single dashboard instance to view and administer resources across multiple tenants, but only if the tenant's RBAC permits cross-namespace access.
+## Setting Up a Tenant
 
-## Cross-Namespace Access
+The `ark-tenant` Helm chart provisions a namespace with the service account, roles, and builtin tools needed to run Ark workloads:
 
-By default, a tenant cannot see or modify resources in another namespace. A cluster administrator must explicitly grant access using standard Kubernetes RBAC.
+```bash
+helm install tenant-a oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-tenant \
+  -n tenant-a --create-namespace
+```
 
-For example, to allow `ark-api-sa` in namespace `tenant-a` to read Ark resources in `tenant-b`:
+This creates a namespace-scoped service account, an `ark-tenant-role` with Ark resource permissions, and builtin tools for agent workflows.
+
+## Cross-Tenant Access
+
+By default, tenants are fully isolated. A user accessing Tenant A's dashboard cannot see resources in Tenant B. A cluster administrator can grant cross-tenant access using standard Kubernetes RBAC.
+
+### Example: Granting Tenant A Access to Tenant B
+
+First, install two tenants:
+
+```bash
+helm install tenant-a oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-tenant \
+  -n tenant-a --create-namespace
+
+helm install tenant-b oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-tenant \
+  -n tenant-b --create-namespace
+```
+
+Then apply a RoleBinding in `tenant-b` that grants Tenant A's service account access:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -26,34 +47,14 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 ```
 
-This uses the existing `ark-tenant-role` (created by the tenant Helm chart) and binds it in the target namespace. No ClusterRole creation is needed.
+Once applied, a user on Tenant A's dashboard can switch to view and manage resources in Tenant B by adding `?namespace=tenant-b` to the URL.
 
-## Namespace Discovery
-
-To allow a tenant to list available namespaces (e.g. for namespace discovery in the API), a cluster administrator can grant namespace read access:
-
-```yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: ark-namespace-reader
-rules:
-  - apiGroups: [""]
-    resources: ["namespaces"]
-    verbs: ["get", "list"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: ark-namespace-reader-binding
-subjects:
-  - kind: ServiceAccount
-    name: ark-api-sa
-    namespace: tenant-a
-roleRef:
-  kind: ClusterRole
-  name: ark-namespace-reader
-  apiGroup: rbac.authorization.k8s.io
+```mermaid
+graph LR
+    User["User"] --> DashA["Dashboard<br/>(tenant-a)"]
+    DashA --> API_A["API<br/>(tenant-a)"]
+    API_A -->|own namespace| NSA["tenant-a resources"]
+    API_A -->|"?namespace=tenant-b<br/>(via RoleBinding)"| NSB["tenant-b resources"]
 ```
 
-Without this, the `GET /api/v1/namespaces` endpoint returns an error. The dashboard and API still function normally for the tenant's own namespace.
+Without the RoleBinding, the API returns a 403 error when attempting to access another tenant's resources.

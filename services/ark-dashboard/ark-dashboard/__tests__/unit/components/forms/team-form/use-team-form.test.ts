@@ -21,19 +21,6 @@ vi.mock('sonner', () => ({
   },
 }));
 
-const mockNamespace = 'default';
-vi.mock('@/providers/NamespaceProvider', () => ({
-  useNamespace: vi.fn(() => ({
-    namespace: mockNamespace,
-    isNamespaceResolved: true,
-    availableNamespaces: [{ name: mockNamespace }],
-    isPending: false,
-    setNamespace: vi.fn(),
-    createNamespace: vi.fn(),
-    readOnlyMode: false,
-  })),
-}));
-
 import { useTeamForm } from '@/components/forms/team-form/use-team-form';
 import { teamsService, agentsService } from '@/lib/services';
 import { toast } from 'sonner';
@@ -105,7 +92,6 @@ describe('useTeamForm', () => {
 
     expect(mockTeamsService.create).toHaveBeenCalledWith(
       expect.objectContaining({ loops: false }),
-      { namespace: 'default' },
     );
   });
 
@@ -130,7 +116,6 @@ describe('useTeamForm', () => {
 
     expect(mockTeamsService.create).toHaveBeenCalledWith(
       expect.objectContaining({ loops: true, maxTurns: 5 }),
-      { namespace: 'default' },
     );
   });
 
@@ -165,7 +150,6 @@ describe('useTeamForm', () => {
     expect(mockTeamsService.updateById).toHaveBeenCalledWith(
       'team-123',
       expect.objectContaining({ loops: true }),
-      { namespace: 'default' },
     );
   });
 

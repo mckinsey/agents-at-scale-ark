@@ -4,18 +4,14 @@ import { apiClient } from '@/lib/api/client'
 import type { TeamDetailResponse, TeamListResponse } from '@/lib/services/teams'
 
 // Mock the API client
-vi.mock('@/lib/api/client', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/api/client')>()
-  return {
-    ...actual,
-    apiClient: {
-      get: vi.fn(),
-      post: vi.fn(),
-      put: vi.fn(),
-      delete: vi.fn(),
-    },
-  }
-})
+vi.mock('@/lib/api/client', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
+  },
+}))
 
 describe('teamsService', () => {
   const mockTeam: TeamDetailResponse = {
@@ -47,9 +43,9 @@ describe('teamsService', () => {
 
       const result = await teamsService.getAll()
 
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams`, undefined)
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams/team1`, undefined)
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams/team2`, undefined)
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams`)
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams/team1`)
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/teams/team2`)
       
       expect(result).toHaveLength(2)
       expect(result[0]).toMatchObject({ id: 'team1', name: 'team1' })
@@ -64,7 +60,7 @@ describe('teamsService', () => {
       const result = await teamsService.getByName('test-team')
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        `/api/v1/teams/test-team`, undefined
+        `/api/v1/teams/test-team`
       )
       expect(result).toMatchObject({
         ...mockTeam,
@@ -99,7 +95,7 @@ describe('teamsService', () => {
       const result = await teamsService.getById(123)
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        `/api/v1/teams/123`, undefined
+        `/api/v1/teams/123`
       )
       expect(result).toMatchObject({ id: 'test-team' })
     })
@@ -110,7 +106,7 @@ describe('teamsService', () => {
       await teamsService.getById('string-id')
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        `/api/v1/teams/string-id`, undefined
+        `/api/v1/teams/string-id`
       )
     })
   })
@@ -132,8 +128,7 @@ describe('teamsService', () => {
 
       expect(apiClient.post).toHaveBeenCalledWith(
         `/api/v1/teams`,
-        createRequest,
-        undefined
+        createRequest
       )
       expect(result).toMatchObject({
         id: 'new-team',
@@ -155,8 +150,7 @@ describe('teamsService', () => {
 
       expect(apiClient.put).toHaveBeenCalledWith(
         `/api/v1/teams/test-team`,
-        updates,
-        undefined
+        updates
       )
       expect(result).toMatchObject({
         id: 'test-team',
@@ -184,8 +178,7 @@ describe('teamsService', () => {
 
       expect(apiClient.put).toHaveBeenCalledWith(
         `/api/v1/teams/123`,
-        updates,
-        undefined
+        updates
       )
     })
   })
@@ -197,8 +190,7 @@ describe('teamsService', () => {
       const result = await teamsService.delete('test-team')
 
       expect(apiClient.delete).toHaveBeenCalledWith(
-        `/api/v1/teams/test-team`,
-        undefined
+        `/api/v1/teams/test-team`
       )
       expect(result).toBe(true)
     })
@@ -230,8 +222,7 @@ describe('teamsService', () => {
       const result = await teamsService.deleteById(123)
 
       expect(apiClient.delete).toHaveBeenCalledWith(
-        `/api/v1/teams/123`,
-        undefined
+        `/api/v1/teams/123`
       )
       expect(result).toBe(true)
     })

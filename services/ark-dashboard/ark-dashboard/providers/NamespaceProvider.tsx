@@ -12,6 +12,7 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 
+import { apiClient } from '@/lib/api/client';
 import type { Namespace } from '@/lib/services';
 import {
   useCreateNamespace,
@@ -75,6 +76,10 @@ function NamespaceProvider({ children }: PropsWithChildren) {
     },
     [mutate],
   );
+
+  useEffect(() => {
+    apiClient.setDefaultParam('namespace', namespaceFromQueryParams);
+  }, [namespaceFromQueryParams]);
 
   useEffect(() => {
     if (error) {

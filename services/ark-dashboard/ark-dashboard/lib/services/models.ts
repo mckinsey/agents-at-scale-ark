@@ -1,5 +1,5 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient, withNamespace, type ServiceOptions } from '@/lib/api/client';
+import { apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
 // Helper type for axios errors
@@ -22,17 +22,14 @@ export type Model = ModelDetailResponse & { id: string };
 // CRUD Operations
 export const modelsService = {
   // Get all models
-  async getAll(namespace?: string): Promise<Model[]> {
-    const response = await apiClient.get<ModelListResponse>(
-      `/api/v1/models`,
-      withNamespace(namespace),
-    );
+  async getAll(): Promise<Model[]> {
+    const response = await apiClient.get<ModelListResponse>(`/api/v1/models`);
 
     // Map the response items to include id for UI compatibility
     const models = await Promise.all(
       response.items.map(async item => {
         // Fetch detailed info for each model to get full data
-        const detailed = await modelsService.getByName(item.name, namespace);
+        const detailed = await modelsService.getByName(item.name);
         return detailed!;
       }),
     );
@@ -41,11 +38,10 @@ export const modelsService = {
   },
 
   // Get a single model by name
-  async getByName(name: string, namespace?: string): Promise<Model | null> {
+  async getByName(name: string): Promise<Model | null> {
     try {
       const response = await apiClient.get<ModelDetailResponse>(
         `/api/v1/models/${name}`,
-        withNamespace(namespace),
       );
       return {
         ...response,
@@ -60,22 +56,16 @@ export const modelsService = {
   },
 
   // Get a single model by ID (for UI compatibility - ID is actually the name)
-  async getById(
-    id: number | string,
-    options?: ServiceOptions,
-  ): Promise<Model | null> {
+  async getById(id: number | string): Promise<Model | null> {
+    // Convert numeric ID to string name
     const name = String(id);
-    return modelsService.getByName(name, options?.namespace);
+    return modelsService.getByName(name);
   },
 
-  async create(
-    model: ModelCreateRequest,
-    options?: ServiceOptions,
-  ): Promise<Model> {
+  async create(model: ModelCreateRequest): Promise<Model> {
     const response = await apiClient.post<ModelDetailResponse>(
       `/api/v1/models`,
       model,
-      withNamespace(options?.namespace),
     );
 
     trackEvent({
@@ -95,13 +85,11 @@ export const modelsService = {
   async update(
     name: string,
     updates: ModelUpdateRequest,
-    options?: ServiceOptions,
   ): Promise<Model | null> {
     try {
       const response = await apiClient.put<ModelDetailResponse>(
         `/api/v1/models/${name}`,
         updates,
-        withNamespace(options?.namespace),
       );
 
       trackEvent({
@@ -127,18 +115,14 @@ export const modelsService = {
   async updateById(
     id: number | string,
     updates: ModelUpdateRequest,
-    options?: ServiceOptions,
   ): Promise<Model | null> {
     const name = String(id);
-    return modelsService.update(name, updates, options);
+    return modelsService.update(name, updates);
   },
 
-  async delete(name: string, options?: ServiceOptions): Promise<boolean> {
+  async delete(name: string): Promise<boolean> {
     try {
-      await apiClient.delete(
-        `/api/v1/models/${name}`,
-        withNamespace(options?.namespace),
-      );
+      await apiClient.delete(`/api/v1/models/${name}`);
 
       trackEvent({
         name: 'model_deleted',
@@ -157,11 +141,8 @@ export const modelsService = {
   },
 
   // Delete by ID (for UI compatibility)
-  async deleteById(
-    id: number | string,
-    options?: ServiceOptions,
-  ): Promise<boolean> {
+  async deleteById(id: number | string): Promise<boolean> {
     const name = String(id);
-    return modelsService.delete(name, options);
+    return modelsService.delete(name);
   },
 };

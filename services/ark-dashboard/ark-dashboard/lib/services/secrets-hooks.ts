@@ -1,4 +1,3 @@
-import type { QueryKey } from '@tanstack/react-query';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
@@ -12,10 +11,10 @@ export const CREATE_SECRET_MUTATION_KEY = 'create-secret';
 export const UPDATE_SECRET_MUTATION_KEY = 'update-secret';
 export const DELETE_SECRET_MUTATION_KEY = 'delete-secret';
 
-export const useGetAllSecrets = (namespace?: string) => {
+export const useGetAllSecrets = () => {
   return useQuery({
-    queryKey: [GET_ALL_SECRETS_QUERY_KEY, namespace],
-    queryFn: () => secretsService.getAll(namespace),
+    queryKey: [GET_ALL_SECRETS_QUERY_KEY],
+    queryFn: secretsService.getAll,
   });
 };
 
@@ -28,32 +27,29 @@ export const useCreateSecret = (props: UseCreateSecretProps) => {
 
   return useMutation({
     mutationKey: [CREATE_SECRET_MUTATION_KEY],
-    mutationFn: ({
-      name,
-      password,
-      namespace,
-    }: {
-      name: string;
-      password: string;
-      namespace?: string;
-    }) => {
-      return secretsService.create(name, password, { namespace });
+    mutationFn: ({ name, password }: { name: string; password: string }) => {
+      return secretsService.create(name, password);
     },
     onMutate: async newSecret => {
+      // Cancel any outgoing refetches
+      // (so they don't overwrite our optimistic update)
       await queryClient.cancelQueries({
         queryKey: [GET_ALL_SECRETS_QUERY_KEY],
       });
-      const previousSecrets = queryClient.getQueriesData<Secret[]>({
-        queryKey: [GET_ALL_SECRETS_QUERY_KEY],
-      });
-      queryClient.setQueriesData<Secret[]>(
-        { queryKey: [GET_ALL_SECRETS_QUERY_KEY] },
-        (old): Secret[] => [
+      // Snapshot the previous value
+      const previousTodos: Secret[] | undefined = queryClient.getQueryData([
+        GET_ALL_SECRETS_QUERY_KEY,
+      ]);
+      // Optimistically update to the new value
+      queryClient.setQueryData(
+        [GET_ALL_SECRETS_QUERY_KEY],
+        (old: Secret[] | undefined): Secret[] => [
           ...(old ?? []),
           { id: newSecret.name, name: newSecret.name },
         ],
       );
-      return { previousSecrets };
+      // Return a result with the snapshotted value
+      return { previousTodos };
     },
     onSuccess: data => {
       toast.success('Secret Created', {
@@ -64,11 +60,12 @@ export const useCreateSecret = (props: UseCreateSecretProps) => {
         props.onSuccess(data);
       }
     },
-    onError: (error, data, context) => {
-      context?.previousSecrets?.forEach(
-        ([queryKey, data]: [QueryKey, Secret[] | undefined]) => {
-          queryClient.setQueryData(queryKey, data);
-        },
+    onError: (error, data, onMutateResult) => {
+      // If the mutation fails,
+      // use the result returned from onMutate to roll back
+      queryClient.setQueryData(
+        [GET_ALL_SECRETS_QUERY_KEY],
+        onMutateResult?.previousTodos,
       );
 
       const getMessage = () => {
@@ -85,6 +82,7 @@ export const useCreateSecret = (props: UseCreateSecretProps) => {
         description: getMessage(),
       });
     },
+    // Always refetch after error or success:
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: [GET_ALL_SECRETS_QUERY_KEY] });
     },

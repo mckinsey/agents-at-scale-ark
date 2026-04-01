@@ -15,7 +15,7 @@ describe('A2AServersService', () => {
 
       await A2AServersService.delete('test-server');
 
-      expect(mockDelete).toHaveBeenCalledWith('/api/v1/a2a-servers/test-server', undefined);
+      expect(mockDelete).toHaveBeenCalledWith('/api/v1/a2a-servers/test-server');
     });
 
     it('should handle delete errors', async () => {
@@ -44,7 +44,7 @@ describe('A2AServersService', () => {
 
       const result = await A2AServersService.create(config);
 
-      expect(mockPost).toHaveBeenCalledWith('/api/v1/a2a-servers', config, undefined);
+      expect(mockPost).toHaveBeenCalledWith('/api/v1/a2a-servers', config);
       expect(result).toHaveProperty('id');
       expect(result).toHaveProperty('name', 'test-server');
     });
@@ -66,7 +66,7 @@ describe('A2AServersService', () => {
 
       const result = await A2AServersService.update('test-server', spec);
 
-      expect(mockPut).toHaveBeenCalledWith('/api/v1/a2a-servers/test-server', spec, undefined);
+      expect(mockPut).toHaveBeenCalledWith('/api/v1/a2a-servers/test-server', spec);
       expect(result).toHaveProperty('id');
       expect(result).toHaveProperty('name', 'test-server');
     });

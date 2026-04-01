@@ -4,18 +4,14 @@ import { apiClient } from '@/lib/api/client'
 import type { AgentDetailResponse, AgentListResponse } from '@/lib/services/agents'
 
 // Mock the API client
-vi.mock('@/lib/api/client', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/api/client')>()
-  return {
-    ...actual,
-    apiClient: {
-      get: vi.fn(),
-      post: vi.fn(),
-      put: vi.fn(),
-      delete: vi.fn(),
-    },
-  }
-})
+vi.mock('@/lib/api/client', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
+  },
+}))
 
 describe('agentsService', () => {
   const mockAgent: AgentDetailResponse = {
@@ -47,9 +43,9 @@ describe('agentsService', () => {
 
       const result = await agentsService.getAll()
 
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/agents`, undefined)
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/agents/agent1`, undefined)
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/agents/agent2`, undefined)
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/agents`)
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/agents/agent1`)
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/agents/agent2`)
       
       expect(result).toHaveLength(2)
       expect(result[0]).toMatchObject({ id: 'agent1', name: 'agent1' })
@@ -64,7 +60,7 @@ describe('agentsService', () => {
       const result = await agentsService.getByName('test-agent')
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        `/api/v1/agents/test-agent`, undefined
+        `/api/v1/agents/test-agent`
       )
       expect(result).toMatchObject({
         ...mockAgent,
@@ -99,7 +95,7 @@ describe('agentsService', () => {
       const result = await agentsService.getById(123)
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        `/api/v1/agents/123`, undefined
+        `/api/v1/agents/123`
       )
       expect(result).toMatchObject({ id: 'test-agent' })
     })
@@ -110,7 +106,7 @@ describe('agentsService', () => {
       await agentsService.getById('string-id')
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        `/api/v1/agents/string-id`, undefined
+        `/api/v1/agents/string-id`
       )
     })
   })
@@ -132,8 +128,7 @@ describe('agentsService', () => {
 
       expect(apiClient.post).toHaveBeenCalledWith(
         `/api/v1/agents`,
-        createRequest,
-        undefined
+        createRequest
       )
       expect(result).toMatchObject({
         id: 'new-agent',
@@ -155,8 +150,7 @@ describe('agentsService', () => {
 
       expect(apiClient.put).toHaveBeenCalledWith(
         `/api/v1/agents/test-agent`,
-        updates,
-        undefined
+        updates
       )
       expect(result).toMatchObject({
         id: 'test-agent',
@@ -184,8 +178,7 @@ describe('agentsService', () => {
 
       expect(apiClient.put).toHaveBeenCalledWith(
         `/api/v1/agents/123`,
-        updates,
-        undefined
+        updates
       )
     })
   })
@@ -197,8 +190,7 @@ describe('agentsService', () => {
       const result = await agentsService.delete('test-agent')
 
       expect(apiClient.delete).toHaveBeenCalledWith(
-        `/api/v1/agents/test-agent`,
-        undefined
+        `/api/v1/agents/test-agent`
       )
       expect(result).toBe(true)
     })
@@ -230,8 +222,7 @@ describe('agentsService', () => {
       const result = await agentsService.deleteById(123)
 
       expect(apiClient.delete).toHaveBeenCalledWith(
-        `/api/v1/agents/123`,
-        undefined
+        `/api/v1/agents/123`
       )
       expect(result).toBe(true)
     })

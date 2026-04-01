@@ -1,5 +1,5 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient, withNamespace } from '@/lib/api/client';
+import { apiClient } from '@/lib/api/client';
 
 // Tool interface for UI compatibility
 export interface Tool {
@@ -35,31 +35,21 @@ interface ToolListResponse {
 // Service for tool operations
 export const toolsService = {
   // Get all tools in a namespace
-  async getAll(namespace?: string): Promise<Tool[]> {
-    const response = await apiClient.get<ToolListResponse>(
-      `/api/v1/tools`,
-      withNamespace(namespace),
-    );
+  async getAll(): Promise<Tool[]> {
+    const response = await apiClient.get<ToolListResponse>(`/api/v1/tools`);
     return response.items.map(item => ({ ...item, id: item.name }));
   },
 
   // Get detailed tool information including schema
-  async getDetail(toolName: string, namespace?: string): Promise<ToolDetail> {
+  async getDetail(toolName: string): Promise<ToolDetail> {
     const response = await apiClient.get<ToolDetail>(
       `/api/v1/tools/${toolName}`,
-      withNamespace(namespace),
     );
     return response;
   },
 
-  async delete(
-    identifier: string,
-    options?: { namespace?: string },
-  ): Promise<void> {
-    await apiClient.delete(
-      `/api/v1/tools/${identifier}`,
-      withNamespace(options?.namespace),
-    );
+  async delete(identifier: string): Promise<void> {
+    await apiClient.delete(`/api/v1/tools/${identifier}`);
 
     trackEvent({
       name: 'tool_deleted',
@@ -112,10 +102,11 @@ export const toolsService = {
     };
     const payload = {
       name,
+      namespace: namespace || 'default',
       annotations,
       spec,
     };
-    await apiClient.post(`/api/v1/tools`, payload, withNamespace(namespace));
+    await apiClient.post(`/api/v1/tools`, payload);
 
     trackEvent({
       name: 'tool_created',

@@ -16,29 +16,17 @@ beforeAll(() => {
   }));
 });
 
-vi.mock('@/lib/api/client', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/api/client')>()
-  return {
-    ...actual,
-    apiClient: {
-      get: vi.fn(),
-      post: vi.fn(),
-      put: vi.fn(),
-      delete: vi.fn(),
-    },
-  }
-});
+vi.mock('@/lib/api/client', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
+  },
+}));
 
 vi.mock('@/lib/services', () => ({
   toolsService: { getAll: vi.fn().mockResolvedValue([]) },
-}));
-
-vi.mock('@/providers/NamespaceProvider', () => ({
-  useNamespace: vi.fn(() => ({
-    namespace: 'default',
-    readOnlyMode: false,
-    setNamespace: vi.fn(),
-  })),
 }));
 
 const renderWithProviders = (ui: React.ReactElement) => {

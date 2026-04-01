@@ -4,18 +4,14 @@ import type { A2ATaskListResponse } from '@/lib/api/a2a-tasks-types';
 import { apiClient } from '@/lib/api/client';
 import { a2aTasksService } from '@/lib/services/a2a-tasks';
 
-vi.mock('@/lib/api/client', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/api/client')>()
-  return {
-    ...actual,
-    apiClient: {
-      get: vi.fn(),
-      post: vi.fn(),
-      put: vi.fn(),
-      delete: vi.fn(),
-    },
-  }
-});
+vi.mock('@/lib/api/client', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
+  },
+}));
 
 describe('a2aTasksService', () => {
   beforeEach(() => {
@@ -53,7 +49,7 @@ describe('a2aTasksService', () => {
       const result = await a2aTasksService.getAll();
 
       expect(apiClient.get).toHaveBeenCalledTimes(1);
-      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/a2a-tasks', undefined);
+      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/a2a-tasks');
 
       expect(result).toHaveLength(2);
       expect(result[0]).toMatchObject({
@@ -95,7 +91,7 @@ describe('a2aTasksService', () => {
       const result = await a2aTasksService.get('task-1');
 
       expect(apiClient.get).toHaveBeenCalledTimes(1);
-      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/a2a-tasks/task-1', undefined);
+      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/a2a-tasks/task-1');
 
       expect(result).toMatchObject({
         id: 'task-1',

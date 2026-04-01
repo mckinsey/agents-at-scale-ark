@@ -2,16 +2,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { toast } from 'sonner';
 
-import type { ModelCreateRequest, ModelUpdateRequest } from './models';
+import type { ModelUpdateRequest } from './models';
 import { modelsService } from './models';
 
 export const GET_ALL_MODELS_QUERY_KEY = 'get-all-models';
 export const GET_MODEL_BY_ID_QUERY_KEY = 'get-model-by-id';
 
-export const useGetAllModels = (namespace?: string) => {
+export const useGetAllModels = () => {
   return useQuery({
-    queryKey: [GET_ALL_MODELS_QUERY_KEY, namespace],
-    queryFn: () => modelsService.getAll(namespace),
+    queryKey: [GET_ALL_MODELS_QUERY_KEY],
+    queryFn: modelsService.getAll,
   });
 };
 
@@ -23,11 +23,7 @@ export const useCreateModel = (props?: UseCreateModelProps) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({
-      namespace,
-      ...model
-    }: ModelCreateRequest & { namespace?: string }) =>
-      modelsService.create(model, { namespace }),
+    mutationFn: modelsService.create,
     onSuccess: model => {
       toast.success('Model Created', {
         description: `Successfully created ${model.name}`,
@@ -56,13 +52,12 @@ export const useCreateModel = (props?: UseCreateModelProps) => {
 
 type UseGetModelbyIdProps = {
   modelId: string | number;
-  namespace?: string;
 };
 
-export const useGetModelbyId = ({ modelId, namespace }: UseGetModelbyIdProps) => {
+export const useGetModelbyId = ({ modelId }: UseGetModelbyIdProps) => {
   const query = useQuery({
-    queryKey: [GET_MODEL_BY_ID_QUERY_KEY, modelId, namespace],
-    queryFn: () => modelsService.getById(modelId, { namespace }),
+    queryKey: [GET_MODEL_BY_ID_QUERY_KEY, modelId],
+    queryFn: () => modelsService.getById(modelId),
   });
 
   useEffect(() => {
@@ -83,12 +78,8 @@ export const useUpdateModelById = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({
-      id,
-      namespace,
-      ...data
-    }: ModelUpdateRequest & { id: string; namespace?: string }) => {
-      return modelsService.updateById(id, data, { namespace });
+    mutationFn: ({ id, ...data }: ModelUpdateRequest & { id: string }) => {
+      return modelsService.updateById(id, data);
     },
     onSuccess: model => {
       toast.success('Model Updated', {

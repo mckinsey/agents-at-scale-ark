@@ -48,13 +48,9 @@ export const mockServices = {
 };
 
 export const setupMocks = () => {
-  vi.mock('@/lib/api/client', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('@/lib/api/client')>()
-    return {
-      ...actual,
-      apiClient: mockApiClient,
-    }
-  });
+  vi.mock('@/lib/api/client', () => ({
+    apiClient: mockApiClient,
+  }));
 
   vi.mock('@/lib/services', () => mockServices);
 };

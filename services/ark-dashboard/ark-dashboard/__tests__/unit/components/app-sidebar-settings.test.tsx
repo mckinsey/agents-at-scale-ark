@@ -11,7 +11,6 @@ import { SidebarProvider } from '@/components/ui/sidebar';
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(),
   usePathname: vi.fn(() => '/'),
-  useSearchParams: vi.fn(() => new URLSearchParams()),
 }));
 
 vi.mock('@/providers/NamespaceProvider', () => ({

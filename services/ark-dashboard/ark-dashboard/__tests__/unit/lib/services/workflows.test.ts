@@ -13,15 +13,11 @@ import type {
   ArgoNodeStatus,
 } from '@/lib/types/argo-workflow';
 
-vi.mock('@/lib/api/client', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/api/client')>()
-  return {
-    ...actual,
-    apiClient: {
-      get: vi.fn(),
-    },
-  }
-});
+vi.mock('@/lib/api/client', () => ({
+  apiClient: {
+    get: vi.fn(),
+  },
+}));
 
 describe('workflowsService', () => {
   beforeEach(() => {

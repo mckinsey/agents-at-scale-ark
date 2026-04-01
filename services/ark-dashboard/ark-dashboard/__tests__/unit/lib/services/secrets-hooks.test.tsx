@@ -114,7 +114,6 @@ describe('secrets-hooks', () => {
       expect(secretsService.create).toHaveBeenCalledWith(
         'test-secret',
         'password123',
-        { namespace: undefined },
       );
       expect(toast.success).toHaveBeenCalledWith('Secret Created', {
         description: 'Successfully created secret test-secret',
