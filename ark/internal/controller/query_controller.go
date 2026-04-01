@@ -24,8 +24,8 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
-	completions "mckinsey.com/ark/executors/completions"
 	arka2a "mckinsey.com/ark/internal/a2a"
+	"mckinsey.com/ark/internal/resolution"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	"mckinsey.com/ark/internal/telemetry"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
@@ -375,8 +375,7 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 
 	rawJSON := engineMeta.MessagesRaw
 	if rawJSON == "" {
-		responseMessages := []completions.Message{completions.NewAssistantMessage(responseText)}
-		rawJSON = serializeMessages(responseMessages)
+		rawJSON = buildFallbackRaw(responseText)
 	}
 
 	response := &arkv1alpha1.Response{
@@ -397,30 +396,19 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 }
 
 func extractUserInput(ctx context.Context, query arkv1alpha1.Query, k8sClient client.Client) string {
-	inputMessages, err := completions.GetQueryInputMessages(ctx, query, k8sClient)
+	text, err := resolution.ResolveQueryInputText(ctx, query, k8sClient)
 	if err != nil {
 		return ""
 	}
-	return completions.ExtractUserMessageContent(inputMessages)
+	return text
 }
 
-func serializeMessages(messages []completions.Message) string {
-	var actualMessages []interface{}
-	for _, msg := range messages {
-		switch {
-		case msg.OfAssistant != nil:
-			actualMessages = append(actualMessages, msg.OfAssistant)
-		case msg.OfUser != nil:
-			actualMessages = append(actualMessages, msg.OfUser)
-		case msg.OfSystem != nil:
-			actualMessages = append(actualMessages, msg.OfSystem)
-		case msg.OfTool != nil:
-			actualMessages = append(actualMessages, msg.OfTool)
-		case msg.OfFunction != nil:
-			actualMessages = append(actualMessages, msg.OfFunction)
-		}
-	}
-	rawBytes, err := json.Marshal(actualMessages)
+func buildFallbackRaw(responseText string) string {
+	msg := []struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}{{Role: "assistant", Content: responseText}}
+	rawBytes, err := json.Marshal(msg)
 	if err != nil {
 		return "[]"
 	}

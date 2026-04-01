@@ -61,21 +61,21 @@ func (s *executionState) finalizeStream(ctx context.Context, responseMessages []
 	if s.eventStream == nil {
 		return
 	}
+	completedQuery := s.query.DeepCopy()
+	completedQuery.Status.Phase = "done"
 	if len(responseMessages) > 0 {
 		rawJSON := serializeResponseMessages(responseMessages)
-		completedQuery := s.query.DeepCopy()
-		completedQuery.Status.Phase = "done"
 		completedQuery.Status.Response = &arkv1alpha1.Response{
 			Target:  *s.target,
 			Content: extractAssistantText(responseMessages),
 			Raw:     rawJSON,
 			Phase:   "done",
 		}
-		finalChunk := NewContentChunk("chatcmpl-final", s.query.Name, "")
-		wrappedChunk := WrapChunkWithMetadata(ctx, finalChunk, "", completedQuery)
-		if err := s.eventStream.StreamChunk(ctx, wrappedChunk); err != nil {
-			log.Error(err, "failed to send final chunk")
-		}
+	}
+	finalChunk := NewContentChunk("chatcmpl-final", s.query.Name, "")
+	wrappedChunk := WrapChunkWithMetadata(ctx, finalChunk, "", completedQuery)
+	if err := s.eventStream.StreamChunk(ctx, wrappedChunk); err != nil {
+		log.Error(err, "failed to send final chunk")
 	}
 	if completionErr := s.eventStream.NotifyCompletion(ctx); completionErr != nil {
 		log.Error(completionErr, "failed to notify stream completion")
@@ -453,9 +453,7 @@ func buildResponseMeta(state *executionState, execResult *ExecutionResult, respo
 			responseMeta["a2a"] = a2aMeta
 		}
 	}
-	if serialized := serializeResponseMessages(responseMessages); serialized != "" {
-		responseMeta["messages"] = json.RawMessage(serialized)
-	}
+	responseMeta["messages"] = json.RawMessage(serializeResponseMessages(responseMessages))
 	return responseMeta
 }
 
@@ -559,11 +557,11 @@ func serializeResponseMessages(messages []Message) string {
 		}
 	}
 	if len(actual) == 0 {
-		return ""
+		return "[]"
 	}
 	data, err := json.Marshal(actual)
 	if err != nil {
-		return ""
+		return "[]"
 	}
 	return string(data)
 }

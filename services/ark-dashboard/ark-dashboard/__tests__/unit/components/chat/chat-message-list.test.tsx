@@ -385,6 +385,37 @@ describe('ChatMessageList', () => {
       ).toBeInTheDocument();
     });
 
+    it('should not render selector transition for terminate tool call message', () => {
+      const messages: ExtendedChatMessage[] = [
+        { role: 'user', content: 'Hello' } as ExtendedChatMessage,
+        {
+          role: 'assistant',
+          content: 'Response from A',
+          name: 'agent-a',
+        } as ExtendedChatMessage,
+        {
+          role: 'assistant',
+          content: '',
+          name: 'selector-agent',
+          tool_calls: [
+            {
+              id: 'tc-1',
+              type: 'function' as const,
+              function: {
+                name: 'terminate',
+                arguments: JSON.stringify({ response: 'Goodbye!' }),
+              },
+            },
+          ],
+        } as ExtendedChatMessage,
+      ];
+
+      renderChatMessageList({ messages, strategy: 'selector' });
+
+      expect(screen.getByText('Selector chose agent-a')).toBeInTheDocument();
+      expect(screen.queryByText('Selector chose selector-agent')).not.toBeInTheDocument();
+    });
+
     it('should not render selector transitions for non-selector strategy', () => {
       const messages: ExtendedChatMessage[] = [
         { role: 'user', content: 'Hello' } as ExtendedChatMessage,

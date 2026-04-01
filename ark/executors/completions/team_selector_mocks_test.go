@@ -35,8 +35,10 @@ func (m *mockTeamMember) Execute(ctx context.Context, userInput Message, history
 }
 
 type mockSelectorAgent struct {
-	returnName  string
-	returnEmpty bool
+	returnName              string
+	returnEmpty             bool
+	returnTerminateResponse string
+	capturedHistory         []Message
 }
 
 func newMockSelectorAgent() *mockSelectorAgent {
@@ -44,8 +46,29 @@ func newMockSelectorAgent() *mockSelectorAgent {
 }
 
 func (m *mockSelectorAgent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	m.capturedHistory = history
 	if m.returnEmpty {
 		return &ExecutionResult{Messages: []Message{}}, nil
+	}
+	if m.returnTerminateResponse != "" {
+		assistantMsg := Message(openai.ChatCompletionMessageParamUnion{
+			OfAssistant: &openai.ChatCompletionAssistantMessageParam{
+				Name: openai.String("mock-selector"),
+				ToolCalls: []openai.ChatCompletionMessageToolCallParam{
+					{
+						ID: "tool-call-id",
+						Function: openai.ChatCompletionMessageToolCallFunctionParam{
+							Name:      "terminate",
+							Arguments: `{"response":"` + m.returnTerminateResponse + `"}`,
+						},
+					},
+				},
+			},
+		})
+		toolMsg := ToolMessage(m.returnTerminateResponse, "tool-call-id")
+		return &ExecutionResult{
+			Messages: []Message{assistantMsg, toolMsg},
+		}, &TerminateTeamWithResponse{Response: m.returnTerminateResponse}
 	}
 	return &ExecutionResult{
 		Messages: []Message{
