@@ -9,7 +9,9 @@ Set your kubectl context to the target namespace and use the Ark CLI to install:
 ```bash
 kubectl create namespace tenant-a
 kubectl config set-context --current --namespace=tenant-a
-ark install ark-tenant ark-api ark-dashboard
+ark install ark-tenant
+ark install ark-api
+ark install ark-dashboard
 ```
 
 This installs the tenant chart (service account, roles, builtin tools), the API layer, and the dashboard. You can then open the dashboard with:
@@ -31,11 +33,15 @@ Install two full tenants:
 ```bash
 kubectl create namespace tenant-a
 kubectl config set-context --current --namespace=tenant-a
-ark install ark-tenant ark-api ark-dashboard
+ark install ark-tenant
+ark install ark-api
+ark install ark-dashboard
 
 kubectl create namespace tenant-b
 kubectl config set-context --current --namespace=tenant-b
-ark install ark-tenant ark-api ark-dashboard
+ark install ark-tenant
+ark install ark-api
+ark install ark-dashboard
 ```
 
 At this point both tenants are fully isolated. To grant Tenant A access to Tenant B's resources, apply a RoleBinding:
