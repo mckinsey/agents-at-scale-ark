@@ -109,11 +109,11 @@ describe('StrategySection', () => {
     ).toBeInTheDocument();
   });
 
-  it('should not show required indicator on max turns for selector strategy', () => {
+  it('should show required indicator on max turns for selector strategy', () => {
     render(<Wrapper defaultStrategy="selector" />);
     expect(
       screen.getByText('Max Turns').parentElement?.querySelector('.text-red-500'),
-    ).not.toBeInTheDocument();
+    ).toBeInTheDocument();
   });
 
   it('should show required indicator on max turns for sequential strategy with loops enabled', async () => {
