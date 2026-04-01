@@ -135,11 +135,10 @@ export function ToolEditor({
   });
 
   const selectedType = form.watch('type');
-  const { reset } = form;
 
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
-      reset();
+      form.reset();
       setIsInputSchemaExpanded(false);
       setIsAnnotationsExpanded(false);
     }
