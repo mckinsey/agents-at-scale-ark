@@ -58,3 +58,19 @@ graph LR
 ```
 
 Without the RoleBinding, the API returns a 403 error when attempting to access another tenant's resources.
+
+## Developing with Tenants
+
+To run Ark services in a specific tenant namespace during development:
+
+```bash
+devspace dev -n tenant-a
+```
+
+To open the dashboard for that tenant:
+
+```bash
+ark dashboard
+```
+
+This port-forwards to the dashboard in your current kubectl context namespace. Add `?namespace=tenant-b` to the URL to view another tenant's resources.
