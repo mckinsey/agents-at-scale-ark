@@ -44,7 +44,7 @@ export function TeamRow({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const memberCount = team.members?.length || 0;
-  const deprecatedStrategies = ['round-robin'];
+  const deprecatedStrategies = ['round-robin', 'graph'];
   const isDeprecatedStrategy = deprecatedStrategies.includes(
     team.strategy ?? '',
   );
@@ -52,7 +52,7 @@ export function TeamRow({
   const strategyDisplayMap: Record<string, string> = {
     sequential: team.loops ? 'Sequential (Loops)' : 'Sequential',
     selector: 'Selector',
-    graph: 'Graph',
+    graph: 'Graph (Deprecated)',
     'round-robin': 'Round Robin (Deprecated)',
   };
 

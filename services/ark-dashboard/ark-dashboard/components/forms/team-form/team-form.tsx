@@ -184,7 +184,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
     <>
       <BasicInfoSection form={form} mode={mode} disabled={saving} />
 
-      <StrategySection form={form} disabled={saving} />
+      <StrategySection form={form} agents={agents} selectedMembers={selectedMembers} disabled={saving} />
 
       <MembersSection
         agents={agents}
@@ -217,6 +217,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
         onGraphEdgesChange={setGraphEdges}
         disabled={saving}
       />
+
     </>
   );
 

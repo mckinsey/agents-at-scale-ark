@@ -76,60 +76,60 @@ Dashboard lacks protective HTTP headers.
 
 - **Assessment Period:** December 2025
 - **Assessor:** DataArt
-- **Remediation Status:** January 2026
-- **Overall Risk Level:** Medium-Low, remediated to Low
+- **Remediation Status:** March 31, 2026 (v1.1 retest)
+- **Overall Risk Level:** Medium-Low, M1 remediated
 
 | Risk Level | Count | Status |
 |------------|--------|---------|
 | Critical | 0 | - |
 | High | 0 | - |
 | Medium | 1 | Remediated |
-| Low | 5 | Remediated |
+| Low | 5 | Open |
 
 ##### M1. Clickjacking Protection
 
-Dashboard and API lacked X-Frame-Options and Content-Security-Policy frame-ancestors headers.
+Dashboard and API lacked X-Frame-Options and Content-Security-Policy headers, allowing potential clickjacking attacks against admin functionality.
 
 **Resolution - Remediated**
 
-Added security headers to all Ingress configurations including X-Frame-Options: DENY and Content-Security-Policy: frame-ancestors 'none'.
+Confirmed remediated on March 31, 2026. Application now includes both X-Frame-Options and Content-Security-Policy headers.
 
 ##### L1. Overly Permissive RBAC Roles
 
-The ark-deployer ClusterRole had cluster-wide delete permissions.
+Service accounts had overly permissive privileges including wildcard verbs, secrets access, and pods/exec permissions across roles (all-access, argo-workflows-workflow-controller, ark-api-sa-role).
 
-**Resolution - Remediated**
+**Status - Open**
 
-Removed delete permissions from ark-deployer. Deployment automation limited to create, update, and patch operations.
+RBAC roles require review following the principle of least privilege to mitigate privilege escalation risks.
 
 ##### L2. Container Security Hardening
 
-Services missing comprehensive security contexts.
+Containers missing security hardening: allowPrivilegeEscalation not set to false, no Linux hardening (AppArmor/SELinux/seccomp), processes running as root, and writable root filesystems.
 
-**Resolution - Remediated**
+**Status - Open**
 
-Added pod and container security contexts: runAsNonRoot, runAsUser, fsGroup, seccompProfile, privilege escalation prevention, and capability dropping.
+Container security contexts require hardening per CIS Kubernetes and Docker benchmarks.
 
 ##### L3. Missing Security Headers
 
-Ingress configurations lacked protective HTTP headers.
+Application responses missing X-Content-Type-Options, Content-Security-Policy, and Referrer-Policy headers.
 
-**Resolution - Remediated**
+**Status - Open**
 
-Added X-Content-Type-Options, X-XSS-Protection, Strict-Transport-Security, and Referrer-Policy headers to all Ingress configurations.
+Security headers need to be added to all responses returning HTML content.
 
 ##### L4. TLS Version Control
 
-Gateway accepted outdated TLS versions.
+Server supported TLS cipher suites using RSA key exchange without Forward Secrecy (AES128-SHA, AES256-SHA, AES128-SHA256, AES256-SHA256).
 
-**Resolution - Remediated**
+**Status - Open**
 
-Configured Gateway resources to enforce TLS 1.2 and TLS 1.3 only.
+Server should be configured to only permit cipher suites with perfect forward secrecy.
 
 ##### L5. Weak Cipher Suites
 
-Gateway accepted weak cipher suites.
+Server supported cipher suites using CBC mode, vulnerable to padding oracle attacks (POODLE, Zombie POODLE, GOLDENDOODLE).
 
-**Resolution - Remediated**
+**Status - Open**
 
-Configured strong cipher suites with forward secrecy (ECDHE-based ciphers).
+Server should be reconfigured to exclusively permit high-grade cipher suites without CBC mode.

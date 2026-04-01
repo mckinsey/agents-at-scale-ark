@@ -46,6 +46,7 @@
     "undici": "^7.24.0",
     "rollup": "4.59.0",
     "minimatch": "^10.2.3",
-    "picomatch": "^4.0.4"
+    "picomatch": "^4.0.4",
+    "@xmldom/xmldom": "0.9.9"
   }
 }

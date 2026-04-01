@@ -1,6 +1,7 @@
-import { Network, Trash2 } from 'lucide-react';
+import { AlertCircle, Network, Trash2 } from 'lucide-react';
 import type { UseFormReturn } from 'react-hook-form';
 
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -36,7 +37,7 @@ export function GraphSection({
 }: Readonly<GraphSectionProps>) {
   const selectedStrategy = form.watch('strategy');
 
-  if (selectedStrategy !== 'graph' && selectedStrategy !== 'selector') {
+  if (selectedStrategy !== 'selector') {
     return null;
   }
 
@@ -62,16 +63,19 @@ export function GraphSection({
     graphEdges.filter(e => e.from).map(e => e.from),
   );
 
+  const agentsWithNoOutgoing = selectedStrategy === 'selector' && graphEdges.length > 0
+    ? selectedMembers
+        .filter(m => m.type === 'agent')
+        .filter(m => !graphEdges.some(e => e.from === m.name))
+    : [];
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Network className="text-muted-foreground h-4 w-4" />
           <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-            Graph Edges{' '}
-            {selectedStrategy === 'graph' && (
-              <span className="text-red-500">*</span>
-            )}
+            Graph Edges
           </h3>
         </div>
         <Button
@@ -83,6 +87,16 @@ export function GraphSection({
           Add Edge
         </Button>
       </div>
+
+      {agentsWithNoOutgoing.length > 0 && (
+        <Alert variant="warning">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            The following agents have no outgoing edges and will end graph execution:{' '}
+            {agentsWithNoOutgoing.map(m => m.name).join(', ')}
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-2">
         {graphEdges.length === 0 ? (
@@ -124,20 +138,13 @@ export function GraphSection({
                       )}
                       {selectedMembers
                         .filter(m => m.type === 'agent')
-                        .map(member => {
-                          const isDisabled =
-                            selectedStrategy === 'graph' &&
-                            usedFromAgents.has(member.name) &&
-                            edge.from !== member.name;
-                          return (
-                            <SelectItem
-                              key={member.name}
-                              value={member.name}
-                              disabled={isDisabled}>
-                              {member.name}
-                            </SelectItem>
-                          );
-                        })}
+                        .map(member => (
+                          <SelectItem
+                            key={member.name}
+                            value={member.name}>
+                            {member.name}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                   <span className="text-muted-foreground">→</span>
@@ -185,17 +192,9 @@ export function GraphSection({
       </div>
 
       <p className="text-muted-foreground text-xs">
-        {selectedStrategy === 'graph' ? (
-          <>
-            Define the flow between agents. Each agent can have at most one
-            outgoing edge.
-          </>
-        ) : (
-          <>
-            Define graph constraints to limit AI selection to valid transitions.
-          </>
-        )}
+        Define graph constraints to limit AI selection to valid transitions.
       </p>
+
     </div>
   );
 }

@@ -31,6 +31,7 @@ vi.mock('@/lib/services', () => ({
     streamChatResponse: vi.fn(),
     submitChatQuery: vi.fn(),
     getQueryResult: vi.fn(),
+    getQuery: vi.fn().mockResolvedValue({ status: { conversationId: '' } }),
   },
 }));
 
@@ -770,13 +771,13 @@ describe('FloatingChat', () => {
       const sendButton = screen.getByRole('button', { name: /send/i });
       await user.click(sendButton);
 
-      // Should call submitChatQuery with timeout parameter
       await waitFor(() => {
         expect(chatService.submitChatQuery).toHaveBeenCalledWith(
-          expect.arrayContaining([{ role: 'user', content: 'Test message' }]),
+          'Test message',
           'agent',
           'Test Agent',
           expect.any(String),
+          undefined, // conversationId
           undefined, // enableStreaming
           '5m', // timeout
         );
@@ -900,10 +901,11 @@ describe('FloatingChat', () => {
 
       await waitFor(() => {
         expect(chatService.submitChatQuery).toHaveBeenCalledWith(
-          expect.arrayContaining([{ role: 'user', content: 'Test message' }]),
+          'Test message',
           'agent',
           'Test Agent',
           expect.any(String),
+          undefined,
           undefined,
           '5m',
         );
