@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { EventBroker, EventData } from '../event-broker.js';
+import { SessionsBroker } from '../sessions-broker.js';
 import { streamSSE } from '../sse.js';
 import { parsePaginationParams, PaginationError, PaginatedList } from '../pagination.js';
 
-export function createEventsRouter(events: EventBroker): Router {
+export function createEventsRouter(events: EventBroker, sessions: SessionsBroker): Router {
   const router = Router();
 
   router.get('/', (req, res) => {
@@ -123,6 +124,12 @@ export function createEventsRouter(events: EventBroker): Router {
       }
       events.addEvent(event as EventData);
       events.save();
+
+      sessions.applyEvent({
+        ...event.data,
+        _reason: event.reason,
+      });
+
       res.status(201).json({ status: 'success' });
     } catch (error) {
       console.error('[EVENTS] Failed to add event:', error);
