@@ -67,10 +67,11 @@ To run Ark services in a specific tenant namespace during development:
 devspace dev -n tenant-a
 ```
 
-To open the dashboard for that tenant:
+The Ark CLI uses your current kubectl context namespace. To open the dashboard for a tenant:
 
 ```bash
+kubectl config set-context --current --namespace=tenant-a
 ark dashboard
 ```
 
-This port-forwards to the dashboard in your current kubectl context namespace. Add `?namespace=tenant-b` to the URL to view another tenant's resources.
+Add `?namespace=tenant-b` to the URL to view another tenant's resources.
