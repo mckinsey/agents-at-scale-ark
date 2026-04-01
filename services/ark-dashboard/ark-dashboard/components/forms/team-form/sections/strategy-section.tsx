@@ -18,16 +18,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import type { Agent, TeamMember } from '@/lib/services';
 
 import { DEFAULT_SELECTOR_PROMPT, type TeamFormValues } from '../use-team-form';
+import { WarningsSection } from './warnings-section';
 
 interface StrategySectionProps {
   form: UseFormReturn<TeamFormValues>;
+  agents: Agent[];
+  selectedMembers: TeamMember[];
   disabled?: boolean;
 }
 
 export function StrategySection({
   form,
+  agents,
+  selectedMembers,
   disabled,
 }: Readonly<StrategySectionProps>) {
   const selectedStrategy = form.watch('strategy');
@@ -126,6 +132,13 @@ export function StrategySection({
           )}
         />
       )}
+
+      <WarningsSection
+        agents={agents}
+        selectedMembers={selectedMembers}
+        strategy={selectedStrategy}
+        enableTerminateTool={form.watch('enableTerminateTool')}
+      />
     </div>
   );
 }

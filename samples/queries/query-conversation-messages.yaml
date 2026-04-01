@@ -1,21 +1,12 @@
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
-  name: conversation-messages
+  name: conversation-followup
   namespace: default
 spec:
-  type: messages
-  input:
-    - role: user
-      content: "Calculate 1+1."
-    - role: assistant
-      content: "2"
-    - role: user
-      content: "Calculate 2+2."
-    - role: assistant
-      content: "4"
-    - role: user
-      content: "What is the sum of all previous sums?"
+  type: user
+  input: "What is the sum of all previous sums?"
+  conversationId: "your-conversation-id-here"
   target:
     type: agent
     name: sample-agent

@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import urlsplit
 
 from playwright.sync_api import Page, TimeoutError
 
@@ -24,10 +25,37 @@ class BasePage:
             popup_locator.wait_for(state="visible", timeout=timeout)
             logger.info(popup_locator.inner_text())
             return True
-        except TimeoutError:
-            # we don't necessarily want to break if we don't see the popup, but we should at least log it
+        except Exception:
             logger.exception("Did not see expected toast")
+            page_name = urlsplit(self.page.url).path.replace("/", "_")
+            self._capture_failure_debug(f"toast_not_visible{page_name}")
             return False
+
+    def _capture_failure_debug(self, label: str = "failure") -> None:
+        try:
+            screenshots_dir = getattr(self.page, "_screenshots_dir", None)
+            if screenshots_dir:
+                screenshot_path = screenshots_dir / f"{label}.png"
+                self.page.screenshot(path=screenshot_path, full_page=True)
+                logger.info(f"Screenshot saved: {screenshot_path}")
+        except Exception as e:
+            logger.warning(f"Screenshot failed: {e}")
+
+        console_messages = getattr(self.page, "_test_console_messages", [])
+        if console_messages:
+            logger.error(f"Browser console errors: {console_messages}")
+
+        try:
+            dialog = self.page.locator("[role='dialog'], [data-slot='dialog-content']").first
+            if dialog.is_visible(timeout=1000):
+                logger.info(f"Dialog still open. Content: {dialog.inner_text()}")
+                field_errors = self.page.locator("[role='dialog'] [role='alert'], [role='dialog'] .error, [role='dialog'] .text-destructive").all_inner_texts()
+                if field_errors:
+                    logger.error(f"Field validation errors in dialog: {field_errors}")
+            else:
+                logger.info("Dialog is closed")
+        except Exception as e:
+            logger.warning(f"Could not inspect dialog: {e}")
 
     def is_visible(self, selector: str, timeout: int = 5000) -> bool:
         try:

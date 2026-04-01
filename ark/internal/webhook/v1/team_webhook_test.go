@@ -162,7 +162,7 @@ var _ = Describe("Team Webhook", func() {
 			Expect(err.Error()).To(ContainSubstring("at least one edge"))
 		})
 
-		It("Should allow selector strategy without graph (backward compatibility)", func() {
+		It("Should allow selector strategy without graph", func() {
 			By("creating a selector team without graph")
 			obj.Spec.Strategy = validation.StrategySelector
 			obj.Spec.Members = []arkv1alpha1.TeamMember{
