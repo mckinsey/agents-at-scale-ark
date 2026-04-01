@@ -26,12 +26,9 @@ export default function ChatManager() {
   >([]);
   const restoredRef = useRef(false);
 
-  // Restore open chat windows from sessionStorage on mount
   useEffect(() => {
-    if (!restoredRef.current && openChatWindows.length > 0) {
+    if (!restoredRef.current) {
       restoredRef.current = true;
-
-      // Restore each chat window
       openChatWindows.forEach(({ name, type, strategy, graphEdges }) => {
         window.dispatchEvent(
           new CustomEvent('open-floating-chat', {
@@ -42,16 +39,16 @@ export default function ChatManager() {
     }
   }, [openChatWindows]);
 
-  // Persist open chat windows to sessionStorage whenever they change
   useEffect(() => {
     if (restoredRef.current) {
-      const windowsToStore = chatWindows.map(({ name, type, strategy, graphEdges }) => ({
-        name,
-        type,
-        strategy,
-        graphEdges,
-      }));
-      setOpenChatWindows(windowsToStore);
+      setOpenChatWindows(
+        chatWindows.map(({ name, type, strategy, graphEdges }) => ({
+          name,
+          type,
+          strategy,
+          graphEdges,
+        })),
+      );
     }
   }, [chatWindows, setOpenChatWindows]);
 

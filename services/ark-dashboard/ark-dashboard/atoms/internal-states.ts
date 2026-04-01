@@ -91,12 +91,14 @@ export const openChatWindowsAtom = atom(
       return value;
     }
 
-    // First read - initialize from sessionStorage
     if (typeof window !== 'undefined') {
       try {
         const stored = sessionStorage.getItem(OPEN_CHAT_WINDOWS_KEY);
         if (stored) {
-          return JSON.parse(stored) as OpenChatWindow[];
+          const parsed: unknown = JSON.parse(stored);
+          if (Array.isArray(parsed)) {
+            return parsed as OpenChatWindow[];
+          }
         }
       } catch {
         // Ignore parse errors
@@ -104,7 +106,7 @@ export const openChatWindowsAtom = atom(
     }
     return [];
   },
-  (get, set, newValue: OpenChatWindow[]) => {
+  (_get, set, newValue: OpenChatWindow[]) => {
     set(openChatWindowsBaseAtom, newValue);
     if (typeof window !== 'undefined') {
       sessionStorage.setItem(

@@ -9,15 +9,18 @@ interface ChatContextType {
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
-// Initialize open chats from sessionStorage
 const getInitialOpenChats = (): string[] => {
   if (typeof window === 'undefined') return [];
 
   try {
     const stored = sessionStorage.getItem('open-chat-windows');
     if (stored) {
-      const windows = JSON.parse(stored) as Array<{ name: string }>;
-      return windows.map(w => w.name);
+      const parsed: unknown = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        return (parsed as Array<{ name?: unknown }>)
+          .map(w => (typeof w?.name === 'string' ? w.name : ''))
+          .filter(Boolean);
+      }
     }
   } catch {
     // Ignore parse errors
