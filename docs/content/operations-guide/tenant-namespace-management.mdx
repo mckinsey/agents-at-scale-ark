@@ -4,32 +4,41 @@ Ark uses Kubernetes namespaces as tenants. Each namespace is an isolated environ
 
 ## Setting Up a Tenant
 
-The `ark-tenant` Helm chart provisions a namespace with the service account, roles, and builtin tools needed to run Ark workloads:
+Set your kubectl context to the target namespace and use the Ark CLI to install:
 
 ```bash
-helm install tenant-a oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-tenant \
-  -n tenant-a --create-namespace
+kubectl create namespace tenant-a
+kubectl config set-context --current --namespace=tenant-a
+ark install ark-tenant ark-api ark-dashboard
 ```
 
-This creates a namespace-scoped service account, an `ark-tenant-role` with Ark resource permissions, and builtin tools for agent workflows.
+This installs the tenant chart (service account, roles, builtin tools), the API layer, and the dashboard. You can then open the dashboard with:
+
+```bash
+ark dashboard
+```
+
+> The Ark CLI uses your current kubectl context namespace. You can also install the charts directly with Helm — see the [Deploying Ark](./deploying-ark) guide.
 
 ## Cross-Tenant Access
 
 By default, tenants are fully isolated. A user accessing Tenant A's dashboard cannot see resources in Tenant B. A cluster administrator can grant cross-tenant access using standard Kubernetes RBAC.
 
-### Example: Granting Tenant A Access to Tenant B
+### Example: Two Tenants with Cross-Access
 
-First, install two tenants:
+Install two full tenants:
 
 ```bash
-helm install tenant-a oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-tenant \
-  -n tenant-a --create-namespace
+kubectl create namespace tenant-a
+kubectl config set-context --current --namespace=tenant-a
+ark install ark-tenant ark-api ark-dashboard
 
-helm install tenant-b oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-tenant \
-  -n tenant-b --create-namespace
+kubectl create namespace tenant-b
+kubectl config set-context --current --namespace=tenant-b
+ark install ark-tenant ark-api ark-dashboard
 ```
 
-Then apply a RoleBinding in `tenant-b` that grants Tenant A's service account access:
+At this point both tenants are fully isolated. To grant Tenant A access to Tenant B's resources, apply a RoleBinding:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -47,7 +56,7 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 ```
 
-Once applied, a user on Tenant A's dashboard can switch to view and manage resources in Tenant B by adding `?namespace=tenant-b` to the URL.
+A user on Tenant A's dashboard can now view and manage Tenant B's resources by adding `?namespace=tenant-b` to the URL.
 
 ```mermaid
 graph LR
@@ -61,13 +70,13 @@ Without the RoleBinding, the API returns a 403 error when attempting to access a
 
 ## Developing with Tenants
 
-To run Ark services in a specific tenant namespace during development:
+During development, use devspace to deploy into a tenant namespace:
 
 ```bash
 devspace dev -n tenant-a
 ```
 
-The Ark CLI uses your current kubectl context namespace. To open the dashboard for a tenant:
+Or set your kubectl context and use the CLI:
 
 ```bash
 kubectl config set-context --current --namespace=tenant-a
