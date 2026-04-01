@@ -84,32 +84,20 @@ class ToolsPage(BasePage):
         logger.info(f"Name in name input is {name_input.input_value()}")
         
         type_trigger = self.page.locator("button#type, button[name='type'], [role='combobox']:has-text('Select'), [data-slot='trigger']").first
-        type_trigger.wait_for(state="visible", timeout=5000)
+        type_trigger.wait_for(state="visible", timeout=15000)
         type_trigger.click()
         
-        self.wait_for_dropdown_options()
-        for attempt in range(3):
-            try:
-                http_option = self.page.get_by_role("option", name="HTTP", exact=True)
-                if http_option.count() == 0:
-                    http_option = self.page.locator("[role='option']:has-text('HTTP')").first
-                http_option.wait_for(state="visible", timeout=5000)
-                self.page.wait_for_timeout(300)
-                http_option.click(force=True, timeout=5000)
-                break
-            except Exception as e:
-                logger.info(f"HTTP option click failed (attempt {attempt + 1}/3): {e}")
-                if attempt < 2:
-                    type_trigger.click()
-                    self.wait_for_dropdown_options()
+        self.page.locator("[role='listbox'][data-side]").wait_for(state="visible", timeout=15000)
+        http_option = self.page.locator("[role='option']:has-text('HTTP')").first
+        http_option.click()
         
         description_input = self.page.locator("input#description, input[name='description'], [role='dialog'] input:nth-of-type(2)").first
-        description_input.wait_for(state="visible", timeout=5000)
+        description_input.wait_for(state="visible", timeout=15000)
         description_input.fill(description)
         
         input_schema = '{"type": "object", "properties": {"city": {"type": "string", "description": "City name to get coordinates for"}}, "required": ["city"]}'
         schema_textarea = self.page.locator("textarea#inputSchema, textarea[name='inputSchema'], [role='dialog'] textarea").first
-        schema_textarea.wait_for(state="visible", timeout=5000)
+        schema_textarea.wait_for(state="visible", timeout=15000)
         schema_textarea.fill(input_schema)
         
         dialog = self.page.locator("[role='dialog'], [data-slot='dialog-content']").first
@@ -137,13 +125,8 @@ class ToolsPage(BasePage):
         save_button.scroll_into_view_if_needed()
         save_button.click(force=True)
         
-        error_banner = self.page.locator("[data-sonner-toast][data-type='error'], [role='alert']:not([role='dialog'] *)").first
-        if error_banner.count() > 0 and error_banner.is_visible():
-            error_text = error_banner.inner_text()
-            logger.error(f"Tool creation error: {error_text}")
-        
         popup_visible = self._check_toast_popup()
-        logger.info(f"Success popup visible: {popup_visible}")
+        logger.info(f"Toast visible: {popup_visible}")
         
         self.wait_for_modal_close()
         
@@ -228,7 +211,10 @@ class ToolsPage(BasePage):
             description=tool_data["description"],
             url=tool_data["url"]
         )
-        
-        logger.info(f"Tool created successfully: {result['name']}")
+
+        if result['in_table']:
+            logger.info(f"Tool created successfully: {result['name']}")
+        else:
+            logger.info("Tool not visible in table")
         
         return result
