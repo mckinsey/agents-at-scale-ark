@@ -1,6 +1,7 @@
-import { Network, Trash2 } from 'lucide-react';
+import { AlertCircle, Network, Trash2 } from 'lucide-react';
 import type { UseFormReturn } from 'react-hook-form';
 
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -58,6 +59,16 @@ export function GraphSection({
     onGraphEdgesChange(graphEdges.filter((_, i) => i !== index));
   };
 
+  const usedFromAgents = new Set(
+    graphEdges.filter(e => e.from).map(e => e.from),
+  );
+
+  const agentsWithNoOutgoing = selectedStrategy === 'selector' && graphEdges.length > 0
+    ? selectedMembers
+        .filter(m => m.type === 'agent')
+        .filter(m => !graphEdges.some(e => e.from === m.name))
+    : [];
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -76,6 +87,16 @@ export function GraphSection({
           Add Edge
         </Button>
       </div>
+
+      {agentsWithNoOutgoing.length > 0 && (
+        <Alert variant="warning">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            The following agents have no outgoing edges and will end graph execution:{' '}
+            {agentsWithNoOutgoing.map(m => m.name).join(', ')}
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-2">
         {graphEdges.length === 0 ? (
@@ -173,6 +194,7 @@ export function GraphSection({
       <p className="text-muted-foreground text-xs">
         Define graph constraints to limit AI selection to valid transitions.
       </p>
+
     </div>
   );
 }
