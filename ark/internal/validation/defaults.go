@@ -1,11 +1,12 @@
 package validation
 
 import (
+	"encoding/json"
 	"fmt"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
-	"mckinsey.com/ark/internal/genai"
+	"mckinsey.com/ark/internal/resolution"
 )
 
 const toolTypeCustom = "custom"
@@ -35,11 +36,50 @@ func DefaultAgent(agent *arkv1alpha1.Agent) {
 	}
 }
 
+func DefaultTeam(team *arkv1alpha1.Team) {
+	if team.Spec.Strategy != StrategyRoundRobin {
+		return
+	}
+
+	if team.Annotations == nil {
+		team.Annotations = make(map[string]string)
+	}
+
+	if team.Spec.MaxTurns != nil {
+		team.Spec.Strategy = StrategySequential
+		team.Spec.Loops = true
+		team.Annotations[annotations.MigrationWarningPrefix+"round-robin"] = "strategy 'round-robin' is deprecated - migrated to 'sequential' with loops: true. Will be removed in v1.0.0"
+	} else {
+		team.Spec.Strategy = StrategySequential
+		team.Spec.Loops = false
+		team.Annotations[annotations.MigrationWarningPrefix+"round-robin"] = "strategy 'round-robin' is deprecated - migrated to 'sequential'. Set loops: true and maxTurns to enable looping. Will be removed in v1.0.0"
+	}
+}
+
+func DefaultQuery(query *arkv1alpha1.Query) {
+	if query.Spec.Type != "messages" {
+		return
+	}
+
+	userText, err := resolution.ExtractFirstUserText(json.RawMessage(query.Spec.Input.Raw))
+	if err != nil {
+		userText = ""
+	}
+
+	query.Spec.Type = arkv1alpha1.QueryTypeUser
+	_ = query.Spec.SetInputString(userText)
+
+	if query.Annotations == nil {
+		query.Annotations = make(map[string]string)
+	}
+	query.Annotations[annotations.MigrationWarningPrefix+"input-type"] = "spec.type 'messages' is deprecated - migrated to 'user' with extracted text. Use conversationId for multi-turn conversations"
+}
+
 func DefaultModel(model *arkv1alpha1.Model) {
-	if model.Spec.Provider == "" && genai.IsDeprecatedProviderInType(model.Spec.Type) {
+	if model.Spec.Provider == "" && IsDeprecatedProviderInType(model.Spec.Type) {
 		originalType := model.Spec.Type
 		model.Spec.Provider = model.Spec.Type
-		model.Spec.Type = genai.ModelTypeCompletions
+		model.Spec.Type = ModelTypeCompletions
 
 		if model.Annotations == nil {
 			model.Annotations = make(map[string]string)

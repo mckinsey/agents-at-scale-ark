@@ -6,7 +6,7 @@ import {
   ChevronRight,
   Search,
   Server,
-  Workflow
+  SquarePlay,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -64,11 +64,17 @@ export default function MarketplacePage() {
         category: 'agents' as MarketplaceCategory,
         type: undefined,
       }));
-    } else if (category === 'workflow') {
-      setFilters(prev => ({
+    } else if (category === 'mcp') {
+      setFilters((prev: MarketplaceFilters) => ({
         ...prev,
-        category: 'workflows' as MarketplaceCategory,
+        category: 'mcp-servers' as MarketplaceCategory,
         type: undefined,
+      }));
+    } else if (category === 'demo') {
+      setFilters((prev: MarketplaceFilters) => ({
+        ...prev,
+        category: undefined,
+        type: 'demo' as MarketplaceItemType,
       }));
     } else if (category === 'services') {
       setFilters(prev => ({
@@ -132,17 +138,30 @@ export default function MarketplacePage() {
             Agents
           </Button>
           <Button
-            variant={selectedCategory === 'workflow' ? 'secondary' : 'ghost'}
+            variant={selectedCategory === 'mcp' ? 'secondary' : 'ghost'}
             size="sm"
-            onClick={() => handleCategoryChange('workflow')}
+            onClick={() => handleCategoryChange('mcp')}
             className={cn(
               'flex h-8 items-center gap-1.5 px-4',
-              selectedCategory === 'workflow'
+              selectedCategory === 'mcp'
                 ? ''
                 : 'text-muted-foreground hover:text-foreground',
             )}>
-            <Workflow className="h-3.5 w-3.5" />
-            Workflow
+            <Server className="h-3.5 w-3.5" />
+            MCPs
+          </Button>
+          <Button
+            variant={selectedCategory === 'demo' ? 'secondary' : 'ghost'}
+            size="sm"
+            onClick={() => handleCategoryChange('demo')}
+            className={cn(
+              'flex h-8 items-center gap-1.5 px-4',
+              selectedCategory === 'demo'
+                ? ''
+                : 'text-muted-foreground hover:text-foreground',
+            )}>
+            <SquarePlay className="h-3.5 w-3.5" />
+            Demos
           </Button>
           <Button
             variant={selectedCategory === 'services' ? 'secondary' : 'ghost'}

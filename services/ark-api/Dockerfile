@@ -1,4 +1,4 @@
-FROM python:3.14.2-slim AS builder
+FROM python:3.14.3-slim AS builder
 
 WORKDIR /app
 
@@ -17,22 +17,17 @@ RUN adduser --system --uid 1001 --home /home/ark ark && \
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Copy dependency files
+# Copy dependency files and install dependencies (cached unless deps change)
 COPY ark-api/pyproject.toml ark-api/uv.lock ./
 COPY README.md ./
+COPY ark-api/out/ark*.whl ./out/
+RUN uv sync --frozen --no-install-project
 
-# Copy wheel files
-COPY ark-api/out/ark*.whl /tmp/wheels/
-
-# Copy source code only (not pyproject.toml again)
+# Copy source code and install the project
 COPY ark-api/src/ ./src/
 COPY ark-api/tests/ ./tests/
 COPY ark-api/*.py ./
-
-# Add ark-sdk wheel as a dependency and sync all dependencies
-# Install the project itself to avoid build delay at runtime
-RUN uv add file://$(ls /tmp/wheels/ark*.whl) && \
-  uv sync --frozen
+RUN uv sync --frozen
 
 ENV HOME=/home/ark
 ENV XDG_CACHE_HOME=/home/ark/.cache

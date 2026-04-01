@@ -67,18 +67,6 @@ spec:
           name: github-credentials
           key: token`,
 
-    evaluators: `apiVersion: v1alpha1
-kind: Evaluator
-metadata:
-  name: ${resourceName}
-  namespace: default
-spec:
-  type: similarity
-  threshold: 0.8
-  metrics:
-    - accuracy
-    - precision`,
-
     memories: `apiVersion: v1alpha1
 kind: Memory
 metadata:
@@ -103,16 +91,6 @@ spec:
       agent: agent-2
       dependsOn: [step1]`,
 
-    evaluations: `apiVersion: v1alpha1
-kind: Evaluation
-metadata:
-  name: ${resourceName}
-  namespace: default
-spec:
-  evaluator: similarity-evaluator
-  target: agent-1
-  status: completed
-  score: 0.92`,
   };
 
   return (
@@ -130,7 +108,7 @@ export async function GET(
 
   // Handle export endpoints
   const exportMatch = path.match(
-    /^(agents|models|secrets|teams|mcp-servers|evaluators|memories|workflow-templates|evaluations)\/(.+)\/export$/,
+    /^(agents|models|secrets|teams|mcp-servers|memories|workflow-templates)\/(.+)\/export$/,
   );
 
   if (exportMatch) {

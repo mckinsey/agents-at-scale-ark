@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: agent-b
+spec:
+  prompt: |
+    You are Agent B. Analyze information and provide insights.
+    Start your response with "AGENT-B:" to identify your contribution.
+  modelRef:
+    name: test-model

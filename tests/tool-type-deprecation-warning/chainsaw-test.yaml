@@ -23,7 +23,7 @@ spec:
           metadata:
             name: mock-llm-mcp
           status:
-            (contains(conditions[?type == 'Available'].status, 'True')): true
+            (contains(conditions[?type == 'Available'].status || `[]`, 'True')): true
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -122,3 +122,11 @@ spec:
           kind: Agent
           metadata:
             name: test-explicit-mcp
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

@@ -57,7 +57,7 @@ spec:
                   app.kubernetes.io/name: mock-llm
               status:
                 phase: Running
-                (contains(conditions[?type == 'Ready'].status, 'True')): true
+                (contains(conditions[?type == 'Ready'].status || `[]`, 'True')): true
         - wait:
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Model
@@ -98,3 +98,12 @@ spec:
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Agent
             name: partial-tool-agent-invalid
+
+      cleanup:
+      - script:
+          content: |
+            helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+            helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+          env:
+          - name: NAMESPACE
+            value: ($namespace)

@@ -4,7 +4,6 @@ metadata:
   name: java8-functional-interfaces
   namespace: default
   labels:
-    evaluation_required: "true"
     environment: "development"
     agent-type: "java-modernizer"
 spec:

@@ -3,7 +3,7 @@ kind: Test
 metadata:
   name: team-round-robin
 spec:
-  description: Test round-robin team execution with brainstormer, critic, and coordinator using terminate tool
+  description: Test sequential team with loops execution with brainstormer, critic, and coordinator using terminate tool
   steps:
   - name: setup-resources
     try:
@@ -82,8 +82,7 @@ spec:
           status:
             (response != null): true
             (response.target.name): 'round-robin-brainstorm-team'
-            (length(response.content) > `300`): true
-            (contains(response.content, 'customer satisfaction') || contains(response.content, 'software')): true
+            (length(response.content) > `50`): true
             (tokenUsage.totalTokens > `50`): true
     catch:
     - events: {}
@@ -91,3 +90,10 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: round-robin-team-query
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

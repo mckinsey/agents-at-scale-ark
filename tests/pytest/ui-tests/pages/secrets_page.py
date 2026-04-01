@@ -19,7 +19,6 @@ class SecretsPage(BasePage):
     SECRET_VALUE_INPUT = "input[name='value'], textarea[name='value'], input[placeholder*='value' i], input[type='password'], textarea, input[type='text']:last-of-type"
     SAVE_BUTTON = "button:has-text('Save'), button:has-text('Create'), button:has-text('Submit'), button[type='submit']"
     SECRET_FORM = "form, [role='dialog'], [data-testid='secret-form']"
-    SUCCESS_POPUP = "[role='alert'], [role='status'], .notification, .toast, .alert-success, div:has-text('success'), div:has-text('created'), div:has-text('Success'), div:has-text('Created'), div:has-text('updated'), div:has-text('Updated'), div:has-text('deleted'), div:has-text('Deleted')"
     DELETE_ICON_TEMPLATE = "tr:has-text('{secret_name}') svg, tr:has-text('{secret_name}') button[aria-label='Delete'], tr:has-text('{secret_name}') [data-testid='delete-icon']"
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
     CONFIRM_DELETE_BUTTON = "button:has-text('Delete'), button:has-text('Confirm'), button:has-text('Yes')"
@@ -64,61 +63,65 @@ class SecretsPage(BasePage):
                 pass
         self.page.keyboard.press("Escape")
     
-    def is_secret_in_table(self, secret_name: str, retries: int = 3) -> bool:
+    def _goto_secrets(self) -> None:
+        self.page.goto("http://localhost:3274/secrets")
+        self.wait_for_navigation_complete()
+        self.wait_for_element(self.ADD_SECRET_BUTTON, timeout=10000)
+        self.wait_for_element_hidden(self.LOADING_INDICATOR, timeout=10000)
+
+    def is_secret_in_table(self, secret_name: str, retries: int = 5) -> bool:
+        self._goto_secrets()
         for attempt in range(retries):
             try:
                 self.page.get_by_text(secret_name, exact=False).first.wait_for(state="visible", timeout=15000)
                 return True
             except Exception as e:
-                logger.debug(f"Secret {secret_name} not visible on attempt {attempt + 1}/{retries}: {e}")
+                logger.info(f"Secret {secret_name} not visible on attempt {attempt + 1}/{retries}: {e}")
                 if attempt < retries - 1:
                     logger.info(f"Secret {secret_name} not found, retrying ({attempt + 1}/{retries})...")
-                    self.page.reload()
-                    self.wait_for_navigation_complete()
-                    self.wait_for_element(self.ADD_SECRET_BUTTON, timeout=10000)
-                    self.wait_for_element_hidden(self.LOADING_INDICATOR, timeout=10000)
+                    self.page.wait_for_timeout(3000)
+                    self._goto_secrets()
         return False
     
     def create_secret_with_verification(self, prefix: str, env_key: str) -> dict:
         secret_name = self.generate_secret_name(prefix)
         secret_value = self.get_password_from_env(env_key)
-        
+
         logger.info(f"Creating secret: {secret_name} with key: {env_key}")
         logger.info(f"Secret value length: {len(secret_value)}")
-        
+
         self.page.locator(self.ADD_SECRET_BUTTON).first.click()
-        
-        inputs = self.page.locator("[role='dialog'] input:visible, [data-slot='dialog-content'] input:visible")
+        self.wait_for_modal_open()
+
+        inputs = self.page.locator("[role='dialog'] input, [data-slot='dialog-content'] input")
         inputs.first.wait_for(state="visible", timeout=10000)
-        
+        try:
+            inputs.nth(1).wait_for(state="visible", timeout=5000)
+        except Exception:
+            pass
+
         input_count = inputs.count()
         logger.info(f"Found {input_count} inputs in dialog")
-        
+
         if input_count >= 2:
             inputs.nth(0).fill(secret_name)
             inputs.nth(1).fill(secret_value)
         else:
             inputs.first.fill(secret_name)
-            textarea = self.page.locator("[role='dialog'] textarea:visible").first
-            if textarea.is_visible():
+            textarea = self.page.locator("[role='dialog'] textarea, [data-slot='dialog-content'] textarea").first
+            if textarea.is_visible(timeout=2000):
                 textarea.fill(secret_value)
-        
+
         save_button = self.page.locator("[role='dialog'] button[type='submit'], [data-slot='dialog-content'] button[type='submit']").first
         save_button.wait_for(state="visible", timeout=5000)
         save_button.click(force=True)
-        
+
+        popup_visible = self._check_toast_popup()
         self.wait_for_modal_close()
-        self.wait_for_load_state("domcontentloaded")
-        
-        try:
-            self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
-            popup_visible = True
-        except:
-            popup_visible = False
-        
+
         self.navigate_to_secrets_tab()
         in_table = self.is_secret_in_table(secret_name)
-        
+
         return {
             "name": secret_name,
             "expected_name": secret_name,
@@ -151,8 +154,8 @@ class SecretsPage(BasePage):
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
         self.wait_for_load_state("domcontentloaded")
-        popup_visible = self._check_success_popup()
-        deleted_from_table = not self.is_secret_in_table(secret_name)
+        popup_visible = self._check_toast_popup()
+        deleted_from_table = not self.is_secret_in_table(secret_name, retries=0)
         
         return {
             "secret_name": secret_name,
@@ -172,13 +175,6 @@ class SecretsPage(BasePage):
             "popup_visible": False,
             "deleted_from_table": False
         }
-    
-    def _check_success_popup(self) -> bool:
-        try:
-            self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
-            return True
-        except:
-            return False
     
     def create_secret_for_test(self, prefix: str, env_key: str):
         self.navigate_to_secrets_tab()

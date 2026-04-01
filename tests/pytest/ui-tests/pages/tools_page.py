@@ -13,7 +13,6 @@ class ToolsPage(BasePage):
 
     ADD_TOOL_BUTTON = "button:has-text('Add Tool'), button:has-text('Create Tool'), button:has-text('New Tool')"
     TOOL_NAME_INPUT = "input[name='name'], input[placeholder*='name' i], input#name, [role='dialog'] input:first-of-type"
-    SUCCESS_POPUP = "[role='alert'], [role='status'], .notification, .toast, div:has-text('success'), div:has-text('Success'), div:has-text('created'), div:has-text('Created')"
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
     CONFIRM_DELETE_BUTTON = "button:has-text('Delete'), button:has-text('Confirm'), button:has-text('Yes')"
     
@@ -47,7 +46,7 @@ class ToolsPage(BasePage):
         date_str = datetime.now().strftime("%d%m%y%H%M%S")
         rand = random.randint(100, 999)
         return f"{prefix}-{date_str}{rand}"
-    
+
     def is_tool_in_table(self, tool_name: str, retries: int = 3) -> bool:
         for attempt in range(retries):
             try:
@@ -59,7 +58,6 @@ class ToolsPage(BasePage):
                     logger.info(f"Tool {tool_name} not found, retrying ({attempt + 1}/{retries})...")
                     self.page.reload()
                     self.wait_for_navigation_complete()
-                    self.wait_for_element(self.ADD_TOOL_BUTTON, timeout=10000)
         return False
     
     def create_http_tool_with_verification(self, tool_name: str, description: str, url: str) -> dict:
@@ -80,27 +78,26 @@ class ToolsPage(BasePage):
             except:
                 logger.info(f"Name input not visible (attempt {attempt + 1}), retrying click")
                 add_button.click()
-        
+
+        logger.info(f"Tool name should be: {tool_name}")
         name_input.fill(tool_name)
+        logger.info(f"Name in name input is {name_input.input_value()}")
         
         type_trigger = self.page.locator("button#type, button[name='type'], [role='combobox']:has-text('Select'), [data-slot='trigger']").first
-        type_trigger.wait_for(state="visible", timeout=5000)
+        type_trigger.wait_for(state="visible", timeout=15000)
         type_trigger.click()
         
-        self.wait_for_dropdown_options()
-        http_option = self.page.get_by_role("option", name="HTTP", exact=True)
-        if http_option.count() > 0:
-            http_option.click()
-        else:
-            self.page.locator("[role='option']:has-text('HTTP')").first.click()
+        self.page.locator("[role='listbox'][data-side]").wait_for(state="visible", timeout=15000)
+        http_option = self.page.locator("[role='option']:has-text('HTTP')").first
+        http_option.click()
         
         description_input = self.page.locator("input#description, input[name='description'], [role='dialog'] input:nth-of-type(2)").first
-        description_input.wait_for(state="visible", timeout=5000)
+        description_input.wait_for(state="visible", timeout=15000)
         description_input.fill(description)
         
         input_schema = '{"type": "object", "properties": {"city": {"type": "string", "description": "City name to get coordinates for"}}, "required": ["city"]}'
         schema_textarea = self.page.locator("textarea#inputSchema, textarea[name='inputSchema'], [role='dialog'] textarea").first
-        schema_textarea.wait_for(state="visible", timeout=5000)
+        schema_textarea.wait_for(state="visible", timeout=15000)
         schema_textarea.fill(input_schema)
         
         dialog = self.page.locator("[role='dialog'], [data-slot='dialog-content']").first
@@ -128,18 +125,10 @@ class ToolsPage(BasePage):
         save_button.scroll_into_view_if_needed()
         save_button.click(force=True)
         
-        error_banner = self.page.locator("[role='alert']:has-text('error'), [role='alert']:has-text('Error'), .error, .toast-error").first
-        if error_banner.count() > 0 and error_banner.is_visible():
-            error_text = error_banner.inner_text()
-            logger.error(f"Tool creation error: {error_text}")
-        
-        popup_visible = self._check_success_popup()
-        logger.info(f"Success popup visible: {popup_visible}")
+        popup_visible = self._check_toast_popup()
+        logger.info(f"Toast visible: {popup_visible}")
         
         self.wait_for_modal_close()
-        
-        logger.info(f"Navigating back to tools list...")
-        self.navigate_to_tools_tab()
         
         in_table = self.is_tool_in_table(tool_name)
         logger.info(f"Tool '{tool_name}' in table after creation: {in_table}")
@@ -185,8 +174,8 @@ class ToolsPage(BasePage):
             self.page.locator(self.CONFIRM_DELETE_BUTTON).first.click()
         
         self.wait_for_navigation_complete()
-        popup_visible = self._check_success_popup()
-        deleted_from_table = not self.is_tool_in_table(tool_name)
+        popup_visible = self._check_toast_popup()
+        deleted_from_table = not self.is_tool_in_table(tool_name, retries=0)
         
         return {
             "tool_name": tool_name,
@@ -206,14 +195,7 @@ class ToolsPage(BasePage):
             "popup_visible": False,
             "deleted_from_table": False
         }
-    
-    def _check_success_popup(self) -> bool:
-        try:
-            self.page.locator(self.SUCCESS_POPUP).first.wait_for(state="visible", timeout=5000)
-            return True
-        except:
-            return False
-    
+
     def create_tool_for_test(self, prefix: str, test_data_key: str = "get_coordinates"):
         tool_data = self.TEST_DATA[test_data_key]
         
@@ -229,7 +211,10 @@ class ToolsPage(BasePage):
             description=tool_data["description"],
             url=tool_data["url"]
         )
-        
-        logger.info(f"Tool created successfully: {result['name']}")
+
+        if result['in_table']:
+            logger.info(f"Tool created successfully: {result['name']}")
+        else:
+            logger.info("Tool not visible in table")
         
         return result

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mckinsey/agents-at-scale-ark/tree/main/ark/api/extensions/query/v1",
+  "title": "Ark Query Extension",
+  "description": "A2A v0.3.0 extension for passing Ark query context to execution engines.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Name of the Ark Query resource."
+    },
+    "namespace": {
+      "type": "string",
+      "description": "Kubernetes namespace of the Ark Query resource."
+    }
+  },
+  "required": ["name", "namespace"],
+  "additionalProperties": false
+}

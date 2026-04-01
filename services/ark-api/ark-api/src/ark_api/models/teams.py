@@ -31,6 +31,8 @@ class Selector(BaseModel):
     """Team selector configuration."""
     agent: Optional[str] = None
     selectorPrompt: Optional[str] = None
+    enableTerminateTool: Optional[bool] = None
+    terminatePrompt: Optional[str] = None
 
 
 class TeamResponse(BaseModel):
@@ -40,6 +42,7 @@ class TeamResponse(BaseModel):
     description: Optional[str] = None
     strategy: Optional[str] = None
     members_count: Optional[int] = None
+    loops: Optional[bool] = None
     status: Optional[str] = None
 
 
@@ -56,6 +59,7 @@ class TeamCreateRequest(BaseModel):
     members: List[TeamMember]
     strategy: str
     graph: Optional[Graph] = None
+    loops: bool = False
     maxTurns: Optional[int] = None
     selector: Optional[Selector] = None
 
@@ -66,6 +70,7 @@ class TeamUpdateRequest(BaseModel):
     members: Optional[List[TeamMember]] = None
     strategy: Optional[str] = None
     graph: Optional[Graph] = None
+    loops: bool = False
     maxTurns: Optional[int] = None
     selector: Optional[Selector] = None
 
@@ -78,6 +83,7 @@ class TeamDetailResponse(BaseModel):
     members: List[TeamMember]
     strategy: str
     graph: Optional[Graph] = None
+    loops: bool = False
     maxTurns: Optional[int] = None
     selector: Optional[Selector] = None
     available: Optional[AvailabilityStatus] = None

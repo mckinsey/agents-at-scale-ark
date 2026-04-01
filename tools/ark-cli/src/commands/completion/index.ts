@@ -32,7 +32,7 @@ _ark_completion() {
   
   case \${COMP_CWORD} in
     1)
-      opts="agents chat cluster completion config dashboard docs evaluation export generate import install marketplace memory models queries query routes status targets teams tools uninstall help"
+      opts="agents chat cluster completion config dashboard docs export generate import install marketplace memory models queries query routes status targets teams tools uninstall help"
       COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
       return 0
       ;;
@@ -94,12 +94,12 @@ _ark_completion() {
           return 0
           ;;
         install)
-          opts="marketplace/services/phoenix marketplace/services/langfuse marketplace/agents/noah"
+          opts="marketplace/services/phoenix marketplace/services/langfuse marketplace/agents/noah marketplace/executors/langchain marketplace/executors/claude-agent-sdk"
           COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
           return 0
           ;;
         uninstall)
-          opts="marketplace/services/phoenix marketplace/services/langfuse marketplace/agents/noah"
+          opts="marketplace/services/phoenix marketplace/services/langfuse marketplace/agents/noah marketplace/executors/langchain marketplace/executors/claude-agent-sdk"
           COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
           return 0
           ;;
@@ -168,7 +168,6 @@ _ark() {
         'config[Configuration management]' \\
         'dashboard[Open ARK dashboard]' \\
         'docs[Open ARK documentation]' \\
-        'evaluation[Execute evaluations against evaluators]' \\
         'export[Export ARK resources to a file]' \\
         'generate[Generate ARK resources]' \\
         'import[Import ARK resources from a file]' \\
@@ -252,12 +251,16 @@ _ark() {
         install)
           _values 'services to install' \\
             'marketplace/services/phoenix[Phoenix observability platform]' \\
-            'marketplace/services/langfuse[Langfuse LLM analytics]'
+            'marketplace/services/langfuse[Langfuse LLM analytics]' \\
+            'marketplace/executors/langchain[LangChain execution engine]' \\
+            'marketplace/executors/claude-agent-sdk[Claude Agent SDK executor]'
           ;;
         uninstall)
           _values 'services to uninstall' \\
             'marketplace/services/phoenix[Phoenix observability platform]' \\
-            'marketplace/services/langfuse[Langfuse LLM analytics]'
+            'marketplace/services/langfuse[Langfuse LLM analytics]' \\
+            'marketplace/executors/langchain[LangChain execution engine]' \\
+            'marketplace/executors/claude-agent-sdk[Claude Agent SDK executor]'
           ;;
         chat)
           # Get available targets dynamically

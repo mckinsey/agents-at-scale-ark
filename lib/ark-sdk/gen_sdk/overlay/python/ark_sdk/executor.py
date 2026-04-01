@@ -8,8 +8,6 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
-ARK_METADATA_KEY = "ark.mckinsey.com/execution-engine"
-
 
 class Parameter(BaseModel):
     """Parameter for agent configuration."""
@@ -35,11 +33,13 @@ class AgentConfig(BaseModel):
     labels: Dict[str, str] = {}
 
 
-class ToolDefinition(BaseModel):
-    """Tool definition for agent capabilities."""
+class MCPServerConfig(BaseModel):
     name: str
-    description: str
-    parameters: Dict[str, Any] = {}
+    url: str
+    transport: str = "http"
+    timeout: str = "30s"
+    headers: Dict[str, str] = {}
+    tools: List[str] = []
 
 
 class Message(BaseModel):
@@ -56,8 +56,8 @@ class ExecutionEngineRequest(BaseModel):
     """Request to execute an agent."""
     agent: AgentConfig
     userInput: Message
-    history: List[Message]
-    tools: List[ToolDefinition] = []
+    mcpServers: List[MCPServerConfig] = []
+    conversationId: str = ""
 
 
 class ExecutionEngineResponse(BaseModel):

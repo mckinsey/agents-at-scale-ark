@@ -32,9 +32,8 @@ const (
 	Resources = ARKPrefix + "resources"
 )
 
-// Evaluation annotations
+// Query annotations
 const (
-	Evaluator       = ARKPrefix + "evaluator"
 	Query           = ARKPrefix + "query"
 	Auto            = ARKPrefix + "auto"
 	QueryGeneration = ARKPrefix + "query-generation"
@@ -55,8 +54,9 @@ const (
 
 // Streaming annotations
 const (
-	StreamingEnabled = ARKPrefix + "streaming-enabled"
-	StreamingURL     = ARKPrefix + "streaming-url"
+	StreamingEnabled   = ARKPrefix + "streaming-enabled"
+	StreamingURL       = ARKPrefix + "streaming-url"
+	StreamingSupported = ARKPrefix + "streaming-supported"
 )
 
 // Migration annotations - used by mutating webhooks to record deprecation warnings.

@@ -5,13 +5,16 @@ import (
 	"fmt"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	"mckinsey.com/ark/internal/genai"
+	arka2a "mckinsey.com/ark/internal/a2a"
 )
 
 const (
-	MemberTypeAgent  = "agent"
-	MemberTypeTeam   = "team"
-	StrategySelector = "selector"
+	MemberTypeAgent    = "agent"
+	MemberTypeTeam     = "team"
+	StrategySequential = "sequential"
+	StrategyRoundRobin = "round-robin"
+	StrategySelector   = "selector"
+	StrategyGraph      = "graph"
 )
 
 func (v *Validator) ValidateTeam(ctx context.Context, team *arkv1alpha1.Team) ([]string, error) {
@@ -41,7 +44,7 @@ func (v *Validator) ValidateTeam(ctx context.Context, team *arkv1alpha1.Team) ([
 		return nil, err
 	}
 
-	return nil, nil
+	return CollectMigrationWarnings(team.Annotations), nil
 }
 
 func (v *Validator) validateNoMixedTeam(ctx context.Context, team *arkv1alpha1.Team) error {
@@ -56,7 +59,7 @@ func (v *Validator) validateNoMixedTeam(ctx context.Context, team *arkv1alpha1.T
 			return fmt.Errorf("team member %d: failed to load agent '%s': %v", i, member.Name, err)
 		}
 		agent := obj.(*arkv1alpha1.Agent)
-		isExternal := agent.Spec.ExecutionEngine != nil && agent.Spec.ExecutionEngine.Name != "" && agent.Spec.ExecutionEngine.Name != genai.ExecutionEngineA2A
+		isExternal := agent.Spec.ExecutionEngine != nil && agent.Spec.ExecutionEngine.Name != "" && agent.Spec.ExecutionEngine.Name != arka2a.ExecutionEngineA2A
 		if isExternal {
 			hasExternalAgents = true
 		} else {
@@ -72,9 +75,14 @@ func (v *Validator) validateNoMixedTeam(ctx context.Context, team *arkv1alpha1.T
 
 func (v *Validator) validateStrategy(ctx context.Context, team *arkv1alpha1.Team) error {
 	switch team.Spec.Strategy {
-	case "sequential", "round-robin":
+	case StrategySequential:
+		return validateSequentialStrategy(team)
+	case StrategyRoundRobin:
 		return nil
 	case StrategySelector:
+		if team.Spec.Loops {
+			return fmt.Errorf("loops can only be used with the 'sequential' strategy")
+		}
 		if err := v.validateSelectorAgent(ctx, team); err != nil {
 			return err
 		}
@@ -82,11 +90,24 @@ func (v *Validator) validateStrategy(ctx context.Context, team *arkv1alpha1.Team
 			return validateGraphForSelector(team)
 		}
 		return nil
-	case "graph":
+	case StrategyGraph:
+		if team.Spec.Loops {
+			return fmt.Errorf("loops can only be used with the 'sequential' strategy")
+		}
 		return validateGraphStrategy(team)
 	default:
-		return fmt.Errorf("unsupported strategy '%s': must be 'sequential', 'round-robin', 'selector', or 'graph'", team.Spec.Strategy)
+		return fmt.Errorf("unsupported strategy '%s': must be '%s', '%s', '%s', or '%s'", team.Spec.Strategy, StrategySequential, StrategyRoundRobin, StrategySelector, StrategyGraph)
 	}
+}
+
+func validateSequentialStrategy(team *arkv1alpha1.Team) error {
+	if team.Spec.Loops && team.Spec.MaxTurns == nil {
+		return fmt.Errorf("maxTurns is required when loops is enabled")
+	}
+	if !team.Spec.Loops && team.Spec.MaxTurns != nil {
+		return fmt.Errorf("maxTurns can only be set when loops is enabled")
+	}
+	return nil
 }
 
 func (v *Validator) validateSelectorAgent(ctx context.Context, team *arkv1alpha1.Team) error {

@@ -77,6 +77,9 @@ jobs:
         include:
           - path: ark
             image: ark-controller
+          - path: ark
+            image: ark-completions
+            dockerfile: Dockerfile.completions
           - path: services/ark-api
             image: ark-api
             prebuild: "make ark-api-deps && mkdir -p services/ark-api/ark-api/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/out/"
@@ -90,9 +93,6 @@ jobs:
             image: filesystem-mcp-server
           - path: services/ark-broker/ark-broker
             image: ark-broker
-          - path: services/ark-evaluator
-            image: ark-evaluator
-            prebuild: "make ark-evaluator-deps"
           - path: tools/ark-cli
             image: ark-cli
             prebuild: "make ark-cli-build"
@@ -136,6 +136,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           prebuild: ${{ matrix.prebuild }}
+          dockerfile: ${{ matrix.dockerfile || 'Dockerfile' }}
       
       - name: Push to "latest" tag
         if: ${{ inputs.deploy_containers_to_latest }}
@@ -282,7 +283,7 @@ jobs:
           
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
   deploy-to-npm:
     needs: [resolve_version, deploy]

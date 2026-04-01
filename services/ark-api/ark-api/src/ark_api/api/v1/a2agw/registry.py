@@ -30,7 +30,7 @@ def ark_to_agent_card(ark_agent) -> AgentCard:
     
     # Create capabilities object
     capabilities = AgentCapabilities(
-        streaming=True, pushNotifications=False, stateTransitionHistory=False
+        streaming=True, push_notifications=False, state_transition_history=False
     )
     
     # Create skills from capabilities list or annotations
@@ -63,8 +63,8 @@ def ark_to_agent_card(ark_agent) -> AgentCard:
         skills=skills_list,
         url=get_external(metadata['name']),
         version="1.0.0",
-        defaultInputModes=["text"],
-        defaultOutputModes=["text"],
+        default_input_modes=["text"],
+        default_output_modes=["text"],
     )
 
 

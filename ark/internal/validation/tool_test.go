@@ -8,14 +8,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	"mckinsey.com/ark/internal/genai"
 )
 
 func TestValidateTool(t *testing.T) { //nolint:gocognit
 	t.Run("valid http tool", func(t *testing.T) {
 		tool := &arkv1alpha1.Tool{
 			Spec: arkv1alpha1.ToolSpec{
-				Type: genai.ToolTypeHTTP,
+				Type: ToolTypeHTTP,
 				HTTP: &arkv1alpha1.HTTPSpec{URL: "https://example.com", Method: "POST"},
 			},
 		}
@@ -27,7 +26,7 @@ func TestValidateTool(t *testing.T) { //nolint:gocognit
 
 	t.Run("rejects http tool without spec", func(t *testing.T) {
 		tool := &arkv1alpha1.Tool{
-			Spec: arkv1alpha1.ToolSpec{Type: genai.ToolTypeHTTP},
+			Spec: arkv1alpha1.ToolSpec{Type: ToolTypeHTTP},
 		}
 		_, err := ValidateTool(tool)
 		if err == nil {
@@ -38,7 +37,7 @@ func TestValidateTool(t *testing.T) { //nolint:gocognit
 	t.Run("rejects http tool without url", func(t *testing.T) {
 		tool := &arkv1alpha1.Tool{
 			Spec: arkv1alpha1.ToolSpec{
-				Type: genai.ToolTypeHTTP,
+				Type: ToolTypeHTTP,
 				HTTP: &arkv1alpha1.HTTPSpec{},
 			},
 		}
@@ -51,7 +50,7 @@ func TestValidateTool(t *testing.T) { //nolint:gocognit
 	t.Run("rejects invalid http method", func(t *testing.T) {
 		tool := &arkv1alpha1.Tool{
 			Spec: arkv1alpha1.ToolSpec{
-				Type: genai.ToolTypeHTTP,
+				Type: ToolTypeHTTP,
 				HTTP: &arkv1alpha1.HTTPSpec{URL: "https://example.com", Method: "INVALID"},
 			},
 		}
@@ -64,7 +63,7 @@ func TestValidateTool(t *testing.T) { //nolint:gocognit
 	t.Run("valid mcp tool", func(t *testing.T) {
 		tool := &arkv1alpha1.Tool{
 			Spec: arkv1alpha1.ToolSpec{
-				Type: genai.ToolTypeMCP,
+				Type: ToolTypeMCP,
 				MCP: &arkv1alpha1.MCPToolRef{
 					MCPServerRef: arkv1alpha1.MCPServerRef{Name: "srv"},
 					ToolName:     "tool1",
@@ -79,7 +78,7 @@ func TestValidateTool(t *testing.T) { //nolint:gocognit
 
 	t.Run("rejects mcp tool without spec", func(t *testing.T) {
 		tool := &arkv1alpha1.Tool{
-			Spec: arkv1alpha1.ToolSpec{Type: genai.ToolTypeMCP},
+			Spec: arkv1alpha1.ToolSpec{Type: ToolTypeMCP},
 		}
 		_, err := ValidateTool(tool)
 		if err == nil {
@@ -90,7 +89,7 @@ func TestValidateTool(t *testing.T) { //nolint:gocognit
 	t.Run("rejects mcp tool without server name", func(t *testing.T) {
 		tool := &arkv1alpha1.Tool{
 			Spec: arkv1alpha1.ToolSpec{
-				Type: genai.ToolTypeMCP,
+				Type: ToolTypeMCP,
 				MCP:  &arkv1alpha1.MCPToolRef{ToolName: "tool1"},
 			},
 		}
@@ -103,7 +102,7 @@ func TestValidateTool(t *testing.T) { //nolint:gocognit
 	t.Run("rejects mcp tool without tool name", func(t *testing.T) {
 		tool := &arkv1alpha1.Tool{
 			Spec: arkv1alpha1.ToolSpec{
-				Type: genai.ToolTypeMCP,
+				Type: ToolTypeMCP,
 				MCP:  &arkv1alpha1.MCPToolRef{MCPServerRef: arkv1alpha1.MCPServerRef{Name: "srv"}},
 			},
 		}
@@ -116,7 +115,7 @@ func TestValidateTool(t *testing.T) { //nolint:gocognit
 	t.Run("valid agent tool ref", func(t *testing.T) {
 		tool := &arkv1alpha1.Tool{
 			Spec: arkv1alpha1.ToolSpec{
-				Type:  genai.ToolTypeAgent,
+				Type:  ToolTypeAgent,
 				Agent: &arkv1alpha1.AgentToolRef{Name: "my-agent"},
 			},
 		}
@@ -129,7 +128,7 @@ func TestValidateTool(t *testing.T) { //nolint:gocognit
 	t.Run("rejects agent tool without name", func(t *testing.T) {
 		tool := &arkv1alpha1.Tool{
 			Spec: arkv1alpha1.ToolSpec{
-				Type:  genai.ToolTypeAgent,
+				Type:  ToolTypeAgent,
 				Agent: &arkv1alpha1.AgentToolRef{},
 			},
 		}
@@ -142,7 +141,7 @@ func TestValidateTool(t *testing.T) { //nolint:gocognit
 	t.Run("valid team tool ref", func(t *testing.T) {
 		tool := &arkv1alpha1.Tool{
 			Spec: arkv1alpha1.ToolSpec{
-				Type: genai.ToolTypeTeam,
+				Type: ToolTypeTeam,
 				Team: &arkv1alpha1.TeamToolRef{Name: "my-team"},
 			},
 		}
@@ -155,7 +154,7 @@ func TestValidateTool(t *testing.T) { //nolint:gocognit
 	t.Run("rejects team tool without name", func(t *testing.T) {
 		tool := &arkv1alpha1.Tool{
 			Spec: arkv1alpha1.ToolSpec{
-				Type: genai.ToolTypeTeam,
+				Type: ToolTypeTeam,
 				Team: &arkv1alpha1.TeamToolRef{},
 			},
 		}
@@ -168,7 +167,7 @@ func TestValidateTool(t *testing.T) { //nolint:gocognit
 	t.Run("valid builtin noop", func(t *testing.T) {
 		tool := &arkv1alpha1.Tool{
 			ObjectMeta: metav1.ObjectMeta{Name: "noop"},
-			Spec:       arkv1alpha1.ToolSpec{Type: genai.ToolTypeBuiltin},
+			Spec:       arkv1alpha1.ToolSpec{Type: ToolTypeBuiltin},
 		}
 		_, err := ValidateTool(tool)
 		if err != nil {
@@ -179,7 +178,7 @@ func TestValidateTool(t *testing.T) { //nolint:gocognit
 	t.Run("valid builtin terminate", func(t *testing.T) {
 		tool := &arkv1alpha1.Tool{
 			ObjectMeta: metav1.ObjectMeta{Name: "terminate"},
-			Spec:       arkv1alpha1.ToolSpec{Type: genai.ToolTypeBuiltin},
+			Spec:       arkv1alpha1.ToolSpec{Type: ToolTypeBuiltin},
 		}
 		_, err := ValidateTool(tool)
 		if err != nil {
@@ -190,7 +189,7 @@ func TestValidateTool(t *testing.T) { //nolint:gocognit
 	t.Run("rejects unsupported builtin", func(t *testing.T) {
 		tool := &arkv1alpha1.Tool{
 			ObjectMeta: metav1.ObjectMeta{Name: "unknown-builtin"},
-			Spec:       arkv1alpha1.ToolSpec{Type: genai.ToolTypeBuiltin},
+			Spec:       arkv1alpha1.ToolSpec{Type: ToolTypeBuiltin},
 		}
 		_, err := ValidateTool(tool)
 		if err == nil {
@@ -212,7 +211,7 @@ func TestValidateTool(t *testing.T) { //nolint:gocognit
 		tool := &arkv1alpha1.Tool{
 			ObjectMeta: metav1.ObjectMeta{Name: "noop"},
 			Spec: arkv1alpha1.ToolSpec{
-				Type:        genai.ToolTypeBuiltin,
+				Type:        ToolTypeBuiltin,
 				InputSchema: &runtime.RawExtension{Raw: json.RawMessage(`{"type": "invalid-type"}`)},
 			},
 		}
@@ -226,7 +225,7 @@ func TestValidateTool(t *testing.T) { //nolint:gocognit
 		tool := &arkv1alpha1.Tool{
 			ObjectMeta: metav1.ObjectMeta{Name: "noop"},
 			Spec: arkv1alpha1.ToolSpec{
-				Type:        genai.ToolTypeBuiltin,
+				Type:        ToolTypeBuiltin,
 				InputSchema: &runtime.RawExtension{Raw: json.RawMessage(`{"type": "object", "properties": {"name": {"type": "string"}}}`)},
 			},
 		}

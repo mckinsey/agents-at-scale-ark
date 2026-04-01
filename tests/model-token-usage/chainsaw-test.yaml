@@ -76,3 +76,11 @@ spec:
             (tokenUsage.promptTokens + tokenUsage.completionTokens == to_number(tokenUsage.totalTokens)): true
     catch:
       - events: {}
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

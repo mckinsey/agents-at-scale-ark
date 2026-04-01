@@ -487,6 +487,68 @@ For functional testing, validate that service operations actually worked:
         fi
 ```
 
+### Cleanup Requirements
+
+All tests that use `helm install` should include explicit cleanup sections to uninstall Helm releases. 
+
+#### Cleanup Pattern
+
+Add a `cleanup` section at the same indentation level as `catch` or `try`:
+
+```yaml
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+```
+
+#### Key Points
+
+- **Placement**: Add cleanup at the same indentation as `catch` blocks within the last step
+- **Blank line**: Include one blank line before the `cleanup:` section
+- **Order**: Uninstall charts in reverse order of installation when multiple charts exist
+- **Timeout**: Use `--wait --timeout=180s` to match chainsaw's cleanup timeout
+- **Error handling**: Always use `|| true` to prevent cleanup failures if releases don't exist
+- **Why required**: Explicit uninstalls are faster and more reliable than cascading namespace deletion
+
+#### Example Test Structure
+
+```yaml
+spec:
+  steps:
+  - name: setup-and-test
+    try:
+    - script:
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+    - apply:
+        file: manifests/*.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          status:
+            phase: done
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+```
+
 ## Error Handling and Verbosity
 
 ### Standard Catch Blocks
@@ -829,5 +891,18 @@ chainsaw test tests/ --test-dir tests/queries --pause-on-failure
 
 ### Validation
 - Each test should pass independently when run individually
+
+## Playwright UI Testing
+
+### Radix UI Select
+
+Radix UI Select uses Floating UI to position the dropdown portal after mount. Until positioning completes, the portal DOM nodes can be replaced, causing "element was detached from the DOM". Wait for `[role='listbox'][data-side]` — Floating UI sets `data-side` once positioning is done.
+
+```python
+trigger.click()
+page.locator("[role='listbox'][data-side]").wait_for(state="visible", timeout=15000)
+page.locator("[role='option']:has-text('HTTP')").first.click()
+```
+
 - Query tests should reach `phase: done`
 - No RBAC permission errors in events

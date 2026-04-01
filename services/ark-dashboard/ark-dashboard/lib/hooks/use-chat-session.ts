@@ -1,10 +1,7 @@
 'use client';
 
 import { useAtom, useAtomValue } from 'jotai';
-import type {
-  ChatCompletionChunk,
-  ChatCompletionMessageParam,
-} from 'openai/resources/chat/completions';
+import type { ChatCompletionChunk } from 'openai/resources/chat/completions';
 import type { RefObject } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -60,6 +57,7 @@ export function useChatSession({
 
   const chatMessages = chatSession.messages;
   const sessionId = chatSession.sessionId;
+  const conversationId = (chatSession as { conversationId?: string }).conversationId;
 
   useEffect(() => {
     if (!chatHistory?.[chatKey]) {
@@ -88,6 +86,21 @@ export function useChatSession({
         return {
           ...safePrev,
           [chatKey]: { ...currentSession, messages: newMessages },
+        };
+      });
+    },
+    [chatKey, setChatHistory],
+  );
+
+  const updateConversationId = useCallback(
+    (newConversationId: string) => {
+      setChatHistory(prev => {
+        const safePrev = prev || {};
+        const currentSession = safePrev[chatKey];
+        if (!currentSession) return safePrev;
+        return {
+          ...safePrev,
+          [chatKey]: { ...currentSession, conversationId: newConversationId },
         };
       });
     },
@@ -133,7 +146,8 @@ export function useChatSession({
   const handleStreamChatResponse = useCallback(
     async (userMessage: string) => {
       const messageArray = buildChatMessages(chatMessages, userMessage);
-      let currentMessageIndex = chatMessages.length + 1;
+      const turnStartIndex = chatMessages.length + 1;
+      let currentMessageIndex = turnStartIndex;
 
       updateChatMessages(prev => [
         ...prev,
@@ -146,6 +160,7 @@ export function useChatSession({
         type: 'function';
         function: { name: string; arguments: string };
       }> = [];
+      const pendingSystemMessages: Array<string> = [];
 
       let hasError = false;
       let errorMessage = '';
@@ -179,11 +194,29 @@ export function useChatSession({
         }
       };
 
+      const addSystemMessagesAndNewAssistant = () => {
+        const systemMsgCount = pendingSystemMessages.length;
+        updateChatMessages(prev => {
+          const systemMsgs = pendingSystemMessages.map(content => ({
+            role: 'system' as const,
+            content,
+          }));
+          return [
+            ...prev,
+            ...systemMsgs,
+            { role: 'assistant', content: '' } as ExtendedChatMessage,
+          ];
+        });
+        pendingSystemMessages.length = 0;
+        currentMessageIndex += systemMsgCount + 1;
+      };
+
       for await (const chunk of chatService.streamChatResponse(
-        messageArray as ChatCompletionMessageParam[],
+        userMessage,
         type,
         name,
         sessionId,
+        conversationId,
         queryTimeout,
       )) {
         if ('error' in chunk && chunk.error) {
@@ -208,6 +241,7 @@ export function useChatSession({
               metadata?: { name?: string };
               status?: {
                 phase?: string;
+                conversationId?: string;
                 response?: {
                   content?: string;
                   raw?: string;
@@ -215,6 +249,12 @@ export function useChatSession({
               };
             };
           };
+
+          const returnedConversationId =
+            arkData.completedQuery?.status?.conversationId;
+          if (returnedConversationId) {
+            updateConversationId(returnedConversationId);
+          }
           if (arkData.completedQuery?.status?.phase === 'error') {
             hasError = true;
             errorMessage =
@@ -233,31 +273,33 @@ export function useChatSession({
         }
 
         if ('ark' in chunk) {
-          const arkData = chunk.ark as { agent?: string };
+          const arkData = chunk.ark as { agent?: string; systemMessage?: string };
+
+          // Accumulate system messages to add with next assistant message
+          if (arkData.systemMessage) {
+            pendingSystemMessages.push(arkData.systemMessage);
+          }
+
           const chunkAgent = arkData.agent;
 
-          if (chunkAgent && chunkAgent !== currentAgent) {
+          // Check if we need to start a new assistant message
+          const isNewAgent = chunkAgent && chunkAgent !== currentAgent;
+          const isNewTurn = chunkAgent === currentAgent && turnComplete;
+
+          if (isNewAgent || isNewTurn) {
+            // Finalize previous message if it exists
             if (currentAgent) {
               finalizeCurrentMessage();
               accumulatedContent = '';
               accumulatedToolCalls.length = 0;
-              currentMessageIndex++;
-              updateChatMessages(prev => [
-                ...prev,
-                { role: 'assistant', content: '' } as ExtendedChatMessage,
-              ]);
             }
-            currentAgent = chunkAgent;
-            turnComplete = false;
-          } else if (chunkAgent === currentAgent && turnComplete) {
-            finalizeCurrentMessage();
-            accumulatedContent = '';
-            accumulatedToolCalls.length = 0;
-            currentMessageIndex++;
-            updateChatMessages(prev => [
-              ...prev,
-              { role: 'assistant', content: '' } as ExtendedChatMessage,
-            ]);
+
+            // Add system messages + new assistant message
+            addSystemMessagesAndNewAssistant();
+
+            if (isNewAgent) {
+              currentAgent = chunkAgent;
+            }
             turnComplete = false;
           }
         }
@@ -324,6 +366,18 @@ export function useChatSession({
 
       finalizeCurrentMessage();
 
+      // Add any remaining pending system messages
+      if (pendingSystemMessages.length > 0) {
+        updateChatMessages(prev => {
+          const systemMsgs = pendingSystemMessages.map(content => ({
+            role: 'system' as const,
+            content,
+          }));
+          return [...prev, ...systemMsgs];
+        });
+        pendingSystemMessages.length = 0;
+      }
+
       if (hasError) {
         const hasTerminateToolCall = accumulatedToolCalls.some(
           tc => tc.function.name === 'terminate',
@@ -347,8 +401,8 @@ export function useChatSession({
 
       if (completedQueryMessages.length > 0) {
         updateChatMessages(prev => {
-          // Keep only user messages, replace everything else with completedQueryMessages
-          const userMessages = prev.filter(m => m.role === 'user');
+          // Preserve previous turns, replace only current turn with complete message chain
+          const beforeThisTurn = prev.slice(0, turnStartIndex);
           const converted: ExtendedChatMessage[] = [];
 
           completedQueryMessages.forEach(msg => {
@@ -390,7 +444,7 @@ export function useChatSession({
             }
           });
 
-          const updated = [...userMessages, ...converted];
+          const updated = [...beforeThisTurn, ...converted];
           return updated;
         });
       }
@@ -411,10 +465,11 @@ export function useChatSession({
       const messageArray = buildChatMessages(chatMessages, userMessage);
 
       const query = await chatService.submitChatQuery(
-        messageArray as ChatCompletionMessageParam[],
+        userMessage,
         type,
         name,
         sessionId,
+        conversationId,
         undefined,
         queryTimeout,
       );
@@ -429,6 +484,14 @@ export function useChatSession({
           const result = await chatService.getQueryResult(query.name);
 
           if (result.terminal) {
+            const fullQuery = await chatService.getQuery(query.name);
+            const queryConversationId = (
+              fullQuery?.status as { conversationId?: string } | undefined
+            )?.conversationId;
+            if (queryConversationId) {
+              updateConversationId(queryConversationId);
+            }
+
             if (result.status === 'done') {
               if (result.messages && result.messages.length > 0) {
                 updateChatMessages(prev => [

@@ -93,6 +93,7 @@ spec:
             - type: team
               name: synthesis-team
     - assert:
+        timeout: 2m
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
@@ -116,3 +117,10 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: team-of-teams-query
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

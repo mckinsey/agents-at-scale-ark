@@ -24,13 +24,16 @@ export {
   BedrockCollectorOptions,
   BedrockConfigCollector,
 } from './bedrock.js';
+export {
+  AnthropicConfig,
+  AnthropicCollectorOptions,
+  AnthropicConfigCollector,
+} from './anthropic.js';
 export {ProviderConfigCollectorFactory} from './factory.js';
 
 import {OpenAIConfig} from './openai.js';
 import {AzureConfig} from './azure.js';
 import {BedrockConfig} from './bedrock.js';
+import {AnthropicConfig} from './anthropic.js';
 
-/**
- * Union type of all supported provider configurations.
- */
-export type ProviderConfig = OpenAIConfig | AzureConfig | BedrockConfig;
+export type ProviderConfig = OpenAIConfig | AzureConfig | BedrockConfig | AnthropicConfig;
