@@ -5,6 +5,7 @@ package completions
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"text/template"
 
@@ -214,7 +215,7 @@ func TestDetermineNextMember(t *testing.T) {
 			team := &Team{
 				Members: members,
 			}
-			team.mockSelectorAgent = newMockSelectorAgent()
+			team.selectorAgent = newMockSelectorAgent()
 
 			ctx := context.Background()
 			messages := []Message{}
@@ -294,7 +295,7 @@ func TestSelectFromGraphConstraints(t *testing.T) {
 				Members: members,
 			}
 
-			team.mockSelectorAgent = newMockSelectorAgent()
+			team.selectorAgent = newMockSelectorAgent()
 
 			ctx := context.Background()
 			messages := []Message{}
@@ -578,6 +579,17 @@ func TestHandleMemberSelectionError(t *testing.T) {
 			wantMessagesAdded: 0,
 		},
 		{
+			name: "TerminateTeamWithResponse adds original messages",
+			err: &TerminateTeamWithResponse{
+				Response: "Goodbye!",
+				Messages: []Message{NewAssistantMessage("Goodbye!"), NewSystemMessage("extra")},
+			},
+			wantTerminate:       true,
+			wantReturnErr:       false,
+			wantMessagesAdded:   2,
+			wantMessageContains: "Goodbye!",
+		},
+		{
 			name:              "regular error returned as-is",
 			err:               errors.New("some error"),
 			wantTerminate:     false,
@@ -602,7 +614,13 @@ func TestHandleMemberSelectionError(t *testing.T) {
 			}
 			assert.Len(t, newMessages, tt.wantMessagesAdded)
 			if tt.wantMessageContains != "" && len(newMessages) > 0 {
-				content := newMessages[0].OfSystem.Content.OfString.Value
+				msg := newMessages[0]
+				var content string
+				if msg.OfSystem != nil {
+					content = msg.OfSystem.Content.OfString.Value
+				} else if msg.OfAssistant != nil {
+					content = msg.OfAssistant.Content.OfString.Value
+				}
 				assert.Contains(t, content, tt.wantMessageContains)
 			}
 		})
@@ -776,8 +794,8 @@ func TestSelectMember_WithInvalidAgent(t *testing.T) {
 
 	mockSelector := &mockSelectorAgent{returnName: "selected"}
 	team := &Team{
-		Members:           members,
-		mockSelectorAgent: mockSelector,
+		Members:       members,
+		selectorAgent: mockSelector,
 	}
 
 	ctx := context.Background()
@@ -799,8 +817,8 @@ func TestSelectMember_ReturnsErrorOnNoMessages(t *testing.T) {
 
 	mockSelector := &mockSelectorAgent{returnEmpty: true}
 	team := &Team{
-		Members:           members,
-		mockSelectorAgent: mockSelector,
+		Members:       members,
+		selectorAgent: mockSelector,
 	}
 
 	ctx := context.Background()
@@ -816,7 +834,7 @@ func TestSelectMember_ReturnsErrorOnNoMessages(t *testing.T) {
 func TestLoadSelectorAgent_WithMock(t *testing.T) {
 	mockSelector := newMockSelectorAgent()
 	team := &Team{
-		mockSelectorAgent: mockSelector,
+		selectorAgent: mockSelector,
 	}
 
 	ctx := context.Background()
@@ -839,6 +857,131 @@ func TestLoadSelectorAgent_RequiresSelectorSpec(t *testing.T) {
 	assert.Contains(t, err.Error(), "selector agent must be specified")
 }
 
+func TestSelectMember_SelectorPrompt(t *testing.T) {
+	enableTerminate := true
+	disableTerminate := false
+
+	members := []TeamMember{
+		&mockTeamMember{name: "agent1"},
+	}
+
+	tests := []struct {
+		name               string
+		selector           *arkv1alpha1.TeamSelectorSpec
+		wantPromptSuffix   string
+		wantPromptContains string
+		wantNoSuffix       string
+	}{
+		{
+			name:               "default selector prompt when no selector spec",
+			selector:           nil,
+			wantPromptContains: "role play game",
+		},
+		{
+			name: "custom selector prompt",
+			selector: &arkv1alpha1.TeamSelectorSpec{
+				SelectorPrompt: "Custom prompt: {{.Participants}}",
+			},
+			wantPromptContains: "Custom prompt:",
+		},
+		{
+			name: "default terminate prompt appended when enableTerminateTool is true",
+			selector: &arkv1alpha1.TeamSelectorSpec{
+				EnableTerminateTool: &enableTerminate,
+			},
+			wantPromptSuffix:   defaultTerminatePrompt,
+			wantPromptContains: "role play game",
+		},
+		{
+			name: "custom terminate prompt appended when provided",
+			selector: &arkv1alpha1.TeamSelectorSpec{
+				EnableTerminateTool: &enableTerminate,
+				TerminatePrompt:     "Call stop() when done.",
+			},
+			wantPromptSuffix:   "Call stop() when done.",
+			wantPromptContains: "role play game",
+		},
+		{
+			name: "terminate prompt not appended when enableTerminateTool is false",
+			selector: &arkv1alpha1.TeamSelectorSpec{
+				EnableTerminateTool: &disableTerminate,
+				TerminatePrompt:     "Call stop() when done.",
+			},
+			wantPromptContains: "role play game",
+			wantNoSuffix:       "Call stop() when done.",
+		},
+		{
+			name: "terminate prompt not appended when enableTerminateTool is nil",
+			selector: &arkv1alpha1.TeamSelectorSpec{
+				TerminatePrompt: "Call stop() when done.",
+			},
+			wantPromptContains: "role play game",
+			wantNoSuffix:       "Call stop() when done.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockSelector := &mockSelectorAgent{returnName: "agent1"}
+			team := &Team{
+				Members:       members,
+				Selector:      tt.selector,
+				selectorAgent: mockSelector,
+			}
+
+			ctx := context.Background()
+			tmpl, err := team.setupSelectorTemplate()
+			require.NoError(t, err)
+
+			_, _ = team.selectMember(ctx, []Message{}, tmpl, "agent1", "agent1", members)
+
+			require.NotEmpty(t, mockSelector.capturedHistory)
+			require.NotNil(t, mockSelector.capturedHistory[0].OfSystem)
+			prompt := mockSelector.capturedHistory[0].OfSystem.Content.OfString.Value
+
+			assert.Contains(t, prompt, tt.wantPromptContains)
+
+			if tt.wantPromptSuffix != "" {
+				assert.True(t, strings.HasSuffix(prompt, tt.wantPromptSuffix),
+					"expected prompt to end with %q, got: %q", tt.wantPromptSuffix, prompt)
+			}
+
+			if tt.wantNoSuffix != "" {
+				assert.False(t, strings.HasSuffix(prompt, tt.wantNoSuffix),
+					"expected prompt NOT to end with %q", tt.wantNoSuffix)
+			}
+		})
+	}
+}
+
+func TestSelectMember_TerminatePromptFormat(t *testing.T) {
+	enableTerminate := true
+	members := []TeamMember{&mockTeamMember{name: "agent1"}}
+
+	mockSelector := &mockSelectorAgent{returnName: "agent1"}
+	team := &Team{
+		Members: members,
+		Selector: &arkv1alpha1.TeamSelectorSpec{
+			EnableTerminateTool: &enableTerminate,
+			TerminatePrompt:     "Custom terminate.",
+		},
+		selectorAgent: mockSelector,
+	}
+
+	ctx := context.Background()
+	tmpl, err := team.setupSelectorTemplate()
+	require.NoError(t, err)
+
+	_, _ = team.selectMember(ctx, []Message{}, tmpl, "agent1", "agent1", members)
+
+	require.NotEmpty(t, mockSelector.capturedHistory)
+	prompt := mockSelector.capturedHistory[0].OfSystem.Content.OfString.Value
+
+	assert.Contains(t, prompt, "role play game")
+	assert.True(t, strings.HasSuffix(prompt, "\n\nCustom terminate."),
+		"expected prompt to end with terminate prompt, got: %q", prompt)
+}
+
 func TestExecuteSelector_WithInvalidAgentSelection(t *testing.T) {
 	mockMember1 := &mockTeamMember{name: "agent1"}
 	mockMember2 := &mockTeamMember{name: "agent2"}
@@ -853,7 +996,7 @@ func TestExecuteSelector_WithInvalidAgentSelection(t *testing.T) {
 			mockMember1,
 			mockMember2,
 		},
-		mockSelectorAgent: mockSelector,
+		selectorAgent:     mockSelector,
 		MaxTurns:          &maxTurns,
 		telemetryRecorder: &mockTeamRecorder{},
 		eventingRecorder:  &mockEventingRecorder{},
@@ -880,4 +1023,103 @@ func TestExecuteSelector_WithInvalidAgentSelection(t *testing.T) {
 	}
 
 	assert.True(t, foundWarning, "Expected to find invalid agent warning message in output")
+}
+
+func TestExtractTerminateToolResponse(t *testing.T) {
+	tests := []struct {
+		name     string
+		result   *ExecutionResult
+		wantResp string
+	}{
+		{
+			name:     "nil result returns empty",
+			result:   nil,
+			wantResp: "",
+		},
+		{
+			name:     "empty messages returns empty",
+			result:   &ExecutionResult{Messages: []Message{}},
+			wantResp: "",
+		},
+		{
+			name: "tool message content is returned",
+			result: &ExecutionResult{
+				Messages: []Message{
+					ToolMessage("The answer is 42", "call-id"),
+				},
+			},
+			wantResp: "The answer is 42",
+		},
+		{
+			name: "last tool message is returned when multiple messages",
+			result: &ExecutionResult{
+				Messages: []Message{
+					NewAssistantMessage("thinking..."),
+					ToolMessage("final answer", "call-id"),
+				},
+			},
+			wantResp: "final answer",
+		},
+		{
+			name: "no tool message returns empty",
+			result: &ExecutionResult{
+				Messages: []Message{
+					NewAssistantMessage("just text"),
+				},
+			},
+			wantResp: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractTerminateToolResponse(tt.result)
+			assert.Equal(t, tt.wantResp, got)
+		})
+	}
+}
+
+func TestExecuteSelector_WithTerminateTool(t *testing.T) {
+	mockMember1 := &mockTeamMember{name: "agent1"}
+	mockMember2 := &mockTeamMember{name: "agent2"}
+
+	mockSelector := &mockSelectorAgent{returnTerminateResponse: "No further responses needed."}
+	stream := &mockEventStream{}
+
+	team := &Team{
+		Name:     "test-team",
+		Strategy: "selector",
+		Members: []TeamMember{
+			mockMember1,
+			mockMember2,
+		},
+		selectorAgent:     mockSelector,
+		telemetryRecorder: &mockTeamRecorder{},
+		eventingRecorder:  &mockEventingRecorder{},
+		eventStream:       stream,
+	}
+
+	ctx := context.Background()
+	userInput := NewUserMessage("test message")
+	history := []Message{}
+
+	messages, err := team.executeSelector(ctx, userInput, history)
+
+	require.NoError(t, err)
+	require.NotEmpty(t, messages, "terminate response should be included in messages")
+
+	foundToolCall := false
+	for _, msg := range messages {
+		if msg.OfAssistant != nil && len(msg.OfAssistant.ToolCalls) > 0 {
+			for _, tc := range msg.OfAssistant.ToolCalls {
+				if tc.Function.Name == "terminate" {
+					foundToolCall = true
+					break
+				}
+			}
+		}
+	}
+	assert.True(t, foundToolCall, "Expected to find terminate tool call in messages")
+
+	require.Len(t, stream.chunks, 1, "Expected terminate response to be streamed")
 }

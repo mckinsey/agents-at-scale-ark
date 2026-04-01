@@ -333,7 +333,8 @@ export function ChatMessageList({
         if (
           isSelectorStrategy &&
           pm.msg.role === 'assistant' &&
-          pm.senderName
+          pm.senderName &&
+          !pm.hasTermination
         ) {
           transitionElement = (
             <SelectorTransition
