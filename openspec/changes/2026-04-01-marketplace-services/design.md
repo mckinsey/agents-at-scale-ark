@@ -177,7 +177,7 @@ if (isInstalled && item.ark.ui?.enabled) {
 
 The services page functionality is fully absorbed by the marketplace page. Users access installed service UIs through the marketplace page instead.
 
-**Phased removal:**
+**Implementation steps:**
 1. Add "Open" button to marketplace cards for items with UI URLs
 2. Add "Installed" filter view to marketplace page
 3. Remove services page from navigation
