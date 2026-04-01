@@ -31,6 +31,8 @@ class Selector(BaseModel):
     """Team selector configuration."""
     agent: Optional[str] = None
     selectorPrompt: Optional[str] = None
+    enableTerminateTool: Optional[bool] = None
+    terminatePrompt: Optional[str] = None
 
 
 class TeamResponse(BaseModel):

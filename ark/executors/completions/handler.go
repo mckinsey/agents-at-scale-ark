@@ -61,21 +61,21 @@ func (s *executionState) finalizeStream(ctx context.Context, responseMessages []
 	if s.eventStream == nil {
 		return
 	}
+	completedQuery := s.query.DeepCopy()
+	completedQuery.Status.Phase = "done"
 	if len(responseMessages) > 0 {
 		rawJSON := serializeResponseMessages(responseMessages)
-		completedQuery := s.query.DeepCopy()
-		completedQuery.Status.Phase = "done"
 		completedQuery.Status.Response = &arkv1alpha1.Response{
 			Target:  *s.target,
 			Content: extractAssistantText(responseMessages),
 			Raw:     rawJSON,
 			Phase:   "done",
 		}
-		finalChunk := NewContentChunk("chatcmpl-final", s.query.Name, "")
-		wrappedChunk := WrapChunkWithMetadata(ctx, finalChunk, "", completedQuery)
-		if err := s.eventStream.StreamChunk(ctx, wrappedChunk); err != nil {
-			log.Error(err, "failed to send final chunk")
-		}
+	}
+	finalChunk := NewContentChunk("chatcmpl-final", s.query.Name, "")
+	wrappedChunk := WrapChunkWithMetadata(ctx, finalChunk, "", completedQuery)
+	if err := s.eventStream.StreamChunk(ctx, wrappedChunk); err != nil {
+		log.Error(err, "failed to send final chunk")
 	}
 	if completionErr := s.eventStream.NotifyCompletion(ctx); completionErr != nil {
 		log.Error(completionErr, "failed to notify stream completion")
