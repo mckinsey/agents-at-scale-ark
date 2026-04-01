@@ -57,12 +57,13 @@ type executionState struct {
 	targetSpan     telemetry.Span
 }
 
-func (s *executionState) finalizeStream(ctx context.Context, responseMessages []Message) {
+func (s *executionState) finalizeStream(ctx context.Context, responseMessages []Message, tokenUsage arkv1alpha1.TokenUsage) {
 	if s.eventStream == nil {
 		return
 	}
 	completedQuery := s.query.DeepCopy()
 	completedQuery.Status.Phase = "done"
+	completedQuery.Status.TokenUsage = tokenUsage
 	if len(responseMessages) > 0 {
 		rawJSON := serializeResponseMessages(responseMessages)
 		completedQuery.Status.Response = &arkv1alpha1.Response{
@@ -110,7 +111,7 @@ func (h *Handler) ProcessMessage(
 
 	execResult, responseMessages, err := h.dispatchTarget(ctx, state)
 	if err != nil {
-		state.finalizeStream(ctx, nil)
+		state.finalizeStream(ctx, nil, arkv1alpha1.TokenUsage{})
 		return nil, fmt.Errorf("execution failed: %w", err)
 	}
 
@@ -282,7 +283,7 @@ func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, r
 		}
 	}
 
-	state.finalizeStream(ctx, responseMessages)
+	state.finalizeStream(ctx, responseMessages, tokenSummary)
 
 	return &taskmanager.MessageProcessingResult{
 		Result: &responseMessage,

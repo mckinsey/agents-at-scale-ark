@@ -564,20 +564,5 @@ describe('ChatMessageList', () => {
       expect(screen.queryByText('Conversation ended')).not.toBeInTheDocument();
     });
 
-    it('should render graph strategy indicator', () => {
-      const messages: ExtendedChatMessage[] = [
-        { role: 'user', content: 'Hello' } as ExtendedChatMessage,
-      ];
-
-      renderChatMessageList({
-        messages,
-        strategy: 'graph',
-        graphEdges,
-      });
-
-      expect(
-        screen.getByText('Agents respond following graph edges'),
-      ).toBeInTheDocument();
-    });
   });
 });
