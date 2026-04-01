@@ -64,12 +64,10 @@ func (r *MCPServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
-	// Initialize conditions if empty
 	if len(mcpServer.Status.Conditions) == 0 {
 		if err := r.reconcileConditionsInitializing(ctx, &mcpServer); err != nil {
 			return ctrl.Result{}, err
 		}
-		// Return early to avoid double reconciliation, let the status update trigger next reconcile
 		return ctrl.Result{}, nil
 	}
 
