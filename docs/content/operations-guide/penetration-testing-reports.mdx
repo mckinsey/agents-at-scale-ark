@@ -86,7 +86,7 @@ Dashboard lacks protective HTTP headers.
 | Medium | 1 | Remediated |
 | Low | 5 | Open |
 
-##### M1. Potential clickjacking attack
+##### M1. Clickjacking Protection
 
 Dashboard and API lacked X-Frame-Options and Content-Security-Policy headers, allowing potential clickjacking attacks against admin functionality.
 
@@ -94,7 +94,7 @@ Dashboard and API lacked X-Frame-Options and Content-Security-Policy headers, al
 
 Confirmed remediated on March 31, 2026. Application now includes both X-Frame-Options and Content-Security-Policy headers.
 
-##### L1. [Kubernetes] Overly permissive RBAC roles
+##### L1. Overly Permissive RBAC Roles
 
 Service accounts had overly permissive privileges including wildcard verbs, secrets access, and pods/exec permissions across roles (all-access, argo-workflows-workflow-controller, ark-api-sa-role).
 
@@ -102,7 +102,7 @@ Service accounts had overly permissive privileges including wildcard verbs, secr
 
 RBAC roles require review following the principle of least privilege to mitigate privilege escalation risks.
 
-##### L2. [Kubernetes] Insecure container parameters
+##### L2. Container Security Hardening
 
 Containers missing security hardening: allowPrivilegeEscalation not set to false, no Linux hardening (AppArmor/SELinux/seccomp), processes running as root, and writable root filesystems.
 
@@ -110,7 +110,7 @@ Containers missing security hardening: allowPrivilegeEscalation not set to false
 
 Container security contexts require hardening per CIS Kubernetes and Docker benchmarks.
 
-##### L3. Security headers misconfiguration
+##### L3. Missing Security Headers
 
 Application responses missing X-Content-Type-Options, Content-Security-Policy, and Referrer-Policy headers.
 
@@ -118,7 +118,7 @@ Application responses missing X-Content-Type-Options, Content-Security-Policy, a
 
 Security headers need to be added to all responses returning HTML content.
 
-##### L4. Cipher suites without PFS are supported
+##### L4. TLS Version Control
 
 Server supported TLS cipher suites using RSA key exchange without Forward Secrecy (AES128-SHA, AES256-SHA, AES128-SHA256, AES256-SHA256).
 
@@ -126,7 +126,7 @@ Server supported TLS cipher suites using RSA key exchange without Forward Secrec
 
 Server should be configured to only permit cipher suites with perfect forward secrecy.
 
-##### L5. Ciphers suites with weak CBC mode are supported
+##### L5. Weak Cipher Suites
 
 Server supported cipher suites using CBC mode, vulnerable to padding oracle attacks (POODLE, Zombie POODLE, GOLDENDOODLE).
 
