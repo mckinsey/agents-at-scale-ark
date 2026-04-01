@@ -66,6 +66,7 @@ func DefaultQuery(query *arkv1alpha1.Query) {
 		userText = ""
 	}
 
+	query.Spec.Type = arkv1alpha1.QueryTypeUser
 	_ = query.Spec.SetInputString(userText)
 
 	if query.Annotations == nil {
