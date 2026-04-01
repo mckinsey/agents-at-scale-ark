@@ -46,6 +46,8 @@ function NamespaceProvider({ children }: PropsWithChildren) {
   const [isNamespaceResolved, setIsNamespaceResolved] = useState(false);
   const [readOnlyMode, setReadOnlyMode] = useState(true);
 
+  apiClient.setDefaultParam('namespace', namespaceFromQueryParams);
+
   const { data, isPending, error } = useGetContext();
 
   const createQueryString = useCallback(
@@ -76,10 +78,6 @@ function NamespaceProvider({ children }: PropsWithChildren) {
     },
     [mutate],
   );
-
-  useEffect(() => {
-    apiClient.setDefaultParam('namespace', namespaceFromQueryParams);
-  }, [namespaceFromQueryParams]);
 
   useEffect(() => {
     if (error) {
