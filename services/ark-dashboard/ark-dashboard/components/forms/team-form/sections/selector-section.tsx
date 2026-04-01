@@ -4,6 +4,7 @@ import type { UseFormReturn } from 'react-hook-form';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Collapsible,
   CollapsibleContent,
@@ -27,7 +28,11 @@ import { Textarea } from '@/components/ui/textarea';
 import type { Agent } from '@/lib/services';
 import { cn } from '@/lib/utils';
 
-import { DEFAULT_SELECTOR_PROMPT, type TeamFormValues } from '../use-team-form';
+import {
+  DEFAULT_SELECTOR_PROMPT,
+  DEFAULT_TERMINATE_PROMPT,
+  type TeamFormValues,
+} from '../use-team-form';
 
 interface SelectorSectionProps {
   form: UseFormReturn<TeamFormValues>;
@@ -196,6 +201,62 @@ export function SelectorSection({
               </FormItem>
             )}
           />
+          <FormField
+            control={form.control}
+            name="enableTerminateTool"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                <FormControl>
+                  <Checkbox
+                    checked={field.value ?? true}
+                    onCheckedChange={field.onChange}
+                    disabled={disabled}
+                  />
+                </FormControl>
+                <div className="space-y-1 leading-none">
+                  <FormLabel>Enable Terminate Tool</FormLabel>
+                  <p className="text-muted-foreground text-xs">
+                    Allow the selector agent to use the terminate tool to end
+                    the conversation early when appropriate.
+                  </p>
+                </div>
+              </FormItem>
+            )}
+          />
+          {form.watch('enableTerminateTool') && (
+            <FormField
+              control={form.control}
+              name="terminatePrompt"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Terminate Prompt</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Enter the terminate prompt..."
+                      disabled={disabled}
+                      className="min-h-[60px] resize-none"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      form.setValue('terminatePrompt', DEFAULT_TERMINATE_PROMPT, {
+                        shouldDirty: true,
+                      })
+                    }
+                    disabled={disabled}
+                    className="mt-2">
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Reset to Default Prompt
+                  </Button>
+                </FormItem>
+              )}
+            />
+          )}
         </CollapsibleContent>
       </Collapsible>
     </div>

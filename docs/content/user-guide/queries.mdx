@@ -5,7 +5,7 @@ description: Learn how to create and execute queries against agents and teams
 
 # Creating Queries
 
-Queries are how you interact with models, tools, agents and teams in ARK. A query sends input to any target, or set of targets, and receives a response. You can create queries using `kubectl`, the `fark` CLI, the ARK APIs or our OpenAI-compatible endpoints.
+Queries are how you interact with models, tools, agents and teams in Ark. A query sends input to any target, or set of targets, and receives a response. You can create queries using `kubectl`, the `fark` CLI, or the Ark Query API.
 
 ## What is a Query?
 
@@ -47,55 +47,25 @@ Check the result:
 kubectl get query query-simple -o yaml
 ```
 
-### Structured Conversations
+### Conversations
 
-The `messages` query type can be used to input a structured conversation (messages array):
+For multi-turn conversations, use `conversationId` to maintain context across queries. The memory service manages conversation history automatically.
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
-  name: conversation-messages
+  name: conversation-followup
   namespace: default
 spec:
-  type: messages
-  input:
-    - role: user
-      content: "Calculate 1+1."
-    - role: assistant
-      content: "2"
-    - role: user
-      content: "Calculate 2+2."
-    - role: assistant
-      content: "4"
-    - role: user
-      content: "What is the sum of all previous sums?"
+  input: "What is the sum of all previous sums?"
+  conversationId: "your-conversation-id-here"
   target:
     type: agent
     name: sample-agent
 ```
 
-Apply this query using kubectl:
-
-```bash
-# Create the 'sample agent' if you haven't already, then run the query.
-kubectl apply -f samples/agents/sample-agent.yaml
-kubectl apply -f samples/queries/query-conversation-messages.yaml
-```
-
-Check the result:
-
-```bash
-kubectl get query conversation-messages -o yaml
-```
-
-The `messages` input type allows you to build up conversation context, by adding the response of each query into an OpenAI message object array.
-
-Notes:
-
-- `type` is optional; if omitted, it defaults to `user` (string input).
-- For `type: messages`, `input` must be an array of objects with `role` and `content` fields.
-- Supported roles: `user`, `assistant`, `system`, and provider-specific roles.
+The `conversationId` is returned in `status.conversationId` after the first query completes. Pass it to subsequent queries to continue the conversation.
 
 ## Using fark CLI
 
@@ -123,34 +93,33 @@ Create a named query:
 fark query my-query
 ```
 
-## Using OpenAI-Compatible Endpoints
+## Using the Query API
 
-The OpenAI-compatible API lets you use familiar tools and libraries to interact with your agents and teams.
+The Query API lets you interact with agents, teams, models, and tools via HTTP.
 
-Explore the [Ark APIs](/reference/ark-apis) docs to see how to run the APIs in detail.
+Explore the [Ark APIs](/reference/ark-apis) docs for complete endpoint documentation.
 
 ### List Available Targets
-
-You can use the [OpenAI List Models API](https://platform.openai.com/docs/api-reference/models/list) to show all available query targets. This will show things like `tool/get_weater`, `model/claude-4-opus`, `agent/weather-reporter`, or `team/coding-team`.
 
 See all available agents, teams, models, and tools:
 
 ```bash
-curl http://ark-api.default.127.0.0.1.nip.io:8080/openai/v1/models
+curl http://ark-api.default.127.0.0.1.nip.io:8080/v1/agents/
+curl http://ark-api.default.127.0.0.1.nip.io:8080/v1/models/
+curl http://ark-api.default.127.0.0.1.nip.io:8080/v1/teams/
+curl http://ark-api.default.127.0.0.1.nip.io:8080/v1/tools/
 ```
 
-### Query a Agent
-
-Query a model, agent, team or tool using the exact same syntax that you would use to query an LLM with the OpenAI SDK:
+### Query an Agent
 
 ```bash
-curl -X POST http://ark-api.default.127.0.0.1.nip.io:8080/openai/v1/chat/completions \
+curl -X POST http://ark-api.default.127.0.0.1.nip.io:8080/v1/queries/ \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "agent/weather-agent",
-    "messages": [
-      {"role": "user", "content": "What'\''s the weather like in New York?"}
-    ]
+    "name": "weather-query",
+    "type": "user",
+    "input": "What'\''s the weather like in New York?",
+    "target": {"type": "agent", "name": "weather-agent"}
   }'
 ```
 
@@ -158,118 +127,65 @@ Response:
 
 ```json
 {
-  "id": "query-abc123",
-  "object": "chat.completion",
-  "model": "agent/weather-agent",
-  "choices": [
-    {
-      "message": {
-        "role": "assistant",
-        "content": "The current weather in New York is 72°F with partly cloudy skies..."
-      },
-      "finish_reason": "stop"
-    }
-  ],
-  "usage": {
-    "prompt_tokens": 12,
-    "completion_tokens": 25,
-    "total_tokens": 37
+  "metadata": {"name": "weather-query", "namespace": "default"},
+  "spec": {
+    "type": "user",
+    "input": "What's the weather like in New York?",
+    "target": {"type": "agent", "name": "weather-agent"}
+  },
+  "status": {
+    "phase": "done",
+    "response": {
+      "content": "The current weather in New York is 72°F with partly cloudy skies..."
+    },
+    "conversationId": "conv-abc123"
   }
 }
 ```
 
-### Using the OpenAI SDK
-
-As the ARK APIs offer OpenAI compatible APIs, you can use any OpenAI SDK to issue queries:
+### Querying with Python
 
 ```python
-from openai import OpenAI
+import requests
 
-client = OpenAI(
-    api_key="not-needed",
-    base_url="http://ark-api.default.127.0.0.1.nip.io:8080/openai/v1"
+response = requests.post(
+    "http://ark-api.default.127.0.0.1.nip.io:8080/v1/queries/",
+    json={
+        "name": "python-query",
+        "type": "user",
+        "input": "Find repositories about kubernetes",
+        "target": {"type": "agent", "name": "github-repo-accessor"},
+    }
 )
 
-response = client.chat.completions.create(
-    model="agent/github-repo-accessor",
-    messages=[
-        {"role": "user", "content": "Find repositories about kubernetes"}
-    ]
-)
-
-print(response.choices[0].message.content)
+query = response.json()
+print(query["status"]["response"]["content"])
 ```
 
 ### Query a Team
 
 ```bash
-curl -X POST http://ark-api.default.127.0.0.1.nip.io:8080/openai/v1/chat/completions \
+curl -X POST http://ark-api.default.127.0.0.1.nip.io:8080/v1/queries/ \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "team/team-seq",
-    "messages": [
-      {"role": "user", "content": "Analyze customer feedback and suggest improvements"}
-    ]
+    "name": "team-query",
+    "type": "user",
+    "input": "Analyze customer feedback and suggest improvements",
+    "target": {"type": "team", "name": "team-seq"}
   }'
-```
-
-Response:
-```json
-{
-  "id": "query-def456",
-  "object": "chat.completion", 
-  "model": "team/team-seq",
-  "choices": [
-    {
-      "message": {
-        "role": "assistant",
-        "content": "Based on the customer feedback analysis:\n1. Product quality is highly rated\n2. Shipping speed needs improvement\n3. Customer service response time should be reduced..."
-      },
-      "finish_reason": "stop"
-    }
-  ],
-  "usage": {
-    "prompt_tokens": 18,
-    "completion_tokens": 45,
-    "total_tokens": 63
-  }
-}
 ```
 
 ### Query a Tool
 
 ```bash
-curl -X POST http://ark-api.default.127.0.0.1.nip.io:8080/openai/v1/chat/completions \
+curl -X POST http://ark-api.default.127.0.0.1.nip.io:8080/v1/queries/ \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "tool/get_weather",
-    "messages": [
-      {"role": "user", "content": "{\"location\": \"New York\"}"}
-    ]
+    "name": "tool-query",
+    "type": "user",
+    "input": "{\"location\": \"New York\"}",
+    "target": {"type": "tool", "name": "get_weather"}
   }'
-```
-
-Response:
-```json
-{
-  "id": "query-ghi789",
-  "object": "chat.completion",
-  "model": "tool/get_weather",
-  "choices": [
-    {
-      "message": {
-        "role": "assistant",
-        "content": "{\"temperature\": 72, \"condition\": \"partly cloudy\"}"
-      },
-      "finish_reason": "stop"
-    }
-  ],
-  "usage": {
-    "prompt_tokens": 10,
-    "completion_tokens": 15,
-    "total_tokens": 25
-  }
-}
 ```
 
 ## Next Steps

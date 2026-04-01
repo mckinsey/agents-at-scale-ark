@@ -58,7 +58,6 @@
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
     "open": "^10.2.0",
-    "openai": "^5.19.1",
     "ora": "^8.2.0",
     "picomatch": "4.0.4",
     "react": "^19.1.5",
