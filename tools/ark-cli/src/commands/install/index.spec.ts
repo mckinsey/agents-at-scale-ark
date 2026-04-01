@@ -126,6 +126,31 @@ describe('install command', () => {
     );
   });
 
+  it('installs multiple services sequentially', async () => {
+    const mockServices = {
+      'ark-api': {
+        name: 'ark-api',
+        helmReleaseName: 'ark-api',
+        chartPath: './charts/ark-api',
+        namespace: 'ark-system',
+      },
+      'ark-dashboard': {
+        name: 'ark-dashboard',
+        helmReleaseName: 'ark-dashboard',
+        chartPath: './charts/ark-dashboard',
+        namespace: 'ark-system',
+      },
+    };
+    mockGetInstallableServices.mockReturnValue(mockServices);
+    mockExeca.mockResolvedValue({stdout: ''});
+
+    const command = createInstallCommand(mockConfig);
+    await command.parseAsync(['node', 'test', 'ark-api', 'ark-dashboard']);
+
+    expect(mockOutput.success).toHaveBeenCalledWith('ark-api installed successfully');
+    expect(mockOutput.success).toHaveBeenCalledWith('ark-dashboard installed successfully');
+  });
+
   it('shows error when service not found', async () => {
     mockGetInstallableServices.mockReturnValue({
       'ark-api': {name: 'ark-api'},

@@ -99,7 +99,7 @@ async function installService(service: ArkService, verbose: boolean = false) {
 
 export async function installArk(
   config: ArkConfig,
-  serviceName?: string,
+  serviceNames: string[] = [],
   options: {yes?: boolean; waitForReady?: string; verbose?: boolean} = {}
 ) {
   // Validate that --wait-for-ready requires -y
@@ -120,40 +120,66 @@ export async function installArk(
   output.success(`connected to cluster: ${chalk.bold(clusterInfo.context)}`);
   console.log(); // Add blank line after cluster info
 
-  // If a specific service is requested, install only that service
-  if (serviceName) {
-    // Check if it's a marketplace item
-    if (isMarketplaceService(serviceName)) {
-      const service = await getMarketplaceItem(serviceName);
+  // If specific services are requested, install only those services
+  if (serviceNames.length > 0) {
+    for (const serviceName of serviceNames) {
+      // Check if it's a marketplace item
+      if (isMarketplaceService(serviceName)) {
+        const service = await getMarketplaceItem(serviceName);
+
+        if (!service) {
+          output.error(`marketplace item '${serviceName}' not found`);
+          output.info('available marketplace items:');
+          const marketplaceServices = await getAllMarketplaceServices();
+          if (marketplaceServices) {
+            for (const name of Object.keys(marketplaceServices)) {
+              output.info(`  marketplace/services/${name}`);
+            }
+          }
+          const marketplaceAgents = await getAllMarketplaceAgents();
+          if (marketplaceAgents) {
+            for (const name of Object.keys(marketplaceAgents)) {
+              output.info(`  marketplace/agents/${name}`);
+            }
+          }
+          const marketplaceExecutors = await getAllMarketplaceExecutors();
+          if (marketplaceExecutors) {
+            for (const name of Object.keys(marketplaceExecutors)) {
+              output.info(`  marketplace/executors/${name}`);
+            }
+          }
+          if (!marketplaceServices && !marketplaceAgents && !marketplaceExecutors) {
+            output.warning('Marketplace unavailable');
+          }
+          process.exit(1);
+        }
+
+        output.info(`installing marketplace item ${service.name}...`);
+        try {
+          await installService(service, options.verbose);
+          output.success(`${service.name} installed successfully`);
+        } catch (error) {
+          output.error(`failed to install ${service.name}`);
+          console.error(error);
+          process.exit(1);
+        }
+        continue;
+      }
+
+      // Core ARK service
+      const services = getInstallableServices();
+      const service = Object.values(services).find((s) => s.name === serviceName);
 
       if (!service) {
-        output.error(`marketplace item '${serviceName}' not found`);
-        output.info('available marketplace items:');
-        const marketplaceServices = await getAllMarketplaceServices();
-        if (marketplaceServices) {
-          for (const name of Object.keys(marketplaceServices)) {
-            output.info(`  marketplace/services/${name}`);
-          }
-        }
-        const marketplaceAgents = await getAllMarketplaceAgents();
-        if (marketplaceAgents) {
-          for (const name of Object.keys(marketplaceAgents)) {
-            output.info(`  marketplace/agents/${name}`);
-          }
-        }
-        const marketplaceExecutors = await getAllMarketplaceExecutors();
-        if (marketplaceExecutors) {
-          for (const name of Object.keys(marketplaceExecutors)) {
-            output.info(`  marketplace/executors/${name}`);
-          }
-        }
-        if (!marketplaceServices && !marketplaceAgents && !marketplaceExecutors) {
-          output.warning('Marketplace unavailable');
+        output.error(`service '${serviceName}' not found`);
+        output.info('available services:');
+        for (const s of Object.values(services)) {
+          output.info(`  ${s.name}`);
         }
         process.exit(1);
       }
 
-      output.info(`installing marketplace item ${service.name}...`);
+      output.info(`installing ${service.name}...`);
       try {
         await installService(service, options.verbose);
         output.success(`${service.name} installed successfully`);
@@ -162,30 +188,6 @@ export async function installArk(
         console.error(error);
         process.exit(1);
       }
-      return;
-    }
-
-    // Core ARK service
-    const services = getInstallableServices();
-    const service = Object.values(services).find((s) => s.name === serviceName);
-
-    if (!service) {
-      output.error(`service '${serviceName}' not found`);
-      output.info('available services:');
-      for (const s of Object.values(services)) {
-        output.info(`  ${s.name}`);
-      }
-      process.exit(1);
-    }
-
-    output.info(`installing ${service.name}...`);
-    try {
-      await installService(service, options.verbose);
-      output.success(`${service.name} installed successfully`);
-    } catch (error) {
-      output.error(`failed to install ${service.name}`);
-      console.error(error);
-      process.exit(1);
     }
     return;
   }
@@ -398,7 +400,7 @@ export async function installArk(
   }
 
   // Show next steps after successful installation
-  if (!serviceName || serviceName === 'all') {
+  if (serviceNames.length === 0) {
     printNextSteps();
   }
 
@@ -464,15 +466,15 @@ export function createInstallCommand(config: ArkConfig) {
 
   command
     .description('Install ARK components using Helm')
-    .argument('[service]', 'specific service to install, or all if omitted')
+    .argument('[service...]', 'specific services to install, or all if omitted')
     .option('-y, --yes', 'automatically confirm all installations')
     .option(
       '--wait-for-ready <timeout>',
       'wait for Ark to be ready after installation (e.g., 30s, 2m)'
     )
     .option('-v, --verbose', 'show commands being executed')
-    .action(async (service, options) => {
-      await installArk(config, service, options);
+    .action(async (services, options) => {
+      await installArk(config, services, options);
     });
 
   return command;
