@@ -3,11 +3,10 @@ import asyncio
 import io
 import json
 import os
-import tempfile
 import unittest
 import zipfile
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, Mock, mock_open, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 from fastapi.testclient import TestClient
 from kubernetes.client.rest import ApiException
@@ -18,7 +17,6 @@ import ark_api.api.v1.export as export_module
 from ark_api.main import app
 from ark_api.api.v1.export import (
     _collect_workflows,
-    _get_current_namespace,
     collect_resources,
     get_export_history,
     update_export_history,
@@ -325,41 +323,6 @@ class TestCollectResources(unittest.TestCase):
         self.assertEqual(len(result), 3)
 
 
-class TestGetCurrentNamespace(unittest.TestCase):
-    """Tests for the _get_current_namespace helper introduced to fix the
-    hardcoded ark-system namespace bug."""
-
-    def test_reads_namespace_from_token_file(self):
-        """Namespace is read from the service account token file when present."""
-        with patch('builtins.open', mock_open(read_data='my-namespace')):
-            result = _get_current_namespace()
-        self.assertEqual(result, 'my-namespace')
-
-    def test_strips_whitespace_from_namespace(self):
-        """Trailing newline and whitespace are stripped from the token file value."""
-        with patch('builtins.open', mock_open(read_data='  my-namespace\n')):
-            result = _get_current_namespace()
-        self.assertEqual(result, 'my-namespace')
-
-    def test_falls_back_to_default_when_file_missing(self):
-        """Returns 'default' when the service account token file does not exist."""
-        with patch('builtins.open', side_effect=FileNotFoundError()):
-            result = _get_current_namespace()
-        self.assertEqual(result, 'default')
-
-    def test_falls_back_to_default_on_any_read_error(self):
-        """Returns 'default' for any I/O error, not just missing files."""
-        with patch('builtins.open', side_effect=PermissionError()):
-            result = _get_current_namespace()
-        self.assertEqual(result, 'default')
-
-    def test_uses_token_file_namespace_not_ark_system(self):
-        """Namespace is never hardcoded to ark-system."""
-        with patch('builtins.open', mock_open(read_data='operator-namespace')):
-            result = _get_current_namespace()
-        self.assertNotEqual(result, 'ark-system')
-        self.assertEqual(result, 'operator-namespace')
-
 
 class TestExportHistoryNamespace(unittest.TestCase):
     """Tests that export history ConfigMap operations use the namespace from
@@ -442,40 +405,40 @@ class TestCollectWorkflowsNamespace(unittest.TestCase):
     """Tests that _collect_workflows resolves namespace from the token file
     when no namespace is explicitly provided."""
 
-    @patch('ark_api.api.v1.export._get_current_namespace')
+    @patch('ark_api.api.v1.export.get_current_context')
     @patch('ark_api.api.v1.export.CustomObjectsApi')
-    def test_uses_token_namespace_when_none_provided(self, mock_api_cls, mock_get_ns):
-        """When namespace is None, _collect_workflows reads from the token file."""
-        mock_get_ns.return_value = 'token-namespace'
+    def test_uses_token_namespace_when_none_provided(self, mock_api_cls, mock_get_ctx):
+        """When namespace is None, _collect_workflows reads from the current context."""
+        mock_get_ctx.return_value = {'namespace': 'token-namespace'}
         mock_api = MagicMock()
         mock_api_cls.return_value = mock_api
         mock_api.list_namespaced_custom_object.return_value = {'items': []}
 
         asyncio.run(_collect_workflows(namespace=None, resource_ids=None))
 
-        mock_get_ns.assert_called_once()
+        mock_get_ctx.assert_called_once()
         call_kwargs = mock_api.list_namespaced_custom_object.call_args.kwargs
         self.assertEqual(call_kwargs['namespace'], 'token-namespace')
 
-    @patch('ark_api.api.v1.export._get_current_namespace')
+    @patch('ark_api.api.v1.export.get_current_context')
     @patch('ark_api.api.v1.export.CustomObjectsApi')
-    def test_uses_provided_namespace_without_calling_token_helper(self, mock_api_cls, mock_get_ns):
-        """When namespace is supplied, _collect_workflows does not read the token file."""
+    def test_uses_provided_namespace_without_calling_token_helper(self, mock_api_cls, mock_get_ctx):
+        """When namespace is supplied, _collect_workflows does not call get_current_context."""
         mock_api = MagicMock()
         mock_api_cls.return_value = mock_api
         mock_api.list_namespaced_custom_object.return_value = {'items': []}
 
         asyncio.run(_collect_workflows(namespace='explicit-ns', resource_ids=None))
 
-        mock_get_ns.assert_not_called()
+        mock_get_ctx.assert_not_called()
         call_kwargs = mock_api.list_namespaced_custom_object.call_args.kwargs
         self.assertEqual(call_kwargs['namespace'], 'explicit-ns')
 
-    @patch('ark_api.api.v1.export._get_current_namespace')
+    @patch('ark_api.api.v1.export.get_current_context')
     @patch('ark_api.api.v1.export.CustomObjectsApi')
-    def test_never_uses_ark_system_namespace(self, mock_api_cls, mock_get_ns):
+    def test_never_uses_ark_system_namespace(self, mock_api_cls, mock_get_ctx):
         """The old hardcoded ark-system namespace is never used."""
-        mock_get_ns.return_value = 'default'
+        mock_get_ctx.return_value = {'namespace': 'default'}
         mock_api = MagicMock()
         mock_api_cls.return_value = mock_api
         mock_api.list_namespaced_custom_object.return_value = {'items': []}
