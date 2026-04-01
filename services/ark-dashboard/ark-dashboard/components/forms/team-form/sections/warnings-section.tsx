@@ -26,7 +26,7 @@ export function WarningsSection({
     <Alert variant="warning">
       <AlertCircle className="h-4 w-4" />
       <AlertDescription>
-        The terminate tool is disabled. The team may not be able to end the conversation gracefully.
+        Neither the agents nor the selector have access to the terminate tool, which may prevent the conversation from terminating gracefully. Enable the terminate tool for the selector, or give one or more agents in the team access to the terminate tool.
       </AlertDescription>
     </Alert>
   );

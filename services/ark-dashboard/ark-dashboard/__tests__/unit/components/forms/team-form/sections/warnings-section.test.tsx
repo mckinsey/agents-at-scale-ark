@@ -62,7 +62,7 @@ describe('WarningsSection', () => {
       />,
     );
     expect(
-      screen.getByText(/The terminate tool is disabled/),
+      screen.getByText(/Neither the agents nor the selector have access to the terminate tool/),
     ).toBeInTheDocument();
   });
 
