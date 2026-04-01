@@ -69,21 +69,6 @@ export function GraphSection({
         .filter(m => !graphEdges.some(e => e.from === m.name))
     : [];
 
-  const selectorAgent = form.watch('selectorAgent');
-
-  const unreachableAgents = (() => {
-    if (selectedStrategy !== 'selector' || graphEdges.length === 0 || selectedMembers.length === 0 || !selectorAgent) return [];
-    const reachable = new Set<string>();
-    const queue = [selectorAgent];
-    while (queue.length) {
-      const current = queue.shift()!;
-      if (reachable.has(current)) continue;
-      reachable.add(current);
-      graphEdges.filter(e => e.from === current).forEach(e => queue.push(e.to));
-    }
-    return selectedMembers.filter(m => m.type === 'agent' && !reachable.has(m.name));
-  })();
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -105,16 +90,6 @@ export function GraphSection({
           Add Edge
         </Button>
       </div>
-
-      {unreachableAgents.length > 0 && (
-        <Alert variant="warning">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            The following agents are not reachable from the starting agent:{' '}
-            {unreachableAgents.map(m => m.name).join(', ')}
-          </AlertDescription>
-        </Alert>
-      )}
 
       {agentsWithNoOutgoing.length > 0 && (
         <Alert variant="warning">

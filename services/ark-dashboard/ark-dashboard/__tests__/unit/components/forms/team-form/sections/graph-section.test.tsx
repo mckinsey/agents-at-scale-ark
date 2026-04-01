@@ -13,6 +13,7 @@ const schema = z.object({
   name: z.string(),
   description: z.string().optional(),
   strategy: z.string(),
+  loops: z.boolean(),
   maxTurns: z.string().optional(),
   selectorAgent: z.string().optional(),
   selectorPrompt: z.string().optional(),
@@ -44,6 +45,7 @@ function Wrapper({
       name: '',
       description: '',
       strategy,
+      loops: false,
       maxTurns: '',
       selectorAgent,
       selectorPrompt: '',
@@ -146,33 +148,6 @@ describe('GraphSection', () => {
     ).toBeInTheDocument();
   });
 
-  it('should show unreachable agents warning for selector strategy', () => {
-    render(
-      <Wrapper
-        strategy="selector"
-        graphEdges={[{ from: 'agent-1', to: 'agent-2' }]}
-        selectorAgent="agent-1"
-      />,
-    );
-    expect(
-      screen.queryByText(/not reachable from the starting agent/),
-    ).not.toBeInTheDocument();
-  });
-
-  it('should show unreachable agents warning when agent is not reachable', () => {
-    render(
-      <Wrapper
-        strategy="selector"
-        graphEdges={[{ from: 'agent-1', to: 'agent-1' }]}
-        selectorAgent="agent-1"
-      />,
-    );
-    expect(
-      screen.getByText(/not reachable from the starting agent/),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/not reachable from the starting agent/)).toHaveTextContent('agent-2');
-  });
-
   it('should show no-outgoing-edges warning for selector strategy with edges', () => {
     render(
       <Wrapper
@@ -213,16 +188,4 @@ describe('GraphSection', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('should not show unreachable warning when no selectorAgent is set', () => {
-    render(
-      <Wrapper
-        strategy="selector"
-        graphEdges={[{ from: 'agent-1', to: 'agent-2' }]}
-        selectorAgent=""
-      />,
-    );
-    expect(
-      screen.queryByText(/not reachable from the starting agent/),
-    ).not.toBeInTheDocument();
-  });
 });
