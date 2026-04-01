@@ -30,6 +30,26 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
+      path: /mutate-ark-mckinsey-com-v1alpha1-query
+  failurePolicy: Fail
+  name: mquery-v1.kb.io
+  rules:
+  - apiGroups:
+    - ark.mckinsey.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - queries
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
       path: /mutate-ark-mckinsey-com-v1alpha1-team
   failurePolicy: Fail
   name: mteam-v1.kb.io

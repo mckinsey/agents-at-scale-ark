@@ -12,6 +12,27 @@ Ark uses [Semantic Versioning](https://semver.org/). The technical details are i
 
 A detailed record of every change is documented in [`CHANGELOG.md`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.github/CHANGELOG.md).
 
+## Unreleased
+
+### OpenAI-Compatible Endpoints Removed
+
+The `/openai/v1/chat/completions` and `/openai/v1/models` endpoints have been removed from the ark-api service. Use the Query API (`/v1/queries/`) instead.
+
+**Migration:**
+- Replace `POST /openai/v1/chat/completions` with `POST /v1/queries/` using `type: "user"` and string `input`
+- Replace `GET /openai/v1/models` with `GET /v1/agents/`, `GET /v1/models/`, etc.
+- For streaming, create a query with the `ark.mckinsey.com/streaming-enabled: "true"` annotation and consume SSE from `/v1/broker/chunks?watch=true&query-id={name}`
+- OpenAI SDK wrappers (Python/JS) are no longer supported; use direct HTTP calls to the query API
+
+### Query Type "messages" Removed
+
+The `type: "messages"` input mode has been removed from the Query CRD. Queries now only accept `type: "user"` with string input.
+
+**Migration:**
+- Use `conversationId` for multi-turn conversations instead of embedding full message history in the query
+- The memory service manages conversation history; the executor retrieves it via `conversationId`
+- During the deprecation period, a mutating webhook automatically converts `type: "messages"` queries to `type: "user"` with a warning
+
 ## v0.2.0
 
 ### Evaluations Moved to Marketplace

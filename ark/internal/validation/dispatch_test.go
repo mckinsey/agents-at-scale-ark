@@ -131,6 +131,34 @@ func TestDispatchApplyDefaults(t *testing.T) {
 		}
 	})
 
+	t.Run("query messages type is migrated", func(t *testing.T) {
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "q"},
+			Spec: arkv1alpha1.QuerySpec{
+				Type: "messages",
+			},
+		}
+		_ = query.Spec.Input.UnmarshalJSON([]byte(`[{"role":"user","content":"hi"}]`))
+		ApplyDefaults(query)
+		text, _ := query.Spec.GetInputString()
+		if text != "hi" {
+			t.Fatalf("expected 'hi', got '%s'", text)
+		}
+	})
+
+	t.Run("team round-robin is migrated", func(t *testing.T) {
+		team := &arkv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{Name: "t"},
+			Spec: arkv1alpha1.TeamSpec{
+				Strategy: "round-robin",
+			},
+		}
+		ApplyDefaults(team)
+		if team.Spec.Strategy != "sequential" {
+			t.Fatalf("expected 'sequential', got '%s'", team.Spec.Strategy)
+		}
+	})
+
 	t.Run("non-defaultable type is noop", func(t *testing.T) {
 		ApplyDefaults(&corev1.ConfigMap{})
 	})
