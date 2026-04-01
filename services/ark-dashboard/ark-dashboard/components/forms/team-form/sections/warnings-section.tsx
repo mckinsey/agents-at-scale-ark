@@ -1,15 +1,17 @@
 import { AlertCircle } from 'lucide-react';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import type { TeamMember } from '@/lib/services';
+import type { Agent, TeamMember } from '@/lib/services';
 
 interface WarningsSectionProps {
+  agents: Agent[];
   selectedMembers: TeamMember[];
   strategy: string;
   enableTerminateTool?: boolean;
 }
 
 export function WarningsSection({
+  agents,
   selectedMembers,
   strategy,
   enableTerminateTool,
@@ -18,7 +20,12 @@ export function WarningsSection({
     return null;
   }
 
-  if (enableTerminateTool !== false) {
+  const anyMemberHasTerminateTool = selectedMembers.some(member => {
+    const agent = agents.find(a => a.name === member.name);
+    return agent?.tools?.some(tool => tool.name === 'terminate');
+  });
+
+  if (enableTerminateTool !== false || anyMemberHasTerminateTool) {
     return null;
   }
 
