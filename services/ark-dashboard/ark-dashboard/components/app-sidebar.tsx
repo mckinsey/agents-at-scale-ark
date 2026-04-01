@@ -7,8 +7,6 @@ import {
   Bot,
   ChevronsLeft,
   ChevronsRight,
-  Check,
-  ChevronsUpDown,
   ChevronsUpDownIcon,
   Cog,
   Download,
@@ -19,7 +17,6 @@ import {
   LogOut,
   Moon,
   MoreHorizontal,
-  Plus,
   Server,
   Settings,
   Store,
@@ -29,7 +26,7 @@ import {
   Zap,
 } from 'lucide-react';
 import Image from 'next/image';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import {
@@ -71,7 +68,6 @@ import {
 } from '@/components/ui/sidebar';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { signout } from '@/lib/auth/signout';
-import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import {
   AGENT_BUILDER_SECTIONS,
   type DashboardSection,
@@ -153,7 +149,7 @@ function CollapsibleSection({
 }
 
 export function AppSidebar() {
-  const { push } = useNamespacedNavigation();
+  const router = useRouter();
   const pathname = usePathname();
   const { user } = useUser();
   const { state: sidebarState, setOpen: setSidebarOpen } = useSidebar();
@@ -171,7 +167,6 @@ export function AppSidebar() {
 
   const {
     availableNamespaces,
-    capabilities,
     createNamespace,
     isPending,
     namespace,
@@ -227,8 +222,7 @@ export function AppSidebar() {
         fromSection: pathname.split('/')[1],
       },
     });
-    const path = sectionKey ? `/${sectionKey}` : '/';
-    push(path);
+    router.push(`/${sectionKey}`);
   };
 
   const getCurrentSection = () => pathname.split('/')[1];
@@ -246,74 +240,35 @@ export function AppSidebar() {
         <SidebarHeader>
           <SidebarMenu>
             <SidebarMenuItem>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <SidebarMenuButton
-                    data-testid="namespace-dropdown-trigger"
-                    size="lg"
-                    disabled={availableNamespaces.length <= 1}
-                    className="!p-0 group-data-[collapsible=icon]:!h-12">
-                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
-                      <Image
-                        src={
-                          isExperimentalDarkModeEnabled
-                            ? qbLogoDark
-                            : qbLogoLight
-                        }
-                        alt="QB Logo"
-                        width={32}
-                        height={28}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-0.5 leading-none">
-                      <span className="text-sidebar-accent-foreground font-medium">
-                        ARK Dashboard
-                      </span>
-                      <span className="text-xs">
-                        {isPending
-                          ? 'Loading...'
-                          : availableNamespaces.length === 0
-                            ? 'No namespaces'
-                            : namespace}
-                      </span>
-                    </div>
-                    {availableNamespaces.length === 0 && !loading ? (
-                      <AlertCircle className="h-4 w-4 text-red-500" />
-                    ) : (
-                      availableNamespaces.length > 1 && (
-                        <ChevronsUpDown className="ml-auto h-4 w-4" />
-                      )
-                    )}
-                  </SidebarMenuButton>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="start"
-                  className="w-[--radix-popper-anchor-width]">
-                  <DropdownMenuLabel>Namespaces</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {availableNamespaces.map(ns => (
-                    <DropdownMenuItem
-                      key={ns.name}
-                      onClick={() => setNamespace(ns.name)}>
-                      <Check
-                        className={`mr-2 h-4 w-4 ${ns.name === namespace ? 'opacity-100' : 'opacity-0'}`}
-                      />
-                      {ns.name}
-                    </DropdownMenuItem>
-                  ))}
-                  {capabilities?.can_create_namespace && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        data-testid="create-namespace-option"
-                        onClick={() => setNamespaceEditorOpen(true)}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Create Namespace
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <SidebarMenuButton
+                size="lg"
+                className="!p-0 group-data-[collapsible=icon]:!h-12">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
+                  <Image
+                    src={
+                      isExperimentalDarkModeEnabled ? qbLogoDark : qbLogoLight
+                    }
+                    alt="QB Logo"
+                    width={32}
+                    height={28}
+                  />
+                </div>
+                <div className="flex flex-col gap-0.5 leading-none">
+                  <span className="text-sidebar-accent-foreground font-medium">
+                    ARK Dashboard
+                  </span>
+                  <span className="text-xs">
+                    {isPending
+                      ? 'Loading...'
+                      : availableNamespaces.length === 0
+                        ? 'No namespaces'
+                        : namespace}
+                  </span>
+                </div>
+                {availableNamespaces.length === 0 && !loading && (
+                  <AlertCircle className="h-4 w-4 text-red-500" />
+                )}
+              </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>
