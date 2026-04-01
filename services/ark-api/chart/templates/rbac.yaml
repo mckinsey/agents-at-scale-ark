@@ -20,24 +20,31 @@ metadata:
     {{- toYaml . | nindent 4 }}
     {{- end }}
 rules:
+  # Core resources for Helm releases and events
   - apiGroups: [""]
     resources: ["secrets", "events"]
     verbs: ["get", "list", "create", "update", "patch", "delete"]
+  # Permission to read configmaps to load ark-config-streaming configuration
   - apiGroups: [""]
     resources: ["configmaps"]
     verbs: ["get", "list"]
+  # Permission to read services to get the address of the configured streaming service
   - apiGroups: [""]
     resources: ["services"]
     verbs: ["get", "list"]
+  # Permission to read pods and pod logs for workflow log fetching
   - apiGroups: [""]
     resources: ["pods", "pods/log"]
     verbs: ["get", "list"]
+  # Gateway API resources
   - apiGroups: ["gateway.networking.k8s.io"]
     resources: ["httproutes", "gateways"]
     verbs: ["get", "list"]
+  # Ark resources
   - apiGroups: ["ark.mckinsey.com"]
     resources: ["models", "agents", "queries", "teams", "tools", "workflows", "arktemplates", "mcpservers", "a2aservers", "memories", "a2atasks", "executionengines"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Argo Workflows resources
   - apiGroups: ["argoproj.io"]
     resources: ["workflows", "workflowtemplates", "cronworkflows", "clusterworkflowtemplates"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

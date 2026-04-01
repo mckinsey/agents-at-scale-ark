@@ -54,6 +54,7 @@ class ToolSpec(BaseModel):
 
 class ToolCreateRequest(BaseModel):
     name: str
+    namespace: str
     labels: Optional[Dict[str, str]] = None
     annotations: Optional[Dict[str, str]] = None
     spec: ToolSpec

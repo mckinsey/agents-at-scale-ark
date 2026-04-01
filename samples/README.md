@@ -24,8 +24,7 @@ samples/
 ├── queries/           # 🎯 Query patterns and targeting
 ├── memory/            # 🧠 Memory and conversation persistence
 ├── models/            # 🧠 Model configurations (LLMs)
-├── mcp/               # 🔌 Model Context Protocol integrations
-└── tenant-management/ # 🔒 RBAC manifests for multi-tenant namespace access
+└── mcp/               # 🔌 Model Context Protocol integrations
 ```
 
 ## Sample Categories
@@ -208,28 +207,6 @@ File system operations via MCP.
 - **MCPServer**: File system server
 - **Agent**: File system assistant
 - **Use case**: File operations
-
-### 🔒 Tenant Management
-
-#### `tenant-management/01-namespace-reader.yaml` - Namespace Discovery
-Grants read-only access to list all namespaces. Enables the dashboard namespace dropdown.
-- **Resources**: ClusterRole + ClusterRoleBinding
-- **Use case**: Namespace discovery without resource access
-
-#### `tenant-management/02-specific-namespaces.yaml` - Named Namespace Access
-Grants Ark resource access in explicitly named namespaces via RoleBindings.
-- **Resources**: RoleBinding per target namespace
-- **Use case**: Cross-namespace access to a known set of namespaces
-
-#### `tenant-management/03-namespace-label-selector.yaml` - Label-Based Access
-Convention for labelling namespaces with `ark.mckinsey.com/tenant` and creating RoleBindings per label.
-- **Resources**: Namespace labels + RoleBinding per labelled namespace
-- **Use case**: Dynamic namespace grouping by convention
-
-#### `tenant-management/04-full-admin.yaml` - Full Cluster Admin
-Full cluster-wide Ark access including namespace creation. Platform admins only.
-- **Resources**: ClusterRole + ClusterRoleBinding for namespaces and all Ark resources
-- **Use case**: Platform administration
 
 ### 🧠 Model Configuration
 

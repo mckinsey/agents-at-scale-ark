@@ -15,13 +15,11 @@ import { toast } from 'sonner';
 import type { Namespace } from '@/lib/services';
 import {
   useCreateNamespace,
-  useGetAllNamespaces,
   useGetContext,
 } from '@/lib/services/namespaces-hooks';
 
 interface NamespaceContext {
   availableNamespaces: Namespace[];
-  capabilities: { can_create_namespace: boolean };
   createNamespace: (name: string) => void;
   isPending: boolean;
   namespace: string;
@@ -38,27 +36,22 @@ function NamespaceProvider({ children }: PropsWithChildren) {
   const searchParams = useSearchParams();
   const namespaceFromQueryParams = searchParams.get('namespace') || 'default';
 
+  const [availableNamespaces] = useState<Namespace[]>([
+    {
+      name: namespaceFromQueryParams,
+      id: 0,
+    },
+  ]);
   const [isNamespaceResolved, setIsNamespaceResolved] = useState(false);
   const [readOnlyMode, setReadOnlyMode] = useState(true);
-  const [capabilities, setCapabilities] = useState<{
-    can_create_namespace: boolean;
-  }>({ can_create_namespace: false });
 
-  const { data, isPending, error } = useGetContext(namespaceFromQueryParams);
-  const {
-    data: namespacesData,
-    isPending: isNamespacesPending,
-    error: namespacesError,
-  } = useGetAllNamespaces();
-
-  const availableNamespaces = useMemo<Namespace[]>(() => {
-    return namespacesData || [];
-  }, [namespacesData]);
+  const { data, isPending, error } = useGetContext();
 
   const createQueryString = useCallback(
     (name: string, value: string) => {
       const params = new URLSearchParams(searchParams.toString());
       params.set(name, value);
+
       return params.toString();
     },
     [searchParams],
@@ -84,17 +77,6 @@ function NamespaceProvider({ children }: PropsWithChildren) {
   );
 
   useEffect(() => {
-    if (namespacesError) {
-      toast.error('Failed to load namespaces', {
-        description:
-          namespacesError instanceof Error
-            ? namespacesError.message
-            : 'An unexpected error occurred',
-      });
-    }
-  }, [namespacesError]);
-
-  useEffect(() => {
     if (error) {
       toast.error('Failed to get namespace', {
         description:
@@ -114,31 +96,6 @@ function NamespaceProvider({ children }: PropsWithChildren) {
   }, [data, isPending]);
 
   useEffect(() => {
-    if (
-      !isNamespacesPending &&
-      namespacesData &&
-      namespaceFromQueryParams !== 'default'
-    ) {
-      const namespaceExists = namespacesData.some(
-        ns => ns.name === namespaceFromQueryParams,
-      );
-
-      if (!namespaceExists) {
-        toast.error(`Namespace does not exist`, {
-          description: `The namespace "${namespaceFromQueryParams}" does not exist. Redirecting to default namespace.`,
-        });
-        setNamespace('default');
-        return;
-      }
-    }
-  }, [
-    isNamespacesPending,
-    namespacesData,
-    namespaceFromQueryParams,
-    setNamespace,
-  ]);
-
-  useEffect(() => {
     if (data) {
       if (data.namespace !== namespaceFromQueryParams) {
         setNamespace(data.namespace);
@@ -147,9 +104,6 @@ function NamespaceProvider({ children }: PropsWithChildren) {
       }
       const newReadOnlyMode = data.read_only_mode ?? false;
       setReadOnlyMode(newReadOnlyMode);
-      if (data.capabilities) {
-        setCapabilities(data.capabilities);
-      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, namespaceFromQueryParams]);
@@ -157,9 +111,8 @@ function NamespaceProvider({ children }: PropsWithChildren) {
   const context = useMemo<NamespaceContext>(
     () => ({
       availableNamespaces,
-      capabilities,
       createNamespace,
-      isPending: isPending || isNamespacesPending,
+      isPending,
       namespace: namespaceFromQueryParams,
       isNamespaceResolved: isNamespaceResolved,
       setNamespace,
@@ -167,10 +120,8 @@ function NamespaceProvider({ children }: PropsWithChildren) {
     }),
     [
       availableNamespaces,
-      capabilities,
       createNamespace,
       isPending,
-      isNamespacesPending,
       namespaceFromQueryParams,
       isNamespaceResolved,
       setNamespace,

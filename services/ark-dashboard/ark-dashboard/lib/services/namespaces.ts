@@ -1,5 +1,5 @@
 import { trackEvent } from '@/lib/analytics/singleton';
-import { apiClient, withNamespace } from '@/lib/api/client';
+import { apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
 // Use the generated type from OpenAPI
@@ -23,12 +23,17 @@ export const namespacesService = {
     }));
   },
 
-  async getContext(
-    namespace?: string,
-  ): Promise<components['schemas']['ContextResponse']> {
-    const response = await apiClient.get<
-      components['schemas']['ContextResponse']
-    >('/api/v1/context', withNamespace(namespace));
+  // Get current Kubernetes context
+  async getContext(): Promise<{
+    namespace: string;
+    cluster: string | null;
+    read_only_mode: boolean;
+  }> {
+    const response = await apiClient.get<{
+      namespace: string;
+      cluster: string | null;
+      read_only_mode: boolean;
+    }>('/api/v1/context');
     return response;
   },
 
