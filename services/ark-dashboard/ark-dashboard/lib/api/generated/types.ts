@@ -4092,8 +4092,12 @@ export interface components {
         Selector: {
             /** Agent */
             agent?: string | null;
+            /** Enableterminatetool */
+            enableTerminateTool?: boolean | null;
             /** Selectorprompt */
             selectorPrompt?: string | null;
+            /** Terminateprompt */
+            terminatePrompt?: string | null;
         };
         /**
          * ServiceListResponse
