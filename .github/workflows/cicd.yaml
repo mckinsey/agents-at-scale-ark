@@ -40,7 +40,7 @@ jobs:
       ci-cache-registry-hostname: ${{ steps.setup-registry.outputs.ci-cache-registry-hostname }}
       is-fork-pr: ${{ steps.setup-registry.outputs.is-fork-pr }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - id: setup-registry
         uses: ./.github/actions/setup-container-cache-registry
@@ -59,7 +59,7 @@ jobs:
       XRAY_WATCH_NAME: 'ark-20863-security-watch'
       SCAN_JSON: "xray-scan-agents-at-scale-${{ github.run_number }}.json"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Run JFrog Xray scan
         id: xray-scan
@@ -147,7 +147,7 @@ jobs:
   build-and-test-ark:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25.8"
@@ -188,7 +188,7 @@ jobs:
   build-and-test-services:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: actions/setup-go@v5
         with:
@@ -269,7 +269,7 @@ jobs:
             prebuild: "make ark-cli-build && cp -r tools ark images/ark-tools/"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download library artifacts
         uses: actions/download-artifact@v4
@@ -317,7 +317,7 @@ jobs:
           - ark-cli
           - ark-tools
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Login to Docker Registry
         uses: docker/login-action@v3
@@ -337,7 +337,7 @@ jobs:
   build-libs:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
@@ -360,7 +360,7 @@ jobs:
     if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/test-ark-cli
         with:
@@ -380,7 +380,7 @@ jobs:
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-e2e
         with:
@@ -525,7 +525,7 @@ jobs:
       matrix:
         storage-backend: [etcd, postgresql]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-e2e
         with:
@@ -587,7 +587,7 @@ jobs:
       matrix:
         storage-backend: [etcd, postgresql]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-e2e
         with:
@@ -653,7 +653,7 @@ jobs:
     runs-on: ubuntu-24.04
     if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-e2e
         with:
@@ -819,7 +819,7 @@ jobs:
     runs-on: ubuntu-24.04
     if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-e2e
         with:
@@ -922,7 +922,7 @@ jobs:
           - { name: ark-tenant, path: charts/ark-tenant }
           - { name: argo-workflows, path: services/argo-workflows/chart }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Helm
         uses: azure/setup-helm@v4
@@ -946,7 +946,7 @@ jobs:
   build-docs:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -979,7 +979,7 @@ jobs:
   build-ark-cli:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -1042,7 +1042,7 @@ jobs:
       ]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Go for coverage tools
         uses: actions/setup-go@v5
@@ -1155,7 +1155,7 @@ jobs:
     runs-on: ubuntu-24.04
     if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Download library artifacts
         uses: actions/download-artifact@v4
@@ -1200,7 +1200,7 @@ jobs:
           - ark-tenant
           - argo-workflows
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download ${{ matrix.chart }} artifact
         uses: actions/download-artifact@v4
@@ -1220,7 +1220,7 @@ jobs:
     runs-on: ubuntu-24.04
     if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download ark-cli artifact
         uses: actions/download-artifact@v4
@@ -1254,7 +1254,7 @@ jobs:
     runs-on: ubuntu-24.04
     if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Needed for goreleaser changelog
 
@@ -1297,7 +1297,7 @@ jobs:
     runs-on: ubuntu-24.04
     if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Trigger Deploy workflow for release
         run: |
@@ -1317,7 +1317,7 @@ jobs:
     runs-on: ubuntu-24.04
     if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-k3s
         with:
