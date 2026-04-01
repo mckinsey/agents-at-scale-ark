@@ -13,6 +13,7 @@ vi.mock('@/lib/services/chat', () => ({
     streamChatResponse: vi.fn(),
     submitChatQuery: vi.fn(),
     getQueryResult: vi.fn(),
+    getQuery: vi.fn().mockResolvedValue({ status: { conversationId: '' } }),
   },
 }));
 
