@@ -37,7 +37,7 @@ export function GraphSection({
 }: Readonly<GraphSectionProps>) {
   const selectedStrategy = form.watch('strategy');
 
-  if (selectedStrategy !== 'graph' && selectedStrategy !== 'selector') {
+  if (selectedStrategy !== 'selector') {
     return null;
   }
 
@@ -75,10 +75,7 @@ export function GraphSection({
         <div className="flex items-center gap-2">
           <Network className="text-muted-foreground h-4 w-4" />
           <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-            Graph Edges{' '}
-            {selectedStrategy === 'graph' && (
-              <span className="text-red-500">*</span>
-            )}
+            Graph Edges
           </h3>
         </div>
         <Button
@@ -141,20 +138,13 @@ export function GraphSection({
                       )}
                       {selectedMembers
                         .filter(m => m.type === 'agent')
-                        .map(member => {
-                          const isDisabled =
-                            selectedStrategy === 'graph' &&
-                            usedFromAgents.has(member.name) &&
-                            edge.from !== member.name;
-                          return (
-                            <SelectItem
-                              key={member.name}
-                              value={member.name}
-                              disabled={isDisabled}>
-                              {member.name}
-                            </SelectItem>
-                          );
-                        })}
+                        .map(member => (
+                          <SelectItem
+                            key={member.name}
+                            value={member.name}>
+                            {member.name}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                   <span className="text-muted-foreground">→</span>
@@ -202,16 +192,7 @@ export function GraphSection({
       </div>
 
       <p className="text-muted-foreground text-xs">
-        {selectedStrategy === 'graph' ? (
-          <>
-            Define the flow between agents. Each agent can have at most one
-            outgoing edge.
-          </>
-        ) : (
-          <>
-            Define graph constraints to limit AI selection to valid transitions.
-          </>
-        )}
+        Define graph constraints to limit AI selection to valid transitions.
       </p>
 
     </div>

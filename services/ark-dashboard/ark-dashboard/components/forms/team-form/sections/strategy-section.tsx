@@ -76,7 +76,6 @@ export function StrategySection({
               <SelectContent>
                 <SelectItem value="sequential">Sequential</SelectItem>
                 <SelectItem value="selector">Selector</SelectItem>
-                <SelectItem value="graph">Graph</SelectItem>
               </SelectContent>
             </Select>
             <FormMessage />
@@ -110,7 +109,7 @@ export function StrategySection({
         />
       )}
 
-      {(loopsChecked || selectedStrategy === 'graph') && (
+      {loopsChecked && (
         <FormField
           control={form.control}
           name="maxTurns"

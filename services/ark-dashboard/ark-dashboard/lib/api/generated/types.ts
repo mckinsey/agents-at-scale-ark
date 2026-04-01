@@ -3951,11 +3951,8 @@ export interface components {
             /** Description */
             description?: string | null;
             graph?: components["schemas"]["Graph"] | null;
-            /**
-             * Loops
-             * @default false
-             */
-            loops: boolean;
+            /** Loops */
+            loops?: boolean | null;
             /** Maxturns */
             maxTurns?: number | null;
             /** Members */

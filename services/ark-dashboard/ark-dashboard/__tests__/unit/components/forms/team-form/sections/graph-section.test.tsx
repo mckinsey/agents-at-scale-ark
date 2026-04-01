@@ -25,7 +25,7 @@ const selectedMembers: TeamMember[] = [
 ];
 
 function Wrapper({
-  strategy = 'graph',
+  strategy = 'selector',
   graphEdges = [] as Array<{ from: string; to: string }>,
   unavailableMembers = [] as TeamMember[],
   onGraphEdgesChange = vi.fn(),
@@ -77,24 +77,9 @@ describe('GraphSection', () => {
     expect(container.innerHTML).toBe('');
   });
 
-  it('should render for graph strategy', () => {
-    render(<Wrapper strategy="graph" />);
-    expect(screen.getByText('Graph Edges')).toBeInTheDocument();
-  });
-
   it('should render for selector strategy', () => {
     render(<Wrapper strategy="selector" />);
     expect(screen.getByText('Graph Edges')).toBeInTheDocument();
-  });
-
-  it('should show required indicator for graph strategy', () => {
-    render(<Wrapper strategy="graph" />);
-    expect(screen.getByText('*')).toBeInTheDocument();
-  });
-
-  it('should not show required indicator for selector strategy', () => {
-    render(<Wrapper strategy="selector" />);
-    expect(screen.queryByText('*')).not.toBeInTheDocument();
   });
 
   it('should show empty state when no edges', () => {
@@ -134,14 +119,7 @@ describe('GraphSection', () => {
     expect(onGraphEdgesChange).toHaveBeenCalledWith([]);
   });
 
-  it('should show graph-specific description for graph strategy', () => {
-    render(<Wrapper strategy="graph" />);
-    expect(
-      screen.getByText(/Define the flow between agents/),
-    ).toBeInTheDocument();
-  });
-
-  it('should show selector-specific description for selector strategy', () => {
+  it('should show selector description', () => {
     render(<Wrapper strategy="selector" />);
     expect(
       screen.getByText(/Define graph constraints/),
