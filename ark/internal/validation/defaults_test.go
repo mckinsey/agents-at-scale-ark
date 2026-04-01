@@ -152,6 +152,60 @@ func TestDefaultTeam(t *testing.T) {
 	})
 }
 
+func TestDefaultQuery(t *testing.T) {
+	t.Run("migrates messages type to user with extracted text", func(t *testing.T) {
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "q"},
+			Spec: arkv1alpha1.QuerySpec{
+				Type: "messages",
+			},
+		}
+		_ = query.Spec.Input.UnmarshalJSON([]byte(`[{"role":"user","content":"hello world"}]`))
+		DefaultQuery(query)
+		text, _ := query.Spec.GetInputString()
+		if text != "hello world" {
+			t.Fatalf("expected 'hello world', got '%s'", text)
+		}
+		key := annotations.MigrationWarningPrefix + "input-type"
+		if query.Annotations[key] == "" {
+			t.Fatal("expected migration warning annotation")
+		}
+	})
+
+	t.Run("sets empty text when extraction fails", func(t *testing.T) {
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "q"},
+			Spec: arkv1alpha1.QuerySpec{
+				Type: "messages",
+			},
+		}
+		_ = query.Spec.Input.UnmarshalJSON([]byte(`"not-an-array"`))
+		DefaultQuery(query)
+		text, _ := query.Spec.GetInputString()
+		if text != "" {
+			t.Fatalf("expected empty string, got '%s'", text)
+		}
+	})
+
+	t.Run("does not modify non-messages type", func(t *testing.T) {
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "q"},
+			Spec: arkv1alpha1.QuerySpec{
+				Type: "user",
+			},
+		}
+		_ = query.Spec.Input.UnmarshalJSON([]byte(`"original"`))
+		DefaultQuery(query)
+		text, _ := query.Spec.GetInputString()
+		if text != "original" {
+			t.Fatalf("expected 'original', got '%s'", text)
+		}
+		if query.Annotations != nil {
+			t.Fatal("expected no annotations for non-messages type")
+		}
+	})
+}
+
 func TestDefaultModel(t *testing.T) {
 	t.Run("migrates deprecated type to provider", func(t *testing.T) {
 		model := &arkv1alpha1.Model{
