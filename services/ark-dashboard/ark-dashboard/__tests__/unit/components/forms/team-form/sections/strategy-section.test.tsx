@@ -61,11 +61,6 @@ describe('StrategySection', () => {
     expect(screen.getByRole('combobox')).toHaveTextContent('Sequential');
   });
 
-  it('should show max turns field for graph strategy', () => {
-    render(<Wrapper defaultStrategy="graph" />);
-    expect(screen.getByText('Max Turns')).toBeInTheDocument();
-  });
-
   it('should show max turns field for selector strategy', () => {
     render(<Wrapper defaultStrategy="selector" />);
     expect(screen.getByText('Max Turns')).toBeInTheDocument();
@@ -100,13 +95,6 @@ describe('StrategySection', () => {
     await waitFor(() => {
       expect(screen.queryByText('Max Turns')).not.toBeInTheDocument();
     });
-  });
-
-  it('should show required indicator on max turns for graph strategy', () => {
-    render(<Wrapper defaultStrategy="graph" />);
-    expect(
-      screen.getByText('Max Turns').parentElement?.querySelector('.text-red-500'),
-    ).toBeInTheDocument();
   });
 
   it('should show required indicator on max turns for selector strategy', () => {

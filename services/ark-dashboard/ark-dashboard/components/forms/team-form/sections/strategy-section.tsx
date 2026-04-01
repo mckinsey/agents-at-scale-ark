@@ -76,7 +76,6 @@ export function StrategySection({
               <SelectContent>
                 <SelectItem value="sequential">Sequential</SelectItem>
                 <SelectItem value="selector">Selector</SelectItem>
-                <SelectItem value="graph">Graph</SelectItem>
               </SelectContent>
             </Select>
             <FormMessage />
