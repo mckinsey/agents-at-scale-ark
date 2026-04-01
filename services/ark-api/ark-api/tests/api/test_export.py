@@ -351,25 +351,6 @@ class TestExportHistoryNamespace(unittest.TestCase):
 
     @patch('ark_api.api.v1.export.EXPORT_CONFIGMAP_NAMESPACE', 'token-namespace')
     @patch('ark_api.api.v1.export.client')
-    def test_update_export_history_creates_configmap_in_token_namespace(self, mock_client):
-        """update_export_history creates the ConfigMap in the token-file namespace."""
-        mock_v1 = MagicMock()
-        mock_client.CoreV1Api.return_value = mock_v1
-        mock_client.V1ConfigMap = MagicMock()
-        mock_client.V1ObjectMeta = MagicMock()
-        mock_v1.read_namespaced_config_map.side_effect = ApiException(status=404)
-
-        asyncio.run(update_export_history(
-            datetime(2024, 1, 1, tzinfo=timezone.utc),
-            {'agents': 2}
-        ))
-
-        mock_v1.create_namespaced_config_map.assert_called_once()
-        call_kwargs = mock_v1.create_namespaced_config_map.call_args.kwargs
-        self.assertEqual(call_kwargs['namespace'], 'token-namespace')
-
-    @patch('ark_api.api.v1.export.EXPORT_CONFIGMAP_NAMESPACE', 'token-namespace')
-    @patch('ark_api.api.v1.export.client')
     def test_update_export_history_patches_configmap_in_token_namespace(self, mock_client):
         """update_export_history patches an existing ConfigMap in the token-file namespace."""
         mock_v1 = MagicMock()
