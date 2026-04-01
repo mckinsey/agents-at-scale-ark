@@ -618,7 +618,7 @@ func TestFinalizeStream(t *testing.T) {
 			query:  arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q1"}},
 			target: target,
 		}
-		state.finalizeStream(context.Background(), nil)
+		state.finalizeStream(context.Background(), nil, arkv1alpha1.TokenUsage{})
 	})
 
 	t.Run("streams final chunk with no response when messages empty", func(t *testing.T) {
@@ -628,7 +628,7 @@ func TestFinalizeStream(t *testing.T) {
 			target:      target,
 			eventStream: stream,
 		}
-		state.finalizeStream(context.Background(), []Message{})
+		state.finalizeStream(context.Background(), []Message{}, arkv1alpha1.TokenUsage{})
 
 		require.Len(t, stream.chunks, 1)
 		chunk, ok := stream.chunks[0].(ChunkWithMetadata)
@@ -647,7 +647,7 @@ func TestFinalizeStream(t *testing.T) {
 			target:      target,
 			eventStream: stream,
 		}
-		state.finalizeStream(context.Background(), []Message{NewAssistantMessage("hello")})
+		state.finalizeStream(context.Background(), []Message{NewAssistantMessage("hello")}, arkv1alpha1.TokenUsage{})
 
 		require.Len(t, stream.chunks, 1)
 		chunk, ok := stream.chunks[0].(ChunkWithMetadata)
@@ -675,7 +675,7 @@ func TestFinalizeStream(t *testing.T) {
 			target:      target,
 			eventStream: stream,
 		}
-		state.finalizeStream(context.Background(), nil)
+		state.finalizeStream(context.Background(), nil, arkv1alpha1.TokenUsage{})
 
 		logged := strings.Join(loggedMessages, "\n")
 		assert.Contains(t, logged, "failed to send final chunk")
