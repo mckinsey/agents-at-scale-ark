@@ -24,6 +24,9 @@ Make sure to choose the role which is best suited to respond to the most recent 
 
 Read the above conversation. Then select the next role from {{.Participants}} to play. Only return the role.`;
 
+export const DEFAULT_TERMINATE_PROMPT =
+  'If the most recent user message has been given an adequate response, do not return a role. Instead call the terminate tool.';
+
 const teamFormSchema = z
   .object({
     name: kubernetesNameSchema,
@@ -33,6 +36,8 @@ const teamFormSchema = z
     maxTurns: z.string().optional(),
     selectorAgent: z.string().optional(),
     selectorPrompt: z.string().optional(),
+    enableTerminateTool: z.boolean().optional(),
+    terminatePrompt: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.strategy === 'sequential' && data.loops && !data.maxTurns) {
@@ -46,6 +51,13 @@ const teamFormSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'Max turns is required for graph teams',
+        path: ['maxTurns'],
+      });
+    }
+    if (data.strategy === 'selector' && !data.maxTurns) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Max turns is required for selector teams',
         path: ['maxTurns'],
       });
     }
@@ -87,6 +99,8 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
       maxTurns: '',
       selectorAgent: '',
       selectorPrompt: '',
+      enableTerminateTool: true,
+      terminatePrompt: DEFAULT_TERMINATE_PROMPT,
     },
   });
 
@@ -130,6 +144,9 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
             selectorPrompt:
               teamData.selector?.selectorPrompt ||
               (teamData.strategy === 'selector' ? DEFAULT_SELECTOR_PROMPT : ''),
+            enableTerminateTool: teamData.selector?.enableTerminateTool ?? false,
+            terminatePrompt:
+              teamData.selector?.terminatePrompt || DEFAULT_TERMINATE_PROMPT,
           });
         } else {
           const agentsData = await agentsService.getAll();
@@ -173,10 +190,15 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
             loops: values.loops,
             maxTurns: values.maxTurns ? parseInt(values.maxTurns) : null,
             selector:
-              values.selectorAgent || values.selectorPrompt
+              values.selectorAgent ||
+              values.selectorPrompt ||
+              values.enableTerminateTool !== undefined ||
+              values.terminatePrompt
                 ? {
                     agent: values.selectorAgent || undefined,
                     selectorPrompt: values.selectorPrompt || undefined,
+                    enableTerminateTool: values.enableTerminateTool,
+                    terminatePrompt: values.terminatePrompt || undefined,
                   }
                 : null,
             graph: graphEdges.length > 0 ? { edges: graphEdges } : null,
@@ -196,10 +218,15 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
             loops: values.loops,
             maxTurns: values.maxTurns ? parseInt(values.maxTurns) : undefined,
             selector:
-              values.selectorAgent || values.selectorPrompt
+              values.selectorAgent ||
+              values.selectorPrompt ||
+              values.enableTerminateTool !== undefined ||
+              values.terminatePrompt
                 ? {
                     agent: values.selectorAgent || undefined,
                     selectorPrompt: values.selectorPrompt || undefined,
+                    enableTerminateTool: values.enableTerminateTool,
+                    terminatePrompt: values.terminatePrompt || undefined,
                   }
                 : undefined,
             graph: graphEdges.length > 0 ? { edges: graphEdges } : undefined,
