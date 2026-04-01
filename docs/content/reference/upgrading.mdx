@@ -12,6 +12,137 @@ Ark uses [Semantic Versioning](https://semver.org/). The technical details are i
 
 A detailed record of every change is documented in [`CHANGELOG.md`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.github/CHANGELOG.md).
 
+## v0.1.56
+
+### OpenAI-Compatible Endpoints Removed
+
+The `/openai/v1/chat/completions` and `/openai/v1/models` endpoints have been removed from ark-api. This removes Ark's runtime dependency on the OpenAI Go SDK.
+
+This is a **breaking** change if you use the OpenAI SDK or directly call `/openai/v1/*` endpoints against Ark.
+
+**Migration:**
+
+Replace OpenAI SDK calls with the Query API:
+
+```bash
+# Create a query
+curl -X POST /api/v1/queries/ \
+  -H "Content-Type: application/json" \
+  -d '{"input": "Hello", "target": {"name": "my-agent"}}'
+
+# Stream results
+curl "/api/v1/broker/chunks?watch=true&query-id={query-name}"
+```
+
+```python
+# Before — OpenAI SDK pointed at Ark
+from openai import OpenAI
+client = OpenAI(base_url="http://ark-api:8080/openai/v1")
+response = client.chat.completions.create(
+    model="my-agent",
+    messages=[{"role": "user", "content": "Hello"}]
+)
+
+# After — Query API with requests
+import requests
+resp = requests.post("http://ark-api:8080/api/v1/queries/", json={
+    "input": "Hello",
+    "target": {"name": "my-agent"}
+})
+query_name = resp.json()["metadata"]["name"]
+chunks = requests.get(f"http://ark-api:8080/api/v1/broker/chunks?watch=true&query-id={query_name}", stream=True)
+```
+
+### Query Message Format Simplified
+
+Queries no longer accept OpenAI-style message arrays (`type: "messages"`). Use `type: "user"` (or omit it — it's the default) with a plain string `input` field.
+
+During the transition period, a deprecation webhook auto-converts old-format queries, but update your manifests before the next release.
+
+This is a **breaking** change for Query resources using `type: "messages"`.
+
+<Callout type="warning">
+The automatic webhook migration from `type: "messages"` will be removed in a future release. Update your manifests now.
+</Callout>
+
+**Migration:**
+
+```yaml
+# Before
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+spec:
+  type: "messages"
+  input:
+    - role: "user"
+      content: "What is 2+2?"
+
+# After
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+spec:
+  input: "What is 2+2?"
+```
+
+### Conversation Model Unified on conversationId
+
+Multi-turn conversations are now handled server-side via the memory service. Clients send only the current message plus a `conversationId` — no more accumulating message history client-side. Dashboard and CLI both use this model.
+
+This is a **breaking** change if your integration accumulates and sends full message history on each request.
+
+**Migration:**
+
+1. On the first query, note the `conversationId` from the response
+2. On subsequent queries, pass the `conversationId` to continue the conversation
+
+```yaml
+# First query — no conversationId needed
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+spec:
+  input: "Hello, tell me about Kubernetes"
+  target:
+    name: my-agent
+  memory:
+    name: ark-broker
+
+# Follow-up query — pass conversationId from previous response
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+spec:
+  input: "Can you elaborate on pods?"
+  target:
+    name: my-agent
+  memory:
+    name: ark-broker
+  conversationId: "conv-abc-123"
+```
+
+```python
+# Before — client-side message accumulation
+messages = []
+messages.append({"role": "user", "content": "Hello"})
+response = send(messages)
+messages.append({"role": "assistant", "content": response})
+messages.append({"role": "user", "content": "Follow up"})
+response = send(messages)
+
+# After — server-side conversation via conversationId
+resp = requests.post("http://ark-api:8080/api/v1/queries/", json={
+    "input": "Hello",
+    "target": {"name": "my-agent"},
+    "memory": {"name": "ark-broker"}
+})
+conversation_id = resp.json()["status"]["conversationId"]
+
+resp = requests.post("http://ark-api:8080/api/v1/queries/", json={
+    "input": "Follow up",
+    "target": {"name": "my-agent"},
+    "memory": {"name": "ark-broker"},
+    "conversationId": conversation_id
+})
+```
+
 ## v0.2.0
 
 ### Evaluations Moved to Marketplace
