@@ -45,3 +45,16 @@ Environment variables:
 | STREAM_FILE_PATH | Path to persist stream data | Not set (no persistence) |
 
 The Helm chart can optionally configure a persistent volume for data storage by setting `persistence.enabled=true`.
+
+## Sessions Endpoint
+
+The `/sessions` endpoint provides a live, event-sourced index of active sessions and their queries. It materializes state from the existing event and message streams — no additional data ingestion is needed.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/sessions` | Returns the full sessions store |
+| GET | `/sessions?watch=true` | SSE stream of session updates |
+| GET | `/sessions?watch=true&session_id=X` | SSE stream filtered to one session |
+| DELETE | `/sessions` | Purge all session data |
+
+Set `SESSIONS_FILE_PATH` to enable persistence to disk.

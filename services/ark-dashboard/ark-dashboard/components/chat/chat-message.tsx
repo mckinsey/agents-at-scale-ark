@@ -15,6 +15,11 @@ interface ChatMessageProps {
   viewMode?: 'text' | 'markdown';
   toolCalls?: ToolCallData[];
   sender?: string;
+  tokenUsage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
 }
 
 export function ChatMessage({
@@ -26,6 +31,7 @@ export function ChatMessage({
   queryName,
   toolCalls,
   sender,
+  tokenUsage,
 }: Readonly<ChatMessageProps>) {
   const isUser = role === 'user';
   const isFailed = status === 'failed';
@@ -191,6 +197,13 @@ export function ChatMessage({
                 </button>
               )}
             </div>
+            {!isUser && tokenUsage && tokenUsage.total_tokens > 0 && (
+              <div className="text-muted-foreground text-xs opacity-60">
+                {tokenUsage.total_tokens.toLocaleString()} tokens (
+                {tokenUsage.prompt_tokens.toLocaleString()} in,{' '}
+                {tokenUsage.completion_tokens.toLocaleString()} out)
+              </div>
+            )}
           </div>
         </div>
       )}
