@@ -4,12 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/common"
+	"mckinsey.com/ark/internal/resolution"
 )
 
 func ResolveQueryInput(ctx context.Context, k8sClient client.Client, namespace, input string, parameters []arkv1alpha1.Parameter) (string, error) {
@@ -58,41 +57,15 @@ func resolveQueryValueFrom(ctx context.Context, k8sClient client.Client, namespa
 
 func resolveValueFrom(ctx context.Context, k8sClient client.Client, namespace string, valueFrom *arkv1alpha1.ValueFromSource) (string, error) {
 	if valueFrom.ConfigMapKeyRef != nil {
-		return resolveConfigMapKeyRef(ctx, k8sClient, namespace, valueFrom.ConfigMapKeyRef)
+		return resolution.ResolveFromConfigMap(ctx, k8sClient, valueFrom.ConfigMapKeyRef, namespace)
 	}
 	if valueFrom.SecretKeyRef != nil {
-		return resolveSecretKeyRef(ctx, k8sClient, namespace, valueFrom.SecretKeyRef)
+		return resolution.ResolveFromSecret(ctx, k8sClient, valueFrom.SecretKeyRef, namespace)
 	}
 	if valueFrom.QueryParameterRef != nil {
 		return resolveQueryParameterRef(ctx, valueFrom.QueryParameterRef)
 	}
 	return "", fmt.Errorf("no supported valueFrom source specified")
-}
-
-func resolveConfigMapKeyRef(ctx context.Context, k8sClient client.Client, namespace string, ref *corev1.ConfigMapKeySelector) (string, error) {
-	configMap := &corev1.ConfigMap{}
-	key := types.NamespacedName{Name: ref.Name, Namespace: namespace}
-	if err := k8sClient.Get(ctx, key, configMap); err != nil {
-		return "", fmt.Errorf("failed to get ConfigMap %s: %w", ref.Name, err)
-	}
-	value, exists := configMap.Data[ref.Key]
-	if !exists {
-		return "", fmt.Errorf("key %s not found in ConfigMap %s", ref.Key, ref.Name)
-	}
-	return value, nil
-}
-
-func resolveSecretKeyRef(ctx context.Context, k8sClient client.Client, namespace string, ref *corev1.SecretKeySelector) (string, error) {
-	secret := &corev1.Secret{}
-	key := types.NamespacedName{Name: ref.Name, Namespace: namespace}
-	if err := k8sClient.Get(ctx, key, secret); err != nil {
-		return "", fmt.Errorf("failed to get Secret %s: %w", ref.Name, err)
-	}
-	value, exists := secret.Data[ref.Key]
-	if !exists {
-		return "", fmt.Errorf("key %s not found in Secret %s", ref.Key, ref.Name)
-	}
-	return string(value), nil
 }
 
 func resolveQueryParameterRef(ctx context.Context, ref *arkv1alpha1.QueryParameterReference) (string, error) {
@@ -141,38 +114,17 @@ func ResolveBodyTemplate(ctx context.Context, k8sClient client.Client, namespace
 	return resolved, nil
 }
 
-// GetQueryInputMessages returns a message array based on query type, handling both input and messages
 func GetQueryInputMessages(ctx context.Context, query arkv1alpha1.Query, k8sClient client.Client) ([]Message, error) {
-	queryType := query.Spec.Type
-	if queryType == "" {
-		queryType = RoleUser // default type
+	inputString, err := query.Spec.GetInputString()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get input string: %w", err)
 	}
 
-	if queryType == RoleUser {
-		// For 'user' type (default), get input string using helper method
-		inputString, err := query.Spec.GetInputString()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get input string: %w", err)
-		}
-
-		// Resolve input with template parameters and create a single user message
-		resolvedInput, err := ResolveQueryInput(ctx, k8sClient, query.Namespace, inputString, query.Spec.Parameters)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve query input: %w", err)
-		}
-		return []Message{NewUserMessage(resolvedInput)}, nil
-	} else {
-		openaiMessages, err := query.Spec.GetInputMessages()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get input messages: %w", err)
-		}
-
-		messages := make([]Message, len(openaiMessages))
-		for i := range openaiMessages {
-			messages[i] = Message(openaiMessages[i])
-		}
-		return messages, nil
+	resolvedInput, err := ResolveQueryInput(ctx, k8sClient, query.Namespace, inputString, query.Spec.Parameters)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve query input: %w", err)
 	}
+	return []Message{NewUserMessage(resolvedInput)}, nil
 }
 
 // toAnyMap converts map[string]string to map[string]any

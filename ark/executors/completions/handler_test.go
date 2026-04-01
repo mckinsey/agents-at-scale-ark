@@ -140,14 +140,14 @@ func TestSerializeResponseMessages(t *testing.T) {
 		want     string
 	}{
 		{
-			name:     "empty messages returns empty string",
+			name:     "empty messages returns empty array",
 			messages: []Message{},
-			want:     "",
+			want:     "[]",
 		},
 		{
-			name:     "nil messages returns empty string",
+			name:     "nil messages returns empty array",
 			messages: nil,
-			want:     "",
+			want:     "[]",
 		},
 		{
 			name:     "single assistant message serializes",
@@ -415,10 +415,11 @@ func TestResolveSelector(t *testing.T) {
 }
 
 func TestBuildResponseMeta(t *testing.T) {
-	t.Run("empty state returns empty meta", func(t *testing.T) {
+	t.Run("empty state returns meta with empty messages array", func(t *testing.T) {
 		state := &executionState{}
 		meta := buildResponseMeta(state, nil, nil, arkv1alpha1.TokenUsage{})
-		assert.Empty(t, meta)
+		assert.Len(t, meta, 1)
+		assert.Equal(t, json.RawMessage("[]"), meta["messages"])
 	})
 
 	t.Run("includes token usage when present", func(t *testing.T) {
