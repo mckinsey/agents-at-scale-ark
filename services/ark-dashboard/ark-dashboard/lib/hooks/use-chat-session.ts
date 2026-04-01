@@ -1,10 +1,7 @@
 'use client';
 
 import { useAtom, useAtomValue } from 'jotai';
-import type {
-  ChatCompletionChunk,
-  ChatCompletionMessageParam,
-} from 'openai/resources/chat/completions';
+import type { ChatCompletionChunk } from 'openai/resources/chat/completions';
 import type { RefObject } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -60,6 +57,7 @@ export function useChatSession({
 
   const chatMessages = chatSession.messages;
   const sessionId = chatSession.sessionId;
+  const conversationId = (chatSession as { conversationId?: string }).conversationId;
 
   useEffect(() => {
     if (!chatHistory?.[chatKey]) {
@@ -88,6 +86,21 @@ export function useChatSession({
         return {
           ...safePrev,
           [chatKey]: { ...currentSession, messages: newMessages },
+        };
+      });
+    },
+    [chatKey, setChatHistory],
+  );
+
+  const updateConversationId = useCallback(
+    (newConversationId: string) => {
+      setChatHistory(prev => {
+        const safePrev = prev || {};
+        const currentSession = safePrev[chatKey];
+        if (!currentSession) return safePrev;
+        return {
+          ...safePrev,
+          [chatKey]: { ...currentSession, conversationId: newConversationId },
         };
       });
     },
@@ -199,10 +212,11 @@ export function useChatSession({
       };
 
       for await (const chunk of chatService.streamChatResponse(
-        messageArray as ChatCompletionMessageParam[],
+        userMessage,
         type,
         name,
         sessionId,
+        conversationId,
         queryTimeout,
       )) {
         if ('error' in chunk && chunk.error) {
@@ -227,6 +241,7 @@ export function useChatSession({
               metadata?: { name?: string };
               status?: {
                 phase?: string;
+                conversationId?: string;
                 response?: {
                   content?: string;
                   raw?: string;
@@ -234,6 +249,12 @@ export function useChatSession({
               };
             };
           };
+
+          const returnedConversationId =
+            arkData.completedQuery?.status?.conversationId;
+          if (returnedConversationId) {
+            updateConversationId(returnedConversationId);
+          }
           if (arkData.completedQuery?.status?.phase === 'error') {
             hasError = true;
             errorMessage =
@@ -444,10 +465,11 @@ export function useChatSession({
       const messageArray = buildChatMessages(chatMessages, userMessage);
 
       const query = await chatService.submitChatQuery(
-        messageArray as ChatCompletionMessageParam[],
+        userMessage,
         type,
         name,
         sessionId,
+        conversationId,
         undefined,
         queryTimeout,
       );
@@ -462,6 +484,14 @@ export function useChatSession({
           const result = await chatService.getQueryResult(query.name);
 
           if (result.terminal) {
+            const fullQuery = await chatService.getQuery(query.name);
+            const queryConversationId = (
+              fullQuery?.status as { conversationId?: string } | undefined
+            )?.conversationId;
+            if (queryConversationId) {
+              updateConversationId(queryConversationId);
+            }
+
             if (result.status === 'done') {
               if (result.messages && result.messages.length > 0) {
                 updateChatMessages(prev => [

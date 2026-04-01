@@ -479,7 +479,7 @@ jobs:
           echo "Testing API endpoints..."
           curl -f --max-time 10 http://127.0.0.1:8082/health || (echo "API health check failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
           curl -f --max-time 10 http://127.0.0.1:8082/ready || (echo "API ready check failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
-          curl -f --max-time 10 http://127.0.0.1:8082/openai/v1/models || (echo "OpenAI models endpoint failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
+          curl -f --max-time 10 http://127.0.0.1:8082/v1/agents/ || (echo "Agents list endpoint failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
           curl -f --max-time 10 http://127.0.0.1:8082/a2a/agents || (echo "A2A /agents endpoint failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
           echo "ark-api tests passed!"
 
