@@ -410,7 +410,7 @@ function StreamView({
   );
 }
 
-function SessionsLiveView() {
+function SessionsView() {
   const [store, setStore] = useState<Record<string, unknown>>({});
   const [isConnected, setIsConnected] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -654,7 +654,7 @@ export default function BrokerPage() {
             />
           </TabsContent>
           <TabsContent value="sessions" className="mt-4 flex-1">
-            <SessionsLiveView />
+            <SessionsView />
           </TabsContent>
         </Tabs>
       </div>
