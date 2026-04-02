@@ -11,7 +11,7 @@ Provisions one minikube cluster per branch supplied by the user. The number of c
 
 | # | Cluster name | Worktree | Branch | Dashboard | API | Gateway |
 |---|---|---|---|---|---|---|
-| 1 | `ark-cluster-1` | `~/agents-at-scale-ark` (main repo, no worktree needed if branch 1 = current) | branch 1 | :3274 | :8080 | :8090 |
+| 1 | `ark-cluster-1` | `$ARK_REPO` (main repo, no worktree needed if branch 1 = current) | branch 1 | :3274 | :8080 | :8090 |
 | 2 | `ark-cluster-2` | `/tmp/ark-worktree-<branch2-slug>` | branch 2 | :3275 | :8081 | :8091 |
 | 3 | `ark-cluster-3` | `/tmp/ark-worktree-<branch3-slug>` | branch 3 | :3276 | :8082 | :8092 |
 | N | `ark-cluster-N` | `/tmp/ark-worktree-<branchN-slug>` | branch N | :3273+N | :8079+N | :8089+N |
@@ -26,6 +26,12 @@ Run before starting:
 minikube version && kubectl version --client && helm version --short && devspace version && docker info | grep "Total Memory"
 ```
 
+Set your repo path (replace with your actual checkout location):
+
+```bash
+export ARK_REPO=~/agents-at-scale-ark  # adjust if cloned elsewhere
+```
+
 **Docker Desktop memory requirement:** ~0.7 GB base + (N × 2.2 GB). For 3 clusters: ~7 GB minimum.
 Set via Docker Desktop → Settings → Resources → Memory.
 
@@ -36,7 +42,7 @@ If the user's message contains branch names (e.g. "create clusters with branch1 
 - The number of clusters = the number of branches provided
 - Assign each branch to `ark-cluster-N` (N = 1, 2, 3...)
 - Branch slug = branch name with `/` replaced by `-`
-- Branch 1 uses `~/agents-at-scale-ark` directly if it matches the current checkout; otherwise also gets a worktree
+- Branch 1 uses `$ARK_REPO` directly if it matches the current checkout; otherwise also gets a worktree
 - Branches 2..N each get a worktree at `/tmp/ark-worktree-<branchN-slug>`
 
 If no branches are provided in the message, ask how many clusters and which branches.
@@ -46,7 +52,7 @@ If no branches are provided in the message, ask how many clusters and which bran
 For each branch beyond the first (or all branches if branch 1 differs from current checkout):
 
 ```bash
-cd ~/agents-at-scale-ark
+cd $ARK_REPO
 
 # Repeat for each branch N >= 2:
 git worktree add /tmp/ark-worktree-<branchN-slug> <BRANCHN>
@@ -75,7 +81,7 @@ The script:
 Deploy cluster-1 first. The **first build takes 30–45 min** (Go toolchain download + compilation). Subsequent clusters use image transfer to skip rebuilding.
 
 ```bash
-cd ~/agents-at-scale-ark
+cd $ARK_REPO
 
 DOCKER_BUILDKIT=0 devspace deploy \
   --kube-context ark-cluster-1 \
@@ -87,7 +93,7 @@ DOCKER_BUILDKIT=0 devspace deploy \
 
 ```bash
 # Build dashboard with legacy builder
-cd ~/agents-at-scale-ark/services/ark-dashboard
+cd $ARK_REPO/services/ark-dashboard
 docker build -t ark-dashboard:main-local .
 minikube image load ark-dashboard:main-local -p ark-cluster-1
 
