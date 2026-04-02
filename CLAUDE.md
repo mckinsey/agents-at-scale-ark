@@ -82,11 +82,11 @@ npm build          # Build site
 
 # Marketplace
 
-Ark has a separate marketplace repository for community-contributed services and components:
+Ark has a separate marketplace repository for add-on components that extend Ark's native capabilities. Marketplace items depend on Ark core — never the other way around.
 
 **Repository**: https://github.com/mckinsey/agents-at-scale-marketplace
 
-The marketplace includes observability platforms (Phoenix, Langfuse) and other optional services. Services can be deployed using DevSpace or Helm as dependencies of your Ark installation.
+The marketplace includes executors (Claude Agent SDK, LangChain), services (Phoenix, Langfuse, ark-sandbox, file-gateway), MCP servers, pre-built agents, and demo bundles. Components can be deployed using DevSpace or Helm as dependencies of your Ark installation.
 
 Example usage in `devspace.yaml`:
 ```yaml
