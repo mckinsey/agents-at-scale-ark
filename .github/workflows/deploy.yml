@@ -89,8 +89,6 @@ jobs:
           - path: services/ark-mcp
             image: ark-mcp
             prebuild: "make ark-mcp-deps && mkdir -p services/ark-mcp/ark-mcp/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-mcp/ark-mcp/out/"
-          - path: mcp/filesystem-mcp
-            image: filesystem-mcp-server
           - path: services/ark-broker/ark-broker
             image: ark-broker
           - path: tools/ark-cli
@@ -214,7 +212,6 @@ jobs:
           - ark-dashboard
           - ark-mcp
           - ark-broker
-          - mcp-filesystem
           - localhost-gateway
           - ark-tenant
           - argo-workflows

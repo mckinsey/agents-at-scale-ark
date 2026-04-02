@@ -38,6 +38,7 @@ metadata:
   name: consulting-team
 spec:
   strategy: selector
+  maxTurns: 10
   description: AI consulting team with intelligent participant selection
   members:
     - name: research-analyst
