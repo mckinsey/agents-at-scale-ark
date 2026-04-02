@@ -7,7 +7,7 @@ import type {
 
 export const filesService = {
   async list(params: ListFilesParams = {}): Promise<ListFilesResponse> {
-    const response = await filesApiClient.get<ListFilesResponse>('/files', {
+    const response = await filesApiClient.get<ListFilesResponse>('files', {
       params: {
         ...(params.prefix !== undefined && { prefix: params.prefix }),
         ...(params.max_keys !== undefined && { max_keys: params.max_keys }),
@@ -49,23 +49,23 @@ export const filesService = {
         reject(new Error('Upload failed'));
       });
 
-      xhr.open('POST', `${FILES_API_BASE_URL}/files`);
+      xhr.open('POST', `${FILES_API_BASE_URL}files`);
       xhr.send(formData);
     });
   },
 
   async delete(key: string): Promise<void> {
-    await filesApiClient.delete(`/files/${encodeURIComponent(key)}`);
+    await filesApiClient.delete(`files/${encodeURIComponent(key)}`);
   },
 
   download(key: string): void {
-    const url = `${FILES_API_BASE_URL}/files/${encodeURIComponent(key)}/download`;
+    const url = `${FILES_API_BASE_URL}files/${encodeURIComponent(key)}/download`;
     window.open(url, '_blank');
   },
 
   async deleteDirectory(prefix: string): Promise<DeleteDirectoryResponse> {
     const response = await filesApiClient.delete<DeleteDirectoryResponse>(
-      '/directories',
+      'directories',
       {
         params: { prefix },
       },
