@@ -74,6 +74,8 @@ Marketplace items with web UIs have no way to surface them through the dashboard
 
 **Auto-discovery from HTTPRoute/Ingress:** Too fragile across networking setups.
 
+**`ark.ui.enabled` manifest field:** Unnecessary. The presence of the `ark.mckinsey.com/marketplace-item-ui-url` annotation on a Service is the signal that a UI exists. No separate manifest flag needed.
+
 ## References
 
 - [Recommended Labels - Kubernetes](https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/)
