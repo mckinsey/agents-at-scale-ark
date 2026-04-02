@@ -59,7 +59,7 @@ jobs:
       sha: ${{ steps.resolve.outputs.sha }}
       has_version: ${{ steps.resolve.outputs.has_version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Resolve ARK version
         id: resolve
@@ -105,7 +105,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ needs.resolve_version.outputs.sha }}
 
@@ -162,7 +162,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Install Helm
         uses: azure/setup-helm@v4
@@ -223,7 +223,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Install Helm
         uses: azure/setup-helm@v4
@@ -257,7 +257,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -287,7 +287,7 @@ jobs:
     if: ${{ always() && inputs.deploy_to_npm && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped') }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Download ark-cli artifact from release
         run: |
@@ -316,7 +316,7 @@ jobs:
     if: ${{ always() && inputs.deploy_to_pypi && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped') }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Download ARK SDK wheel from release
         run: |
