@@ -32,7 +32,7 @@ jobs:
       PROJECT_KEY: ${{ secrets.SONARQUBE_PROJECT_KEY }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ inputs.branch || github.ref }}
           fetch-depth: 0
