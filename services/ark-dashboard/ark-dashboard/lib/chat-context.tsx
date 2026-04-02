@@ -23,7 +23,7 @@ const getInitialOpenChats = (): string[] => {
       }
     }
   } catch {
-    // Ignore parse errors
+    // noop
   }
   return [];
 };

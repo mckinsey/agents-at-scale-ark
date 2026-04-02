@@ -1,5 +1,7 @@
 import { atom } from 'jotai';
 
+import type { GraphEdge } from '@/lib/types/chat-message';
+
 export const experimentalFeaturesDialogOpenAtom = atom(false);
 
 const SESSION_STORAGE_KEY = 'files-browser-prefix';
@@ -75,11 +77,7 @@ export interface OpenChatWindow {
   name: string;
   type: 'model' | 'team' | 'agent';
   strategy?: string;
-  graphEdges?: Array<{
-    source: string;
-    target: string;
-    messages: unknown[];
-  }>;
+  graphEdges?: GraphEdge[];
 }
 
 const OPEN_CHAT_WINDOWS_KEY = 'open-chat-windows';
@@ -101,7 +99,7 @@ export const openChatWindowsAtom = atom(
           }
         }
       } catch {
-        // Ignore parse errors
+        // noop
       }
     }
     return [];
