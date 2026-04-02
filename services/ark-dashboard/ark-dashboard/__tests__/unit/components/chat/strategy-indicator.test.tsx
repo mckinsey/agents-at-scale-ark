@@ -41,12 +41,10 @@ describe('StrategyIndicator', () => {
     ).toBeInTheDocument();
   });
 
-  it('should render for graph strategy', () => {
-    render(<StrategyIndicator strategy="graph" />);
+  it('should not render for deprecated graph strategy', () => {
+    const { container } = render(<StrategyIndicator strategy="graph" />);
 
-    expect(
-      screen.getByText('Agents respond following graph edges'),
-    ).toBeInTheDocument();
+    expect(container.firstChild).toBeNull();
   });
 
   it('should not render when strategy is undefined', () => {
