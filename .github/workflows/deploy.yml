@@ -302,9 +302,6 @@ jobs:
           node-version: "22.x"
           registry-url: https://registry.npmjs.org/
 
-      - name: Install npm with trusted publishing support
-        run: npm install -g npm@11
-
       - name: Publish to npm
         run: |
           npm publish ark-cli.tgz --access public --provenance
@@ -337,3 +334,52 @@ jobs:
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
           attestations: false  # Will enable when organization Trusted Publishing is configured
+
+  verify-ark-installation:
+    needs: [resolve_version, deploy-to-npm, deploy-helm-charts]
+    if: ${{ always() && inputs.deploy_to_npm && needs.deploy-to-npm.result == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-k3s
+        with:
+          metrics-enabled: false
+          traefik-enabled: false
+          k3s-channel: latest
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22.x"
+
+      - name: Install published ark-cli from npm
+        run: |
+          VERSION="${{ needs.resolve_version.outputs.version }}"
+          echo "Installing ark-cli@${VERSION} from npm registry..."
+          npm install -g @agents-at-scale/ark@${VERSION}
+          ark --version
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install test dependencies
+        run: |
+          pip install -r tests/pytest/ui-tests/requirements.txt
+
+      - name: Run complete ARK workflow installation test
+        env:
+          PYTHONPATH: ${{ github.workspace }}/tests/pytest
+        run: |
+          cd tests/pytest
+          pytest test_complete_ark_workflow.py -v --tb=short
+
+      - name: Upload verification test logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ark-installation-verification-logs-${{ github.sha }}
+          path: tests/pytest/*.log
+          retention-days: 7
