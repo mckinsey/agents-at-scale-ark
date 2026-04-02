@@ -108,3 +108,24 @@ func (e *TerminateTeamWithResponse) Error() string {
 func (e *TerminateTeamWithResponse) Unwrap() error {
 	return &e.base
 }
+
+type SelectionMade struct {
+	SelectedName string
+	base         TerminateTeam
+}
+
+func (e *SelectionMade) Error() string {
+	return fmt.Sprintf("selection made: %s", e.SelectedName)
+}
+
+func (e *SelectionMade) Unwrap() error {
+	return &e.base
+}
+
+func IsSelectionMade(err error) bool {
+	if err == nil {
+		return false
+	}
+	var selectionErr *SelectionMade
+	return errors.As(err, &selectionErr)
+}

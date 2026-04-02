@@ -17,11 +17,11 @@ import (
 
 const defaultSelectorPrompt = `You are in a role play game. The following roles are available:
 {{.Roles}}.
-Read the following conversation. Then select the next role from {{.Participants}} to play. Only return the role.
+Read the following conversation, then use the select-next-conversant tool to select the next role from {{.Participants}} to play.
 
 {{.History}}
 
-Read the above conversation. Then select the next role from {{.Participants}} to play. Only return the role.`
+Read the above conversation, then use the select-next-conversant tool to select the next role from {{.Participants}} to play.`
 
 const defaultTerminatePrompt = `If the most recent user message has been given an adequate response, do not return a role. Instead call the terminate tool.`
 
@@ -95,11 +95,10 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, e
 		return nil, fmt.Errorf("failed to create selector agent: %w", err)
 	}
 
+	agent.Tools.ClearTools()
+
 	if t.Selector.EnableTerminateTool != nil && *t.Selector.EnableTerminateTool {
-		terminateTool := arkv1alpha1.AgentTool{Type: "builtin", Name: BuiltinToolTerminate}
-		if err := agent.Tools.registerTool(ctx, t.Client, terminateTool, t.Namespace, t.telemetry, t.eventing); err != nil {
-			return nil, fmt.Errorf("failed to register selector tool %s: %w", terminateTool.Name, err)
-		}
+		agent.Tools.RegisterTool(GetTerminateTool(), &TerminateExecutor{})
 	}
 
 	t.selectorAgent = agent
@@ -135,8 +134,30 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 		return nil, err
 	}
 
+	membersToSearch := t.Members
+	if candidateMembers != nil {
+		membersToSearch = candidateMembers
+	}
+
+	candidateNames := make([]string, len(membersToSearch))
+	for i, m := range membersToSearch {
+		candidateNames[i] = m.GetName()
+	}
+	t.registerSelectNextConversantTool(selectorAgent, candidateNames)
+
 	result, err := selectorAgent.Execute(ctx, NewUserMessage("Select the next participant to respond."), []Message{NewSystemMessage(selectorMessage)}, nil, nil)
 	if err != nil {
+		var selectionMade *SelectionMade
+		if errors.As(err, &selectionMade) {
+			logger := logf.FromContext(ctx)
+			logger.Info("Selector chose", "selectedName", selectionMade.SelectedName)
+			for _, member := range membersToSearch {
+				if member.GetName() == selectionMade.SelectedName {
+					return member, nil
+				}
+			}
+			return nil, &InvalidAgentError{SelectedName: selectionMade.SelectedName}
+		}
 		if IsTerminateTeam(err) {
 			if response := extractTerminateToolResponse(result); response != "" {
 				return nil, &TerminateTeamWithResponse{Response: response, Messages: result.Messages}
@@ -146,40 +167,7 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 		return nil, fmt.Errorf("selector agent call failed: %w", err)
 	}
 
-	if len(result.Messages) == 0 {
-		return nil, fmt.Errorf("selector agent returned no messages")
-	}
-
-	var selectedName string
-	lastMsg := result.Messages[len(result.Messages)-1]
-	if lastMsg.OfAssistant != nil && lastMsg.OfAssistant.Content.OfString.Value != "" {
-		selectedName = strings.TrimSpace(lastMsg.OfAssistant.Content.OfString.Value)
-		logger := logf.FromContext(ctx)
-		logger.Info("Selector chose", "selectedName", selectedName)
-	} else {
-		return nil, fmt.Errorf("selector agent returned invalid response")
-	}
-
-	// Use candidateMembers if provided, otherwise use all team members
-	membersToSearch := t.Members
-	if candidateMembers != nil {
-		membersToSearch = candidateMembers
-	}
-
-	// Find selected member
-	for _, member := range membersToSearch {
-		if member.GetName() == selectedName {
-			return member, nil
-		}
-	}
-
-	if len(membersToSearch) > 0 {
-		// This error will allow us to message to the user that the selector's response doesn't match an agent
-		err := &InvalidAgentError{SelectedName: selectedName}
-		return nil, err
-	}
-
-	return nil, fmt.Errorf("no members available")
+	return nil, fmt.Errorf("selector agent did not use select-next-conversant tool")
 }
 
 // determineNextMember routes to the appropriate selection logic based on whether graph constraints exist.
@@ -258,6 +246,13 @@ func (t *Team) buildLegalTransitionsMap() map[string][]TeamMember {
 	}
 
 	return legalTransitions
+}
+
+func (t *Team) registerSelectNextConversantTool(selectorAgent SelectorAgentInterface, candidates []string) {
+	if agent, ok := selectorAgent.(*Agent); ok {
+		agent.Tools.RemoveTool(BuiltinToolSelectNextConversant)
+		agent.Tools.RegisterTool(GetSelectNextConversantTool(candidates), &SelectNextConversantExecutor{})
+	}
 }
 
 func extractTerminateToolResponse(result *ExecutionResult) string {

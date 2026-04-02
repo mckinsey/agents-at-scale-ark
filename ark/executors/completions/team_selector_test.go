@@ -427,7 +427,7 @@ func TestSetupSelectorTemplate(t *testing.T) {
 		{
 			name:         "uses default prompt when no selector spec",
 			selectorSpec: nil,
-			wantContains: "role play game",
+			wantContains: "select-next-conversant tool",
 		},
 		{
 			name: "uses custom prompt when provided",
@@ -828,7 +828,7 @@ func TestSelectMember_ReturnsErrorOnNoMessages(t *testing.T) {
 	_, err = team.selectMember(ctx, []Message{}, tmpl, "agent1", "roles", nil)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "selector agent returned no messages")
+	assert.Contains(t, err.Error(), "selector agent did not use select-next-conversant tool")
 }
 
 func TestLoadSelectorAgent_WithMock(t *testing.T) {

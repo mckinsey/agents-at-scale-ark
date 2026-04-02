@@ -74,7 +74,7 @@ func (m *mockSelectorAgent) Execute(ctx context.Context, userInput Message, hist
 		Messages: []Message{
 			NewAssistantMessage(m.returnName),
 		},
-	}, nil
+	}, &SelectionMade{SelectedName: m.returnName}
 }
 
 func (m *mockSelectorAgent) FullName() string {

@@ -26,4 +26,4 @@ spec:
       Choose from: {{.Participants}}
 
       Start with researcher, then analyst, then coordinator. Avoid selecting the same participant twice in a row.
-      Return only the exact name of the selected participant.
+      Use the select-next-conversant tool to make your selection.

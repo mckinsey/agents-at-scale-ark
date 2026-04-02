@@ -63,7 +63,7 @@ spec:
 
       Always start with research-analyst, and follow by strategy-consultant.
       Select project-manager expert after each turn. Do not select the same participant twice in a row.
-      Return only the exact name of the selected participant.
+      Use the select-next-conversant tool to make your selection.
 ---
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query

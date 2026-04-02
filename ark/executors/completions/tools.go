@@ -205,6 +205,16 @@ func (tr *ToolRegistry) RegisterTool(def ToolDefinition, executor ToolExecutor) 
 	tr.executors[def.Name] = executor
 }
 
+func (tr *ToolRegistry) RemoveTool(name string) {
+	delete(tr.tools, name)
+	delete(tr.executors, name)
+}
+
+func (tr *ToolRegistry) ClearTools() {
+	clear(tr.tools)
+	clear(tr.executors)
+}
+
 func (tr *ToolRegistry) GetToolDefinitions() []ToolDefinition {
 	definitions := make([]ToolDefinition, 0, len(tr.tools))
 	for _, def := range tr.tools {
@@ -223,6 +233,8 @@ func (tr *ToolRegistry) GetToolType(toolName string) string {
 	case *NoopExecutor:
 		return "builtin"
 	case *TerminateExecutor:
+		return "builtin"
+	case *SelectNextConversantExecutor:
 		return "builtin"
 	case *HTTPExecutor:
 		return "custom"
@@ -367,6 +379,46 @@ func GetTerminateTool() ToolDefinition {
 				},
 			},
 			"required": []string{"response"},
+		},
+	}
+}
+
+type SelectNextConversantExecutor struct{}
+
+func (s *SelectNextConversantExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
+	var arguments map[string]any
+	if err := json.Unmarshal([]byte(call.Function.Arguments), &arguments); err != nil {
+		return ToolResult{ID: call.ID, Name: call.Function.Name}, fmt.Errorf("failed to parse arguments: %w", err)
+	}
+	nameArg, exists := arguments["name"]
+	if !exists {
+		return ToolResult{ID: call.ID, Name: call.Function.Name}, fmt.Errorf("name parameter is required")
+	}
+	nameStr, ok := nameArg.(string)
+	if !ok {
+		return ToolResult{ID: call.ID, Name: call.Function.Name}, fmt.Errorf("name parameter must be a string")
+	}
+	return ToolResult{ID: call.ID, Name: call.Function.Name, Content: nameStr}, &SelectionMade{SelectedName: nameStr}
+}
+
+func GetSelectNextConversantTool(candidates []string) ToolDefinition {
+	enumValues := make([]any, len(candidates))
+	for i, c := range candidates {
+		enumValues[i] = c
+	}
+	return ToolDefinition{
+		Name:        BuiltinToolSelectNextConversant,
+		Description: "Select the next participant to respond in the conversation",
+		Parameters: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"name": map[string]any{
+					"type":        "string",
+					"description": "The name of the next participant to respond",
+					"enum":        enumValues,
+				},
+			},
+			"required": []string{"name"},
 		},
 	}
 }
