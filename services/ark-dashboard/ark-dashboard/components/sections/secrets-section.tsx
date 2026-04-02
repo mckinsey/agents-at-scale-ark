@@ -114,17 +114,13 @@ export const SecretsSection = forwardRef<
     deleteSecretMutation.mutate(secret.name);
   };
 
-  if (showLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="py-8 text-center">Loading...</div>
-      </div>
-    );
-  }
-
-  if (secrets.length === 0 && !secretsLoading) {
-    return (
-      <>
+  return (
+    <>
+      {showLoading ? (
+        <div className="flex h-full items-center justify-center">
+          <div className="py-8 text-center">Loading...</div>
+        </div>
+      ) : secrets.length === 0 && !secretsLoading ? (
         <Empty>
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -154,49 +150,33 @@ export const SecretsSection = forwardRef<
             </a>
           </Button>
         </Empty>
-        <SecretEditor
-          open={secretEditorOpen}
-          onOpenChange={open => {
-            setSecretEditorOpen(open);
-            if (!open) {
-              setEditingSecret(null);
-            }
-          }}
-          secret={editingSecret}
-          onSave={handleSaveSecret}
-          existingSecrets={secrets}
-        />
-      </>
-    );
-  }
-
-  return (
-    <>
-      <div className="flex h-full flex-col">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex-1" />
-          <Button onClick={handleOpenAddEditor} variant="default">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Secret
-          </Button>
-        </div>
-        <main className="mt-3 flex-1 overflow-auto">
-          <div className="flex flex-row flex-wrap gap-2 pb-6">
-            {secrets.map(secret => (
-              <SecretRow
-                key={secret.id}
-                secret={secret}
-                models={models}
-                onEdit={secretToEdit => {
-                  setEditingSecret(secretToEdit);
-                  setSecretEditorOpen(true);
-                }}
-                onDelete={handleDeleteSecret}
-              />
-            ))}
+      ) : (
+        <div className="flex h-full flex-col">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex-1" />
+            <Button onClick={handleOpenAddEditor} variant="default">
+              <Plus className="mr-2 h-4 w-4" />
+              Add Secret
+            </Button>
           </div>
-        </main>
-      </div>
+          <main className="mt-3 flex-1 overflow-auto">
+            <div className="flex flex-row flex-wrap gap-2 pb-6">
+              {secrets.map(secret => (
+                <SecretRow
+                  key={secret.id}
+                  secret={secret}
+                  models={models}
+                  onEdit={secretToEdit => {
+                    setEditingSecret(secretToEdit);
+                    setSecretEditorOpen(true);
+                  }}
+                  onDelete={handleDeleteSecret}
+                />
+              ))}
+            </div>
+          </main>
+        </div>
+      )}
 
       <SecretEditor
         open={secretEditorOpen}

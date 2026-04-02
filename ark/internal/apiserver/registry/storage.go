@@ -124,7 +124,7 @@ func (s *GenericStorage) List(ctx context.Context, options *metainternalversion.
 	if err != nil {
 		metrics.RecordStorageOperation("list", s.config.Kind, "error")
 		metrics.RecordStorageLatency("list", s.config.Kind, start)
-		return nil, fmt.Errorf("failed to list %s: %w", s.config.Resource, err)
+		return nil, apierrors.NewInternalError(fmt.Errorf("failed to list %s: %w", s.config.Resource, err))
 	}
 
 	list := s.config.NewListFunc()
@@ -242,9 +242,7 @@ func (s *GenericStorage) Delete(ctx context.Context, name string, deleteValidati
 	}
 
 	if err := s.backend.Delete(sctx, s.config.Kind, namespace, name); err != nil {
-		metrics.RecordStorageOperation("delete", s.config.Kind, "error")
-		metrics.RecordStorageLatency("delete", s.config.Kind, start)
-		return nil, false, fmt.Errorf("failed to delete %s: %w", s.config.SingularName, err)
+		return nil, false, handleUpdateError(err, s.config, "delete", name, start)
 	}
 
 	metrics.RecordStorageOperation("delete", s.config.Kind, "success")
