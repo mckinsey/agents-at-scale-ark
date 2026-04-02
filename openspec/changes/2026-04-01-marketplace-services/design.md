@@ -2,51 +2,50 @@
 
 ## Context
 
-The Ark dashboard has two issues with marketplace services:
+The Ark marketplace page has two issues:
 
-1. **Installation detection** — Infrastructure services (Phoenix, Langfuse, A2A Inspector, MCP Inspector) show as "not installed" even when successfully deployed. Dashboard detection queries Ark CRDs via export service, but these infrastructure services create only standard Kubernetes resources (Deployments, Services, HTTPRoutes) without Ark CRDs.
+1. **Installation detection** — Marketplace items (Phoenix, Langfuse, A2A Inspector, MCP Inspector) show as "not installed" even when deployed. Dashboard detection queries Ark CRDs, but these items create only standard Kubernetes resources.
 
-2. **UI access** — Marketplace items with web UIs have no way to surface those UIs through the dashboard. The services page (`/services`) attempts this but makes brittle assumptions about port-forwarding and nip.io routing, making it unreliable across deployment modes (Ingress, Gateway API, LoadBalancer, local).
+2. **UI access** — Items with web UIs have no way to surface them. The services page makes brittle assumptions about port-forwarding and nip.io routing.
 
-Evidence of problem 1:
+Evidence:
 ```bash
-# Helm + pods running
-$ helm list -A | grep phoenix
-phoenix  phoenix  1  deployed  ✓
+$ helm list | grep phoenix
+phoenix  default  1  deployed  ✓
 
-# No Ark CRDs exist
-$ kubectl get agents,mcpservers,a2aservers -A | grep phoenix
-(empty)  ✗
+$ kubectl get agents,mcpservers -A | grep phoenix
+(empty)
 
-# Dashboard shows: "Get" (not installed)  ✗
+# Dashboard shows: "Get" (not installed)
 ```
 
-**Prior work:**
-- PR #1440 initially proposed Deployment labeling with post-install hooks
-- PR #1598 extended this to include UI URL annotations on Deployments
-- Community feedback suggested simplifying to use Helm releases directly
+**Prior work:** PR #1440 (Deployment labeling), PR #1598 (UI URL annotations on Deployments). Community feedback suggested using Helm releases directly.
 
 ## Goals / Non-Goals
 
 **Goals:**
-- Infrastructure services show correct installation status in dashboard
-- Marketplace items can surface their web UIs with "Open" button (or custom label)
-- Solution only works for items in the same namespace as ark-api (namespace-scoped detection)
-- No post-install hooks or complex patching required
+- Marketplace page shows items in the user's current namespace
+- Items show correct installation status
+- Items with web UIs get an "Open" button (or custom label)
+- No post-install hooks or complex patching
 - Leverage existing Helm and Kubernetes standards
-- Retire the services page in favor of enhanced marketplace page
+- Retire the services page
 
 **Non-Goals:**
-- Embedded/iframe UIs within the dashboard (future work)
-- OIDC token passthrough to marketplace item UIs (future work)
-- Automatic URL detection from Ingress/HTTPRoute/Gateway resources (too fragile across setups)
-- Cross-namespace resource discovery (deferred; requires ClusterRole)
+- Cross-namespace discovery (marketplace = current namespace only)
+- Embedded/iframe UIs within the dashboard
+- OIDC token passthrough to item UIs
+- Automatic URL detection from Ingress/HTTPRoute/Gateway
 
 ## Decisions
 
-### 1. Use Helm releases with chart annotations for installation detection
+### 1. Marketplace page is current-namespace only
 
-Query Helm releases via the `/v1/marketplace-items` endpoint and match using the `ark.mckinsey.com/marketplace-item-name` annotation baked into `Chart.yaml`.
+The marketplace page shows what is installed in the user's current namespace. Detection queries Helm releases in that namespace. If a user installs something, it goes to their namespace.
+
+### 2. Detect installed items via chart annotations
+
+Query Helm releases via `/v1/marketplace-items` and match using the `ark.mckinsey.com/marketplace-item-name` annotation in `Chart.yaml`.
 
 ```yaml
 # Chart.yaml for phoenix
@@ -57,7 +56,6 @@ annotations:
 ```
 
 ```typescript
-// Detection flow
 const releases = await fetch('/v1/marketplace-items')
 const isInstalled = releases.items.some(r =>
   r.chart?.metadata?.annotations?.['ark.mckinsey.com/marketplace-item-name'] === item.name
@@ -65,20 +63,12 @@ const isInstalled = releases.items.some(r =>
 )
 ```
 
-**Why chart annotations over Helm release name matching:**
-Release names are chosen at install time by the user (`helm install my-obs ./phoenix-chart`). Chart annotations are baked in at build time and survive regardless of naming. This eliminates fragile coupling between release names and marketplace manifest entries.
+**Why chart annotations over release name matching:**
+Release names are chosen at install time. Chart annotations are baked in at build time and survive regardless of naming.
 
-**What this enables:**
-- Single detection mechanism (no two-tier CRD + fallback)
-- Rich metadata available (version, revision, status, updated timestamp)
-- No additional resources to label or patch
-- Users can name their releases freely
+### 3. UI URLs and labels via Service annotations
 
-**Trade-off accepted:** Namespace-scoped detection only. Helm releases are stored as Secrets in the release namespace, and ark-api uses a Role (not ClusterRole), so it can only detect items in its own namespace.
-
-### 2. Use Service annotations for UI URLs and labels
-
-For marketplace items with web UIs, store the externally-reachable URL and optional display label as annotations on the Kubernetes Service resource.
+Store the externally-reachable URL and optional display label as annotations on the Kubernetes Service.
 
 ```yaml
 apiVersion: v1
@@ -86,7 +76,7 @@ kind: Service
 metadata:
   name: phoenix
   labels:
-    app.kubernetes.io/instance: "phoenix"  # Helm adds this automatically
+    app.kubernetes.io/instance: "phoenix"
   annotations:
     ark.mckinsey.com/marketplace-item-ui-url: "https://phoenix.example.com"
     ark.mckinsey.com/marketplace-item-ui-label: "Dashboard"
@@ -95,16 +85,9 @@ spec:
     - port: 6006
 ```
 
-**Why Service annotations over Deployment annotations (PR #1598 original approach):**
-Services are the network entry point and map 1:1 to endpoints. Service metadata is templatable from Helm values at install time (no post-install patching needed). This aligns with Kubernetes conventions where networking metadata lives on Service resources.
+**Multi-UI support:** Some items expose multiple Services with UIs (e.g., Argo Workflows: MinIO + Argo dashboard). Each Service can have its own URL and label. If label is absent, dashboard shows "Open".
 
-**Why annotations not Chart.yaml:**
-Chart.yaml annotations are static (baked in at chart build time) and cannot be overridden at install time. Service annotations are runtime-configurable from Helm values, allowing admins to specify the URL for their specific networking setup.
-
-**Multi-UI support via `marketplace-item-ui-label`:**
-Some marketplace items expose multiple Services with UIs. For example, an Argo Workflows item might have a MinIO UI and an Argo dashboard. The `marketplace-item-ui-label` annotation lets each Service specify its display label. If absent, the dashboard falls back to "Open".
-
-**Example Helm chart template:**
+**Helm chart template:**
 ```yaml
 # templates/service.yaml
 metadata:
@@ -117,264 +100,92 @@ metadata:
     {{- end }}
 ```
 
-### 3. Query Services using Helm's standard label
+### 4. Query Services using Helm's standard label
 
-To retrieve UI URLs, query Services for a Helm release using the standard `app.kubernetes.io/instance` label, then extract `ark.mckinsey.com/marketplace-item-ui-url` and `ark.mckinsey.com/marketplace-item-ui-label` annotations.
+Query Services for a Helm release using `app.kubernetes.io/instance`, then extract UI annotations.
 
-**Why `app.kubernetes.io/instance`:**
-Helm automatically sets `app.kubernetes.io/instance: "{{ .Release.Name }}"` on all resources per [Helm best practices](https://helm.sh/docs/chart_best_practices/labels/). This is a Kubernetes standard label — no need to add custom labels.
-
-**Multi-Service support:**
-A single Helm release can create multiple Services (e.g., dashboard + admin UIs). This query finds all Services for that release, each potentially having different UI URL and label annotations.
-
-**Query pattern:**
 ```typescript
 GET /v1/resources/v1/Service?labelSelector=app.kubernetes.io/instance=${releaseName}
 ```
 
-**Requires:** `/v1/resources` endpoint with `labelSelector` parameter support — single shared implementation used across all resource types (added by PR #1440).
+Helm automatically sets this label on all resources. Single shared `labelSelector` implementation on the `/v1/resources` endpoint.
 
-### 4. No manifest-level UI declaration needed
+### 5. No manifest-level UI declaration
 
-The presence of the `ark.mckinsey.com/marketplace-item-ui-url` annotation on a Service is the signal that a UI exists. No `ark.ui.enabled` field is needed in the marketplace manifest.
+The `ark.mckinsey.com/marketplace-item-ui-url` annotation on a Service is the signal a UI exists. No `ark.ui.enabled` manifest field needed.
 
-**Conditional query logic:**
-- Dashboard queries Services (Decision 3) for all installed marketplace items
-- If any matching Service has a `marketplace-item-ui-url` annotation: show button with label from `marketplace-item-ui-label` (or "Open" as fallback)
-- If no UI URL annotation found: item is installed but has no UI
-
-### 5. Complete detection and UI URL flow
-
-The dashboard combines Decisions 1-4 into a single flow. For each marketplace item:
+### 6. Complete flow
 
 ```typescript
-// Decision 1: Check if Helm release is deployed (by chart annotation)
 const releases = await arkApi.getMarketplaceItems(namespace)
-const matchingRelease = releases.items.find(r =>
-  r.chart?.metadata?.annotations?.['ark.mckinsey.com/marketplace-item-name'] === item.name
-  && r.status === 'deployed'
-)
 
-if (matchingRelease) {
-  // Decision 3: Query Services using standard Helm label
-  const services = await k8sApi.getServices({
-    labelSelector: `app.kubernetes.io/instance=${matchingRelease.name}`
-  })
+return items.map(item => {
+  const release = releases.items.find(r =>
+    r.chart?.metadata?.annotations?.['ark.mckinsey.com/marketplace-item-name'] === item.name
+    && r.status === 'deployed'
+  )
 
-  // Decision 2: Extract UI URLs and labels from Service annotations
-  const uis = services.items
-    .filter(svc => svc.metadata.annotations?.['ark.mckinsey.com/marketplace-item-ui-url'])
-    .map(svc => ({
-      url: svc.metadata.annotations['ark.mckinsey.com/marketplace-item-ui-url'],
-      label: svc.metadata.annotations['ark.mckinsey.com/marketplace-item-ui-label'] || 'Open'
-    }))
+  let uis: { url: string; label: string }[] = []
 
-  // Render buttons for each UI
-  uis.forEach(ui => <Button onClick={() => window.open(ui.url)}>{ui.label}</Button>)
-}
-```
-
-### 6. Services page sunset
-
-The services page functionality is fully absorbed by the marketplace page. Users access installed service UIs through the marketplace page instead.
-
-**Implementation steps:**
-1. Add buttons to marketplace cards for items with UI URLs (using label or "Open" fallback)
-2. Add "Installed" filter view to marketplace page
-3. Remove services page from navigation
-4. Remove services page code and components
-
-### 7. Namespace vs cluster-scoped detection
-
-The marketplace manifest includes an `installScope` field to distinguish between namespace-scoped and cluster-scoped deployments (addresses [#1522](https://github.com/mckinsey/agents-at-scale-ark/issues/1522)).
-
-```json
-{
-  "name": "services/phoenix",
-  "installScope": "namespace",
-  "ark": {
-    "namespace": "phoenix"
+  if (release) {
+    const services = await k8sApi.getServices({
+      labelSelector: `app.kubernetes.io/instance=${release.name}`
+    })
+    uis = services.items
+      .filter(svc => svc.metadata.annotations?.['ark.mckinsey.com/marketplace-item-ui-url'])
+      .map(svc => ({
+        url: svc.metadata.annotations['ark.mckinsey.com/marketplace-item-ui-url'],
+        label: svc.metadata.annotations['ark.mckinsey.com/marketplace-item-ui-label'] || 'Open'
+      }))
   }
-}
+
+  return { ...item, status: release ? 'installed' : 'available', uis }
+})
 ```
 
-**Scope values:**
-- `"namespace"`: Item deployed in the same namespace as ark-api — detection supported
-- `"cluster"`: Item may be deployed in different namespace or cluster-wide — detection not supported, requires manual verification
+### 7. Services page sunset
 
-**Dashboard behavior:**
-- **Namespace-scoped items**: Show "Installed" when Helm release detected in ark-api's namespace
-- **Cluster-scoped items**: Always show "Get" with scope badge indicating manual verification needed
-- Badge displayed on marketplace cards: `[Namespace]` or `[Cluster]`
-
-**Why this matters:**
-Users need to understand detection limitations. Cluster-scoped items (like operators) may be installed but won't auto-detect due to namespace-scoped RBAC. The badge sets correct expectations.
-
-**Implementation:**
-```typescript
-// In marketplace card
-{item.installScope === 'cluster' && (
-  <Badge>Cluster</Badge>
-)}
-{item.installScope === 'namespace' && (
-  <Badge>Namespace</Badge>
-)}
-```
+1. Add buttons to marketplace cards for items with UI URLs
+2. Add "Installed" filter to marketplace page
+3. Remove services page and components
 
 ## Risks / Trade-offs
 
-**Namespace limitation** — ark-api can only detect items in its own namespace due to Role-scoped RBAC (not ClusterRole). Items deployed to other namespaces cannot be auto-detected.
+**URL configuration burden** — Admins must set `uiUrl` at install time. Acceptable because the admin who sets up networking knows the URL.
 
-*Mitigation:* Marketplace manifest can include `installScope: "cluster"` badge to inform users. Future work could add ClusterRole option for cluster-wide detection.
-
-**URL configuration burden** — Admins must set the `uiUrl` Helm value at install time for their networking setup (Ingress hostname, LoadBalancer IP, etc.).
-
-*Mitigation:* This is acceptable because the admin who sets up networking knows the URL. Chart templates can provide sensible defaults (localhost + port for local dev).
-
-**URL staleness** — If admin changes Ingress hostname after install, the Service annotation becomes stale.
-
-*Mitigation:* This matches how other annotation-based systems work (external-dns, cert-manager). Admin must update annotation when networking changes. Helm upgrade with new values updates the annotation.
-
-**HTTPRoute auto-discovery** — The `/v1/ark-services` endpoint already discovers HTTPRoutes and constructs URLs. Why not use this?
-
-*Mitigation:* HTTPRoute discovery only works for Gateway API deployments, not Ingress, LoadBalancer, or port-forward setups (the "fragile assumptions" mentioned in #1596). Explicit Service annotations work universally across all deployment modes.
+**URL staleness** — If networking changes, the annotation becomes stale. `helm upgrade` with new values fixes it.
 
 ## Implementation Notes
 
 ### ark-api (this repo)
 
-**New endpoint:** `/v1/marketplace-items` — queries Helm releases and returns them for dashboard consumption. Replaces `/v1/ark-services` for this use case.
+**New endpoint:** `/v1/marketplace-items` — queries Helm releases in current namespace.
 
-**Existing endpoint:** `/v1/resources/v1/Service?labelSelector=...` — for Service queries. `labelSelector` must be a single shared implementation used across all resource types (requires support from PR #1440).
+**Existing endpoint:** `/v1/resources/v1/Service?labelSelector=...` — single shared `labelSelector` implementation.
 
-**RBAC:** Already has permissions to read Helm releases (Secrets) and Services in its namespace. No expansion needed.
+**RBAC:** Already has permissions. No expansion needed.
 
 ### Dashboard (this repo)
 
 **Modified files:**
-- `lib/services/marketplace-fetcher.ts` — Detection logic using `/v1/marketplace-items`
-- `lib/services/kubernetes.ts` — Service query helper using `labelSelector`
-- `components/cards/marketplace-item-card.tsx` — UI buttons with labels when URL annotations present
-- `lib/api/generated/marketplace-types.ts` — Add `uiUrl` and `uiLabel` fields
+- `lib/services/marketplace-fetcher.ts` — detection logic
+- `lib/services/kubernetes.ts` — Service query helper
+- `components/cards/marketplace-item-card.tsx` — UI buttons
+- `lib/api/generated/marketplace-types.ts` — add `uis` field
 
-**Detection flow:**
-```typescript
-async function getInstalledMarketplaceItems(items: MarketplaceItem[]) {
-  const releases = await fetch('/v1/marketplace-items')
-
-  return items.map(item => {
-    const matchingRelease = releases.items.find(r =>
-      r.chart?.metadata?.annotations?.['ark.mckinsey.com/marketplace-item-name'] === item.name
-      && r.status === 'deployed'
-    )
-
-    let uis: { url: string; label: string }[] = []
-
-    if (matchingRelease) {
-      const services = await fetch(
-        `/v1/resources/v1/Service?labelSelector=app.kubernetes.io/instance=${matchingRelease.name}`
-      )
-      uis = services.items
-        .filter(svc => svc.metadata.annotations?.['ark.mckinsey.com/marketplace-item-ui-url'])
-        .map(svc => ({
-          url: svc.metadata.annotations['ark.mckinsey.com/marketplace-item-ui-url'],
-          label: svc.metadata.annotations['ark.mckinsey.com/marketplace-item-ui-label'] || 'Open'
-        }))
-    }
-
-    return {
-      ...item,
-      status: matchingRelease ? 'installed' : 'available',
-      uis
-    }
-  })
-}
-```
+**Removed:**
+- Services page and ark-services components
 
 ### Marketplace Charts (agents-at-scale-marketplace repo)
 
-**For each chart:**
+1. Add `ark.mckinsey.com/marketplace-item-name` to `Chart.yaml`
+2. Add `ark.mckinsey.com/marketplace-item-ui-url` to Service template (from `.Values.uiUrl`)
+3. Optionally add `ark.mckinsey.com/marketplace-item-ui-label` (from `.Values.uiLabel`)
+4. Add `uiUrl: ""` and `uiLabel: ""` to `values.yaml`
 
-1. **Add marketplace item annotation to Chart.yaml:**
-```yaml
-# Chart.yaml
-apiVersion: v2
-name: phoenix
-annotations:
-  ark.mckinsey.com/marketplace-item-name: "services/phoenix"
-```
-
-2. **For charts with a web UI, add annotations to Service template:**
-```yaml
-# templates/service.yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: {{ include "phoenix.fullname" . }}
-  annotations:
-    {{- if .Values.uiUrl }}
-    ark.mckinsey.com/marketplace-item-ui-url: "{{ .Values.uiUrl }}"
-    {{- end }}
-    {{- if .Values.uiLabel }}
-    ark.mckinsey.com/marketplace-item-ui-label: "{{ .Values.uiLabel }}"
-    {{- end }}
-spec:
-  # ... existing spec
-```
-
-3. **Update values.yaml with UI config:**
-```yaml
-# values.yaml
-uiUrl: ""      # Set via --set uiUrl=https://phoenix.example.com
-uiLabel: ""    # Set via --set uiLabel="Dashboard" (defaults to "Open" if empty)
-```
-
-4. **Update marketplace.json:**
-```json
-{
-  "name": "services/phoenix",
-  "installScope": "namespace",
-  "ark": {
-    "namespace": "phoenix"
-  }
-}
-```
-
-**Install examples:**
+**Install example:**
 ```bash
-# URL and label configured
 helm install phoenix ./chart \
   --set uiUrl=https://phoenix.example.com \
   --set uiLabel="Phoenix Dashboard"
-
-# Local dev (no URL configured — no "Open" button shown)
-helm install phoenix ./chart
-```
-
-### Documentation
-
-**For chart authors** (marketplace repo CONTRIBUTING.md):
-```markdown
-## Marketplace Item Detection
-
-Add the `ark.mckinsey.com/marketplace-item-name` annotation to your Chart.yaml:
-  ark.mckinsey.com/marketplace-item-name: "<type>/<name>"
-
-## UI URL Configuration
-
-If your marketplace item has a web UI:
-1. Add `ark.mckinsey.com/marketplace-item-ui-url` annotation to Service template, templated from `.Values.uiUrl`
-2. Optionally add `ark.mckinsey.com/marketplace-item-ui-label` for a custom button label (defaults to "Open")
-3. Add `uiUrl: ""` and `uiLabel: ""` to values.yaml
-```
-
-**For users** (dashboard or marketplace docs):
-```markdown
-## Accessing Marketplace Item UIs
-
-Items with web UIs show a button (labeled per the chart author, or "Open") when installed with a configured URL:
-
-  helm install <item> --set uiUrl=<your-url> --set uiLabel="My Dashboard"
-
-Without URL configuration, item shows as installed but no button appears.
 ```
