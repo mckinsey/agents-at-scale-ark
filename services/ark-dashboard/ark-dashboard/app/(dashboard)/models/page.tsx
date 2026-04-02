@@ -15,7 +15,7 @@ export default function ModelsPage() {
   const searchParams = useSearchParams();
   const namespace = searchParams.get('namespace') || 'default';
   const { readOnlyMode } = useNamespace();
-  const { data: models } = useGetAllModels(namespace);
+  const { data: models } = useGetAllModels();
 
   const pageTitle = models ? `Models (${models.length})` : 'Models';
 

@@ -10,8 +10,7 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 import { MetricCard } from './metric-card';
 
 export function HomepageAgentsCard() {
-  const { namespace } = useNamespace();
-  const { data, isPending, error } = useGetAllAgents(namespace);
+  const { data, isPending, error } = useGetAllAgents();
 
   const count = data?.length || 0;
 

@@ -74,8 +74,8 @@ export const ToolsSection = forwardRef<
       setLoading(true);
       try {
         const [toolsData, agentsData] = await Promise.all([
-          toolsService.getAll(namespace),
-          agentsService.getAll(namespace),
+          toolsService.getAll(),
+          agentsService.getAll(),
         ]);
         setTools(toolsData);
         setAgents(agentsData);
@@ -115,7 +115,7 @@ export const ToolsSection = forwardRef<
       return;
     }
     try {
-      await toolsService.delete(identifier, { namespace });
+      await toolsService.delete(identifier);
       setTools(tools.filter(tool => (tool.name || tool.type) !== identifier));
       toast.success('Tool Deleted', {
         description: 'Successfully deleted tool',
@@ -150,7 +150,7 @@ export const ToolsSection = forwardRef<
         description: `Successfully created ${toolSpec.name}`,
       });
 
-      const updatedTools = await toolsService.getAll(namespace);
+      const updatedTools = await toolsService.getAll();
       setTools(updatedTools);
     } catch (error) {
       toast.error('Failed to Create Tool', {

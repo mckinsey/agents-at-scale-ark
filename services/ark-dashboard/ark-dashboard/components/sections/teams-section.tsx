@@ -54,8 +54,8 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
         setLoading(true);
         try {
           const [teamsData, agentsData] = await Promise.all([
-            teamsService.getAll(namespace),
-            agentsService.getAll(namespace),
+            teamsService.getAll(),
+            agentsService.getAll(),
           ]);
           setTeams(teamsData);
           setAgents(agentsData);
@@ -82,19 +82,19 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
         if (team.id) {
           // This is an update
           const updateRequest = team as TeamUpdateRequest & { id: string };
-          await teamsService.updateById(updateRequest.id, updateRequest, { namespace });
+          await teamsService.updateById(updateRequest.id, updateRequest);
           toast.success('Team Updated', {
             description: 'Successfully updated the team',
           });
         } else {
           const createRequest = team as TeamCreateRequest;
-          await teamsService.create(createRequest, { namespace });
+          await teamsService.create(createRequest);
           toast.success('Team Created', {
             description: `Successfully created ${createRequest.name}`,
           });
         }
         // Reload data
-        const updatedTeams = await teamsService.getAll(namespace);
+        const updatedTeams = await teamsService.getAll();
         setTeams(updatedTeams);
       } catch (error) {
         toast.error(
@@ -115,12 +115,12 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
         if (!team) {
           throw new Error('Team not found');
         }
-        await teamsService.deleteById(id, { namespace });
+        await teamsService.deleteById(id);
         toast.success('Team Deleted', {
           description: `Successfully deleted ${team.name}`,
         });
         // Reload data
-        const updatedTeams = await teamsService.getAll(namespace);
+        const updatedTeams = await teamsService.getAll();
         setTeams(updatedTeams);
       } catch (error) {
         toast.error('Failed to Delete Team', {

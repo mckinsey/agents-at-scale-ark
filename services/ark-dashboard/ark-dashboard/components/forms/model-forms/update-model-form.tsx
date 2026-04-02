@@ -52,7 +52,6 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
       id: model.id,
       model: formValues.model,
       config,
-      namespace,
     }).then(handleSuccess);
   };
 

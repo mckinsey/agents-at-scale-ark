@@ -114,8 +114,8 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
           teamName
         ) {
           const [teamData, agentsData] = await Promise.all([
-            teamsService.getByName(teamName, namespace),
-            agentsService.getAll(namespace),
+            teamsService.getByName(teamName),
+            agentsService.getAll(),
           ]);
 
           if (!teamData) {
@@ -151,7 +151,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
               teamData.selector?.terminatePrompt || DEFAULT_TERMINATE_PROMPT,
           });
         } else {
-          const agentsData = await agentsService.getAll(namespace);
+          const agentsData = await agentsService.getAll();
           setAgents(agentsData);
         }
       } catch (error) {
@@ -204,7 +204,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
                   }
                 : null,
             graph: graphEdges.length > 0 ? { edges: graphEdges } : null,
-          }, { namespace });
+          });
 
           setTeam(updatedTeam);
           setInitialMembers(selectedMembers);
@@ -232,7 +232,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
                   }
                 : undefined,
             graph: graphEdges.length > 0 ? { edges: graphEdges } : undefined,
-          }, { namespace });
+          });
           toast.success('Team created successfully');
           onSuccessRef.current?.();
         }

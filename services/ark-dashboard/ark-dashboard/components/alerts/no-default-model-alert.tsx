@@ -10,8 +10,7 @@ import { useGetAllModels } from '@/lib/services/models-hooks';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 export function NoDefaultModelAlert() {
-  const { namespace } = useNamespace();
-  const { data: models, error } = useGetAllModels(namespace);
+  const { data: models, error } = useGetAllModels();
 
   useEffect(() => {
     if (error) {

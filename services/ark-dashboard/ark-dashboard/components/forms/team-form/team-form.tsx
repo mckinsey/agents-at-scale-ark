@@ -57,12 +57,12 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
     if (isViewing) {
       setTeamsLoading(true);
       teamsService
-        .getAll(namespace)
+        .getAll()
         .then(teams => setAllTeams(teams))
         .catch(console.error)
         .finally(() => setTeamsLoading(false));
     }
-  }, [isViewing, namespace]);
+  }, [isViewing]);
 
   const { form, state, actions } = useTeamForm({
     mode,
@@ -149,7 +149,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
     if (!team) return;
 
     try {
-      await teamsService.deleteById(team.id, { namespace });
+      await teamsService.deleteById(team.id);
       toast.success('Team Deleted', {
         description: `Successfully deleted ${team.name}`,
       });

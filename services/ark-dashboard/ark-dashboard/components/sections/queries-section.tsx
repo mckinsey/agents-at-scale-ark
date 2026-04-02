@@ -72,7 +72,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(
       isError: listQueriesError,
       error: listQueriesErrorObject,
       refetch: loadQueries,
-    } = useListQueries(namespace);
+    } = useListQueries();
 
     useEffect(() => {
       if (listQueriesData && !listQueriesError) {

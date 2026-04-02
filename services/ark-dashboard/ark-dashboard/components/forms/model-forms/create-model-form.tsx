@@ -60,7 +60,6 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
       provider: formValues.provider,
       model: formValues.model,
       config,
-      namespace,
     });
   };
 

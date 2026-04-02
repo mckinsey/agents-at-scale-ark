@@ -45,7 +45,7 @@ export const McpServersSection = forwardRef<
     const loadData = async () => {
       setLoading(true);
       try {
-        const data = await mcpServersService.getAll(namespace);
+        const data = await mcpServersService.getAll();
         setMcpServers(data);
       } catch (error) {
         console.error('Failed to load MCP servers:', error);
@@ -65,7 +65,7 @@ export const McpServersSection = forwardRef<
 
   const handleDelete = async (identifier: string) => {
     try {
-      await mcpServersService.delete(identifier, { namespace });
+      await mcpServersService.delete(identifier);
       setMcpServers(
         mcpServers.filter(server => (server.name || server.id) !== identifier),
       );
@@ -94,7 +94,7 @@ export const McpServersSection = forwardRef<
   ) => {
     try {
       if (!edit) {
-        await mcpServersService.create(mcpServer, { namespace });
+        await mcpServersService.create(mcpServer);
         toast.success('Mcp Created', {
           description: `Successfully created ${mcpServer.name}`,
         });
@@ -102,13 +102,12 @@ export const McpServersSection = forwardRef<
         await mcpServersService.update(
           mcpServer.name,
           { spec: mcpServer.spec },
-          { namespace },
         );
         toast.success('Mcp Updated', {
           description: `Successfully updated ${mcpServer.name}`,
         });
       }
-      const data = await mcpServersService.getAll(namespace);
+      const data = await mcpServersService.getAll();
       setMcpServers(data);
       setMcpEditorOpen(false);
     } catch (error) {

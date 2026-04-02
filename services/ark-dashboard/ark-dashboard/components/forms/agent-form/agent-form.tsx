@@ -71,12 +71,12 @@ export function AgentForm({
     if (isViewing) {
       setAgentsLoading(true);
       agentsService
-        .getAll(namespace)
+        .getAll()
         .then(agents => setAllAgents(agents))
         .catch(console.error)
         .finally(() => setAgentsLoading(false));
     }
-  }, [isViewing, namespace]);
+  }, [isViewing]);
 
   const { form, state, actions } = useAgentForm({
     mode,

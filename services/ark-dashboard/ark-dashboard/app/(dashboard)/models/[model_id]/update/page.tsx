@@ -18,9 +18,7 @@ type PageProps = {
 
 export default function ModelUpdatePage({ params }: PageProps) {
   const { model_id: modelId } = use(params);
-  const searchParams = useSearchParams();
-  const namespace = searchParams.get('namespace') || 'default';
-  const { data, isPending } = useGetModelbyId({ modelId, namespace });
+  const { data, isPending } = useGetModelbyId({ modelId });
 
   const breadcrumbs: BreadcrumbElement[] = [
     ...BASE_BREADCRUMBS,

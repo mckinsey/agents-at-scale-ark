@@ -10,8 +10,7 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 import { MetricCard } from './metric-card';
 
 export function HomepageMcpServersCard() {
-  const { namespace } = useNamespace();
-  const { data, isPending, error } = useGetAllMcpServers(namespace);
+  const { data, isPending, error } = useGetAllMcpServers();
 
   const count = data?.length || 0;
 

@@ -66,7 +66,7 @@ export function ModelConfiguratorForm() {
     data: secrets,
     isPending: isSecretsPending,
     error: secretsError,
-  } = useGetAllSecrets(namespace);
+  } = useGetAllSecrets();
 
   useEffect(() => {
     if (secretsError) {
@@ -600,9 +600,9 @@ function SecretDialogProvider({
 
   const handleSubmit = useCallback(
     (formValues: NewSecretData) => {
-      mutate({ ...formValues, namespace });
+      mutate(formValues);
     },
-    [mutate, namespace],
+    [mutate],
   );
 
   const handleOpenChange = useCallback(

@@ -105,7 +105,6 @@ describe('useTeamForm', () => {
 
     expect(mockTeamsService.create).toHaveBeenCalledWith(
       expect.objectContaining({ loops: false }),
-      { namespace: 'default' },
     );
   });
 
@@ -130,7 +129,6 @@ describe('useTeamForm', () => {
 
     expect(mockTeamsService.create).toHaveBeenCalledWith(
       expect.objectContaining({ loops: true, maxTurns: 5 }),
-      { namespace: 'default' },
     );
   });
 
@@ -165,7 +163,6 @@ describe('useTeamForm', () => {
     expect(mockTeamsService.updateById).toHaveBeenCalledWith(
       'team-123',
       expect.objectContaining({ loops: true }),
-      { namespace: 'default' },
     );
   });
 

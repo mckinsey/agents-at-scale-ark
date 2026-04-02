@@ -50,7 +50,7 @@ export const AgentsSection = forwardRef<AgentsSectionHandle, object>(
       const loadData = async () => {
         setLoading(true);
         try {
-          const agentsData = await agentsService.getAll(namespace);
+          const agentsData = await agentsService.getAll();
           setAgents(agentsData);
         } catch (error) {
           console.error('Failed to load data:', error);
@@ -74,11 +74,11 @@ export const AgentsSection = forwardRef<AgentsSectionHandle, object>(
         if (!agent) {
           throw new Error('Agent not found');
         }
-        await agentsService.deleteById(id, { namespace });
+        await agentsService.deleteById(id);
         toast.success('Agent Deleted', {
           description: `Successfully deleted ${agent.name}`,
         });
-        const updatedAgents = await agentsService.getAll(namespace);
+        const updatedAgents = await agentsService.getAll();
         setAgents(updatedAgents);
       } catch (error) {
         toast.error('Failed to Delete Agent', {

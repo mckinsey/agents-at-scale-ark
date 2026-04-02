@@ -7,8 +7,7 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 import { MetricCard } from './metric-card';
 
 export function HomepageMemoryCard() {
-  const { namespace } = useNamespace();
-  const { data, isPending, error } = useGetMemoryResources(namespace);
+  const { data, isPending, error } = useGetMemoryResources();
 
   const count = data?.length || 0;
 

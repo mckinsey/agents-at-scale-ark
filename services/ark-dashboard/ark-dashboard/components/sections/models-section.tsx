@@ -45,7 +45,7 @@ export const ModelsSection = function ModelsSection({
     const loadData = async () => {
       setLoading(true);
       try {
-        const modelsData = await modelsService.getAll(namespace);
+        const modelsData = await modelsService.getAll();
         setModels(modelsData);
       } catch (error) {
         console.error('Failed to load data:', error);
@@ -69,11 +69,11 @@ export const ModelsSection = function ModelsSection({
       if (!model) {
         throw new Error('Model not found');
       }
-      await modelsService.deleteById(id, { namespace });
+      await modelsService.deleteById(id);
       toast.success('Model Deleted', {
         description: `Successfully deleted ${model.name}`,
       });
-      const updatedModels = await modelsService.getAll(namespace);
+      const updatedModels = await modelsService.getAll();
       setModels(updatedModels);
     } catch (error) {
       toast.error('Failed to Delete Model', {

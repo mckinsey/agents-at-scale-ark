@@ -185,9 +185,7 @@ describe('A2AServersSection', () => {
     await userEvent.click(deleteButtons[0]);
 
     await waitFor(() => {
-      expect(A2AServersService.delete).toHaveBeenCalledWith('server-1', {
-        namespace: 'default',
-      });
+      expect(A2AServersService.delete).toHaveBeenCalledWith('server-1');
       expect(toast.success).toHaveBeenCalledWith('A2A Server Deleted', {
         description: 'Successfully deleted test-server-1',
       });
