@@ -37,7 +37,7 @@ for i in "${!BRANCHES[@]}"; do
   if [ $N -eq 1 ]; then
     WORKTREE="$REPO_ROOT"
   else
-    WORKTREE="$HOME/ark-worktree-${SLUG}"
+    WORKTREE="/tmp/ark-worktree-${SLUG}"
   fi
 
   DASHBOARD_PORT=$((3273 + N))

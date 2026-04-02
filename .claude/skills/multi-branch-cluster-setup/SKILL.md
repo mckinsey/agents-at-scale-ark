@@ -12,9 +12,9 @@ Provisions one minikube cluster per branch supplied by the user. The number of c
 | # | Cluster name | Worktree | Branch | Dashboard | API | Gateway |
 |---|---|---|---|---|---|---|
 | 1 | `ark-cluster-1` | `~/agents-at-scale-ark` (main repo, no worktree needed if branch 1 = current) | branch 1 | :3274 | :8080 | :8090 |
-| 2 | `ark-cluster-2` | `~/ark-worktree-<branch2-slug>` | branch 2 | :3275 | :8081 | :8091 |
-| 3 | `ark-cluster-3` | `~/ark-worktree-<branch3-slug>` | branch 3 | :3276 | :8082 | :8092 |
-| N | `ark-cluster-N` | `~/ark-worktree-<branchN-slug>` | branch N | :3273+N | :8079+N | :8089+N |
+| 2 | `ark-cluster-2` | `/tmp/ark-worktree-<branch2-slug>` | branch 2 | :3275 | :8081 | :8091 |
+| 3 | `ark-cluster-3` | `/tmp/ark-worktree-<branch3-slug>` | branch 3 | :3276 | :8082 | :8092 |
+| N | `ark-cluster-N` | `/tmp/ark-worktree-<branchN-slug>` | branch N | :3273+N | :8079+N | :8089+N |
 
 Port formula: Dashboard = 3273+N, API = 8079+N, Gateway = 8089+N
 
@@ -37,7 +37,7 @@ If the user's message contains branch names (e.g. "create clusters with branch1 
 - Assign each branch to `ark-cluster-N` (N = 1, 2, 3...)
 - Branch slug = branch name with `/` replaced by `-`
 - Branch 1 uses `~/agents-at-scale-ark` directly if it matches the current checkout; otherwise also gets a worktree
-- Branches 2..N each get a worktree at `~/ark-worktree-<branchN-slug>`
+- Branches 2..N each get a worktree at `/tmp/ark-worktree-<branchN-slug>`
 
 If no branches are provided in the message, ask how many clusters and which branches.
 
@@ -49,7 +49,7 @@ For each branch beyond the first (or all branches if branch 1 differs from curre
 cd ~/agents-at-scale-ark
 
 # Repeat for each branch N >= 2:
-git worktree add ~/ark-worktree-<branchN-slug> <BRANCHN>
+git worktree add /tmp/ark-worktree-<branchN-slug> <BRANCHN>
 
 # Verify
 git worktree list
@@ -156,7 +156,7 @@ bash .claude/skills/multi-branch-cluster-setup/scripts/port-forward.sh status
 bash .claude/skills/multi-branch-cluster-setup/scripts/port-forward.sh stop
 
 # Run devspace dev on a specific worktree
-cd ~/ark-worktree-<branch-slug> && devspace dev
+cd /tmp/ark-worktree-<branch-slug> && devspace dev
 ```
 
 ## Troubleshooting
