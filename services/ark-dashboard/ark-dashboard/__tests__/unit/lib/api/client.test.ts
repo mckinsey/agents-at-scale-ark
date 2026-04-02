@@ -263,6 +263,32 @@ describe('APIClient', () => {
     })
   })
 
+  describe('relative baseURL', () => {
+    it('should resolve a relative baseURL against globalThis.location.origin without throwing', async () => {
+      Object.defineProperty(globalThis, 'location', {
+        value: { origin: 'http://localhost:3274' },
+        writable: true,
+        configurable: true,
+      })
+
+      const relativeClient = new APIClient('/api/v1/proxy/services')
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ services: [] }),
+      })
+
+      await relativeClient.get('')
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `http://localhost:3274/api/v1/proxy/services?_t=${MOCK_TIMESTAMP}`,
+        expect.anything(),
+      )
+    })
+  })
+
   describe('APIError', () => {
     it('should create error with correct properties', () => {
       const error = new APIError('Test error', 404, { code: 'NOT_FOUND' })

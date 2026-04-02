@@ -34,7 +34,11 @@ class APIClient {
     params?: Record<string, string | number | boolean>,
     method?: string,
   ): string {
-    const url = new URL(endpoint, this.baseURL);
+    const isAbsolute = this.baseURL.startsWith('http') || this.baseURL.startsWith('//');
+    const base = isAbsolute || typeof globalThis.location === 'undefined'
+      ? this.baseURL
+      : `${globalThis.location.origin}${this.baseURL}`;
+    const url = new URL(endpoint, base);
 
     if (params) {
       Object.entries(params).forEach(([key, value]) => {

@@ -23,6 +23,8 @@ Read the following conversation. Then select the next role from {{.Participants}
 
 Read the above conversation. Then select the next role from {{.Participants}} to play. Only return the role.`
 
+const defaultTerminatePrompt = `If the most recent user message has been given an adequate response, do not return a role. Instead call the terminate tool.`
+
 type SelectorTemplateData struct {
 	Roles        string
 	Participants string
@@ -71,9 +73,9 @@ func buildRoles(members []TeamMember) string {
 }
 
 func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, error) {
-	// Check for override selector agent first (used in tests)
-	if t.mockSelectorAgent != nil {
-		return t.mockSelectorAgent, nil
+	// Return cached selector agent if already loaded (test mock or production cache)
+	if t.selectorAgent != nil {
+		return t.selectorAgent, nil
 	}
 
 	if t.Selector == nil || t.Selector.Agent == "" {
@@ -93,6 +95,15 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, e
 		return nil, fmt.Errorf("failed to create selector agent: %w", err)
 	}
 
+	if t.Selector.EnableTerminateTool != nil && *t.Selector.EnableTerminateTool {
+		terminateTool := arkv1alpha1.AgentTool{Type: "builtin", Name: BuiltinToolTerminate}
+		if err := agent.Tools.registerTool(ctx, t.Client, terminateTool, t.Namespace, t.telemetry, t.eventing); err != nil {
+			return nil, fmt.Errorf("failed to register selector tool %s: %w", terminateTool.Name, err)
+		}
+	}
+
+	t.selectorAgent = agent
+
 	return agent, nil
 }
 
@@ -110,14 +121,26 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 		return nil, err
 	}
 
+	selectorMessage := buf.String()
+	if t.Selector != nil && t.Selector.EnableTerminateTool != nil && *t.Selector.EnableTerminateTool {
+		terminatePrompt := defaultTerminatePrompt
+		if t.Selector.TerminatePrompt != "" {
+			terminatePrompt = t.Selector.TerminatePrompt
+		}
+		selectorMessage = selectorMessage + "\n\n" + terminatePrompt
+	}
+
 	selectorAgent, err := t.loadSelectorAgent(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	result, err := selectorAgent.Execute(ctx, NewUserMessage("Select the next participant to respond."), []Message{NewSystemMessage(buf.String())}, nil, nil)
+	result, err := selectorAgent.Execute(ctx, NewUserMessage("Select the next participant to respond."), []Message{NewSystemMessage(selectorMessage)}, nil, nil)
 	if err != nil {
 		if IsTerminateTeam(err) {
+			if response := extractTerminateToolResponse(result); response != "" {
+				return nil, &TerminateTeamWithResponse{Response: response, Messages: result.Messages}
+			}
 			return nil, err
 		}
 		return nil, fmt.Errorf("selector agent call failed: %w", err)
@@ -133,7 +156,6 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 		selectedName = strings.TrimSpace(lastMsg.OfAssistant.Content.OfString.Value)
 		logger := logf.FromContext(ctx)
 		logger.Info("Selector chose", "selectedName", selectedName)
-
 	} else {
 		return nil, fmt.Errorf("selector agent returned invalid response")
 	}
@@ -238,6 +260,18 @@ func (t *Team) buildLegalTransitionsMap() map[string][]TeamMember {
 	return legalTransitions
 }
 
+func extractTerminateToolResponse(result *ExecutionResult) string {
+	if result == nil {
+		return ""
+	}
+	for i := len(result.Messages) - 1; i >= 0; i-- {
+		if msg := result.Messages[i]; msg.OfTool != nil {
+			return msg.OfTool.Content.OfString.Value
+		}
+	}
+	return ""
+}
+
 func (t *Team) handleMemberSelectionError(ctx context.Context, err error, newMessages *[]Message) (shouldTerminate bool, returnErr error) {
 	var invalidAgentErr *InvalidAgentError
 	switch {
@@ -250,6 +284,17 @@ func (t *Team) handleMemberSelectionError(ctx context.Context, err error, newMes
 		StreamSystemMessage(ctx, t.eventStream, warningContent)
 		return true, nil
 	case IsTerminateTeam(err):
+		var withResponse *TerminateTeamWithResponse
+		if errors.As(err, &withResponse) && withResponse.Response != "" {
+			*newMessages = append(*newMessages, withResponse.Messages...)
+			if t.eventStream != nil {
+				chunk := NewContentChunk("chatcmpl-terminate", "", withResponse.Response)
+				chunkWithMeta := WrapChunkWithMetadata(ctx, chunk, "", nil)
+				if streamErr := t.eventStream.StreamChunk(ctx, chunkWithMeta); streamErr != nil {
+					logf.FromContext(ctx).Error(streamErr, "failed to stream terminate response")
+				}
+			}
+		}
 		return true, nil
 	default:
 		return false, err

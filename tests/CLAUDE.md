@@ -1,6 +1,21 @@
 # Chainsaw Testing Guide
 
-This document covers best practices for writing chainsaw tests in the ARK project.
+This document covers best practices for writing chainsaw tests in the Ark project.
+
+## Test Taxonomy
+
+Tests use labels in `chainsaw-test.yaml` metadata to control when they run.
+
+### Label-Based Selectors
+
+| Label | Meaning | CI Trigger |
+|---|---|---|
+| *(no label)* | Standard tests, use mock-llm | Always runs (`!llm,!postgresql` or `!llm`) |
+| `llm: "true"` | Requires real LLM API keys | `e2e-tests-llm` job only |
+| `multi-provider: "true"` | Runs per-provider via `chainsaw-multi` script | `e2e-tests-llm` job |
+| `postgresql: "true"` | Requires PostgreSQL backend | Excluded from etcd-only runs |
+| `requires-images: "true"` | Requires built container images | Conditional |
+| `standard: "true"` | Explicit standard marker | Always runs |
 
 ### Basic Test Layout
 ```
@@ -891,5 +906,18 @@ chainsaw test tests/ --test-dir tests/queries --pause-on-failure
 
 ### Validation
 - Each test should pass independently when run individually
+
+## Playwright UI Testing
+
+### Radix UI Select
+
+Radix UI Select uses Floating UI to position the dropdown portal after mount. Until positioning completes, the portal DOM nodes can be replaced, causing "element was detached from the DOM". Wait for `[role='listbox'][data-side]` — Floating UI sets `data-side` once positioning is done.
+
+```python
+trigger.click()
+page.locator("[role='listbox'][data-side]").wait_for(state="visible", timeout=15000)
+page.locator("[role='option']:has-text('HTTP')").first.click()
+```
+
 - Query tests should reach `phase: done`
 - No RBAC permission errors in events
