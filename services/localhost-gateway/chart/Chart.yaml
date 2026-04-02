@@ -2,8 +2,8 @@ apiVersion: v2
 name: localhost-gateway
 description: Ark Gateway for Local Development
 type: application
-version: 0.1.55
-appVersion: 0.1.55
+version: 0.1.56
+appVersion: 0.1.56
 annotations:
   category: Networking
   licenses: Apache-2.0
