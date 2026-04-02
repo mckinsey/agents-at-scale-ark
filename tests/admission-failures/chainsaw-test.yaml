@@ -92,23 +92,6 @@ spec:
     try:
     - error:
         file: manifests/invalid-team-invalid-member-type.yaml
-  - name: test-team-graph-no-config
-    try:
-    - error:
-        file: manifests/invalid-team-graph-no-config.yaml
-  - name: test-team-graph-no-edges
-    try:
-    - error:
-        file: manifests/invalid-team-graph-no-edges.yaml
-  - name: test-team-graph-invalid-edge
-    try:
-    - error:
-        file: manifests/invalid-team-graph-invalid-edge.yaml
-  - name: test-team-graph-no-maxturns
-    try:
-    - error:
-        file: manifests/invalid-team-graph-no-maxturns.yaml
-  
   # Tool validation failures
   - name: test-tool-missing-type
     try:

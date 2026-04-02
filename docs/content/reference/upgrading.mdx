@@ -111,6 +111,49 @@ spec:
   maxTurns: 20
 ```
 
+### Graph Strategy Deprecation
+
+The `graph` team strategy is deprecated and has been merged into `sequential`.
+
+**Existing `graph` teams** are automatically migrated by the admission webhook to `strategy: sequential` with `loops: false`. Graph edges and `maxTurns` are discarded during migration.
+
+On create or update, you will see a deprecation warning.
+
+<Callout type="warning">
+`strategy: graph` will be removed in v1.0.0. Update your team manifests to use `sequential`.
+</Callout>
+
+**Migration:**
+
+```bash
+# Trigger migration by annotating all teams
+kubectl annotate teams --all 'ark.mckinsey.com/migrate-graph-0.1.51=done' --overwrite
+
+# Verify migration
+kubectl get teams -o yaml | grep -A2 strategy
+```
+
+Update your manifests:
+
+```yaml
+# Before
+spec:
+  strategy: graph
+  graph:
+    maxTurns: 10
+    edges:
+      - from: agent-a
+        to: agent-b
+
+# After
+spec:
+  strategy: sequential
+```
+
+<Callout type="info">
+Graph edges define execution order. After migration, agents run in the order listed in `spec.agents`. Review and reorder `spec.agents` if your graph had a specific execution path.
+</Callout>
+
 ## v0.1.50
 
 ### Broker Service Rename
