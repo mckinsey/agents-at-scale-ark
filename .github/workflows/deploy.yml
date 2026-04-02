@@ -59,7 +59,7 @@ jobs:
       sha: ${{ steps.resolve.outputs.sha }}
       has_version: ${{ steps.resolve.outputs.has_version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Resolve ARK version
         id: resolve
@@ -77,6 +77,9 @@ jobs:
         include:
           - path: ark
             image: ark-controller
+          - path: ark
+            image: ark-completions
+            dockerfile: Dockerfile.completions
           - path: services/ark-api
             image: ark-api
             prebuild: "make ark-api-deps && mkdir -p services/ark-api/ark-api/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-api/ark-api/out/"
@@ -86,13 +89,8 @@ jobs:
           - path: services/ark-mcp
             image: ark-mcp
             prebuild: "make ark-mcp-deps && mkdir -p services/ark-mcp/ark-mcp/out && cp out/ark-sdk/py-sdk/dist/ark_sdk-*.whl services/ark-mcp/ark-mcp/out/"
-          - path: mcp/filesystem-mcp
-            image: filesystem-mcp-server
           - path: services/ark-broker/ark-broker
             image: ark-broker
-          - path: services/ark-evaluator
-            image: ark-evaluator
-            prebuild: "make ark-evaluator-deps"
           - path: tools/ark-cli
             image: ark-cli
             prebuild: "make ark-cli-build"
@@ -107,7 +105,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ needs.resolve_version.outputs.sha }}
 
@@ -136,6 +134,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           prebuild: ${{ matrix.prebuild }}
+          dockerfile: ${{ matrix.dockerfile || 'Dockerfile' }}
       
       - name: Push to "latest" tag
         if: ${{ inputs.deploy_containers_to_latest }}
@@ -163,7 +162,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Install Helm
         uses: azure/setup-helm@v4
@@ -202,8 +201,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
   deploy-helm-charts:
-    needs: [resolve_version]
-    if: ${{ inputs.deploy_helm_chart }}
+    needs: [resolve_version, deploy]
+    if: ${{ always() && inputs.deploy_helm_chart && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped') }}
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -213,7 +212,6 @@ jobs:
           - ark-dashboard
           - ark-mcp
           - ark-broker
-          - mcp-filesystem
           - localhost-gateway
           - ark-tenant
           - argo-workflows
@@ -225,7 +223,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Install Helm
         uses: azure/setup-helm@v4
@@ -259,7 +257,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -282,14 +280,14 @@ jobs:
           
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
   deploy-to-npm:
-    needs: [resolve_version]
-    if: ${{ inputs.deploy_to_npm }}
+    needs: [resolve_version, deploy]
+    if: ${{ always() && inputs.deploy_to_npm && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped') }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Download ark-cli artifact from release
         run: |
@@ -314,11 +312,11 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   deploy-to-pypi:
-    needs: [resolve_version]
-    if: ${{ inputs.deploy_to_pypi }}
+    needs: [resolve_version, deploy]
+    if: ${{ always() && inputs.deploy_to_pypi && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped') }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Download ARK SDK wheel from release
         run: |

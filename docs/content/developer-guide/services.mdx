@@ -47,8 +47,8 @@ Individual services can also be exposed using `kubectl port-forward` (as shown i
 
 ### Core Services
 
+- [Completions Engine](/developer-guide/services/ark-completions) - Default execution engine for Ark queries
 - [ARK Broker](/developer-guide/services/ark-broker) - In-memory storage with SSE streaming support
-- [Execution Engine](/developer-guide/langchain-execution-engine) - Framework adapter for Langchain and other AI frameworks
 
 ### ARK API Services
 
@@ -58,15 +58,11 @@ Individual services can also be exposed using `kubectl port-forward` (as shown i
 - A2A Gateway endpoints for agent-to-agent communication
 
 ### Execution Engines
-- **Langchain Execution Engine** - Framework adapter for Langchain workflows
+- **LangChain Execution Engine** - A2A server for LangChain agent execution
 
 ### Development Tools
 - **[ARK Dashboard](/developer-guide/ark-dashboard)** - Next.js-based web interface for ARK management
 - **ARK API** - REST API for managing ARK resources
-
-### Specialized Services
-- **Evaluator LLM** - AI-powered query evaluation service using LLM-as-a-Judge
-- **Evaluation Operator** - Automated evaluation and scoring of agent responses  
 
 ## Service Discovery and Annotations
 

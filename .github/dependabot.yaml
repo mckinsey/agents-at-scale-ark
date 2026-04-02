@@ -48,36 +48,9 @@ updates:
       interval: weekly
     open-pull-requests-limit: 1
 
-  # Python - ark-evaluator
-  - package-ecosystem: "pip"
-    directory: "services/ark-evaluator"
-    commit-message:
-      prefix: 'chore(python): '
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 1
-
   # Python - ark-api
   - package-ecosystem: "pip"
     directory: "services/ark-api"
-    commit-message:
-      prefix: 'chore(python): '
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 1
-
-  # Python - ark-cluster-memory
-  - package-ecosystem: "pip"
-    directory: "services/ark-cluster-memory"
-    commit-message:
-      prefix: 'chore(python): '
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 1
-
-  # Python - executor-langchain
-  - package-ecosystem: "pip"
-    directory: "services/executor-langchain"
     commit-message:
       prefix: 'chore(python): '
     schedule:
@@ -90,9 +63,6 @@ updates:
       - "services/ark-api"
       - "services/ark-broker/ark-broker"
       - "services/ark-dashboard"
-      - "services/ark-evaluator"
-      - "services/ark-cluster-memory"
-      - "services/executor-langchain"
       - "services/ark-mcp"
     commit-message:
       prefix: 'chore(docker): '

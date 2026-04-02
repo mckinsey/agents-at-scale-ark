@@ -45,7 +45,7 @@ SAMPLE_DOCUMENTS = [
         "metadata": {"category": "features", "source": "ark-docs", "topic": "rag"}
     },
     {
-        "content": "ARK's architecture includes a controller (manages CRDs), API server (REST API), dashboard (web UI), and optional services like broker, evaluators, and execution engines. All components run in Kubernetes pods.",
+        "content": "ARK's architecture includes a controller (manages CRDs), API server (REST API), dashboard (web UI), and optional services like broker and execution engines. All components run in Kubernetes pods.",
         "metadata": {"category": "architecture", "source": "ark-docs", "topic": "components"}
     },
     {
@@ -55,10 +55,6 @@ SAMPLE_DOCUMENTS = [
     {
         "content": "Secret management in ARK uses Kubernetes secrets. API keys, passwords, and tokens can be referenced via secretKeyRef in various resources like Models, MCPServers, and Tools. Headers can also reference secrets.",
         "metadata": {"category": "security", "source": "ark-docs", "topic": "secrets"}
-    },
-    {
-        "content": "ARK Evaluators assess agent and query quality using frameworks like RAGAS, G-Eval, or custom rules. Evaluators can run on-demand or be triggered by events, providing scores and detailed feedback on responses.",
-        "metadata": {"category": "features", "source": "ark-docs", "topic": "evaluation"}
     },
 ]
 

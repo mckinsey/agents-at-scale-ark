@@ -68,7 +68,7 @@ runs:
   using: "composite"
   steps:
     - name: Install ingresses
-      if: ${{ inputs.install_ingress == 'true' }}
+      if: ${{ inputs.install_loadbalancer == 'true' }}
       shell: bash
       run: |
         echo "Setting up ingress and load balancer"

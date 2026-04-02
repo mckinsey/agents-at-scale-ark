@@ -61,7 +61,7 @@ spec:
             name: mock-openai
           status:
             phase: Running
-            (contains(conditions[?type == 'Ready'].status, 'True')): true
+            (contains(conditions[?type == 'Ready'].status || `[]`, 'True')): true
     catch:
     - events: {}
     - describe:
@@ -92,16 +92,15 @@ spec:
                 apiKey:
                   value: mock-api-key
           EOF
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          metadata:
-            name: default
-          status:
-            conditions:
-            - type: ModelAvailable
-              status: "True"
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: default
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True' 
     catch:
     - events: {}
     - describe:
@@ -166,3 +165,11 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: default-model-query
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

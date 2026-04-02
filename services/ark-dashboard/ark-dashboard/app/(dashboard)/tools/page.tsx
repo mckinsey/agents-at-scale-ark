@@ -4,14 +4,10 @@ import { Plus } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useRef } from 'react';
 
-import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
 import { ToolsSection } from '@/components/sections/tools-section';
 import { Button } from '@/components/ui/button';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-];
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 
 export default function ToolsPage() {
   const searchParams = useSearchParams();
@@ -21,7 +17,7 @@ export default function ToolsPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={breadcrumbs}
+        breadcrumbs={BASE_BREADCRUMBS}
         currentPage="Tools"
         actions={
           <Button onClick={() => toolsSectionRef.current?.openAddEditor()}>
@@ -31,6 +27,9 @@ export default function ToolsPage() {
         }
       />
       <div className="flex flex-1 flex-col">
+        <div className="px-6 pt-6">
+          <h1 className="text-3xl font-bold">Tools</h1>
+        </div>
         <ToolsSection ref={toolsSectionRef} namespace={namespace} />
       </div>
     </>

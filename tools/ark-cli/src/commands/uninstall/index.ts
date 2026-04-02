@@ -11,6 +11,7 @@ import {
   getMarketplaceItem,
   getAllMarketplaceServices,
   getAllMarketplaceAgents,
+  getAllMarketplaceExecutors,
 } from '../../marketplaceServices.js';
 
 async function uninstallService(service: ArkService, verbose: boolean = false) {
@@ -48,9 +49,7 @@ async function uninstallArk(
       const service = await getMarketplaceItem(serviceName);
 
       if (!service) {
-        output.error(
-          `marketplace item '${serviceName}' not found`
-        );
+        output.error(`marketplace item '${serviceName}' not found`);
         output.info('available marketplace items:');
         const marketplaceServices = await getAllMarketplaceServices();
         if (marketplaceServices) {
@@ -64,7 +63,13 @@ async function uninstallArk(
             output.info(`  marketplace/agents/${name}`);
           }
         }
-        if (!marketplaceServices && !marketplaceAgents) {
+        const marketplaceExecutors = await getAllMarketplaceExecutors();
+        if (marketplaceExecutors) {
+          for (const name of Object.keys(marketplaceExecutors)) {
+            output.info(`  marketplace/executors/${name}`);
+          }
+        }
+        if (!marketplaceServices && !marketplaceAgents && !marketplaceExecutors) {
           output.warning('Marketplace unavailable');
         }
         process.exit(1);
@@ -112,7 +117,7 @@ async function uninstallArk(
   const serviceEntries = Object.entries(services).reverse();
 
   for (const [, service] of serviceEntries) {
-    let shouldUninstall = false;
+    let shouldUninstall: boolean;
 
     try {
       // Ask for confirmation

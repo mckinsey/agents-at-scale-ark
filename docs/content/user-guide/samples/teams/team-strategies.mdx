@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # Team Strategies
 
 Teams coordinate multiple agents through execution strategies. Each strategy defines how team members interact and process messages.
@@ -11,12 +13,12 @@ graph TD
         S3 --> SR[Final Result]
     end
 
-    subgraph "Round Robin Strategy"
-        RR_START[Input] --> RR1[Agent A]
-        RR1 --> RR2[Agent B]
-        RR2 --> RR3[Agent C]
-        RR3 --> RR1
-        RR1 -. "After Max Turns" .-> RR_END[Max Turns Reached]
+    subgraph "Sequential with Loops"
+        SL_START[Input] --> SL1[Agent A]
+        SL1 --> SL2[Agent B]
+        SL2 --> SL3[Agent C]
+        SL3 --> SL1
+        SL1 -. "After Max Turns" .-> SL_END[Max Turns Reached]
     end
 
     subgraph "Selector Strategy"
@@ -54,23 +56,24 @@ spec:
     type: agent
 ```
 
-**Implementation**: `runtime/internal/genai/team.go:53`
+**Implementation**: `ark/executors/completions/team.go`
 - Processes members one by one in array order
 - Each member receives complete message history from previous members
 - Execution stops on first error or termination
 
-## Round-Robin Strategy
+## Sequential with Loops
 
-Cycles through team members repeatedly until maxTurns limit or team termination.
+Cycles through team members repeatedly until `maxTurns` limit or team termination.
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Team
 metadata:
-  name: roundrobin-team
+  name: looping-team
 spec:
-  strategy: round-robin
-  maxTurns: 3
+  strategy: sequential
+  loops: true
+  maxTurns: 10
   members:
   - name: agent1
     type: agent
@@ -78,12 +81,15 @@ spec:
     type: agent
 ```
 
-**Implementation**: `runtime/internal/genai/team.go:67`
-- Continuously cycles through all members
+**Implementation**: `ark/executors/completions/team.go`
+- Continuously cycles through all members in order
 - Requires `maxTurns` to prevent infinite loops
-- Each turn processes all members in sequence
-- Maintains turn counter and message history across cycles
+- Maintains message history across cycles
 - Use terminate tool to end execution early
+
+<Callout type="warning">
+`strategy: round-robin` is deprecated. Use `strategy: sequential` with `loops: true` instead. Existing round-robin teams are automatically migrated.
+</Callout>
 
 ## Selector Strategy
 
@@ -110,7 +116,7 @@ spec:
     type: agent
 ```
 
-**Implementation**: `runtime/internal/genai/team_selector.go:66`
+**Implementation**: `ark/executors/completions/team_selector.go`
 - Uses AI agent to select next participant
 - Template-based prompts with conversation history
 - Fallback to first member if selection fails
@@ -149,7 +155,7 @@ spec:
       to: writer
 ```
 
-**Implementation**: `runtime/internal/genai/team_graph.go:10`
+**Implementation**: `ark/executors/completions/team_graph.go`
 - Follows directed graph edges for member transitions
 - Starts with first member in members array
 - Execution stops when no outgoing edge exists or team termination
@@ -187,7 +193,7 @@ spec:
         to: writer
 ```
 
-**Implementation**: `runtime/internal/genai/team_selector.go:237`
+**Implementation**: `ark/executors/completions/team_selector.go`
 - Uses selector agent to choose next participant
 - Graph constraints limit available candidates
 - Single legal transition: skips selector agent (optimization)
@@ -272,11 +278,13 @@ spec:
 ## Configuration Options
 
 ### Common Settings
-- `maxTurns`: Maximum execution cycles (required for round-robin, selector, graph)
+- `loops`: Enable cycling through members (sequential strategy only)
+- `maxTurns`: Maximum execution cycles (required for sequential+loops, selector, graph)
 - `description`: Team description used in selector templates
 - `members`: Array of TeamMember objects
 
 ### Strategy-Specific Settings
+- **Sequential**: `loops` (optional, enables cycling)
 - **Selector**: `selector.agent`, `selector.selectorPrompt`
 - **Graph**: `graph.edges` array with `from`/`to` references
 
@@ -308,7 +316,7 @@ The terminate tool stops team execution and returns current results without proc
 
 ## Sample Files
 
-- Basic sequential: `samples/team.yaml`
-- Graph workflow: `samples/team-graph.yaml`
-- GitHub integration: `samples/teams/github-team.yaml`
-- Selector strategy: `samples/selector-strategy-test.yaml`
+- Basic sequential: `samples/teams/sequential.yaml`
+- Sequential with loops: `samples/teams/sequential-with-loops.yaml`
+- Graph workflow: `samples/teams/graph-strategy.yaml`
+- Selector strategy: `samples/teams/selector-strategy.yaml`

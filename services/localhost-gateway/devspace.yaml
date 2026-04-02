@@ -2,11 +2,13 @@
 version: v2beta1
 
 pipelines:
+  deploy: |-
+    create_deployments --all
   dev: |-
     create_deployments --all
-    
+
     echo "Waiting for gateway to be ready to port-forward..."
-    until kubectl port-forward -n ark-system service/localhost-gateway-nginx 8080:80; do 
+    until kubectl port-forward -n ark-system service/localhost-gateway-nginx 8080:80; do
       echo "Port-forwarding failed - gateway not ready yet. Retrying in 10s..."
       sleep 10
     done

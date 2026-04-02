@@ -5,7 +5,6 @@ import * as React from 'react';
 import {marked} from 'marked';
 // @ts-ignore - no types available
 import TerminalRenderer from 'marked-terminal';
-import {APIError} from 'openai';
 import {
   ChatClient,
   QueryTarget,
@@ -554,31 +553,34 @@ const ChatUI: React.FC<ChatUIProps> = ({
       setAbortController(controller);
 
       // Convert messages to format expected by OpenAI API - only include user and agent messages
-      const apiMessages = messages
+      type ApiMessage = {role: 'user' | 'assistant' | 'system'; content: string};
+      const apiMessages: ApiMessage[] = messages
         .filter(
           (msg) =>
             msg.type === 'user' || msg.type === 'agent' || msg.type === 'team'
         )
-        .map((msg) => {
+        .flatMap((msg): ApiMessage[] => {
           if (msg.type === 'user') {
-            return {
-              role: 'user' as const,
-              content: msg.content,
-            };
+            return [
+              {
+                role: 'user' as const,
+                content: msg.content,
+              },
+            ];
           } else if (msg.type === 'agent') {
-            return {
-              role: 'assistant' as const,
-              content: msg.content,
-            };
+            return [
+              {
+                role: 'assistant' as const,
+                content: msg.content,
+              },
+            ];
           } else if (msg.type === 'team') {
-            // For teams, concatenate all member responses
-            const content = msg.members.map((m) => m.content).join(' ');
-            return {
+            return msg.members.map((m) => ({
               role: 'assistant' as const,
-              content: content || '',
-            };
+              content: m.content || '',
+            }));
           }
-          return {role: 'user' as const, content: ''};
+          return [];
         });
 
       // Add the new user message
@@ -619,11 +621,9 @@ const ChatUI: React.FC<ChatUIProps> = ({
         (chunk: string, toolCalls?: ToolCall[], arkMetadata?: ArkMetadata) => {
           // Extract A2A context ID from response
           // Chat TUI always queries a single target, so contextId is in response
-          if (
-            arkMetadata?.completedQuery?.status?.response?.a2a?.contextId
-          ) {
-            a2aContextIdRef.current =
-              arkMetadata.completedQuery.status.response.a2a.contextId;
+          const completed = arkMetadata?.completedQuery as {status?: {response?: {a2a?: {contextId?: string}}}} | undefined;
+          if (completed?.status?.response?.a2a?.contextId) {
+            a2aContextIdRef.current = completed.status.response.a2a.contextId;
           }
 
           // Update message progressively as chunks arrive
@@ -721,21 +721,9 @@ const ChatUI: React.FC<ChatUIProps> = ({
 
       let errorMessage = 'Failed to send message';
 
-      // OpenAI SDK errors include response body in .error property
-      if (err instanceof APIError) {
-        if (err.error && typeof err.error === 'object') {
-          const errorObj = err.error as any;
-          errorMessage = errorObj.message || JSON.stringify(err.error, null, 2);
-        } else {
-          errorMessage = err.message;
-        }
-      }
-      // Standard JavaScript errors
-      else if (err instanceof Error) {
+      if (err instanceof Error) {
         errorMessage = err.message;
-      }
-      // String errors from throw statements
-      else if (typeof err === 'string') {
+      } else if (typeof err === 'string') {
         errorMessage = err;
       }
 

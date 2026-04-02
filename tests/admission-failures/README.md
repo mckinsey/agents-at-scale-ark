@@ -24,7 +24,6 @@ Comprehensive test of admission controller validation by attempting to create in
 - Missing required input field
 - Empty input values
 - Invalid/unsupported target types
-- Both evaluators and evaluatorSelector specified (mutually exclusive)
 - Missing both targets and selector
 
 ### Team Validation
@@ -33,9 +32,6 @@ Comprehensive test of admission controller validation by attempting to create in
 - Deprecated format usage (spec.targets instead of spec.members)
 - Team self-reference (circular dependency)
 - Invalid member types (only agent/team allowed)
-- Graph strategy missing configuration
-- Graph strategy with no edges
-- Graph edges referencing non-existent members
 
 ### Tool Validation
 - Missing required type field
@@ -47,10 +43,6 @@ Comprehensive test of admission controller validation by attempting to create in
 - Fetcher tools with invalid HTTP methods
 - MCP tools missing server reference
 - MCP tools missing tool name
-
-### Evaluator Validation
-- Missing required address field
-- Invalid model references
 
 ### MCPServer Validation
 - Missing required address field

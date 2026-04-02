@@ -1,5 +1,3 @@
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
-
 import { trackEvent } from '@/lib/analytics/singleton';
 import { hashPromptSync } from '@/lib/analytics/utils';
 import { apiClient } from '@/lib/api/client';
@@ -54,7 +52,10 @@ const QUERY_STATUS_PHASES: readonly QueryStatusPhase[] = [
 
 type QueryStatusWithPhase = {
   phase: string;
-  response?: { content: string };
+  response?: {
+    content: string;
+    raw?: string;
+  };
 };
 
 // Type guard for checking if a phase is terminal
@@ -73,6 +74,17 @@ export type ChatResponse = {
   status: QueryStatusPhase;
   terminal: boolean;
   response?: string;
+  messages?: Array<{
+    role: string;
+    content?: string;
+    name?: string;
+    tool_calls?: Array<{
+      id: string;
+      type: string;
+      function: { name: string; arguments: string };
+    }>;
+    tool_call_id?: string;
+  }>;
 };
 
 export type ChatMessage = {
@@ -177,31 +189,31 @@ export const chatService = {
   },
 
   async submitChatQuery(
-    messages: ChatCompletionMessageParam[],
+    input: string,
     targetType: string,
     targetName: string,
     sessionId?: string,
+    conversationId?: string,
     enableStreaming?: boolean,
     timeout?: string,
   ): Promise<QueryDetailResponse> {
     const queryRequest: QueryCreateRequest = {
       name: `chat-query-${generateUUID()}`,
-      type: 'messages',
-      // Use OpenAI ChatCompletionMessageParam which supports multimodal content
-      input: messages,
+      type: 'user',
+      input,
       target: {
         type: targetType.toLowerCase(),
         name: targetName,
       },
       sessionId,
+      conversationId,
       timeout,
     };
 
-    // Add streaming annotation if enabled
     if (enableStreaming) {
       queryRequest.metadata = {
         annotations: {
-          [ARK_ANNOTATIONS.STREAMING_ENABLED]: 'false',
+          [ARK_ANNOTATIONS.STREAMING_ENABLED]: 'true',
         },
       };
     }
@@ -249,15 +261,37 @@ export const chatService = {
         const phase = statusWithPhase.phase;
         const response = statusWithPhase.response?.content || 'No response';
 
-        // Check if phase is in the valid set, otherwise use 'unknown'
         const validatedPhase: QueryStatusPhase = isValidQueryStatusPhase(phase)
           ? phase
           : 'unknown';
+
+        let messages:
+          | Array<{
+              role: string;
+              content?: string;
+              name?: string;
+              tool_calls?: Array<{
+                id: string;
+                type: string;
+                function: { name: string; arguments: string };
+              }>;
+              tool_call_id?: string;
+            }>
+          | undefined;
+
+        if (statusWithPhase.response?.raw) {
+          try {
+            messages = JSON.parse(statusWithPhase.response.raw);
+          } catch (error) {
+            console.error('Failed to parse raw messages:', error);
+          }
+        }
 
         return {
           terminal: isTerminalPhase(validatedPhase),
           status: validatedPhase,
           response: response,
+          messages: messages,
         };
       }
 
@@ -344,37 +378,28 @@ export const chatService = {
     }
   },
 
-  /**
-   * Stream chat response using Server-Sent Events
-   * @param messages - Chat messages to send
-   * @param targetType - Type of target (agent, model, team)
-   * @param targetName - Name of the target
-   * @param sessionId - Optional session ID
-   * @yields Parsed SSE chunks containing response data
-   */
   async *streamChatResponse(
-    messages: ChatCompletionMessageParam[],
+    input: string,
     targetType: string,
     targetName: string,
     sessionId?: string,
+    conversationId?: string,
     timeout?: string,
   ): AsyncGenerator<Record<string, unknown>, void, unknown> {
-    const model = `${targetType}/${targetName}`;
-    const response = await fetch('/api/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        stream: true,
-        metadata: {
-          ...(sessionId ? { sessionId } : {}),
-          ...(timeout ? { timeout } : {}),
-        },
-      }),
-    });
+    const query = await this.submitChatQuery(
+      input,
+      targetType,
+      targetName,
+      sessionId,
+      conversationId,
+      true,
+      timeout,
+    );
+
+    const queryName = query.name;
+    const response = await fetch(
+      `/api/v1/broker/chunks?watch=true&query-id=${queryName}`,
+    );
 
     if (!response.ok) {
       throw new Error(`Failed to connect to stream: ${response.statusText}`);
@@ -395,16 +420,10 @@ export const chatService = {
           break;
         }
 
-        // Decode the chunk and add to buffer
         buffer += decoder.decode(value, { stream: true });
-
-        // Split by double newline (SSE event separator)
         const lines = buffer.split('\n\n');
-
-        // Keep the last incomplete line in the buffer
         buffer = lines.pop() || '';
 
-        // Process complete lines
         for (const line of lines) {
           const chunk = this.parseSSEChunk(line);
           if (chunk) {

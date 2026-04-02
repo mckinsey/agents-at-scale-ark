@@ -65,6 +65,7 @@ type config struct {
 	probeAddr                                        string
 	secureMetrics                                    bool
 	enableHTTP2                                      bool
+	completionsAddr                                  string
 }
 
 func main() {
@@ -98,7 +99,7 @@ func main() {
 	// Initialize eventing provider with direct client for broker discovery
 	eventingProvider := eventingconfig.NewProvider(mgr, directClient)
 
-	setupControllers(mgr, telemetryProvider, eventingProvider)
+	setupControllers(mgr, telemetryProvider, eventingProvider, result.config)
 	setupWebhooks(mgr)
 	setupEmbeddedApiserver(mgr)
 	startManager(mgr, metricsCertWatcher, webhookCertWatcher)
@@ -129,6 +130,8 @@ func parseFlags() struct {
 	flag.BoolVar(&cfg.enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.BoolVar(&showVersion, "version", false, "Show version information and exit")
+	flag.StringVar(&cfg.completionsAddr, "completions-addr", "http://ark-completions.ark-system",
+		"Address of the completions engine for A2A communication")
 
 	zapOpts := zap.Options{Development: false}
 	zapOpts.BindFlags(flag.CommandLine)
@@ -242,7 +245,7 @@ func setupMetricsServer(cfg config, baseTLSOpts []func(*tls.Config)) (metricsser
 	return metricsServerOptions, metricsCertWatcher
 }
 
-func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provider, eventingProvider *eventingconfig.Provider) {
+func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provider, eventingProvider *eventingconfig.Provider, cfg config) {
 	controllers := []struct {
 		name       string
 		reconciler interface{ SetupWithManager(ctrl.Manager) error }
@@ -253,10 +256,11 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 			Eventing: eventingProvider,
 		}},
 		{"Query", &controller.QueryReconciler{
-			Client:    mgr.GetClient(),
-			Scheme:    mgr.GetScheme(),
-			Telemetry: telemetryProvider,
-			Eventing:  eventingProvider,
+			Client:          mgr.GetClient(),
+			Scheme:          mgr.GetScheme(),
+			Telemetry:       telemetryProvider,
+			Eventing:        eventingProvider,
+			CompletionsAddr: cfg.completionsAddr,
 		}},
 		{"Tool", &controller.ToolReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
 		{"Team", &controller.TeamReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("team-controller")}},
@@ -282,8 +286,6 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 			Scheme:   mgr.GetScheme(),
 			Eventing: eventingProvider,
 		}},
-		{"Evaluator", &controller.EvaluatorReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
-		{"Evaluation", &controller.EvaluationReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}},
 		{"A2ATask", &controller.A2ATaskReconciler{
 			Client:   mgr.GetClient(),
 			Scheme:   mgr.GetScheme(),
@@ -314,8 +316,6 @@ func setupWebhooks(mgr ctrl.Manager) {
 		{"Tool", webhookv1.SetupToolWebhookWithManager},
 		{"Model", webhookv1.SetupModelWebhookWithManager},
 		{"MCPServer", webhookv1.SetupMCPServerWebhookWithManager},
-		{"Evaluator", webhookv1.SetupEvaluatorWebhookWithManager},
-		{"Evaluation", webhookv1.SetupEvaluationWebhookWithManager},
 		{"A2AServer", webhookv1prealpha1.SetupA2AServerWebhookWithManager},
 		{"ExecutionEngine", webhookv1prealpha1.SetupExecutionEngineWebhookWithManager},
 	}
@@ -357,6 +357,7 @@ func setupEmbeddedApiserver(mgr ctrl.Manager) {
 	if cfg.PostgresSSL == "" {
 		cfg.PostgresSSL = "disable"
 	}
+	cfg.K8sClient = mgr.GetClient()
 
 	server := apiserver.New(cfg)
 	if err := mgr.Add(server); err != nil {

@@ -3,7 +3,7 @@ kind: WorkflowTemplate
 metadata:
   name: query-fanout-template
   annotations:
-    workflows.argoproj.io/description: 'Query all Ark models in parallel and evaluate responses'
+    workflows.argoproj.io/description: 'Query all Ark models in parallel and compare responses'
 spec:
   entrypoint: main
   serviceAccountName: argo-workflow
@@ -13,8 +13,6 @@ spec:
     parameters:
       - name: question
         value: "What are the key benefits of using Argo Workflows?"
-      - name: evaluator-model
-        value: "default"
   templates:
     - name: main
       steps:
@@ -37,19 +35,11 @@ spec:
             # parameter set to each of the model names found in the previous
             # step.
             withParam: "{{steps.list-models.outputs.parameters.model-names}}"
-            # Even if individual query steps fail, we'll continue to the fan-in
-            # and evaluate all results.
             continueOn:
               failed: true
 
-        # This step will run an LLM call to evaluate the output of each of the
-        # model queries in the previous step.
-        - - name: evaluate-responses
-            template: evaluate-all
-            arguments:
-              parameters:
-                - name: evaluator-model
-                  value: "{{workflow.parameters.evaluator-model}}"
+        - - name: compare-responses
+            template: compare-all
 
     - name: kubectl-get-models
       script:
@@ -118,15 +108,11 @@ spec:
             valueFrom:
               path: /tmp/query.json
 
-    - name: evaluate-all
-      inputs:
-        parameters:
-          - name: evaluator-model
+    - name: compare-all
       script:
         image: alpine/k8s:1.28.13
         command: [sh]
         source: |
-          # Get all queries from this workflow using the label selector
           kubectl get queries -l workflow={{workflow.name}} -o json | \
             jq -r '.items[] |
               "Model: " + .spec.target.name + "\n" +
@@ -135,43 +121,10 @@ spec:
               "Tokens: " + (.status.tokenUsage.totalTokens // 0 | tostring) + "\n"' \
             > /tmp/results.txt
 
-          # Indent results so that we can drop them into a query YAML shortly.
-          RESULTS_INDENTED=$(sed 's/^/    /' /tmp/results.txt)
-
-          # Create evaluation query.
-          EVAL_QUERY="workflow-evaluation-{{workflow.name}}"
-          cat <<EOF | kubectl apply -f -
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: $EVAL_QUERY
-          spec:
-            input: |
-              Analyze these model responses and provide:
-
-              1. Summary: Brief overview of the query and results
-              2. Table: Model name, token usage, and one-liner description of response
-              3. Recommendation: Best suggested model for this query with reasoning
-              4. Comparison: Brief comparison of each model's response
-
-          $RESULTS_INDENTED
-            targets:
-            - name: "{{inputs.parameters.evaluator-model}}"
-              type: model
-            timeout: 5m
-            ttl: 1h
-          EOF
-          
-          # Wait for the query to complete, grab it.
-          kubectl wait --for=condition=Completed \
-            --timeout=5m query/$EVAL_QUERY
-          kubectl get query $EVAL_QUERY -o jsonpath='{.status.response.content}' > /tmp/evaluation.txt
-          
-          # Show the final result, output it.
-          echo "Evaluation result:"
-          cat /tmp/evaluation.txt
+          echo "Results:"
+          cat /tmp/results.txt
       outputs:
         parameters:
-          - name: evaluation
+          - name: results
             valueFrom:
-              path: /tmp/evaluation.txt
+              path: /tmp/results.txt

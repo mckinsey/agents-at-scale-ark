@@ -10,7 +10,7 @@ import {
   useState,
 } from 'react';
 import type { Control, UseFormReturn, UseFormSetValue } from 'react-hook-form';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
@@ -131,6 +131,7 @@ export function ModelConfiguratorForm() {
                     <SelectItem value="openai">OpenAI</SelectItem>
                     <SelectItem value="azure">Azure OpenAI</SelectItem>
                     <SelectItem value="bedrock">AWS Bedrock</SelectItem>
+                    <SelectItem value="anthropic">Anthropic</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -151,7 +152,9 @@ export function ModelConfiguratorForm() {
                         ? 'e.g., gpt-4-turbo-preview'
                         : provider === 'azure'
                           ? 'e.g., gpt-4'
-                          : 'e.g., anthropic.claude-v2'
+                          : provider === 'anthropic'
+                            ? 'e.g., claude-sonnet-4-20250514'
+                            : 'e.g., anthropic.claude-v2'
                     }
                   />
                 </FormControl>
@@ -180,6 +183,13 @@ export function ModelConfiguratorForm() {
               control={form.control}
             />
           )}
+          {provider === 'anthropic' && (
+            <AnthropicSpecificFields
+              isSecretsPending={isSecretsPending}
+              secrets={secrets}
+              control={form.control}
+            />
+          )}
         </form>
       </Form>
       <CreateNewSecretDialog />
@@ -187,136 +197,213 @@ export function ModelConfiguratorForm() {
   );
 }
 
-type OpenAISpecificFieldsProps = {
+type ProviderFieldsProps = {
   isSecretsPending: boolean;
   secrets?: Secret[];
   control: Control<FormValues, unknown, FormValues>;
 };
+
+function SecretSelectorField({
+  control,
+  isSecretsPending,
+  secrets,
+  fieldName,
+  label,
+  placeholder,
+}: {
+  control: Control<FormValues, unknown, FormValues>;
+  isSecretsPending: boolean;
+  secrets?: Secret[];
+  fieldName: KeysOfUnion<FormValues>;
+  label: string;
+  placeholder: string;
+}) {
+  return (
+    <FormField
+      control={control}
+      name={fieldName}
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>{label}</FormLabel>
+          <Select onValueChange={field.onChange} value={field.value as string}>
+            <FormControl>
+              <div className="flex gap-4">
+                <SelectTrigger>
+                  <SelectValue placeholder={placeholder} />
+                </SelectTrigger>
+                <CreateNewSecretButton fieldName={fieldName} />
+              </div>
+            </FormControl>
+            <SelectContent>
+              {isSecretsPending ? (
+                <Spinner size="sm" className="mx-auto my-2" />
+              ) : (
+                <>
+                  {secrets?.map(secret => (
+                    <SelectItem key={secret.name} value={secret.name}>
+                      {secret.name}
+                    </SelectItem>
+                  ))}
+                </>
+              )}
+            </SelectContent>
+          </Select>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+}
+
+function BaseUrlField({
+  control,
+  placeholder,
+}: {
+  control: Control<FormValues, unknown, FormValues>;
+  placeholder: string;
+}) {
+  return (
+    <FormField
+      control={control}
+      name="baseUrl"
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>Base URL</FormLabel>
+          <FormControl>
+            <Input
+              {...field}
+              value={field.value ?? ''}
+              placeholder={placeholder}
+            />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+}
 
 function OpenAISpecificFields({
   isSecretsPending,
   secrets,
   control,
-}: OpenAISpecificFieldsProps) {
+}: ProviderFieldsProps) {
   return (
     <>
-      <FormField
+      <SecretSelectorField
         control={control}
-        name="secret"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>API Key</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value}>
-              <FormControl>
-                <div className="flex gap-4">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a secret" />
-                  </SelectTrigger>
-                  <CreateNewSecretButton fieldName="secret" />
-                </div>
-              </FormControl>
-              <SelectContent>
-                {isSecretsPending ? (
-                  <Spinner size="sm" className="mx-auto my-2" />
-                ) : (
-                  <>
-                    {secrets?.map(secret => (
-                      <SelectItem key={secret.name} value={secret.name}>
-                        {secret.name}
-                      </SelectItem>
-                    ))}
-                  </>
-                )}
-              </SelectContent>
-            </Select>
-            <FormMessage />
-          </FormItem>
-        )}
+        isSecretsPending={isSecretsPending}
+        secrets={secrets}
+        fieldName="secret"
+        label="API Key"
+        placeholder="Select a secret"
       />
-      <FormField
-        control={control}
-        name="baseUrl"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Base URL</FormLabel>
-            <FormControl>
-              <Input
-                {...field}
-                value={field.value ?? ''}
-                placeholder="https://api.openai.com/v1"
-              />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
+      <BaseUrlField control={control} placeholder="https://api.openai.com/v1" />
     </>
   );
 }
 
-type AzureSpecificFieldsProps = {
-  isSecretsPending: boolean;
-  secrets?: Secret[];
-  control: Control<FormValues, unknown, FormValues>;
-};
+type AzureSpecificFieldsProps = ProviderFieldsProps;
 
 function AzureSpecificFields({
   control,
   isSecretsPending,
   secrets,
 }: AzureSpecificFieldsProps) {
+  const { initialAzureAuthMethod } = useModelConfigurationForm();
+  const watchedAuthMethod = useWatch({
+    control,
+    name: 'azureAuthMethod',
+  });
+  const azureAuthMethod =
+    watchedAuthMethod ?? initialAzureAuthMethod ?? 'apiKey';
   return (
     <>
       <FormField
         control={control}
-        name="secret"
+        name="azureAuthMethod"
         render={({ field }) => (
           <FormItem>
-            <FormLabel>API Key</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value}>
+            <FormLabel>Authentication</FormLabel>
+            <Select
+              onValueChange={field.onChange}
+              value={field.value ?? 'apiKey'}>
               <FormControl>
-                <div className="flex gap-4">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a secret" />
-                  </SelectTrigger>
-                  <CreateNewSecretButton fieldName="secret" />
-                </div>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select auth method" />
+                </SelectTrigger>
               </FormControl>
               <SelectContent>
-                {isSecretsPending ? (
-                  <Spinner size="sm" className="mx-auto my-2" />
-                ) : (
-                  <>
-                    {secrets?.map(secret => (
-                      <SelectItem key={secret.name} value={secret.name}>
-                        {secret.name}
-                      </SelectItem>
-                    ))}
-                  </>
-                )}
+                <SelectItem value="apiKey">API Key</SelectItem>
+                <SelectItem value="managedIdentity">
+                  Managed Identity
+                </SelectItem>
+                <SelectItem value="workloadIdentity">
+                  Workload Identity
+                </SelectItem>
               </SelectContent>
             </Select>
+            <FormDescription>
+              API Key: use a secret. Managed Identity: AKS node identity.
+              Workload Identity: K8s ServiceAccount federated to Azure.
+            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
       />
-      <FormField
-        control={control}
-        name="baseUrl"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Base URL</FormLabel>
-            <FormControl>
-              <Input
-                {...field}
-                value={field.value ?? ''}
-                placeholder="https://your-resource.openai.azure.com/"
-              />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
+      {azureAuthMethod === 'apiKey' ? (
+        <SecretSelectorField
+          control={control}
+          isSecretsPending={isSecretsPending}
+          secrets={secrets}
+          fieldName="secret"
+          label="API Key"
+          placeholder="Select a secret"
+        />
+      ) : (
+        <>
+          <FormField
+            control={control}
+            name="azureClientId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                  Client ID
+                  {azureAuthMethod === 'managedIdentity' ? ' (optional)' : ''}
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    value={field.value ?? ''}
+                    placeholder="Azure Managed Identity client ID (GUID)"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          {azureAuthMethod === 'workloadIdentity' && (
+            <FormField
+              control={control}
+              name="azureTenantId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tenant ID</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      value={field.value ?? ''}
+                      placeholder="Azure AD tenant ID (GUID)"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+        </>
+      )}
+      <BaseUrlField control={control} placeholder="https://your-resource.openai.azure.com/" />
       <FormField
         control={control}
         name="azureApiVersion"
@@ -350,84 +437,28 @@ function AzureSpecificFields({
   );
 }
 
-type AWSBedrockSpecificFieldsProps = {
-  isSecretsPending: boolean;
-  secrets?: Secret[];
-  control: Control<FormValues, unknown, FormValues>;
-};
-
 function AWSBedrockSpecificFields({
   control,
   isSecretsPending,
   secrets,
-}: AWSBedrockSpecificFieldsProps) {
+}: ProviderFieldsProps) {
   return (
     <>
-      <FormField
+      <SecretSelectorField
         control={control}
-        name="bedrockAccessKeyIdSecretName"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Access Key ID Secret</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value}>
-              <FormControl>
-                <div className="flex gap-4">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a secret for Access Key ID" />
-                  </SelectTrigger>
-                  <CreateNewSecretButton fieldName="bedrockAccessKeyIdSecretName" />
-                </div>
-              </FormControl>
-              <SelectContent>
-                {isSecretsPending ? (
-                  <Spinner size="sm" className="mx-auto my-2" />
-                ) : (
-                  <>
-                    {secrets?.map(secret => (
-                      <SelectItem key={secret.name} value={secret.name}>
-                        {secret.name}
-                      </SelectItem>
-                    ))}
-                  </>
-                )}
-              </SelectContent>
-            </Select>
-            <FormMessage />
-          </FormItem>
-        )}
+        isSecretsPending={isSecretsPending}
+        secrets={secrets}
+        fieldName="bedrockAccessKeyIdSecretName"
+        label="Access Key ID Secret"
+        placeholder="Select a secret for Access Key ID"
       />
-      <FormField
+      <SecretSelectorField
         control={control}
-        name="bedrockSecretAccessKeySecretName"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Secret Access Key Secret</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value}>
-              <FormControl>
-                <div className="flex gap-4">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a secret for Secret Access Key" />
-                  </SelectTrigger>
-                  <CreateNewSecretButton fieldName="bedrockSecretAccessKeySecretName" />
-                </div>
-              </FormControl>
-              <SelectContent>
-                {isSecretsPending ? (
-                  <Spinner size="sm" className="mx-auto my-2" />
-                ) : (
-                  <>
-                    {secrets?.map(secret => (
-                      <SelectItem key={secret.name} value={secret.name}>
-                        {secret.name}
-                      </SelectItem>
-                    ))}
-                  </>
-                )}
-              </SelectContent>
-            </Select>
-            <FormMessage />
-          </FormItem>
-        )}
+        isSecretsPending={isSecretsPending}
+        secrets={secrets}
+        fieldName="bedrockSecretAccessKeySecretName"
+        label="Secret Access Key Secret"
+        placeholder="Select a secret for Secret Access Key"
       />
       <FormField
         control={control}
@@ -457,6 +488,43 @@ function AWSBedrockSpecificFields({
                 {...field}
                 value={field.value ?? ''}
                 placeholder="arn:aws:bedrock:..."
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+    </>
+  );
+}
+
+function AnthropicSpecificFields({
+  isSecretsPending,
+  secrets,
+  control,
+}: ProviderFieldsProps) {
+  return (
+    <>
+      <SecretSelectorField
+        control={control}
+        isSecretsPending={isSecretsPending}
+        secrets={secrets}
+        fieldName="secret"
+        label="API Key"
+        placeholder="Select a secret"
+      />
+      <BaseUrlField control={control} placeholder="https://api.anthropic.com" />
+      <FormField
+        control={control}
+        name="anthropicVersion"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Anthropic Version (Optional)</FormLabel>
+            <FormControl>
+              <Input
+                {...field}
+                value={field.value ?? ''}
+                placeholder="2023-06-01"
               />
             </FormControl>
             <FormMessage />

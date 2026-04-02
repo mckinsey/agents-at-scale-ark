@@ -7,6 +7,7 @@ spec:
     - try:
       # Install mock-llm with Ark Model and custom config
       - script:
+          timeout: 90s
           content: |
             helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
               --version 0.1.28 \
@@ -17,6 +18,7 @@ spec:
             value: ($namespace)
       # Install ark-tenant for RBAC
       - script:
+          timeout: 60s
           content: |
             helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
           env:
@@ -38,16 +40,15 @@ spec:
             metadata:
               name: query-secrets
       # Wait for Model to be available before creating agents/queries
-      - assert:
-          resource:
-            apiVersion: ark.mckinsey.com/v1alpha1
-            kind: Model
-            metadata:
-              name: mock-gpt-4.1
-            status:
-              conditions:
-              - type: ModelAvailable
-                status: "True"
+      - wait:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          name: mock-gpt-4.1
+          timeout: 3m
+          for:
+            condition:
+              name: ModelAvailable
+              value: 'True' 
       # Apply agents first
       - apply:
           file: manifests/a0[4,6]-*.yaml
@@ -137,3 +138,11 @@ spec:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
           name: test-query-with-params
+      cleanup:
+      - script:
+          content: |
+            helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+            helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+          env:
+          - name: NAMESPACE
+            value: ($namespace)

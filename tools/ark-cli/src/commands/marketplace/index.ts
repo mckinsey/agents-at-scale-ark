@@ -8,6 +8,7 @@ import {
 import {
   getAllMarketplaceServices,
   getAllMarketplaceAgents,
+  getAllMarketplaceExecutors,
 } from '../../marketplaceServices.js';
 import {fetchMarketplaceManifest} from '../../lib/marketplaceFetcher.js';
 
@@ -32,9 +33,10 @@ Registry: ${chalk.cyan(registry.replace('oci://', ''))}
       'after',
       `
 ${chalk.cyan('Examples:')}
-  ${chalk.yellow('ark marketplace list')}                        # List available services and agents
+  ${chalk.yellow('ark marketplace list')}                        # List available marketplace items
   ${chalk.yellow('ark install marketplace/services/phoenix')}    # Install Phoenix service
   ${chalk.yellow('ark install marketplace/agents/noah')}         # Install Noah agent
+  ${chalk.yellow('ark install marketplace/executors/langchain')} # Install LangChain executor
   ${chalk.yellow('ark uninstall marketplace/services/phoenix')}  # Uninstall Phoenix
 `
     );
@@ -43,39 +45,28 @@ ${chalk.cyan('Examples:')}
   const list = new Command('list');
   list
     .alias('ls')
-    .description('List available marketplace services and agents')
+    .description('List available marketplace items')
     .action(async () => {
       const services = await getAllMarketplaceServices();
       const agents = await getAllMarketplaceAgents();
+      const executors = await getAllMarketplaceExecutors();
       const manifest = await fetchMarketplaceManifest();
 
       console.log(chalk.blue('\n🏪 ARK Marketplace\n'));
 
       if (!manifest) {
-        console.log(
-          chalk.yellow('⚠️  Marketplace unavailable\n')
-        );
+        console.log(chalk.yellow('⚠️  Marketplace unavailable\n'));
         console.log(
           chalk.gray('Could not fetch marketplace.json from repository.\n')
         );
-        console.log(
-          chalk.cyan(
-            `Repository: ${repoUrl}`
-          )
-        );
-        console.log(
-          chalk.cyan(
-            `Registry: ${registry}`
-          )
-        );
+        console.log(chalk.cyan(`Repository: ${repoUrl}`));
+        console.log(chalk.cyan(`Registry: ${registry}`));
         console.log();
         return;
       }
 
       console.log(
-        chalk.dim(
-          `Using marketplace.json (version: ${manifest.version})\n`
-        )
+        chalk.dim(`Using marketplace.json (version: ${manifest.version})\n`)
       );
 
       if (services && Object.keys(services).length > 0) {
@@ -116,16 +107,27 @@ ${chalk.cyan('Examples:')}
         }
       }
 
-      console.log(
-        chalk.cyan(
-          `Repository: ${repoUrl}`
-        )
-      );
-      console.log(
-        chalk.cyan(
-          `Registry: ${registry}`
-        )
-      );
+      if (executors && Object.keys(executors).length > 0) {
+        console.log(chalk.bold('Executors:'));
+        console.log(
+          chalk.gray('Install with: ark install marketplace/executors/<name>\n')
+        );
+
+        for (const [key, executor] of Object.entries(executors)) {
+          const icon = '⚙️';
+          const executorName = `marketplace/executors/${key.padEnd(12)}`;
+          const executorDesc = executor.description;
+          console.log(
+            `${icon} ${chalk.green(executorName)} ${chalk.gray(executorDesc)}`
+          );
+          const namespaceInfo = `namespace: ${executor.namespace || 'default'}`;
+          console.log(`   ${chalk.dim(namespaceInfo)}`);
+          console.log();
+        }
+      }
+
+      console.log(chalk.cyan(`Repository: ${repoUrl}`));
+      console.log(chalk.cyan(`Registry: ${registry}`));
       console.log();
     });
 

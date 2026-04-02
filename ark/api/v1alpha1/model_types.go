@@ -14,14 +14,43 @@ type ModelConfig struct {
 	Azure *AzureModelConfig `json:"azure,omitempty"`
 	// +kubebuilder:validation:Optional
 	Bedrock *BedrockModelConfig `json:"bedrock,omitempty"`
+	// +kubebuilder:validation:Optional
+	Anthropic *AnthropicModelConfig `json:"anthropic,omitempty"`
+}
+
+// AzureAuth represents authentication configuration for Azure OpenAI
+type AzureAuth struct {
+	// +kubebuilder:validation:Optional
+	APIKey *ValueSource `json:"apiKey,omitempty"`
+	// +kubebuilder:validation:Optional
+	ManagedIdentity *AzureManagedIdentity `json:"managedIdentity,omitempty"`
+	// +kubebuilder:validation:Optional
+	WorkloadIdentity *AzureWorkloadIdentity `json:"workloadIdentity,omitempty"`
+}
+
+// AzureManagedIdentity configures Azure Managed Identity authentication
+type AzureManagedIdentity struct {
+	// +kubebuilder:validation:Optional
+	ClientID *ValueSource `json:"clientId,omitempty"`
+}
+
+// AzureWorkloadIdentity configures Azure Workload Identity authentication
+type AzureWorkloadIdentity struct {
+	// +kubebuilder:validation:Required
+	ClientID ValueSource `json:"clientId"`
+	// +kubebuilder:validation:Required
+	TenantID ValueSource `json:"tenantId"`
 }
 
 // AzureModelConfig contains Azure OpenAI specific parameters
 type AzureModelConfig struct {
 	// +kubebuilder:validation:Required
 	BaseURL ValueSource `json:"baseUrl"`
-	// +kubebuilder:validation:Required
-	APIKey ValueSource `json:"apiKey"`
+	// +kubebuilder:validation:Optional
+	Auth *AzureAuth `json:"auth,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Deprecated: Use auth.apiKey instead
+	APIKey *ValueSource `json:"apiKey,omitempty"`
 	// +kubebuilder:validation:Optional
 	APIVersion *ValueSource `json:"apiVersion,omitempty"`
 	// +kubebuilder:validation:Optional
@@ -67,6 +96,20 @@ type BedrockModelConfig struct {
 	Properties map[string]ValueSource `json:"properties,omitempty"`
 }
 
+// AnthropicModelConfig contains Anthropic API specific parameters
+type AnthropicModelConfig struct {
+	// +kubebuilder:validation:Required
+	BaseURL ValueSource `json:"baseUrl"`
+	// +kubebuilder:validation:Required
+	APIKey ValueSource `json:"apiKey"`
+	// +kubebuilder:validation:Optional
+	Version *ValueSource `json:"version,omitempty"`
+	// +kubebuilder:validation:Optional
+	Headers []Header `json:"headers,omitempty"`
+	// +kubebuilder:validation:Optional
+	Properties map[string]ValueSource `json:"properties,omitempty"`
+}
+
 type ModelSpec struct {
 	// +kubebuilder:validation:Required
 	Model ValueSource `json:"model"`
@@ -74,12 +117,12 @@ type ModelSpec struct {
 	// Deprecated: The values "openai", "azure", "bedrock" are accepted for backward
 	// compatibility but will be removed in release 1.0. Use spec.provider instead.
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Enum=completions;openai;azure;bedrock
+	// +kubebuilder:validation:Enum=completions;openai;azure;bedrock;anthropic
 	// +kubebuilder:default=completions
 	Type string `json:"type,omitempty"`
-	// Provider specifies the AI provider client to use (openai, azure, bedrock).
+	// Provider specifies the AI provider client to use (openai, azure, bedrock, anthropic).
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=openai;azure;bedrock
+	// +kubebuilder:validation:Enum=openai;azure;bedrock;anthropic
 	Provider string `json:"provider"`
 	// +kubebuilder:validation:Required
 	Config ModelConfig `json:"config"`

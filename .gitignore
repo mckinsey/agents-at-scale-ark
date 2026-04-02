@@ -39,6 +39,7 @@ __pycache__/
 .ark-sdk-local/
 .ark.env
 ark-export.yaml
+.serena/
 
 # Icon must end with two \r
 Icon
@@ -165,3 +166,4 @@ vibe_artifacts/
 
 # Playwright MCP screenshots
 .playwright-mcp/
+xray-scan-*.json

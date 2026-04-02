@@ -1,5 +1,3 @@
-/* Copyright 2025. McKinsey & Company */
-
 package v1
 
 import (
@@ -12,33 +10,30 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	arka2a "mckinsey.com/ark/internal/a2a"
 	"mckinsey.com/ark/internal/annotations"
-	"mckinsey.com/ark/internal/genai"
+	"mckinsey.com/ark/internal/validation"
 )
 
 var _ = Describe("Agent Webhook", func() {
 	var (
 		ctx       context.Context
 		agent     *arkv1alpha1.Agent
-		validator *AgentCustomValidator
+		validator *validation.WebhookValidator
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
 
-		// Setup scheme
 		s := runtime.NewScheme()
 		Expect(arkv1alpha1.AddToScheme(s)).To(Succeed())
 
-		// Create fake client
 		fakeClient := fake.NewClientBuilder().WithScheme(s).Build()
 
-		// Create validator
-		validator = &AgentCustomValidator{
-			ResourceValidator: &ResourceValidator{Client: fakeClient},
+		validator = &validation.WebhookValidator{
+			V: validation.NewValidator(&validation.WebhookLookup{Client: fakeClient}),
 		}
 
-		// Create base agent
 		agent = &arkv1alpha1.Agent{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-agent",
@@ -53,16 +48,14 @@ var _ = Describe("Agent Webhook", func() {
 
 	Context("When validating agent model requirements", func() {
 		It("Should allow creation without model validation (handled at runtime)", func() {
-			// Agent without modelRef - validation now happens at runtime via status conditions
 			warnings, err := validator.ValidateCreate(ctx, agent)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(warnings).To(BeEmpty())
 		})
 
 		It("Should allow A2A agents without model validation", func() {
-			// Set execution engine to A2A
 			agent.Spec.ExecutionEngine = &arkv1alpha1.ExecutionEngineRef{
-				Name: genai.ExecutionEngineA2A,
+				Name: arka2a.ExecutionEngineA2A,
 			}
 
 			warnings, err := validator.ValidateCreate(ctx, agent)
@@ -71,9 +64,8 @@ var _ = Describe("Agent Webhook", func() {
 		})
 
 		It("Should allow A2A agents to be updated without model validation", func() {
-			// Set execution engine to A2A
 			agent.Spec.ExecutionEngine = &arkv1alpha1.ExecutionEngineRef{
-				Name: genai.ExecutionEngineA2A,
+				Name: arka2a.ExecutionEngineA2A,
 			}
 
 			oldAgent := agent.DeepCopy()
@@ -85,12 +77,10 @@ var _ = Describe("Agent Webhook", func() {
 		})
 
 		It("Should allow all agents regardless of execution engine (model validation at runtime)", func() {
-			// Set execution engine to something other than A2A
 			agent.Spec.ExecutionEngine = &arkv1alpha1.ExecutionEngineRef{
 				Name: "langchain",
 			}
 
-			// Model validation now happens at runtime, not in webhook
 			warnings, err := validator.ValidateCreate(ctx, agent)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(warnings).To(BeEmpty())
@@ -98,10 +88,10 @@ var _ = Describe("Agent Webhook", func() {
 	})
 
 	Context("When defaulting agent model", func() {
-		var defaulter *AgentCustomDefaulter
+		var defaulter *validation.WebhookDefaulter
 
 		BeforeEach(func() {
-			defaulter = &AgentCustomDefaulter{}
+			defaulter = &validation.WebhookDefaulter{}
 		})
 
 		It("Should set default model for regular agents without modelRef", func() {

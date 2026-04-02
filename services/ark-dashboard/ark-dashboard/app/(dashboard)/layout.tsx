@@ -2,10 +2,12 @@
 
 import { AppSidebar } from '@/components/app-sidebar';
 import ChatManager from '@/components/chat-manager';
-import { ExperimentalFeaturesDialog } from '@/components/experimental-features-dialog';
+import { SettingsModal } from '@/components/settings-modal';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { Spinner } from '@/components/ui/spinner';
 import { useNamespace } from '@/providers/NamespaceProvider';
+
+import './layout.css';
 
 export default function DashboardLayout({
   children,
@@ -27,13 +29,18 @@ export default function DashboardLayout({
 
   return (
     <>
-      <SidebarProvider>
+      <SidebarProvider
+        style={
+          {
+            '--sidebar-width-icon': '5rem',
+          } as React.CSSProperties
+        }>
         <AppSidebar />
-        <SidebarInset>
-          <div className="flex flex-col gap-4 p-4">{children}</div>
+        <SidebarInset className="ml-8 min-w-0 p-10 transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)]">
+          {children}
         </SidebarInset>
       </SidebarProvider>
-      <ExperimentalFeaturesDialog />
+      <SettingsModal />
       <ChatManager />
     </>
   );

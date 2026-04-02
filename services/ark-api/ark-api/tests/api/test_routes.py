@@ -1133,16 +1133,12 @@ class TestModelsEndpoint(unittest.TestCase):
         self.assertEqual(data["count"], 0)
         self.assertEqual(data["items"], [])
     
-    @patch('ark_api.api.v1.models.with_ark_client')
-    def test_create_model_openai_success(self, mock_ark_client):
+    @patch('ark_api.api.v1.models.get_context', return_value={"namespace": "default"})
+    @patch('ark_api.api.v1.models.CustomObjectsApi')
+    @patch('ark_api.api.v1.models.ApiClient')
+    def test_create_model_openai_success(self, mock_api_client_cls, mock_custom_api_cls, mock_get_context):
         """Test successful OpenAI model creation."""
-        # Setup async context manager mock
-        mock_client = AsyncMock()
-        mock_ark_client.return_value.__aenter__.return_value = mock_client
-        
-        # Mock the created model response
-        mock_model = Mock()
-        mock_model.to_dict.return_value = {
+        created_cr = {
             "metadata": {"name": "gpt-4-model", "namespace": "default"},
             "spec": {
                 "type": "completions",
@@ -1156,10 +1152,12 @@ class TestModelsEndpoint(unittest.TestCase):
                 }
             }
         }
+        mock_custom_api = Mock()
+        mock_custom_api.create_namespaced_custom_object = AsyncMock(return_value=created_cr)
+        mock_custom_api_cls.return_value = mock_custom_api
+        mock_api_client_cls.return_value.__aenter__ = AsyncMock(return_value=Mock())
+        mock_api_client_cls.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        mock_client.models.a_create = AsyncMock(return_value=mock_model)
-
-        # Make the request
         request_data = {
             "name": "gpt-4-model",
             "provider": "openai",
@@ -1173,7 +1171,6 @@ class TestModelsEndpoint(unittest.TestCase):
         }
         response = self.client.post("/v1/models?namespace=default", json=request_data)
 
-        # Assert response
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["name"], "gpt-4-model")
@@ -1183,16 +1180,12 @@ class TestModelsEndpoint(unittest.TestCase):
         self.assertEqual(data["config"]["openai"]["apiKey"]["value"], "sk-test")
         self.assertEqual(data["config"]["openai"]["baseUrl"]["value"], "https://api.openai.com/v1")
     
-    @patch('ark_api.api.v1.models.with_ark_client')
-    def test_create_model_azure_success(self, mock_ark_client):
+    @patch('ark_api.api.v1.models.get_context', return_value={"namespace": "default"})
+    @patch('ark_api.api.v1.models.CustomObjectsApi')
+    @patch('ark_api.api.v1.models.ApiClient')
+    def test_create_model_azure_success(self, mock_api_client_cls, mock_custom_api_cls, mock_get_context):
         """Test successful Azure model creation."""
-        # Setup async context manager mock
-        mock_client = AsyncMock()
-        mock_ark_client.return_value.__aenter__.return_value = mock_client
-
-        # Mock the created model response
-        mock_model = Mock()
-        mock_model.to_dict.return_value = {
+        created_cr = {
             "metadata": {"name": "azure-gpt", "namespace": "default"},
             "spec": {
                 "type": "completions",
@@ -1207,10 +1200,12 @@ class TestModelsEndpoint(unittest.TestCase):
                 }
             }
         }
+        mock_custom_api = Mock()
+        mock_custom_api.create_namespaced_custom_object = AsyncMock(return_value=created_cr)
+        mock_custom_api_cls.return_value = mock_custom_api
+        mock_api_client_cls.return_value.__aenter__ = AsyncMock(return_value=Mock())
+        mock_api_client_cls.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        mock_client.models.a_create = AsyncMock(return_value=mock_model)
-
-        # Make the request
         request_data = {
             "name": "azure-gpt",
             "provider": "azure",
@@ -1225,24 +1220,19 @@ class TestModelsEndpoint(unittest.TestCase):
         }
         response = self.client.post("/v1/models?namespace=default", json=request_data)
 
-        # Assert response
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["name"], "azure-gpt")
         self.assertEqual(data["provider"], "azure")
         self.assertEqual(data["type"], "completions")
         self.assertEqual(data["config"]["azure"]["apiVersion"]["value"], "2023-05-15")
-    
-    @patch('ark_api.api.v1.models.with_ark_client')
-    def test_create_model_bedrock_success(self, mock_ark_client):
-        """Test successful Bedrock model creation."""
-        # Setup async context manager mock
-        mock_client = AsyncMock()
-        mock_ark_client.return_value.__aenter__.return_value = mock_client
 
-        # Mock the created model response
-        mock_model = Mock()
-        mock_model.to_dict.return_value = {
+    @patch('ark_api.api.v1.models.get_context', return_value={"namespace": "default"})
+    @patch('ark_api.api.v1.models.CustomObjectsApi')
+    @patch('ark_api.api.v1.models.ApiClient')
+    def test_create_model_bedrock_success(self, mock_api_client_cls, mock_custom_api_cls, mock_get_context):
+        """Test successful Bedrock model creation."""
+        created_cr = {
             "metadata": {"name": "claude-bedrock", "namespace": "default"},
             "spec": {
                 "type": "completions",
@@ -1259,10 +1249,12 @@ class TestModelsEndpoint(unittest.TestCase):
                 }
             }
         }
+        mock_custom_api = Mock()
+        mock_custom_api.create_namespaced_custom_object = AsyncMock(return_value=created_cr)
+        mock_custom_api_cls.return_value = mock_custom_api
+        mock_api_client_cls.return_value.__aenter__ = AsyncMock(return_value=Mock())
+        mock_api_client_cls.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        mock_client.models.a_create = AsyncMock(return_value=mock_model)
-
-        # Make the request
         request_data = {
             "name": "claude-bedrock",
             "provider": "bedrock",
@@ -1279,7 +1271,6 @@ class TestModelsEndpoint(unittest.TestCase):
         }
         response = self.client.post("/v1/models?namespace=default", json=request_data)
 
-        # Assert response
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["name"], "claude-bedrock")
@@ -1289,16 +1280,12 @@ class TestModelsEndpoint(unittest.TestCase):
         self.assertEqual(data["config"]["bedrock"]["maxTokens"]["value"], "1000")
         self.assertEqual(data["config"]["bedrock"]["temperature"]["value"], "0.7")
     
-    @patch('ark_api.api.v1.models.with_ark_client')
-    def test_get_model_success(self, mock_ark_client):
+    @patch('ark_api.api.v1.models.get_context', return_value={"namespace": "default"})
+    @patch('ark_api.api.v1.models.CustomObjectsApi')
+    @patch('ark_api.api.v1.models.ApiClient')
+    def test_get_model_success(self, mock_api_client_cls, mock_custom_api_cls, mock_get_context):
         """Test successfully retrieving a model."""
-        # Setup async context manager mock
-        mock_client = AsyncMock()
-        mock_ark_client.return_value.__aenter__.return_value = mock_client
-
-        # Mock the model response
-        mock_model = Mock()
-        mock_model.to_dict.return_value = {
+        model_cr = {
             "metadata": {"name": "gpt-4-model", "namespace": "default"},
             "spec": {
                 "type": "completions",
@@ -1318,13 +1305,14 @@ class TestModelsEndpoint(unittest.TestCase):
                 "resolvedAddress": "https://api.openai.com/v1"
             }
         }
+        mock_custom_api = Mock()
+        mock_custom_api.get_namespaced_custom_object = AsyncMock(return_value=model_cr)
+        mock_custom_api_cls.return_value = mock_custom_api
+        mock_api_client_cls.return_value.__aenter__ = AsyncMock(return_value=Mock())
+        mock_api_client_cls.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        mock_client.models.a_get = AsyncMock(return_value=mock_model)
-
-        # Make the request
         response = self.client.get("/v1/models/gpt-4-model?namespace=default")
 
-        # Assert response
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["name"], "gpt-4-model")
@@ -1335,16 +1323,12 @@ class TestModelsEndpoint(unittest.TestCase):
         self.assertEqual(data["resolved_address"], "https://api.openai.com/v1")
         self.assertIn("valueFrom", data["config"]["openai"]["apiKey"])
     
-    @patch('ark_api.api.v1.models.with_ark_client')
-    def test_update_model_success(self, mock_ark_client):
+    @patch('ark_api.api.v1.models.get_context', return_value={"namespace": "default"})
+    @patch('ark_api.api.v1.models.CustomObjectsApi')
+    @patch('ark_api.api.v1.models.ApiClient')
+    def test_update_model_success(self, mock_api_client_cls, mock_custom_api_cls, mock_get_context):
         """Test successful model update."""
-        # Setup async context manager mock
-        mock_client = AsyncMock()
-        mock_ark_client.return_value.__aenter__.return_value = mock_client
-        
-        # Mock existing model
-        existing_model = Mock()
-        existing_model.to_dict.return_value = {
+        existing_cr = {
             "metadata": {"name": "gpt-model", "namespace": "default"},
             "spec": {
                 "provider": "openai",
@@ -1358,10 +1342,7 @@ class TestModelsEndpoint(unittest.TestCase):
                 }
             }
         }
-
-        # Mock updated model
-        updated_model = Mock()
-        updated_model.to_dict.return_value = {
+        updated_cr = {
             "metadata": {"name": "gpt-model", "namespace": "default"},
             "spec": {
                 "provider": "openai",
@@ -1375,11 +1356,13 @@ class TestModelsEndpoint(unittest.TestCase):
                 }
             }
         }
+        mock_custom_api = Mock()
+        mock_custom_api.get_namespaced_custom_object = AsyncMock(return_value=existing_cr)
+        mock_custom_api.replace_namespaced_custom_object = AsyncMock(return_value=updated_cr)
+        mock_custom_api_cls.return_value = mock_custom_api
+        mock_api_client_cls.return_value.__aenter__ = AsyncMock(return_value=Mock())
+        mock_api_client_cls.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        mock_client.models.a_get = AsyncMock(return_value=existing_model)
-        mock_client.models.a_update = AsyncMock(return_value=updated_model)
-
-        # Make the request
         request_data = {
             "model": "gpt-4",
             "config": {
@@ -1391,23 +1374,18 @@ class TestModelsEndpoint(unittest.TestCase):
         }
         response = self.client.put("/v1/models/gpt-model?namespace=default", json=request_data)
 
-        # Assert response
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["name"], "gpt-model")
         self.assertEqual(data["model"], "gpt-4")
         self.assertEqual(data["config"]["openai"]["apiKey"]["value"], "new-key")
-    
-    @patch('ark_api.api.v1.models.with_ark_client')
-    def test_update_model_partial(self, mock_ark_client):
-        """Test partial model update."""
-        # Setup async context manager mock
-        mock_client = AsyncMock()
-        mock_ark_client.return_value.__aenter__.return_value = mock_client
 
-        # Mock existing model
-        existing_model = Mock()
-        existing_model.to_dict.return_value = {
+    @patch('ark_api.api.v1.models.get_context', return_value={"namespace": "default"})
+    @patch('ark_api.api.v1.models.CustomObjectsApi')
+    @patch('ark_api.api.v1.models.ApiClient')
+    def test_update_model_partial(self, mock_api_client_cls, mock_custom_api_cls, mock_get_context):
+        """Test partial model update."""
+        existing_cr = {
             "metadata": {"name": "gpt-model", "namespace": "default"},
             "spec": {
                 "provider": "openai",
@@ -1421,10 +1399,7 @@ class TestModelsEndpoint(unittest.TestCase):
                 }
             }
         }
-
-        # Mock updated model
-        updated_model = Mock()
-        updated_model.to_dict.return_value = {
+        updated_cr = {
             "metadata": {"name": "gpt-model", "namespace": "default"},
             "spec": {
                 "provider": "openai",
@@ -1438,15 +1413,16 @@ class TestModelsEndpoint(unittest.TestCase):
                 }
             }
         }
+        mock_custom_api = Mock()
+        mock_custom_api.get_namespaced_custom_object = AsyncMock(return_value=existing_cr)
+        mock_custom_api.replace_namespaced_custom_object = AsyncMock(return_value=updated_cr)
+        mock_custom_api_cls.return_value = mock_custom_api
+        mock_api_client_cls.return_value.__aenter__ = AsyncMock(return_value=Mock())
+        mock_api_client_cls.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        mock_client.models.a_get = AsyncMock(return_value=existing_model)
-        mock_client.models.a_update = AsyncMock(return_value=updated_model)
-
-        # Make the request - only update model
         request_data = {"model": "gpt-4"}
         response = self.client.put("/v1/models/gpt-model?namespace=default", json=request_data)
 
-        # Assert response
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["model"], "gpt-4")
@@ -2223,7 +2199,8 @@ class TestTeamsEndpoint(unittest.TestCase):
             "spec": {
                 "description": "Old description",
                 "members": [{"name": "agent1", "type": "agent"}],
-                "strategy": "sequential"
+                "strategy": "sequential",
+                "loops": False
             },
             "status": {"phase": "Ready"}
         }
@@ -2280,6 +2257,7 @@ class TestTeamsEndpoint(unittest.TestCase):
                 "description": "Original description",
                 "members": [{"name": "agent1", "type": "agent"}],
                 "strategy": "sequential",
+                "loops": False,
                 "maxTurns": 5
             },
             "status": {"phase": "Ready"}
@@ -2371,3 +2349,151 @@ class TestTeamsEndpoint(unittest.TestCase):
         data = response.json()
         self.assertIn("graph strategy requires maxTurns", data["detail"])
         self.assertIn("admission webhook", data["detail"])
+
+    @patch('ark_api.api.v1.teams.with_ark_client')
+    def test_create_team_with_loops(self, mock_ark_client):
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        mock_team = Mock()
+        mock_team.to_dict.return_value = {
+            "metadata": {"name": "loop-team", "namespace": "default"},
+            "spec": {
+                "members": [
+                    {"name": "agent1", "type": "agent"},
+                    {"name": "agent2", "type": "agent"}
+                ],
+                "strategy": "sequential",
+                "loops": True,
+                "maxTurns": 5
+            },
+            "status": {"phase": "pending"}
+        }
+
+        mock_client.teams.a_create = AsyncMock(return_value=mock_team)
+
+        request_data = {
+            "name": "loop-team",
+            "members": [
+                {"name": "agent1", "type": "agent"},
+                {"name": "agent2", "type": "agent"}
+            ],
+            "strategy": "sequential",
+            "loops": True,
+            "maxTurns": 5
+        }
+        response = self.client.post("/v1/teams?namespace=default", json=request_data)
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["name"], "loop-team")
+        self.assertEqual(data["strategy"], "sequential")
+        self.assertTrue(data["loops"])
+        self.assertEqual(data["maxTurns"], 5)
+
+    @patch('ark_api.api.v1.teams.with_ark_client')
+    def test_create_team_default_loops_false(self, mock_ark_client):
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        mock_team = Mock()
+        mock_team.to_dict.return_value = {
+            "metadata": {"name": "no-loop-team", "namespace": "default"},
+            "spec": {
+                "members": [{"name": "agent1", "type": "agent"}],
+                "strategy": "sequential",
+                "loops": False
+            },
+            "status": {"phase": "pending"}
+        }
+
+        mock_client.teams.a_create = AsyncMock(return_value=mock_team)
+
+        request_data = {
+            "name": "no-loop-team",
+            "members": [{"name": "agent1", "type": "agent"}],
+            "strategy": "sequential"
+        }
+        response = self.client.post("/v1/teams?namespace=default", json=request_data)
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertFalse(data["loops"])
+
+    @patch('ark_api.api.v1.teams.with_ark_client')
+    def test_update_team_set_loops(self, mock_ark_client):
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        existing_team = Mock()
+        existing_team.to_dict.return_value = {
+            "metadata": {"name": "test-team", "namespace": "default"},
+            "spec": {
+                "members": [{"name": "agent1", "type": "agent"}],
+                "strategy": "sequential",
+                "loops": False
+            },
+            "status": {"phase": "Ready"}
+        }
+
+        updated_team = Mock()
+        updated_team.to_dict.return_value = {
+            "metadata": {"name": "test-team", "namespace": "default"},
+            "spec": {
+                "members": [{"name": "agent1", "type": "agent"}],
+                "strategy": "sequential",
+                "loops": True,
+                "maxTurns": 3
+            },
+            "status": {"phase": "Ready"}
+        }
+
+        mock_client.teams.a_get = AsyncMock(return_value=existing_team)
+        mock_client.teams.a_update = AsyncMock(return_value=updated_team)
+
+        request_data = {"loops": True, "maxTurns": 3}
+        response = self.client.put("/v1/teams/test-team?namespace=default", json=request_data)
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["loops"])
+        self.assertEqual(data["maxTurns"], 3)
+        mock_client.teams.a_update.assert_called_once()
+
+    @patch('ark_api.api.v1.teams.with_ark_client')
+    def test_update_team_clear_loops(self, mock_ark_client):
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        existing_team = Mock()
+        existing_team.to_dict.return_value = {
+            "metadata": {"name": "test-team", "namespace": "default"},
+            "spec": {
+                "members": [{"name": "agent1", "type": "agent"}],
+                "strategy": "sequential",
+                "loops": True,
+                "maxTurns": 5
+            },
+            "status": {"phase": "Ready"}
+        }
+
+        updated_team = Mock()
+        updated_team.to_dict.return_value = {
+            "metadata": {"name": "test-team", "namespace": "default"},
+            "spec": {
+                "members": [{"name": "agent1", "type": "agent"}],
+                "strategy": "sequential",
+                "loops": False
+            },
+            "status": {"phase": "Ready"}
+        }
+
+        mock_client.teams.a_get = AsyncMock(return_value=existing_team)
+        mock_client.teams.a_update = AsyncMock(return_value=updated_team)
+
+        request_data = {"loops": False}
+        response = self.client.put("/v1/teams/test-team?namespace=default", json=request_data)
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertFalse(data["loops"])

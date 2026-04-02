@@ -12,7 +12,6 @@ import { ErrorResponseContent } from '@/components/ErrorResponseContent';
 import JsonDisplay from '@/components/JsonDisplay';
 import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
-import { QueryEvaluationActions } from '@/components/query-actions';
 import { QueryMemoryField } from '@/components/query-fields/query-memory-field';
 import { QueryTargetsField } from '@/components/query-fields/query-targets-field';
 import { Button } from '@/components/ui/button';
@@ -30,10 +29,10 @@ import {
 } from '@/components/ui/tooltip';
 import type { components } from '@/lib/api/generated/types';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
+import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { useMarkdownProcessor } from '@/lib/hooks/use-markdown-processor';
 import {
   agentsService,
-  evaluationsService,
   memoriesService,
   modelsService,
   teamsService,
@@ -50,11 +49,6 @@ import {
   transformQueryParametersToApi,
 } from '@/lib/utils/query-parameters';
 import { simplifyDuration } from '@/lib/utils/time';
-
-const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
-  { href: '/queries', label: 'Queries' },
-];
 
 // Component for rendering response content
 function ResponseContent({
@@ -134,12 +128,6 @@ interface QueryStatus {
     };
     content?: string;
   };
-  evaluations?: Array<{
-    evaluatorName?: string;
-    score?: string;
-    passed?: boolean;
-    metadata?: Record<string, string>;
-  }>;
   tokenUsage?: {
     promptTokens?: number;
     completionTokens?: number;
@@ -361,7 +349,6 @@ function QueryDetailContent() {
 
   const [query, setQuery] = useState<TypedQueryDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [evaluationCount, setEvaluationCount] = useState(0);
   const [availableTargets, setAvailableTargets] = useState<
     Array<{ name: string; type: 'agent' | 'model' | 'team' | 'tool' }>
   >([]);
@@ -490,6 +477,7 @@ function QueryDetailContent() {
         timeout: query.timeout,
         ttl: query.ttl,
         sessionId: query.sessionId,
+        ...(query.conversationId && { conversationId: query.conversationId }),
         memory: query.memory,
         ...(apiParameters.length > 0 && { parameters: apiParameters }),
         ...(streaming && {
@@ -609,15 +597,6 @@ function QueryDetailContent() {
           ] === 'true';
         setStreaming(isStreamingEnabled);
 
-        // Load evaluation count
-        try {
-          const evaluationSummary =
-            await evaluationsService.getEvaluationSummary(queryId);
-          setEvaluationCount(evaluationSummary.total || 0);
-        } catch (error) {
-          console.error('Failed to load evaluation count:', error);
-          setEvaluationCount(0);
-        }
       } catch (error) {
         toast.error('Failed to Load Query', {
           description:
@@ -686,14 +665,20 @@ function QueryDetailContent() {
     );
   }
 
+  const breadcrumbs: BreadcrumbElement[] = [
+    ...BASE_BREADCRUMBS,
+    { href: '/queries', label: 'Queries' },
+  ];
+
+  const pageTitle = isNew ? 'New Query' : query?.name || queryId;
+
   return (
     <>
       <PageHeader
         breadcrumbs={breadcrumbs}
-        currentPage={isNew ? 'New Query' : query.name}
+        currentPage={pageTitle}
         actions={
           <>
-            {!isNew && <QueryEvaluationActions queryName={queryId} />}
             {isNew && (
               <>
                 <Button
@@ -742,7 +727,7 @@ function QueryDetailContent() {
                   </a>
                 </div>
               </div>
-              <table className="w-full table-fixed">
+              <table className="w-full">
                 <tbody>
                   <QueryNameField
                     mode={mode}
@@ -796,7 +781,19 @@ function QueryDetailContent() {
                     }
                     label="Session ID"
                     placeholder="Default: Auto-generated"
-                    tooltip="Identifier for grouping related queries, used for conversation memory"
+                    tooltip="Identifier for grouping related queries"
+                  />
+                  <QueryNameField
+                    mode={mode}
+                    value={query.conversationId}
+                    onChange={conversationId =>
+                      setQuery(prev =>
+                        prev ? { ...prev, conversationId } : null,
+                      )
+                    }
+                    label="Conversation ID"
+                    placeholder="Default: Auto-generated"
+                    tooltip="Identifier for conversation history and memory chain"
                   />
                 </tbody>
               </table>
@@ -912,12 +909,6 @@ function QueryDetailContent() {
                       {query.status?.tokenUsage
                         ? `${query.status.tokenUsage.promptTokens || 0} / ${query.status.tokenUsage.completionTokens || 0}`
                         : '—'}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className={FIELD_HEADING_STYLES}>Evaluations</td>
-                    <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                      {evaluationCount}
                     </td>
                   </tr>
                 </tbody>

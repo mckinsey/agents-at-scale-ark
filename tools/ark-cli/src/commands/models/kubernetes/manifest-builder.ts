@@ -1,3 +1,5 @@
+import type {AzureConfig} from '../providers/azure.js';
+import type {AnthropicConfig} from '../providers/anthropic.js';
 import {BedrockConfig, ProviderConfig} from '../providers/index.js';
 
 // Model manifest builder interface
@@ -17,7 +19,7 @@ export class KubernetesModelManifestBuilder implements ModelManifestBuilder {
         name: this.modelName,
       },
       spec: {
-        provider: config.type,  // Use provider field (required as of v0.50.0)
+        provider: config.type, // Use provider field (required as of v0.50.0)
         model: {
           value: config.modelValue,
         },
@@ -31,24 +33,39 @@ export class KubernetesModelManifestBuilder implements ModelManifestBuilder {
 
   private buildProviderConfig(config: ProviderConfig): Record<string, unknown> {
     if (config.type === 'azure') {
-      return {
-        azure: {
+      const azureConfig = config as AzureConfig;
+      const azure: Record<string, unknown> = {
+        baseUrl: { value: azureConfig.baseUrl },
+        apiVersion: { value: azureConfig.apiVersion },
+      };
+      const authMethod = azureConfig.authMethod ?? 'apiKey';
+      if (authMethod === 'apiKey') {
+        azure.auth = {
           apiKey: {
             valueFrom: {
               secretKeyRef: {
-                name: config.secretName,
+                name: azureConfig.secretName || 'azure-openai-secret',
                 key: 'api-key',
               },
             },
           },
-          baseUrl: {
-            value: config.baseUrl,
+        };
+      } else if (authMethod === 'managedIdentity') {
+        azure.auth = {
+          managedIdentity:
+            azureConfig.clientId ?
+              { clientId: { value: azureConfig.clientId } }
+            : {},
+        };
+      } else if (authMethod === 'workloadIdentity') {
+        azure.auth = {
+          workloadIdentity: {
+            clientId: { value: azureConfig.clientId },
+            tenantId: { value: azureConfig.tenantId },
           },
-          apiVersion: {
-            value: config.apiVersion,
-          },
-        },
-      };
+        };
+      }
+      return { azure };
     }
 
     if (config.type === 'bedrock') {
@@ -71,6 +88,29 @@ export class KubernetesModelManifestBuilder implements ModelManifestBuilder {
           },
         },
       };
+    }
+
+    if (config.type === 'anthropic') {
+      const anthropicConfig = config as AnthropicConfig;
+      const anthropic: Record<string, unknown> = {
+        apiKey: {
+          valueFrom: {
+            secretKeyRef: {
+              name: config.secretName,
+              key: 'api-key',
+            },
+          },
+        },
+        baseUrl: {
+          value: anthropicConfig.baseUrl,
+        },
+      };
+      if (anthropicConfig.version) {
+        anthropic.version = {
+          value: anthropicConfig.version,
+        };
+      }
+      return {anthropic};
     }
 
     throw new Error(

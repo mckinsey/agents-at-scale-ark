@@ -4,7 +4,6 @@ metadata:
   name: malformed-java-code
   namespace: default
   labels:
-    evaluation_required: "true"
     environment: "development"
     agent-type: "java-modernizer"
 spec:

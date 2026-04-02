@@ -1,7 +1,7 @@
-import {describe, it, expect, jest, beforeEach, afterEach} from '@jest/globals';
+import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 
 // Mock chalk to avoid ANSI codes in tests
-jest.unstable_mockModule('chalk', () => ({
+vi.mock('chalk', () => ({
   default: {
     red: (str: string) => str,
     yellow: (str: string) => str,
@@ -11,18 +11,18 @@ jest.unstable_mockModule('chalk', () => ({
 }));
 
 // Mock commands module
-jest.unstable_mockModule('./commands.js', () => ({
-  checkCommandExists: jest.fn(),
+vi.mock('./commands.js', () => ({
+  checkCommandExists: vi.fn(),
 }));
 
 // Mock config module
-jest.unstable_mockModule('./config.js', () => ({
-  loadConfig: jest.fn(),
+vi.mock('./config.js', () => ({
+  loadConfig: vi.fn(),
 }));
 
 // Mock execa module
-jest.unstable_mockModule('execa', () => ({
-  execa: jest.fn(),
+vi.mock('execa', () => ({
+  execa: vi.fn(),
 }));
 
 // Dynamic imports after mocks
@@ -37,19 +37,17 @@ const mockLoadConfig = loadConfig as any;
 const mockExeca = execa as any;
 
 describe('startup', () => {
-  let mockExit: jest.SpiedFunction<typeof process.exit>;
-  let mockConsoleError: jest.SpiedFunction<typeof console.error>;
+  let mockExit: vi.SpiedFunction<typeof process.exit>;
+  let mockConsoleError: vi.SpiedFunction<typeof console.error>;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Mock execa to reject by default (no kubectl context)
     mockExeca.mockRejectedValue(new Error('No context'));
-    mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
+    mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('process.exit');
     });
-    mockConsoleError = jest
-      .spyOn(console, 'error')
-      .mockImplementation(() => {});
+    mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {

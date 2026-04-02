@@ -1,26 +1,26 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 import {Command} from 'commander';
 import type {ArkConfig} from '../../lib/config.js';
 import type {ServiceCollection} from '../../types/arkService.js';
 import type {AnthropicMarketplaceManifest} from '../../types/marketplace.js';
 
-const mockGetAllMarketplaceServices = jest.fn<
-  () => Promise<ServiceCollection | null>
->();
-const mockGetAllMarketplaceAgents = jest.fn<
-  () => Promise<ServiceCollection | null>
->();
-const mockFetchMarketplaceManifest = jest.fn<
-  () => Promise<AnthropicMarketplaceManifest | null>
->();
-const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
+const mockGetAllMarketplaceServices =
+  vi.fn<() => Promise<ServiceCollection | null>>();
+const mockGetAllMarketplaceAgents =
+  vi.fn<() => Promise<ServiceCollection | null>>();
+const mockGetAllMarketplaceExecutors =
+  vi.fn<() => Promise<ServiceCollection | null>>();
+const mockFetchMarketplaceManifest =
+  vi.fn<() => Promise<AnthropicMarketplaceManifest | null>>();
+const mockConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-jest.unstable_mockModule('../../marketplaceServices.js', () => ({
+vi.mock('../../marketplaceServices.js', () => ({
   getAllMarketplaceServices: mockGetAllMarketplaceServices,
   getAllMarketplaceAgents: mockGetAllMarketplaceAgents,
+  getAllMarketplaceExecutors: mockGetAllMarketplaceExecutors,
 }));
 
-jest.unstable_mockModule('../../lib/marketplaceFetcher.js', () => ({
+vi.mock('../../lib/marketplaceFetcher.js', () => ({
   fetchMarketplaceManifest: mockFetchMarketplaceManifest,
 }));
 
@@ -28,7 +28,7 @@ const {createMarketplaceCommand} = await import('./index.js');
 
 describe('marketplace command', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('creates marketplace command with correct structure', () => {
@@ -88,6 +88,7 @@ describe('marketplace command', () => {
 
     mockGetAllMarketplaceServices.mockResolvedValue(mockServices);
     mockGetAllMarketplaceAgents.mockResolvedValue(mockAgents);
+    mockGetAllMarketplaceExecutors.mockResolvedValue(null);
     mockFetchMarketplaceManifest.mockResolvedValue(mockManifest);
 
     const command = createMarketplaceCommand({} as ArkConfig);
@@ -101,6 +102,7 @@ describe('marketplace command', () => {
   it('shows unavailable message when marketplace unavailable', async () => {
     mockGetAllMarketplaceServices.mockResolvedValue(null);
     mockGetAllMarketplaceAgents.mockResolvedValue(null);
+    mockGetAllMarketplaceExecutors.mockResolvedValue(null);
     mockFetchMarketplaceManifest.mockResolvedValue(null);
 
     const command = createMarketplaceCommand({} as ArkConfig);
@@ -110,6 +112,4 @@ describe('marketplace command', () => {
     const logCalls = mockConsoleLog.mock.calls.map((c) => c[0]).join(' ');
     expect(logCalls).toContain('unavailable');
   });
-
 });
-

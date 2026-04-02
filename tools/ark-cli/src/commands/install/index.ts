@@ -16,6 +16,7 @@ import {
   getMarketplaceItem,
   getAllMarketplaceServices,
   getAllMarketplaceAgents,
+  getAllMarketplaceExecutors,
 } from '../../marketplaceServices.js';
 import {printNextSteps} from '../../lib/nextSteps.js';
 import ora from 'ora';
@@ -25,7 +26,10 @@ import {
 } from '../../lib/waitForReady.js';
 import {parseTimeoutToSeconds} from '../../lib/timeout.js';
 
-async function uninstallPrerequisites(service: ArkService, verbose: boolean = false) {
+async function uninstallPrerequisites(
+  service: ArkService,
+  verbose: boolean = false
+) {
   if (!service.prerequisiteUninstalls?.length) return;
 
   for (const prereq of service.prerequisiteUninstalls) {
@@ -48,17 +52,14 @@ async function checkAndCleanFailedRelease(
   }
 
   try {
-    const result = await execute(
-      'helm',
-      statusArgs,
-      {},
-      {verbose: false}
-    );
+    const result = await execute('helm', statusArgs, {}, {verbose: false});
 
     const stdout = String(result.stdout || '');
-    if (stdout.includes('STATUS: pending-install') ||
-        stdout.includes('STATUS: failed') ||
-        stdout.includes('STATUS: uninstalling')) {
+    if (
+      stdout.includes('STATUS: pending-install') ||
+      stdout.includes('STATUS: failed') ||
+      stdout.includes('STATUS: uninstalling')
+    ) {
       const uninstallArgs = ['uninstall', releaseName];
       if (namespace) {
         uninstallArgs.push('--namespace', namespace);
@@ -66,6 +67,7 @@ async function checkAndCleanFailedRelease(
       await execute('helm', uninstallArgs, {stdio: 'inherit'}, {verbose});
     }
   } catch {
+    // Ignore errors - prerequisite may not exist
   }
 }
 
@@ -125,9 +127,7 @@ export async function installArk(
       const service = await getMarketplaceItem(serviceName);
 
       if (!service) {
-        output.error(
-          `marketplace item '${serviceName}' not found`
-        );
+        output.error(`marketplace item '${serviceName}' not found`);
         output.info('available marketplace items:');
         const marketplaceServices = await getAllMarketplaceServices();
         if (marketplaceServices) {
@@ -141,7 +141,13 @@ export async function installArk(
             output.info(`  marketplace/agents/${name}`);
           }
         }
-        if (!marketplaceServices && !marketplaceAgents) {
+        const marketplaceExecutors = await getAllMarketplaceExecutors();
+        if (marketplaceExecutors) {
+          for (const name of Object.keys(marketplaceExecutors)) {
+            output.info(`  marketplace/executors/${name}`);
+          }
+        }
+        if (!marketplaceServices && !marketplaceAgents && !marketplaceExecutors) {
           output.warning('Marketplace unavailable');
         }
         process.exit(1);
@@ -186,14 +192,6 @@ export async function installArk(
 
   // If not using -y flag, show checklist interface
   if (!options.yes) {
-    console.log(chalk.cyan.bold('\nSelect components to install:'));
-    console.log(
-      chalk.gray(
-        'Use arrow keys to navigate, space to toggle, enter to confirm\n'
-      )
-    );
-
-    // Build choices for the checkbox prompt
     const coreServices = Object.values(arkServices)
       .filter((s) => s.category === 'core')
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -202,33 +200,45 @@ export async function installArk(
       .filter((s) => s.category === 'service')
       .sort((a, b) => a.name.localeCompare(b.name));
 
+    const mandatoryServiceNames = [...coreServices, ...otherServices]
+      .filter((s) => s.mandatory)
+      .map((s) => s.helmReleaseName);
+
+    console.log(chalk.cyan.bold('\nSelect components to install:'));
+    console.log(
+      chalk.gray(
+        'Use arrow keys to navigate, space to toggle, enter to confirm\n'
+      )
+    );
+
+    const formatServiceChoice = (service: ArkService) => {
+      if (service.mandatory) {
+        return new inquirer.Separator(
+          `${chalk.dim.green('◉')} ${chalk.dim(`${service.name} - ${service.description}`)}`
+        );
+      }
+      return {
+        name: `${service.name} ${chalk.gray(`- ${service.description}`)}`,
+        value: service.helmReleaseName,
+        checked: Boolean(service.enabled),
+      };
+    };
+
     const allChoices = [
       new inquirer.Separator(chalk.bold('──── Dependencies ────')),
-      {
-        name: `cert-manager ${chalk.gray('- Certificate management')}`,
-        value: 'cert-manager',
-        checked: true,
-      },
-      {
-        name: `gateway-api ${chalk.gray('- Gateway API CRDs')}`,
-        value: 'gateway-api',
-        checked: true,
-      },
+      new inquirer.Separator(
+        `${chalk.dim.green('◉')} ${chalk.dim('cert-manager - Certificate management')}`
+      ),
+      new inquirer.Separator(
+        `${chalk.dim.green('◉')} ${chalk.dim('gateway-api - Gateway API CRDs')}`
+      ),
       new inquirer.Separator(chalk.bold('──── Ark Core ────')),
-      ...coreServices.map((service) => ({
-        name: `${service.name} ${chalk.gray(`- ${service.description}`)}`,
-        value: service.helmReleaseName,
-        checked: Boolean(service.enabled),
-      })),
+      ...coreServices.map(formatServiceChoice),
       new inquirer.Separator(chalk.bold('──── Ark Services ────')),
-      ...otherServices.map((service) => ({
-        name: `${service.name} ${chalk.gray(`- ${service.description}`)}`,
-        value: service.helmReleaseName,
-        checked: Boolean(service.enabled),
-      })),
+      ...otherServices.map(formatServiceChoice),
     ];
 
-    let selectedComponents: string[] = [];
+    let selectedComponents: string[];
     try {
       const answers = await inquirer.prompt([
         {
@@ -239,12 +249,12 @@ export async function installArk(
           pageSize: 15,
         },
       ]);
-      selectedComponents = answers.components;
-
-      if (selectedComponents.length === 0) {
-        output.warning('No components selected. Exiting.');
-        process.exit(0);
-      }
+      selectedComponents = [
+        'cert-manager',
+        'gateway-api',
+        ...mandatoryServiceNames,
+        ...answers.components,
+      ];
     } catch (error) {
       // Handle Ctrl-C gracefully
       if (error && (error as {name?: string}).name === 'ExitPromptError') {

@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { Provider as JotaiProvider } from 'jotai';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { AppSidebar } from '@/components/app-sidebar';
 import { SidebarProvider } from '@/components/ui/sidebar';
+import userEvent from '@testing-library/user-event';
 
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(() => ({ push: vi.fn() })),
@@ -41,10 +43,32 @@ vi.mock('@/lib/services', () => ({
   },
 }));
 
-vi.mock('@/lib/services/files', () => ({
-  filesService: {
-    list: vi.fn(() => Promise.reject(new Error('Files API not available'))),
+vi.mock('@/lib/services/proxy', () => ({
+  proxyService: {
+    getSystemInfo: vi.fn(() => Promise.resolve({})),
+    isServiceAvailable: vi.fn(() => Promise.resolve(true)),
   },
+}));
+
+vi.mock('@/lib/services/files-count-hooks', () => ({
+  useGetFilesCount: vi.fn(() => ({
+    data: 0,
+    isPending: false,
+  })),
+}));
+
+vi.mock('@/lib/services/events-hooks', () => ({
+  useGetEventsCount: vi.fn(() => ({
+    data: 0,
+    isPending: false,
+  })),
+}));
+
+vi.mock('@/lib/services/workflow-templates-hooks', () => ({
+  useGetAllWorkflowTemplates: vi.fn(() => ({
+    data: [],
+    isPending: false,
+  })),
 }));
 
 vi.mock('@/components/editors', () => ({
@@ -60,25 +84,113 @@ describe('AppSidebar - Files Section', () => {
     vi.clearAllMocks();
   });
 
-  it('should always display Files section in sidebar regardless of API availability', async () => {
+  it('should display Files in More menu', async () => {
+    const user = userEvent.setup();
+
     render(
-      <SidebarProvider>
-        <AppSidebar />
-      </SidebarProvider>,
+      <JotaiProvider>
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>
+      </JotaiProvider>,
     );
 
-    const filesLink = await screen.findByRole('button', { name: /files/i });
-    expect(filesLink).toBeInTheDocument();
+    const moreButton = await screen.findByRole('button', { name: /more/i });
+    await user.click(moreButton);
+
+    const filesButton = await screen.findByText('Files');
+    expect(filesButton).toBeInTheDocument();
   });
 
   it('should display Files section even when files API is not available', async () => {
+    const user = userEvent.setup();
+
     render(
-      <SidebarProvider>
-        <AppSidebar />
-      </SidebarProvider>,
+      <JotaiProvider>
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>
+      </JotaiProvider>,
     );
 
-    const filesLink = await screen.findByRole('button', { name: /files/i });
-    expect(filesLink).toBeInTheDocument();
+    const moreButton = await screen.findByRole('button', { name: /more/i });
+    await user.click(moreButton);
+
+    const filesButton = await screen.findByText('Files');
+    expect(filesButton).toBeInTheDocument();
+  });
+
+  it('should display alert icon when no namespaces are available', async () => {
+    const { useNamespace } = await import('@/providers/NamespaceProvider');
+    vi.mocked(useNamespace).mockReturnValue({
+      availableNamespaces: [],
+      createNamespace: vi.fn(),
+      isPending: false,
+      namespace: '',
+      isNamespaceResolved: false,
+      setNamespace: vi.fn(),
+      readOnlyMode: false,
+    });
+
+    const { container } = render(
+      <JotaiProvider>
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>
+      </JotaiProvider>,
+    );
+
+    await screen.findByText('No namespaces');
+    
+    const alertIcon = container.querySelector('.text-red-500');
+    expect(alertIcon).toBeInTheDocument();
+  });
+
+  it('should display namespace name when available', async () => {
+    const { useNamespace } = await import('@/providers/NamespaceProvider');
+    vi.mocked(useNamespace).mockReturnValue({
+      availableNamespaces: [{ name: 'test-namespace' }],
+      createNamespace: vi.fn(),
+      isPending: false,
+      namespace: 'test-namespace',
+      isNamespaceResolved: true,
+      setNamespace: vi.fn(),
+      readOnlyMode: false,
+    });
+
+    render(
+      <JotaiProvider>
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>
+      </JotaiProvider>,
+    );
+
+    const namespaceText = await screen.findByText('test-namespace');
+    expect(namespaceText).toBeInTheDocument();
+  });
+
+  it('should display loading state when namespace is pending', async () => {
+    const { useNamespace } = await import('@/providers/NamespaceProvider');
+    vi.mocked(useNamespace).mockReturnValue({
+      availableNamespaces: [{ name: 'default' }],
+      createNamespace: vi.fn(),
+      isPending: true,
+      namespace: 'default',
+      isNamespaceResolved: false,
+      setNamespace: vi.fn(),
+      readOnlyMode: false,
+    });
+
+    render(
+      <JotaiProvider>
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>
+      </JotaiProvider>,
+    );
+
+    const loadingText = await screen.findByText('Loading...');
+    expect(loadingText).toBeInTheDocument();
   });
 });

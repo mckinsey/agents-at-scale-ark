@@ -1,6 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAtomValue } from 'jotai';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -13,10 +14,17 @@ import type {
   AgentCreateRequest,
   AgentTool,
   AgentUpdateRequest,
+  ExecutionEngine,
   Model,
   Tool,
 } from '@/lib/services';
-import { agentsService, modelsService, toolsService } from '@/lib/services';
+import {
+  agentsService,
+  executionEnginesService,
+  modelsService,
+  toolsService,
+} from '@/lib/services';
+import { GET_ALL_AGENTS_QUERY_KEY } from '@/lib/services/agents-hooks';
 
 import { AgentFormMode, type AgentFormValues, agentFormSchema } from './types';
 import {
@@ -35,6 +43,7 @@ export function useAgentForm({
   agentName,
   onSuccess,
 }: UseAgentFormOptions) {
+  const queryClient = useQueryClient();
   const onSuccessRef = useRef(onSuccess);
   onSuccessRef.current = onSuccess;
 
@@ -49,6 +58,9 @@ export function useAgentForm({
   const [selectedTools, setSelectedTools] = useState<AgentTool[]>([]);
   const [initialTools, setInitialTools] = useState<AgentTool[]>([]);
   const [unavailableTools, setUnavailableTools] = useState<Tool[]>([]);
+  const [executionEngines, setExecutionEngines] = useState<ExecutionEngine[]>(
+    [],
+  );
   const [parameters, setParameters] = useState<Parameter[]>([]);
   const [initialParameters, setInitialParameters] = useState<Parameter[]>([]);
 
@@ -75,11 +87,15 @@ export function useAgentForm({
           (mode === AgentFormMode.EDIT || mode === AgentFormMode.VIEW) &&
           agentName
         ) {
-          const [agentData, modelsData, toolsData] = await Promise.all([
-            agentsService.getByName(agentName),
-            modelsService.getAll(),
-            toolsService.getAll(),
-          ]);
+          const [agentData, modelsData, toolsData, enginesData] =
+            await Promise.all([
+              agentsService.getByName(agentName),
+              modelsService.getAll(),
+              toolsService.getAll(),
+              isExperimentalExecutionEngineEnabled
+                ? executionEnginesService.getAll()
+                : Promise.resolve([]),
+            ]);
 
           if (!agentData) {
             toast.error('Agent not found');
@@ -90,6 +106,7 @@ export function useAgentForm({
           setAgent(agentData);
           setModels(modelsData);
           setAvailableTools(toolsData);
+          setExecutionEngines(enginesData);
 
           const missingTools = agentData.tools?.filter(
             agentTool => !toolsData.some(t => t.name === agentTool.name),
@@ -112,12 +129,16 @@ export function useAgentForm({
             prompt: agentData.prompt || '',
           });
         } else {
-          const [modelsData, toolsData] = await Promise.all([
+          const [modelsData, toolsData, enginesData] = await Promise.all([
             modelsService.getAll(),
             toolsService.getAll(),
+            isExperimentalExecutionEngineEnabled
+              ? executionEnginesService.getAll()
+              : Promise.resolve([]),
           ]);
           setModels(modelsData);
           setAvailableTools(toolsData);
+          setExecutionEngines(enginesData);
         }
       } catch (error) {
         toast.error(
@@ -162,15 +183,20 @@ export function useAgentForm({
                     namespace: values.selectedModelNamespace || undefined,
                   }
                 : undefined,
-            executionEngine: values.executionEngineName
-              ? { name: values.executionEngineName }
-              : undefined,
+            executionEngine:
+              values.executionEngineName &&
+              values.executionEngineName !== '__none__'
+                ? { name: values.executionEngineName }
+                : undefined,
             prompt: values.prompt || undefined,
             tools: selectedTools,
             parameters: mapParametersToApi(),
           };
 
           await agentsService.create(createData);
+          queryClient.invalidateQueries({
+            queryKey: [GET_ALL_AGENTS_QUERY_KEY],
+          });
         } else if (agent) {
           const updateData: AgentUpdateRequest = {
             description: values.description || undefined,
@@ -185,7 +211,9 @@ export function useAgentForm({
                   }
                 : undefined,
             executionEngine:
-              !agent.isA2A && values.executionEngineName
+              !agent.isA2A &&
+              values.executionEngineName &&
+              values.executionEngineName !== '__none__'
                 ? { name: values.executionEngineName }
                 : undefined,
             prompt: !agent.isA2A ? values.prompt || undefined : undefined,
@@ -210,7 +238,7 @@ export function useAgentForm({
         setSaving(false);
       }
     },
-    [mode, agent, selectedTools, mapParametersToApi],
+    [mode, agent, selectedTools, mapParametersToApi, queryClient],
   );
 
   const handleToolToggle = useCallback((tool: Tool, checked: boolean) => {
@@ -258,6 +286,7 @@ export function useAgentForm({
       saving,
       agent,
       models,
+      executionEngines,
       availableTools,
       toolsLoading,
       selectedTools,

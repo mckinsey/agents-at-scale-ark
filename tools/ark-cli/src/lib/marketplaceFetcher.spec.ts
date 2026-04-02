@@ -1,14 +1,15 @@
-import {jest} from '@jest/globals';
+import {vi} from 'vitest';
 import type {AnthropicMarketplaceManifest} from '../types/marketplace.js';
 import type {AxiosResponse, AxiosRequestConfig} from 'axios';
 
-const mockAxiosGet = jest.fn<
-  (
-    url: string,
-    config?: AxiosRequestConfig
-  ) => Promise<AxiosResponse<AnthropicMarketplaceManifest>>
->();
-jest.unstable_mockModule('axios', () => ({
+const mockAxiosGet =
+  vi.fn<
+    (
+      url: string,
+      config?: AxiosRequestConfig
+    ) => Promise<AxiosResponse<AnthropicMarketplaceManifest>>
+  >();
+vi.mock('axios', () => ({
   default: {
     get: mockAxiosGet,
     isAxiosError: (error: unknown) => {
@@ -22,10 +23,10 @@ jest.unstable_mockModule('axios', () => ({
   },
 }));
 
-const mockGetMarketplaceRepoUrl = jest.fn();
-const mockGetMarketplaceRegistry = jest.fn();
+const mockGetMarketplaceRepoUrl = vi.fn();
+const mockGetMarketplaceRegistry = vi.fn();
 
-jest.unstable_mockModule('./config.js', () => ({
+vi.mock('./config.js', () => ({
   getMarketplaceRepoUrl: mockGetMarketplaceRepoUrl,
   getMarketplaceRegistry: mockGetMarketplaceRegistry,
 }));
@@ -34,11 +35,12 @@ const {
   fetchMarketplaceManifest,
   mapMarketplaceItemToArkService,
   getMarketplaceServicesFromManifest,
+  getMarketplaceExecutorsFromManifest,
 } = await import('./marketplaceFetcher.js');
 
 describe('marketplaceFetcher', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockAxiosGet.mockClear();
     mockGetMarketplaceRepoUrl.mockReturnValue(
       'https://test-repo.example.com/marketplace'
@@ -109,7 +111,6 @@ describe('marketplaceFetcher', () => {
 
       expect(result).toBeNull();
     });
-
   });
 
   describe('mapMarketplaceItemToArkService', () => {
@@ -285,5 +286,86 @@ describe('marketplaceFetcher', () => {
       expect(result).toBeNull();
     });
   });
-});
 
+  describe('getMarketplaceExecutorsFromManifest', () => {
+    it('converts executor items to service collection', async () => {
+      const mockManifest: AnthropicMarketplaceManifest = {
+        version: '1.0.0',
+        marketplace: 'ARK Marketplace',
+        items: [
+          {
+            name: 'langchain',
+            description: 'LangChain executor',
+            type: 'executor',
+            ark: {
+              chartPath: 'oci://registry/langchain',
+              namespace: 'langchain-ns',
+            },
+          },
+          {
+            name: 'claude-agent-sdk',
+            description: 'Claude Agent SDK executor',
+            type: 'executor',
+            ark: {
+              chartPath: 'oci://registry/claude-agent-sdk',
+              namespace: 'claude-ns',
+            },
+          },
+          {
+            name: 'phoenix',
+            description: 'Phoenix service',
+            type: 'service',
+            ark: {
+              chartPath: 'oci://registry/phoenix',
+            },
+          },
+        ],
+      };
+
+      mockAxiosGet.mockResolvedValue({
+        data: mockManifest,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+
+      const result = await getMarketplaceExecutorsFromManifest();
+
+      expect(result).not.toBeNull();
+      expect(result?.['langchain']).toBeDefined();
+      expect(result?.['claude-agent-sdk']).toBeDefined();
+      expect(result?.['phoenix']).toBeUndefined();
+      expect(result?.['langchain']?.description).toBe('LangChain executor');
+    });
+
+    it('returns null when no executor items exist', async () => {
+      const mockManifest: AnthropicMarketplaceManifest = {
+        version: '1.0.0',
+        marketplace: 'ARK Marketplace',
+        items: [
+          {
+            name: 'phoenix',
+            description: 'Phoenix service',
+            type: 'service',
+            ark: {
+              chartPath: 'oci://registry/phoenix',
+            },
+          },
+        ],
+      };
+
+      mockAxiosGet.mockResolvedValue({
+        data: mockManifest,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      });
+
+      const result = await getMarketplaceExecutorsFromManifest();
+
+      expect(result).toBeNull();
+    });
+  });
+});

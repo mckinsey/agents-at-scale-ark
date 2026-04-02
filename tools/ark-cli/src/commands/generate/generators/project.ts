@@ -997,7 +997,9 @@ Generated with ARK CLI generator`;
     if (config.projectType === 'empty') {
       steps.push(
         {desc: 'Add YAML files to agents/, teams/, queries/ directories'},
-        {desc: 'Use either the default model already in models/ or a configuration template from samples/models/ of ARK repository'},
+        {
+          desc: 'Use either the default model already in models/ or a configuration template from samples/models/ of ARK repository',
+        },
         {desc: 'Edit .env file to set your API keys'},
         {desc: 'Deploy your project', cmd: 'devspace dev'}
       );
@@ -1013,7 +1015,9 @@ Generated with ARK CLI generator`;
       );
     } else {
       steps.push(
-        {desc: 'Use either the default model already in models/ or a configuration template from samples/models/ of ARK repository'},
+        {
+          desc: 'Use either the default model already in models/ or a configuration template from samples/models/ of ARK repository',
+        },
         {desc: 'Edit .env file to set your API keys'},
         {desc: 'Deploy your project', cmd: 'devspace dev'}
       );

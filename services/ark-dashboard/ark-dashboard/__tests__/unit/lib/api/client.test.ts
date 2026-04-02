@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { APIClient, APIError } from '@/lib/api/client'
 
 // Mock fetch globally
@@ -8,10 +8,16 @@ global.fetch = mockFetch
 describe('APIClient', () => {
   let client: APIClient
   const baseURL = 'http://localhost:8080'
-  
+  const MOCK_TIMESTAMP = 1234567890
+
   beforeEach(() => {
     client = new APIClient(baseURL)
     mockFetch.mockClear()
+    vi.spyOn(Date, 'now').mockReturnValue(MOCK_TIMESTAMP)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   describe('constructor', () => {
@@ -35,13 +41,17 @@ describe('APIClient', () => {
       })
 
       const result = await client.get('/test')
-      
+
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8080/test',
+        `http://localhost:8080/test?_t=${MOCK_TIMESTAMP}`,
         expect.objectContaining({
           method: 'GET',
+          cache: 'no-store',
           headers: expect.objectContaining({
             'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
           }),
         })
       )
@@ -81,10 +91,52 @@ describe('APIClient', () => {
       })
 
       await client.get('/test', { params: { foo: 'bar', baz: 123 } })
-      
+
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8080/test?foo=bar&baz=123',
-        expect.any(Object)
+        `http://localhost:8080/test?foo=bar&baz=123&_t=${MOCK_TIMESTAMP}`,
+        expect.objectContaining({
+          method: 'GET',
+          cache: 'no-store',
+          headers: expect.objectContaining({
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+          }),
+        })
+      )
+    })
+
+    it('should handle endpoints with existing query parameters', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({}),
+      })
+
+      await client.get('/api/marketplace?type=demos')
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `http://localhost:8080/api/marketplace?type=demos&_t=${MOCK_TIMESTAMP}`,
+        expect.objectContaining({
+          method: 'GET',
+        })
+      )
+    })
+
+    it('should handle endpoints with existing query parameters and additional params', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({}),
+      })
+
+      await client.get('/api/marketplace?type=demos', { params: { search: 'test' } })
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `http://localhost:8080/api/marketplace?type=demos&search=test&_t=${MOCK_TIMESTAMP}`,
+        expect.objectContaining({
+          method: 'GET',
+        })
       )
     })
 
@@ -152,8 +204,14 @@ describe('APIClient', () => {
     it('should make GET requests', async () => {
       await client.get('/test')
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8080/test',
-        expect.objectContaining({ method: 'GET' })
+        `http://localhost:8080/test?_t=${MOCK_TIMESTAMP}`,
+        expect.objectContaining({
+          method: 'GET',
+          cache: 'no-store',
+          headers: expect.objectContaining({
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+          }),
+        })
       )
     })
 
@@ -201,6 +259,32 @@ describe('APIClient', () => {
       expect(mockFetch).toHaveBeenCalledWith(
         'http://localhost:8080/test',
         expect.objectContaining({ method: 'DELETE' })
+      )
+    })
+  })
+
+  describe('relative baseURL', () => {
+    it('should resolve a relative baseURL against globalThis.location.origin without throwing', async () => {
+      Object.defineProperty(globalThis, 'location', {
+        value: { origin: 'http://localhost:3274' },
+        writable: true,
+        configurable: true,
+      })
+
+      const relativeClient = new APIClient('/api/v1/proxy/services')
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ services: [] }),
+      })
+
+      await relativeClient.get('')
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `http://localhost:3274/api/v1/proxy/services?_t=${MOCK_TIMESTAMP}`,
+        expect.anything(),
       )
     })
   })

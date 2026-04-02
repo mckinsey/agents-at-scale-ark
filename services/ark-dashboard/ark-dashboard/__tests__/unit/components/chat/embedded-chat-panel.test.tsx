@@ -13,11 +13,18 @@ vi.mock('@/lib/services/chat', () => ({
     streamChatResponse: vi.fn(),
     submitChatQuery: vi.fn(),
     getQueryResult: vi.fn(),
+    getQuery: vi.fn().mockResolvedValue({ status: { conversationId: '' } }),
   },
 }));
 
 vi.mock('@/lib/analytics/singleton', () => ({
   trackEvent: vi.fn(),
+}));
+
+vi.mock('@/lib/services/proxy', () => ({
+  proxyService: {
+    checkBrokerHealth: vi.fn(() => Promise.resolve('available')),
+  },
 }));
 
 vi.mock('next/navigation', () => ({
@@ -127,7 +134,7 @@ describe('EmbeddedChatPanel', () => {
                   spans: [
                     {
                       attributes: [
-                        { key: 'session.id', value: 'session-A' },
+                        { key: 'ark.session.id', value: 'session-A' },
                         { key: 'agent', value: 'test-agent' },
                       ],
                       startTimeUnixNano: '1704103200000000000',
@@ -222,7 +229,7 @@ describe('EmbeddedChatPanel', () => {
                   spans: [
                     {
                       attributes: [
-                        { key: 'session.id', value: 'session-A' },
+                        { key: 'ark.session.id', value: 'session-A' },
                         { key: 'agent', value: 'test-agent' },
                       ],
                       startTimeUnixNano: '1704103200000000000',
@@ -234,7 +241,7 @@ describe('EmbeddedChatPanel', () => {
                   spans: [
                     {
                       attributes: [
-                        { key: 'session.id', value: 'session-B' },
+                        { key: 'ark.session.id', value: 'session-B' },
                         { key: 'agent', value: 'test-agent' },
                       ],
                       startTimeUnixNano: '1704103260000000000',
@@ -246,7 +253,7 @@ describe('EmbeddedChatPanel', () => {
                   spans: [
                     {
                       attributes: [
-                        { key: 'session.id', value: 'session-A' },
+                        { key: 'ark.session.id', value: 'session-A' },
                         { key: 'agent', value: 'test-agent' },
                       ],
                       startTimeUnixNano: '1704103320000000000',
