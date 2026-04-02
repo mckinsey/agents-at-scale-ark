@@ -46,6 +46,8 @@ func (p *PostgreSQLBackend) startWALConsumer() {
 		}
 
 		klog.Errorf("WAL consumer disconnected, retrying in %v: %v", backoff, err)
+		klog.Infof("WAL consumer: falling back to periodic nudge (every %v)", backoff)
+		p.nudgeAllWatchers()
 		select {
 		case <-p.ctx.Done():
 			return
