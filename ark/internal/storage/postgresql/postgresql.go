@@ -752,7 +752,7 @@ func (w *postgresWatcher) run() {
 	bookmarkTicker := time.NewTicker(30 * time.Second)
 	defer bookmarkTicker.Stop()
 
-	relistTicker := time.NewTicker(300 * time.Second)
+	relistTicker := time.NewTicker(120 * time.Second)
 	defer relistTicker.Stop()
 
 	for {
