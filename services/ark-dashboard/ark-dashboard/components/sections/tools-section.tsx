@@ -7,7 +7,6 @@ import {
 } from '@radix-ui/react-collapsible';
 import { Label } from '@radix-ui/react-label';
 import { ArrowUpRightIcon, ChevronRight, Plus } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import {
   forwardRef,
   useEffect,
@@ -40,6 +39,7 @@ import {
   agentsService,
   toolsService,
 } from '@/lib/services';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { groupToolsByLabel } from '@/lib/utils/groupToolsByLabels';
 
 interface ToolsSectionProps {
@@ -57,7 +57,7 @@ export const ToolsSection = forwardRef<
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
   const [infoDialogOpen, setInfoDialogOpen] = useState(false);
   const [showCompactView, setShowCompactView] = useState(false);
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
   const [toolEditorOpen, setToolEditorOpen] = useState(false);
 
   useImperativeHandle(ref, () => ({
@@ -133,7 +133,7 @@ export const ToolsSection = forwardRef<
 
   const handleInfo = (tool: Tool) => {
     setSelectedTool(tool);
-    router.push(`/tool/${tool.name}`);
+    push(`/tool/${tool.name}`);
   };
 
   const handleSaveTool = async (toolSpec: {

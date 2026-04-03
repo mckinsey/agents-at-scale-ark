@@ -28,20 +28,22 @@ cd /tmp/ark-analysis
 
 The Ark repository is organized as follows:
 
-- **`ark/`** - Kubernetes operator (Go)
-  - Controllers managing AI resources
-  - Custom Resource Definitions (CRDs)
-  - Webhooks for validation
+- **`ark/`** - Kubernetes operator and default executor (Go)
+  - Controller dispatches queries to executors via A2A protocol
+  - CRDs: Agent, Model, Query, Team, MCPServer, ExecutionEngine, A2AServer
+  - `executors/completions/` - Built-in default execution engine
 
-- **`services/`** - Supporting services (Go, Python, TypeScript)
-  - `ark-api/` - REST API
+- **`lib/ark-sdk/`** - Python SDK (generated + overlay)
+  - `BaseExecutor` ABC and `ExecutorApp` for pluggable executor interface
 
-- **`samples/`** - Example configurations (YAML)
-  - Agent definitions and queries
-  - Multi-agent teams
-  - A2A server examples
+- **`services/`** - Component services
+  - `ark-api/` - REST API gateway (Python/FastAPI)
+  - `ark-broker/` - In-memory event bus (Node.js/Express)
+  - `ark-dashboard/` - Web UI (Next.js/React)
 
-- **`docs/`** - Documentation site (Next.js)
+- **`samples/`** - Example YAML configurations
+
+- **`docs/`** - Documentation site (Next.js/MDX)
 
 ## Common analysis tasks
 
@@ -99,6 +101,6 @@ cat docs/content/developer-guide/building-a2a-servers.mdx
 ### Finding CRD specifications
 ```bash
 cd /tmp/ark-analysis
-ls ark/api/v1prealpha1/
-cat ark/api/v1prealpha1/agent_types.go
+ls ark/api/v1alpha1/
+cat ark/api/v1alpha1/agent_types.go
 ```
