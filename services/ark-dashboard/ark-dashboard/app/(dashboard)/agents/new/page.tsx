@@ -1,14 +1,14 @@
 'use client';
 
 import { Bot, MessageCircle } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useCallback } from 'react';
 import { toast } from 'sonner';
 
 import { AgentForm, AgentFormMode } from '@/components/forms/agent-form';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 
 export default function AgentNewPage() {
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
 
   const onSuccess = useCallback(() => {
     toast.success('Agent Created', {
@@ -27,8 +27,8 @@ export default function AgentNewPage() {
       duration: 8000,
     });
 
-    router.push('/agents');
-  }, [router]);
+    push('/agents');
+  }, [push]);
 
   return <AgentForm mode={AgentFormMode.CREATE} onSuccess={onSuccess} />;
 }

@@ -52,6 +52,7 @@ import {
 } from '@/lib/services/secrets-hooks';
 import type { KeysOfUnion } from '@/lib/types/utils';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { useModelConfigurationForm } from './model-configuration-form-context';
 import type { FormValues } from './schema';
@@ -59,6 +60,7 @@ import type { FormValues } from './schema';
 export function ModelConfiguratorForm() {
   const { form, formId, onSubmit, provider, disabledFields } =
     useModelConfigurationForm();
+  const { namespace } = useNamespace();
 
   const {
     data: secrets,
@@ -78,7 +80,7 @@ export function ModelConfiguratorForm() {
   }, [secretsError]);
 
   return (
-    <SecretDialogProvider formValueSetter={form.setValue}>
+    <SecretDialogProvider formValueSetter={form.setValue} namespace={namespace}>
       <Form {...form}>
         <form
           id={formId}
@@ -557,11 +559,13 @@ const SecretDialogContext = createContext<SecretDialogContext | undefined>(
 
 type SecretDialogProviderProps = {
   formValueSetter: UseFormSetValue<FormValues>;
+  namespace: string;
 };
 
 function SecretDialogProvider({
   children,
   formValueSetter,
+  namespace,
 }: PropsWithChildren<SecretDialogProviderProps>) {
   const [isOpen, setIsOpen] = useState(false);
   const [fieldToSet, setFieldToSet] = useState<FormFields | undefined>(
