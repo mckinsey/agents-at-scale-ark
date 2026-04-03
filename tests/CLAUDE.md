@@ -911,13 +911,20 @@ chainsaw test tests/ --test-dir tests/queries --pause-on-failure
 
 ### Radix UI Select
 
-Radix UI Select uses Floating UI to position the dropdown portal after mount. Until positioning completes, the portal DOM nodes can be replaced, causing "element was detached from the DOM". Wait for `[role='listbox'][data-side]` — Floating UI sets `data-side` once positioning is done.
+Two things make Radix UI Select options unstable for Playwright:
+
+1. **Floating UI positioning**: The dropdown portal DOM nodes are replaced when Floating UI calculates position, causing "element was detached from the DOM". Floating UI sets `data-side` once positioning is done.
+2. **Open animation**: `data-side` is set before the entry animation (zoom-in, slide-in) finishes. Playwright sees the bounding box still changing and reports "element is not stable". Radix sets `data-state="open"` only after the animation completes.
+
+Wait for both before clicking:
 
 ```python
 trigger.click()
-page.locator("[role='listbox'][data-side]").wait_for(state="visible", timeout=15000)
+page.locator("[role='listbox'][data-side][data-state='open']").wait_for(state="visible", timeout=15000)
 page.locator("[role='option']:has-text('HTTP')").first.click()
 ```
+
+If options are still detaching after this, the likely cause is a parent component re-rendering while the dropdown is open (e.g. a `form.watch()` call in React Hook Form re-rendering on blur/validation). Fix it in the component by replacing `form.watch(name)` with `useWatch({ control, name })`, which only re-renders when the field value changes.
 
 - Query tests should reach `phase: done`
 - No RBAC permission errors in events
