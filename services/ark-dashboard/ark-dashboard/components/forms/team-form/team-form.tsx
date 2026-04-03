@@ -1,11 +1,10 @@
 'use client';
 
 import { ArrowLeft, Code, Save, Settings, Trash2 } from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
+import { NamespacedLink } from '@/components/namespaced-link';
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
 import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
@@ -22,8 +21,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import type { Team } from '@/lib/services';
 import { teamsService } from '@/lib/services';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import {
   BasicInfoSection,
@@ -41,7 +42,8 @@ const breadcrumbs: BreadcrumbElement[] = [
 ];
 
 export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
+  const { namespace } = useNamespace();
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(false);
@@ -151,7 +153,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
       toast.success('Team Deleted', {
         description: `Successfully deleted ${team.name}`,
       });
-      router.push('/teams');
+      push('/teams');
     } catch (error) {
       toast.error('Failed to Delete Team', {
         description:
@@ -229,10 +231,10 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
             isViewing ? (
               <div className="flex items-center gap-2">
                 <Button variant="outline" asChild>
-                  <Link href="/teams">
+                  <NamespacedLink href="/teams">
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     Back
-                  </Link>
+                  </NamespacedLink>
                 </Button>
                 <Button
                   onClick={form.handleSubmit(onSubmit)}
@@ -254,10 +256,10 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
             ) : isCreating ? (
               <div className="flex items-center gap-2">
                 <Button variant="outline" asChild>
-                  <Link href="/teams">
+                  <NamespacedLink href="/teams">
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     Back
-                  </Link>
+                  </NamespacedLink>
                 </Button>
                 <Button onClick={form.handleSubmit(onSubmit)} disabled={saving}>
                   {saving ? (
@@ -287,7 +289,7 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
                   <Select
                     value={teamName}
                     onValueChange={value =>
-                      router.push(`/teams/${encodeURIComponent(value)}`)
+                      push(`/teams/${encodeURIComponent(value)}`)
                     }>
                     <SelectTrigger className="border-border h-8 w-[180px] bg-transparent px-2 text-sm font-medium">
                       <SelectValue placeholder="Select team" />

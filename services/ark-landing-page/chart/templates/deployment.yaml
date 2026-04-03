@@ -34,6 +34,21 @@ spec:
           value: {{ .Values.app.config.port | quote }}
         - name: HOSTNAME
           value: {{ .Values.app.config.hostname }}
+        {{- if .Values.app.env }}
+        {{- range .Values.app.env }}
+        - name: {{ .name }}
+          {{- if .value }}
+          value: {{ .value | quote }}
+          {{- else if .valueFrom }}
+          valueFrom:
+            {{- toYaml .valueFrom | nindent 12 }}
+          {{- end }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.app.envFrom }}
+        envFrom:
+          {{- toYaml .Values.app.envFrom | nindent 10 }}
+        {{- end }}
         resources:
           {{- toYaml .Values.app.resources | nindent 10 }}
         securityContext:
