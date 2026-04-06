@@ -52,6 +52,8 @@
     "swagger-jsdoc": {
       "glob": "^7.2.3"
     },
-    "flatted": "^3.4.2"
+    "flatted": "^3.4.2",
+    "handlebars": "^4.7.9",
+    "path-to-regexp": "^8.4.0"
   }
 }

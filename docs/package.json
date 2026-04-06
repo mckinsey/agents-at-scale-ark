@@ -18,7 +18,7 @@
     "@napi-rs/simple-git": "^0.1.19",
     "@theguild/remark-mermaid": "^0.3.0",
     "cheerio": "^1.2.0",
-    "next": "16.2.2",
+    "next": "16.2.6",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
     "react": "^19.2.4",
@@ -48,6 +48,9 @@
     "minimatch": "^10.2.3",
     "picomatch": "^4.0.4",
     "@xmldom/xmldom": "0.9.9",
-    "lodash-es": "4.18.1"
+    "lodash-es": "4.18.1",
+    "mermaid": "^11.14.0",
+    "handlebars": "^4.7.9",
+    "path-to-regexp": "^8.4.0"
   }
 }
