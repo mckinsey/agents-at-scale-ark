@@ -11,7 +11,6 @@ from kubernetes_asyncio import client
 from kubernetes_asyncio.client.api_client import ApiClient
 
 from ..client import V1_ALPHA1, V1_PREALPHA1, with_ark_client
-from ..k8s import SecretClient, init_k8s
 from ..executor import (
     AgentConfig,
     ExecutionEngineRequest,
@@ -20,7 +19,7 @@ from ..executor import (
     Model,
     Parameter,
 )
-from ..k8s import SecretClient
+from ..k8s import SecretClient, init_k8s
 
 logger = logging.getLogger(__name__)
 
