@@ -15,8 +15,7 @@ spec:
     - script:
         skipLogOutput: true
         content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
+          ../scripts/setup-azure-credentials.sh
         outputs:
         - name: azure
           value: (json_parse($stdout))

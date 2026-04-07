@@ -2,6 +2,8 @@
 
 set -e
 
+source "$(dirname "$0")/defaults.sh"
+
 is_azure_configured() {
     [ -n "${E2E_TEST_AZURE_OPENAI_KEY:-}" ] && [ -n "${E2E_TEST_AZURE_OPENAI_BASE_URL:-}" ]
 }
@@ -47,11 +49,11 @@ get_all_available_providers() {
 generate_config() {
     case "$1" in
         azure)
-            AZURE_API_VERSION="${E2E_TEST_AZURE_OPENAI_API_VERSION:-2024-12-01-preview}"
-            echo "{\"type\":\"azure\",\"model\":\"gpt-4.1-mini\",\"token\":\"$E2E_TEST_AZURE_OPENAI_KEY\",\"url\":\"$E2E_TEST_AZURE_OPENAI_BASE_URL\",\"apiVersion\":\"$AZURE_API_VERSION\"}"
+            AZURE_API_VERSION="$E2E_TEST_AZURE_OPENAI_API_VERSION"
+            echo "{\"type\":\"azure\",\"model\":\"$E2E_TEST_AZURE_OPENAI_MODEL\",\"token\":\"$E2E_TEST_AZURE_OPENAI_KEY\",\"url\":\"$E2E_TEST_AZURE_OPENAI_BASE_URL\",\"apiVersion\":\"$AZURE_API_VERSION\"}"
             ;;
         openai)
-            OPENAI_BASE_URL="${E2E_TEST_OPENAI_BASE_URL:-https://api.openai.com/v1}"
+            OPENAI_BASE_URL="$E2E_TEST_OPENAI_BASE_URL"
             echo "{\"type\":\"openai\",\"model\":\"gpt-4o-mini\",\"token\":\"$E2E_TEST_OPENAI_API_KEY\",\"url\":\"$OPENAI_BASE_URL\"}"
             ;;
         bedrock)

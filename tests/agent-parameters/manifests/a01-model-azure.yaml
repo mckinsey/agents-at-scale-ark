@@ -5,7 +5,7 @@ metadata:
 spec:
   type: azure
   model:
-    value: gpt-4.1-mini
+    value: ($provider.model)
   config:
     azure:
       baseUrl:

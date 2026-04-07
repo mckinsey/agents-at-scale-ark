@@ -6,7 +6,7 @@ spec:
   type: completions
   provider: azure
   model:
-    value: gpt-4.1-mini
+    value: ($azure.model)
   config:
     azure:
       properties:
