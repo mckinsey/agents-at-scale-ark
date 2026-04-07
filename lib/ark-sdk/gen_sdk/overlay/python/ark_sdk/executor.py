@@ -92,9 +92,9 @@ class BaseExecutor(ABC):
         """
         pass
 
-    def _resolve_prompt(self, agent_config, base_prompt: str = None) -> str:
+    def _resolve_prompt(self, agent_config, base_prompt: str = "You are a helpful assistant.") -> str:
         """Resolve agent prompt with parameter substitution."""
-        prompt = base_prompt or agent_config.prompt or "You are a helpful assistant."
+        prompt = agent_config.prompt or base_prompt
 
         for param in agent_config.parameters:
             placeholder = f"{{{param.name}}}"
