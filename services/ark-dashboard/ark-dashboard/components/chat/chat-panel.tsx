@@ -8,6 +8,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { useChatSession } from '@/lib/hooks';
 import type { GraphEdge } from '@/lib/types/chat-message';
@@ -38,6 +44,8 @@ export function ChatPanel({
     sendMessage,
     clearChat,
     messagesEndRef,
+    tokenUsage,
+    messageTokenUsage,
   } = useChatSession({ name, type });
 
   const [currentMessage, setCurrentMessage] = useState('');
@@ -85,6 +93,7 @@ export function ChatPanel({
             error={error}
             viewMode={viewMode}
             messagesEndRef={messagesEndRef}
+            messageTokenUsage={messageTokenUsage}
           />
         </div>
       </div>
@@ -137,6 +146,35 @@ export function ChatPanel({
               className="text-muted-foreground cursor-pointer text-sm">
               Show tool calls
             </label>
+            {tokenUsage && tokenUsage.total_tokens > 0 && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="text-muted-foreground ml-2 flex items-center gap-1 text-xs">
+                      <span className="font-mono">
+                        {tokenUsage.total_tokens.toLocaleString()} tokens
+                      </span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <div className="space-y-1 text-xs">
+                      <div>
+                        Prompt:{' '}
+                        {tokenUsage.prompt_tokens.toLocaleString()}
+                      </div>
+                      <div>
+                        Completion:{' '}
+                        {tokenUsage.completion_tokens.toLocaleString()}
+                      </div>
+                      <div className="border-t pt-1 font-medium">
+                        Total:{' '}
+                        {tokenUsage.total_tokens.toLocaleString()}
+                      </div>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
             <Button
               variant="ghost"
               size="sm"

@@ -99,9 +99,10 @@ export const McpServersSection = forwardRef<
           description: `Successfully created ${mcpServer.name}`,
         });
       } else {
-        await mcpServersService.update(mcpServer.name, {
-          spec: mcpServer.spec,
-        });
+        await mcpServersService.update(
+          mcpServer.name,
+          { spec: mcpServer.spec },
+        );
         toast.success('Mcp Updated', {
           description: `Successfully updated ${mcpServer.name}`,
         });

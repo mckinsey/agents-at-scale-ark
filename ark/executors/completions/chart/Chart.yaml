@@ -2,8 +2,8 @@ apiVersion: v2
 name: ark-completions
 description: Completions execution engine for Ark queries
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 0.1.57
+appVersion: 0.1.57
 annotations:
   ark.mckinsey.com/service: completions
   ark.mckinsey.com/resources: service,deployment
