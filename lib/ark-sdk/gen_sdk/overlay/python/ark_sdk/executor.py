@@ -31,6 +31,7 @@ class AgentConfig(BaseModel):
     parameters: List[Parameter] = []
     model: Model
     labels: Dict[str, str] = {}
+    annotations: Dict[str, str] = {}
 
 
 class MCPServerConfig(BaseModel):
@@ -58,6 +59,8 @@ class ExecutionEngineRequest(BaseModel):
     userInput: Message
     mcpServers: List[MCPServerConfig] = []
     conversationId: str = ""
+    query_annotations: Dict[str, str] = {}
+    execution_engine_annotations: Dict[str, str] = {}
 
 
 class ExecutionEngineResponse(BaseModel):

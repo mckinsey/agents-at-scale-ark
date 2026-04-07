@@ -89,12 +89,34 @@ async def _resolve_from_query(ark, query, namespace: str, user_input: str, conve
     agent_config = await _build_agent_config(ark, agent, query, namespace)
     mcp_servers = await _build_mcp_servers(ark, agent, namespace)
 
+    query_annotations = query.metadata.get("annotations", {}) if query.metadata else {}
+    execution_engine_annotations = await _resolve_execution_engine_annotations(ark, agent, namespace)
+
     return ExecutionEngineRequest(
         agent=agent_config,
         userInput=Message(role="user", content=user_input),
         mcpServers=mcp_servers,
         conversationId=conversation_id,
+        query_annotations=query_annotations,
+        execution_engine_annotations=execution_engine_annotations,
     )
+
+
+async def _resolve_execution_engine_annotations(ark, agent, namespace: str) -> Dict[str, str]:
+    ee_ref = getattr(agent.spec, "execution_engine", None) or getattr(agent.spec, "executionEngine", None)
+    if not ee_ref:
+        return {}
+    ee_name = _get_attr_or_key(ee_ref, "name")
+    if not ee_name:
+        return {}
+    try:
+        from ..client import V1_PREALPHA1, with_ark_client
+        async with with_ark_client(namespace, V1_PREALPHA1) as prealpha_ark:
+            ee = await prealpha_ark.executionengines.a_get(ee_name, namespace)
+            return ee.metadata.get("annotations", {}) if ee.metadata else {}
+    except Exception as e:
+        logger.warning(f"Failed to resolve ExecutionEngine '{ee_name}' annotations: {e}")
+        return {}
 
 
 async def _build_agent_config(ark, agent, query, namespace: str) -> AgentConfig:
@@ -111,6 +133,7 @@ async def _build_agent_config(ark, agent, query, namespace: str) -> AgentConfig:
         prompt = prompt.replace(f"{{{param.name}}}", param.value)
 
     labels = agent.metadata.get("labels", {}) if agent.metadata else {}
+    annotations = agent.metadata.get("annotations", {}) if agent.metadata else {}
 
     return AgentConfig(
         name=agent.metadata.get("name", "unknown") if agent.metadata else "unknown",
@@ -120,6 +143,7 @@ async def _build_agent_config(ark, agent, query, namespace: str) -> AgentConfig:
         parameters=parameters,
         model=model,
         labels=labels,
+        annotations=annotations,
     )
 
 
