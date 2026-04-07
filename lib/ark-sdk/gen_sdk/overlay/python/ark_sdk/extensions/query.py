@@ -3,6 +3,7 @@
 Extension spec: ark/api/extensions/query/v1/
 """
 
+import base64
 import logging
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -76,7 +77,7 @@ async def resolve_query(
         return await _resolve_from_query(ark, query, query_ref.namespace, user_input, conversation_id)
 
 
-async def _resolve_from_query(ark, query, namespace: str, user_input: str, conversation_id: str = "") -> ExecutionEngineRequest:
+async def _resolve_from_query(ark: Any, query: Any, namespace: str, user_input: str, conversation_id: str = "") -> ExecutionEngineRequest:
     target = query.spec.target
     if not target:
         raise ValueError(f"Query '{query.metadata['name']}' has no target")
@@ -115,7 +116,7 @@ async def _resolve_execution_engine_annotations(agent, namespace: str) -> dict[s
         return ee.metadata.get("annotations", {}) if ee.metadata else {}
 
 
-async def _build_agent_config(ark, agent, query, namespace: str) -> AgentConfig:
+async def _build_agent_config(ark: Any, agent: Any, query: Any, namespace: str) -> AgentConfig:
     spec = agent.spec
     model = Model(name="", type="", config={})
 
@@ -143,7 +144,7 @@ async def _build_agent_config(ark, agent, query, namespace: str) -> AgentConfig:
     )
 
 
-def _get_attr_or_key(obj, attr_name: str, dict_key: str = None):
+def _get_attr_or_key(obj: Any, attr_name: str, dict_key: Optional[str] = None) -> Any:
     if dict_key is None:
         dict_key = attr_name
     if isinstance(obj, dict):
@@ -151,7 +152,7 @@ def _get_attr_or_key(obj, attr_name: str, dict_key: str = None):
     return getattr(obj, attr_name, None)
 
 
-def _extract_value_source_refs(vs):
+def _extract_value_source_refs(vs: Any) -> tuple[Optional[str], Any, Any]:
     if isinstance(vs, dict):
         if vs.get("value"):
             return vs["value"], None, None
@@ -168,13 +169,12 @@ def _extract_value_source_refs(vs):
     return None, secret_ref, cm_ref
 
 
-async def _resolve_secret_ref(secret_ref, namespace: str) -> str:
+async def _resolve_secret_ref(secret_ref: Any, namespace: str) -> str:
     ref_name = _get_attr_or_key(secret_ref, "name")
     ref_key = _get_attr_or_key(secret_ref, "key")
     if not (ref_name and ref_key):
         return ""
     try:
-        import base64
         sc = SecretClient(namespace=namespace)
         result = await sc.get_secret_value(ref_name, ref_key)
         return base64.b64decode(result["value"]).decode("utf-8")
@@ -183,7 +183,7 @@ async def _resolve_secret_ref(secret_ref, namespace: str) -> str:
         return ""
 
 
-async def _resolve_configmap_ref(cm_ref, namespace: str) -> str:
+async def _resolve_configmap_ref(cm_ref: Any, namespace: str) -> str:
     ref_name = _get_attr_or_key(cm_ref, "name")
     ref_key = _get_attr_or_key(cm_ref, "key")
     if not (ref_name and ref_key):
@@ -198,7 +198,7 @@ async def _resolve_configmap_ref(cm_ref, namespace: str) -> str:
         return ""
 
 
-async def _resolve_value_source(vs, namespace: str) -> str:
+async def _resolve_value_source(vs: Any, namespace: str) -> str:
     direct_value, secret_ref, cm_ref = _extract_value_source_refs(vs)
     if direct_value:
         return direct_value
@@ -211,7 +211,7 @@ async def _resolve_value_source(vs, namespace: str) -> str:
     return ""
 
 
-async def _resolve_provider_config(provider_config_obj, namespace: str) -> dict:
+async def _resolve_provider_config(provider_config_obj: Any, namespace: str) -> dict[str, Any]:
     config = {}
     api_key_vs = getattr(provider_config_obj, "api_key", None) or getattr(provider_config_obj, "apiKey", None)
     if api_key_vs:
@@ -224,7 +224,7 @@ async def _resolve_provider_config(provider_config_obj, namespace: str) -> dict:
     return config
 
 
-async def _resolve_model(ark, model_ref, namespace: str) -> Model:
+async def _resolve_model(ark: Any, model_ref: Any, namespace: str) -> Model:
     model_name = model_ref.name
     model_namespace = getattr(model_ref, "namespace", None) or namespace
 
@@ -261,7 +261,7 @@ def _build_query_param_map(query_params: Optional[list]) -> dict[str, str]:
     return param_map
 
 
-def _resolve_param_value(param, query_param_map: dict[str, str]) -> str:
+def _resolve_param_value(param: Any, query_param_map: dict[str, str]) -> str:
     value = _get_attr_or_key(param, "value")
     if value:
         return value
@@ -292,7 +292,7 @@ def _resolve_parameters(
     return resolved
 
 
-async def _resolve_mcp_server(ark, server_name: str, namespace: str) -> Optional[MCPServerConfig]:
+async def _resolve_mcp_server(ark: Any, server_name: str, namespace: str) -> Optional[MCPServerConfig]:
     server_namespace = namespace
     try:
         server_crd = await ark.mcpservers.a_get(server_name, server_namespace)
@@ -329,7 +329,7 @@ async def _resolve_mcp_server(ark, server_name: str, namespace: str) -> Optional
     )
 
 
-async def _build_mcp_servers(ark, agent, namespace: str) -> list[MCPServerConfig]:
+async def _build_mcp_servers(ark: Any, agent: Any, namespace: str) -> list[MCPServerConfig]:
     if not agent.spec.tools:
         return []
 
