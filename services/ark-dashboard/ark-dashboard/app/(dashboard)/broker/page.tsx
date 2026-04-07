@@ -56,7 +56,7 @@ function extractItemTimestamp(item: unknown): string {
   return new Date().toISOString();
 }
 
-function useSSEStream(endpoint: string | null, memory: string) {
+export function useSSEStream(endpoint: string | null, memory: string) {
   const [streamedEntries, setStreamedEntries] = useState<StreamEntry[]>([]);
   const [fetchedEntries, setFetchedEntries] = useState<StreamEntry[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -410,7 +410,7 @@ function StreamView({
   );
 }
 
-function SessionsView() {
+export function SessionsView({ memory }: { memory: string }) {
   const [store, setStore] = useState<Record<string, unknown>>({});
   const [isConnected, setIsConnected] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -418,7 +418,7 @@ function SessionsView() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const es = new EventSource('/api/v1/broker/sessions?watch=true');
+    const es = new EventSource(`/api/v1/broker/sessions?memory=${encodeURIComponent(memory)}&watch=true`);
     const sessions: Record<string, unknown> = {};
 
     es.onopen = () => setIsConnected(true);
@@ -435,7 +435,7 @@ function SessionsView() {
     es.onerror = () => setIsConnected(false);
 
     return () => es.close();
-  }, []);
+  }, [memory]);
 
   useEffect(() => {
     if (autoScroll && containerRef.current) {
@@ -461,7 +461,7 @@ function SessionsView() {
 
   const handlePurge = async () => {
     try {
-      await fetch('/api/v1/broker/sessions', { method: 'DELETE' });
+      await fetch(`/api/v1/broker/sessions?memory=${encodeURIComponent(memory)}`, { method: 'DELETE' });
       setStore({ sessions: {} });
     } catch {
     }
@@ -498,18 +498,23 @@ function SessionsView() {
               return (
                 <div key={sid} className="border-border mb-1 overflow-hidden border-b pb-1 last:border-b-0">
                   <div className="flex min-w-0 items-center gap-1">
-                    <span
-                      className="flex shrink-0 cursor-pointer items-center gap-1"
+                    <button
+                      type="button"
+                      aria-label={isExpanded ? 'Collapse session' : 'Expand session'}
+                      aria-expanded={isExpanded}
+                      className="flex shrink-0 cursor-pointer items-center gap-1 bg-transparent p-0"
                       onClick={() => toggleExpanded(sid)}>
                       {isExpanded ? (
                         <ChevronDown className="text-muted-foreground h-3 w-3 shrink-0" />
                       ) : (
                         <ChevronRight className="text-muted-foreground h-3 w-3 shrink-0" />
                       )}
-                    </span>
-                    <span className="text-muted-foreground shrink-0">
-                      {(sessions[sid] as { lastActivity?: string })?.lastActivity?.substring(0, 19) || ''}Z
-                    </span>
+                    </button>
+                    {(sessions[sid] as { lastActivity?: string })?.lastActivity && (
+                      <span className="text-muted-foreground shrink-0">
+                        {(sessions[sid] as { lastActivity?: string }).lastActivity!.substring(0, 19)}Z
+                      </span>
+                    )}
                     <span className="truncate">{sid}</span>
                   </div>
                   {isExpanded && (
@@ -654,7 +659,7 @@ export default function BrokerPage() {
             />
           </TabsContent>
           <TabsContent value="sessions" className="mt-4 flex-1">
-            <SessionsView />
+            <SessionsView memory={selectedMemory} />
           </TabsContent>
         </Tabs>
       </div>
