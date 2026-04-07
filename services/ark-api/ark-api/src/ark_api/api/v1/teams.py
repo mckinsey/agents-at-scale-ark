@@ -205,7 +205,8 @@ async def update_team(team_name: str, body: TeamUpdateRequest, namespace: Option
             else:
                 existing_spec.pop("graph", None)
 
-        existing_spec["loops"] = body.loops
+        if "loops" in body.model_fields_set:
+            existing_spec["loops"] = body.loops
 
         if "maxTurns" in body.model_fields_set:
             if body.maxTurns is not None:

@@ -10,6 +10,7 @@ import type { components } from '@/lib/api/generated/types';
 import type { Agent, Team, TeamMember } from '@/lib/services';
 import { agentsService, teamsService } from '@/lib/services';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { TeamFormMode } from './types';
 
@@ -27,17 +28,41 @@ Read the above conversation. Then select the next role from {{.Participants}} to
 export const DEFAULT_TERMINATE_PROMPT =
   'If the most recent user message has been given an adequate response, do not return a role. Instead call the terminate tool.';
 
-const teamFormSchema = z.object({
-  name: kubernetesNameSchema,
-  description: z.string().optional(),
-  strategy: z.string().min(1, 'Strategy is required'),
-  loops: z.boolean(),
-  maxTurns: z.string().optional(),
-  selectorAgent: z.string().optional(),
-  selectorPrompt: z.string().optional(),
-  enableTerminateTool: z.boolean().optional(),
-  terminatePrompt: z.string().optional(),
-});
+const teamFormSchema = z
+  .object({
+    name: kubernetesNameSchema,
+    description: z.string().optional(),
+    strategy: z.string().min(1, 'Strategy is required'),
+    loops: z.boolean(),
+    maxTurns: z.string().optional(),
+    selectorAgent: z.string().optional(),
+    selectorPrompt: z.string().optional(),
+    enableTerminateTool: z.boolean().optional(),
+    terminatePrompt: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.strategy === 'sequential' && data.loops && !data.maxTurns) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Max turns is required for looping sequential teams',
+        path: ['maxTurns'],
+      });
+    }
+    if (data.strategy === 'graph' && !data.maxTurns) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Max turns is required for graph teams',
+        path: ['maxTurns'],
+      });
+    }
+    if (data.strategy === 'selector' && !data.maxTurns) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Max turns is required for selector teams',
+        path: ['maxTurns'],
+      });
+    }
+  });
 
 export type TeamFormValues = z.infer<typeof teamFormSchema>;
 
@@ -48,6 +73,7 @@ interface UseTeamFormOptions {
 }
 
 export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
+  const { namespace } = useNamespace();
   const onSuccessRef = useRef(onSuccess);
   onSuccessRef.current = onSuccess;
 
@@ -147,7 +173,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
     };
 
     loadData();
-  }, [mode, teamName, form]);
+  }, [mode, teamName, form, namespace]);
 
   const hasChanges =
     form.formState.isDirty ||
@@ -207,6 +233,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
                 : undefined,
             graph: graphEdges.length > 0 ? { edges: graphEdges } : undefined,
           });
+          toast.success('Team created successfully');
           onSuccessRef.current?.();
         }
       } catch (error) {
@@ -225,7 +252,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
         setSaving(false);
       }
     },
-    [mode, team, teamName, selectedMembers, graphEdges, form],
+    [mode, team, teamName, selectedMembers, graphEdges, form, namespace],
   );
 
   return {

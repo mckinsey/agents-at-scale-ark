@@ -2199,7 +2199,8 @@ class TestTeamsEndpoint(unittest.TestCase):
             "spec": {
                 "description": "Old description",
                 "members": [{"name": "agent1", "type": "agent"}],
-                "strategy": "sequential"
+                "strategy": "sequential",
+                "loops": False
             },
             "status": {"phase": "Ready"}
         }
@@ -2256,6 +2257,7 @@ class TestTeamsEndpoint(unittest.TestCase):
                 "description": "Original description",
                 "members": [{"name": "agent1", "type": "agent"}],
                 "strategy": "sequential",
+                "loops": False,
                 "maxTurns": 5
             },
             "status": {"phase": "Ready"}
