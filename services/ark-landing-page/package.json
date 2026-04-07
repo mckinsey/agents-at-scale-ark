@@ -39,6 +39,8 @@
     "qs": "^6.15.0",
     "tar": "^7.5.11",
     "minimatch": "^10.2.3",
-    "picomatch": "^4.0.4"
+    "picomatch": "^4.0.4",
+    "flatted": "^3.4.2",
+    "express-rate-limit": "^8.3.0"
   }
 }

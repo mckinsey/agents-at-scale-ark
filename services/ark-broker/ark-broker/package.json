@@ -52,6 +52,8 @@
     "swagger-jsdoc": {
       "glob": "^7.2.3"
     },
-    "flatted": "^3.4.2"
+    "flatted": "^3.4.2",
+    "tar": "^7.5.11",
+    "express-rate-limit": "^8.3.0"
   }
 }
