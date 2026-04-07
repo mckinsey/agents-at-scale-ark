@@ -1,4 +1,4 @@
-# KYC Demo configuration for ark-api (read-only mode enabled)
+# KYC Demo configuration for ark-api (read-only mode enabled, cluster-wide read access)
 app:
   env:
     - name: READ_ONLY_MODE
@@ -7,3 +7,7 @@ app:
       value: "open"
     - name: CORS_ORIGINS
       value: "*"
+
+# Enable cluster-wide read permissions to access resources from all namespaces
+rbac:
+  clusterWide: true
