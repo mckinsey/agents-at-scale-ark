@@ -20,6 +20,7 @@ vi.mock('next/navigation', () => ({
     prefetch: vi.fn(),
   }),
   usePathname: () => '/',
+  useSearchParams: vi.fn(() => new URLSearchParams()),
 }));
 
 // Mock scrollIntoView
