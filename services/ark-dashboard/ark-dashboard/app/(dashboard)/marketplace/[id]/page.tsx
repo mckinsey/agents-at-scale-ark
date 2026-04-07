@@ -10,7 +10,7 @@ import {
   Terminal,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { useEffect } from 'react';
 import { toast } from 'sonner';
 
@@ -21,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import {
   useGetMarketplaceItemById,
   useInstallMarketplaceItem,
@@ -29,7 +30,7 @@ import {
 
 export default function MarketplaceDetailPage() {
   const params = useParams();
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
   const id = params.id as string;
 
   const { data: item, isPending, error } = useGetMarketplaceItemById(id);
@@ -91,7 +92,7 @@ export default function MarketplaceDetailPage() {
             The marketplace item you&apos;re looking for doesn&apos;t exist.
           </p>
           <Button
-            onClick={() => router.push('/marketplace')}
+            onClick={() => push('/marketplace')}
             variant="outline"
             className="mt-4">
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -108,7 +109,7 @@ export default function MarketplaceDetailPage() {
       <main className="container space-y-8 p-6 py-8">
         <div className="flex items-center gap-4">
           <Button
-            onClick={() => router.push('/marketplace')}
+            onClick={() => push('/marketplace')}
             variant="ghost"
             size="sm">
             <ArrowLeft className="mr-2 h-4 w-4" />
