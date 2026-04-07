@@ -22,8 +22,7 @@ vi.mock('@/lib/services/export-server', () => ({
   },
 }))
 
-const mockFetch = vi.fn() as Mock
-global.fetch = mockFetch
+let mockFetch: Mock
 
 function makeGitHubItem(overrides: Record<string, unknown> = {}) {
   return {
@@ -66,6 +65,8 @@ const defaultSource: MarketplaceSource = {
 
 describe('marketplace-fetcher', () => {
   beforeEach(() => {
+    mockFetch = vi.fn() as Mock
+    global.fetch = mockFetch
     vi.clearAllMocks()
   })
 
@@ -441,6 +442,8 @@ describe('marketplace-fetcher', () => {
         makeGitHubItem({ name: 'phoenix', category: 'observability' }),
       ])
       mockFetchSuccess(manifest)
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
 
       const result = await fetchMarketplaceItemsFromSource(defaultSource)
 
@@ -467,6 +470,8 @@ describe('marketplace-fetcher', () => {
 
     it('adds source displayName to items', async () => {
       mockFetchSuccess(makeManifest())
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
 
       const result = await fetchMarketplaceItemsFromSource(defaultSource)
 
@@ -475,6 +480,8 @@ describe('marketplace-fetcher', () => {
 
     it('falls back to source name when displayName is missing', async () => {
       mockFetchSuccess(makeManifest())
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
 
       const sourceWithoutDisplay: MarketplaceSource = {
         id: 'test',
@@ -532,14 +539,12 @@ describe('marketplace-fetcher', () => {
         id: 's2', name: 'Source2', url: 'https://s2.com/m.json', enabled: true,
       }
 
-      // Source 1: manifest, Helm releases, Services
+      // With Promise.all(), fetches interleave: s1-manifest, s2-manifest, s1-helm, s2-helm, s1-services, s2-services
       mockFetchSuccess(makeManifest([makeGitHubItem({ name: 'item-a' })]))
-      mockFetchSuccess({ items: [], count: 0 })
-      mockFetchSuccess({ items: [] })
-
-      // Source 2: manifest, Helm releases, Services
       mockFetchSuccess(makeManifest([makeGitHubItem({ name: 'item-b' })]))
       mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
       mockFetchSuccess({ items: [] })
 
       const result = await getMarketplaceItemsFromSources([source1, source2])
@@ -557,18 +562,16 @@ describe('marketplace-fetcher', () => {
         id: 's2', name: 'Source2', url: 'https://s2.com/m.json', enabled: true,
       }
 
-      // Source 1: manifest, Helm releases, Services
+      // With Promise.all(), fetches interleave
       mockFetchSuccess(makeManifest([
         makeGitHubItem({ name: 'same-item', description: 'from source 1' }),
       ]))
-      mockFetchSuccess({ items: [], count: 0 })
-      mockFetchSuccess({ items: [] })
-
-      // Source 2: manifest, Helm releases, Services
       mockFetchSuccess(makeManifest([
         makeGitHubItem({ name: 'same-item', description: 'from source 2' }),
       ]))
       mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
       mockFetchSuccess({ items: [] })
 
       const result = await getMarketplaceItemsFromSources([source1, source2])
@@ -587,17 +590,16 @@ describe('marketplace-fetcher', () => {
 
       // Mock manifest fetch for enabled source
       mockFetchSuccess(makeManifest([makeGitHubItem({ name: 'enabled-item' })]))
-      // Mock Helm releases fetch
+      // Mock Helm releases fetch (empty array)
       mockFetchSuccess({ items: [], count: 0 })
-      // Mock Services fetch
-      mockFetchSuccess({ items: [] })
+      // Note: No Services fetch because getAllServiceUIs returns early when releases.length === 0
 
       const result = await getMarketplaceItemsFromSources([enabledSource, disabledSource])
 
       expect(result).toHaveLength(1)
       expect(result[0].id).toBe('enabled-item')
-      // Now expects 3 calls: manifest + Helm releases + Services (only for enabled source)
-      expect(mockFetch).toHaveBeenCalledTimes(3)
+      // Only 2 calls: manifest + Helm releases (Services fetch is skipped when no releases)
+      expect(mockFetch).toHaveBeenCalledTimes(2)
     })
 
     it('uses default source when none provided', async () => {
@@ -648,6 +650,8 @@ describe('marketplace-fetcher', () => {
           makeGitHubItem({ name: 'langfuse', category: 'observability' }),
         ]),
       )
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
 
       const result = await getMarketplaceItemById('phoenix')
 
@@ -657,6 +661,8 @@ describe('marketplace-fetcher', () => {
 
     it('returns null when no item matches', async () => {
       mockFetchSuccess(makeManifest([makeGitHubItem({ name: 'phoenix' })]))
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
 
       const result = await getMarketplaceItemById('nonexistent')
 
