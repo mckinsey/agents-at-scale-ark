@@ -19,7 +19,7 @@ from ..executor import (
     Model,
     Parameter,
 )
-from ..k8s import SecretClient, init_k8s
+from ..k8s import SecretClient
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +71,7 @@ async def resolve_query(
     Only a QueryRef crosses A2A — all resources are resolved locally from the cluster.
     """
     from ..client import V1_ALPHA1, with_ark_client
+    from ..k8s import init_k8s
     await init_k8s()
     async with with_ark_client(query_ref.namespace, V1_ALPHA1) as ark:
         query = await ark.queries.a_get(query_ref.name, query_ref.namespace)
