@@ -5,7 +5,7 @@ Extension spec: ark/api/extensions/query/v1/
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from ..executor import (
     AgentConfig,
@@ -102,7 +102,7 @@ async def _resolve_from_query(ark, query, namespace: str, user_input: str, conve
     )
 
 
-async def _resolve_execution_engine_annotations(ark, agent, namespace: str) -> Dict[str, str]:
+async def _resolve_execution_engine_annotations(ark, agent, namespace: str) -> dict[str, str]:
     ee_ref = getattr(agent.spec, "execution_engine", None) or getattr(agent.spec, "executionEngine", None)
     if not ee_ref:
         return {}
@@ -251,8 +251,8 @@ async def _resolve_model(ark, model_ref, namespace: str) -> Model:
     return Model(name=resolved_name, type=provider, config={provider: config} if config else {})
 
 
-def _build_query_param_map(query_params: Optional[list]) -> Dict[str, str]:
-    param_map: Dict[str, str] = {}
+def _build_query_param_map(query_params: Optional[list]) -> dict[str, str]:
+    param_map: dict[str, str] = {}
     if not query_params:
         return param_map
     for qp in query_params:
@@ -263,7 +263,7 @@ def _build_query_param_map(query_params: Optional[list]) -> Dict[str, str]:
     return param_map
 
 
-def _resolve_param_value(param, query_param_map: Dict[str, str]) -> str:
+def _resolve_param_value(param, query_param_map: dict[str, str]) -> str:
     value = _get_attr_or_key(param, "value")
     if value:
         return value
@@ -281,7 +281,7 @@ def _resolve_param_value(param, query_param_map: Dict[str, str]) -> str:
 def _resolve_parameters(
     agent_params: Optional[list],
     query_params: Optional[list],
-) -> List[Parameter]:
+) -> list[Parameter]:
     query_param_map = _build_query_param_map(query_params)
     if not agent_params:
         return []
@@ -308,7 +308,7 @@ async def _resolve_mcp_server(ark, server_name: str, namespace: str) -> Optional
         logger.warning(f"MCPServer '{server_name}' has no resolvable address")
         return None
 
-    headers: Dict[str, str] = {}
+    headers: dict[str, str] = {}
     if spec.headers:
         for header in spec.headers:
             header_name = _get_attr_or_key(header, "name")
@@ -331,11 +331,11 @@ async def _resolve_mcp_server(ark, server_name: str, namespace: str) -> Optional
     )
 
 
-async def _build_mcp_servers(ark, agent, namespace: str) -> List[MCPServerConfig]:
+async def _build_mcp_servers(ark, agent, namespace: str) -> list[MCPServerConfig]:
     if not agent.spec.tools:
         return []
 
-    server_tools: Dict[str, List[str]] = {}
+    server_tools: dict[str, list[str]] = {}
     for agent_tool in agent.spec.tools:
         tool_name = getattr(agent_tool, "name", None)
         if not tool_name:
@@ -366,7 +366,7 @@ async def _build_mcp_servers(ark, agent, namespace: str) -> List[MCPServerConfig
         except Exception as e:
             logger.warning(f"Failed to resolve tool '{tool_name}': {e}")
 
-    servers: List[MCPServerConfig] = []
+    servers: list[MCPServerConfig] = []
     for server_name, tool_names in server_tools.items():
         server_config = await _resolve_mcp_server(ark, server_name, namespace)
         if server_config:
