@@ -25,8 +25,8 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
-	"mckinsey.com/ark/internal/resolution"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
+	"mckinsey.com/ark/internal/resolution"
 	"mckinsey.com/ark/internal/telemetry"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 	otelimpl "mckinsey.com/ark/internal/telemetry/otel"
@@ -453,16 +453,23 @@ func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMet
 		return responseMeta
 	}
 
-	var msgMeta map[string]any
-	if msg, ok := result.Result.(*protocol.Message); ok {
-		msgMeta = msg.Metadata
-	}
-
-	if msgMeta == nil {
+	msg, ok := result.Result.(*protocol.Message)
+	if !ok {
 		return responseMeta
 	}
 
-	arkData, ok := msgMeta[arka2a.QueryExtensionMetadataKey]
+	if msg.ContextID != nil && *msg.ContextID != "" {
+		responseMeta.A2AContextID = *msg.ContextID
+	}
+	if msg.TaskID != nil && *msg.TaskID != "" {
+		responseMeta.A2ATaskID = *msg.TaskID
+	}
+
+	if msg.Metadata == nil {
+		return responseMeta
+	}
+
+	arkData, ok := msg.Metadata[arka2a.QueryExtensionMetadataKey]
 	if !ok {
 		return responseMeta
 	}

@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { useGetAllTeams } from '@/lib/services/teams-hooks';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { MetricCard } from './metric-card';
 

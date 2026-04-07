@@ -208,6 +208,7 @@ jobs:
       matrix:
         chart:
           - ark-controller
+          - ark-completions
           - ark-api
           - ark-dashboard
           - ark-mcp

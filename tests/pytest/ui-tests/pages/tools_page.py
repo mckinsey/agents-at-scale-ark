@@ -87,7 +87,7 @@ class ToolsPage(BasePage):
         type_trigger.wait_for(state="visible", timeout=15000)
         type_trigger.click()
         
-        self.page.locator("[role='listbox'][data-side]").wait_for(state="visible", timeout=15000)
+        self.page.locator("[role='listbox'][data-side][data-state='open']").wait_for(state="visible", timeout=15000)
         http_option = self.page.locator("[role='option']:has-text('HTTP')").first
         http_option.click()
         
