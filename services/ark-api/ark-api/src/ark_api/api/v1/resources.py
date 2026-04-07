@@ -74,7 +74,8 @@ async def list_core_resources(
     request: Request,
     version: str,
     kind: str,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
+    labelSelector: Optional[str] = Query(None, description="Label selector for filtering resources (e.g., app.kubernetes.io/instance=phoenix)")
 ) -> Response:
     """
     List core Kubernetes resources.
@@ -83,6 +84,7 @@ async def list_core_resources(
         version: API version (e.g., 'v1')
         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
         namespace: The namespace (defaults to current context)
+        labelSelector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
 
     Returns:
         Response: List of raw Kubernetes resources as JSON
@@ -90,6 +92,7 @@ async def list_core_resources(
     Examples:
         - GET /v1/resources/api/v1/Pod
         - GET /v1/resources/api/v1/Service
+        - GET /v1/resources/api/v1/Service?labelSelector=app.kubernetes.io/instance=phoenix
     """
     if namespace is None:
         namespace = get_context()["namespace"]
@@ -102,7 +105,7 @@ async def list_core_resources(
             kind=kind
         )
 
-        resources = await api_resource.get(namespace=namespace)
+        resources = await api_resource.get(namespace=namespace, label_selector=labelSelector)
 
         return _create_resource_response(resources.to_dict(), request)
 
@@ -162,6 +165,7 @@ async def list_grouped_resources(
     version: str,
     kind: str,
     namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
+    labelSelector: Optional[str] = Query(None, description="Label selector for filtering resources (e.g., app.kubernetes.io/instance=phoenix)"),
     workflowName: Optional[str] = Query(None, description="Filter by workflow name (partial match, case insensitive)"),
     workflowTemplateName: Optional[str] = Query(None, description="Filter by workflow template name (partial match, case insensitive)"),
     status: Optional[str] = Query(None, description="Filter by workflow status (case insensitive). Options: running, succeeded, failed (which matches both failed and error), pending")
@@ -174,6 +178,7 @@ async def list_grouped_resources(
         version: API version (e.g., 'v1', 'v1alpha1')
         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
         namespace: The namespace (defaults to current context)
+        labelSelector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
         workflowName: Filter by workflow name (partial match, case insensitive)
         workflowTemplateName: Filter by workflow template name (partial match, case insensitive)
         status: Filter by workflow status
@@ -186,6 +191,7 @@ async def list_grouped_resources(
         - GET /v1/resources/apis/batch/v1/Job
         - GET /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate
         - GET /v1/resources/apis/argoproj.io/v1alpha1/Workflow?workflowName=my-workflow&status=running
+        - GET /v1/resources/v1/Service?labelSelector=app.kubernetes.io/instance=phoenix
     """
     if namespace is None:
         namespace = get_context()["namespace"]
@@ -200,7 +206,7 @@ async def list_grouped_resources(
             kind=kind
         )
 
-        resources = await api_resource.get(namespace=namespace)
+        resources = await api_resource.get(namespace=namespace, label_selector=labelSelector)
         resources_dict = resources.to_dict()
 
         # Apply filters for Workflow resources

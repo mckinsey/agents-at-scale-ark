@@ -57,13 +57,17 @@ async def extract_helm_release_data(release) -> Dict[str, Any]:
     chart_metadata = await _extract_chart_metadata(chart_metadata_obj)
     updated_time = await _get_revision_timestamp(revision)
     
+    # Extract status name from enum (e.g., "ReleaseRevisionStatus.DEPLOYED" -> "deployed")
+    status_str = str(revision.status)
+    status = status_str.split('.')[-1].lower() if '.' in status_str else status_str.lower()
+
     return {
         'name': release.name,
         'namespace': release.namespace,
         'chart': f"{chart_name}-{chart_version}" if chart_name and chart_version else "",
         'chart_version': chart_version,
         'app_version': app_version,
-        'status': str(revision.status),
+        'status': status,
         'revision': revision.revision,
         'updated': updated_time,
         'chart_metadata': chart_metadata

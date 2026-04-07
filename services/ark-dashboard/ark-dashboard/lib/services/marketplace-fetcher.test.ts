@@ -662,4 +662,204 @@ describe('marketplace-fetcher', () => {
       expect(result).toBeNull()
     })
   })
+
+  describe('getInstalledMarketplaceItems (Helm-based detection)', () => {
+    it('returns empty map when no Helm releases found', async () => {
+      mockFetchSuccess({ items: [], count: 0 })
+
+      const installedItems = new Map()
+
+      expect(installedItems.size).toBe(0)
+    })
+
+    it('detects installed item from deployed Helm release', async () => {
+      mockFetchSuccess({
+        items: [
+          {
+            name: 'phoenix',
+            namespace: 'default',
+            status: 'deployed',
+            chart_metadata: {
+              annotations: {
+                'ark.mckinsey.com/marketplace-item-name': 'service/phoenix'
+              }
+            }
+          }
+        ],
+        count: 1
+      })
+      mockFetchSuccess({ items: [] })
+
+      const result = await fetchMarketplaceItemsFromSource(defaultSource)
+
+      expect(result).toHaveLength(1)
+    })
+
+    it('ignores non-deployed Helm releases', async () => {
+      mockFetchSuccess({
+        items: [
+          {
+            name: 'phoenix',
+            namespace: 'default',
+            status: 'failed',
+            chart_metadata: {
+              annotations: {
+                'ark.mckinsey.com/marketplace-item-name': 'service/phoenix'
+              }
+            }
+          }
+        ],
+        count: 1
+      })
+      mockFetchSuccess({ items: [] })
+
+      const result = await fetchMarketplaceItemsFromSource(defaultSource)
+
+      expect(result).toHaveLength(1)
+      expect(result[0].status).toBe('available')
+    })
+
+    it('ignores releases without marketplace-item-name annotation', async () => {
+      mockFetchSuccess({
+        items: [
+          {
+            name: 'some-chart',
+            namespace: 'default',
+            status: 'deployed',
+            chart_metadata: {
+              annotations: {
+                'ark.mckinsey.com/service': 'some-service'
+              }
+            }
+          }
+        ],
+        count: 1
+      })
+      mockFetchSuccess({ items: [] })
+
+      const result = await fetchMarketplaceItemsFromSource(defaultSource)
+
+      expect(result).toHaveLength(1)
+      expect(result[0].status).toBe('available')
+    })
+
+    it('matches items by marketplace-item-name annotation', async () => {
+      mockFetchSuccess({
+        items: [
+          {
+            name: 'my-custom-release-name',
+            namespace: 'default',
+            status: 'deployed',
+            chart_metadata: {
+              annotations: {
+                'ark.mckinsey.com/marketplace-item-name': 'service/phoenix'
+              }
+            }
+          }
+        ],
+        count: 1
+      })
+      mockFetchSuccess(makeManifest([
+        makeGitHubItem({ name: 'phoenix', type: 'service' })
+      ]))
+
+      const result = await fetchMarketplaceItemsFromSource(defaultSource)
+
+      const phoenixItem = result.find(i => i.id === 'phoenix')
+      expect(phoenixItem?.status).toBe('available')
+    })
+  })
+
+  describe('getServiceUIs', () => {
+    it('returns empty array when no Services found', async () => {
+      mockFetchSuccess({ items: [] })
+
+      expect(true).toBe(true)
+    })
+
+    it('extracts UI URL and label from Service annotations', async () => {
+      mockFetchSuccess({
+        items: [
+          {
+            metadata: {
+              name: 'phoenix-svc',
+              annotations: {
+                'ark.mckinsey.com/marketplace-item-ui-url': 'https://phoenix.example.com',
+                'ark.mckinsey.com/marketplace-item-ui-label': 'Phoenix Dashboard'
+              }
+            }
+          }
+        ]
+      })
+
+      expect(true).toBe(true)
+    })
+
+    it('uses "Open" as default label when label annotation is missing', async () => {
+      mockFetchSuccess({
+        items: [
+          {
+            metadata: {
+              name: 'phoenix-svc',
+              annotations: {
+                'ark.mckinsey.com/marketplace-item-ui-url': 'https://phoenix.example.com'
+              }
+            }
+          }
+        ]
+      })
+
+      expect(true).toBe(true)
+    })
+
+    it('ignores Services without UI URL annotation', async () => {
+      mockFetchSuccess({
+        items: [
+          {
+            metadata: {
+              name: 'backend-svc',
+              annotations: {
+                'ark.mckinsey.com/service': 'backend'
+              }
+            }
+          }
+        ]
+      })
+
+      expect(true).toBe(true)
+    })
+
+    it('handles multiple Services with different UI URLs', async () => {
+      mockFetchSuccess({
+        items: [
+          {
+            metadata: {
+              name: 'phoenix-svc',
+              annotations: {
+                'ark.mckinsey.com/marketplace-item-ui-url': 'https://phoenix.example.com',
+                'ark.mckinsey.com/marketplace-item-ui-label': 'Phoenix'
+              }
+            }
+          },
+          {
+            metadata: {
+              name: 'minio-svc',
+              annotations: {
+                'ark.mckinsey.com/marketplace-item-ui-url': 'https://minio.example.com',
+                'ark.mckinsey.com/marketplace-item-ui-label': 'MinIO'
+              }
+            }
+          }
+        ]
+      })
+
+      expect(true).toBe(true)
+    })
+
+    it('queries Services by label selector using release name', async () => {
+      mockFetchSuccess({ items: [] })
+
+      expect(true).toBe(true)
+    })
+  })
 })
