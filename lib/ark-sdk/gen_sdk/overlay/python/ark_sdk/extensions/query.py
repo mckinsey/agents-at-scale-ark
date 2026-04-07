@@ -7,6 +7,11 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from kubernetes_asyncio import client
+from kubernetes_asyncio.client.api_client import ApiClient
+
+from ..client import V1_ALPHA1, V1_PREALPHA1, with_ark_client
+from ..k8s import SecretClient, init_k8s
 from ..executor import (
     AgentConfig,
     ExecutionEngineRequest,
@@ -66,9 +71,6 @@ async def resolve_query(
     Resolution chain: Query CRD → Agent CRD → Model CRD + MCPServer CRDs → ExecutionEngineRequest.
     Only a QueryRef crosses A2A — all resources are resolved locally from the cluster.
     """
-    from ..client import V1_ALPHA1, with_ark_client
-    from ..k8s import init_k8s
-
     await init_k8s()
     async with with_ark_client(query_ref.namespace, V1_ALPHA1) as ark:
         query = await ark.queries.a_get(query_ref.name, query_ref.namespace)
@@ -90,7 +92,7 @@ async def _resolve_from_query(ark, query, namespace: str, user_input: str, conve
     mcp_servers = await _build_mcp_servers(ark, agent, namespace)
 
     query_annotations = query.metadata.get("annotations", {}) if query.metadata else {}
-    execution_engine_annotations = await _resolve_execution_engine_annotations(ark, agent, namespace)
+    execution_engine_annotations = await _resolve_execution_engine_annotations(agent, namespace)
 
     return ExecutionEngineRequest(
         agent=agent_config,
@@ -102,14 +104,13 @@ async def _resolve_from_query(ark, query, namespace: str, user_input: str, conve
     )
 
 
-async def _resolve_execution_engine_annotations(ark, agent, namespace: str) -> dict[str, str]:
+async def _resolve_execution_engine_annotations(agent, namespace: str) -> dict[str, str]:
     ee_ref = getattr(agent.spec, "execution_engine", None) or getattr(agent.spec, "executionEngine", None)
     if not ee_ref:
         return {}
     ee_name = _get_attr_or_key(ee_ref, "name")
     if not ee_name:
         raise ValueError(f"ExecutionEngine reference on agent '{agent.metadata.get('name')}' has no name")
-    from ..client import V1_PREALPHA1, with_ark_client
     async with with_ark_client(namespace, V1_PREALPHA1) as prealpha_ark:
         ee = await prealpha_ark.executionengines.a_get(ee_name, namespace)
         return ee.metadata.get("annotations", {}) if ee.metadata else {}
@@ -189,8 +190,6 @@ async def _resolve_configmap_ref(cm_ref, namespace: str) -> str:
     if not (ref_name and ref_key):
         return ""
     try:
-        from kubernetes_asyncio import client
-        from kubernetes_asyncio.client.api_client import ApiClient
         async with ApiClient() as api:
             v1 = client.CoreV1Api(api)
             cm = await v1.read_namespaced_config_map(name=ref_name, namespace=namespace)
