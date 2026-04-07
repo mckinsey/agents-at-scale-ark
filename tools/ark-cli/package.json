@@ -89,6 +89,7 @@
     "rollup": "4.59.0",
     "hono": "^4.12.4",
     "@hono/node-server": "^1.19.10",
-    "flatted": "^3.4.2"
+    "flatted": "^3.4.2",
+    "vite": "^7.3.2"
   }
 }
