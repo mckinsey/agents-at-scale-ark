@@ -488,15 +488,31 @@ describe('marketplace-fetcher', () => {
     })
 
     it('detects installed items from cluster resources', async () => {
-      const { exportService } = await import('@/lib/services/export')
-      vi.mocked(exportService.fetchAllResources).mockResolvedValueOnce({
-        agents: [{ name: 'phoenix', yaml: '' }],
+      // Mock marketplace manifest
+      mockFetchSuccess(makeManifest([
+        makeGitHubItem({ name: 'phoenix', type: 'service' }),
+        makeGitHubItem({ name: 'langfuse', type: 'service' }),
+      ]))
+
+      // Mock Helm releases - phoenix is deployed
+      mockFetchSuccess({
+        items: [
+          {
+            name: 'phoenix',
+            namespace: 'default',
+            status: 'deployed',
+            chart_metadata: {
+              annotations: {
+                'ark.mckinsey.com/marketplace-item-name': 'service/phoenix'
+              }
+            }
+          }
+        ],
+        count: 1
       })
 
-      mockFetchSuccess(makeManifest([
-        makeGitHubItem({ name: 'phoenix' }),
-        makeGitHubItem({ name: 'langfuse' }),
-      ]))
+      // Mock Services (no UI URLs)
+      mockFetchSuccess({ items: [] })
 
       const result = await fetchMarketplaceItemsFromSource(defaultSource)
 
@@ -516,8 +532,15 @@ describe('marketplace-fetcher', () => {
         id: 's2', name: 'Source2', url: 'https://s2.com/m.json', enabled: true,
       }
 
+      // Source 1: manifest, Helm releases, Services
       mockFetchSuccess(makeManifest([makeGitHubItem({ name: 'item-a' })]))
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
+
+      // Source 2: manifest, Helm releases, Services
       mockFetchSuccess(makeManifest([makeGitHubItem({ name: 'item-b' })]))
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
 
       const result = await getMarketplaceItemsFromSources([source1, source2])
 
@@ -534,12 +557,19 @@ describe('marketplace-fetcher', () => {
         id: 's2', name: 'Source2', url: 'https://s2.com/m.json', enabled: true,
       }
 
+      // Source 1: manifest, Helm releases, Services
       mockFetchSuccess(makeManifest([
         makeGitHubItem({ name: 'same-item', description: 'from source 1' }),
       ]))
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
+
+      // Source 2: manifest, Helm releases, Services
       mockFetchSuccess(makeManifest([
         makeGitHubItem({ name: 'same-item', description: 'from source 2' }),
       ]))
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
 
       const result = await getMarketplaceItemsFromSources([source1, source2])
 
@@ -555,17 +585,25 @@ describe('marketplace-fetcher', () => {
         id: 's2', name: 'Disabled', url: 'https://disabled.com/m.json', enabled: false,
       }
 
+      // Mock manifest fetch for enabled source
       mockFetchSuccess(makeManifest([makeGitHubItem({ name: 'enabled-item' })]))
+      // Mock Helm releases fetch
+      mockFetchSuccess({ items: [], count: 0 })
+      // Mock Services fetch
+      mockFetchSuccess({ items: [] })
 
       const result = await getMarketplaceItemsFromSources([enabledSource, disabledSource])
 
       expect(result).toHaveLength(1)
       expect(result[0].id).toBe('enabled-item')
-      expect(mockFetch).toHaveBeenCalledTimes(1)
+      // Now expects 3 calls: manifest + Helm releases + Services (only for enabled source)
+      expect(mockFetch).toHaveBeenCalledTimes(3)
     })
 
     it('uses default source when none provided', async () => {
       mockFetchSuccess(makeManifest())
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
 
       await getMarketplaceItemsFromSources()
 
@@ -577,6 +615,8 @@ describe('marketplace-fetcher', () => {
 
     it('uses default source when empty array provided', async () => {
       mockFetchSuccess(makeManifest())
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
 
       await getMarketplaceItemsFromSources([])
 
@@ -590,6 +630,8 @@ describe('marketplace-fetcher', () => {
   describe('getMarketplaceItems', () => {
     it('delegates to getMarketplaceItemsFromSources with defaults', async () => {
       mockFetchSuccess(makeManifest([makeGitHubItem({ name: 'default-item' })]))
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
 
       const result = await getMarketplaceItems()
 
@@ -673,6 +715,12 @@ describe('marketplace-fetcher', () => {
     })
 
     it('detects installed item from deployed Helm release', async () => {
+      // Mock marketplace manifest (must be first)
+      mockFetchSuccess(makeManifest([
+        makeGitHubItem({ name: 'phoenix', type: 'service' })
+      ]))
+
+      // Mock Helm releases
       mockFetchSuccess({
         items: [
           {
@@ -688,6 +736,8 @@ describe('marketplace-fetcher', () => {
         ],
         count: 1
       })
+
+      // Mock Services
       mockFetchSuccess({ items: [] })
 
       const result = await fetchMarketplaceItemsFromSource(defaultSource)
@@ -696,6 +746,12 @@ describe('marketplace-fetcher', () => {
     })
 
     it('ignores non-deployed Helm releases', async () => {
+      // Mock marketplace manifest (must be first)
+      mockFetchSuccess(makeManifest([
+        makeGitHubItem({ name: 'phoenix', type: 'service' })
+      ]))
+
+      // Mock Helm releases with failed status
       mockFetchSuccess({
         items: [
           {
@@ -711,6 +767,8 @@ describe('marketplace-fetcher', () => {
         ],
         count: 1
       })
+
+      // Mock Services
       mockFetchSuccess({ items: [] })
 
       const result = await fetchMarketplaceItemsFromSource(defaultSource)
@@ -720,6 +778,12 @@ describe('marketplace-fetcher', () => {
     })
 
     it('ignores releases without marketplace-item-name annotation', async () => {
+      // Mock marketplace manifest (must be first)
+      mockFetchSuccess(makeManifest([
+        makeGitHubItem({ name: 'some-item' })
+      ]))
+
+      // Mock Helm releases without marketplace annotation
       mockFetchSuccess({
         items: [
           {
@@ -735,6 +799,8 @@ describe('marketplace-fetcher', () => {
         ],
         count: 1
       })
+
+      // Mock Services
       mockFetchSuccess({ items: [] })
 
       const result = await fetchMarketplaceItemsFromSource(defaultSource)
@@ -744,6 +810,12 @@ describe('marketplace-fetcher', () => {
     })
 
     it('matches items by marketplace-item-name annotation', async () => {
+      // Mock marketplace manifest (must be first)
+      mockFetchSuccess(makeManifest([
+        makeGitHubItem({ name: 'phoenix', type: 'service' })
+      ]))
+
+      // Mock Helm releases
       mockFetchSuccess({
         items: [
           {
@@ -759,14 +831,14 @@ describe('marketplace-fetcher', () => {
         ],
         count: 1
       })
-      mockFetchSuccess(makeManifest([
-        makeGitHubItem({ name: 'phoenix', type: 'service' })
-      ]))
+
+      // Mock Services
+      mockFetchSuccess({ items: [] })
 
       const result = await fetchMarketplaceItemsFromSource(defaultSource)
 
       const phoenixItem = result.find(i => i.id === 'phoenix')
-      expect(phoenixItem?.status).toBe('available')
+      expect(phoenixItem?.status).toBe('installed')
     })
   })
 
