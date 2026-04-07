@@ -11,7 +11,6 @@ from typing import Any, Optional
 from kubernetes_asyncio import client
 from kubernetes_asyncio.client.api_client import ApiClient
 
-from ..client import V1_ALPHA1, V1_PREALPHA1, with_ark_client
 from ..executor import (
     AgentConfig,
     ExecutionEngineRequest,
@@ -71,6 +70,7 @@ async def resolve_query(
     Resolution chain: Query CRD → Agent CRD → Model CRD + MCPServer CRDs → ExecutionEngineRequest.
     Only a QueryRef crosses A2A — all resources are resolved locally from the cluster.
     """
+    from ..client import V1_ALPHA1, with_ark_client
     await init_k8s()
     async with with_ark_client(query_ref.namespace, V1_ALPHA1) as ark:
         query = await ark.queries.a_get(query_ref.name, query_ref.namespace)
@@ -111,6 +111,7 @@ async def _resolve_execution_engine_annotations(agent, namespace: str) -> dict[s
     ee_name = _get_attr_or_key(ee_ref, "name")
     if not ee_name:
         raise ValueError(f"ExecutionEngine reference on agent '{agent.metadata.get('name')}' has no name")
+    from ..client import V1_PREALPHA1, with_ark_client
     async with with_ark_client(namespace, V1_PREALPHA1) as prealpha_ark:
         ee = await prealpha_ark.executionengines.a_get(ee_name, namespace)
         return ee.metadata.get("annotations", {}) if ee.metadata else {}
