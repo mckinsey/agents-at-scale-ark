@@ -108,7 +108,7 @@ async def _resolve_execution_engine_annotations(ark, agent, namespace: str) -> D
         return {}
     ee_name = _get_attr_or_key(ee_ref, "name")
     if not ee_name:
-        return {}
+        raise ValueError(f"ExecutionEngine reference on agent '{agent.metadata.get('name')}' has no name")
     from ..client import V1_PREALPHA1, with_ark_client
     async with with_ark_client(namespace, V1_PREALPHA1) as prealpha_ark:
         ee = await prealpha_ark.executionengines.a_get(ee_name, namespace)
