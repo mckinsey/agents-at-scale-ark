@@ -107,6 +107,7 @@ fi
 
 if [ "${INSTALL_COVERAGE}" = "true" ]; then
   echo "=== Including coverage collection in Helm install ==="
+  kubectl create namespace ark-system 2>/dev/null || true
   kubectl -n ark-system apply -f "${SCRIPT_DIR}/coverage-pvc.yaml" || echo "Coverage PVC may already exist"
   HELM_ARGS+=(
     --set controllerManager.container.env.GOCOVERDIR=/workspace/coverage
