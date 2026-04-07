@@ -109,14 +109,10 @@ async def _resolve_execution_engine_annotations(ark, agent, namespace: str) -> D
     ee_name = _get_attr_or_key(ee_ref, "name")
     if not ee_name:
         return {}
-    try:
-        from ..client import V1_PREALPHA1, with_ark_client
-        async with with_ark_client(namespace, V1_PREALPHA1) as prealpha_ark:
-            ee = await prealpha_ark.executionengines.a_get(ee_name, namespace)
-            return ee.metadata.get("annotations", {}) if ee.metadata else {}
-    except Exception as e:
-        logger.warning(f"Failed to resolve ExecutionEngine '{ee_name}' annotations: {e}")
-        return {}
+    from ..client import V1_PREALPHA1, with_ark_client
+    async with with_ark_client(namespace, V1_PREALPHA1) as prealpha_ark:
+        ee = await prealpha_ark.executionengines.a_get(ee_name, namespace)
+        return ee.metadata.get("annotations", {}) if ee.metadata else {}
 
 
 async def _build_agent_config(ark, agent, query, namespace: str) -> AgentConfig:
