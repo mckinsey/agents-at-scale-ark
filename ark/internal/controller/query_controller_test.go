@@ -7,7 +7,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/openai/openai-go"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -16,7 +15,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	completions "mckinsey.com/ark/executors/completions"
 )
 
 var _ = Describe("Query Controller", func() {
@@ -208,27 +206,18 @@ var _ = Describe("Query Controller", func() {
 	})
 })
 
-var _ = Describe("Query Controller Message Serialization", func() {
-	Context("When serializing messages", func() {
-		It("should serialize all message types correctly", func() {
-			messages := []completions.Message{
-				completions.Message(openai.AssistantMessage("hello")),
-				completions.Message(openai.UserMessage("hi")),
-				completions.Message(openai.SystemMessage("sys")),
-				completions.Message(openai.ToolMessage("tool-content", "tool-1")),
-			}
-
-			jsonStr := serializeMessages(messages)
-			Expect(jsonStr).To(ContainSubstring("assistant"))
-			Expect(jsonStr).To(ContainSubstring("user"))
-			Expect(jsonStr).To(ContainSubstring("system"))
-			Expect(jsonStr).To(ContainSubstring("tool"))
+var _ = Describe("Query Controller Fallback Raw", func() {
+	Context("When building fallback raw JSON", func() {
+		It("should produce assistant message JSON", func() {
+			jsonStr := buildFallbackRaw("hello")
+			Expect(jsonStr).To(ContainSubstring(`"role":"assistant"`))
+			Expect(jsonStr).To(ContainSubstring(`"content":"hello"`))
 		})
 
-		It("should return empty array for unknown message types", func() {
-			messages := []completions.Message{{}}
-			jsonStr := serializeMessages(messages)
-			Expect(jsonStr).To(Equal("null"))
+		It("should handle empty text", func() {
+			jsonStr := buildFallbackRaw("")
+			Expect(jsonStr).To(ContainSubstring(`"role":"assistant"`))
+			Expect(jsonStr).To(ContainSubstring(`"content":""`))
 		})
 	})
 })

@@ -18,16 +18,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import type { Agent, TeamMember } from '@/lib/services';
 
 import { DEFAULT_SELECTOR_PROMPT, type TeamFormValues } from '../use-team-form';
+import { WarningsSection } from './warnings-section';
 
 interface StrategySectionProps {
   form: UseFormReturn<TeamFormValues>;
+  agents: Agent[];
+  selectedMembers: TeamMember[];
   disabled?: boolean;
 }
 
 export function StrategySection({
   form,
+  agents,
+  selectedMembers,
   disabled,
 }: Readonly<StrategySectionProps>) {
   const selectedStrategy = form.watch('strategy');
@@ -70,7 +76,6 @@ export function StrategySection({
               <SelectContent>
                 <SelectItem value="sequential">Sequential</SelectItem>
                 <SelectItem value="selector">Selector</SelectItem>
-                <SelectItem value="graph">Graph</SelectItem>
               </SelectContent>
             </Select>
             <FormMessage />
@@ -104,14 +109,15 @@ export function StrategySection({
         />
       )}
 
-      {(loopsChecked || selectedStrategy === 'graph') && (
+      {(selectedStrategy !== 'sequential' || loopsChecked) && (
         <FormField
           control={form.control}
           name="maxTurns"
           render={({ field }) => (
             <FormItem>
               <FormLabel>
-                Max Turns <span className="text-red-500">*</span>
+                Max Turns{' '}
+                <span className="text-red-500">*</span>
               </FormLabel>
               <FormControl>
                 <Input
@@ -126,6 +132,13 @@ export function StrategySection({
           )}
         />
       )}
+
+      <WarningsSection
+        agents={agents}
+        selectedMembers={selectedMembers}
+        strategy={selectedStrategy}
+        enableTerminateTool={form.watch('enableTerminateTool')}
+      />
     </div>
   );
 }

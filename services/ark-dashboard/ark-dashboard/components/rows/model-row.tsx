@@ -1,9 +1,9 @@
 'use client';
 
 import { Pencil, Trash2 } from 'lucide-react';
-import Link from 'next/link';
 import { useState } from 'react';
 
+import { NamespacedLink } from '@/components/namespaced-link';
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { AvailabilityStatusBadge } from '@/components/ui/availability-status-badge';
 import { Button } from '@/components/ui/button';
@@ -66,9 +66,9 @@ export function ModelRow({ model, onDelete }: ModelRowProps) {
                   size="sm"
                   className="h-8 w-8 p-0"
                   asChild>
-                  <Link href={`/models/${model.id}/update`}>
+                  <NamespacedLink href={`/models/${model.id}/update`}>
                     <Pencil className="h-4 w-4" />
-                  </Link>
+                  </NamespacedLink>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Edit model</TooltipContent>

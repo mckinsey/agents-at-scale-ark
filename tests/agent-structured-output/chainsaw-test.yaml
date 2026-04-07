@@ -10,7 +10,7 @@ spec:
     apply: 30s
     # Extended timeout as model probes can take time to validate availability
     assert: 120s
-    cleanup: 30s
+    cleanup: 3m
   steps:
   - name: deploy-resources
     try:

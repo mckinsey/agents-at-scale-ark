@@ -51,6 +51,10 @@ spec:
           {{- end }}
         {{- end }}
         {{- end }}
+        {{- if .Values.app.envFrom }}
+        envFrom:
+          {{- toYaml .Values.app.envFrom | nindent 10 }}
+        {{- end }}
         resources:
           {{- toYaml .Values.app.resources | nindent 10 }}
         securityContext:

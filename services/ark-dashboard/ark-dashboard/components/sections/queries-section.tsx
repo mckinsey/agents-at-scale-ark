@@ -9,11 +9,10 @@ import {
   RefreshCw,
   Trash2,
 } from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { toast } from 'sonner';
 
+import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import {
   Empty,
@@ -31,10 +30,12 @@ import {
 } from '@/components/ui/tooltip';
 import type { components } from '@/lib/api/generated/types';
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { queriesService } from '@/lib/services/queries';
 import { useListQueries } from '@/lib/services/queries-hooks';
 import { getResourceEventsUrl } from '@/lib/utils/events';
 import { formatAge } from '@/lib/utils/time';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 type QueryResponse = components['schemas']['QueryResponse'];
 
@@ -51,11 +52,12 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(
     const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
     const [outputViewMode, setOutputViewMode] =
       useState<OutputViewMode>('content'); // NEW
-    const router = useRouter();
+    const { push } = useNamespacedNavigation();
+    const { namespace } = useNamespace();
 
     useImperativeHandle(ref, () => ({
       openAddEditor: () => {
-        router.push(`/query/new`);
+        push(`/query/new`);
       },
     }));
 
@@ -400,14 +402,14 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(
                                 </EmptyDescription>
                               </EmptyHeader>
                               <EmptyContent>
-                                <Link href="/query/new">
+                                <NamespacedLink href="/query/new">
                                   <Button asChild>
                                     <div>
                                       <Plus className="h-4 w-4" />
                                       Create Query
                                     </div>
                                   </Button>
-                                </Link>
+                                </NamespacedLink>
                               </EmptyContent>
                               <Button
                                 variant="link"
@@ -435,7 +437,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(
                               key={query.name}
                               className="cursor-pointer border-b border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900/30"
                               onClick={() =>
-                                router.push(`/query/${query.name}`)
+                                push(`/query/${query.name}`)
                               }>
                               <td className="px-3 py-3 font-mono text-sm text-gray-900 dark:text-gray-100">
                                 {query.name}

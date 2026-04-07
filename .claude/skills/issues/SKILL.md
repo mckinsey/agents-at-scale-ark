@@ -1,6 +1,6 @@
 ---
 name: ark-issues
-description: Search, create, and manage GitHub issues for the Ark project. Use when you need to find existing issues, create new ones, or update issue status.
+description: Search, list, view, and update existing GitHub issues. Primary use case is CVE tracking and security vulnerability issue management. Used by the ark-security-patcher agent. For drafting NEW issues with research and task breakdowns, use the "issue-creation" skill instead.
 ---
 
 # Ark Issues
