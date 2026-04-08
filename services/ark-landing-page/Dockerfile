@@ -11,7 +11,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY app ./app
 COPY next.config.js tsconfig.json postcss.config.js tailwind.config.js ./
-RUN npm run build
+ARG NEXT_PUBLIC_ARK_DASHBOARD_URL
+RUN echo "Building with NEXT_PUBLIC_ARK_DASHBOARD_URL=${NEXT_PUBLIC_ARK_DASHBOARD_URL}" && \
+    NEXT_PUBLIC_ARK_DASHBOARD_URL=${NEXT_PUBLIC_ARK_DASHBOARD_URL} npm run build
 
 FROM base AS runner
 WORKDIR /app
