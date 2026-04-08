@@ -37,5 +37,9 @@ func ApplyDefaults(obj runtime.Object) {
 		DefaultAgent(o)
 	case *arkv1alpha1.Model:
 		DefaultModel(o)
+	case *arkv1alpha1.Query:
+		DefaultQuery(o)
+	case *arkv1alpha1.Team:
+		DefaultTeam(o)
 	}
 }

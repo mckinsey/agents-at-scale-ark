@@ -319,7 +319,7 @@ function DebugStreamView({
             typeof attr === 'object' &&
             attr !== null &&
             'key' in attr &&
-            attr.key === 'session.id',
+            attr.key === 'ark.session.id',
         ) as { value?: string } | undefined;
         if (sessionAttr?.value) {
           return sessionAttr.value;
@@ -334,7 +334,7 @@ function DebugStreamView({
           typeof attr === 'object' &&
           attr !== null &&
           'key' in attr &&
-          attr.key === 'session.id',
+          attr.key === 'ark.session.id',
       ) as { value?: string } | undefined;
       if (sessionAttr?.value) {
         return sessionAttr.value;

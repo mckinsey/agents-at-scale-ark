@@ -93,6 +93,7 @@ spec:
             - type: team
               name: synthesis-team
     - assert:
+        timeout: 2m
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query

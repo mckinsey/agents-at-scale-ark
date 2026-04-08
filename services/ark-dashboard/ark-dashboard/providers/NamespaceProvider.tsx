@@ -12,6 +12,7 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 
+import { apiClient } from '@/lib/api/client';
 import type { Namespace } from '@/lib/services';
 import {
   useCreateNamespace,
@@ -45,14 +46,19 @@ function NamespaceProvider({ children }: PropsWithChildren) {
   const [isNamespaceResolved, setIsNamespaceResolved] = useState(false);
   const [readOnlyMode, setReadOnlyMode] = useState(true);
 
+  apiClient.setDefaultParam('namespace', namespaceFromQueryParams);
+
   const { data, isPending, error } = useGetContext();
 
-  const createQueryString = useCallback((name: string, value: string) => {
-    const params = new URLSearchParams();
-    params.set(name, value);
+  const createQueryString = useCallback(
+    (name: string, value: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set(name, value);
 
-    return params.toString();
-  }, []);
+      return params.toString();
+    },
+    [searchParams],
+  );
 
   const setNamespace = useCallback(
     (namespace: string) => {

@@ -82,6 +82,10 @@ func LoadModel(ctx context.Context, k8sClient client.Client, modelSpec interface
 		if err := loadBedrockConfig(ctx, resolver, modelCRD.Spec.Config.Bedrock, namespace, model, modelInstance); err != nil {
 			return nil, err
 		}
+	case ProviderAnthropic:
+		if err := loadAnthropicConfig(ctx, resolver, modelCRD.Spec.Config.Anthropic, namespace, modelInstance, additionalHeaders); err != nil {
+			return nil, err
+		}
 	default:
 		if modelCRD.Spec.Provider == "" {
 			if IsDeprecatedProviderInType(modelCRD.Spec.Type) {

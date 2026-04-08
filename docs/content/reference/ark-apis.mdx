@@ -1,13 +1,13 @@
 ---
 title: Ark APIs
-description: REST APIs for managing ARK resources and OpenAI-compatible endpoints
+description: REST APIs for managing Ark resources and querying targets
 ---
 
 import { Tabs } from 'nextra/components'
 
 # Ark APIs
 
-ARK provides REST APIs for managing resources and executing queries. The APIs include both native ARK endpoints and OpenAI-compatible endpoints.
+Ark provides REST APIs for managing resources and executing queries.
 
 ## Interactive API Explorer
 
@@ -27,7 +27,7 @@ You can open the API docs directly and interact with them through the path: http
 
 ## Authentication
 
-ARK APIs support multiple authentication methods depending on the `AUTH_MODE` configuration:
+Ark APIs support multiple authentication methods depending on the `AUTH_MODE` configuration:
 
 - **OIDC/JWT**: For dashboard users (when `AUTH_MODE=sso` or `AUTH_MODE=hybrid`)
 - **API Keys**: For service-to-service communication (when `AUTH_MODE=basic` or `AUTH_MODE=hybrid`)
@@ -38,12 +38,10 @@ ARK APIs support multiple authentication methods depending on the `AUTH_MODE` co
 For programmatic access, create API keys and use HTTP Basic Authentication:
 
 ```bash
-# Create an API key (requires authentication)
 curl -X POST http://localhost:8000/v1/api-keys \
   -H "Content-Type: application/json" \
   -d '{"name": "My Service Key"}'
 
-# Use the API key for subsequent requests
 curl -u "pk-ark-xxxxx:sk-ark-xxxxx" \
   http://localhost:8000/v1/namespaces/default/agents
 ```
@@ -53,10 +51,8 @@ See the [Authentication Guide](/developer-guide/authentication) for complete con
 ## Starting the APIs
 
 ```bash
-# Development mode
 make ark-api-dev
 
-# Or using Docker
 docker run -p 8000:8000 ark-api:latest
 ```
 
@@ -64,12 +60,12 @@ The APIs will be available at `http://localhost:8000`.
 
 Browse the complete API documentation at `http://localhost:8000/docs` when the service is running.
 
-## Native ARK APIs
+## Resource APIs
 
-Standard REST APIs for managing ARK resources, for example:
+Standard REST APIs for managing Ark resources:
 
 - **Agents**: `/v1/namespaces/{namespace}/agents`
-- **Teams**: `/v1/namespaces/{namespace}/teams` 
+- **Teams**: `/v1/namespaces/{namespace}/teams`
 - **Queries**: `/v1/namespaces/{namespace}/queries`
 - **Models**: `/v1/namespaces/{namespace}/models`
 - **Secrets**: `/v1/namespaces/{namespace}/secrets`
@@ -78,230 +74,264 @@ Standard REST APIs for managing ARK resources, for example:
 
 Standard Kubernetes REST patterns are followed, such as `POST` to create, `DELETE` to delete.
 
-## OpenAI-Compatible APIs
+## Query API
 
-The `openai/v1/` endpoint has been designed to mimic the [OpenAI API Specification](https://platform.openai.com/docs/api-reference/introduction). This allows Ark resources to be accessed using standard OpenAI compliant tools and SDKs.
+Queries are the primary way to interact with Ark. Use `POST /v1/queries/` to send input to any agent, team, model, or tool.
 
-### List Models API
+### List Available Targets
 
-The `v1/models` API lists all available query targets in Ark:
+See all available agents, teams, models, and tools:
 
-```bash
-curl http://localhost:8000/openai/v1/models
-```
-
-Example Response:
-
-```json
-{
-  "object": "list",
-  "data": [
-    {
-      "id": "agent/aws-operator-agent",
-      "created": 1760345001,
-      "object": "model",
-      "owned_by": "ark"
-    },
-    {
-      "id": "team/coding-team",
-      "created": 1761159225,
-      "object": "model",
-      "owned_by": "ark"
-    },
-    {
-      "id": "model/gpt-4",
-      "created": 1761137042,
-      "object": "model",
-      "owned_by": "ark"
-    }
-  ]
-}
-```
-
-Returns all available agents, teams, models, and tools in the format `<target_type>/<target_name>`. Any of these targets can be queried.
-
-When using OpenAI endpoints, specify targets with these prefixes:
-
-- `agent/agent-name` - Query an agent
-- `team/team-name` - Query a team
-- `model/model-name` - Query a model directly
-- `tool/tool-name` - Query a tool
-
-### Chat Completions
-
-The `v1/chat/completions` API can be used to execute a query against a target:
-
-```bash
-curl -X POST http://localhost:8000/openai/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "agent/my-agent",
-    "messages": [{"role": "user", "content": "Hello"}]
-  }'
-```
-
-Example response:
-
-```json
-{
-  "id": "openai-query-ce031d64",
-  "object": "chat.completion",
-  "created": 1761224998,
-  "model": "agent/my-agent",
-  "choices": [
-    {
-      "index": 0,
-      "message": {
-        "role": "assistant",
-        "content": "Hello! How can I help you today?"
-      },
-      "finish_reason": "stop"
-    }
-  ],
-  "usage": {
-    "prompt_tokens": 10,
-    "completion_tokens": 9,
-    "total_tokens": 19
-  }
-}
-```
-
-#### Custom Metadata
-
-ARK extends the OpenAI API with a `metadata` field to pass Kubernetes annotations to the underlying Query resource.
-
-Use the `conversationId` field for multi-turn conversations, and `queryAnnotations` for custom Kubernetes annotations:
-
-```bash
-curl -X POST http://localhost:8000/openai/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "agent/my-agent",
-    "messages": [{"role": "user", "content": "Hello"}],
-    "metadata": {
-      "conversationId": "conv-abc123"
-    }
-  }'
-```
-
-The `conversationId` is sent to the execution engine as A2A `contextId` for conversation threading. The `queryAnnotations` field can pass additional Kubernetes annotations to the Query resource. This format works with standard OpenAI SDKs since metadata fields accept string values.
-
-See [Streaming Responses](/developer-guide/queries/streaming#the-ark-metadata-field) for how metadata is returned in responses.
-
-#### Response Metadata
-
-Responses include an `ark` field with query metadata including status, token usage, and conversation ID:
-
-<Tabs items={['Non-streaming', 'Streaming']}>
+<Tabs items={['Bash', 'Python']}>
   <Tabs.Tab>
-    ```python
-    response = client.chat.completions.create(
-        model='agent/my-agent',
-        messages=[{'role': 'user', 'content': 'Hello'}],
-    )
-
-    print(response.choices[0].message.content)
-    # Access conversation ID for multi-turn conversations
-    conversation_id = response.ark['completedQuery']['status']['conversationId']
+    ```bash
+    curl http://localhost:8000/v1/agents/
+    curl http://localhost:8000/v1/models/
+    curl http://localhost:8000/v1/teams/
+    curl http://localhost:8000/v1/tools/
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    stream = client.chat.completions.create(
-        model='agent/my-agent',
-        messages=[{'role': 'user', 'content': 'Hello'}],
-        stream=True,
-    )
+    import requests
 
-    full_message = ''
-    for chunk in stream:
-        content = chunk.choices[0].delta.content or ''
-        full_message += content
+    base = "http://localhost:8000"
+    agents = requests.get(f"{base}/v1/agents/").json()
+    models = requests.get(f"{base}/v1/models/").json()
+    teams = requests.get(f"{base}/v1/teams/").json()
+    tools = requests.get(f"{base}/v1/tools/").json()
 
-        # Final chunk contains complete query object
-        if hasattr(chunk, 'ark') and chunk.ark.get('completedQuery'):
-            conversation_id = chunk.ark['completedQuery']['status']['conversationId']
+    for agent in agents.get("items", []):
+        print(f"agent/{agent['metadata']['name']}")
     ```
   </Tabs.Tab>
 </Tabs>
 
-### Ark Metadata Extensions
+### Creating a Query
 
-Ark extends the OpenAI API with optional metadata for passing annotations and retrieving query information:
+Send a query to any target:
 
-```json
-{
-  "model": "agent/my-agent",
-  "messages": [{"role": "user", "content": "Hello"}],
-  "stream": true,
-  "metadata": {
-    "user_id": "12345",
-    "ark": "{\"annotations\": {\"ark.mckinsey.com/a2a-context-id\": \"abc-123\"}}"
-  }
-}
-```
-
-The `ark` field is a JSON string containing:
-- `annotations`: Custom Kubernetes annotations applied to the query
-
-Example Response:
-
-```json
-{
-  "id": "openai-query-ce031d64",
-  "object": "chat.completion",
-  "model": "agent/my-agent",
-  "choices": [...],
-  "usage": {...},
-  "ark": {
-    "query_name": "openai-query-ce031d64",
-    "annotations": {
-      "ark.mckinsey.com/a2a-context-id": "abc-123",
-      "ark.mckinsey.com/streaming-enabled": "true"
-    }
-  }
-}
-```
-
-As per the OpenAI spec, additional fields can be included in the response. The field `ark` is used rather than `metadata` - as `metadata` is more likely to clash with other providers.
-
-### Using OpenAI SDKs
-
-Standard OpenAI SDKs and tools can be used:
-
-<Tabs items={['Python', 'Node.js']}>
+<Tabs items={['Bash', 'Python']}>
   <Tabs.Tab>
-    ```python
-    from openai import OpenAI
-
-    client = OpenAI(
-        api_key="not-needed",
-        base_url="http://localhost:8000/openai/v1"
-    )
-
-    response = client.chat.completions.create(
-        model="agent/my-agent",
-        messages=[{"role": "user", "content": "Hello"}]
-    )
-
-    print(response.choices[0].message.content)
+    ```bash
+    curl -X POST http://localhost:8000/v1/queries/ \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "my-query",
+        "type": "user",
+        "input": "Hello, how can you help me?",
+        "target": {"type": "agent", "name": "my-agent"}
+      }'
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```javascript
-    import OpenAI from 'openai';
+    ```python
+    import requests
 
-    const client = new OpenAI({
-      apiKey: 'not-needed',
-      baseURL: 'http://localhost:8000/openai/v1'
-    });
+    response = requests.post(
+        "http://localhost:8000/v1/queries/",
+        json={
+            "name": "my-query",
+            "type": "user",
+            "input": "Hello, how can you help me?",
+            "target": {"type": "agent", "name": "my-agent"},
+        }
+    )
 
-    const response = await client.chat.completions.create({
-      model: 'agent/my-agent',
-      messages: [{ role: 'user', content: 'Hello' }]
-    });
+    query = response.json()
+    print(query["status"]["response"]["content"])
+    ```
+  </Tabs.Tab>
+</Tabs>
 
-    console.log(response.choices[0].message.content);
+Response:
+
+```json
+{
+  "metadata": {
+    "name": "my-query",
+    "namespace": "default"
+  },
+  "spec": {
+    "type": "user",
+    "input": "Hello, how can you help me?",
+    "target": {"type": "agent", "name": "my-agent"}
+  },
+  "status": {
+    "phase": "done",
+    "response": {
+      "content": "Hello! How can I help you today?"
+    },
+    "conversationId": "conv-abc123"
+  }
+}
+```
+
+#### Query Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Unique query name |
+| `type` | No | Input type, defaults to `"user"` |
+| `input` | Yes | The user message text |
+| `target` | Yes | Target with `type` (agent/model/team/tool) and `name` |
+| `conversationId` | No | Continue a previous conversation |
+| `sessionId` | No | Group queries for telemetry tracking |
+| `timeout` | No | Query timeout, e.g. `"5m"` |
+| `metadata.annotations` | No | Custom Kubernetes annotations |
+
+### Conversations
+
+Use `conversationId` to maintain context across queries. The memory service manages conversation history automatically.
+
+<Tabs items={['Python', 'Bash']}>
+  <Tabs.Tab>
+    ```python
+    import requests
+
+    url = "http://localhost:8000/v1/queries/"
+
+    first = requests.post(url, json={
+        "name": "conv-q1",
+        "input": "What is the capital of France?",
+        "target": {"type": "agent", "name": "my-agent"},
+    }).json()
+
+    conversation_id = first["status"]["conversationId"]
+
+    followup = requests.post(url, json={
+        "name": "conv-q2",
+        "input": "What is its population?",
+        "target": {"type": "agent", "name": "my-agent"},
+        "conversationId": conversation_id,
+    }).json()
+
+    print(followup["status"]["response"]["content"])
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    RESPONSE=$(curl -s -X POST http://localhost:8000/v1/queries/ \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "conv-q1",
+        "input": "What is the capital of France?",
+        "target": {"type": "agent", "name": "my-agent"}
+      }')
+
+    CONV_ID=$(echo $RESPONSE | jq -r '.status.conversationId')
+
+    curl -X POST http://localhost:8000/v1/queries/ \
+      -H "Content-Type: application/json" \
+      -d "{
+        \"name\": \"conv-q2\",
+        \"input\": \"What is its population?\",
+        \"target\": {\"type\": \"agent\", \"name\": \"my-agent\"},
+        \"conversationId\": \"$CONV_ID\"
+      }"
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+The `conversationId` is returned in `status.conversationId` after the first query completes. Pass it to subsequent queries to continue the conversation. See [Streaming Responses](/developer-guide/queries/streaming#the-ark-metadata-field) for how metadata is returned in streaming responses.
+
+### Custom Annotations
+
+Pass custom Kubernetes annotations to the query resource via `metadata.annotations`:
+
+```bash
+curl -X POST http://localhost:8000/v1/queries/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "annotated-query",
+    "input": "Hello",
+    "target": {"type": "agent", "name": "my-agent"},
+    "metadata": {
+      "annotations": {
+        "ark.mckinsey.com/a2a-context-id": "ctx-abc123",
+        "ark.mckinsey.com/streaming-enabled": "true"
+      }
+    }
+  }'
+```
+
+### Querying with Python
+
+A complete example showing query creation, polling, authentication, and error handling:
+
+```python
+import requests
+from requests.auth import HTTPBasicAuth
+
+base_url = "http://localhost:8000"
+
+response = requests.post(
+    f"{base_url}/v1/queries/",
+    # Uncomment to use auth with key pair
+    # auth=HTTPBasicAuth("pk-ark-xxxxx", "sk-ark-xxxxx"),
+    headers={
+        "Content-Type": "application/json",
+        # Uncomment to use auth with bearer token
+        # "Authorization": "Bearer YOUR_TOKEN_HERE",
+    },
+    json={
+        "name": "python-query",
+        "type": "user",
+        "input": "Summarize the latest updates",
+        "target": {"type": "agent", "name": "my-agent"},
+        # Optional: continue a conversation
+        # "conversationId": "previous-conversation-id",
+        # Optional: session tracking
+        # "sessionId": "my-session-id",
+        # Optional: query timeout
+        # "timeout": "5m",
+    }
+)
+
+response.raise_for_status()
+query = response.json()
+print(query["status"]["response"]["content"])
+```
+
+### Querying Different Targets
+
+The same query API works for agents, teams, models, and tools:
+
+<Tabs items={['Agent', 'Team', 'Model', 'Tool']}>
+  <Tabs.Tab>
+    ```python
+    requests.post(url, json={
+        "name": "agent-query",
+        "input": "What's the weather like in New York?",
+        "target": {"type": "agent", "name": "weather-agent"},
+    })
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    requests.post(url, json={
+        "name": "team-query",
+        "input": "Analyze customer feedback and suggest improvements",
+        "target": {"type": "team", "name": "research-team"},
+    })
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    requests.post(url, json={
+        "name": "model-query",
+        "input": "What is 2+2?",
+        "target": {"type": "model", "name": "gpt-4"},
+    })
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    requests.post(url, json={
+        "name": "tool-query",
+        "input": "{\"location\": \"New York\"}",
+        "target": {"type": "tool", "name": "get_weather"},
+    })
     ```
   </Tabs.Tab>
 </Tabs>

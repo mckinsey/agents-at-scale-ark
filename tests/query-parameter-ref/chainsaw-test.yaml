@@ -7,6 +7,7 @@ spec:
     - try:
       # Install mock-llm with Ark Model and custom config
       - script:
+          timeout: 90s
           content: |
             helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
               --version 0.1.28 \
@@ -17,6 +18,7 @@ spec:
             value: ($namespace)
       # Install ark-tenant for RBAC
       - script:
+          timeout: 60s
           content: |
             helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
           env:

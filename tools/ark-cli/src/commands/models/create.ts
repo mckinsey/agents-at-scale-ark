@@ -75,6 +75,7 @@ export async function createModel(
         choices: [
           {name: 'Azure OpenAI', value: 'azure'},
           {name: 'OpenAI', value: 'openai'},
+          {name: 'Anthropic', value: 'anthropic'},
           {name: 'AWS Bedrock', value: 'bedrock'},
         ],
         default: 'azure',

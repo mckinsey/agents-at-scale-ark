@@ -40,7 +40,7 @@ jobs:
       ci-cache-registry-hostname: ${{ steps.setup-registry.outputs.ci-cache-registry-hostname }}
       is-fork-pr: ${{ steps.setup-registry.outputs.is-fork-pr }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - id: setup-registry
         uses: ./.github/actions/setup-container-cache-registry
@@ -59,7 +59,7 @@ jobs:
       XRAY_WATCH_NAME: 'ark-20863-security-watch'
       SCAN_JSON: "xray-scan-agents-at-scale-${{ github.run_number }}.json"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Run JFrog Xray scan
         id: xray-scan
@@ -78,7 +78,7 @@ jobs:
         shell: bash
         run: |
           GITHUB_REPOSITORY="${{ github.repository }}"
-          LAST_RUN_ID=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs?branch=main&status=success&per_page=100" | jq -c '.workflow_runs[] | select(.name == "CI/CD") | .id' | head -n 1)
+          LAST_RUN_ID=$(gh api "/repos/$GITHUB_REPOSITORY/actions/workflows/cicd.yaml/runs?branch=main&status=success&per_page=1" | jq -c '.workflow_runs[0].id')
           
           echo "Downloading artifacts from run ID: $LAST_RUN_ID"
           gh run download "$LAST_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern "xray-scan-results-agents-at-scale-*" --dir ./artifacts
@@ -147,10 +147,10 @@ jobs:
   build-and-test-ark:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25.8"
+          go-version: "1.26.1"
           cache: true
           cache-dependency-path: |
             ark/go.sum
@@ -188,11 +188,11 @@ jobs:
   build-and-test-services:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25.8"
+          go-version: "1.26.1"
           cache: true
           cache-dependency-path: |
             ark/go.sum
@@ -267,11 +267,9 @@ jobs:
           - path: images/ark-tools
             image: ark-tools
             prebuild: "make ark-cli-build && cp -r tools ark images/ark-tools/"
-          - path: mcp/filesystem-mcp
-            image: filesystem-mcp-server
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download library artifacts
         uses: actions/download-artifact@v4
@@ -318,9 +316,8 @@ jobs:
           - ark-mcp
           - ark-cli
           - ark-tools
-          - filesystem-mcp-server
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Login to Docker Registry
         uses: docker/login-action@v3
@@ -340,7 +337,7 @@ jobs:
   build-libs:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
@@ -352,7 +349,7 @@ jobs:
         run: make libs-test-all
 
       - name: Upload library artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: out-libs-${{ github.sha }}
           path: out/
@@ -363,7 +360,7 @@ jobs:
     if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/test-ark-cli
         with:
@@ -383,7 +380,7 @@ jobs:
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-e2e
         with:
@@ -479,7 +476,7 @@ jobs:
           echo "Testing API endpoints..."
           curl -f --max-time 10 http://127.0.0.1:8082/health || (echo "API health check failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
           curl -f --max-time 10 http://127.0.0.1:8082/ready || (echo "API ready check failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
-          curl -f --max-time 10 http://127.0.0.1:8082/openai/v1/models || (echo "OpenAI models endpoint failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
+          curl -f --max-time 10 http://127.0.0.1:8082/v1/agents/ || (echo "Agents list endpoint failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
           curl -f --max-time 10 http://127.0.0.1:8082/a2a/agents || (echo "A2A /agents endpoint failed" && kubectl logs -l app=ark-api -n default --tail=20 && exit 1)
           echo "ark-api tests passed!"
 
@@ -518,16 +515,23 @@ jobs:
 
 
   e2e-tests-standard:
+    name: E2E Standard (${{ matrix.storage-backend }})
     needs: [setup-container-cache-registry, build-containers]
     if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }} # Remove skipping these tests once chainsaw can be run with mock-llm
     runs-on: ubuntu-24.04
+    continue-on-error: ${{ matrix.storage-backend == 'postgresql' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        storage-backend: [etcd, postgresql]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-e2e
         with:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "true"
+          storage-backend: ${{ matrix.storage-backend }}
           ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
@@ -543,8 +547,6 @@ jobs:
         env:
           E2E_TEST_AZURE_OPENAI_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY != '' && secrets.CICD_AZURE_OPENAI_KEY || 'xxxxxxxxxxx' }}
           E2E_TEST_AZURE_OPENAI_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL != '' &&  secrets.CICD_AZURE_OPENAI_BASE_URL || 'http://mock-llm.default.svc.cluster.local/v1' }}
-          FILESYS_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/filesystem-mcp-server
-          FILESYS_IMAGE_TAG: ${{ github.sha }}
           LANGCHAIN_WEATHER_AGENT_IMAGE_REPOSITORY: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/langchain-weather-agent
           LANGCHAIN_WEATHER_AGENT_IMAGE_TAG: ${{ github.sha }}
           ARK_BROKER_IMAGE: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-broker
@@ -552,24 +554,46 @@ jobs:
         run: |
           cd tests
           mkdir -p /tmp/chainsaw-report
-          chainsaw test --config .chainsaw.yaml --selector '!llm'
+          if [ "${{ matrix.storage-backend }}" = "etcd" ]; then
+            chainsaw test --config .chainsaw.yaml --selector '!llm,!postgresql'
+          else
+            chainsaw test --config .chainsaw.yaml --selector '!llm'
+          fi
+
+      - name: Collect cluster logs
+        if: always()
+        run: kubectl cluster-info dump --all-namespaces --output-directory=/tmp/cluster-logs
+
+      - name: Upload cluster logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cluster-logs-standard-${{ matrix.storage-backend }}-${{ github.sha }}
+          path: /tmp/cluster-logs
+          retention-days: 7
 
       - uses: ./.github/actions/collect-coverage-e2e
         with:
-          artifact-name: coverage-reports-standard
+          artifact-name: coverage-reports-standard-${{ matrix.storage-backend }}
 
   e2e-tests-llm:
+    name: E2E LLM (${{ matrix.storage-backend }})
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
     if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
+    continue-on-error: ${{ matrix.storage-backend == 'postgresql' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        storage-backend: [etcd, postgresql]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-e2e
         with:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "true"
-
+          storage-backend: ${{ matrix.storage-backend }}
           ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
@@ -599,8 +623,6 @@ jobs:
           E2E_TEST_AZURE_OPENAI_API_VERSION: ${{ secrets.CICD_AZURE_OPENAI_API_VERSION || '2024-12-01-preview' }}
           E2E_TEST_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
           E2E_TEST_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
-          FILESYS_IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/filesystem-mcp-server
-          FILESYS_IMAGE_TAG: ${{ github.sha }}
           LANGCHAIN_WEATHER_AGENT_IMAGE_REPOSITORY: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/langchain-weather-agent
           LANGCHAIN_WEATHER_AGENT_IMAGE_TAG: ${{ github.sha }}
           ARK_CLUSTER_MEMORY_IMAGE: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-cluster-memory
@@ -610,16 +632,28 @@ jobs:
           chmod +x llm-tests/run-multi-provider.sh
           ./llm-tests/run-multi-provider.sh
 
+      - name: Collect cluster logs
+        if: always()
+        run: kubectl cluster-info dump --all-namespaces --output-directory=/tmp/cluster-logs
+
+      - name: Upload cluster logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cluster-logs-llm-${{ matrix.storage-backend }}-${{ github.sha }}
+          path: /tmp/cluster-logs
+          retention-days: 7
+
       - uses: ./.github/actions/collect-coverage-e2e
         with:
-          artifact-name: coverage-reports-llm
+          artifact-name: coverage-reports-llm-${{ matrix.storage-backend }}
 
   e2e-ui-tests:
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
     if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-e2e
         with:
@@ -652,22 +686,10 @@ jobs:
             --wait \
             --timeout=5m
 
-      - name: Deploy ark-mcp
-        run: |
-          helm upgrade --install ark-mcp services/ark-mcp/chart \
-            --namespace default \
-            --create-namespace \
-            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/ark-mcp" \
-            --set app.image.tag="${{ github.sha }}" \
-            --set app.image.pullPolicy="Always" \
-            --wait \
-            --timeout=5m
-
       - name: Wait for services to be ready
         run: |
           kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
           kubectl wait --for=condition=ready pod -l app=ark-dashboard -n default --timeout=120s
-          kubectl wait --for=condition=ready pod -l app=ark-mcp -n default --timeout=120s
 
       - name: Update Argo Workflows dependencies
         run: |
@@ -774,10 +796,22 @@ jobs:
 
       - name: Upload test screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ui-test-screenshots-${{ github.sha }}
           path: tests/pytest/ui-tests/screenshots/
+          retention-days: 7
+
+      - name: Collect cluster logs
+        if: always()
+        run: kubectl cluster-info dump --all-namespaces --output-directory=/tmp/cluster-logs
+
+      - name: Upload cluster logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cluster-logs-ui-${{ github.sha }}
+          path: /tmp/cluster-logs
           retention-days: 7
 
   e2e-cli-tests:
@@ -785,7 +819,7 @@ jobs:
     runs-on: ubuntu-24.04
     if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-e2e
         with:
@@ -850,14 +884,26 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
         run: |
           cd tests/pytest/cli-tests/tests
-          pytest test_file_gateway.py -n 2 --dist loadscope -v --tb=short
+          pytest test_file_gateway.py -n 2 --dist loadscope -v --tb=short --log-cli-level=INFO
 
       - name: Upload CLI test logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cli-test-logs-${{ github.sha }}
           path: tests/pytest/cli-tests/tests/*.log
+          retention-days: 7
+
+      - name: Collect cluster logs
+        if: always()
+        run: kubectl cluster-info dump --all-namespaces --output-directory=/tmp/cluster-logs
+
+      - name: Upload cluster logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cluster-logs-cli-${{ github.sha }}
+          path: /tmp/cluster-logs
           retention-days: 7
 
   build-charts:
@@ -872,12 +918,11 @@ jobs:
           - { name: ark-dashboard, path: services/ark-dashboard/chart }
           - { name: ark-mcp, path: services/ark-mcp/chart }
           - { name: ark-broker, path: services/ark-broker/chart }
-          - { name: mcp-filesystem, path: mcp/filesystem-mcp/chart }
           - { name: localhost-gateway, path: services/localhost-gateway/chart }
           - { name: ark-tenant, path: charts/ark-tenant }
           - { name: argo-workflows, path: services/argo-workflows/chart }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Helm
         uses: azure/setup-helm@v4
@@ -892,7 +937,7 @@ jobs:
           helm package .
 
       - name: Upload ${{ matrix.chart.name }} Chart
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.chart.name }}-${{ github.sha }}
           path: ${{ matrix.chart.path }}/${{ matrix.chart.name }}-*.tgz
@@ -901,7 +946,7 @@ jobs:
   build-docs:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -934,7 +979,7 @@ jobs:
   build-ark-cli:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -974,7 +1019,7 @@ jobs:
           ls -la ../../out/ark-cli.tgz
 
       - name: Upload ARK CLI Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ark-cli-${{ github.sha }}
           path: out/ark-cli.tgz
@@ -997,12 +1042,12 @@ jobs:
       ]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Go for coverage tools
         uses: actions/setup-go@v5
         with:
-          go-version: "1.25.8"
+          go-version: "1.26.1"
 
       - name: Install Python coverage tools
         run: |
@@ -1103,14 +1148,14 @@ jobs:
       - name: Deploy to GitHub Pages
         if: ${{ !env.ACT }}
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
   release-libs:
     needs: [check-release]
     runs-on: ubuntu-24.04
     if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Download library artifacts
         uses: actions/download-artifact@v4
@@ -1147,16 +1192,16 @@ jobs:
       matrix:
         chart:
           - ark-controller
+          - ark-completions
           - ark-api
           - ark-dashboard
           - ark-mcp
           - ark-broker
-          - mcp-filesystem
           - localhost-gateway
           - ark-tenant
           - argo-workflows
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download ${{ matrix.chart }} artifact
         uses: actions/download-artifact@v4
@@ -1176,7 +1221,7 @@ jobs:
     runs-on: ubuntu-24.04
     if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download ark-cli artifact
         uses: actions/download-artifact@v4
@@ -1210,14 +1255,14 @@ jobs:
     runs-on: ubuntu-24.04
     if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Needed for goreleaser changelog
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25.8'
+          go-version: '1.26.1'
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
@@ -1253,7 +1298,7 @@ jobs:
     runs-on: ubuntu-24.04
     if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Trigger Deploy workflow for release
         run: |
@@ -1268,51 +1313,3 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-  verify-ark-installation:
-    needs: [check-release, release-charts, release-ark-cli]
-    runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: ./.github/actions/setup-k3s
-        with:
-          metrics-enabled: false
-          traefik-enabled: false
-          k3s-channel: latest
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22.x"
-
-      - name: Install published ark-cli from npm
-        run: |
-          RELEASE_TAG="${{ needs.check-release.outputs.tag }}"
-          echo "Installing ark-cli@${RELEASE_TAG} from npm registry..."
-          npm install -g @agents-at-scale/ark@${RELEASE_TAG}
-          ark --version
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Install test dependencies
-        run: |
-          pip install -r tests/pytest/ui-tests/requirements.txt
-
-      - name: Run complete ARK workflow installation test
-        env:
-          PYTHONPATH: ${{ github.workspace }}/tests/pytest
-        run: |
-          cd tests/pytest
-          pytest test_complete_ark_workflow.py -v --tb=short
-
-      - name: Upload verification test logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ark-installation-verification-logs-${{ github.sha }}
-          path: tests/pytest/*.log
-          retention-days: 7

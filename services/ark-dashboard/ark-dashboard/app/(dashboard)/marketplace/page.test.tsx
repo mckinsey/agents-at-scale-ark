@@ -17,6 +17,7 @@ vi.mock('next/navigation', () => ({
     prefetch: vi.fn(),
   })),
   usePathname: vi.fn(() => '/marketplace'),
+  useSearchParams: vi.fn(() => new URLSearchParams()),
 }));
 
 // Mock the PageHeader component to avoid SidebarProvider dependency
