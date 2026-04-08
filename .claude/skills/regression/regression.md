@@ -10,7 +10,7 @@ Execute the complete UI regression test suite:
 
 1. **Verify environment setup**
    - Check dashboard accessibility (http://localhost:3274)
-   - Verify required environment variables (.env file)
+   - Verify `tests/pytest/ui-tests/.env` exists and contains `CICD_OPENAI_API_KEY` — **do not proceed if missing, do not accept shell exports as a substitute**
    - Ensure test dependencies are installed
 
 2. **Execute full test suite**:
@@ -67,6 +67,8 @@ The full regression suite includes:
 
 ### 1. Pre-Test Environment Check
 
+**MANDATORY**: Before running any tests, verify that `CICD_OPENAI_API_KEY` exists in `tests/pytest/ui-tests/.env`. Do NOT accept `export CICD_OPENAI_API_KEY=...` in the shell as an alternative — the key MUST be present in the `.env` file. If it is missing, stop and tell the user to add it to the `.env` file before proceeding.
+
 ```bash
 # Check dashboard accessibility
 curl -sf http://localhost:3274 > /dev/null || echo "Dashboard not accessible"
@@ -74,12 +76,17 @@ curl -sf http://localhost:3274 > /dev/null || echo "Dashboard not accessible"
 # Verify environment variables
 cd tests/pytest/ui-tests
 if [ ! -f .env ]; then
-    echo "Missing .env file"
+    echo "ERROR: Missing .env file at tests/pytest/ui-tests/.env"
+    echo "Create it and add CICD_OPENAI_API_KEY=<your-key> before running tests."
     exit 1
 fi
 
-# Check for required API keys
-grep -q "CICD_OPENAI_API_KEY" .env || echo "Missing CICD_OPENAI_API_KEY"
+# Check for required API keys — STOP if missing, do not accept shell exports
+if ! grep -q "CICD_OPENAI_API_KEY" .env; then
+    echo "ERROR: CICD_OPENAI_API_KEY is not set in .env"
+    echo "Add it to tests/pytest/ui-tests/.env before running tests."
+    exit 1
+fi
 ```
 
 ### 2. Run Full Test Suite
