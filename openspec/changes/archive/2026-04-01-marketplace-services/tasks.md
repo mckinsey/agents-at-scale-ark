@@ -7,7 +7,7 @@
 - [x] 1.1 Add `labelSelector` parameter to `list_grouped_resources()` in `services/ark-api/ark-api/src/ark_api/api/v1/resources.py`
 - [x] 1.2 Pass `label_selector=labelSelector` to `api_resource.get()` call — single shared implementation
 - [x] 1.3 Add tests for label selector filtering
-- [ ] 1.4 Test manually: `GET /v1/resources/v1/Service?labelSelector=app.kubernetes.io/instance=phoenix`
+- [x] 1.4 Test manually: `GET /v1/resources/v1/Service?labelSelector=app.kubernetes.io/instance=phoenix`
 
 ## 2. ark-api: `/v1/marketplace-items` Endpoint
 
@@ -64,14 +64,14 @@
 
 ## 10. Integration Testing
 
-- [ ] 10.1 Deploy item with chart annotation and URL: verify detection and button
-- [ ] 10.2 Deploy item with custom release name: verify annotation-based detection works
-- [ ] 10.3 Deploy item with multiple Services: verify multiple buttons with labels
-- [ ] 10.4 Test failed Helm release: should not show as installed
-- [ ] 10.5 Test Service without UI annotation: no button
+- [x] 10.1 Deploy item with chart annotation and URL: verify detection and button
+- [x] 10.2 Deploy item with custom release name: verify annotation-based detection works
+- [x] 10.3 Deploy item with multiple Services: verify multiple buttons with labels
+- [x] 10.4 Test failed Helm release: should not show as installed
+- [x] 10.5 Test Service without UI annotation: no button
 
 ## 11. Documentation
 
-- [ ] 11.1 Update marketplace repo CONTRIBUTING.md with chart annotation and UI URL sections
-- [ ] 11.2 Document install examples with `--set uiUrl` and `--set uiLabel`
-- [ ] 11.3 Document services page sunset
+- [x] 11.1 Update marketplace repo CONTRIBUTING.md with chart annotation and UI URL sections
+- [x] 11.2 Document install examples with `--set uiUrl` and `--set uiLabel`
+- [x] 11.3 Document services page sunset
