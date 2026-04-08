@@ -8,24 +8,21 @@ export const getBashSnippet = (
 curl -X POST "${fullEndpoint}" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": "agent/${selectedAgent}",
-    "messages": [
-      {"role": "system", "content": "You are a helpful assistant."},
-      {"role": "user", "content": "Hello, how can you help me?"}
-    ],
-    "stream": false,
-    "temperature": 1.0,
-    "max_tokens": 1024,
-    "metadata": {
-      "sessionId": "my-session-id"
+    "name": "my-query",
+    "type": "user",
+    "input": "Hello, how can you help me?",
+    "target": {
+      "type": "agent",
+      "name": "${selectedAgent}"
     }
   }'
 
 # Fields:
-# - model (required): The agent to use, format "agent/<name>"
-# - messages (required): List of messages with role (system/user/assistant) and content
-# - stream (optional): Enable streaming responses, default false
-# - temperature (optional): Sampling temperature 0-2, higher = more random, default 1
-# - max_tokens (optional): Maximum tokens to generate
-# - metadata (optional): Custom metadata to pass to the agent
+# - name (required): Unique query name
+# - type: "user" (default)
+# - input (required): User message text
+# - target (required): Target agent/model/team with type and name
+# - conversationId (optional): Continue a previous conversation
+# - sessionId (optional): Session tracking ID
+# - timeout (optional): Query timeout e.g. "5m"
 `;

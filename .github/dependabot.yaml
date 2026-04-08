@@ -57,22 +57,12 @@ updates:
       interval: weekly
     open-pull-requests-limit: 1
 
-  # Python - ark-cluster-memory
-  - package-ecosystem: "pip"
-    directory: "services/ark-cluster-memory"
-    commit-message:
-      prefix: 'chore(python): '
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 1
-
   # Docker - scan for base image updates
   - package-ecosystem: "docker"
     directories:
       - "services/ark-api"
       - "services/ark-broker/ark-broker"
       - "services/ark-dashboard"
-      - "services/ark-cluster-memory"
       - "services/ark-mcp"
     commit-message:
       prefix: 'chore(docker): '

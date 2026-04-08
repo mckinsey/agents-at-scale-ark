@@ -1,6 +1,8 @@
-# Completions Engine
+# Completions Executor
 
-Standalone execution engine for Ark queries. Receives A2A messages from the controller and executes the full turn loop: agent/team orchestration, tool execution, LLM provider calls, memory management, and streaming.
+The built-in default execution engine for Ark queries. One of potentially many executors — agents without an `executionEngine` field use this. Custom executors are deployed separately and implement `BaseExecutor` from the Python SDK.
+
+Receives A2A messages from the controller and executes the full turn loop: agent/team orchestration, tool execution, LLM provider calls, memory management, and streaming.
 
 ## Build
 
@@ -21,11 +23,11 @@ go test ./executors/completions/...  # Run tests
 
 ## Key Patterns
 
-- The engine is stateless from Query CR perspective — receives context via A2A metadata, executes, returns results
+- Stateless from Query CR perspective — receives context via A2A metadata, executes, returns results
 - The controller is the sole writer to Query CR status
-- Agent execution routes based on ExecutionEngine spec (local or A2A). Named execution engines are dispatched directly by the controller.
 - Traces are linked to the controller's root span via W3C traceparent propagation. Session ID flows via baggage.
 - Team execution supports sequential, round-robin, selector, and graph strategies
+- Streaming chunks and events are emitted to the Ark Broker
 
 ## Dependencies
 

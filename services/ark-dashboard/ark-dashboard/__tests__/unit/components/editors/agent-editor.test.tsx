@@ -16,6 +16,19 @@ beforeAll(() => {
   }));
 });
 
+const mockNamespace = 'default';
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: vi.fn(() => ({
+    namespace: mockNamespace,
+    isNamespaceResolved: true,
+    availableNamespaces: [{ name: mockNamespace }],
+    isPending: false,
+    setNamespace: vi.fn(),
+    createNamespace: vi.fn(),
+    readOnlyMode: false,
+  })),
+}));
+
 vi.mock('@/lib/api/client', () => ({
   apiClient: {
     get: vi.fn(),

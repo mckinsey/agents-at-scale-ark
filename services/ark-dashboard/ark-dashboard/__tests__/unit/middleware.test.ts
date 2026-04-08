@@ -161,7 +161,7 @@ describe('middleware default export', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
 
-      const request = createMockRequest('/api/openai/v1/chat/completions');
+      const request = createMockRequest('/api/v1/queries/');
       request.auth = {
         user: { id: 'user123', email: 'test@example.com' },
         expires: '',
