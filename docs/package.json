@@ -49,6 +49,7 @@
     "picomatch": "^4.0.4",
     "@xmldom/xmldom": "0.9.9",
     "lodash-es": "4.18.1",
-    "tough-cookie": "^5.0.0"
+    "tough-cookie": "^5.0.0",
+    "urlobj": "0.0.11"
   }
 }
