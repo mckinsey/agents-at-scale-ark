@@ -9,6 +9,7 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({
     push: vi.fn(),
   }),
+  useSearchParams: vi.fn(() => new URLSearchParams()),
 }));
 
 function renderChatMessageList(
@@ -126,18 +127,18 @@ describe('ChatMessageList', () => {
         { role: 'user', content: 'Hello' } as ExtendedChatMessage,
       ];
 
-      renderChatMessageList({ messages, strategy: 'round-robin' });
+      renderChatMessageList({ messages, strategy: 'sequential' });
 
       expect(
-        screen.getByText('Agents respond in round-robin order'),
+        screen.getByText('Agents respond in sequential order'),
       ).toBeInTheDocument();
     });
 
     it('should not show strategy indicator when no messages', () => {
-      renderChatMessageList({ strategy: 'round-robin' });
+      renderChatMessageList({ strategy: 'sequential' });
 
       expect(
-        screen.queryByText('Agents respond in round-robin order'),
+        screen.queryByText('Agents respond in sequential order'),
       ).not.toBeInTheDocument();
     });
   });
@@ -364,6 +365,58 @@ describe('ChatMessageList', () => {
       expect(screen.getByText('Maximum turns reached (3)')).toBeInTheDocument();
     });
 
+    it('should render selector failure event when invalid agent selected', () => {
+      const messages: ExtendedChatMessage[] = [
+        { role: 'user', content: 'Hello' } as ExtendedChatMessage,
+        {
+          role: 'system',
+          content: 'Selector returned invalid agent name: invalid-agent',
+        } as ExtendedChatMessage,
+        {
+          role: 'assistant',
+          content: 'Response from fallback',
+          name: 'agent-a',
+        } as ExtendedChatMessage,
+      ];
+
+      renderChatMessageList({ messages, strategy: 'selector' });
+
+      expect(
+        screen.getByText('Selector returned invalid agent: invalid-agent. Ending conversation'),
+      ).toBeInTheDocument();
+    });
+
+    it('should not render selector transition for terminate tool call message', () => {
+      const messages: ExtendedChatMessage[] = [
+        { role: 'user', content: 'Hello' } as ExtendedChatMessage,
+        {
+          role: 'assistant',
+          content: 'Response from A',
+          name: 'agent-a',
+        } as ExtendedChatMessage,
+        {
+          role: 'assistant',
+          content: '',
+          name: 'selector-agent',
+          tool_calls: [
+            {
+              id: 'tc-1',
+              type: 'function' as const,
+              function: {
+                name: 'terminate',
+                arguments: JSON.stringify({ response: 'Goodbye!' }),
+              },
+            },
+          ],
+        } as ExtendedChatMessage,
+      ];
+
+      renderChatMessageList({ messages, strategy: 'selector' });
+
+      expect(screen.getByText('Selector chose agent-a')).toBeInTheDocument();
+      expect(screen.queryByText('Selector chose selector-agent')).not.toBeInTheDocument();
+    });
+
     it('should not render selector transitions for non-selector strategy', () => {
       const messages: ExtendedChatMessage[] = [
         { role: 'user', content: 'Hello' } as ExtendedChatMessage,
@@ -379,7 +432,7 @@ describe('ChatMessageList', () => {
         } as ExtendedChatMessage,
       ];
 
-      renderChatMessageList({ messages, strategy: 'round-robin' });
+      renderChatMessageList({ messages, strategy: 'sequential' });
 
       expect(screen.queryByText(/Selector chose/)).not.toBeInTheDocument();
     });
@@ -475,7 +528,7 @@ describe('ChatMessageList', () => {
 
       renderChatMessageList({
         messages,
-        strategy: 'round-robin',
+        strategy: 'sequential',
         graphEdges,
       });
 
@@ -512,20 +565,5 @@ describe('ChatMessageList', () => {
       expect(screen.queryByText('Conversation ended')).not.toBeInTheDocument();
     });
 
-    it('should render graph strategy indicator', () => {
-      const messages: ExtendedChatMessage[] = [
-        { role: 'user', content: 'Hello' } as ExtendedChatMessage,
-      ];
-
-      renderChatMessageList({
-        messages,
-        strategy: 'graph',
-        graphEdges,
-      });
-
-      expect(
-        screen.getByText('Agents respond following graph edges'),
-      ).toBeInTheDocument();
-    });
   });
 });

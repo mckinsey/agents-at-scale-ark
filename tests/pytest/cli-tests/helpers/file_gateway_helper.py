@@ -1,9 +1,12 @@
 
+import logging
 import subprocess
 import time
 import os
 import tempfile
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class FileGatewayHelper:
@@ -12,7 +15,8 @@ class FileGatewayHelper:
     TIMEOUTS = {"install": 300, "pods": 120, "api": 60, "cleanup": 30}
     INTERVALS = {"pod_check": 5, "api_check": 2}
     FILE_GATEWAY_PODS = ['file-gateway-file-api', 'file-gateway-filesystem-mcp', 'file-gateway-versitygw']
-    API_PORT = 8080
+    # 8080 is too likely to be in use, so adding a few
+    API_PORT = 8082
     API_HOST = "localhost"
     DEFAULT_BUCKET = "aas-files"
     DEFAULT_STORAGE_SIZE = "1Gi"
@@ -26,6 +30,7 @@ class FileGatewayHelper:
     def _run_cmd(self, cmd, timeout=None, check=True, capture_output=True):
         """Run subprocess with error handling"""
         try:
+            logger.info(f"Running {' '.join(cmd)}")
             result = subprocess.run(
                 cmd, 
                 capture_output=capture_output, 
@@ -45,12 +50,28 @@ class FileGatewayHelper:
                 return True
             time.sleep(interval)
             time_waited += interval
-            print(f"{operation_name} in progress... ({time_waited}s elapsed)")
+            logger.info(f"{operation_name} in progress... ({time_waited}s elapsed)")
         return False
+
+    def _get_pod_status(self):
+        success, stdout, _ = self._run_cmd(
+            ['kubectl', 'get', 'pods', '-l', 'app.kubernetes.io/name=file-gateway', '-o',
+             'jsonpath={range .items[*]}{.metadata.name}{"\\t"}{.status.phase}{"\\n"}{end}'],
+            check=False
+        )
+        if not success:
+            return False
+
+        lines = [l for l in stdout.strip().splitlines() if l]
+        status_dict = {}
+        for line in lines:
+            key, value = line.split("\t")
+            status_dict[key] = value
+        return status_dict
     
     def install_file_gateway(self):
         """Install File Gateway using ark install command"""
-        print("Installing File Gateway...")
+        logger.info("Installing File Gateway...")
         
         success, _, stderr = self._run_cmd(
             ['ark', 'install', 'marketplace/services/file-gateway'],
@@ -58,31 +79,25 @@ class FileGatewayHelper:
         )
         
         if success:
-            print("File Gateway installation command completed")
+            logger.info("File Gateway installation command completed")
             return True
         else:
-            print(f"File Gateway installation failed: {stderr}")
+            logger.info(f"File Gateway installation failed: {stderr}")
             return False
     
     def verify_pods_running(self):
         """Verify File Gateway pods are running"""
-        print("Verifying File Gateway pods...")
+        logger.info("Verifying File Gateway pods...")
         
         def check_pods():
-            success, stdout, _ = self._run_cmd(
-                ['kubectl', 'get', 'pods', '-l', 'app.kubernetes.io/name=file-gateway', '-o', 'jsonpath={.items[*].status.phase}'],
-                check=False
-            )
-            if not success:
-                return False
-            
-            phases = stdout.strip().split()
-            running_count = sum(1 for phase in phases if phase == 'Running')
-            print(f"Found {running_count}/{len(self.FILE_GATEWAY_PODS)} File Gateway pods running")
+            status_dict = self._get_pod_status()
+            logger.info(status_dict)
+            running_count = sum(1 for status in status_dict.values() if status == 'Running')
+            logger.info(f"Found {running_count}/{len(self.FILE_GATEWAY_PODS)} File Gateway pods running")
             return running_count >= len(self.FILE_GATEWAY_PODS)
         
         if not self._wait_for_condition(check_pods, self.TIMEOUTS["pods"], self.INTERVALS["pod_check"], "Pod startup"):
-            print("Timeout waiting for pods to be ready")
+            logger.info("Timeout waiting for pods to be ready")
             return False
         
         success, stdout, _ = self._run_cmd(
@@ -90,10 +105,10 @@ class FileGatewayHelper:
             check=False
         )
         if success:
-            print("Pod details:")
-            print(stdout)
+            logger.info("Pod details:")
+            logger.info(stdout)
         
-        print("File Gateway pods verified successfully")
+        logger.info("File Gateway pods verified successfully")
         return True
     
     def get_pod_names(self):
@@ -103,7 +118,9 @@ class FileGatewayHelper:
             check=False
         )
         if success and stdout.strip():
-            return stdout.strip().split()
+            pod_names = stdout.strip().split()
+            logger.info(f"Found pods: {pod_names}")
+            return pod_names
         return []
     
     def get_pod_image(self, pod_name):
@@ -118,7 +135,7 @@ class FileGatewayHelper:
     
     def verify_storage_configuration(self):
         """Verify persistent volume claim configuration"""
-        print("Verifying storage configuration...")
+        logger.info("Verifying storage configuration...")
         
         success, stdout, _ = self._run_cmd(
             ['kubectl', 'get', 'pvc', '-l', 'app.kubernetes.io/name=file-gateway', '-o', 'jsonpath={.items[0].spec.resources.requests.storage}'],
@@ -127,15 +144,15 @@ class FileGatewayHelper:
         
         if success and stdout.strip():
             storage_size = stdout.strip()
-            print(f"Storage size: {storage_size}")
+            logger.info(f"Storage size: {storage_size}")
             return True, storage_size
         else:
-            print("Failed to get storage configuration")
+            logger.info("Failed to get storage configuration")
             return False, None
     
     def verify_pvc_exists(self):
         """Verify PVC exists and is bound"""
-        print("Verifying PVC exists...")
+        logger.info("Verifying PVC exists...")
         
         success, stdout, _ = self._run_cmd(
             ['kubectl', 'get', 'pvc', '-l', 'app.kubernetes.io/name=file-gateway', '-o', 'jsonpath={.items[0].status.phase}'],
@@ -143,15 +160,15 @@ class FileGatewayHelper:
         )
         
         if success and stdout.strip() == "Bound":
-            print("PVC is bound")
+            logger.info("PVC is bound")
             return True
         else:
-            print(f"PVC status: {stdout.strip()}")
+            logger.info(f"PVC status: {stdout.strip()}")
             return False
     
     def verify_service_ports(self):
         """Verify service ports configuration"""
-        print("Verifying service ports...")
+        logger.info("Verifying service ports...")
         
         services_config = {
             'file-gateway-api': 80,
@@ -169,19 +186,19 @@ class FileGatewayHelper:
             if success and stdout.strip():
                 actual_port = int(stdout.strip())
                 if actual_port == expected_port:
-                    print(f"{service_name}: port {actual_port} (correct)")
+                    logger.info(f"{service_name}: port {actual_port} (correct)")
                 else:
-                    print(f"{service_name}: port {actual_port} (expected {expected_port})")
+                    logger.info(f"{service_name}: port {actual_port} (expected {expected_port})")
                     all_correct = False
             else:
-                print(f"{service_name}: not found")
+                logger.info(f"{service_name}: not found")
                 all_correct = False
         
         return all_correct
     
     def verify_bucket_configuration(self):
         """Verify S3 bucket configuration"""
-        print("Verifying bucket configuration...")
+        logger.info("Verifying bucket configuration...")
         
         # Try to get bucket name from BASE_DATA_DIR environment variable
         success, stdout, _ = self._run_cmd(
@@ -193,15 +210,15 @@ class FileGatewayHelper:
             base_data_dir = stdout.strip()
             # Extract bucket name from path like /data/aas-files
             bucket_name = base_data_dir.split('/')[-1]
-            print(f"Bucket name: {bucket_name} (from BASE_DATA_DIR: {base_data_dir})")
+            logger.info(f"Bucket name: {bucket_name} (from BASE_DATA_DIR: {base_data_dir})")
             return True, bucket_name
         else:
-            print("Failed to get bucket configuration")
+            logger.info("Failed to get bucket configuration")
             return False, None
     
     def verify_component_enabled(self, component):
         """Verify if a component is enabled by checking if deployment exists"""
-        print(f"Verifying {component} component...")
+        logger.info(f"Verifying {component} component...")
         
         deployment_name = f"file-gateway-{component}"
         success, stdout, _ = self._run_cmd(
@@ -210,59 +227,59 @@ class FileGatewayHelper:
         )
         
         if success and stdout.strip():
-            print(f"{component} component is enabled")
+            logger.info(f"{component} component is enabled")
             return True
         else:
-            print(f"{component} component not found")
+            logger.info(f"{component} component not found")
             return False
     
     def verify_mcp_server_registered(self, max_retries=24, retry_delay=5):
         """Verify MCP server is registered with ARK"""
-        print("Verifying MCP server registration...")
+        logger.info("Verifying MCP server registration...")
         
         for attempt in range(max_retries):
             success, stdout, _ = self._run_cmd(
-                ['kubectl', 'get', 'mcpserver', 'file-gateway-mcpserver', '-o', 'jsonpath={.status.toolCount}'],
+                ['kubectl', 'get', 'mcpserver', 'file-gateway', '-o', 'jsonpath={.status.toolCount}'],
                 check=False
             )
             
             if success and stdout.strip().isdigit():
                 tool_count = int(stdout.strip())
-                print(f"MCP server registered with {tool_count} tools")
+                logger.info(f"MCP server registered with {tool_count} tools")
                 return True, tool_count
             
             if attempt < max_retries - 1:
-                print(f"MCP server not ready yet, waiting... (attempt {attempt + 1}/{max_retries})")
+                logger.info(f"MCP server not ready yet, waiting... (attempt {attempt + 1}/{max_retries})")
                 time.sleep(retry_delay)
         
-        print("MCP server not found or not ready after all retries")
+        logger.info("MCP server not found or not ready after all retries")
         return False, 0
     
     def verify_mcp_server_status(self, max_retries=24, retry_delay=5):
         """Verify MCP server status is Available"""
-        print("Verifying MCP server status...")
+        logger.info("Verifying MCP server status...")
         
         for attempt in range(max_retries):
             success, stdout, _ = self._run_cmd(
-                ['kubectl', 'get', 'mcpserver', 'file-gateway-mcpserver', '-o', 'jsonpath={.status.conditions[?(@.type=="Available")].status}'],
+                ['kubectl', 'get', 'mcpserver', 'file-gateway', '-o', 'jsonpath={.status.conditions[?(@.type=="Available")].status}'],
                 check=False
             )
             
             if success and stdout.strip() == "True":
-                print("MCP server status: Available")
+                logger.info("MCP server status: Available")
                 return True
             
             if attempt < max_retries - 1:
                 status = stdout.strip() if stdout else "Unknown"
-                print(f"MCP server status: {status}, waiting... (attempt {attempt + 1}/{max_retries})")
+                logger.info(f"MCP server status: {status}, waiting... (attempt {attempt + 1}/{max_retries})")
                 time.sleep(retry_delay)
         
-        print(f"MCP server status not Available after all retries: {stdout.strip()}")
+        logger.info(f"MCP server status not Available after all retries: {stdout.strip()}")
         return False
     
     def setup_port_forward(self):
         """Setup port forwarding to File Gateway API"""
-        print(f"Setting up port forward to File Gateway API on port {self.API_PORT}...")
+        logger.info(f"Setting up port forward to File Gateway API on port {self.API_PORT}...")
         
         # Check if port is already available
         def check_port():
@@ -277,7 +294,7 @@ class FileGatewayHelper:
         
         # If port is already available, skip setup
         if check_port():
-            print(f"Port forward already active on {self.API_HOST}:{self.API_PORT}")
+            logger.info(f"Port forward already active on {self.API_HOST}:{self.API_PORT}")
             return True
         
         self._run_cmd(['bash', '-c', f'lsof -ti :{self.API_PORT} | xargs kill -9 2>/dev/null || true'], check=False)
@@ -288,19 +305,19 @@ class FileGatewayHelper:
             stderr=subprocess.DEVNULL
         )
         
-        print("Waiting for port forward to be ready...")
+        logger.info("Waiting for port forward to be ready...")
         time.sleep(3)
         
         if self._wait_for_condition(check_port, 30, 1, "Port forward setup"):
-            print(f"Port forward ready on {self.API_HOST}:{self.API_PORT}")
+            logger.info(f"Port forward ready on {self.API_HOST}:{self.API_PORT}")
             return True
         else:
-            print("Port forward failed to become ready")
+            logger.info("Port forward failed to become ready")
             return False
     
     def test_api_health(self):
         """Test File Gateway API health endpoint"""
-        print("Testing API health endpoint...")
+        logger.info("Testing API health endpoint...")
         
         success, stdout, stderr = self._run_cmd(
             ['curl', '-s', f'http://{self.API_HOST}:{self.API_PORT}/health'],
@@ -309,15 +326,15 @@ class FileGatewayHelper:
         )
         
         if success and 'healthy' in stdout:
-            print(f"API health check passed: {stdout.strip()}")
+            logger.info(f"API health check passed: {stdout.strip()}")
             return True
         else:
-            print(f"API health check failed: {stderr}")
+            logger.info(f"API health check failed: {stderr}")
             return False
     
     def create_test_file(self, content=None):
         """Create a temporary test file"""
-        print("Creating test file...")
+        logger.info("Creating test file...")
         
         temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt')
         if content is None:
@@ -326,12 +343,12 @@ class FileGatewayHelper:
         temp_file.close()
         
         self.test_files.append(temp_file.name)
-        print(f"Created test file: {temp_file.name}")
+        logger.info(f"Created test file: {temp_file.name}")
         return temp_file.name, content
     
     def upload_file(self, file_path, key):
         """Upload a file to File Gateway"""
-        print(f"Uploading file as '{key}'...")
+        logger.info(f"Uploading file as '{key}'...")
         
         success, stdout, stderr = self._run_cmd(
             ['curl', '-s', '-X', 'POST',
@@ -345,7 +362,7 @@ class FileGatewayHelper:
         # Check if upload was successful by looking for key field in JSON response
         # Return the actual uploaded key from the response
         if success and ('"key"' in stdout or 'key' in stdout) and 'last_modified' in stdout:
-            print(f"File uploaded successfully: {stdout.strip()}")
+            logger.info(f"File uploaded successfully: {stdout.strip()}")
             # Extract the actual key from JSON response
             try:
                 import json
@@ -355,12 +372,12 @@ class FileGatewayHelper:
             except:
                 return True, key
         else:
-            print(f"File upload failed - stderr: {stderr}, stdout: {stdout}")
+            logger.info(f"File upload failed - stderr: {stderr}, stdout: {stdout}")
             return False, None
     
     def list_files(self):
         """List files in File Gateway"""
-        print("Listing files...")
+        logger.info("Listing files...")
         
         success, stdout, stderr = self._run_cmd(
             ['curl', '-s', f'http://{self.API_HOST}:{self.API_PORT}/files'],
@@ -369,15 +386,15 @@ class FileGatewayHelper:
         )
         
         if success:
-            print(f"Files listed: {stdout}")
+            logger.info(f"Files listed: {stdout}")
             return True, stdout
         else:
-            print(f"Failed to list files: {stderr}")
+            logger.info(f"Failed to list files: {stderr}")
             return False, ""
     
     def download_file(self, key):
         """Download a file from File Gateway"""
-        print(f"Downloading file '{key}'...")
+        logger.info(f"Downloading file '{key}'...")
         
         success, stdout, stderr = self._run_cmd(
             ['curl', '-s', f'http://{self.API_HOST}:{self.API_PORT}/files/{key}/download'],
@@ -387,15 +404,15 @@ class FileGatewayHelper:
         
         if success:
             # Empty files have empty stdout, which is valid
-            print(f"File downloaded successfully, content length: {len(stdout)} bytes")
+            logger.info(f"File downloaded successfully, content length: {len(stdout)} bytes")
             return True, stdout
         else:
-            print(f"File download failed: {stderr}")
+            logger.info(f"File download failed: {stderr}")
             return False, ""
     
     def delete_file(self, key):
         """Delete a file from File Gateway"""
-        print(f"Deleting file '{key}'...")
+        logger.info(f"Deleting file '{key}'...")
         
         success, stdout, stderr = self._run_cmd(
             ['curl', '-s', '-X', 'DELETE', f'http://{self.API_HOST}:{self.API_PORT}/files/{key}'],
@@ -404,15 +421,15 @@ class FileGatewayHelper:
         )
         
         if success and 'deleted' in stdout:
-            print(f"File deleted successfully: {stdout.strip()}")
+            logger.info(f"File deleted successfully: {stdout.strip()}")
             return True
         else:
-            print(f"File deletion failed: {stderr}")
+            logger.info(f"File deletion failed: {stderr}")
             return False
     
     def verify_file_size_limit(self):
         """Verify 1MB file size limit for MCP"""
-        print("Testing file size limit...")
+        logger.info("Testing file size limit...")
         
         # Create a file larger than 1MB
         large_content = "X" * (1024 * 1024 + 1)  # 1MB + 1 byte
@@ -426,7 +443,7 @@ class FileGatewayHelper:
     
     def cleanup_resources(self):
         """Clean up resources"""
-        print("Cleaning up resources...")
+        logger.info("Cleaning up resources...")
         
         if self.port_forward_process:
             self.port_forward_process.terminate()
@@ -441,15 +458,15 @@ class FileGatewayHelper:
             try:
                 if os.path.exists(file_path):
                     os.remove(file_path)
-                    print(f"Removed test file: {file_path}")
+                    logger.info(f"Removed test file: {file_path}")
             except Exception as e:
-                print(f"Failed to remove test file {file_path}: {e}")
+                logger.info(f"Failed to remove test file {file_path}: {e}")
         
-        print("Cleanup completed")
+        logger.info("Cleanup completed")
     
     def uninstall_file_gateway(self):
         """Uninstall File Gateway"""
-        print("Uninstalling File Gateway...")
+        logger.info("Uninstalling File Gateway...")
         
         success, stdout, _ = self._run_cmd(
             ['helm', 'uninstall', 'file-gateway', '-n', 'default'],
@@ -458,8 +475,8 @@ class FileGatewayHelper:
         )
         
         if success:
-            print("File Gateway uninstalled")
+            logger.info("File Gateway uninstalled")
             return True
         else:
-            print(f"Uninstall completed with output: {stdout}")
+            logger.info(f"Uninstall completed with output: {stdout}")
             return True

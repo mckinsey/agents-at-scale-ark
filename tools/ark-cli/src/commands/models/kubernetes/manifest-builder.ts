@@ -1,4 +1,5 @@
 import type {AzureConfig} from '../providers/azure.js';
+import type {AnthropicConfig} from '../providers/anthropic.js';
 import {BedrockConfig, ProviderConfig} from '../providers/index.js';
 
 // Model manifest builder interface
@@ -87,6 +88,29 @@ export class KubernetesModelManifestBuilder implements ModelManifestBuilder {
           },
         },
       };
+    }
+
+    if (config.type === 'anthropic') {
+      const anthropicConfig = config as AnthropicConfig;
+      const anthropic: Record<string, unknown> = {
+        apiKey: {
+          valueFrom: {
+            secretKeyRef: {
+              name: config.secretName,
+              key: 'api-key',
+            },
+          },
+        },
+        baseUrl: {
+          value: anthropicConfig.baseUrl,
+        },
+      };
+      if (anthropicConfig.version) {
+        anthropic.version = {
+          value: anthropicConfig.version,
+        };
+      }
+      return {anthropic};
     }
 
     throw new Error(

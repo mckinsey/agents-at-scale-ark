@@ -1,0 +1,8 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: agent-b
+spec:
+  prompt: You are a test agent.
+  modelRef:
+    name: test-model

@@ -72,6 +72,9 @@ spec:
                 required:
                 - edges
                 type: object
+              loops:
+                default: false
+                type: boolean
               maxTurns:
                 type: integer
               members:
@@ -90,12 +93,17 @@ spec:
                 properties:
                   agent:
                     type: string
+                  enableTerminateTool:
+                    type: boolean
                   selectorPrompt:
+                    type: string
+                  terminatePrompt:
                     type: string
                 type: object
               strategy:
                 type: string
             required:
+            - loops
             - members
             - strategy
             type: object

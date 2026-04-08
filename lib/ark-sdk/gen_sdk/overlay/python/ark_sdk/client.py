@@ -7,7 +7,7 @@ from ark_sdk.executor import (
     Parameter,
     Model,
     AgentConfig,
-    ToolDefinition,
+    MCPServerConfig,
     Message,
     ExecutionEngineRequest,
     ExecutionEngineResponse,

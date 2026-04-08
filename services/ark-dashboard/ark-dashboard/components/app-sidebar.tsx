@@ -8,6 +8,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   ChevronsUpDownIcon,
+  Cog,
   Download,
   File,
   HelpCircle,
@@ -30,6 +31,7 @@ import { useEffect, useState } from 'react';
 
 import {
   isExperimentalDarkModeEnabledAtom,
+  isExperimentalExecutionEngineEnabledAtom,
   isFilesBrowserAvailableAtom,
   storedIsExperimentalDarkModeEnabledAtom,
 } from '@/atoms/experimental-features';
@@ -154,6 +156,9 @@ export function AppSidebar() {
   const isExperimentalDarkModeEnabled = useAtomValue(
     isExperimentalDarkModeEnabledAtom,
   );
+  const isExperimentalExecutionEngineEnabled = useAtomValue(
+    isExperimentalExecutionEngineEnabledAtom,
+  );
   const setSettingsModalOpen = useSetAtom(settingsModalOpenAtom);
   const setIsFilesBrowserAvailable = useSetAtom(isFilesBrowserAvailableAtom);
   const setStoredIsExperimentalDarkModeEnabled = useSetAtom(
@@ -245,7 +250,7 @@ export function AppSidebar() {
                     }
                     alt="QB Logo"
                     width={32}
-                    height={32}
+                    height={28}
                   />
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
@@ -390,6 +395,17 @@ export function AppSidebar() {
                       <ListTodo className="h-4 w-4" />
                       <span>A2A Tasks</span>
                     </button>
+                    {isExperimentalExecutionEngineEnabled && (
+                      <button
+                        onClick={() => {
+                          navigateToSection('execution-engines');
+                          setMorePopoverOpen(false);
+                        }}
+                        className="hover:bg-accent hover:text-accent-foreground flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm">
+                        <Cog className="h-4 w-4" />
+                        <span>Execution Engines</span>
+                      </button>
+                    )}
                     <button
                       onClick={() => {
                         navigateToSection('export');
