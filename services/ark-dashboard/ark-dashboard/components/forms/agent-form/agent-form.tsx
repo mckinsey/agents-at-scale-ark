@@ -8,10 +8,9 @@ import {
   Save,
   Settings,
 } from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
+import { NamespacedLink } from '@/components/namespaced-link';
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
 import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
@@ -35,6 +34,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { type Agent, agentsService } from '@/lib/services';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -58,8 +58,8 @@ export function AgentForm({
   onSuccess,
   onCancel,
 }: AgentFormProps) {
-  const router = useRouter();
-  const { readOnlyMode } = useNamespace();
+  const { push } = useNamespacedNavigation();
+  const { namespace, readOnlyMode } = useNamespace();
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
   const [allAgents, setAllAgents] = useState<Agent[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
@@ -216,10 +216,10 @@ export function AgentForm({
             isViewing ? (
               <div className="flex items-center gap-2">
                 <Button variant="outline" asChild>
-                  <Link href="/agents">
+                  <NamespacedLink href="/agents">
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     Back
-                  </Link>
+                  </NamespacedLink>
                 </Button>
                 <Button
                   onClick={form.handleSubmit(onSubmit)}
@@ -236,10 +236,10 @@ export function AgentForm({
               <div className="flex items-center gap-2">
                 {cancelHref ? (
                   <Button variant="outline" asChild>
-                    <Link href={cancelHref}>
+                    <NamespacedLink href={cancelHref}>
                       <ArrowLeft className="mr-2 h-4 w-4" />
                       Cancel
-                    </Link>
+                    </NamespacedLink>
                   </Button>
                 ) : (
                   <Button variant="outline" onClick={onCancel}>
@@ -276,7 +276,7 @@ export function AgentForm({
                   <Settings className="text-muted-foreground h-4 w-4" />
                   <Select
                     value={agentName}
-                    onValueChange={value => router.push(`/agents/${value}`)}>
+                    onValueChange={value => push(`/agents/${value}`)}>
                     <SelectTrigger className="border-border h-8 w-[180px] bg-transparent px-2 text-sm font-medium">
                       <SelectValue placeholder="Select agent" />
                     </SelectTrigger>

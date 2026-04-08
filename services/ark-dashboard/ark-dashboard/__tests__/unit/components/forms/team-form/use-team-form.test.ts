@@ -21,6 +21,19 @@ vi.mock('sonner', () => ({
   },
 }));
 
+const mockNamespace = 'default';
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: vi.fn(() => ({
+    namespace: mockNamespace,
+    isNamespaceResolved: true,
+    availableNamespaces: [{ name: mockNamespace }],
+    isPending: false,
+    setNamespace: vi.fn(),
+    createNamespace: vi.fn(),
+    readOnlyMode: false,
+  })),
+}));
+
 import { useTeamForm } from '@/components/forms/team-form/use-team-form';
 import { teamsService, agentsService } from '@/lib/services';
 import { toast } from 'sonner';
@@ -151,6 +164,101 @@ describe('useTeamForm', () => {
       'team-123',
       expect.objectContaining({ loops: true }),
     );
+  });
+
+  it('should require maxTurns when strategy is sequential and loops is enabled', async () => {
+    const { result } = renderHook(() =>
+      useTeamForm({ mode: TeamFormMode.CREATE }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.state.loading).toBe(false);
+    });
+
+    act(() => {
+      result.current.form.setValue('name', 'valid-name');
+      result.current.form.setValue('strategy', 'sequential');
+      result.current.form.setValue('loops', true);
+      result.current.form.setValue('maxTurns', '');
+    });
+
+    let maxTurnsError: string | undefined;
+    await act(async () => {
+      await new Promise<void>(resolve => {
+        result.current.form.handleSubmit(
+          () => resolve(),
+          errors => {
+            maxTurnsError = errors.maxTurns?.message;
+            resolve();
+          },
+        )({ preventDefault: () => {}, stopPropagation: () => {} } as any);
+      });
+    });
+
+    expect(maxTurnsError).toBe('Max turns is required for looping sequential teams');
+  });
+
+  it('should require maxTurns when strategy is graph', async () => {
+    const { result } = renderHook(() =>
+      useTeamForm({ mode: TeamFormMode.CREATE }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.state.loading).toBe(false);
+    });
+
+    act(() => {
+      result.current.form.setValue('name', 'valid-name');
+      result.current.form.setValue('strategy', 'graph');
+      result.current.form.setValue('maxTurns', '');
+    });
+
+    let maxTurnsError: string | undefined;
+    await act(async () => {
+      await new Promise<void>(resolve => {
+        result.current.form.handleSubmit(
+          () => resolve(),
+          errors => {
+            maxTurnsError = errors.maxTurns?.message;
+            resolve();
+          },
+        )({ preventDefault: () => {}, stopPropagation: () => {} } as any);
+      });
+    });
+
+    expect(maxTurnsError).toBe('Max turns is required for graph teams');
+  });
+
+  it('should not require maxTurns when strategy is sequential and loops is disabled', async () => {
+    const { result } = renderHook(() =>
+      useTeamForm({ mode: TeamFormMode.CREATE }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.state.loading).toBe(false);
+    });
+
+    act(() => {
+      result.current.form.setValue('name', 'valid-name');
+      result.current.form.setValue('strategy', 'sequential');
+      result.current.form.setValue('loops', false);
+      result.current.form.setValue('maxTurns', '');
+    });
+
+    let maxTurnsError: string | undefined;
+    await act(async () => {
+      await new Promise<void>(resolve => {
+        result.current.form.handleSubmit(
+          () => resolve(),
+          errors => {
+            maxTurnsError = errors.maxTurns?.message;
+            resolve();
+          },
+        )({ preventDefault: () => {}, stopPropagation: () => {} } as any);
+      });
+    });
+
+    expect(maxTurnsError).toBeUndefined();
   });
 
   it('should detect hasChanges correctly', async () => {

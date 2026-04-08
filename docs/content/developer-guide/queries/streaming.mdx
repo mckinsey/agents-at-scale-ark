@@ -4,7 +4,7 @@
 
 Real-time message streaming allows users to see agent responses as they're generated during query execution.
 
-Streaming is implemented in line with the [OpenAI Streaming Responses](https://platform.openai.com/docs/guides/streaming-responses) specification, meaning that any client that supports the OpenAI spec can read streaming responses from Ark queries. The OpenAI `v1/completions` [Ark Api](/reference/ark-apis) streams responses when the `stream=True` parameter is set.
+Streaming is implemented using Server-Sent Events (SSE) with chunks in OpenAI-compatible format. To stream a query, create it with the `ark.mckinsey.com/streaming-enabled` annotation and consume SSE from the broker proxy endpoint. See the [Ark APIs](/reference/ark-apis) reference for details.
 
 ## Enabling Streaming
 
@@ -26,22 +26,29 @@ spec:
     - name: my-agent
 ```
 
-The Ark OpenAI completions API returns a streaming response when `stream: true` is set:
+To stream query responses, create a query with the streaming annotation and consume SSE from the broker proxy:
 
 ```bash
-# Curl the ark api completions endpoint with streaming enabled.
-curl -N -X POST http://ark-api.default.127.0.0.1.nip.io:8080/openai/v1/chat/completions \
+# Create a query with streaming enabled
+curl -X POST http://ark-api.default.127.0.0.1.nip.io:8080/v1/queries/ \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "model/gpt-4",
-    "messages": [
-      {"role": "user", "content": "Write a haiku about streaming data"}
-    ],
-    "stream": true  # <-- Enable streaming
+    "name": "stream-query",
+    "type": "user",
+    "input": "Write a haiku about streaming data",
+    "target": {"type": "model", "name": "gpt-4"},
+    "metadata": {
+      "annotations": {
+        "ark.mckinsey.com/streaming-enabled": "true"
+      }
+    }
   }'
+
+# Stream the response via the broker proxy
+curl -N http://ark-api.default.127.0.0.1.nip.io:8080/v1/broker/chunks?watch=true&query-id=stream-query
 ```
 
-The response will be Server-Sent Events (SSE) with streaming chunks in OpenAI format, following the [Read Stream](#read-stream) API specification, which is fully OpenAI compatible. This means that consumers can query Ark and stream responses as if it was an LLM, and use existing OpenAI SDKs etc.
+The response is Server-Sent Events (SSE) with streaming chunks in OpenAI format.
 
 ## Streaming Responses
 
@@ -95,9 +102,9 @@ data: {"choices":[{"delta":{"content":" me"}}],"ark":{"agent":"team-leader","tea
 data: {"choices":[{"delta":{"content":"I'll"}}],"ark":{"agent":"analyst","team":"research-team","model":"gpt-4","query":"789"}}
 ```
 
-If using the OpenAI completions API to query teams with streaming, it becomes the client's responsiblilty to decide how to render the chunks. With a regular, non-streaming call, Ark will do exactly as OpenAI does and return only the final response from the team (without any speification on what the agent was). However, for a real-time streaming response it is not possible to 'filter' this down to only the final response (as team members can execute in parallel and the final message cannot be determined in advance deterministically).
+When streaming team queries, chunks arrive from all team members. It is the client's responsibility to decide how to render them. With a regular, non-streaming call, Ark returns only the final response. However, for a real-time streaming response it is not possible to filter this down to only the final response, as team members can execute in parallel and the final message cannot be determined in advance.
 
-This means that OpenAI compability is not possible when querying teams with streaming - the client must check the `ark` metadata fields to see what agent is currently responding.
+The client must check the `ark` metadata fields on each chunk to see which agent is currently responding.
 
 ## The Ark Metadata Field
 

@@ -1,10 +1,10 @@
 'use client';
 
 import { AlertCircle, ArrowRight, Package } from 'lucide-react';
-import Link from 'next/link';
 import { forwardRef, useEffect } from 'react';
 import { toast } from 'sonner';
 
+import { NamespacedLink } from '@/components/namespaced-link';
 import { MarketplaceItemCard } from '@/components/cards/marketplace-item-card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -54,12 +54,12 @@ export const MarketplaceSection = forwardRef<
               Discover and install community extensions, tools, and integrations
             </p>
           </div>
-          <Link href="/marketplace">
+          <NamespacedLink href="/marketplace">
             <Button variant="outline" className="gap-2">
               View All
               <ArrowRight className="h-4 w-4" />
             </Button>
-          </Link>
+          </NamespacedLink>
         </div>
       )}
 

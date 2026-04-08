@@ -138,16 +138,90 @@ func TestDefaultTeam(t *testing.T) {
 		}
 	})
 
-	t.Run("does not modify graph strategy", func(t *testing.T) {
+	t.Run("migrates graph to sequential with loops disabled", func(t *testing.T) {
+		maxTurns := 10
 		team := &arkv1alpha1.Team{
 			ObjectMeta: metav1.ObjectMeta{Name: "t"},
 			Spec: arkv1alpha1.TeamSpec{
 				Strategy: "graph",
+				MaxTurns: &maxTurns,
+				Graph: &arkv1alpha1.TeamGraphSpec{
+					Edges: []arkv1alpha1.TeamGraphEdge{
+						{From: "a", To: "b"},
+					},
+				},
 			},
 		}
 		DefaultTeam(team)
-		if team.Spec.Strategy != "graph" {
-			t.Fatalf("expected strategy 'graph', got '%s'", team.Spec.Strategy)
+		if team.Spec.Strategy != "sequential" {
+			t.Fatalf("expected strategy 'sequential', got '%s'", team.Spec.Strategy)
+		}
+		if team.Spec.Loops {
+			t.Fatal("expected loops to be false")
+		}
+		if team.Spec.Graph != nil {
+			t.Fatal("expected graph to be nil")
+		}
+		if team.Spec.MaxTurns != nil {
+			t.Fatal("expected maxTurns to be nil")
+		}
+		key := annotations.MigrationWarningPrefix + "graph"
+		if team.Annotations[key] == "" {
+			t.Fatal("expected migration warning annotation")
+		}
+	})
+}
+
+func TestDefaultQuery(t *testing.T) {
+	t.Run("migrates messages type to user with extracted text", func(t *testing.T) {
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "q"},
+			Spec: arkv1alpha1.QuerySpec{
+				Type: "messages",
+			},
+		}
+		_ = query.Spec.Input.UnmarshalJSON([]byte(`[{"role":"user","content":"hello world"}]`))
+		DefaultQuery(query)
+		text, _ := query.Spec.GetInputString()
+		if text != "hello world" {
+			t.Fatalf("expected 'hello world', got '%s'", text)
+		}
+		key := annotations.MigrationWarningPrefix + "input-type"
+		if query.Annotations[key] == "" {
+			t.Fatal("expected migration warning annotation")
+		}
+	})
+
+	t.Run("sets empty text when extraction fails", func(t *testing.T) {
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "q"},
+			Spec: arkv1alpha1.QuerySpec{
+				Type: "messages",
+			},
+		}
+		_ = query.Spec.Input.UnmarshalJSON([]byte(`"not-an-array"`))
+		DefaultQuery(query)
+		text, _ := query.Spec.GetInputString()
+		if text != "" {
+			t.Fatalf("expected empty string, got '%s'", text)
+		}
+	})
+
+	t.Run("does not modify non-messages type", func(t *testing.T) {
+		query := &arkv1alpha1.Query{
+			ObjectMeta: metav1.ObjectMeta{Name: "q"},
+			Spec: arkv1alpha1.QuerySpec{
+				Type: "user",
+			},
+		}
+		_ = query.Spec.Input.UnmarshalJSON([]byte(`"original"`))
+		DefaultQuery(query)
+		text, _ := query.Spec.GetInputString()
+		if text != "original" {
+			t.Fatalf("expected 'original', got '%s'", text)
+		}
+		if query.Annotations != nil {
+			t.Fatal("expected no annotations for non-messages type")
 		}
 	})
 }

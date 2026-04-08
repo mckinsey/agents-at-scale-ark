@@ -78,7 +78,6 @@ export function SecretEditor({
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
     onSave(values.name, values.password);
-    onOpenChange(false);
   };
 
   return (

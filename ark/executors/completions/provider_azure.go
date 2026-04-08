@@ -99,6 +99,9 @@ func (ap *AzureProvider) prepareStreamParams(messages []Message, n int64, tools 
 		Model:    ap.Model,
 		Messages: openaiMessages,
 		N:        openai.Int(n),
+		StreamOptions: openai.ChatCompletionStreamOptionsParam{
+			IncludeUsage: openai.Bool(true),
+		},
 	}
 
 	applyPropertiesToParams(ap.Properties, &params)
@@ -131,6 +134,15 @@ func (ap *AzureProvider) ChatCompletionStream(ctx context.Context, messages []Me
 		}
 
 		accumulateStreamChunk(&chunk, &fullResponse, toolCallsMap)
+
+		// Accumulate usage if present in chunk
+		if chunk.Usage.TotalTokens > 0 {
+			fullResponse.Usage = openai.CompletionUsage{
+				PromptTokens:     chunk.Usage.PromptTokens,
+				CompletionTokens: chunk.Usage.CompletionTokens,
+				TotalTokens:      chunk.Usage.TotalTokens,
+			}
+		}
 	}
 
 	ap.finalizeToolCalls(fullResponse, toolCallsMap, streamFunc)

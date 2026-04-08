@@ -10,6 +10,7 @@ import type {ArkService, ServiceCollection} from './types/arkService.js';
 import {
   getMarketplaceServicesFromManifest,
   getMarketplaceAgentsFromManifest,
+  getMarketplaceExecutorsFromManifest,
 } from './lib/marketplaceFetcher.js';
 
 /**
@@ -29,7 +30,15 @@ export async function getAllMarketplaceAgents(): Promise<ServiceCollection | nul
 }
 
 /**
- * Get a marketplace item by path (supports both services and agents)
+ * Get all marketplace executors, fetching from marketplace.json
+ * Returns null if marketplace is unavailable
+ */
+export async function getAllMarketplaceExecutors(): Promise<ServiceCollection | null> {
+  return await getMarketplaceExecutorsFromManifest();
+}
+
+/**
+ * Get a marketplace item by path (supports services, agents, and executors)
  * Returns null if marketplace is unavailable
  */
 export async function getMarketplaceItem(
@@ -51,12 +60,21 @@ export async function getMarketplaceItem(
     }
     return agents[name];
   }
+  if (path.startsWith('marketplace/executors/')) {
+    const name = path.replace(/^marketplace\/executors\//, '');
+    const executors = await getAllMarketplaceExecutors();
+    if (!executors) {
+      return null;
+    }
+    return executors[name];
+  }
   return undefined;
 }
 
 export function isMarketplaceService(name: string): boolean {
   return (
     name.startsWith('marketplace/services/') ||
-    name.startsWith('marketplace/agents/')
+    name.startsWith('marketplace/agents/') ||
+    name.startsWith('marketplace/executors/')
   );
 }
