@@ -1,7 +1,6 @@
 'use client';
 
 import { MessageCircle, Pencil, Trash2, Users } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
@@ -21,6 +20,7 @@ import type {
   TeamCreateRequest,
   TeamUpdateRequest,
 } from '@/lib/services';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { BaseCard, type BaseCardAction } from './base-card';
@@ -35,7 +35,7 @@ interface TeamCardProps {
 }
 
 export function TeamCard({ team, agents, onUpdate, onDelete }: TeamCardProps) {
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(team.name);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -89,7 +89,7 @@ export function TeamCard({ team, agents, onUpdate, onDelete }: TeamCardProps) {
         title={team.name}
         description={team.description}
         icon={<Users className="h-5 w-5" />}
-        onClick={() => router.push(`/teams/${encodeURIComponent(team.name)}`)}
+        onClick={() => push(`/teams/${encodeURIComponent(team.name)}`)}
         actions={
           team.members.length === 0
             ? actions.filter(a => a.label !== 'Chat with team')

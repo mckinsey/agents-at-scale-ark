@@ -1,8 +1,8 @@
 import { AlertCircle } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
 import { ToolCall, type ToolCallData } from '@/components/chat/tool-call';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { useMarkdownProcessor } from '@/lib/hooks/use-markdown-processor';
 import { getResourceEventsUrl } from '@/lib/utils/events';
 
@@ -36,7 +36,7 @@ export function ChatMessage({
   const isUser = role === 'user';
   const isFailed = status === 'failed';
   const markdownContent = useMarkdownProcessor(content);
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
   const contentRef = useRef<HTMLDivElement>(null);
   const [needsExpansion, setNeedsExpansion] = useState(false);
   const [expandedWidth, setExpandedWidth] = useState<number | null>(null);
@@ -46,7 +46,7 @@ export function ChatMessage({
   const handleErrorIconClick = () => {
     if (queryName) {
       const eventsUrl = getResourceEventsUrl('Query', queryName);
-      router.push(eventsUrl);
+      push(eventsUrl);
     }
   };
 

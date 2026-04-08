@@ -1,7 +1,6 @@
 'use client';
 
 import { Pencil, Trash2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
@@ -10,6 +9,7 @@ import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { DASHBOARD_SECTIONS } from '@/lib/constants/dashboard-icons';
 import { getModelTypeDisplayName } from '@/lib/constants/model-types';
 import type { Model } from '@/lib/services';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -21,7 +21,7 @@ interface ModelCardProps {
 }
 
 export function ModelCard({ model, onDelete }: ModelCardProps) {
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const { readOnlyMode } = useNamespace();
   // Get custom icon or default model icon
@@ -35,7 +35,7 @@ export function ModelCard({ model, onDelete }: ModelCardProps) {
       icon: Pencil,
       label: 'Edit model',
       onClick: () => {
-        router.push(`/models/${model.id}/update`);
+        push(`/models/${model.id}/update`);
       },
       disabled: readOnlyMode,
     },

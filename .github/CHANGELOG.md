@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.57](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.56...v0.1.57) (2026-04-02)
+
+
+### Bug Fixes
+
+* **ci:** add ark-completions chart to release and deploy pipelines ([#1644](https://github.com/mckinsey/agents-at-scale-ark/issues/1644)) ([78db960](https://github.com/mckinsey/agents-at-scale-ark/commit/78db9602edabce2fb37da95c29d66b2cf5776a63))
+* fix deploy-to-npm failure and verify-ark-installation race condition ([#1639](https://github.com/mckinsey/agents-at-scale-ark/issues/1639)) ([4f34379](https://github.com/mckinsey/agents-at-scale-ark/commit/4f343797d68ef8af0bfb13e5ac07e481e8454571))
+
 ## [0.1.56](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.55...v0.1.56) (2026-04-02)
 
 

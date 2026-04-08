@@ -1,4 +1,4 @@
-.PHONY: help dev build install deploy check-demo setup-demo port-forwards demo-page stop-port-forwards build-images
+.PHONY: help dev build install deploy check-demo setup-demo port-forwards demo-page stop-port-forwards build-images deploy-production-demo
 
 help:
 	@echo "Available targets:"
@@ -14,6 +14,12 @@ help:
 	@echo "  make setup-demo         - Deploy kyc-demo namespace with dashboard + API"
 	@echo "  make port-forwards      - Start port-forwards for demo"
 	@echo "  make stop-port-forwards - Stop all port-forwards"
+	@echo ""
+	@echo "Production deployment:"
+	@echo "  make deploy-production-demo - Deploy kyc-demo with custom domains"
+	@echo "      GATEWAY_NAME=<name>       (default: localhost-gateway)"
+	@echo "      GATEWAY_NAMESPACE=<ns>    (default: ark-system)"
+	@echo "      IMAGE_TAG=<tag>           (default: latest)"
 
 install:
 	npm install
@@ -84,3 +90,43 @@ demo-page: install build-images
 	@echo "Landing page: http://localhost:3002"
 	@echo ""
 	@PORT=3002 npm run dev
+
+GATEWAY_NAME ?= localhost-gateway
+GATEWAY_NAMESPACE ?= ark-system
+IMAGE_TAG ?= latest
+
+deploy-production-demo:
+	@echo "Deploying kyc-demo namespace..."
+	@echo "  Landing page service will be available at: https://demo.dev.agents-at-scale.com"
+	@echo "  Dashboard service will be available at: https://dashboard-demo.dev.agents-at-scale.com"
+	@echo ""
+	@kubectl get namespace kyc-demo >/dev/null 2>&1 || \
+		kubectl apply -f ../../examples/demo-namespaces/kyc-demo.yaml
+	@echo "Deploying ark-dashboard..."
+	@helm upgrade --install ark-dashboard ../ark-dashboard/chart \
+		-n kyc-demo \
+		--set app.image.tag=$(IMAGE_TAG) \
+		--wait --timeout=5m
+	@echo "Deploying ark-api..."
+	@helm upgrade --install ark-api ../ark-api/chart \
+		-n kyc-demo \
+		--set app.image.tag=$(IMAGE_TAG) \
+		-f ./kyc-demo-values.yaml \
+		--wait --timeout=5m
+	@echo "Deploying ark-landing-page..."
+	@helm upgrade --install ark-landing-page ./chart \
+		-n kyc-demo \
+		--set app.image.tag=$(IMAGE_TAG) \
+		-f ./kyc-demo-production-values.yaml \
+		--wait --timeout=5m
+	@echo ""
+	@echo "Deployment complete!"
+	@echo ""
+	@echo "Services deployed to kyc-demo namespace:"
+	@echo "  - ark-dashboard (port 3000)"
+	@echo "  - ark-api (port 80)"
+	@echo "  - ark-landing-page (port 3000)"
+	@echo ""
+	@echo "Configure your routing to:"
+	@echo "  - demo.dev.agents-at-scale.com -> ark-landing-page:3000"
+	@echo "  - dashboard-demo.dev.agents-at-scale.com -> ark-dashboard:3000"

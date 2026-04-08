@@ -22,6 +22,7 @@ vi.mock('next/navigation', () => ({
   })),
   usePathname: vi.fn(() => '/marketplace/test-item'),
   useParams: vi.fn(() => ({ id: 'test-item' })),
+  useSearchParams: vi.fn(() => new URLSearchParams()),
 }));
 
 vi.mock('@/components/common/page-header', () => ({
