@@ -79,7 +79,7 @@ async def list_core_resources(
     version: str,
     kind: str,
     namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
-    label_selector: Optional[str] = Query(None, description=LABEL_SELECTOR_DESCRIPTION)
+    label_selector: Optional[str] = Query(None, alias="labelSelector", description=LABEL_SELECTOR_DESCRIPTION)
 ) -> Response:
     """
     List core Kubernetes resources.
@@ -169,7 +169,7 @@ async def list_grouped_resources(
     version: str,
     kind: str,
     namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
-    label_selector: Optional[str] = Query(None, description=LABEL_SELECTOR_DESCRIPTION),
+    label_selector: Optional[str] = Query(None, alias="labelSelector", description=LABEL_SELECTOR_DESCRIPTION),
     workflowName: Optional[str] = Query(None, description="Filter by workflow name (partial match, case insensitive)"),
     workflowTemplateName: Optional[str] = Query(None, description="Filter by workflow template name (partial match, case insensitive)"),
     status: Optional[str] = Query(None, description="Filter by workflow status (case insensitive). Options: running, succeeded, failed (which matches both failed and error), pending")
