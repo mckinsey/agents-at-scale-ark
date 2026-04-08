@@ -481,6 +481,15 @@
         "bug",
         "doc"
       ]
+    },
+    {
+      "login": "vincentkoc",
+      "name": "Vincent Koc",
+      "avatar_url": "https://avatars.githubusercontent.com/u/25068?v=4",
+      "profile": "https://linktr.ee/vincentkoc",
+      "contributions": [
+        "doc"
+      ]
     }
   ],
   "contributorsPerLine": 7,

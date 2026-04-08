@@ -13,7 +13,7 @@ vi.mock('@/lib/api/files-client', () => ({
     get: vi.fn(),
     delete: vi.fn(),
   },
-  FILES_API_BASE_URL: '/api/v1/proxy/services/file-gateway-api',
+  FILES_API_BASE_URL: '/api/v1/proxy/services/file-gateway-api/',
 }));
 
 describe('filesService', () => {
@@ -39,7 +39,7 @@ describe('filesService', () => {
 
       const result = await filesService.list();
 
-      expect(filesApiClient.get).toHaveBeenCalledWith('/files', {
+      expect(filesApiClient.get).toHaveBeenCalledWith('files', {
         params: {},
       });
       expect(result).toEqual(mockResponse);
@@ -62,7 +62,7 @@ describe('filesService', () => {
 
       const result = await filesService.list({ prefix: 'dir1/' });
 
-      expect(filesApiClient.get).toHaveBeenCalledWith('/files', {
+      expect(filesApiClient.get).toHaveBeenCalledWith('files', {
         params: { prefix: 'dir1/' },
       });
       expect(result).toEqual(mockResponse);
@@ -83,7 +83,7 @@ describe('filesService', () => {
         continuation_token: 'token-abc',
       });
 
-      expect(filesApiClient.get).toHaveBeenCalledWith('/files', {
+      expect(filesApiClient.get).toHaveBeenCalledWith('files', {
         params: {
           prefix: 'documents/',
           max_keys: 50,
@@ -101,7 +101,7 @@ describe('filesService', () => {
       await filesService.delete('test-file.txt');
 
       expect(filesApiClient.delete).toHaveBeenCalledWith(
-        '/files/test-file.txt',
+        'files/test-file.txt',
       );
     });
 
@@ -111,7 +111,7 @@ describe('filesService', () => {
       await filesService.delete('folder/file with spaces.txt');
 
       expect(filesApiClient.delete).toHaveBeenCalledWith(
-        '/files/folder%2Ffile%20with%20spaces.txt',
+        'files/folder%2Ffile%20with%20spaces.txt',
       );
     });
   });
@@ -126,7 +126,7 @@ describe('filesService', () => {
 
       const result = await filesService.deleteDirectory('test-dir/');
 
-      expect(filesApiClient.delete).toHaveBeenCalledWith('/directories', {
+      expect(filesApiClient.delete).toHaveBeenCalledWith('directories', {
         params: { prefix: 'test-dir/' },
       });
       expect(result).toEqual(mockResponse);
