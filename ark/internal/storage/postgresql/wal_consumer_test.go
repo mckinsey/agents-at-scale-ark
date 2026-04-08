@@ -149,7 +149,7 @@ func TestNudgeWatchersByKindEmptyNamespace(t *testing.T) {
 	allNs := newTestWatcher()
 	specific := newTestWatcher()
 	backend := newTestBackendWithWatchers(map[string][]*postgresWatcher{
-		"Agent/":          {allNs},
+		"Agent/":           {allNs},
 		"Agent/production": {specific},
 	})
 
