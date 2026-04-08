@@ -6,36 +6,45 @@
 
 ## Core Folders
 
-- **`ark/`** - Kubernetes operator and default executor (Go)
-  - Controller reconciles CRDs: Agent, Model, Query, Team, MCPServer, ExecutionEngine, A2AServer
-  - Webhooks for validation and mutation (including migration warnings)
-  - `executors/completions/` - Built-in default execution engine
-  - The controller dispatches queries to the appropriate executor via A2A protocol
+- **`ark/`** - Kubernetes operator (Go)
+  - Main controller managing AI resources like agents, models, queries
+  - Custom Resource Definitions (CRDs) for AI workloads
+  - Webhooks for validation and admission control
 
-- **`lib/ark-sdk/`** - Python SDK (generated + overlay)
-  - Generated from CRDs via OpenAPI, with hand-written overlay for executor interfaces
-  - `BaseExecutor` ABC and `ExecutorApp` (A2A bridge) provide the standard interface for pluggable executors
-  - Downstream executor implementations live in the [marketplace](https://github.com/mckinsey/agents-at-scale-marketplace)
-
-- **`services/`** - Component services
-  - `ark-api/` - REST API gateway (Python/FastAPI) with streaming, A2A, broker integration
-  - `ark-broker/` - In-memory event bus (Node.js/Express) for messages, chunks, traces, events, sessions
-  - `ark-dashboard/` - Web UI (Next.js/React)
-  - `ark-mcp/` - MCP server host service
+- **`services/`** - Supporting services for Ark (Go, Python, TypeScript)
+  - `ark-api/` - API gateway service
+  - `ark-broker/` - Broker service (Node.js)
+  - `ark-dashboard/` - Dashboard web interface (TypeScript/React)
+  - `ark-evaluator/` - Evaluation service
+  - `ark-landing-page/` - Landing page
+  - `ark-mcp/` - MCP service
+  - `langchain-execution-engine/` - LangChain executor (Python)
   - `localhost-gateway/` - Local development gateway
+  - `bundles/` - Component bundles and manifests
 
-- **`samples/`** - Example YAML configurations for agents, models, queries, teams
+- **`mcp/`** - Model Context Protocol servers
+  - `filesystem-mcp/` - File system operations
 
-- **`docs/`** - Documentation site (Next.js/MDX)
+- **`samples/`** - Example configurations (YAML)
+  - Agent definitions, models, queries, teams
+  - Demonstration workflows and use cases
+  - Demo configurations for various scenarios
+
+- **`docs/`** - Documentation site (Next.js)
+  - Architecture guides and API references
+  - Built with Next.js and MDX
 
 ## Supporting Folders
 
 - **`tools/`** - CLI tools
   - `ark-cli/` - Ark CLI (Node.js) - General-purpose, interactive
   - `fark/` - Fark CLI (Go) - Optimized for resource management and low latency
-- **`bundles/`** - Component bundles and manifests
 - **`scripts/`** - Build and deployment scripts (Bash)
-- **`templates/`** - Project templates for new services
+- **`templates/`** - Project templates (agents, models, queries, teams, tools, MCP servers, marketplace)
+- **`infrastructure/`** - Infrastructure provisioning (Terraform)
+- **`charts/`** - Helm charts
+- **`tests/`** - E2E Chainsaw tests
+- **`lib/`** - Shared libraries (SDK generation)
 
 # Build Instructions
 
@@ -74,10 +83,20 @@ make lint          # Run linting and type checking
 make build         # Build container
 ```
 
+## MCP Servers
+All MCP servers follow this pattern:
+```bash
+cd mcp/{server-name}/
+make build         # Build Docker image
+```
+
 ## Node.js Services
 ```bash
 cd docs/           # Documentation site
 npm build          # Build site
+
+cd services/vnext-ui/    # UI service
+make build         # Build Docker image
 ```
 
 # Marketplace
@@ -197,6 +216,10 @@ One sentence description.
 - **Resource**: What it creates
 - **Use case**: When to use it
 ```
+
+# Build & CI/CD
+
+For build failures, CI issues, CVEs, dependabot management, and test failures, use the **ark-build-manager** agent. It triages failures across workflow runs and delegates to appropriate skills (chainsaw, vulnerability-fixer, ark-dependabot-management, etc.).
 
 # Testing Guidelines
 

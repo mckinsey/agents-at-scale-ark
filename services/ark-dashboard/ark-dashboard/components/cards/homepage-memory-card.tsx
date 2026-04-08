@@ -2,6 +2,7 @@
 
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { useGetMemoryResources } from '@/lib/services/memory-hooks';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { MetricCard } from './metric-card';
 
