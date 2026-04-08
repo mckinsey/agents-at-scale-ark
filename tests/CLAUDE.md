@@ -12,7 +12,6 @@ Tests use labels in `chainsaw-test.yaml` metadata to control when they run.
 |---|---|---|
 | *(no label)* | Standard tests, use mock-llm | Always runs (`!llm,!postgresql` or `!llm`) |
 | `llm: "true"` | Requires real LLM API keys | `e2e-tests-llm` job only |
-| `multi-provider: "true"` | Runs per-provider via `chainsaw-multi` script | `e2e-tests-llm` job |
 | `postgresql: "true"` | Requires PostgreSQL backend | Excluded from etcd-only runs |
 | `requires-images: "true"` | Requires built container images | Conditional |
 | `standard: "true"` | Explicit standard marker | Always runs |
