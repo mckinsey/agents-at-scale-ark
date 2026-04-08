@@ -25,6 +25,7 @@ import {
   toolsService,
 } from '@/lib/services';
 import { GET_ALL_AGENTS_QUERY_KEY } from '@/lib/services/agents-hooks';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { AgentFormMode, type AgentFormValues, agentFormSchema } from './types';
 import {
@@ -44,6 +45,7 @@ export function useAgentForm({
   onSuccess,
 }: UseAgentFormOptions) {
   const queryClient = useQueryClient();
+  const { namespace } = useNamespace();
   const onSuccessRef = useRef(onSuccess);
   onSuccessRef.current = onSuccess;
 
@@ -96,7 +98,7 @@ export function useAgentForm({
                 ? executionEnginesService.getAll()
                 : Promise.resolve([]),
             ]);
-
+          
           if (!agentData) {
             toast.error('Agent not found');
             onSuccessRef.current?.();
@@ -160,7 +162,7 @@ export function useAgentForm({
     };
 
     loadData();
-  }, [mode, agentName, form]);
+  }, [mode, agentName, form, namespace]);
 
   const mapParametersToApi = useCallback(() => {
     return transformFormParametersToApi(parameters);
@@ -238,7 +240,7 @@ export function useAgentForm({
         setSaving(false);
       }
     },
-    [mode, agent, selectedTools, mapParametersToApi, queryClient],
+    [mode, agent, selectedTools, mapParametersToApi, queryClient, namespace],
   );
 
   const handleToolToggle = useCallback((tool: Tool, checked: boolean) => {

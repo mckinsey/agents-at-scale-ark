@@ -1,7 +1,8 @@
 export default {
   '---platform-ops': { type: 'separator', title: 'Platform operations' },
   provisioning: 'Cloud Infrastructure Provisioning',
-  'deploying-ark': 'Deploying ARK',
+  'deploying-ark': 'Deploying Ark',
+  'tenant-namespace-management': 'Tenant and Namespace Management',
   monitoring: 'Monitoring',
 
   '---cicd': { type: 'separator', title: 'CI/CD and supply chain' },

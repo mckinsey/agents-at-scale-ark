@@ -1,7 +1,6 @@
 'use client';
 
 import { ChevronRight, MessageCircle, Trash2, Wrench } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
@@ -12,6 +11,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import type { Tool } from '@/lib/services/tools';
 import { cn } from '@/lib/utils';
@@ -28,7 +28,7 @@ type ToolRowProps = {
 
 export function ToolRow(props: ToolRowProps) {
   const { tool, onInfo, onDelete, inUse, inUseReason } = props;
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   // Get custom icon or default Wrench icon
@@ -45,7 +45,7 @@ export function ToolRow(props: ToolRowProps) {
   };
 
   const handleQueryTool = () => {
-    router.push(`/query/new?target_tool=${tool.name}`);
+    push(`/query/new?target_tool=${tool.name}`);
   };
 
   return (
