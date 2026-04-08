@@ -106,16 +106,17 @@ class TestNamespaceApiErrors:
             "Run: kubectl port-forward svc/ark-api 8080:80 -n default"
         )
 
-    # def test_get_agent_without_namespace_returns_404_not_500(self, helper):
-    #     name = f"{PREFIX}404-check"
-    #     helper.custom.create_agent(name, prompt="Issue 1399 test agent.")
-    #     assert helper.custom.verify_agent_exists(name), "Agent must exist in custom namespace"
+    @pytest.mark.skip(reason="Namespace returning incorrect code")
+    def test_get_agent_without_namespace_returns_404_not_500(self, helper):
+        name = f"{PREFIX}404-check"
+        helper.custom.create_agent(name, prompt="Issue 1399 test agent.")
+        assert helper.custom.verify_agent_exists(name), "Agent must exist in custom namespace"
 
-    #     status, body = get_resource_status("agents", name)
-    #     assert status == 404, (
-    #         f"Expected HTTP 404 for agent '{name}' (exists only in '{TEST_NAMESPACE}'), "
-    #         f"got HTTP {status}. Body: {body}"
-    #     )
-    #     assert status != 500, (
-    #         f"Got HTTP 500 Internal Server Error — issue #1399 is not fixed. Body: {body}"
-    #     )
+        status, body = get_resource_status("agents", name)
+        assert status == 404, (
+            f"Expected HTTP 404 for agent '{name}' (exists only in '{TEST_NAMESPACE}'), "
+            f"got HTTP {status}. Body: {body}"
+        )
+        assert status != 500, (
+            f"Got HTTP 500 Internal Server Error — issue #1399 is not fixed. Body: {body}"
+        )
