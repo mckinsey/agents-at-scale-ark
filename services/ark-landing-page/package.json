@@ -41,6 +41,9 @@
     "minimatch": "^10.2.3",
     "picomatch": "^4.0.4",
     "flatted": "^3.4.2",
-    "express-rate-limit": "^8.3.0"
+    "express-rate-limit": "^8.3.0",
+    "@tootallnate/once": "^3.0.1",
+    "http-proxy-agent": "^7.0.0",
+    "jsdom": "^25.0.0"
   }
 }
