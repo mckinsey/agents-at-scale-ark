@@ -309,9 +309,9 @@ export default function MarketplaceDetailPage() {
                     <>
                       <Separator />
                       <div className="space-y-2">
-                        {item.uis.map((ui, index) => (
+                        {item.uis.map((ui) => (
                           <Button
-                            key={index}
+                            key={ui.url}
                             variant="outline"
                             className="w-full justify-start"
                             onClick={() => window.open(ui.url, '_blank')}>

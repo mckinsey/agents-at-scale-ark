@@ -216,9 +216,9 @@ export function MarketplaceItemCard({
           {/* UI URLs */}
           {localStatus === 'installed' && item.uis && item.uis.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {item.uis.map((ui, index) => (
+              {item.uis.map((ui) => (
                 <Button
-                  key={index}
+                  key={ui.url}
                   variant="secondary"
                   size="sm"
                   className="h-8"

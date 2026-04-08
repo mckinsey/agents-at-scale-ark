@@ -27,6 +27,7 @@ from ...constants.annotations import (
     RESOURCES_ANNOTATION,
     LOCALHOST_GATEWAY_PORT_ANNOTATION
 )
+from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +137,7 @@ async def get_httproutes_for_ark_service(namespace: str, release_name: str) -> L
 @router.get("", response_model=ArkServiceListResponse)
 async def list_ark_services(
     list_all_services: Optional[bool] = Query(False, description="List all Helm releases, not just ARK services"),
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION)
 ) -> ArkServiceListResponse:
     """
     List ARK services (Helm releases) in a namespace.
@@ -199,7 +200,7 @@ async def list_ark_services(
 
 @router.get("/marketplace-items", response_model=HelmReleaseListResponse)
 async def list_marketplace_items(
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION)
 ) -> HelmReleaseListResponse:
     """
     List Helm releases for marketplace item detection.
@@ -244,7 +245,7 @@ async def list_marketplace_items(
 @router.get("/{service_name}", response_model=ArkService)
 async def get_ark_service(
     service_name: str,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION)
 ) -> ArkService:
     """
     Get a specific ARK service (Helm release) by name.

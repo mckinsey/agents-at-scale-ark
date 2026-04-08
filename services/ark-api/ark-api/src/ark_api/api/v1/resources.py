@@ -10,6 +10,10 @@ from kubernetes_asyncio.client import CoreV1Api
 from kubernetes_asyncio.dynamic import DynamicClient
 from ark_sdk.k8s import get_context
 
+from ...constants.query_param_descriptions import (
+    NAMESPACE_DESCRIPTION,
+    LABEL_SELECTOR_DESCRIPTION,
+)
 from .exceptions import handle_k8s_errors
 
 logger = logging.getLogger(__name__)
@@ -34,7 +38,7 @@ async def get_core_resource(
     version: str,
     kind: str,
     resource_name: str,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION)
 ) -> Response:
     """
     Get a core Kubernetes resource by name.
@@ -74,8 +78,8 @@ async def list_core_resources(
     request: Request,
     version: str,
     kind: str,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
-    labelSelector: Optional[str] = Query(None, description="Label selector for filtering resources (e.g., app.kubernetes.io/instance=phoenix)")
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    label_selector: Optional[str] = Query(None, description=LABEL_SELECTOR_DESCRIPTION)
 ) -> Response:
     """
     List core Kubernetes resources.
@@ -84,7 +88,7 @@ async def list_core_resources(
         version: API version (e.g., 'v1')
         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
         namespace: The namespace (defaults to current context)
-        labelSelector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
+        label_selector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
 
     Returns:
         Response: List of raw Kubernetes resources as JSON
@@ -105,7 +109,7 @@ async def list_core_resources(
             kind=kind
         )
 
-        resources = await api_resource.get(namespace=namespace, label_selector=labelSelector)
+        resources = await api_resource.get(namespace=namespace, label_selector=label_selector)
 
         return _create_resource_response(resources.to_dict(), request)
 
@@ -118,7 +122,7 @@ async def get_grouped_resource(
     version: str,
     kind: str,
     resource_name: str,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION)
 ) -> Response:
     """
     Get a grouped Kubernetes resource by name.
@@ -164,8 +168,8 @@ async def list_grouped_resources(
     group: str,
     version: str,
     kind: str,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
-    labelSelector: Optional[str] = Query(None, description="Label selector for filtering resources (e.g., app.kubernetes.io/instance=phoenix)"),
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION),
+    label_selector: Optional[str] = Query(None, description=LABEL_SELECTOR_DESCRIPTION),
     workflowName: Optional[str] = Query(None, description="Filter by workflow name (partial match, case insensitive)"),
     workflowTemplateName: Optional[str] = Query(None, description="Filter by workflow template name (partial match, case insensitive)"),
     status: Optional[str] = Query(None, description="Filter by workflow status (case insensitive). Options: running, succeeded, failed (which matches both failed and error), pending")
@@ -178,7 +182,7 @@ async def list_grouped_resources(
         version: API version (e.g., 'v1', 'v1alpha1')
         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
         namespace: The namespace (defaults to current context)
-        labelSelector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
+        label_selector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
         workflowName: Filter by workflow name (partial match, case insensitive)
         workflowTemplateName: Filter by workflow template name (partial match, case insensitive)
         status: Filter by workflow status
@@ -206,7 +210,7 @@ async def list_grouped_resources(
             kind=kind
         )
 
-        resources = await api_resource.get(namespace=namespace, label_selector=labelSelector)
+        resources = await api_resource.get(namespace=namespace, label_selector=label_selector)
         resources_dict = resources.to_dict()
 
         # Apply filters for Workflow resources
@@ -253,7 +257,7 @@ async def create_core_resource(
     version: str,
     kind: str,
     body: dict,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION)
 ) -> Response:
     """
     Create a core Kubernetes resource.
@@ -295,7 +299,7 @@ async def create_grouped_resource(
     version: str,
     kind: str,
     body: dict,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION)
 ) -> Response:
     """
     Create a grouped Kubernetes resource.
@@ -340,7 +344,7 @@ async def delete_core_resource(
     version: str,
     kind: str,
     resource_name: str,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION)
 ) -> Response:
     """
     Delete a core Kubernetes resource by name.
@@ -381,7 +385,7 @@ async def delete_grouped_resource(
     version: str,
     kind: str,
     resource_name: str,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION)
 ) -> Response:
     """
     Delete a grouped Kubernetes resource by name.
