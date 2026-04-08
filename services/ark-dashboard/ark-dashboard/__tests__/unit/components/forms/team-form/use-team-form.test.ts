@@ -21,6 +21,19 @@ vi.mock('sonner', () => ({
   },
 }));
 
+const mockNamespace = 'default';
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: vi.fn(() => ({
+    namespace: mockNamespace,
+    isNamespaceResolved: true,
+    availableNamespaces: [{ name: mockNamespace }],
+    isPending: false,
+    setNamespace: vi.fn(),
+    createNamespace: vi.fn(),
+    readOnlyMode: false,
+  })),
+}));
+
 import { useTeamForm } from '@/components/forms/team-form/use-team-form';
 import { teamsService, agentsService } from '@/lib/services';
 import { toast } from 'sonner';
