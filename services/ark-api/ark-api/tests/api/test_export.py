@@ -1,16 +1,27 @@
 """Tests for export API endpoints."""
+import asyncio
+import io
+import json
 import os
 import unittest
-import json
 import zipfile
-import io
-from unittest.mock import AsyncMock, Mock, patch, MagicMock
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
 from fastapi.testclient import TestClient
+from kubernetes.client.rest import ApiException
 
 os.environ["AUTH_MODE"] = "open"
 
+import ark_api.api.v1.export as export_module
 from ark_api.main import app
+from ark_api.api.v1.export import (
+    _collect_workflows,
+    collect_resources,
+    get_export_history,
+    update_export_history,
+    EXPORT_CONFIGMAP_NAMESPACE,
+)
 
 
 class TestExportEndpoints(unittest.TestCase):
@@ -224,7 +235,6 @@ class TestCollectResources(unittest.TestCase):
     @patch('ark_api.api.v1.export.with_ark_client')
     def test_collect_resources_filters_by_type(self, mock_ark_client_context):
         """Test that collect_resources only collects requested resource types."""
-        import asyncio
         # Setup mock ark_client with all resource types available
         mock_ark_client = AsyncMock()
 
@@ -260,9 +270,6 @@ class TestCollectResources(unittest.TestCase):
         mock_context.__aenter__ = AsyncMock(return_value=mock_ark_client)
         mock_context.__aexit__ = AsyncMock(return_value=None)
         mock_ark_client_context.return_value = mock_context
-
-        # Import the function to test
-        from ark_api.api.v1.export import collect_resources
 
         # Test 1: Request only agents - should NOT call models or teams
         result = asyncio.run(collect_resources(
@@ -314,6 +321,86 @@ class TestCollectResources(unittest.TestCase):
         self.assertIn("models", result)
         self.assertIn("teams", result)
         self.assertEqual(len(result), 3)
+
+
+
+class TestExportHistoryNamespace(unittest.TestCase):
+    """Tests that export history ConfigMap operations use the namespace from
+    the service account token, not a hardcoded value."""
+
+    @patch('ark_api.api.v1.export.EXPORT_CONFIGMAP_NAMESPACE', 'token-namespace')
+    @patch('ark_api.api.v1.export.client')
+    def test_get_export_history_reads_from_token_namespace(self, mock_client):
+        """get_export_history reads the ConfigMap from the token-file namespace."""
+        mock_v1 = MagicMock()
+        mock_client.CoreV1Api.return_value = mock_v1
+        mock_cm = MagicMock()
+        mock_cm.data = {'history': json.dumps({
+            'last_export': '2024-01-01T00:00:00',
+            'export_count': 3
+        })}
+        mock_v1.read_namespaced_config_map.return_value = mock_cm
+
+        result = asyncio.run(get_export_history())
+
+        mock_v1.read_namespaced_config_map.assert_called_once_with(
+            name='ark-export-metadata',
+            namespace='token-namespace'
+        )
+        self.assertEqual(result['export_count'], 3)
+
+    @patch('ark_api.api.v1.export.EXPORT_CONFIGMAP_NAMESPACE', 'token-namespace')
+    @patch('ark_api.api.v1.export.client')
+    def test_update_export_history_patches_configmap_in_token_namespace(self, mock_client):
+        """update_export_history patches an existing ConfigMap in the token-file namespace."""
+        mock_v1 = MagicMock()
+        mock_client.CoreV1Api.return_value = mock_v1
+        existing_cm = MagicMock()
+        existing_cm.data = {'history': '{}'}
+        mock_v1.read_namespaced_config_map.return_value = existing_cm
+
+        asyncio.run(update_export_history(
+            datetime(2024, 1, 1, tzinfo=timezone.utc),
+            {'agents': 2}
+        ))
+
+        mock_v1.patch_namespaced_config_map.assert_called_once()
+        call_kwargs = mock_v1.patch_namespaced_config_map.call_args.kwargs
+        self.assertEqual(call_kwargs['namespace'], 'token-namespace')
+
+
+class TestCollectWorkflowsNamespace(unittest.TestCase):
+    """Tests that _collect_workflows resolves namespace from the token file
+    when no namespace is explicitly provided."""
+
+    @patch('ark_api.api.v1.export.get_current_context')
+    @patch('ark_api.api.v1.export.CustomObjectsApi')
+    def test_uses_token_namespace_when_none_provided(self, mock_api_cls, mock_get_ctx):
+        """When namespace is None, _collect_workflows reads from the current context."""
+        mock_get_ctx.return_value = {'namespace': 'token-namespace'}
+        mock_api = MagicMock()
+        mock_api_cls.return_value = mock_api
+        mock_api.list_namespaced_custom_object.return_value = {'items': []}
+
+        asyncio.run(_collect_workflows(namespace=None, resource_ids=None))
+
+        mock_get_ctx.assert_called_once()
+        call_kwargs = mock_api.list_namespaced_custom_object.call_args.kwargs
+        self.assertEqual(call_kwargs['namespace'], 'token-namespace')
+
+    @patch('ark_api.api.v1.export.get_current_context')
+    @patch('ark_api.api.v1.export.CustomObjectsApi')
+    def test_uses_provided_namespace_without_calling_token_helper(self, mock_api_cls, mock_get_ctx):
+        """When namespace is supplied, _collect_workflows does not call get_current_context."""
+        mock_api = MagicMock()
+        mock_api_cls.return_value = mock_api
+        mock_api.list_namespaced_custom_object.return_value = {'items': []}
+
+        asyncio.run(_collect_workflows(namespace='explicit-ns', resource_ids=None))
+
+        mock_get_ctx.assert_not_called()
+        call_kwargs = mock_api.list_namespaced_custom_object.call_args.kwargs
+        self.assertEqual(call_kwargs['namespace'], 'explicit-ns')
 
 
 if __name__ == '__main__':
