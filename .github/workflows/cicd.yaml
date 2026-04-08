@@ -2,9 +2,9 @@ name: CI/CD
 
 on:
   push:
-    branches: [main]
+    branches: [main, release]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "release"]
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 
@@ -29,7 +29,7 @@ permissions:
 # have the full pipeline run on.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/release' }}
 
 jobs:
   # Setup job to determine container cache registry
@@ -1127,17 +1127,18 @@ jobs:
           echo "ℹ️  Skipping release when running locally with 'act'"
           echo "   Release creation requires GitHub tokens that are not available locally"
       - name: Create Release
-        if: ${{ !env.ACT && github.ref == 'refs/heads/main' }}
+        if: ${{ !env.ACT && github.ref == 'refs/heads/release' }}
         uses: googleapis/release-please-action@v4
         id: release-please
         with:
           manifest-file: .github/release-please-manifest.json
           config-file: .github/release-please-config.json
+          target-branch: release
 
   release-docs:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
     concurrency:
       group: "pages"
       cancel-in-progress: true
@@ -1153,7 +1154,7 @@ jobs:
   release-libs:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
     steps:
       - uses: actions/checkout@v6
       
@@ -1187,7 +1188,7 @@ jobs:
   release-charts:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
     strategy:
       matrix:
         chart:
@@ -1219,7 +1220,7 @@ jobs:
   release-ark-cli:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
     steps:
       - uses: actions/checkout@v6
 
@@ -1253,7 +1254,7 @@ jobs:
   release-fark:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -1296,7 +1297,7 @@ jobs:
   run-deploy-workflow:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
     steps:
       - uses: actions/checkout@v6
       
@@ -1313,3 +1314,51 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+  verify-ark-installation:
+    needs: [check-release, release-charts, release-ark-cli]
+    runs-on: ubuntu-24.04
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-k3s
+        with:
+          metrics-enabled: false
+          traefik-enabled: false
+          k3s-channel: latest
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+
+      - name: Install published ark-cli from npm
+        run: |
+          RELEASE_TAG="${{ needs.check-release.outputs.tag }}"
+          echo "Installing ark-cli@${RELEASE_TAG} from npm registry..."
+          npm install -g @agents-at-scale/ark@${RELEASE_TAG}
+          ark --version
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install test dependencies
+        run: |
+          pip install -r tests/pytest/ui-tests/requirements.txt
+
+      - name: Run complete ARK workflow installation test
+        env:
+          PYTHONPATH: ${{ github.workspace }}/tests/pytest
+        run: |
+          cd tests/pytest
+          pytest test_complete_ark_workflow.py -v --tb=short
+
+      - name: Upload verification test logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ark-installation-verification-logs-${{ github.sha }}
+          path: tests/pytest/*.log
+          retention-days: 7
