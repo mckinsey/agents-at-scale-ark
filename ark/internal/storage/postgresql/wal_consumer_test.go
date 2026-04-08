@@ -309,10 +309,10 @@ func TestProcessWALDataUpdateMessage(t *testing.T) {
 	})
 
 	relations := map[uint32]*pglogrepl.RelationMessage{
-		1: makeRelation(1, "kind", "namespace"),
+		2: makeRelation(2, "kind", "namespace"),
 	}
 
-	update := encodeUpdateMessage(1, makeTuple("Model", "prod"))
+	update := encodeUpdateMessage(2, makeTuple("Model", "prod"))
 
 	backend.processWALData(update, relations)
 
@@ -330,10 +330,10 @@ func TestProcessWALDataDeleteMessage(t *testing.T) {
 	})
 
 	relations := map[uint32]*pglogrepl.RelationMessage{
-		1: makeRelation(1, "kind", "namespace"),
+		3: makeRelation(3, "kind", "namespace"),
 	}
 
-	del := encodeDeleteMessage(1)
+	del := encodeDeleteMessage(3)
 	backend.processWALData(del, relations)
 
 	select {
