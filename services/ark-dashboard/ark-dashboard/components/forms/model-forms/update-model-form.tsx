@@ -1,12 +1,12 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useRouter } from 'next/navigation';
 import { useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 
 import { Spinner } from '@/components/ui/spinner';
 import { TrackedButton } from '@/components/ui/tracked-button';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import type { Model } from '@/lib/services';
 import { useUpdateModelById } from '@/lib/services/models-hooks';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -30,8 +30,8 @@ type UpdateModelFormProps = {
 };
 
 export function UpdateModelForm({ model }: UpdateModelFormProps) {
-  const router = useRouter();
-  const { readOnlyMode } = useNamespace();
+  const { push } = useNamespacedNavigation();
+  const { readOnlyMode, namespace } = useNamespace();
 
   const defaultValues = getDefaultValuesForUpdate(model);
   const form = useForm<FormValues>({
@@ -41,8 +41,8 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
   });
 
   const handleSuccess = useCallback(() => {
-    router.push('/models');
-  }, [router]);
+    push('/models');
+  }, [push]);
 
   const { mutateAsync, isPending } = useUpdateModelById();
 
