@@ -69,6 +69,8 @@ The selector prompt supports these template variables:
 
 ## Custom Selector Prompts
 
+Custom prompts **must** instruct the agent to use the `select-next-conversant` tool. Without this, the selector agent will not know how to make a structured selection and the team will fail.
+
 You can customize the selection logic by providing your own selector prompt:
 
 ```yaml

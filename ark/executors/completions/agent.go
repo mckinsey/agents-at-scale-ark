@@ -54,7 +54,7 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 	result, err := a.executeAgent(ctx, userInput, history, memory, eventStream)
 	if err != nil {
 		a.telemetryRecorder.RecordError(span, err)
-		if !IsTerminateTeam(err) {
+		if !IsTerminateTeam(err) && !IsSelectionMade(err) {
 			a.eventingRecorder.Fail(ctx, "AgentExecution", fmt.Sprintf("Agent execution failed: %v", err), err, operationData)
 			return nil, err
 		}
@@ -73,7 +73,7 @@ func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []M
 
 	messages, err := a.executeLocally(ctx, userInput, history, memory, eventStream)
 	if err != nil {
-		if IsTerminateTeam(err) {
+		if IsTerminateTeam(err) || IsSelectionMade(err) {
 			return &ExecutionResult{Messages: messages}, err
 		}
 		return nil, err
@@ -196,7 +196,7 @@ func (a *Agent) executeLocally(ctx context.Context, userInput Message, history [
 
 		if err := a.executeToolCalls(ctx, choice.Message.ToolCalls, &agentMessages, &newMessages); err != nil {
 			logger := logf.FromContext(ctx)
-			if !IsTerminateTeam(err) {
+			if !IsTerminateTeam(err) && !IsSelectionMade(err) {
 				logger.Error(err, "Tool execution failed", "agent", a.FullName())
 			}
 			return newMessages, err

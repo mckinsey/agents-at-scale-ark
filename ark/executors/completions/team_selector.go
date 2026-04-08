@@ -143,7 +143,7 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	for i, m := range membersToSearch {
 		candidateNames[i] = m.GetName()
 	}
-	t.registerSelectNextConversantTool(selectorAgent, candidateNames)
+	t.registerSelectNextConversantTool(ctx, selectorAgent, candidateNames)
 
 	result, err := selectorAgent.Execute(ctx, NewUserMessage("Select the next participant to respond."), []Message{NewSystemMessage(selectorMessage)}, nil, nil)
 	if err != nil {
@@ -248,11 +248,14 @@ func (t *Team) buildLegalTransitionsMap() map[string][]TeamMember {
 	return legalTransitions
 }
 
-func (t *Team) registerSelectNextConversantTool(selectorAgent SelectorAgentInterface, candidates []string) {
-	if agent, ok := selectorAgent.(*Agent); ok {
-		agent.Tools.RemoveTool(BuiltinToolSelectNextConversant)
-		agent.Tools.RegisterTool(GetSelectNextConversantTool(candidates), &SelectNextConversantExecutor{})
+func (t *Team) registerSelectNextConversantTool(ctx context.Context, selectorAgent SelectorAgentInterface, candidates []string) {
+	agent, ok := selectorAgent.(*Agent)
+	if !ok {
+		logf.FromContext(ctx).Info("Cannot register select-next-conversant tool: selector agent is not a local *Agent", "selectorType", fmt.Sprintf("%T", selectorAgent))
+		return
 	}
+	agent.Tools.RemoveTool(BuiltinToolSelectNextConversant)
+	agent.Tools.RegisterTool(GetSelectNextConversantTool(candidates), &SelectNextConversantExecutor{})
 }
 
 func extractTerminateToolResponse(result *ExecutionResult) string {

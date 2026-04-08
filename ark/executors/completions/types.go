@@ -111,15 +111,10 @@ func (e *TerminateTeamWithResponse) Unwrap() error {
 
 type SelectionMade struct {
 	SelectedName string
-	base         TerminateTeam
 }
 
 func (e *SelectionMade) Error() string {
 	return fmt.Sprintf("selection made: %s", e.SelectedName)
-}
-
-func (e *SelectionMade) Unwrap() error {
-	return &e.base
 }
 
 func IsSelectionMade(err error) bool {
