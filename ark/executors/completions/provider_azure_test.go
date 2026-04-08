@@ -210,6 +210,91 @@ func TestAzureProvider_FinalizeToolCalls(t *testing.T) {
 	}
 }
 
+func TestAzureProvider_PrepareStreamParams(t *testing.T) {
+	t.Run("includes StreamOptions with IncludeUsage true", func(t *testing.T) {
+		ap := &AzureProvider{
+			Model:      "gpt-4",
+			BaseURL:    "https://test.openai.azure.com",
+			APIVersion: "2024-02-01",
+			APIKey:     "test-key",
+		}
+		messages := []Message{NewUserMessage("hello")}
+		params := ap.prepareStreamParams(messages, 1)
+
+		require.Equal(t, "gpt-4", params.Model)
+		require.Equal(t, openai.Bool(true), params.StreamOptions.IncludeUsage)
+	})
+
+	t.Run("includes tools when provided", func(t *testing.T) {
+		ap := &AzureProvider{
+			Model:      "gpt-4",
+			BaseURL:    "https://test.openai.azure.com",
+			APIVersion: "2024-02-01",
+			APIKey:     "test-key",
+		}
+		messages := []Message{NewUserMessage("hello")}
+		tools := []openai.ChatCompletionToolParam{
+			{
+				Function: openai.FunctionDefinitionParam{
+					Name:        "test_tool",
+					Description: openai.String("a test tool"),
+				},
+			},
+		}
+		params := ap.prepareStreamParams(messages, 1, tools)
+
+		require.Len(t, params.Tools, 1)
+		require.Equal(t, "test_tool", params.Tools[0].Function.Name)
+	})
+
+	t.Run("no tools when none provided", func(t *testing.T) {
+		ap := &AzureProvider{
+			Model:      "gpt-4",
+			BaseURL:    "https://test.openai.azure.com",
+			APIVersion: "2024-02-01",
+			APIKey:     "test-key",
+		}
+		messages := []Message{NewUserMessage("hello")}
+		params := ap.prepareStreamParams(messages, 1)
+
+		require.Nil(t, params.Tools)
+	})
+
+	t.Run("applies properties to params", func(t *testing.T) {
+		ap := &AzureProvider{
+			Model:      "gpt-4",
+			BaseURL:    "https://test.openai.azure.com",
+			APIVersion: "2024-02-01",
+			APIKey:     "test-key",
+			Properties: map[string]string{
+				"temperature": "0.5",
+			},
+		}
+		messages := []Message{NewUserMessage("hello")}
+		params := ap.prepareStreamParams(messages, 1)
+
+		require.Equal(t, "gpt-4", params.Model)
+		require.Equal(t, openai.Bool(true), params.StreamOptions.IncludeUsage)
+	})
+
+	t.Run("converts messages to openai format", func(t *testing.T) {
+		ap := &AzureProvider{
+			Model:      "gpt-4",
+			BaseURL:    "https://test.openai.azure.com",
+			APIVersion: "2024-02-01",
+			APIKey:     "test-key",
+		}
+		messages := []Message{
+			NewUserMessage("first"),
+			NewUserMessage("second"),
+		}
+		params := ap.prepareStreamParams(messages, 1)
+
+		require.Len(t, params.Messages, 2)
+		require.Equal(t, openai.Int(int64(1)), params.N)
+	})
+}
+
 func TestAzureProvider_EnsureUsageData(t *testing.T) {
 	tests := []struct {
 		name          string

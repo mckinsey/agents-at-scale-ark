@@ -106,42 +106,24 @@ spec:
     name: geography-agent
 ```
 
-### Messages Input
+### Conversation Continuity
 
-Structured conversation array for multi-turn conversations with role attribution.
+For multi-turn conversations, use `conversationId` to maintain context across queries. The memory service manages conversation history.
 
 ```yaml
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
-  name: conversation-query
+  name: followup-query
 spec:
-  type: messages
-  input:
-    - role: user
-      content: "Calculate 1+1"
-    - role: assistant
-      content: "2"
-    - role: user
-      content: "Now calculate 2+2"
+  input: "Now calculate 2+2"
+  conversationId: "conv-abc123"
   target:
     type: agent
     name: math-agent
 ```
 
-**Supported roles:**
-- `user` - User messages
-- `assistant` - Agent/assistant responses
-- `system` - System instructions (provider-specific)
-
-#### Multimodal Messages
-
-The `messages` type uses the standard OpenAI message structure, supporting multimodal content including `image_url` for vision capabilities:
-
-```bash
-kubectl apply -f samples/queries/query-messages-image-url.yaml
-# Example output: "The image shows a black hexagonal shape with a small break in the bottom right corner, resembling the QuantumBlack logo"
-```
+The `conversationId` is returned in `status.conversationId` after the first query completes. Pass it to subsequent queries to continue the conversation.
 
 ## Targets
 
@@ -167,7 +149,7 @@ Each target receives the same input and produces an independent response in `sta
 
 Query parameters enable dynamic input through Go template syntax. Parameters are resolved from values, ConfigMaps, or Secrets.
 
-**Important:** Parameter expansion only applies to `type: user` queries. For `type: messages` queries, message content is used as-is without template processing.
+**Important:** Parameter expansion applies to the query input string via Go template syntax.
 
 ### Parameter Sources
 

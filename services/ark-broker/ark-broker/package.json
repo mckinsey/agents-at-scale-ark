@@ -1,6 +1,6 @@
 {
   "name": "ark-broker",
-  "version": "0.1.55",
+  "version": "0.1.57",
   "description": "Ark broker for memory, telemetry streaming, and observability",
   "main": "dist/main.js",
   "type": "module",
@@ -31,7 +31,7 @@
     "@types/express": "^5.0.6",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.0.0",
-    "@types/supertest": "^6.0.2",
+    "@types/supertest": "^7.2.0",
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^8.18.1",
     "@typescript-eslint/parser": "^8.57.1",
@@ -47,10 +47,13 @@
   },
   "overrides": {
     "minimatch": "^10.2.3",
+    "picomatch": "^4.0.4",
     "qs": "^6.15.0",
     "swagger-jsdoc": {
       "glob": "^7.2.3"
     },
-    "flatted": "^3.4.2"
+    "flatted": "^3.4.2",
+    "tar": "^7.5.11",
+    "express-rate-limit": "^8.3.0"
   }
 }

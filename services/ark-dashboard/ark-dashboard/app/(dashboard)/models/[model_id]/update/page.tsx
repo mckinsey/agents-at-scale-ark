@@ -1,6 +1,7 @@
 'use client';
 
 import { use } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 import {
   type BreadcrumbElement,

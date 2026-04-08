@@ -11,4 +11,5 @@ spec:
   strategy: selector
   selector:
     agent: selector-agent
+  maxTurns: 5
   description: Team with selector that will return invalid agent name

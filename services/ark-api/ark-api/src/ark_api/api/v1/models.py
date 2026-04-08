@@ -20,6 +20,7 @@ from ...models.models import (
     PROVIDER_OPENAI,
     PROVIDER_AZURE,
     PROVIDER_BEDROCK,
+    PROVIDER_ANTHROPIC,
     MODEL_TYPE_COMPLETIONS,
 )
 from ...models.common import extract_availability_from_conditions
@@ -192,6 +193,16 @@ async def create_model(body: ModelCreateRequest, namespace: Optional[str] = Quer
                 elif isinstance(value, str):
                     config_dict[PROVIDER_BEDROCK][field] = {"value": value}
 
+    elif body.config.anthropic and body.provider == PROVIDER_ANTHROPIC:
+        config_dict[PROVIDER_ANTHROPIC] = {}
+        for field, value in body.config.anthropic.model_dump(by_alias=True, exclude_none=True).items():
+            if field == "headers" and value is not None:
+                config_dict[PROVIDER_ANTHROPIC][field] = value
+            elif isinstance(value, dict) and ("value" in value or "valueFrom" in value):
+                config_dict[PROVIDER_ANTHROPIC][field] = value
+            elif isinstance(value, str):
+                config_dict[PROVIDER_ANTHROPIC][field] = {"value": value}
+
     model_spec = {
         "type": MODEL_TYPE_COMPLETIONS,
         "provider": body.provider,
@@ -286,6 +297,15 @@ def _build_config_dict_from_body(body_config, provider: str) -> dict:
                     config_dict[PROVIDER_BEDROCK][field] = value
                 elif isinstance(value, str):
                     config_dict[PROVIDER_BEDROCK][field] = {"value": value}
+    elif body_config.anthropic and provider == PROVIDER_ANTHROPIC:
+        config_dict[PROVIDER_ANTHROPIC] = {}
+        for field, value in body_config.anthropic.model_dump(by_alias=True, exclude_none=True).items():
+            if field == "headers" and value is not None:
+                config_dict[PROVIDER_ANTHROPIC][field] = value
+            elif isinstance(value, dict) and ("value" in value or "valueFrom" in value):
+                config_dict[PROVIDER_ANTHROPIC][field] = value
+            elif isinstance(value, str):
+                config_dict[PROVIDER_ANTHROPIC][field] = {"value": value}
     return config_dict
 
 

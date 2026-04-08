@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: invalid-model-anthropic-missing-config
+spec:
+  provider: anthropic
+  model:
+    value: claude-sonnet-4-20250514
+  config: {}
