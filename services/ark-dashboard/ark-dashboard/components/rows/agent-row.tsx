@@ -1,7 +1,6 @@
 'use client';
 
 import { Bot, MessageCircle, Pencil, Trash2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
@@ -17,6 +16,7 @@ import { useChatState } from '@/lib/chat-context';
 import { toggleFloatingChat } from '@/lib/chat-events';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import type { Agent } from '@/lib/services';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { cn } from '@/lib/utils';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -27,7 +27,7 @@ interface AgentRowProps {
 }
 
 export function AgentRow({ agent, onDelete }: AgentRowProps) {
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(agent.name);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -47,11 +47,11 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
         role="link"
         tabIndex={0}
         className="bg-card hover:bg-accent/5 flex w-full cursor-pointer flex-wrap items-center gap-4 rounded-md border px-4 py-3 transition-colors"
-        onClick={() => router.push(`/agents/${encodeURIComponent(agent.name)}`)}
+        onClick={() => push(`/agents/${encodeURIComponent(agent.name)}`)}
         onKeyDown={e => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            router.push(`/agents/${encodeURIComponent(agent.name)}`);
+            push(`/agents/${encodeURIComponent(agent.name)}`);
           }
         }}>
         <div className="flex flex-grow items-center gap-3 overflow-hidden">
@@ -89,7 +89,7 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
                   className="h-8 w-8 p-0"
                   onClick={e => {
                     e.stopPropagation();
-                    if (!readOnlyMode) router.push(`/agents/${agent.name}`);
+                    if (!readOnlyMode) push(`/agents/${agent.name}`);
                   }}
                   disabled={readOnlyMode}>
                   <Pencil className="h-4 w-4" />

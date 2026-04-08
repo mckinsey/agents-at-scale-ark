@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import { MemoryBroker } from '../memory-broker.js';
+import { SessionsBroker } from '../sessions-broker.js';
 import { streamSSE } from '../sse.js';
 import { parsePaginationParams, PaginationError, PaginatedList } from '../pagination.js';
 
-export function createMemoryRouter(memory: MemoryBroker): Router {
+export function createMemoryRouter(memory: MemoryBroker, sessions?: SessionsBroker): Router {
   const router = Router();
 
   /**
@@ -66,6 +67,10 @@ export function createMemoryRouter(memory: MemoryBroker): Router {
 
       memory.addMessages(conversation_id, query_id, messages);
       memory.save();
+
+      if (sessions && conversation_id) {
+        sessions.applyMessage(conversation_id, query_id);
+      }
 
       res.status(200).send();
     } catch (error) {

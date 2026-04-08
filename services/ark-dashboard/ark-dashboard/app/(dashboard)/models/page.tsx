@@ -1,9 +1,9 @@
 'use client';
 
 import { Plus } from 'lucide-react';
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
+import { NamespacedLink } from '@/components/namespaced-link';
 import { PageHeader } from '@/components/common/page-header';
 import { ModelsSection } from '@/components/sections/models-section';
 import { Button } from '@/components/ui/button';
@@ -31,12 +31,12 @@ export default function ModelsPage() {
               Add Model
             </Button>
           ) : (
-            <Link href="/models/new">
+            <NamespacedLink href="/models/new">
               <Button>
                 <Plus className="h-4 w-4" />
                 Add Model
               </Button>
-            </Link>
+            </NamespacedLink>
           )
         }
       />

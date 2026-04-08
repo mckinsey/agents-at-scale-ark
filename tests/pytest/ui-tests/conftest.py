@@ -25,6 +25,10 @@ def pytest_addoption(parser):
         parser.addoption("--skip-install", action="store_true", default=False)
     except ValueError:
         pass
+    try:
+        parser.addoption("--log-browser-console", action="store_true", default=False)
+    except ValueError:
+        pass
 
 
 def get_ark_pods():
@@ -164,6 +168,13 @@ def ark_setup(request, tmp_path_factory):
 
 
 @pytest.fixture(scope="session")
+def screenshots_dir() -> Path:
+    path = Path("screenshots")
+    path.mkdir(exist_ok=True)
+    return path
+
+
+@pytest.fixture(scope="session")
 def playwright():
     with sync_playwright() as p:
         yield p
@@ -201,9 +212,35 @@ def context(browser, request):
 
 
 @pytest.fixture(scope="function")
-def page(context):
+def page(context, request, screenshots_dir):
     page = context.new_page()
+    page._screenshots_dir = screenshots_dir
+
+    console_messages = []
+
+    def handle_console(msg):
+        if msg.type in ("error", "warning"):
+            console_messages.append({"type": msg.type, "text": msg.text})
+
+    def handle_response(response):
+        if response.status >= 400:
+            try:
+                body = response.text()
+            except Exception:
+                body = "<unreadable>"
+            logger.warning(f"HTTP {response.status} {response.request.method} {response.url}: {body[:500]}")
+
+    page.on("console", handle_console)
+    page.on("response", handle_response)
+    page._test_console_messages = console_messages
+
     yield page
+
+    if console_messages and request.config.getoption("--log-browser-console"):
+        logger.info("Browser console errors during test:")
+        for message in console_messages:
+            logger.info(f"\t{message}")
+
     page.close()
 
 
@@ -214,12 +251,9 @@ def pytest_runtest_makereport(item, call):
     
     if rep.when == "call" and rep.failed:
         page = item.funcargs.get("page")
-        if page:
+        screenshots_dir = item.funcargs.get("screenshots_dir")
+        if page and screenshots_dir:
             try:
-                # Ensure screenshots directory exists
-                screenshots_dir = Path("screenshots")
-                screenshots_dir.mkdir(exist_ok=True)
-                
                 screenshot_path = screenshots_dir / f"{item.name}.png"
                 page.screenshot(path=str(screenshot_path))
                 logger.info(f"Screenshot saved: {screenshot_path}")

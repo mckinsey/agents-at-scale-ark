@@ -258,18 +258,9 @@ chainsaw test samples/walkthrough/teams/tests/
 
 ### Deploy the Complete Workflow
 
-First, set up the MCP filesystem server for document storage:
+First, install the MCP filesystem server from the [Ark Marketplace](https://github.com/mckinsey/agents-at-scale-marketplace):
 ```bash
-# Build and load the filesys MCP server image
-cd mcp-servers/filesystem-mcp
-docker build -t filesystem-mcp-server:latest .
-# Load image into cluster (choose based on your setup)
-kind load docker-image filesystem-mcp-server:latest        # For kind
-minikube image load filesystem-mcp-server:latest           # For minikube
-cd ../..
-
-# Deploy filesystem MCP server
-helm install mcp-filesystem mcp-servers/filesystem-mcp/chart --set image.repository=filesystem-mcp-server --set image.tag=latest
+ark install marketplace/mcps/filesystem-mcp-server
 
 # Verify it's ready (should show READY=True)
 kubectl get mcpservers
@@ -353,14 +344,8 @@ open http://localhost:8080
 If you want to deploy everything at once without the step-by-step tutorial:
 
 ```bash
-# 1. Build and load the filesys MCP server image
-cd mcp-servers/filesystem-mcp
-docker build -t filesystem-mcp-server:latest .
-kind load docker-image filesystem-mcp-server:latest
-cd ../..
-
-# Deploy MCP filesystem server
-helm install mcp-filesystem mcp-servers/filesystem-mcp/chart --set image.repository=filesystem-mcp-server --set image.tag=latest
+# 1. Install MCP filesystem server from marketplace
+ark install marketplace/mcps/filesystem-mcp-server
 
 # Verify it's ready (should show READY=True)
 kubectl get mcpservers

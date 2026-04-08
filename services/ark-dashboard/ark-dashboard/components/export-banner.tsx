@@ -2,9 +2,9 @@
 
 import { format } from 'date-fns';
 import { AlertTriangle, Download, X } from 'lucide-react';
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
+import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { exportService } from '@/lib/services/export';
 
@@ -49,11 +49,11 @@ export function ExportBanner() {
           <span className="block sm:inline">
             To bring changes made in the Dashboard locally, export the required
             resources via{' '}
-            <Link
+            <NamespacedLink
               href="/export"
               className="font-semibold underline hover:no-underline">
               export section
-            </Link>
+            </NamespacedLink>
           </span>
           {lastExportTime && (
             <span className="mt-1 block text-[10px] sm:mt-0 sm:ml-1 sm:inline sm:text-xs">
@@ -66,7 +66,7 @@ export function ExportBanner() {
         </span>
       </div>
       <div className="flex items-center gap-2 self-end sm:self-auto">
-        <Link href="/export">
+        <NamespacedLink href="/export">
           <Button
             size="sm"
             variant="outline"
@@ -74,7 +74,7 @@ export function ExportBanner() {
             <Download className="h-3 w-3" />
             <span className="hidden sm:inline">Export</span>
           </Button>
-        </Link>
+        </NamespacedLink>
         <Button
           size="sm"
           variant="ghost"

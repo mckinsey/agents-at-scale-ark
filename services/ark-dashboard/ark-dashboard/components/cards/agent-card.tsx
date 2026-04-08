@@ -1,7 +1,6 @@
 'use client';
 
 import { Bot, MessageCircle, Pencil, Trash2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
@@ -10,6 +9,7 @@ import { useChatState } from '@/lib/chat-context';
 import { toggleFloatingChat } from '@/lib/chat-events';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import type { Agent } from '@/lib/services';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -21,7 +21,7 @@ interface AgentCardProps {
 }
 
 export function AgentCard({ agent, onDelete }: AgentCardProps) {
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(agent.name);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -39,7 +39,7 @@ export function AgentCard({ agent, onDelete }: AgentCardProps) {
     {
       icon: Pencil,
       label: 'Edit agent',
-      onClick: () => router.push(`/agents/${agent.name}`),
+      onClick: () => push(`/agents/${agent.name}`),
       disabled: readOnlyMode,
     },
   ];
@@ -67,7 +67,7 @@ export function AgentCard({ agent, onDelete }: AgentCardProps) {
         description={agent.description}
         icon={<IconComponent className="h-5 w-5" />}
         actions={actions}
-        onClick={() => router.push(`/agents/${agent.name}`)}
+        onClick={() => push(`/agents/${agent.name}`)}
         footer={
           <div className="flex w-full flex-row items-end justify-between">
             <div className="text-muted-foreground flex items-center gap-2 text-sm">

@@ -1,9 +1,9 @@
 'use client';
 
 import { ExternalLink, Play, Trash2, Workflow } from 'lucide-react';
-import Link from 'next/link';
 import { useState } from 'react';
 
+import { NamespacedLink } from '@/components/namespaced-link';
 import { DeleteWorkflowTemplateDialog } from '@/components/dialogs/delete-workflow-template-dialog';
 import { RunWorkflowDialog } from '@/components/dialogs/run-workflow-dialog';
 import { Button } from '@/components/ui/button';
@@ -70,7 +70,7 @@ export function FlowRow({
 
   return (
     <div className="bg-card hover:bg-accent/5 relative flex w-full items-center gap-4 overflow-hidden rounded-md border px-4 py-3 transition-colors">
-      <Link
+      <NamespacedLink
         href={`/workflow-templates/${flow.id}`}
         className="absolute inset-0 z-0"
       />
