@@ -55,25 +55,40 @@ async def proxy_sse_stream(url: str):
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             async with client.stream("GET", url) as response:
-                if response.status_code != 200:
-                    response_text = await response.aread()
-                    error = format_error_response(
-                        response_text.decode("utf-8"),
-                        response.status_code,
-                        response.reason_phrase
-                    )
-                    yield f"data: {json.dumps(error)}\n\n"
-                    return
+                yield ": ok\n\n"
+                try:
+                    first_line = None
+                    async for line in response.aiter_lines():
+                        first_line = line
+                        break
 
-                async for line in response.aiter_lines():
-                    if line.strip():
-                        yield line + "\n\n"
+                    if response.status_code != 200:
+                        body_parts = [first_line] if first_line else []
+                        async for line in response.aiter_lines():
+                            body_parts.append(line)
+                        error = format_error_response(
+                            "\n".join(body_parts),
+                            response.status_code,
+                            response.reason_phrase,
+                        )
+                        yield f"event: error\ndata: {json.dumps(error)}\n\n"
+                        return
+
+                    if first_line and first_line.strip():
+                        yield first_line + "\n\n"
+                    async for line in response.aiter_lines():
+                        if line.strip():
+                            yield line + "\n\n"
+                except Exception as e:
+                    logger.error(f"Error during SSE stream from {url}: {e}")
+                    err = {'error': {'message': str(e), 'type': 'server_error'}}
+                    yield f"event: error\ndata: {json.dumps(err)}\n\n"
     except httpx.ConnectError as e:
         logger.error(f"Failed to connect to broker at {url}: {e}")
-        yield f"data: {json.dumps({'error': {'message': 'Failed to connect to broker service', 'type': 'connection_error'}})}\n\n"
+        yield f"event: error\ndata: {json.dumps({'error': {'message': 'Failed to connect to broker service', 'type': 'connection_error'}})}\n\n"
     except Exception as e:
         logger.error(f"Error proxying SSE stream: {e}")
-        yield f"data: {json.dumps({'error': {'message': str(e), 'type': 'server_error'}})}\n\n"
+        yield f"event: error\ndata: {json.dumps({'error': {'message': str(e), 'type': 'server_error'}})}\n\n"
 
 
 async def proxy_broker_request(

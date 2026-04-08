@@ -583,38 +583,42 @@ class TestHelperFunctions(unittest.IsolatedAsyncioTestCase):
             async for chunk in proxy_sse_stream("http://broker:8080/traces"):
                 result.append(chunk)
 
-            self.assertEqual(len(result), 2)
-            self.assertIn("test1", result[0])
-            self.assertIn("test2", result[1])
+            self.assertEqual(len(result), 3)
+            self.assertEqual(result[0], ": ok\n\n")
+            self.assertIn("test1", result[1])
+            self.assertIn("test2", result[2])
 
     async def test_proxy_sse_stream_error_response(self):
         from ark_api.api.v1.broker import proxy_sse_stream
+        from unittest.mock import MagicMock
 
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.status_code = 500
         mock_response.reason_phrase = "Internal Server Error"
-        mock_response.aread = AsyncMock(return_value=b'{"error": "server error"}')
 
-        mock_stream_context = AsyncMock()
-        mock_stream_context.__aenter__.return_value = mock_response
-        mock_stream_context.__aexit__.return_value = None
+        async def mock_aiter_lines():
+            yield '{"error": "server error"}'
 
-        mock_client = AsyncMock()
-        mock_client.stream.return_value = mock_stream_context
+        mock_response.aiter_lines = mock_aiter_lines
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=None)
 
-        mock_client_context = AsyncMock()
-        mock_client_context.__aenter__.return_value = mock_client
-        mock_client_context.__aexit__.return_value = None
+        mock_client = MagicMock()
+        mock_client.stream = MagicMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
 
         with patch('ark_api.api.v1.broker.httpx.AsyncClient') as mock_async_client:
-            mock_async_client.return_value = mock_client_context
+            mock_async_client.return_value = mock_client
 
             result = []
             async for chunk in proxy_sse_stream("http://broker:8080/traces"):
                 result.append(chunk)
 
-            self.assertEqual(len(result), 1)
-            self.assertIn("error", result[0])
+            self.assertEqual(len(result), 2)
+            self.assertEqual(result[0], ": ok\n\n")
+            self.assertIn("event: error", result[1])
+            self.assertIn("error", result[1])
 
     async def test_proxy_sse_stream_connection_error(self):
         from ark_api.api.v1.broker import proxy_sse_stream
