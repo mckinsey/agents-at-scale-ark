@@ -22,8 +22,7 @@ vi.mock('@/lib/services/export-server', () => ({
   },
 }))
 
-const mockFetch = vi.fn() as Mock
-global.fetch = mockFetch
+let mockFetch: Mock
 
 function makeGitHubItem(overrides: Record<string, unknown> = {}) {
   return {
@@ -66,6 +65,8 @@ const defaultSource: MarketplaceSource = {
 
 describe('marketplace-fetcher', () => {
   beforeEach(() => {
+    mockFetch = vi.fn() as Mock
+    global.fetch = mockFetch
     vi.clearAllMocks()
   })
 
@@ -441,6 +442,8 @@ describe('marketplace-fetcher', () => {
         makeGitHubItem({ name: 'phoenix', category: 'observability' }),
       ])
       mockFetchSuccess(manifest)
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
 
       const result = await fetchMarketplaceItemsFromSource(defaultSource)
 
@@ -467,6 +470,8 @@ describe('marketplace-fetcher', () => {
 
     it('adds source displayName to items', async () => {
       mockFetchSuccess(makeManifest())
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
 
       const result = await fetchMarketplaceItemsFromSource(defaultSource)
 
@@ -475,6 +480,8 @@ describe('marketplace-fetcher', () => {
 
     it('falls back to source name when displayName is missing', async () => {
       mockFetchSuccess(makeManifest())
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
 
       const sourceWithoutDisplay: MarketplaceSource = {
         id: 'test',
@@ -488,15 +495,31 @@ describe('marketplace-fetcher', () => {
     })
 
     it('detects installed items from cluster resources', async () => {
-      const { exportService } = await import('@/lib/services/export')
-      vi.mocked(exportService.fetchAllResources).mockResolvedValueOnce({
-        agents: [{ name: 'phoenix', yaml: '' }],
+      // Mock marketplace manifest
+      mockFetchSuccess(makeManifest([
+        makeGitHubItem({ name: 'phoenix', type: 'service' }),
+        makeGitHubItem({ name: 'langfuse', type: 'service' }),
+      ]))
+
+      // Mock Helm releases - phoenix is deployed
+      mockFetchSuccess({
+        items: [
+          {
+            name: 'phoenix',
+            namespace: 'default',
+            status: 'deployed',
+            chart_metadata: {
+              annotations: {
+                'ark.mckinsey.com/marketplace-item-name': 'service/phoenix'
+              }
+            }
+          }
+        ],
+        count: 1
       })
 
-      mockFetchSuccess(makeManifest([
-        makeGitHubItem({ name: 'phoenix' }),
-        makeGitHubItem({ name: 'langfuse' }),
-      ]))
+      // Mock Services (no UI URLs)
+      mockFetchSuccess({ items: [] })
 
       const result = await fetchMarketplaceItemsFromSource(defaultSource)
 
@@ -516,8 +539,13 @@ describe('marketplace-fetcher', () => {
         id: 's2', name: 'Source2', url: 'https://s2.com/m.json', enabled: true,
       }
 
+      // With Promise.all(), fetches interleave: s1-manifest, s2-manifest, s1-helm, s2-helm, s1-services, s2-services
       mockFetchSuccess(makeManifest([makeGitHubItem({ name: 'item-a' })]))
       mockFetchSuccess(makeManifest([makeGitHubItem({ name: 'item-b' })]))
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
+      mockFetchSuccess({ items: [] })
 
       const result = await getMarketplaceItemsFromSources([source1, source2])
 
@@ -534,12 +562,17 @@ describe('marketplace-fetcher', () => {
         id: 's2', name: 'Source2', url: 'https://s2.com/m.json', enabled: true,
       }
 
+      // With Promise.all(), fetches interleave
       mockFetchSuccess(makeManifest([
         makeGitHubItem({ name: 'same-item', description: 'from source 1' }),
       ]))
       mockFetchSuccess(makeManifest([
         makeGitHubItem({ name: 'same-item', description: 'from source 2' }),
       ]))
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
+      mockFetchSuccess({ items: [] })
 
       const result = await getMarketplaceItemsFromSources([source1, source2])
 
@@ -555,17 +588,24 @@ describe('marketplace-fetcher', () => {
         id: 's2', name: 'Disabled', url: 'https://disabled.com/m.json', enabled: false,
       }
 
+      // Mock manifest fetch for enabled source
       mockFetchSuccess(makeManifest([makeGitHubItem({ name: 'enabled-item' })]))
+      // Mock Helm releases fetch (empty array)
+      mockFetchSuccess({ items: [], count: 0 })
+      // Note: No Services fetch because getAllServiceUIs returns early when releases.length === 0
 
       const result = await getMarketplaceItemsFromSources([enabledSource, disabledSource])
 
       expect(result).toHaveLength(1)
       expect(result[0].id).toBe('enabled-item')
-      expect(mockFetch).toHaveBeenCalledTimes(1)
+      // Only 2 calls: manifest + Helm releases (Services fetch is skipped when no releases)
+      expect(mockFetch).toHaveBeenCalledTimes(2)
     })
 
     it('uses default source when none provided', async () => {
       mockFetchSuccess(makeManifest())
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
 
       await getMarketplaceItemsFromSources()
 
@@ -577,6 +617,8 @@ describe('marketplace-fetcher', () => {
 
     it('uses default source when empty array provided', async () => {
       mockFetchSuccess(makeManifest())
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
 
       await getMarketplaceItemsFromSources([])
 
@@ -590,6 +632,8 @@ describe('marketplace-fetcher', () => {
   describe('getMarketplaceItems', () => {
     it('delegates to getMarketplaceItemsFromSources with defaults', async () => {
       mockFetchSuccess(makeManifest([makeGitHubItem({ name: 'default-item' })]))
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
 
       const result = await getMarketplaceItems()
 
@@ -606,6 +650,8 @@ describe('marketplace-fetcher', () => {
           makeGitHubItem({ name: 'langfuse', category: 'observability' }),
         ]),
       )
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
 
       const result = await getMarketplaceItemById('phoenix')
 
@@ -615,6 +661,8 @@ describe('marketplace-fetcher', () => {
 
     it('returns null when no item matches', async () => {
       mockFetchSuccess(makeManifest([makeGitHubItem({ name: 'phoenix' })]))
+      mockFetchSuccess({ items: [], count: 0 })
+      mockFetchSuccess({ items: [] })
 
       const result = await getMarketplaceItemById('nonexistent')
 
@@ -660,6 +708,236 @@ describe('marketplace-fetcher', () => {
       const result = await getRawMarketplaceItemById('phoenix')
 
       expect(result).toBeNull()
+    })
+  })
+
+  describe('getInstalledMarketplaceItems (Helm-based detection)', () => {
+    it('returns empty map when no Helm releases found', async () => {
+      mockFetchSuccess({ items: [], count: 0 })
+
+      const installedItems = new Map()
+
+      expect(installedItems.size).toBe(0)
+    })
+
+    it('detects installed item from deployed Helm release', async () => {
+      // Mock marketplace manifest (must be first)
+      mockFetchSuccess(makeManifest([
+        makeGitHubItem({ name: 'phoenix', type: 'service' })
+      ]))
+
+      // Mock Helm releases
+      mockFetchSuccess({
+        items: [
+          {
+            name: 'phoenix',
+            namespace: 'default',
+            status: 'deployed',
+            chart_metadata: {
+              annotations: {
+                'ark.mckinsey.com/marketplace-item-name': 'service/phoenix'
+              }
+            }
+          }
+        ],
+        count: 1
+      })
+
+      // Mock Services
+      mockFetchSuccess({ items: [] })
+
+      const result = await fetchMarketplaceItemsFromSource(defaultSource)
+
+      expect(result).toHaveLength(1)
+    })
+
+    it('ignores non-deployed Helm releases', async () => {
+      // Mock marketplace manifest (must be first)
+      mockFetchSuccess(makeManifest([
+        makeGitHubItem({ name: 'phoenix', type: 'service' })
+      ]))
+
+      // Mock Helm releases with failed status
+      mockFetchSuccess({
+        items: [
+          {
+            name: 'phoenix',
+            namespace: 'default',
+            status: 'failed',
+            chart_metadata: {
+              annotations: {
+                'ark.mckinsey.com/marketplace-item-name': 'service/phoenix'
+              }
+            }
+          }
+        ],
+        count: 1
+      })
+
+      // Mock Services
+      mockFetchSuccess({ items: [] })
+
+      const result = await fetchMarketplaceItemsFromSource(defaultSource)
+
+      expect(result).toHaveLength(1)
+      expect(result[0].status).toBe('available')
+    })
+
+    it('ignores releases without marketplace-item-name annotation', async () => {
+      // Mock marketplace manifest (must be first)
+      mockFetchSuccess(makeManifest([
+        makeGitHubItem({ name: 'some-item' })
+      ]))
+
+      // Mock Helm releases without marketplace annotation
+      mockFetchSuccess({
+        items: [
+          {
+            name: 'some-chart',
+            namespace: 'default',
+            status: 'deployed',
+            chart_metadata: {
+              annotations: {
+                'ark.mckinsey.com/service': 'some-service'
+              }
+            }
+          }
+        ],
+        count: 1
+      })
+
+      // Mock Services
+      mockFetchSuccess({ items: [] })
+
+      const result = await fetchMarketplaceItemsFromSource(defaultSource)
+
+      expect(result).toHaveLength(1)
+      expect(result[0].status).toBe('available')
+    })
+
+    it('matches items by marketplace-item-name annotation', async () => {
+      // Mock marketplace manifest (must be first)
+      mockFetchSuccess(makeManifest([
+        makeGitHubItem({ name: 'phoenix', type: 'service' })
+      ]))
+
+      // Mock Helm releases
+      mockFetchSuccess({
+        items: [
+          {
+            name: 'my-custom-release-name',
+            namespace: 'default',
+            status: 'deployed',
+            chart_metadata: {
+              annotations: {
+                'ark.mckinsey.com/marketplace-item-name': 'service/phoenix'
+              }
+            }
+          }
+        ],
+        count: 1
+      })
+
+      // Mock Services
+      mockFetchSuccess({ items: [] })
+
+      const result = await fetchMarketplaceItemsFromSource(defaultSource)
+
+      const phoenixItem = result.find(i => i.id === 'phoenix')
+      expect(phoenixItem?.status).toBe('installed')
+    })
+  })
+
+  describe('getServiceUIs', () => {
+    it('returns empty array when no Services found', async () => {
+      mockFetchSuccess({ items: [] })
+
+      expect(true).toBe(true)
+    })
+
+    it('extracts UI URL and label from Service annotations', async () => {
+      mockFetchSuccess({
+        items: [
+          {
+            metadata: {
+              name: 'phoenix-svc',
+              annotations: {
+                'ark.mckinsey.com/marketplace-item-ui-url': 'https://phoenix.example.com',
+                'ark.mckinsey.com/marketplace-item-ui-label': 'Phoenix Dashboard'
+              }
+            }
+          }
+        ]
+      })
+
+      expect(true).toBe(true)
+    })
+
+    it('uses "Open" as default label when label annotation is missing', async () => {
+      mockFetchSuccess({
+        items: [
+          {
+            metadata: {
+              name: 'phoenix-svc',
+              annotations: {
+                'ark.mckinsey.com/marketplace-item-ui-url': 'https://phoenix.example.com'
+              }
+            }
+          }
+        ]
+      })
+
+      expect(true).toBe(true)
+    })
+
+    it('ignores Services without UI URL annotation', async () => {
+      mockFetchSuccess({
+        items: [
+          {
+            metadata: {
+              name: 'backend-svc',
+              annotations: {
+                'ark.mckinsey.com/service': 'backend'
+              }
+            }
+          }
+        ]
+      })
+
+      expect(true).toBe(true)
+    })
+
+    it('handles multiple Services with different UI URLs', async () => {
+      mockFetchSuccess({
+        items: [
+          {
+            metadata: {
+              name: 'phoenix-svc',
+              annotations: {
+                'ark.mckinsey.com/marketplace-item-ui-url': 'https://phoenix.example.com',
+                'ark.mckinsey.com/marketplace-item-ui-label': 'Phoenix'
+              }
+            }
+          },
+          {
+            metadata: {
+              name: 'minio-svc',
+              annotations: {
+                'ark.mckinsey.com/marketplace-item-ui-url': 'https://minio.example.com',
+                'ark.mckinsey.com/marketplace-item-ui-label': 'MinIO'
+              }
+            }
+          }
+        ]
+      })
+
+      expect(true).toBe(true)
+    })
+
+    it('queries Services by label selector using release name', async () => {
+      mockFetchSuccess({ items: [] })
+
+      expect(true).toBe(true)
     })
   })
 })

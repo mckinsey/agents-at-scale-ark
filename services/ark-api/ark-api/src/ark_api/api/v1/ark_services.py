@@ -12,6 +12,9 @@ from ark_sdk.k8s import get_context
 from ...models.ark_services import (
     ArkService,
     ArkServiceListResponse,
+    HelmRelease,
+    HelmReleaseListResponse,
+    ChartMetadata,
     HTTPRouteInfo
 )
 from ...utils.ark_services import (
@@ -24,6 +27,7 @@ from ...constants.annotations import (
     RESOURCES_ANNOTATION,
     LOCALHOST_GATEWAY_PORT_ANNOTATION
 )
+from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +137,7 @@ async def get_httproutes_for_ark_service(namespace: str, release_name: str) -> L
 @router.get("", response_model=ArkServiceListResponse)
 async def list_ark_services(
     list_all_services: Optional[bool] = Query(False, description="List all Helm releases, not just ARK services"),
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION)
 ) -> ArkServiceListResponse:
     """
     List ARK services (Helm releases) in a namespace.
@@ -194,29 +198,73 @@ async def list_ark_services(
     )
 
 
+@router.get("/marketplace-items", response_model=HelmReleaseListResponse)
+async def list_marketplace_items(
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION)
+) -> HelmReleaseListResponse:
+    """
+    List Helm releases for marketplace item detection.
+
+    Returns full Helm release data including chart metadata and annotations
+    for marketplace item detection via ark.mckinsey.com/marketplace-item-name.
+
+    Args:
+        namespace: The namespace to list Helm releases from (defaults to current context)
+
+    Returns:
+        HelmReleaseListResponse containing:
+        - items: List of Helm releases with chart metadata
+        - count: Number of releases found
+    """
+    if namespace is None:
+        namespace = get_context()["namespace"]
+
+    helm_releases_data = await get_helm_releases(namespace)
+
+    helm_releases = [
+        HelmRelease(
+            name=release["name"],
+            namespace=release["namespace"],
+            chart=release["chart"],
+            chart_version=release["chart_version"],
+            app_version=release["app_version"],
+            status=release["status"],
+            revision=release["revision"],
+            updated=release["updated"],
+            chart_metadata=ChartMetadata(**release["chart_metadata"]) if release.get("chart_metadata") else None
+        )
+        for release in helm_releases_data
+    ]
+
+    return HelmReleaseListResponse(
+        items=helm_releases,
+        count=len(helm_releases)
+    )
+
+
 @router.get("/{service_name}", response_model=ArkService)
 async def get_ark_service(
     service_name: str,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION)
 ) -> ArkService:
     """
     Get a specific ARK service (Helm release) by name.
-    
+
     Args:
         namespace: The namespace to get the ARK service from
         service_name: The name of the ARK service (Helm release)
-        
+
     Returns:
         ArkService: The ARK service details
     """
     # Reuse the existing logic by getting all services and filtering
-    services_response = await list_ark_services(namespace, list_all_services=True)
-    
+    services_response = await list_ark_services(list_all_services=True, namespace=namespace)
+
     # Find the service by name
     for service in services_response.items:
         if service.name == service_name:
             return service
-    
+
     # Service not found
     raise HTTPException(status_code=404, detail=f"ARK service '{service_name}' not found in namespace '{namespace}'")
 

@@ -4,7 +4,7 @@ This section explains **what ARK is**, how it is designed, and why key decisions
 
 ## What is ARK?
 
-ARK is a platform designed to provide reliable, production-grade infrastructure for AI agents and multi-agent systems. The key features of ARK include:
+Ark is a set of open-source tools that allow teams to leverage their existing Kubernetes infrastructure to run AI agents and multi-agent systems. Key features include:
 
 - [Platform-agnostic agent operations](../reference/query-execution).
 - [Standardized deployment patterns](../operations-guide/deploying-ark).
@@ -25,7 +25,7 @@ The reason ARK uses Kubernetes as its foundation is to build upon battle-tested 
 - [How observability provides system transparency](/developer-guide/observability).
 
 
-## Platform architecture concepts
+## Architecture concepts
 
 ![High-level architecture diagram](../images/high-level-architecture.png)
 
@@ -46,7 +46,7 @@ ARK's core resources represent the fundamental abstractions for building agentic
 
 ### Services
 
-ARK includes supporting services that extend the platform's capabilities:
+Ark includes supporting services that extend its capabilities:
 
 - **ark-api**: REST API for managing ARK resources (includes A2A Gateway for agent-to-agent communication).
 - **ark-dashboard**: Web-based management interface.
@@ -71,7 +71,7 @@ The design of effective agentic systems requires understanding both technical pa
 
 ### Extensibility concepts
 
-ARK's extensibility model allows customization while maintaining system stability. The platform provides extension points through:
+Ark's extensibility model allows customization while maintaining system stability. Extension points include:
 
 - [CRD design guidelines](/developer-guide/crd-design-guide).
 - [RAG implementation](/developer-guide/rag-implementation).
