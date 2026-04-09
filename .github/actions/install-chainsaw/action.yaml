@@ -1,0 +1,21 @@
+name: 'Install Chainsaw'
+description: 'Installs Chainsaw test framework'
+
+inputs:
+  version:
+    description: 'Version of Chainsaw to install'
+    required: false
+    default: 'v0.2.12'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install chainsaw
+      shell: bash
+      run: |
+        curl -s -L "https://github.com/kyverno/chainsaw/releases/download/${{ inputs.version }}/chainsaw_linux_amd64.tar.gz" | \
+          tar xz -C /tmp
+        sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
+        sudo chmod +x /usr/local/bin/chainsaw
+        echo "✅ Chainsaw ${{ inputs.version }} installed successfully"
+        chainsaw version

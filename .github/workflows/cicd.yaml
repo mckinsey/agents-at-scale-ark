@@ -200,6 +200,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
 
       - name: Install ruff
         uses: astral-sh/ruff-action@v3
@@ -279,6 +281,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
 
       - name: Login to Docker Registry
         if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
@@ -341,6 +345,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
 
       - name: Build libraries
         run: make libs-build-all
@@ -536,12 +542,7 @@ jobs:
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
 
-      - name: Install chainsaw
-        run: |
-          curl -s -L "https://github.com/kyverno/chainsaw/releases/download/v0.2.12/chainsaw_linux_amd64.tar.gz" | \
-            tar xz -C /tmp
-          sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
-          sudo chmod +x /usr/local/bin/chainsaw
+      - uses: ./.github/actions/install-chainsaw
 
       - name: Run standard E2E tests
         env:
@@ -580,7 +581,7 @@ jobs:
     name: E2E LLM (${{ matrix.storage-backend }})
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
-    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
+    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' && github.event.pull_request.draft != true }}
     continue-on-error: ${{ matrix.storage-backend == 'postgresql' }}
     strategy:
       fail-fast: false
@@ -598,13 +599,10 @@ jobs:
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
 
-      - name: Install chainsaw and jq
-        run: |
-          curl -s -L "https://github.com/kyverno/chainsaw/releases/download/v0.2.12/chainsaw_linux_amd64.tar.gz" | \
-            tar xz -C /tmp
-          sudo mv /tmp/chainsaw /usr/local/bin/chainsaw
-          sudo chmod +x /usr/local/bin/chainsaw
-          sudo apt-get update && sudo apt-get install -y jq
+      - uses: ./.github/actions/install-chainsaw
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
 
       - name: Warm up network connectivity
         run: |
@@ -952,6 +950,8 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: "22.x"
+          cache: "npm"
+          cache-dependency-path: docs/package-lock.json
 
       - name: Build Docs
         run: |
@@ -985,6 +985,8 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: "22.x"
+          cache: "npm"
+          cache-dependency-path: tools/ark-cli/package-lock.json
 
       - name: Build ARK CLI
         run: |
