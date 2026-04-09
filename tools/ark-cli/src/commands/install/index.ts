@@ -26,6 +26,10 @@ import {
 } from '../../lib/waitForReady.js';
 import {parseTimeoutToSeconds} from '../../lib/timeout.js';
 
+function isValidVersion(version: string): boolean {
+  return /^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$/.test(version);
+}
+
 function isVersionNotFoundError(
   error: unknown,
   options: {
@@ -52,6 +56,26 @@ function isVersionNotFoundError(
   }
 
   return false;
+}
+
+function handleInstallError(
+  error: unknown,
+  service: ArkService,
+  options: {
+    arkVersion?: string;
+    marketplaceVersion?: string;
+  }
+): boolean {
+  if (isVersionNotFoundError(error, options)) {
+    const version = options.arkVersion || options.marketplaceVersion;
+    output.warning(`${service.name} version ${version} not found, skipping...`);
+    return true; // should continue to next service
+  }
+
+  // Other errors still fail
+  output.error(`failed to install ${service.name}`);
+  console.error(error);
+  process.exit(1);
 }
 
 async function uninstallPrerequisites(
@@ -127,7 +151,16 @@ async function installService(
     marketplaceVersionOverride &&
     chartPath.includes('ghcr.io/mckinsey/agents-at-scale-marketplace/charts')
   ) {
-    chartPath = `${chartPath}:${marketplaceVersionOverride}`;
+    // Check if version tag exists after the last slash
+    const lastSlashIndex = chartPath.lastIndexOf('/');
+    const afterLastSlash = chartPath.slice(lastSlashIndex + 1);
+    if (afterLastSlash.includes(':')) {
+      // Replace existing version
+      chartPath = chartPath.replace(/:[^:/]+$/, `:${marketplaceVersionOverride}`);
+    } else {
+      // Append version
+      chartPath = `${chartPath}:${marketplaceVersionOverride}`;
+    }
   }
 
   const helmArgs = [
@@ -149,8 +182,8 @@ async function installService(
     'helm',
     helmArgs,
     {
-      stdout: ['pipe', 'inherit'],
-      stderr: ['pipe', 'inherit'],
+      stdout: 'inherit',
+      stderr: 'pipe',
     },
     {verbose}
   );
@@ -167,6 +200,17 @@ export async function installArk(
     marketplaceVersion?: string;
   } = {}
 ) {
+  // Validate version strings
+  if (options.arkVersion && !isValidVersion(options.arkVersion)) {
+    output.error(`Invalid ARK version format: ${options.arkVersion}. Expected semantic versioning (e.g., 0.1.50)`);
+    process.exit(1);
+  }
+
+  if (options.marketplaceVersion && !isValidVersion(options.marketplaceVersion)) {
+    output.error(`Invalid marketplace version format: ${options.marketplaceVersion}. Expected semantic versioning (e.g., 0.1.7)`);
+    process.exit(1);
+  }
+
   // Validate that --wait-for-ready requires -y
   if (options.waitForReady && !options.yes) {
     output.error('--wait-for-ready requires -y flag for non-interactive mode');
@@ -229,15 +273,9 @@ export async function installArk(
           );
           output.success(`${service.name} installed successfully`);
         } catch (error) {
-          if (isVersionNotFoundError(error, options)) {
-            const version = options.arkVersion || options.marketplaceVersion;
-            output.warning(`${service.name} version ${version} not found, skipping...`);
+          if (handleInstallError(error, service, options)) {
             continue;
           }
-
-          output.error(`failed to install ${service.name}`);
-          console.error(error);
-          process.exit(1);
         }
         continue;
       }
@@ -265,16 +303,9 @@ export async function installArk(
         );
         output.success(`${service.name} installed successfully`);
       } catch (error) {
-        if (isVersionNotFoundError(error, options)) {
-          const version = options.arkVersion || options.marketplaceVersion;
-          output.warning(`${service.name} version ${version} not found, skipping...`);
+        if (handleInstallError(error, service, options)) {
           continue;
         }
-
-        // Other errors still fail
-        output.error(`failed to install ${service.name}`);
-        console.error(error);
-        process.exit(1);
       }
     }
     return;
@@ -450,15 +481,11 @@ export async function installArk(
 
         console.log(); // Add blank line after command output
       } catch (error) {
-        if (isVersionNotFoundError(error, options)) {
-          const version = options.arkVersion || options.marketplaceVersion;
-          output.warning(`${service.name} version ${version} not found, skipping...`);
+        if (handleInstallError(error, service, options)) {
           console.log(); // Add blank line after warning
           continue;
         }
-
         console.log(); // Add blank line after error output
-        process.exit(1);
       }
     }
   } else {
@@ -498,15 +525,11 @@ export async function installArk(
         );
         console.log(); // Add blank line after command output
       } catch (error) {
-        if (isVersionNotFoundError(error, options)) {
-          const version = options.arkVersion || options.marketplaceVersion;
-          output.warning(`${service.name} version ${version} not found, skipping...`);
+        if (handleInstallError(error, service, options)) {
           console.log(); // Add blank line after warning
           continue;
         }
-
         console.log(); // Add blank line after error output
-        process.exit(1);
       }
     }
   }
