@@ -305,6 +305,25 @@ export default function MarketplaceDetailPage() {
                     </Button>
                   )}
 
+                  {item.status === 'installed' && item.uis && item.uis.length > 0 && (
+                    <>
+                      <Separator />
+                      <div className="space-y-2">
+                        {item.uis.map((ui) => (
+                          <Button
+                            key={ui.url}
+                            variant="outline"
+                            className="w-full justify-start"
+                            onClick={() => window.open(ui.url, '_blank')}>
+                            <ExternalLink className="mr-2 h-4 w-4" />
+                            {ui.label}
+                            <ExternalLink className="ml-auto h-3 w-3" />
+                          </Button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
                   <Separator />
 
                   <div className="space-y-3">
