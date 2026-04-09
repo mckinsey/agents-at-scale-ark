@@ -26,6 +26,34 @@ import {
 } from '../../lib/waitForReady.js';
 import {parseTimeoutToSeconds} from '../../lib/timeout.js';
 
+function isVersionNotFoundError(
+  error: unknown,
+  options: {
+    arkVersion?: string;
+    marketplaceVersion?: string;
+  }
+): boolean {
+  let errorMsg = '';
+
+  if (error && typeof error === 'object') {
+    const err = error as any;
+    // Check stderr first (execa captures this with pipe), then message
+    errorMsg = err.stderr || err.message || String(error);
+  } else {
+    errorMsg = String(error);
+  }
+
+  if (options.arkVersion && errorMsg.includes(`:${options.arkVersion}: not found`)) {
+    return true;
+  }
+
+  if (options.marketplaceVersion && errorMsg.includes(`:${options.marketplaceVersion}: not found`)) {
+    return true;
+  }
+
+  return false;
+}
+
 async function uninstallPrerequisites(
   service: ArkService,
   verbose: boolean = false
@@ -71,7 +99,12 @@ async function checkAndCleanFailedRelease(
   }
 }
 
-async function installService(service: ArkService, verbose: boolean = false) {
+async function installService(
+  service: ArkService,
+  verbose: boolean = false,
+  arkVersionOverride?: string,
+  marketplaceVersionOverride?: string
+) {
   await uninstallPrerequisites(service, verbose);
   await checkAndCleanFailedRelease(
     service.helmReleaseName,
@@ -79,11 +112,29 @@ async function installService(service: ArkService, verbose: boolean = false) {
     verbose
   );
 
+  let chartPath = service.chartPath!;
+
+  // Override version for ARK core services
+  if (
+    arkVersionOverride &&
+    chartPath.includes('ghcr.io/mckinsey/agents-at-scale-ark/charts')
+  ) {
+    chartPath = chartPath.replace(/:[^:]+$/, `:${arkVersionOverride}`);
+  }
+
+  // Override version for marketplace items
+  if (
+    marketplaceVersionOverride &&
+    chartPath.includes('ghcr.io/mckinsey/agents-at-scale-marketplace/charts')
+  ) {
+    chartPath = `${chartPath}:${marketplaceVersionOverride}`;
+  }
+
   const helmArgs = [
     'upgrade',
     '--install',
     service.helmReleaseName,
-    service.chartPath!,
+    chartPath,
   ];
 
   // Only add namespace flag if service has explicit namespace
@@ -94,13 +145,27 @@ async function installService(service: ArkService, verbose: boolean = false) {
   // Add any additional install args
   helmArgs.push(...(service.installArgs || []));
 
-  await execute('helm', helmArgs, {stdio: 'inherit'}, {verbose});
+  await execute(
+    'helm',
+    helmArgs,
+    {
+      stdout: ['pipe', 'inherit'],
+      stderr: ['pipe', 'inherit'],
+    },
+    {verbose}
+  );
 }
 
 export async function installArk(
   config: ArkConfig,
   serviceNames: string[] = [],
-  options: {yes?: boolean; waitForReady?: string; verbose?: boolean} = {}
+  options: {
+    yes?: boolean;
+    waitForReady?: string;
+    verbose?: boolean;
+    arkVersion?: string;
+    marketplaceVersion?: string;
+  } = {}
 ) {
   // Validate that --wait-for-ready requires -y
   if (options.waitForReady && !options.yes) {
@@ -156,9 +221,20 @@ export async function installArk(
 
         output.info(`installing marketplace item ${service.name}...`);
         try {
-          await installService(service, options.verbose);
+          await installService(
+            service,
+            options.verbose,
+            options.arkVersion,
+            options.marketplaceVersion
+          );
           output.success(`${service.name} installed successfully`);
         } catch (error) {
+          if (isVersionNotFoundError(error, options)) {
+            const version = options.arkVersion || options.marketplaceVersion;
+            output.warning(`${service.name} version ${version} not found, skipping...`);
+            continue;
+          }
+
           output.error(`failed to install ${service.name}`);
           console.error(error);
           process.exit(1);
@@ -181,9 +257,21 @@ export async function installArk(
 
       output.info(`installing ${service.name}...`);
       try {
-        await installService(service, options.verbose);
+        await installService(
+          service,
+          options.verbose,
+          options.arkVersion,
+          options.marketplaceVersion
+        );
         output.success(`${service.name} installed successfully`);
       } catch (error) {
+        if (isVersionNotFoundError(error, options)) {
+          const version = options.arkVersion || options.marketplaceVersion;
+          output.warning(`${service.name} version ${version} not found, skipping...`);
+          continue;
+        }
+
+        // Other errors still fail
         output.error(`failed to install ${service.name}`);
         console.error(error);
         process.exit(1);
@@ -353,10 +441,22 @@ export async function installArk(
 
       output.info(`installing ${service.name}...`);
       try {
-        await installService(service, options.verbose);
+        await installService(
+          service,
+          options.verbose,
+          options.arkVersion,
+          options.marketplaceVersion
+        );
 
         console.log(); // Add blank line after command output
-      } catch {
+      } catch (error) {
+        if (isVersionNotFoundError(error, options)) {
+          const version = options.arkVersion || options.marketplaceVersion;
+          output.warning(`${service.name} version ${version} not found, skipping...`);
+          console.log(); // Add blank line after warning
+          continue;
+        }
+
         console.log(); // Add blank line after error output
         process.exit(1);
       }
@@ -390,9 +490,21 @@ export async function installArk(
       output.info(`installing ${service.name}...`);
 
       try {
-        await installService(service, options.verbose);
+        await installService(
+          service,
+          options.verbose,
+          options.arkVersion,
+          options.marketplaceVersion
+        );
         console.log(); // Add blank line after command output
-      } catch {
+      } catch (error) {
+        if (isVersionNotFoundError(error, options)) {
+          const version = options.arkVersion || options.marketplaceVersion;
+          output.warning(`${service.name} version ${version} not found, skipping...`);
+          console.log(); // Add blank line after warning
+          continue;
+        }
+
         console.log(); // Add blank line after error output
         process.exit(1);
       }
@@ -468,6 +580,14 @@ export function createInstallCommand(config: ArkConfig) {
     .description('Install ARK components using Helm')
     .argument('[service...]', 'specific services to install, or all if omitted')
     .option('-y, --yes', 'automatically confirm all installations')
+    .option(
+      '--ark-version <version>',
+      'ARK version to install (e.g., 0.1.50, defaults to CLI version)'
+    )
+    .option(
+      '--marketplace-version <version>',
+      'Marketplace item version to install (e.g., 0.1.5)'
+    )
     .option(
       '--wait-for-ready <timeout>',
       'wait for Ark to be ready after installation (e.g., 30s, 2m)'

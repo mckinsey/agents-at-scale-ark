@@ -119,7 +119,10 @@ describe('install command', () => {
         '--set',
         'image.tag=latest',
       ],
-      {stdio: 'inherit'}
+      {
+        stdout: ['pipe', 'inherit'],
+        stderr: ['pipe', 'inherit'],
+      }
     );
     expect(mockOutput.success).toHaveBeenCalledWith(
       'ark-api installed successfully'
@@ -197,7 +200,10 @@ describe('install command', () => {
         '--set',
         'replicas=2',
       ],
-      {stdio: 'inherit'}
+      {
+        stdout: ['pipe', 'inherit'],
+        stderr: ['pipe', 'inherit'],
+      }
     );
   });
 
@@ -225,7 +231,10 @@ describe('install command', () => {
         '--namespace',
         'default',
       ],
-      {stdio: 'inherit'}
+      {
+        stdout: ['pipe', 'inherit'],
+        stderr: ['pipe', 'inherit'],
+      }
     );
   });
 
@@ -328,7 +337,10 @@ describe('install command', () => {
           '--namespace',
           'ark-system',
         ],
-        {stdio: 'inherit'}
+        {
+          stdout: ['pipe', 'inherit'],
+          stderr: ['pipe', 'inherit'],
+        }
       );
     });
 
@@ -423,7 +435,10 @@ describe('install command', () => {
           '--namespace',
           'ark-system',
         ],
-        {stdio: 'inherit'}
+        {
+          stdout: ['pipe', 'inherit'],
+          stderr: ['pipe', 'inherit'],
+        }
       );
     });
 
@@ -455,7 +470,10 @@ describe('install command', () => {
           '--namespace',
           'ark-system',
         ],
-        {stdio: 'inherit'}
+        {
+          stdout: ['pipe', 'inherit'],
+          stderr: ['pipe', 'inherit'],
+        }
       );
     });
 
@@ -615,6 +633,220 @@ describe('install command', () => {
         command.parseAsync(['node', 'test'])
       ).rejects.toThrow('process.exit called');
       expect(mockExit).toHaveBeenCalledWith(130);
+    });
+  });
+
+  describe('version override flags', () => {
+    it('replaces ARK service version with --ark-version flag', async () => {
+      const mockService = {
+        name: 'ark-api',
+        helmReleaseName: 'ark-api',
+        chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api:0.1.57',
+        namespace: 'ark-system',
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-api': mockService,
+      });
+      mockExeca.mockResolvedValue({stdout: '', stderr: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'ark-api', '--ark-version', '0.1.50']);
+
+      expect(mockExeca).toHaveBeenCalledWith(
+        'helm',
+        [
+          'upgrade',
+          '--install',
+          'ark-api',
+          'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api:0.1.50',
+          '--namespace',
+          'ark-system',
+        ],
+        {
+          stdout: ['pipe', 'inherit'],
+          stderr: ['pipe', 'inherit'],
+        }
+      );
+    });
+
+    it('appends marketplace version with --marketplace-version flag', async () => {
+      const mockService = {
+        name: 'phoenix',
+        helmReleaseName: 'phoenix',
+        chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/phoenix',
+        namespace: 'default',
+      };
+      mockIsMarketplaceService.mockReturnValue(true);
+      mockGetMarketplaceItem.mockResolvedValue(mockService);
+      mockExeca.mockResolvedValue({stdout: '', stderr: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'marketplace/services/phoenix', '--marketplace-version', '0.1.7']);
+
+      expect(mockExeca).toHaveBeenCalledWith(
+        'helm',
+        [
+          'upgrade',
+          '--install',
+          'phoenix',
+          'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/phoenix:0.1.7',
+          '--namespace',
+          'default',
+        ],
+        {
+          stdout: ['pipe', 'inherit'],
+          stderr: ['pipe', 'inherit'],
+        }
+      );
+    });
+
+    it('uses both --ark-version and --marketplace-version together', async () => {
+      const arkService = {
+        name: 'ark-api',
+        helmReleaseName: 'ark-api',
+        chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api:0.1.57',
+        namespace: 'ark-system',
+      };
+      const marketplaceService = {
+        name: 'phoenix',
+        helmReleaseName: 'phoenix',
+        chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/phoenix',
+        namespace: 'default',
+      };
+
+      mockGetInstallableServices.mockReturnValue({'ark-api': arkService});
+      mockIsMarketplaceService.mockImplementation((name) => name === 'marketplace/services/phoenix');
+      mockGetMarketplaceItem.mockResolvedValue(marketplaceService);
+      mockExeca.mockResolvedValue({stdout: '', stderr: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync([
+        'node', 'test',
+        'ark-api',
+        'marketplace/services/phoenix',
+        '--ark-version', '0.1.50',
+        '--marketplace-version', '0.1.7'
+      ]);
+
+      expect(mockExeca).toHaveBeenCalledWith(
+        'helm',
+        expect.arrayContaining([
+          'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api:0.1.50',
+        ]),
+        expect.any(Object)
+      );
+
+      expect(mockExeca).toHaveBeenCalledWith(
+        'helm',
+        expect.arrayContaining([
+          'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/phoenix:0.1.7',
+        ]),
+        expect.any(Object)
+      );
+    });
+
+    it('shows warning and continues when ARK version not found', async () => {
+      const mockService = {
+        name: 'ark-completions',
+        helmReleaseName: 'ark-completions',
+        chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-completions:0.1.57',
+        namespace: 'ark-system',
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-completions': mockService,
+        'ark-api': {
+          name: 'ark-api',
+          helmReleaseName: 'ark-api',
+          chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api:0.1.57',
+          namespace: 'ark-system',
+        },
+      });
+
+      mockExeca
+        .mockResolvedValueOnce({stdout: '', stderr: ''})
+        .mockRejectedValueOnce({
+          stderr: 'Error: failed to perform "FetchReference" on source: ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-completions:0.1.50: not found',
+          message: 'Command failed',
+        })
+        .mockResolvedValueOnce({stdout: '', stderr: ''})
+        .mockResolvedValueOnce({stdout: '', stderr: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'ark-completions', 'ark-api', '--ark-version', '0.1.50']);
+
+      expect(mockOutput.warning).toHaveBeenCalledWith('ark-completions version 0.1.50 not found, skipping...');
+      expect(mockOutput.success).toHaveBeenCalledWith('ark-api installed successfully');
+    });
+
+    it('shows warning and continues when marketplace version not found', async () => {
+      const mockService = {
+        name: 'phoenix',
+        helmReleaseName: 'phoenix',
+        chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/phoenix',
+        namespace: 'default',
+      };
+      mockIsMarketplaceService.mockReturnValue(true);
+      mockGetMarketplaceItem.mockResolvedValue(mockService);
+
+      mockExeca
+        .mockResolvedValueOnce({stdout: '', stderr: ''})
+        .mockRejectedValueOnce({
+          stderr: 'Error: failed to perform "FetchReference" on source: ghcr.io/mckinsey/agents-at-scale-marketplace/charts/phoenix:99.99.99: not found',
+          message: 'Command failed',
+        });
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'marketplace/services/phoenix', '--marketplace-version', '99.99.99']);
+
+      expect(mockOutput.warning).toHaveBeenCalledWith('phoenix version 99.99.99 not found, skipping...');
+    });
+
+    it('fails on other helm errors (not version-not-found)', async () => {
+      const mockService = {
+        name: 'ark-api',
+        helmReleaseName: 'ark-api',
+        chartPath: 'oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-api:0.1.57',
+        namespace: 'ark-system',
+      };
+      mockGetInstallableServices.mockReturnValue({'ark-api': mockService});
+
+      mockExeca
+        .mockResolvedValueOnce({stdout: '', stderr: ''})
+        .mockRejectedValueOnce({
+          stderr: 'Error: network timeout',
+          message: 'Command failed',
+        });
+
+      const command = createInstallCommand(mockConfig);
+
+      await expect(
+        command.parseAsync(['node', 'test', 'ark-api', '--ark-version', '0.1.50'])
+      ).rejects.toThrow('process.exit called');
+
+      expect(mockOutput.error).toHaveBeenCalledWith('failed to install ark-api');
+      expect(mockExit).toHaveBeenCalledWith(1);
+    });
+
+    it('does not modify chart path when version flag does not match registry', async () => {
+      const mockService = {
+        name: 'custom-service',
+        helmReleaseName: 'custom-service',
+        chartPath: 'oci://custom-registry.io/charts/service:1.0.0',
+        namespace: 'default',
+      };
+      mockGetInstallableServices.mockReturnValue({'custom-service': mockService});
+      mockExeca.mockResolvedValue({stdout: '', stderr: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'custom-service', '--ark-version', '0.1.50']);
+
+      expect(mockExeca).toHaveBeenCalledWith(
+        'helm',
+        expect.arrayContaining([
+          'oci://custom-registry.io/charts/service:1.0.0',
+        ]),
+        expect.any(Object)
+      );
     });
   });
 });
