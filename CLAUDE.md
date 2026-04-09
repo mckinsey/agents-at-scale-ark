@@ -6,45 +6,36 @@
 
 ## Core Folders
 
-- **`ark/`** - Kubernetes operator (Go)
-  - Main controller managing AI resources like agents, models, queries
-  - Custom Resource Definitions (CRDs) for AI workloads
-  - Webhooks for validation and admission control
+- **`ark/`** - Kubernetes operator and default executor (Go)
+  - Controller reconciles CRDs: Agent, Model, Query, Team, MCPServer, ExecutionEngine, A2AServer
+  - Webhooks for validation and mutation (including migration warnings)
+  - `executors/completions/` - Built-in default execution engine
+  - The controller dispatches queries to the appropriate executor via A2A protocol
 
-- **`services/`** - Supporting services for Ark (Go, Python, TypeScript)
-  - `ark-api/` - API gateway service
-  - `ark-broker/` - Broker service (Node.js)
-  - `ark-dashboard/` - Dashboard web interface (TypeScript/React)
-  - `ark-evaluator/` - Evaluation service
-  - `ark-landing-page/` - Landing page
-  - `ark-mcp/` - MCP service
-  - `langchain-execution-engine/` - LangChain executor (Python)
+- **`lib/ark-sdk/`** - Python SDK (generated + overlay)
+  - Generated from CRDs via OpenAPI, with hand-written overlay for executor interfaces
+  - `BaseExecutor` ABC and `ExecutorApp` (A2A bridge) provide the standard interface for pluggable executors
+  - Downstream executor implementations live in the [marketplace](https://github.com/mckinsey/agents-at-scale-marketplace)
+
+- **`services/`** - Component services
+  - `ark-api/` - REST API gateway (Python/FastAPI) with streaming, A2A, broker integration
+  - `ark-broker/` - In-memory event bus (Node.js/Express) for messages, chunks, traces, events, sessions
+  - `ark-dashboard/` - Web UI (Next.js/React)
+  - `ark-mcp/` - MCP server host service
   - `localhost-gateway/` - Local development gateway
-  - `bundles/` - Component bundles and manifests
 
-- **`mcp/`** - Model Context Protocol servers
-  - `filesystem-mcp/` - File system operations
+- **`samples/`** - Example YAML configurations for agents, models, queries, teams
 
-- **`samples/`** - Example configurations (YAML)
-  - Agent definitions, models, queries, teams
-  - Demonstration workflows and use cases
-  - Demo configurations for various scenarios
-
-- **`docs/`** - Documentation site (Next.js)
-  - Architecture guides and API references
-  - Built with Next.js and MDX
+- **`docs/`** - Documentation site (Next.js/MDX)
 
 ## Supporting Folders
 
 - **`tools/`** - CLI tools
   - `ark-cli/` - Ark CLI (Node.js) - General-purpose, interactive
   - `fark/` - Fark CLI (Go) - Optimized for resource management and low latency
+- **`bundles/`** - Component bundles and manifests
 - **`scripts/`** - Build and deployment scripts (Bash)
-- **`templates/`** - Project templates (agents, models, queries, teams, tools, MCP servers, marketplace)
-- **`infrastructure/`** - Infrastructure provisioning (Terraform)
-- **`charts/`** - Helm charts
-- **`tests/`** - E2E Chainsaw tests
-- **`lib/`** - Shared libraries (SDK generation)
+- **`templates/`** - Project templates for new services
 
 # Build Instructions
 
@@ -83,29 +74,23 @@ make lint          # Run linting and type checking
 make build         # Build container
 ```
 
-## MCP Servers
-All MCP servers follow this pattern:
-```bash
-cd mcp/{server-name}/
-make build         # Build Docker image
-```
-
 ## Node.js Services
 ```bash
 cd docs/           # Documentation site
 npm build          # Build site
-
-cd services/vnext-ui/    # UI service
-make build         # Build Docker image
 ```
+
+# Observability
+
+Ark uses OpenTelemetry with W3C TraceContext and Baggage propagation for distributed tracing. The operator instruments query dispatch and A2A communication, automatically propagating trace context to downstream executors via HTTP headers. The telemetry subsystem lives in `ark/internal/telemetry/`, and the `ExecutorApp` base class in `lib/ark-sdk/` handles context extraction on the executor side.
 
 # Marketplace
 
-Ark has a separate marketplace repository for community-contributed services and components:
+Ark has a separate marketplace repository for add-on components that extend Ark's native capabilities. Marketplace items depend on Ark core — never the other way around.
 
 **Repository**: https://github.com/mckinsey/agents-at-scale-marketplace
 
-The marketplace includes observability platforms (Phoenix, Langfuse) and other optional services. Services can be deployed using DevSpace or Helm as dependencies of your Ark installation.
+The marketplace includes executors (Claude Agent SDK, LangChain), services (Phoenix, Langfuse, ark-sandbox, file-gateway), MCP servers, pre-built agents, and demo bundles. Components can be deployed using DevSpace or Helm as dependencies of your Ark installation.
 
 Example usage in `devspace.yaml`:
 ```yaml
