@@ -1,6 +1,6 @@
 import os
 import pytest
-from helpers.models_helper import ModelsHelper
+from helpers.models_helper import DEFAULT_AZURE_API_VERSION, ModelsHelper
 
 PREFIX = "cli-model-test"
 
@@ -17,7 +17,7 @@ PROVIDERS = [
     ),
     pytest.param(
         "azure",
-        {"api_key_env": "CICD_AZURE_API_KEY", "base_url_env": "CICD_AZURE_BASE_URL", "model": "gpt-35-turbo", "api_version": "2024-04-01-preview"},
+        {"api_key_env": "CICD_AZURE_API_KEY", "base_url_env": "CICD_AZURE_BASE_URL", "model": "gpt-35-turbo", "api_version": DEFAULT_AZURE_API_VERSION},
         id="azure",
     ),
 ]
@@ -76,7 +76,7 @@ class TestProviderModels:
         elif provider == "anthropic":
             success, msg = helper.create_anthropic_model(_model_name(provider), _secret_name(provider), config["model"], base_url)
         else:
-            api_version = config.get("api_version", "2024-04-01-preview")
+            api_version = config.get("api_version", DEFAULT_AZURE_API_VERSION)
             success, msg = helper.create_azure_model(_model_name(provider), _secret_name(provider), config["model"], base_url, api_version)
         assert success, f"Failed to create {provider} model: {msg}"
 
