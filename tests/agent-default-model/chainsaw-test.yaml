@@ -53,15 +53,15 @@ spec:
           value: ($namespace)
     - apply:
         file: manifests/a00-mock-openai.yaml
-    - assert:
-        resource:
-          apiVersion: v1
-          kind: Pod
-          metadata:
-            name: mock-openai
-          status:
-            phase: Running
-            (contains(conditions[?type == 'Ready'].status || `[]`, 'True')): true
+    - wait:
+        apiVersion: v1
+        kind: Pod
+        name: mock-openai
+        timeout: 2m
+        for:
+          condition:
+            name: Ready
+            value: 'True'
     catch:
     - events: {}
     - describe:
