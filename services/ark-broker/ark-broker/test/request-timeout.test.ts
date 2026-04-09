@@ -2,22 +2,7 @@ import http from 'http';
 import express from 'express';
 import { CompletionChunkBroker } from '../src/completion-chunk-broker';
 import { createStreamRouter } from '../src/routes/stream';
-
-const createTextChunk = (content: string) => ({
-  id: `chatcmpl-${Date.now()}`,
-  object: 'chat.completion.chunk',
-  created: Date.now(),
-  model: 'gpt-4',
-  choices: [{ index: 0, delta: { content } }]
-});
-
-const createFinishChunk = () => ({
-  id: `chatcmpl-${Date.now()}`,
-  object: 'chat.completion.chunk',
-  created: Date.now(),
-  model: 'gpt-4',
-  choices: [{ index: 0, delta: {}, finish_reason: 'stop' }]
-});
+import { createTextChunk, createFinishChunk } from './chunk-helpers';
 
 function createBrokerServer(opts: { requestTimeout?: number; timeout?: number } = {}): {
   server: http.Server;
