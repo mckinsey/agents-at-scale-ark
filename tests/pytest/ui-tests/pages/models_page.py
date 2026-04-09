@@ -27,6 +27,18 @@ class ModelsPage(BasePage):
             "model_name": "gpt-4o-mini",
             "env_key": "CICD_OPENAI_API_KEY",
             "base_url_key": "CICD_OPENAI_BASE_URL"
+        },
+        "anthropic": {
+            "model_type": "anthropic",
+            "model_name": "claude-3-5-haiku-20241022",
+            "env_key": "CICD_ANTHROPIC_API_KEY",
+            "base_url_key": None
+        },
+        "azure": {
+            "model_type": "azure",
+            "model_name": "gpt-4o",
+            "env_key": "CICD_AZURE_API_KEY",
+            "base_url_key": "CICD_AZURE_BASE_URL"
         }
     }
     
@@ -76,7 +88,7 @@ class ModelsPage(BasePage):
         self.page.locator(f"[role='option']:has-text('{option_text}')").first.click()
         self.wait_for_element_hidden("[role='listbox'], [data-slot='select-content']", timeout=3000)
 
-    def create_model_with_verification(self, model_name: str, model_type: str, model: str, secret_name: str, base_url: str) -> dict:
+    def create_model_with_verification(self, model_name: str, model_type: str, model: str, secret_name: str, base_url: str = None) -> dict:
         logger.info(f"Creating {model_type} model: {model_name}")
         
         self.page.locator(self.ADD_MODEL_BUTTON).first.click()
@@ -95,9 +107,13 @@ class ModelsPage(BasePage):
         
         self._select_from_combobox("[role='combobox']:has-text('Select a secret'), [role='combobox']:has-text('Select secret')", secret_name)
         
-        base_url_input = self.page.locator(self.BASE_URL_INPUT).first
-        base_url_input.wait_for(state="visible", timeout=5000)
-        base_url_input.fill(base_url)
+        if base_url:
+            try:
+                base_url_input = self.page.locator(self.BASE_URL_INPUT).first
+                base_url_input.wait_for(state="visible", timeout=3000)
+                base_url_input.fill(base_url)
+            except Exception:
+                logger.info(f"No base URL field visible for {model_type}, skipping")
         
         submit_button = self.page.locator("button:has-text('Create Model'), button[type='submit']:has-text('Create')").first
         submit_button.wait_for(state="visible", timeout=5000)
