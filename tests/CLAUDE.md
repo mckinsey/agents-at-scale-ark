@@ -132,7 +132,20 @@ Agents don't have a `status.phase` field, so only assert existence:
 ```
 
 ### Query Assertions
-Queries should assert `phase: done` for successful completion:
+Use `wait:` with the `Completed` condition to wait for query completion. This uses a Kubernetes watch instead of polling, which reduces API server load:
+```yaml
+- wait:
+    apiVersion: ark.mckinsey.com/v1alpha1
+    kind: Query
+    name: test-query
+    timeout: 4m
+    for:
+      condition:
+        name: Completed
+        value: 'True'
+```
+
+Use `assert:` only for post-completion validation where the query is already known to be done:
 ```yaml
 - assert:
     resource:
@@ -542,12 +555,15 @@ spec:
           helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
     - apply:
         file: manifests/*.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          status:
-            phase: done
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     catch:
     - events: {}
     - describe:
@@ -603,14 +619,15 @@ Separate query completion waiting from validation steps to ensure proper timing:
 ```yaml
 - name: wait-for-query-completion
   try:
-  - assert:
-      resource:
-        apiVersion: ark.mckinsey.com/v1alpha1
-        kind: Query
-        metadata:
-          name: test-query
-        status:
-          phase: done
+  - wait:
+      apiVersion: ark.mckinsey.com/v1alpha1
+      kind: Query
+      name: test-query
+      timeout: 4m
+      for:
+        condition:
+          name: Completed
+          value: 'True'
 
 - name: validate-response
   try:
@@ -878,14 +895,17 @@ jsonpath "$.result.messageId" exists
       content: kubectl exec test-pod -- hurl --test /tests/test.hurl
 
 # Then test ARK integration
-- name: test-ark-integration
+- name: wait-for-query-completion
   try:
-  - assert:
-      resource:
-        apiVersion: ark.mckinsey.com/v1alpha1
-        kind: Query
-        status:
-          phase: done
+  - wait:
+      apiVersion: ark.mckinsey.com/v1alpha1
+      kind: Query
+      name: test-query
+      timeout: 4m
+      for:
+        condition:
+          name: Completed
+          value: 'True'
 ```
 
 This pattern validates both the service's HTTP API functionality and its integration with the ARK platform.

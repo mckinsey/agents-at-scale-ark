@@ -95,14 +95,15 @@ spec:
             file: manifests/weather-agent.yaml
         - apply:
             file: manifests/weather-query.yaml
-        - assert:
-            resource:
-              apiVersion: ark.mckinsey.com/v1alpha1
-              kind: Query
-              metadata:
-                name: weather-query
-              status:
-                phase: done
+        - wait:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Query
+            name: weather-query
+            timeout: 4m
+            for:
+              condition:
+                name: Completed
+                value: 'True'
         - assert:
             resource:
               apiVersion: ark.mckinsey.com/v1alpha1

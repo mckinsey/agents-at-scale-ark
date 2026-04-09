@@ -43,16 +43,15 @@ spec:
     # Apply all manifests
     - apply:
         file: manifests/*.yaml
-    # Assert query completes (should terminate after invalid agent name)
-    - assert:
-        timeout: 30s
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: test-invalid-selector-query
-          status:
-            phase: done
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-invalid-selector-query
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     # Validate response exists and contains warning about invalid agent
     - assert:
         timeout: 5s

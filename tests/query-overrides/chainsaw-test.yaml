@@ -75,14 +75,15 @@ spec:
 
   - name: wait-for-query-completion
     try:
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: query-overrides-test-query
-          status:
-            phase: done
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: query-overrides-test-query
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     catch:
     - events: {}
     - describe:
@@ -140,14 +141,15 @@ spec:
     try:
     - apply:
         file: manifests/a06-query-tool.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: query-overrides-test-query-tool
-          status:
-            phase: done
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: query-overrides-test-query-tool
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     - script:
         env:
         - name: NAMESPACE
@@ -193,14 +195,15 @@ spec:
     try:
     - apply:
         file: manifests/a07-query-precedence.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: query-overrides-precedence-test
-          status:
-            phase: done
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: query-overrides-precedence-test
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     - script:
         env:
         - name: NAMESPACE

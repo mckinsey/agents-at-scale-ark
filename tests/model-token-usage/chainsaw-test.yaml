@@ -38,14 +38,15 @@ spec:
 
   - name: wait-for-query-completion
     try:
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: model-token-query
-          status:
-            phase: done
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: model-token-query
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
 
   - name: validate-model-response
     try:

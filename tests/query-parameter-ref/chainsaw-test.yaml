@@ -67,15 +67,15 @@ spec:
       # Now apply queries after Model and Agents are ready
       - apply:
           file: manifests/a0[5,7]-*.yaml
-      - assert:
-          timeout: 5s
-          resource:
-            apiVersion: ark.mckinsey.com/v1alpha1
-            kind: Query
-            metadata:
-              name: test-query-with-params
-            status:
-              phase: done
+      - wait:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          name: test-query-with-params
+          timeout: 4m
+          for:
+            condition:
+              name: Completed
+              value: 'True'
       - assert:
           resource:
             apiVersion: ark.mckinsey.com/v1alpha1
@@ -100,15 +100,15 @@ spec:
               (contains(response.raw, '"role":"system"')): true
               (contains(response.content, 'QueryAgent123')): true
       # Test nested valueFrom resolution - Agent referencing Query params that use ConfigMap/Secret
-      - assert:
-          timeout: 5s
-          resource:
-            apiVersion: ark.mckinsey.com/v1alpha1
-            kind: Query
-            metadata:
-              name: test-query-nested-params
-            status:
-              phase: done
+      - wait:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          name: test-query-nested-params
+          timeout: 4m
+          for:
+            condition:
+              name: Completed
+              value: 'True'
       - assert:
           resource:
             apiVersion: ark.mckinsey.com/v1alpha1
