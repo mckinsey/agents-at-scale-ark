@@ -1,4 +1,4 @@
-FROM golang:1.26-alpine AS fark-builder
+FROM golang:1.26.2-alpine AS fark-builder
 
 WORKDIR /build
 
