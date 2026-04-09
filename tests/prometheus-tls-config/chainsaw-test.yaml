@@ -76,7 +76,6 @@ spec:
               if ! kubectl get crd servicemonitors.monitoring.coreos.com >/dev/null 2>&1; then
                 echo "ServiceMonitor CRD not found. Installing..."
                 kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.71.2/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
-                kubectl wait --for=condition=established crd/servicemonitors.monitoring.coreos.com --timeout=60s
               else
                 echo "ServiceMonitor CRD already installed"
               fi
@@ -86,6 +85,9 @@ spec:
               kind: CustomResourceDefinition
               metadata:
                 name: servicemonitors.monitoring.coreos.com
+              status:
+                (conditions[?type == 'Established']):
+                  - status: "True"
 
     - name: apply-service-monitor
       try:
