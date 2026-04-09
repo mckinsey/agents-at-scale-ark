@@ -125,16 +125,15 @@ spec:
                 target:
                   type: agent
                   name: partial-tool-valuefrom-agent
-        - assert:
-            timeout: 10s
-            resource:
-              apiVersion: ark.mckinsey.com/v1alpha1
-              kind: Query
-              metadata:
-                name: partial-tool-valuefrom-query
-              status:
-                (conditions[?type == 'Completed']):
-                  - status: "True"
+        - wait:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Query
+            name: partial-tool-valuefrom-query
+            timeout: 4m
+            for:
+              condition:
+                name: Completed
+                value: 'True'
         - assert:
             timeout: 5s
             resource:

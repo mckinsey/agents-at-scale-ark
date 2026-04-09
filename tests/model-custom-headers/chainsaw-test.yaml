@@ -41,15 +41,15 @@ spec:
     - apply:
         file: manifests/a0[5-6]-*.yaml
     # Wait for Query to complete
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: custom-headers-query
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: custom-headers-query
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     # Verify headers were received correctly
     # Mock-llm echoes back the headers object as JSON in the response content
     - assert:

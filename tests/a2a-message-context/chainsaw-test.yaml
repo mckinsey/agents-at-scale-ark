@@ -41,15 +41,15 @@ spec:
     try:
     - apply:
         file: manifests/a01-query-first.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: message-counter-first
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: message-counter-first
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         timeout: 1s
         resource:
@@ -101,15 +101,15 @@ spec:
             target:
               type: agent
               name: message-counter-agent
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: message-counter-second
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: message-counter-second
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         timeout: 1s
         resource:

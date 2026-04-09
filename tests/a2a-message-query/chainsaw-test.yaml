@@ -37,16 +37,15 @@ spec:
     - apply:
         file: manifests/a01-query.yaml
     # Wait for Query to complete
-    - assert:
-        timeout: 10s
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: echo-test-query
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: echo-test-query
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     # Verify response contains the echoed message
     - assert:
         timeout: 1s

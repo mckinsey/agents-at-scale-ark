@@ -80,24 +80,24 @@ spec:
 
   - name: wait-for-queries
     try:
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: query-with-turns
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: query-without-turns
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: query-with-turns
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: query-without-turns
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     catch:
     - events: {}
     - describe:

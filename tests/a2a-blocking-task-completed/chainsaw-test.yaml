@@ -36,15 +36,15 @@ spec:
     # Apply Query targeting countdown agent
     - apply:
         file: manifests/a01-query.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: countdown-test-query
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: countdown-test-query
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     # Verify response contains full countdown history
     - assert:
         timeout: 1s

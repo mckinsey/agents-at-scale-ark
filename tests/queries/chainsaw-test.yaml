@@ -51,15 +51,15 @@ spec:
             kind: Agent
             metadata:
               name: test-agent
-      - assert:
-          resource:
-            apiVersion: ark.mckinsey.com/v1alpha1
-            kind: Query
-            metadata:
-              name: test-query
-            status:
-              (conditions[?type == 'Completed']):
-              - status: 'True'
+      - wait:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          name: test-query
+          timeout: 4m
+          for:
+            condition:
+              name: Completed
+              value: 'True'
       - assert:
           resource:
             apiVersion: ark.mckinsey.com/v1alpha1
