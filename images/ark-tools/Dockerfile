@@ -1,4 +1,4 @@
-FROM golang:1.26-alpine AS fark-builder
+FROM golang:1.26.2-alpine AS fark-builder
 
 WORKDIR /build
 
@@ -14,7 +14,7 @@ RUN cd tools/fark && GOTOOLCHAIN=auto go mod download
 COPY tools/fark/cmd ./tools/fark/cmd
 RUN cd tools/fark && CGO_ENABLED=0 GOOS=linux GOTOOLCHAIN=auto go build -o /build/fark ./cmd/fark
 
-FROM node:24.13.0-alpine AS ark-builder
+FROM node:24.14.1-alpine AS ark-builder
 
 WORKDIR /build
 

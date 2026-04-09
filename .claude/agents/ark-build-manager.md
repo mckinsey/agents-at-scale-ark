@@ -69,6 +69,8 @@ Classify each failure into one of these categories and delegate accordingly:
 - Timeout issues in LLM-dependent tests
 - CRD schema changes not reflected in test fixtures
 - Mock service configuration drift
+- Antipattern: `kubectl wait --for=condition=...` crashing with nil accessor error — use chainsaw `assert` with JMESPath instead (see chainsaw skill Antipatterns section)
+**Antipattern check**: When a chainsaw test fails with `.status.conditions accessor error: <nil> is of the type <nil>`, use the **chainsaw** skill to replace the `kubectl wait` command with a chainsaw assert block.
 
 ### Category: E2E CLI Test Failures
 **Indicators**: `e2e-cli-tests` in job name, pytest failures in logs
