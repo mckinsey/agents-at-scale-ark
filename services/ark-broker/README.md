@@ -21,7 +21,7 @@ devspace dev
 |----------|---------|-------------|
 | `PORT` | `8080` | HTTP server port |
 | `HOST` | `0.0.0.0` | HTTP server bind address |
-| `REQUEST_TIMEOUT` | `0` | HTTP request timeout in ms. `0` disables the timeout, allowing long-running streaming connections. Node.js 22+ defaults to 300,000ms (5 min), which closes streaming connections prematurely. |
+| `REQUEST_TIMEOUT_MS` | `0` | HTTP request timeout in milliseconds. Default is no timeout (`0`). |
 | `MAX_MESSAGES` | `0` | Max messages to persist (0 = unlimited) |
 | `MAX_CHUNKS` | `0` | Max stream chunks to persist (0 = unlimited) |
 | `MAX_SPANS` | `0` | Max trace spans to persist (0 = unlimited) |

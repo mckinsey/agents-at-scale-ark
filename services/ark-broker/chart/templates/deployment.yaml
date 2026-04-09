@@ -34,7 +34,7 @@ spec:
           env:
             - name: PORT
               value: {{ .Values.memory.port | quote }}
-            - name: REQUEST_TIMEOUT
+            - name: REQUEST_TIMEOUT_MS
               value: {{ .Values.server.requestTimeout | quote }}
             {{- if .Values.limits.maxMessages }}
             - name: MAX_MESSAGES
