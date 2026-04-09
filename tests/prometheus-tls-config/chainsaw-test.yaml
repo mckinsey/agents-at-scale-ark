@@ -31,6 +31,7 @@ spec:
             apiVersion: cert-manager.io/v1
             kind: Issuer
             name: selfsigned-issuer
+            namespace: ark-system
             timeout: 60s
             for:
               condition:
@@ -40,6 +41,7 @@ spec:
             apiVersion: cert-manager.io/v1
             kind: Certificate
             name: metrics-certs
+            namespace: ark-system
             timeout: 60s
             for:
               condition:

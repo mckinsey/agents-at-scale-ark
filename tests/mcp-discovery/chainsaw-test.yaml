@@ -50,15 +50,14 @@ spec:
             name: mock-llm-echo-tool
           status:
             state: Ready
-    - wait:
-        apiVersion: ark.mckinsey.com/v1alpha1
-        kind: MCPServer
-        name: mock-llm-mcp
-        timeout: 2m
-        for:
-          condition:
-            name: Discovering
-            value: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: MCPServer
+          metadata:
+            name: mock-llm-mcp
+          status:
+            (contains(conditions[?type == 'Discovering'].reason || `[]`, 'DiscoveryComplete')): true
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
