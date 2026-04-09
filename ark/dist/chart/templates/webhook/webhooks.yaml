@@ -17,6 +17,9 @@ webhooks:
       - key: "ark.mckinsey.com/skip-webhook-validation"
         operator: "NotIn"
         values: ["true"]
+    matchConditions:
+    - name: not-being-deleted
+      expression: "!has(object.metadata.deletionTimestamp)"
     clientConfig:
       service:
         name: ark-webhook-service
@@ -38,6 +41,9 @@ webhooks:
         resources:
           - agents
   - name: mmodel-v1.kb.io
+    matchConditions:
+    - name: not-being-deleted
+      expression: "!has(object.metadata.deletionTimestamp)"
     clientConfig:
       service:
         name: ark-webhook-service
@@ -58,7 +64,34 @@ webhooks:
           - v1alpha1
         resources:
           - models
+  - name: mquery-v1.kb.io
+    matchConditions:
+    - name: not-being-deleted
+      expression: "!has(object.metadata.deletionTimestamp)"
+    clientConfig:
+      service:
+        name: ark-webhook-service
+        namespace: {{ .Release.Namespace }}
+        path: /mutate-ark-mckinsey-com-v1alpha1-query
+    failurePolicy: {{ .Values.webhook.failurePolicy | default "Fail" }}
+    timeoutSeconds: {{ .Values.webhook.timeoutSeconds | default 10 }}
+    sideEffects: None
+    admissionReviewVersions:
+      - v1
+    rules:
+      - operations:
+          - CREATE
+          - UPDATE
+        apiGroups:
+          - ark.mckinsey.com
+        apiVersions:
+          - v1alpha1
+        resources:
+          - queries
   - name: mteam-v1.kb.io
+    matchConditions:
+    - name: not-being-deleted
+      expression: "!has(object.metadata.deletionTimestamp)"
     clientConfig:
       service:
         name: ark-webhook-service
@@ -98,6 +131,9 @@ webhooks:
       - key: "ark.mckinsey.com/skip-webhook-validation"
         operator: "NotIn"
         values: ["true"]
+    matchConditions:
+    - name: not-being-deleted
+      expression: "!has(object.metadata.deletionTimestamp)"
     clientConfig:
       service:
         name: ark-webhook-service
@@ -119,6 +155,9 @@ webhooks:
         resources:
           - agents
   - name: vmcpserver-v1.kb.io
+    matchConditions:
+    - name: not-being-deleted
+      expression: "!has(object.metadata.deletionTimestamp)"
     clientConfig:
       service:
         name: ark-webhook-service
@@ -140,6 +179,9 @@ webhooks:
         resources:
           - mcpserver
   - name: vmodel-v1.kb.io
+    matchConditions:
+    - name: not-being-deleted
+      expression: "!has(object.metadata.deletionTimestamp)"
     clientConfig:
       service:
         name: ark-webhook-service
@@ -161,6 +203,9 @@ webhooks:
         resources:
           - models
   - name: vquery-v1.kb.io
+    matchConditions:
+    - name: not-being-deleted
+      expression: "!has(object.metadata.deletionTimestamp)"
     clientConfig:
       service:
         name: ark-webhook-service
@@ -182,6 +227,9 @@ webhooks:
         resources:
           - queries
   - name: vteam-v1.kb.io
+    matchConditions:
+    - name: not-being-deleted
+      expression: "!has(object.metadata.deletionTimestamp)"
     clientConfig:
       service:
         name: ark-webhook-service
@@ -208,6 +256,9 @@ webhooks:
       - key: "ark.mckinsey.com/skip-webhook-validation"
         operator: "NotIn"
         values: ["true"]
+    matchConditions:
+    - name: not-being-deleted
+      expression: "!has(object.metadata.deletionTimestamp)"
     clientConfig:
       service:
         name: ark-webhook-service
@@ -229,6 +280,9 @@ webhooks:
         resources:
           - tools
   - name: va2aserver-v1prealpha1.kb.io
+    matchConditions:
+    - name: not-being-deleted
+      expression: "!has(object.metadata.deletionTimestamp)"
     clientConfig:
       service:
         name: ark-webhook-service
@@ -250,6 +304,9 @@ webhooks:
         resources:
           - a2aservers
   - name: vexecutionengine-v1prealpha1.kb.io
+    matchConditions:
+    - name: not-being-deleted
+      expression: "!has(object.metadata.deletionTimestamp)"
     clientConfig:
       service:
         name: ark-webhook-service

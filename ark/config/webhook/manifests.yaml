@@ -12,6 +12,9 @@ webhooks:
       namespace: system
       path: /mutate-ark-mckinsey-com-v1alpha1-model
   failurePolicy: Fail
+  matchConditions:
+  - name: not-being-deleted
+    expression: "!has(object.metadata.deletionTimestamp)"
   name: mmodel-v1.kb.io
   rules:
   - apiGroups:
@@ -32,6 +35,9 @@ webhooks:
       namespace: system
       path: /mutate-ark-mckinsey-com-v1alpha1-query
   failurePolicy: Fail
+  matchConditions:
+  - name: not-being-deleted
+    expression: "!has(object.metadata.deletionTimestamp)"
   name: mquery-v1.kb.io
   rules:
   - apiGroups:
@@ -52,6 +58,9 @@ webhooks:
       namespace: system
       path: /mutate-ark-mckinsey-com-v1alpha1-team
   failurePolicy: Fail
+  matchConditions:
+  - name: not-being-deleted
+    expression: "!has(object.metadata.deletionTimestamp)"
   name: mteam-v1.kb.io
   rules:
   - apiGroups:
@@ -78,6 +87,9 @@ webhooks:
       namespace: system
       path: /validate-ark-mckinsey-com-v1alpha1-mcpserver
   failurePolicy: Fail
+  matchConditions:
+  - name: not-being-deleted
+    expression: "!has(object.metadata.deletionTimestamp)"
   name: vmcpserver-v1.kb.io
   rules:
   - apiGroups:
@@ -98,6 +110,9 @@ webhooks:
       namespace: system
       path: /validate-ark-mckinsey-com-v1alpha1-model
   failurePolicy: Fail
+  matchConditions:
+  - name: not-being-deleted
+    expression: "!has(object.metadata.deletionTimestamp)"
   name: vmodel-v1.kb.io
   rules:
   - apiGroups:
@@ -118,6 +133,9 @@ webhooks:
       namespace: system
       path: /validate-ark-mckinsey-com-v1alpha1-query
   failurePolicy: Fail
+  matchConditions:
+  - name: not-being-deleted
+    expression: "!has(object.metadata.deletionTimestamp)"
   name: vquery-v1.kb.io
   rules:
   - apiGroups:
@@ -138,6 +156,9 @@ webhooks:
       namespace: system
       path: /validate-ark-mckinsey-com-v1alpha1-team
   failurePolicy: Fail
+  matchConditions:
+  - name: not-being-deleted
+    expression: "!has(object.metadata.deletionTimestamp)"
   name: vteam-v1.kb.io
   rules:
   - apiGroups:
@@ -158,6 +179,9 @@ webhooks:
       namespace: system
       path: /validate-ark-mckinsey-com-v1alpha1-tool
   failurePolicy: Fail
+  matchConditions:
+  - name: not-being-deleted
+    expression: "!has(object.metadata.deletionTimestamp)"
   name: vtool-v1.kb.io
   rules:
   - apiGroups:
@@ -178,6 +202,9 @@ webhooks:
       namespace: system
       path: /validate-ark-mckinsey-com-v1prealpha1-a2aserver
   failurePolicy: Fail
+  matchConditions:
+  - name: not-being-deleted
+    expression: "!has(object.metadata.deletionTimestamp)"
   name: va2aserver-v1prealpha1.kb.io
   rules:
   - apiGroups:
@@ -198,6 +225,9 @@ webhooks:
       namespace: system
       path: /validate-ark-mckinsey-com-v1prealpha1-executionengine
   failurePolicy: Fail
+  matchConditions:
+  - name: not-being-deleted
+    expression: "!has(object.metadata.deletionTimestamp)"
   name: vexecutionengine-v1prealpha1.kb.io
   rules:
   - apiGroups:
