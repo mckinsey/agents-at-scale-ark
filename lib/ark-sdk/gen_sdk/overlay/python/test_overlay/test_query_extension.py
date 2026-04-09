@@ -96,6 +96,8 @@ class TestResolveQuery(unittest.IsolatedAsyncioTestCase):
         mock_agent.spec.model_ref = None
         mock_agent.spec.parameters = None
         mock_agent.spec.tools = None
+        mock_agent.spec.execution_engine = None
+        mock_agent.spec.executionEngine = None
 
         mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
         mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
@@ -238,6 +240,8 @@ class TestResolveModelWithSecrets(unittest.IsolatedAsyncioTestCase):
         mock_agent.spec.model_ref.namespace = None
         mock_agent.spec.parameters = None
         mock_agent.spec.tools = None
+        mock_agent.spec.execution_engine = None
+        mock_agent.spec.executionEngine = None
 
         mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
         mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
@@ -277,6 +281,8 @@ class TestConversationIdPassthrough(unittest.IsolatedAsyncioTestCase):
         mock_agent.spec.model_ref = None
         mock_agent.spec.parameters = None
         mock_agent.spec.tools = None
+        mock_agent.spec.execution_engine = None
+        mock_agent.spec.executionEngine = None
 
         mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
         mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
@@ -309,6 +315,8 @@ class TestConversationIdPassthrough(unittest.IsolatedAsyncioTestCase):
         mock_agent.spec.model_ref = None
         mock_agent.spec.parameters = None
         mock_agent.spec.tools = None
+        mock_agent.spec.execution_engine = None
+        mock_agent.spec.executionEngine = None
 
         mock_ark.queries.a_get = AsyncMock(return_value=mock_query)
         mock_ark.agents.a_get = AsyncMock(return_value=mock_agent)
@@ -392,6 +400,8 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
             self._make_agent_tool("github-mcp-search-repos"),
             self._make_agent_tool("github-mcp-create-issue"),
         ]
+        mock_agent.spec.execution_engine = None
+        mock_agent.spec.executionEngine = None
 
         tool_crd_1 = self._make_tool_crd("mcp", "github-mcp", "search_repos")
         tool_crd_2 = self._make_tool_crd("mcp", "github-mcp", "create_issue")
@@ -443,6 +453,8 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
             self._make_agent_tool("github-mcp-search"),
             self._make_agent_tool("slack-mcp-send"),
         ]
+        mock_agent.spec.execution_engine = None
+        mock_agent.spec.executionEngine = None
 
         tool_crd_1 = self._make_tool_crd("mcp", "github-mcp", "search")
         tool_crd_2 = self._make_tool_crd("mcp", "slack-mcp", "send_message")
@@ -487,6 +499,8 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
             self._make_agent_tool("github-mcp-search"),
             self._make_agent_tool("weather-api"),
         ]
+        mock_agent.spec.execution_engine = None
+        mock_agent.spec.executionEngine = None
 
         mcp_tool = self._make_tool_crd("mcp", "github-mcp", "search")
         http_tool = self._make_tool_crd("http")
@@ -530,6 +544,8 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
             self._make_agent_tool("missing-server-tool"),
             self._make_agent_tool("good-server-tool"),
         ]
+        mock_agent.spec.execution_engine = None
+        mock_agent.spec.executionEngine = None
 
         missing_tool = self._make_tool_crd("mcp", "missing-mcp", "some_tool")
         good_tool = self._make_tool_crd("mcp", "good-mcp", "good_tool")
@@ -574,6 +590,8 @@ class TestBuildMCPServers(unittest.IsolatedAsyncioTestCase):
         mock_agent.spec.model_ref = None
         mock_agent.spec.parameters = None
         mock_agent.spec.tools = [self._make_agent_tool("bad-tool")]
+        mock_agent.spec.execution_engine = None
+        mock_agent.spec.executionEngine = None
 
         tool_crd = self._make_tool_crd("mcp", "bad-mcp", "tool")
         bad_server = MagicMock()
