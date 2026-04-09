@@ -3,6 +3,7 @@ import {
   Bot,
   Calendar,
   ClipboardList,
+  Cog,
   Database,
   Download,
   FileText,
@@ -22,6 +23,7 @@ import {
 
 import {
   BROKER_FEATURE_KEY,
+  EXPERIMENTAL_EXECUTION_ENGINE_FEATURE_KEY,
   FILES_BROWSER_FEATURE_KEY,
 } from '@/atoms/experimental-features';
 
@@ -146,11 +148,13 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     icon: Server,
     group: 'runtime',
   },
-  services: {
-    key: 'services',
-    title: 'ARK Services',
-    icon: Settings,
+
+  'execution-engines': {
+    key: 'execution-engines',
+    title: 'Execution Engines',
+    icon: Cog,
     group: 'runtime',
+    enablerFeature: EXPERIMENTAL_EXECUTION_ENGINE_FEATURE_KEY,
   },
 
   // Service

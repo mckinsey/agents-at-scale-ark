@@ -86,6 +86,54 @@ var _ = Describe("Model Webhook", func() {
 			Expect(warnings).To(BeEmpty())
 		})
 
+		It("Should allow valid Anthropic model with direct values", func() {
+			model.Spec.Provider = validation.ProviderAnthropic
+			model.Spec.Config = arkv1alpha1.ModelConfig{
+				Anthropic: &arkv1alpha1.AnthropicModelConfig{
+					BaseURL: arkv1alpha1.ValueSource{
+						Value: "https://api.anthropic.com",
+					},
+					APIKey: arkv1alpha1.ValueSource{
+						Value: "sk-ant-test-key",
+					},
+				},
+			}
+
+			warnings, err := validator.ValidateCreate(ctx, model)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("Should allow valid Anthropic model with version", func() {
+			model.Spec.Provider = validation.ProviderAnthropic
+			model.Spec.Config = arkv1alpha1.ModelConfig{
+				Anthropic: &arkv1alpha1.AnthropicModelConfig{
+					BaseURL: arkv1alpha1.ValueSource{
+						Value: "https://api.anthropic.com",
+					},
+					APIKey: arkv1alpha1.ValueSource{
+						Value: "sk-ant-test-key",
+					},
+					Version: &arkv1alpha1.ValueSource{
+						Value: "2023-06-01",
+					},
+				},
+			}
+
+			warnings, err := validator.ValidateCreate(ctx, model)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("Should reject Anthropic model without config", func() {
+			model.Spec.Provider = validation.ProviderAnthropic
+			model.Spec.Config = arkv1alpha1.ModelConfig{}
+
+			_, err := validator.ValidateCreate(ctx, model)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("anthropic configuration is required"))
+		})
+
 		It("Should allow valid Bedrock model with direct values", func() {
 			model.Spec.Provider = validation.ProviderBedrock
 			model.Spec.Config = arkv1alpha1.ModelConfig{

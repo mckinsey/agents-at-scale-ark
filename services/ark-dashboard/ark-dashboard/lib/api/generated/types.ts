@@ -46,43 +46,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/openai/v1/chat/completions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Chat Completions */
-        post: operations["chat_completions_openai_v1_chat_completions_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/openai/v1/models": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Models
-         * @description List available models in OpenAI format, including ARK agents, teams, models, and tools.
-         */
-        get: operations["list_models_openai_v1_models_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/ready": {
         parameters: {
             query?: never;
@@ -390,6 +353,37 @@ export interface paths {
          *         ArkServiceListResponse: List of ARK services in the namespace
          */
         get: operations["list_ark_services_v1_ark_services_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ark-services/marketplace-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Marketplace Items
+         * @description List Helm releases for marketplace item detection.
+         *
+         *     Returns full Helm release data including chart metadata and annotations
+         *     for marketplace item detection via ark.mckinsey.com/marketplace-item-name.
+         *
+         *     Args:
+         *         namespace: The namespace to list Helm releases from (defaults to current context)
+         *
+         *     Returns:
+         *         HelmReleaseListResponse containing:
+         *         - items: List of Helm releases with chart metadata
+         *         - count: Number of releases found
+         */
+        get: operations["list_marketplace_items_v1_ark_services_marketplace_items_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1331,6 +1325,7 @@ export interface paths {
          *         version: API version (e.g., 'v1')
          *         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
          *         namespace: The namespace (defaults to current context)
+         *         label_selector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
          *
          *     Returns:
          *         Response: List of raw Kubernetes resources as JSON
@@ -1338,6 +1333,7 @@ export interface paths {
          *     Examples:
          *         - GET /v1/resources/api/v1/Pod
          *         - GET /v1/resources/api/v1/Service
+         *         - GET /v1/resources/api/v1/Service?labelSelector=app.kubernetes.io/instance=phoenix
          */
         get: operations["list_core_resources_v1_resources_api__version___kind__get"];
         put?: never;
@@ -1465,6 +1461,7 @@ export interface paths {
          *         version: API version (e.g., 'v1', 'v1alpha1')
          *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
          *         namespace: The namespace (defaults to current context)
+         *         label_selector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
          *         workflowName: Filter by workflow name (partial match, case insensitive)
          *         workflowTemplateName: Filter by workflow template name (partial match, case insensitive)
          *         status: Filter by workflow status
@@ -1477,6 +1474,7 @@ export interface paths {
          *         - GET /v1/resources/apis/batch/v1/Job
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/Workflow?workflowName=my-workflow&status=running
+         *         - GET /v1/resources/v1/Service?labelSelector=app.kubernetes.io/instance=phoenix
          */
         get: operations["list_grouped_resources_v1_resources_apis__group___version___kind__get"];
         put?: never;
@@ -1653,8 +1651,7 @@ export interface paths {
          * @description Create a new Team CR.
          *
          *     Supports various execution strategies:
-         *     - sequential: Members execute in order
-         *     - round-robin: Members take turns
+         *     - sequential: Members execute in order (set loops=true with maxTurns for cycling)
          *     - graph: Custom workflow defined by graph edges
          *     - selector: AI-powered member selection (can be combined with graph constraints)
          *
@@ -2435,34 +2432,18 @@ export interface components {
             serviceRef?: components["schemas"]["AgentServiceRef"] | null;
         };
         /**
-         * Annotation
-         * @description A URL citation when using web search.
+         * AnthropicConfig
+         * @description Anthropic model configuration.
          */
-        Annotation: {
-            /**
-             * Type
-             * @constant
-             */
-            type: "url_citation";
-            url_citation: components["schemas"]["AnnotationURLCitation"];
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * AnnotationURLCitation
-         * @description A URL citation when using web search.
-         */
-        AnnotationURLCitation: {
-            /** End Index */
-            end_index: number;
-            /** Start Index */
-            start_index: number;
-            /** Title */
-            title: string;
-            /** Url */
-            url: string;
-        } & {
-            [key: string]: unknown;
+        AnthropicConfig: {
+            /** Apikey */
+            apiKey: string | components["schemas"]["ModelValueSource"];
+            /** Baseurl */
+            baseUrl: string | components["schemas"]["ModelValueSource"];
+            /** Headers */
+            headers?: components["schemas"]["AgentHeader-Input"][] | null;
+            /** Version */
+            version?: string | components["schemas"]["ModelValueSource"] | null;
         };
         /**
          * ArkService
@@ -2592,30 +2573,16 @@ export interface components {
             temperature?: string | null;
         };
         /**
-         * ChatCompletion
-         * @description Represents a chat completion response returned by model, based on the provided input.
+         * ChartMetadata
+         * @description Chart metadata from Helm release.
          */
-        ChatCompletion: {
-            /** Choices */
-            choices: components["schemas"]["Choice"][];
-            /** Created */
-            created: number;
-            /** Id */
-            id: string;
-            /** Model */
-            model: string;
-            /**
-             * Object
-             * @constant
-             */
-            object: "chat.completion";
-            /** Service Tier */
-            service_tier?: ("auto" | "default" | "flex" | "scale" | "priority") | null;
-            /** System Fingerprint */
-            system_fingerprint?: string | null;
-            usage?: components["schemas"]["CompletionUsage"] | null;
-        } & {
-            [key: string]: unknown;
+        ChartMetadata: {
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
+            } | null;
+            /** Description */
+            description?: string | null;
         };
         /**
          * ChatCompletionAssistantMessageParam
@@ -2625,7 +2592,7 @@ export interface components {
             audio?: components["schemas"]["Audio"] | null;
             /** Content */
             content?: string | (components["schemas"]["ChatCompletionContentPartTextParam"] | components["schemas"]["ChatCompletionContentPartRefusalParam"])[] | null;
-            function_call?: components["schemas"]["FunctionCall-Input"] | null;
+            function_call?: components["schemas"]["FunctionCall"] | null;
             /** Name */
             name?: string;
             /** Refusal */
@@ -2636,7 +2603,7 @@ export interface components {
              */
             role: "assistant";
             /** Tool Calls */
-            tool_calls?: (components["schemas"]["ChatCompletionMessageFunctionToolCallParam-Input"] | components["schemas"]["ChatCompletionMessageCustomToolCallParam-Input"])[];
+            tool_calls?: (components["schemas"]["ChatCompletionMessageFunctionToolCallParam"] | components["schemas"]["ChatCompletionMessageCustomToolCallParam"])[];
         };
         /**
          * ChatCompletionAssistantMessageParam
@@ -2646,7 +2613,7 @@ export interface components {
             audio?: components["schemas"]["Audio"] | null;
             /** Content */
             content?: string | (components["schemas"]["ChatCompletionContentPartTextParam"] | components["schemas"]["ChatCompletionContentPartRefusalParam"])[] | null;
-            function_call?: components["schemas"]["openai__types__chat__chat_completion_assistant_message_param__FunctionCall"] | null;
+            function_call?: components["schemas"]["FunctionCall"] | null;
             /** Name */
             name?: string;
             /** Refusal */
@@ -2657,24 +2624,7 @@ export interface components {
              */
             role: "assistant";
             /** Tool Calls */
-            tool_calls?: (components["schemas"]["ChatCompletionMessageFunctionToolCallParam-Output"] | components["schemas"]["ChatCompletionMessageCustomToolCallParam-Output"])[];
-        };
-        /**
-         * ChatCompletionAudio
-         * @description If the audio output modality is requested, this object contains data
-         *     about the audio response from the model. [Learn more](https://platform.openai.com/docs/guides/audio).
-         */
-        ChatCompletionAudio: {
-            /** Data */
-            data: string;
-            /** Expires At */
-            expires_at: number;
-            /** Id */
-            id: string;
-            /** Transcript */
-            transcript: string;
-        } & {
-            [key: string]: unknown;
+            tool_calls?: (components["schemas"]["ChatCompletionMessageFunctionToolCallParam"] | components["schemas"]["ChatCompletionMessageCustomToolCallParam"])[];
         };
         /**
          * ChatCompletionContentPartImageParam
@@ -2753,50 +2703,11 @@ export interface components {
             role: "function";
         };
         /**
-         * ChatCompletionMessage
-         * @description A chat completion message generated by the model.
-         */
-        ChatCompletionMessage: {
-            /** Annotations */
-            annotations?: components["schemas"]["Annotation"][] | null;
-            audio?: components["schemas"]["ChatCompletionAudio"] | null;
-            /** Content */
-            content?: string | null;
-            function_call?: components["schemas"]["openai__types__chat__chat_completion_message__FunctionCall"] | null;
-            /** Refusal */
-            refusal?: string | null;
-            /**
-             * Role
-             * @constant
-             */
-            role: "assistant";
-            /** Tool Calls */
-            tool_calls?: (components["schemas"]["ChatCompletionMessageFunctionToolCall"] | components["schemas"]["ChatCompletionMessageCustomToolCall"])[] | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * ChatCompletionMessageCustomToolCall
-         * @description A call to a custom tool created by the model.
-         */
-        ChatCompletionMessageCustomToolCall: {
-            custom: components["schemas"]["openai__types__chat__chat_completion_message_custom_tool_call__Custom"];
-            /** Id */
-            id: string;
-            /**
-             * Type
-             * @constant
-             */
-            type: "custom";
-        } & {
-            [key: string]: unknown;
-        };
-        /**
          * ChatCompletionMessageCustomToolCallParam
          * @description A call to a custom tool created by the model.
          */
-        "ChatCompletionMessageCustomToolCallParam-Input": {
-            custom: components["schemas"]["Custom-Input"];
+        ChatCompletionMessageCustomToolCallParam: {
+            custom: components["schemas"]["Custom"];
             /** Id */
             id: string;
             /**
@@ -2804,43 +2715,13 @@ export interface components {
              * @constant
              */
             type: "custom";
-        };
-        /**
-         * ChatCompletionMessageCustomToolCallParam
-         * @description A call to a custom tool created by the model.
-         */
-        "ChatCompletionMessageCustomToolCallParam-Output": {
-            custom: components["schemas"]["openai__types__chat__chat_completion_message_custom_tool_call_param__Custom"];
-            /** Id */
-            id: string;
-            /**
-             * Type
-             * @constant
-             */
-            type: "custom";
-        };
-        /**
-         * ChatCompletionMessageFunctionToolCall
-         * @description A call to a function tool created by the model.
-         */
-        ChatCompletionMessageFunctionToolCall: {
-            function: components["schemas"]["openai__types__chat__chat_completion_message_function_tool_call__Function"];
-            /** Id */
-            id: string;
-            /**
-             * Type
-             * @constant
-             */
-            type: "function";
-        } & {
-            [key: string]: unknown;
         };
         /**
          * ChatCompletionMessageFunctionToolCallParam
          * @description A call to a function tool created by the model.
          */
-        "ChatCompletionMessageFunctionToolCallParam-Input": {
-            function: components["schemas"]["Function-Input"];
+        ChatCompletionMessageFunctionToolCallParam: {
+            function: components["schemas"]["Function"];
             /** Id */
             id: string;
             /**
@@ -2848,43 +2729,6 @@ export interface components {
              * @constant
              */
             type: "function";
-        };
-        /**
-         * ChatCompletionMessageFunctionToolCallParam
-         * @description A call to a function tool created by the model.
-         */
-        "ChatCompletionMessageFunctionToolCallParam-Output": {
-            function: components["schemas"]["openai__types__chat__chat_completion_message_function_tool_call_param__Function"];
-            /** Id */
-            id: string;
-            /**
-             * Type
-             * @constant
-             */
-            type: "function";
-        };
-        /** ChatCompletionRequest */
-        ChatCompletionRequest: {
-            /** Max Tokens */
-            max_tokens?: number | null;
-            /** Messages */
-            messages: (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam-Input"] | components["schemas"]["ChatCompletionAssistantMessageParam-Input"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[];
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            } | null;
-            /** Model */
-            model: string;
-            /**
-             * Stream
-             * @default false
-             */
-            stream: boolean;
-            /**
-             * Temperature
-             * @default 1
-             */
-            temperature: number;
         };
         /**
          * ChatCompletionSystemMessageParam
@@ -2902,19 +2746,6 @@ export interface components {
              * @constant
              */
             role: "system";
-        };
-        /** ChatCompletionTokenLogprob */
-        ChatCompletionTokenLogprob: {
-            /** Bytes */
-            bytes?: number[] | null;
-            /** Logprob */
-            logprob: number;
-            /** Token */
-            token: string;
-            /** Top Logprobs */
-            top_logprobs: components["schemas"]["TopLogprob"][];
-        } & {
-            [key: string]: unknown;
         };
         /** ChatCompletionToolMessageParam */
         ChatCompletionToolMessageParam: {
@@ -2960,64 +2791,6 @@ export interface components {
              */
             role: "user";
         };
-        /** Choice */
-        Choice: {
-            /**
-             * Finish Reason
-             * @enum {string}
-             */
-            finish_reason: "stop" | "length" | "tool_calls" | "content_filter" | "function_call";
-            /** Index */
-            index: number;
-            logprobs?: components["schemas"]["ChoiceLogprobs"] | null;
-            message: components["schemas"]["ChatCompletionMessage"];
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * ChoiceLogprobs
-         * @description Log probability information for the choice.
-         */
-        ChoiceLogprobs: {
-            /** Content */
-            content?: components["schemas"]["ChatCompletionTokenLogprob"][] | null;
-            /** Refusal */
-            refusal?: components["schemas"]["ChatCompletionTokenLogprob"][] | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * CompletionTokensDetails
-         * @description Breakdown of tokens used in a completion.
-         */
-        CompletionTokensDetails: {
-            /** Accepted Prediction Tokens */
-            accepted_prediction_tokens?: number | null;
-            /** Audio Tokens */
-            audio_tokens?: number | null;
-            /** Reasoning Tokens */
-            reasoning_tokens?: number | null;
-            /** Rejected Prediction Tokens */
-            rejected_prediction_tokens?: number | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * CompletionUsage
-         * @description Usage statistics for the completion request.
-         */
-        CompletionUsage: {
-            /** Completion Tokens */
-            completion_tokens: number;
-            completion_tokens_details?: components["schemas"]["CompletionTokensDetails"] | null;
-            /** Prompt Tokens */
-            prompt_tokens: number;
-            prompt_tokens_details?: components["schemas"]["PromptTokensDetails"] | null;
-            /** Total Tokens */
-            total_tokens: number;
-        } & {
-            [key: string]: unknown;
-        };
         /** ContextResponse */
         ContextResponse: {
             /** Cluster */
@@ -3057,7 +2830,7 @@ export interface components {
          * Custom
          * @description The custom tool that the model called.
          */
-        "Custom-Input": {
+        Custom: {
             /** Input */
             input: string;
             /** Name */
@@ -3201,7 +2974,7 @@ export interface components {
          * Function
          * @description The function that the model called.
          */
-        "Function-Input": {
+        Function: {
             /** Arguments */
             arguments: string;
             /** Name */
@@ -3213,7 +2986,7 @@ export interface components {
          *
          *     The name and arguments of a function that should be called, as generated by the model.
          */
-        "FunctionCall-Input": {
+        FunctionCall: {
             /** Arguments */
             arguments: string;
             /** Name */
@@ -3273,6 +3046,42 @@ export interface components {
              * @example healthy
              */
             status: string;
+        };
+        /**
+         * HelmRelease
+         * @description Helm release information for marketplace item detection.
+         *
+         *     Represents a Helm release with chart metadata including annotations
+         *     used for marketplace item identification.
+         */
+        HelmRelease: {
+            /** App Version */
+            app_version: string;
+            /** Chart */
+            chart: string;
+            chart_metadata?: components["schemas"]["ChartMetadata"] | null;
+            /** Chart Version */
+            chart_version: string;
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace: string;
+            /** Revision */
+            revision: number;
+            /** Status */
+            status: string;
+            /** Updated */
+            updated: string;
+        };
+        /**
+         * HelmReleaseListResponse
+         * @description Response model for listing Helm releases.
+         */
+        HelmReleaseListResponse: {
+            /** Count */
+            count: number;
+            /** Items */
+            items: components["schemas"]["HelmRelease"][];
         };
         /** ImageURL */
         ImageURL: {
@@ -3559,6 +3368,7 @@ export interface components {
          * @description Model configuration container.
          */
         ModelConfig: {
+            anthropic?: components["schemas"]["AnthropicConfig"] | null;
             azure?: components["schemas"]["AzureConfig"] | null;
             bedrock?: components["schemas"]["BedrockConfig"] | null;
             openai?: components["schemas"]["OpenAIConfig"] | null;
@@ -3577,7 +3387,7 @@ export interface components {
              * Provider
              * @enum {string}
              */
-            provider: "openai" | "azure" | "bedrock";
+            provider: "openai" | "azure" | "bedrock" | "anthropic";
         };
         /**
          * ModelDetailResponse
@@ -3607,7 +3417,7 @@ export interface components {
              * Provider
              * @enum {string}
              */
-            provider: "openai" | "azure" | "bedrock";
+            provider: "openai" | "azure" | "bedrock" | "anthropic";
             /** Resolved Address */
             resolved_address?: string | null;
             /**
@@ -3657,7 +3467,7 @@ export interface components {
              * Provider
              * @enum {string}
              */
-            provider: "openai" | "azure" | "bedrock";
+            provider: "openai" | "azure" | "bedrock" | "anthropic";
             /**
              * Type
              * @default completions
@@ -3725,18 +3535,6 @@ export interface components {
             baseUrl: string | components["schemas"]["ModelValueSource"];
             /** Headers */
             headers?: components["schemas"]["AgentHeader-Input"][] | null;
-        };
-        /**
-         * PromptTokensDetails
-         * @description Breakdown of tokens used in the prompt.
-         */
-        PromptTokensDetails: {
-            /** Audio Tokens */
-            audio_tokens?: number | null;
-            /** Cached Tokens */
-            cached_tokens?: number | null;
-        } & {
-            [key: string]: unknown;
         };
         /**
          * QueryConfigMapKeyRef
@@ -4078,8 +3876,12 @@ export interface components {
         Selector: {
             /** Agent */
             agent?: string | null;
+            /** Enableterminatetool */
+            enableTerminateTool?: boolean | null;
             /** Selectorprompt */
             selectorPrompt?: string | null;
+            /** Terminateprompt */
+            terminatePrompt?: string | null;
         };
         /**
          * ServiceListResponse
@@ -4139,6 +3941,11 @@ export interface components {
             /** Description */
             description?: string | null;
             graph?: components["schemas"]["Graph"] | null;
+            /**
+             * Loops
+             * @default false
+             */
+            loops: boolean;
             /** Maxturns */
             maxTurns?: number | null;
             /** Members */
@@ -4158,6 +3965,11 @@ export interface components {
             /** Description */
             description?: string | null;
             graph?: components["schemas"]["Graph"] | null;
+            /**
+             * Loops
+             * @default false
+             */
+            loops: boolean;
             /** Maxturns */
             maxTurns?: number | null;
             /** Members */
@@ -4201,6 +4013,8 @@ export interface components {
         TeamResponse: {
             /** Description */
             description?: string | null;
+            /** Loops */
+            loops?: boolean | null;
             /** Members Count */
             members_count?: number | null;
             /** Name */
@@ -4220,6 +4034,8 @@ export interface components {
             /** Description */
             description?: string | null;
             graph?: components["schemas"]["Graph"] | null;
+            /** Loops */
+            loops?: boolean | null;
             /** Maxturns */
             maxTurns?: number | null;
             /** Members */
@@ -4279,17 +4095,6 @@ export interface components {
             /** Type */
             type?: string | null;
         };
-        /** TopLogprob */
-        TopLogprob: {
-            /** Bytes */
-            bytes?: number[] | null;
-            /** Logprob */
-            logprob: number;
-            /** Token */
-            token: string;
-        } & {
-            [key: string]: unknown;
-        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -4302,76 +4107,6 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
-        };
-        /**
-         * FunctionCall
-         * @description Deprecated and replaced by `tool_calls`.
-         *
-         *     The name and arguments of a function that should be called, as generated by the model.
-         */
-        openai__types__chat__chat_completion_assistant_message_param__FunctionCall: {
-            /** Arguments */
-            arguments: string;
-            /** Name */
-            name: string;
-        };
-        /**
-         * FunctionCall
-         * @description Deprecated and replaced by `tool_calls`.
-         *
-         *     The name and arguments of a function that should be called, as generated by the model.
-         */
-        openai__types__chat__chat_completion_message__FunctionCall: {
-            /** Arguments */
-            arguments: string;
-            /** Name */
-            name: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * Custom
-         * @description The custom tool that the model called.
-         */
-        openai__types__chat__chat_completion_message_custom_tool_call__Custom: {
-            /** Input */
-            input: string;
-            /** Name */
-            name: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * Custom
-         * @description The custom tool that the model called.
-         */
-        openai__types__chat__chat_completion_message_custom_tool_call_param__Custom: {
-            /** Input */
-            input: string;
-            /** Name */
-            name: string;
-        };
-        /**
-         * Function
-         * @description The function that the model called.
-         */
-        openai__types__chat__chat_completion_message_function_tool_call__Function: {
-            /** Arguments */
-            arguments: string;
-            /** Name */
-            name: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * Function
-         * @description The function that the model called.
-         */
-        openai__types__chat__chat_completion_message_function_tool_call_param__Function: {
-            /** Arguments */
-            arguments: string;
-            /** Name */
-            name: string;
         };
     };
     responses: never;
@@ -4420,59 +4155,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
-                };
-            };
-        };
-    };
-    chat_completions_openai_v1_chat_completions_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ChatCompletionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ChatCompletion"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_models_openai_v1_models_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
         };
@@ -4968,6 +4650,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ArkServiceListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_marketplace_items_v1_ark_services_marketplace_items_get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelmReleaseListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6943,6 +6657,8 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Label selector for filtering resources (e.g., app.kubernetes.io/instance=phoenix) */
+                labelSelector?: string | null;
             };
             header?: never;
             path: {
@@ -7129,6 +6845,8 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Label selector for filtering resources (e.g., app.kubernetes.io/instance=phoenix) */
+                labelSelector?: string | null;
                 /** @description Filter by workflow name (partial match, case insensitive) */
                 workflowName?: string | null;
                 /** @description Filter by workflow template name (partial match, case insensitive) */

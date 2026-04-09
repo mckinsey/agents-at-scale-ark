@@ -13,6 +13,7 @@ vi.mock('@/lib/services/chat', () => ({
     streamChatResponse: vi.fn(),
     submitChatQuery: vi.fn(),
     getQueryResult: vi.fn(),
+    getQuery: vi.fn().mockResolvedValue({ status: { conversationId: '' } }),
   },
 }));
 
@@ -133,7 +134,7 @@ describe('EmbeddedChatPanel', () => {
                   spans: [
                     {
                       attributes: [
-                        { key: 'session.id', value: 'session-A' },
+                        { key: 'ark.session.id', value: 'session-A' },
                         { key: 'agent', value: 'test-agent' },
                       ],
                       startTimeUnixNano: '1704103200000000000',
@@ -228,7 +229,7 @@ describe('EmbeddedChatPanel', () => {
                   spans: [
                     {
                       attributes: [
-                        { key: 'session.id', value: 'session-A' },
+                        { key: 'ark.session.id', value: 'session-A' },
                         { key: 'agent', value: 'test-agent' },
                       ],
                       startTimeUnixNano: '1704103200000000000',
@@ -240,7 +241,7 @@ describe('EmbeddedChatPanel', () => {
                   spans: [
                     {
                       attributes: [
-                        { key: 'session.id', value: 'session-B' },
+                        { key: 'ark.session.id', value: 'session-B' },
                         { key: 'agent', value: 'test-agent' },
                       ],
                       startTimeUnixNano: '1704103260000000000',
@@ -252,7 +253,7 @@ describe('EmbeddedChatPanel', () => {
                   spans: [
                     {
                       attributes: [
-                        { key: 'session.id', value: 'session-A' },
+                        { key: 'ark.session.id', value: 'session-A' },
                         { key: 'agent', value: 'test-agent' },
                       ],
                       startTimeUnixNano: '1704103320000000000',

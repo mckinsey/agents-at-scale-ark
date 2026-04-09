@@ -1,7 +1,6 @@
 'use client';
 
-import { MessageCircle, Pencil, Trash2, Users } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { AlertTriangle, MessageCircle, Pencil, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
@@ -21,6 +20,7 @@ import type {
   TeamCreateRequest,
   TeamUpdateRequest,
 } from '@/lib/services';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { cn } from '@/lib/utils';
 
 interface TeamRowProps {
@@ -38,22 +38,26 @@ export function TeamRow({
   onUpdate: _onUpdate,
   onDelete,
 }: TeamRowProps) {
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(team.name);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const memberCount = team.members?.length || 0;
+  const deprecatedStrategies = ['round-robin', 'graph'];
+  const isDeprecatedStrategy = deprecatedStrategies.includes(
+    team.strategy ?? '',
+  );
+
+  const strategyDisplayMap: Record<string, string> = {
+    sequential: team.loops ? 'Sequential (Loops)' : 'Sequential',
+    selector: 'Selector',
+    graph: 'Graph (Deprecated)',
+    'round-robin': 'Round Robin (Deprecated)',
+  };
+
   const strategyDisplay =
-    team.strategy === 'round-robin'
-      ? 'Round Robin'
-      : team.strategy === 'selector'
-        ? 'Selector'
-        : team.strategy === 'graph'
-          ? 'Graph'
-          : team.strategy === 'sequential'
-            ? 'Sequential'
-            : team.strategy || 'No strategy';
+    strategyDisplayMap[team.strategy ?? ''] || team.strategy || 'No strategy';
 
   return (
     <>
@@ -61,11 +65,11 @@ export function TeamRow({
         role="link"
         tabIndex={0}
         className="bg-card hover:bg-accent/5 flex w-full cursor-pointer flex-wrap items-center gap-4 rounded-md border px-4 py-3 transition-colors"
-        onClick={() => router.push(`/teams/${encodeURIComponent(team.name)}`)}
+        onClick={() => push(`/teams/${encodeURIComponent(team.name)}`)}
         onKeyDown={e => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            router.push(`/teams/${encodeURIComponent(team.name)}`);
+            push(`/teams/${encodeURIComponent(team.name)}`);
           }
         }}>
         <div className="flex flex-grow items-center gap-3 overflow-hidden">
@@ -87,6 +91,9 @@ export function TeamRow({
           <span>
             {memberCount} member{memberCount !== 1 ? 's' : ''} ·{' '}
             {strategyDisplay}
+            {isDeprecatedStrategy && (
+              <AlertTriangle className="ml-1 inline h-3.5 w-3.5 text-yellow-500" />
+            )}
           </span>
         </div>
 
@@ -105,7 +112,7 @@ export function TeamRow({
                   className="h-8 w-8 p-0"
                   onClick={e => {
                     e.stopPropagation();
-                    router.push(`/teams/${encodeURIComponent(team.name)}`);
+                    push(`/teams/${encodeURIComponent(team.name)}`);
                   }}>
                   <Pencil className="h-4 w-4" />
                 </Button>

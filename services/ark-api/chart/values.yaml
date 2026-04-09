@@ -129,7 +129,6 @@ httpRoute:
       namespace: ark-system
   # Hostnames this route matches
   hostnames:
-    - "ark-api.127.0.0.1.nip.io"
     - "ark-api.default.127.0.0.1.nip.io"
 
 # Service account configuration

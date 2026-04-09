@@ -1,7 +1,6 @@
 'use client';
 
 import { ArrowUpRightIcon, Plus } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import type React from 'react';
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { toast } from 'sonner';
@@ -20,6 +19,7 @@ import {
 import { type ToggleOption, ToggleSwitch } from '@/components/ui/toggle-switch';
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { useDelayedLoading } from '@/lib/hooks';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import {
   type Agent,
   type Team,
@@ -32,7 +32,7 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 
 export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
   function TeamsSection(_, ref) {
-    const router = useRouter();
+    const { push } = useNamespacedNavigation();
     const [teams, setTeams] = useState<Team[]>([]);
     const [agents, setAgents] = useState<Agent[]>([]);
     const [loading, setLoading] = useState(true);
@@ -43,10 +43,10 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
       { id: 'compact', label: 'compact view', active: !showCompactView },
       { id: 'card', label: 'card view', active: showCompactView },
     ];
-    const { readOnlyMode } = useNamespace();
+    const { readOnlyMode, namespace } = useNamespace();
 
     useImperativeHandle(ref, () => ({
-      openAddEditor: () => router.push('/teams/new'),
+      openAddEditor: () => push('/teams/new'),
     }));
 
     useEffect(() => {
@@ -73,7 +73,7 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
       };
 
       loadData();
-    }, []);
+    }, [namespace]);
 
     const handleSaveTeam = async (
       team: (TeamCreateRequest | TeamUpdateRequest) & { id?: string },
@@ -87,7 +87,6 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
             description: 'Successfully updated the team',
           });
         } else {
-          // This is a create
           const createRequest = team as TeamCreateRequest;
           await teamsService.create(createRequest);
           toast.success('Team Created', {
@@ -156,7 +155,7 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
           </EmptyHeader>
           <EmptyContent>
             <Button
-              onClick={() => router.push('/teams/new')}
+              onClick={() => push('/teams/new')}
               disabled={readOnlyMode}>
               <Plus className="h-4 w-4" />
               Create Team

@@ -3,6 +3,8 @@ title: Team
 description: Teams of agents with execution strategies
 ---
 
+import { Callout } from 'nextra/components'
+
 # Team
 
 Teams coordinate multiple agents working together using different execution strategies.
@@ -24,11 +26,12 @@ spec:
     - name: writer
       type: agent
 
-  # Turn limit (optional) - prevents infinite loops
-  maxTurns: 10
-
   # Execution strategy - how members collaborate
-  strategy: selector  # Options: sequential, round-robin, selector, graph
+  strategy: selector  # Options: sequential, selector, graph
+
+  # Enable looping for sequential strategy (optional)
+  # loops: true
+  # maxTurns: 10  # Required when loops is true
 
   # Selector configuration - for strategy: selector
   selector:
@@ -44,16 +47,18 @@ spec:
       - from: analyst
         to: writer
 
-  # # Round-robin configuration - for strategy: round-robin
-  # strategy: round-robin
-  # # No additional configuration needed
-
   # # Sequential configuration - for strategy: sequential
   # strategy: sequential
-  # # No additional configuration needed
+  # # Single pass through members, no maxTurns needed
+
+  # # Sequential with loops - for cycling through members
+  # strategy: sequential
+  # loops: true
+  # maxTurns: 10  # Required - prevents infinite loops
 
   # # Graph-only configuration - for strategy: graph
   # strategy: graph
+  # maxTurns: 10
   # graph:
   #   edges:
   #     - from: researcher
@@ -66,20 +71,23 @@ spec:
 
 Execution strategies define how team members are chosen during query execution.
 
-- **sequential** - Agents process input one after another
-- **round-robin** - Agents take turns processing inputs
+- **sequential** - Agents process input one after another in a single pass
+- **sequential + loops** - Agents cycle through members repeatedly until `maxTurns` or terminate
 - **selector** - Dynamic agent selection based on criteria, LLM chooses the next agent for the job
 - **graph** - Custom execution flows with edges, supports more complex workflows
 - **selector + graph** - Combines AI-driven selection with workflow constraints (selector agent chooses from graph-defined valid transitions)
 
+<Callout type="warning">
+`strategy: round-robin` is deprecated and will be removed in v1.0.0. Use `strategy: sequential` with `loops: true` instead. Existing round-robin teams are automatically migrated on create/update.
+</Callout>
+
 ## Turn Limiting
 
-The optional `maxTurns` field prevents infinite loops by limiting execution turns. When reached, the team completes successfully with all accumulated responses.
+The `maxTurns` field limits execution turns. Its usage depends on the strategy:
 
-- **round-robin** - Limits total agent messages (e.g., 3 agents, `maxTurns: 5` = 5 messages total)
+- **sequential** - Not applicable for single pass. Required when `loops: true` to prevent infinite loops.
 - **selector** - Limits selection rounds (each round = one agent selection and execution)
 - **graph** - Limits edge traversals through the execution graph
-- **sequential** - Not applicable (naturally terminates after all agents complete)
 
 When `maxTurns` is reached:
 

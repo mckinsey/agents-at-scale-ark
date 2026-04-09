@@ -10,6 +10,7 @@ import type { components } from '@/lib/api/generated/types';
 import type { Agent, Team, TeamMember } from '@/lib/services';
 import { agentsService, teamsService } from '@/lib/services';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { TeamFormMode } from './types';
 
@@ -24,14 +25,44 @@ Make sure to choose the role which is best suited to respond to the most recent 
 
 Read the above conversation. Then select the next role from {{.Participants}} to play. Only return the role.`;
 
-const teamFormSchema = z.object({
-  name: kubernetesNameSchema,
-  description: z.string().optional(),
-  strategy: z.string().min(1, 'Strategy is required'),
-  maxTurns: z.string().optional(),
-  selectorAgent: z.string().optional(),
-  selectorPrompt: z.string().optional(),
-});
+export const DEFAULT_TERMINATE_PROMPT =
+  'If the most recent user message has been given an adequate response, do not return a role. Instead call the terminate tool.';
+
+const teamFormSchema = z
+  .object({
+    name: kubernetesNameSchema,
+    description: z.string().optional(),
+    strategy: z.string().min(1, 'Strategy is required'),
+    loops: z.boolean(),
+    maxTurns: z.string().optional(),
+    selectorAgent: z.string().optional(),
+    selectorPrompt: z.string().optional(),
+    enableTerminateTool: z.boolean().optional(),
+    terminatePrompt: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.strategy === 'sequential' && data.loops && !data.maxTurns) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Max turns is required for looping sequential teams',
+        path: ['maxTurns'],
+      });
+    }
+    if (data.strategy === 'graph' && !data.maxTurns) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Max turns is required for graph teams',
+        path: ['maxTurns'],
+      });
+    }
+    if (data.strategy === 'selector' && !data.maxTurns) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Max turns is required for selector teams',
+        path: ['maxTurns'],
+      });
+    }
+  });
 
 export type TeamFormValues = z.infer<typeof teamFormSchema>;
 
@@ -42,6 +73,7 @@ interface UseTeamFormOptions {
 }
 
 export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
+  const { namespace } = useNamespace();
   const onSuccessRef = useRef(onSuccess);
   onSuccessRef.current = onSuccess;
 
@@ -64,10 +96,13 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
     defaultValues: {
       name: '',
       description: '',
-      strategy: 'round-robin',
+      strategy: 'sequential',
+      loops: false,
       maxTurns: '',
       selectorAgent: '',
       selectorPrompt: '',
+      enableTerminateTool: true,
+      terminatePrompt: DEFAULT_TERMINATE_PROMPT,
     },
   });
 
@@ -104,12 +139,16 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
           form.reset({
             name: teamData.name,
             description: teamData.description || '',
-            strategy: teamData.strategy || 'round-robin',
+            strategy: teamData.strategy || 'sequential',
+            loops: teamData.loops ?? false,
             maxTurns: teamData.maxTurns ? String(teamData.maxTurns) : '',
             selectorAgent: teamData.selector?.agent || '',
             selectorPrompt:
               teamData.selector?.selectorPrompt ||
               (teamData.strategy === 'selector' ? DEFAULT_SELECTOR_PROMPT : ''),
+            enableTerminateTool: teamData.selector?.enableTerminateTool ?? false,
+            terminatePrompt:
+              teamData.selector?.terminatePrompt || DEFAULT_TERMINATE_PROMPT,
           });
         } else {
           const agentsData = await agentsService.getAll();
@@ -134,7 +173,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
     };
 
     loadData();
-  }, [mode, teamName, form]);
+  }, [mode, teamName, form, namespace]);
 
   const hasChanges =
     form.formState.isDirty ||
@@ -150,15 +189,21 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
             description: values.description || undefined,
             members: selectedMembers.length > 0 ? selectedMembers : undefined,
             strategy: values.strategy || undefined,
-            maxTurns: values.maxTurns ? parseInt(values.maxTurns) : undefined,
+            loops: values.loops,
+            maxTurns: values.maxTurns ? parseInt(values.maxTurns) : null,
             selector:
-              values.selectorAgent || values.selectorPrompt
+              values.selectorAgent ||
+              values.selectorPrompt ||
+              values.enableTerminateTool !== undefined ||
+              values.terminatePrompt
                 ? {
                     agent: values.selectorAgent || undefined,
                     selectorPrompt: values.selectorPrompt || undefined,
+                    enableTerminateTool: values.enableTerminateTool,
+                    terminatePrompt: values.terminatePrompt || undefined,
                   }
-                : undefined,
-            graph: graphEdges.length > 0 ? { edges: graphEdges } : undefined,
+                : null,
+            graph: graphEdges.length > 0 ? { edges: graphEdges } : null,
           });
 
           setTeam(updatedTeam);
@@ -172,12 +217,18 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
             description: values.description || undefined,
             members: selectedMembers,
             strategy: values.strategy,
+            loops: values.loops,
             maxTurns: values.maxTurns ? parseInt(values.maxTurns) : undefined,
             selector:
-              values.selectorAgent || values.selectorPrompt
+              values.selectorAgent ||
+              values.selectorPrompt ||
+              values.enableTerminateTool !== undefined ||
+              values.terminatePrompt
                 ? {
                     agent: values.selectorAgent || undefined,
                     selectorPrompt: values.selectorPrompt || undefined,
+                    enableTerminateTool: values.enableTerminateTool,
+                    terminatePrompt: values.terminatePrompt || undefined,
                   }
                 : undefined,
             graph: graphEdges.length > 0 ? { edges: graphEdges } : undefined,
@@ -201,7 +252,7 @@ export function useTeamForm({ mode, teamName, onSuccess }: UseTeamFormOptions) {
         setSaving(false);
       }
     },
-    [mode, team, teamName, selectedMembers, graphEdges, form],
+    [mode, team, teamName, selectedMembers, graphEdges, form, namespace],
   );
 
   return {
