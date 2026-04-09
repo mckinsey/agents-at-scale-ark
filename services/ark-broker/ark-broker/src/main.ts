@@ -9,7 +9,7 @@ setupSwagger(app, version);
 
 const PORT = process.env.PORT || '8080';
 const HOST = process.env.HOST || '0.0.0.0';
-const REQUEST_TIMEOUT = parseInt(process.env.REQUEST_TIMEOUT || '0');
+const REQUEST_TIMEOUT = parseInt(process.env.REQUEST_TIMEOUT || '0', 10);
 
 const server = app.listen(parseInt(PORT), HOST, () => {
   console.log(`ARK Broker service running on http://${HOST}:${PORT}`);
