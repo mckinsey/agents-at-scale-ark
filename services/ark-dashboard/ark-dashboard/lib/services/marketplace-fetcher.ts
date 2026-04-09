@@ -264,14 +264,10 @@ interface HelmReleasesResponse {
   count: number;
 }
 
-/**
- * Get ark-api base URL using same env vars as middleware.ts
- */
 function getArkApiBaseUrl(): string {
   const isServerSide = typeof window === 'undefined';
   if (!isServerSide) return '';
 
-  // Use same defaults as middleware.ts for consistency
   const host = process.env.ARK_API_SERVICE_HOST || 'localhost';
   const port = process.env.ARK_API_SERVICE_PORT || '8000';
   const protocol = process.env.ARK_API_SERVICE_PROTOCOL || 'http';
