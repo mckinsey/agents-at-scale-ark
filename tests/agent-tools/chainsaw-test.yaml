@@ -12,14 +12,15 @@ spec:
     try:
     - apply:
         file: ../shared/mock-weather-api.yaml
-    - assert:
-        resource:
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: mock-weather-api
-          status:
-            readyReplicas: 1
+    - wait:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: mock-weather-api
+        timeout: 2m
+        for:
+          condition:
+            name: Available
+            value: 'True'
     - assert:
         resource:
           apiVersion: v1

@@ -36,16 +36,15 @@ spec:
           condition:
             name: ModelAvailable
             value: 'True' 
-    - assert:
-        resource:
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: mock-weather-api
-            namespace: ($namespace)
-          status:
-            readyReplicas: 1
-            availableReplicas: 1
+    - wait:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: mock-weather-api
+        timeout: 2m
+        for:
+          condition:
+            name: Available
+            value: 'True'
     # Create tools using kubectl with template substitution
     - script:
         content: |

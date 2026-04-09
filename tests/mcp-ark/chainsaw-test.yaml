@@ -29,15 +29,15 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
         timeout: 180s
-    - assert:
-        resource:
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: ark-mcp
-          status:
-            readyReplicas: 1
-        timeout: 120s
+    - wait:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: ark-mcp
+        timeout: 2m
+        for:
+          condition:
+            name: Available
+            value: 'True'
 
   - name: test-mcp-namespace-listing
     try:

@@ -11,14 +11,15 @@ spec:
       try:
         - apply:
             file: ../shared/mock-geocoding-api.yaml
-        - assert:
-            resource:
-              apiVersion: apps/v1
-              kind: Deployment
-              metadata:
-                name: mock-geocoding-api
-              status:
-                readyReplicas: 1
+        - wait:
+            apiVersion: apps/v1
+            kind: Deployment
+            name: mock-geocoding-api
+            timeout: 2m
+            for:
+              condition:
+                name: Available
+                value: 'True'
         - assert:
             resource:
               apiVersion: v1
