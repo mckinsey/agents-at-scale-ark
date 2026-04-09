@@ -80,13 +80,17 @@ cd docs/           # Documentation site
 npm build          # Build site
 ```
 
+# Observability
+
+Ark uses OpenTelemetry with W3C TraceContext and Baggage propagation for distributed tracing. The operator instruments query dispatch and A2A communication, automatically propagating trace context to downstream executors via HTTP headers. The telemetry subsystem lives in `ark/internal/telemetry/`, and the `ExecutorApp` base class in `lib/ark-sdk/` handles context extraction on the executor side.
+
 # Marketplace
 
-Ark has a separate marketplace repository for community-contributed services and components:
+Ark has a separate marketplace repository for add-on components that extend Ark's native capabilities. Marketplace items depend on Ark core — never the other way around.
 
 **Repository**: https://github.com/mckinsey/agents-at-scale-marketplace
 
-The marketplace includes observability platforms (Phoenix, Langfuse) and other optional services. Services can be deployed using DevSpace or Helm as dependencies of your Ark installation.
+The marketplace includes executors (Claude Agent SDK, LangChain), services (Phoenix, Langfuse, ark-sandbox, file-gateway), MCP servers, pre-built agents, and demo bundles. Components can be deployed using DevSpace or Helm as dependencies of your Ark installation.
 
 Example usage in `devspace.yaml`:
 ```yaml
@@ -197,6 +201,10 @@ One sentence description.
 - **Resource**: What it creates
 - **Use case**: When to use it
 ```
+
+# Build & CI/CD
+
+For build failures, CI issues, CVEs, dependabot management, and test failures, use the **ark-build-manager** agent. It triages failures across workflow runs and delegates to appropriate skills (chainsaw, vulnerability-fixer, ark-dependabot-management, etc.).
 
 # Testing Guidelines
 

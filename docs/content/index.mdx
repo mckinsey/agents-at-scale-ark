@@ -4,7 +4,9 @@ sidebarTitle: Introduction
 
 # ARK - Agentic Runtime for Kubernetes
 
-ARK is a Kubernetes-based platform that provides a runtime and enables management and orchestration of AI agents and their resources. It provides [custom resource definitions (CRDs)](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/) and services to handle:
+Ark is a set of open-source tools that extend Kubernetes with [custom resource definitions (CRDs)](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/) and services for building and running agentic workloads. This allows teams to extend their existing Kubernetes infrastructure to run AI agents, in a similar way to how [Argo](https://argoproj.github.io/) extends Kubernetes to run workflows.
+
+Ark provides resources for:
 
 - [AI model configurations](./user-guide/models).
 - [Autonomous agents](./user-guide/agents).
@@ -12,18 +14,12 @@ ARK is a Kubernetes-based platform that provides a runtime and enables managemen
 - [Tool integrations](./user-guide/tools).
 - [Memory persistence](./reference/resources/memory).
 
-This documentation explains how to build, deploy, and operate agentic solutions using proven patterns and practices that are reliable for complex distributed systems.
+Ark emphasizes a declarative approach to building agentic solutions, separating the definition of how agents should behave from the underlying implementation of how they are run. This encourages teams to build portable solutions that can be moved across different stacks as the agentic space evolves.
 
-Find out more about the [core concepts of ARK](./core-concepts).
+Find out more about the [core concepts of Ark](./core-concepts).
 
 ## Get started
 Follow the [Quickstart](./quickstart.mdx) guide to install ARK locally.
-
-> [!NOTE]
->
-> The Agents at Scale - Agentic platform and runtime for Kubernetes ("Ark") Technical Preview should **not** be run without reading the [Disclaimer](./disclaimer.mdx), which covers key risk topics.
->
-> We are transitioning this project to our open-source repository. During this process we will be moving documentation URLs, artifact registries, etc. Some builds, artifacts and pipelines may be impacted.
 
 
 

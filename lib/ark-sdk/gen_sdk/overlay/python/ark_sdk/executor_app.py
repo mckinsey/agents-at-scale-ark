@@ -302,11 +302,15 @@ class ExecutorApp:
 
         app.routes.insert(0, Route("/health", health_check, methods=["GET"]))
 
-        # Wrap app with OTEL ASGI middleware to extract traceparent/baggage
+        # Wrap app with OTEL ASGI middleware to extract traceparent/baggage.
+        # Exclude /health to prevent Kubernetes liveness/readiness probes
+        # from generating noisy traces on every probe interval.
         if _otel_enabled:
             try:
                 from opentelemetry.instrumentation.asgi import OpenTelemetryMiddleware
-                app = OpenTelemetryMiddleware(app)
+                from opentelemetry.util.http import ExcludeList
+                excluded = ExcludeList(["health"])
+                app = OpenTelemetryMiddleware(app, excluded_urls=excluded)
             except ImportError:
                 logger.debug("opentelemetry-instrumentation-asgi not available")
 
