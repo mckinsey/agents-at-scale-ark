@@ -1117,6 +1117,9 @@ jobs:
         build-ark-cli,
       ]
     runs-on: ubuntu-24.04
+    concurrency:
+      group: release-please
+      cancel-in-progress: false
     outputs:
       released: ${{ steps.release-please.outputs.release_created }}
       tag: ${{ steps.release-please.outputs.tag_name }}
