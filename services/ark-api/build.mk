@@ -109,7 +109,6 @@ $(ARK_API_STAMP_INSTALL): $(ARK_API_STAMP_BUILD) $$(LOCALHOST_GATEWAY_STAMP_INST
 		--timeout=5m
 	@echo "ark-api installed successfully"
 	@echo "Routes available via localhost-gateway:"
-	@echo "  http://ark-api.127.0.0.1.nip.io"
 	@echo "  http://ark-api.default.127.0.0.1.nip.io"
 	@touch $@
 
