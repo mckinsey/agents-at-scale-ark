@@ -1,17 +1,20 @@
 import base64
 import json
+import os
 import subprocess
 import time
 from typing import Dict, Optional, Tuple
+
+DEFAULT_AZURE_API_VERSION = "2024-04-01-preview"
 
 
 class ModelsHelper:
     NAMESPACE = "default"
     TIMEOUT_CREATE = 30
-    TIMEOUT_AVAILABLE = 120
+    TIMEOUT_AVAILABLE = int(os.getenv("MODEL_AVAILABILITY_TIMEOUT", "120"))
     POLL_INTERVAL = 5
 
-    def _run_cmd(self, cmd, timeout=30, check=True) -> Tuple[bool, str, str]:
+    def _run_cmd(self, cmd, timeout=30, check=False) -> Tuple[bool, str, str]:
         try:
             result = subprocess.run(
                 cmd,
@@ -23,8 +26,6 @@ class ModelsHelper:
             return result.returncode == 0, result.stdout, result.stderr
         except subprocess.TimeoutExpired:
             return False, "", f"Command timed out after {timeout}s"
-        except subprocess.CalledProcessError as e:
-            return False, e.stdout, e.stderr
         except Exception as e:
             return False, "", str(e)
 
@@ -77,7 +78,7 @@ spec:
 """
         return self._apply_yaml(yaml_str)
 
-    def create_anthropic_model(self, name: str, secret_name: str, model: str = "claude-3-5-haiku-20241022", base_url: str = "") -> Tuple[bool, str]:
+    def create_anthropic_model(self, name: str, secret_name: str, model: str = "claude-3-haiku-20240307", base_url: str = "") -> Tuple[bool, str]:
         yaml_str = f"""apiVersion: ark.mckinsey.com/v1alpha1
 kind: Model
 metadata:
@@ -100,7 +101,7 @@ spec:
 """
         return self._apply_yaml(yaml_str)
 
-    def create_azure_model(self, name: str, secret_name: str, model: str = "gpt-35-turbo", base_url: str = "", api_version: str = "2024-04-01-preview") -> Tuple[bool, str]:
+    def create_azure_model(self, name: str, secret_name: str, model: str = "gpt-35-turbo", base_url: str = "", api_version: str = DEFAULT_AZURE_API_VERSION) -> Tuple[bool, str]:
         yaml_str = f"""apiVersion: ark.mckinsey.com/v1alpha1
 kind: Model
 metadata:

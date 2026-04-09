@@ -1,4 +1,8 @@
 def pytest_collection_modifyitems(items):
+    """Sort parametrized provider tests so all tests for a given provider run
+    together (openai → anthropic → azure). Without this, pytest interleaves
+    them by test name, causing create/delete races across providers when using
+    the module-scoped cleanup fixture."""
     provider_order = {"openai": 0, "anthropic": 1, "azure": 2}
     original_order = {item: i for i, item in enumerate(items)}
 
