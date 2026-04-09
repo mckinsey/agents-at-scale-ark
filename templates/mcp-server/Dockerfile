@@ -95,7 +95,7 @@ ENTRYPOINT [ "/bin/sh", "-c", "mcp-proxy --debug --port 8080 --host 0.0.0.0 --sh
 {{- end }}
 
 {{- else if eq .Values.technology "python" }}
-FROM python:3.11-slim
+FROM python:3.11.13-slim
 
 WORKDIR /app
 

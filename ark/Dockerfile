@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM golang:1.26.1-bookworm AS builder
+FROM golang:1.26.2-bookworm AS builder
 ARG TARGETOS
 ARG TARGETARCH
 ARG ENABLE_COVERAGE=false
