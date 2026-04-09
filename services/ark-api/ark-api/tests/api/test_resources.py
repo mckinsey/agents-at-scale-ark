@@ -1123,6 +1123,129 @@ class TestResourcesEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
         self.assertIn("Failed to fetch logs", response.text)
 
+    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.get_context')
+    def test_list_core_resources_with_label_selector(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
+        """Test listing core resources with label selector parameter."""
+        mock_get_context.return_value = {"namespace": "default"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+
+        mock_api_resource = AsyncMock()
+        mock_resources = Mock()
+        mock_resources.to_dict.return_value = {
+            "apiVersion": "v1",
+            "kind": "ServiceList",
+            "items": [
+                {
+                    "metadata": {
+                        "name": "phoenix-svc",
+                        "labels": {"app.kubernetes.io/instance": "phoenix"}
+                    }
+                }
+            ]
+        }
+        mock_api_resource.get = AsyncMock(return_value=mock_resources)
+        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
+
+        response = self.client.get(
+            "/v1/resources/api/v1/Service?labelSelector=app.kubernetes.io/instance=phoenix"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["kind"], "ServiceList")
+        self.assertEqual(len(data["items"]), 1)
+        self.assertEqual(data["items"][0]["metadata"]["name"], "phoenix-svc")
+        mock_api_resource.get.assert_called_once_with(
+            namespace="default",
+            label_selector="app.kubernetes.io/instance=phoenix"
+        )
+
+    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.get_context')
+    def test_list_grouped_resources_with_label_selector(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
+        """Test listing grouped resources with label selector parameter."""
+        mock_get_context.return_value = {"namespace": "default"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+
+        mock_api_resource = AsyncMock()
+        mock_resources = Mock()
+        mock_resources.to_dict.return_value = {
+            "apiVersion": "apps/v1",
+            "kind": "DeploymentList",
+            "items": [
+                {
+                    "metadata": {
+                        "name": "phoenix-deployment",
+                        "labels": {"app.kubernetes.io/instance": "phoenix", "app": "phoenix"}
+                    }
+                },
+                {
+                    "metadata": {
+                        "name": "other-deployment",
+                        "labels": {"app": "other"}
+                    }
+                }
+            ]
+        }
+        mock_api_resource.get = AsyncMock(return_value=mock_resources)
+        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
+
+        response = self.client.get(
+            "/v1/resources/apis/apps/v1/Deployment?labelSelector=app.kubernetes.io/instance=phoenix"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["kind"], "DeploymentList")
+        mock_api_resource.get.assert_called_once_with(
+            namespace="default",
+            label_selector="app.kubernetes.io/instance=phoenix"
+        )
+
+    @patch('ark_api.api.v1.resources.ApiClient')
+    @patch('ark_api.api.v1.resources.DynamicClient')
+    @patch('ark_api.api.v1.resources.get_context')
+    def test_list_core_resources_without_label_selector(self, mock_get_context, mock_dynamic_client_cls, mock_api_client):
+        """Test listing core resources without label selector defaults to None."""
+        mock_get_context.return_value = {"namespace": "default"}
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_dynamic_client_instance = AsyncMock()
+        mock_dynamic_client_cls.side_effect = make_awaitable(mock_dynamic_client_instance)
+
+        mock_api_resource = AsyncMock()
+        mock_resources = Mock()
+        mock_resources.to_dict.return_value = {
+            "apiVersion": "v1",
+            "kind": "ServiceList",
+            "items": []
+        }
+        mock_api_resource.get = AsyncMock(return_value=mock_resources)
+        mock_dynamic_client_instance.resources.get = AsyncMock(return_value=mock_api_resource)
+
+        response = self.client.get("/v1/resources/api/v1/Service")
+
+        self.assertEqual(response.status_code, 200)
+        mock_api_resource.get.assert_called_once_with(
+            namespace="default",
+            label_selector=None
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
