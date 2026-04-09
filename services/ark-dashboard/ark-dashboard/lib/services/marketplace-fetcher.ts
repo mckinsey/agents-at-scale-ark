@@ -166,6 +166,7 @@ export function transformGitHubItemToMarketplaceItem(
   item: GitHubMarketplaceItem,
   isInstalled: boolean = false,
   source?: string,
+  uis?: { url: string; label: string }[],
 ): MarketplaceItem {
   const id = generateItemId(item);
   const now = new Date().toISOString();
@@ -198,6 +199,7 @@ export function transformGitHubItemToMarketplaceItem(
     createdAt: now,
     updatedAt: now,
     source: source ?? 'Unknown source',
+    uis: uis ?? [],
   };
 }
 
@@ -242,62 +244,158 @@ export interface MarketplaceSource {
   enabled?: boolean;
 }
 
+interface HelmRelease {
+  name: string;
+  namespace: string;
+  chart: string;
+  chart_version: string;
+  app_version: string;
+  status: string;
+  revision: number;
+  updated: string;
+  chart_metadata: {
+    annotations?: Record<string, string>;
+    description?: string;
+  };
+}
+
+interface HelmReleasesResponse {
+  items: HelmRelease[];
+  count: number;
+}
+
+function getArkApiBaseUrl(): string {
+  const isServerSide = typeof window === 'undefined';
+  if (!isServerSide) return '';
+
+  const host = process.env.ARK_API_SERVICE_HOST || 'localhost';
+  const port = process.env.ARK_API_SERVICE_PORT || '8000';
+  const protocol = process.env.ARK_API_SERVICE_PROTOCOL || 'http';
+
+  return `${protocol}://${host}:${port}`;
+}
+
 /**
- * Get installed marketplace items by checking cluster resources
- * Uses the export service to fetch all resources and matches them
- * against marketplace item naming conventions
+ * Fetch Helm releases from ark-api for marketplace item detection
  */
-async function getInstalledMarketplaceItems(): Promise<Set<string>> {
+async function fetchHelmReleases(namespace?: string): Promise<HelmRelease[]> {
   try {
-    console.log('Fetching resources from cluster via export service...');
-    console.log('Running in context:', typeof window !== 'undefined' ? 'client-side' : 'server-side');
+    const baseUrl = getArkApiBaseUrl();
 
-    // Use appropriate service based on context
-    const isServerSide = typeof window === 'undefined';
-    const service = isServerSide ? exportServiceServer : exportService;
+    const url = namespace
+      ? `${baseUrl}/v1/ark-services/marketplace-items?namespace=${namespace}`
+      : `${baseUrl}/v1/ark-services/marketplace-items`;
 
-    // Fetch all resources from the cluster
-    const resources = await service.fetchAllResources();
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error(`Failed to fetch Helm releases: ${response.status}`);
+      return [];
+    }
 
-    const installedItems = new Set<string>();
+    const data: HelmReleasesResponse = await response.json();
+    return data.items || [];
+  } catch (error) {
+    console.error('Error fetching Helm releases:', error);
+    return [];
+  }
+}
 
-    // Check agents
-    if (resources.agents) {
-      for (const agent of resources.agents) {
-        // Add both the exact name and a normalized version
-        installedItems.add(agent.name.toLowerCase());
-        installedItems.add(generateItemIdFromName(agent.name));
+/**
+ * Fetch UI URLs from Services for multiple Helm releases in a single API call
+ */
+async function getAllServiceUIs(
+  releases: HelmRelease[],
+  namespace?: string,
+): Promise<Map<string, { url: string; label: string }[]>> {
+  try {
+    if (releases.length === 0) {
+      return new Map();
+    }
+
+    const baseUrl = getArkApiBaseUrl();
+
+    // Build set-based labelSelector for all releases
+    const releaseNames = releases.map(r => r.name);
+    const labelSelector = `app.kubernetes.io/instance in (${releaseNames.join(',')})`;
+    const namespaceParam = namespace ? `&namespace=${namespace}` : '';
+    const url = `${baseUrl}/v1/resources/api/v1/Service?labelSelector=${encodeURIComponent(labelSelector)}${namespaceParam}`;
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error(`Failed to fetch Services for releases: ${response.status}`);
+      return new Map();
+    }
+
+    const data = await response.json();
+    const services = data.items || [];
+
+    // Group Services by release name and extract UI URLs
+    const uisByRelease = new Map<string, { url: string; label: string }[]>();
+
+    for (const service of services) {
+      const releaseName = service.metadata?.labels?.['app.kubernetes.io/instance'];
+      if (!releaseName) continue;
+
+      const annotations = service.metadata?.annotations || {};
+      const uiUrl = annotations['ark.mckinsey.com/marketplace-item-ui-url'];
+
+      if (uiUrl) {
+        if (!uisByRelease.has(releaseName)) {
+          uisByRelease.set(releaseName, []);
+        }
+
+        const uiLabel =
+          annotations['ark.mckinsey.com/marketplace-item-ui-label'] || 'Open';
+        uisByRelease.get(releaseName)!.push({ url: uiUrl, label: uiLabel });
       }
     }
 
-    // Check services (MCP servers, A2A servers)
-    if (resources.mcpservers) {
-      for (const server of resources.mcpservers) {
-        installedItems.add(server.name.toLowerCase());
-        installedItems.add(generateItemIdFromName(server.name));
-      }
-    }
+    return uisByRelease;
+  } catch (error) {
+    console.error('Error fetching Service UIs for releases:', error);
+    return new Map();
+  }
+}
 
-    if (resources.a2a) {
-      for (const server of resources.a2a) {
-        installedItems.add(server.name.toLowerCase());
-        installedItems.add(generateItemIdFromName(server.name));
-      }
-    }
+/**
+ * Get installed marketplace items by checking Helm releases
+ */
+async function getInstalledMarketplaceItems(
+  namespace?: string,
+): Promise<Map<string, { isInstalled: boolean; uis: { url: string; label: string }[] }>> {
+  try {
+    console.log('Fetching Helm releases for marketplace item detection...');
 
-    // Check workflows
-    if (resources.workflows) {
-      for (const workflow of resources.workflows) {
-        installedItems.add(workflow.name.toLowerCase());
-        installedItems.add(generateItemIdFromName(workflow.name));
-      }
-    }
+    const releases = await fetchHelmReleases(namespace);
 
-    // Check models
-    if (resources.models) {
-      for (const model of resources.models) {
-        installedItems.add(model.name.toLowerCase());
-        installedItems.add(generateItemIdFromName(model.name));
+    // Filter to only deployed releases
+    const deployedReleases = releases.filter(r => r.status === 'deployed');
+
+    // Fetch UI URLs for all deployed releases in one API call
+    const uisByRelease = await getAllServiceUIs(deployedReleases, namespace);
+
+    const installedItems = new Map<
+      string,
+      { isInstalled: boolean; uis: { url: string; label: string }[] }
+    >();
+
+    for (const release of deployedReleases) {
+      const chartAnnotations = release.chart_metadata?.annotations || {};
+      const marketplaceItemName =
+        chartAnnotations['ark.mckinsey.com/marketplace-item-name'];
+
+      if (marketplaceItemName) {
+        // Get UI URLs from batch result
+        const uis = uisByRelease.get(release.name) || [];
+
+        installedItems.set(marketplaceItemName, {
+          isInstalled: true,
+          uis,
+        });
+
+        console.log(
+          `Found installed item: ${marketplaceItemName} with ${uis.length} UI(s)`,
+        );
       }
     }
 
@@ -305,24 +403,14 @@ async function getInstalledMarketplaceItems(): Promise<Set<string>> {
     return installedItems;
   } catch (error) {
     console.error('Failed to fetch installed marketplace items:', error);
-    // Return empty set if we can't fetch resources
-    return new Set<string>();
+    return new Map();
   }
 }
 
-/**
- * Generate a consistent item ID from a resource name
- * This normalizes the name to match marketplace item IDs
- */
-function generateItemIdFromName(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-)|(-$)/g, '');
-}
 
 export async function fetchMarketplaceItemsFromSource(
   source: MarketplaceSource,
+  namespace?: string,
 ): Promise<MarketplaceItem[]> {
   const manifest = await fetchMarketplaceManifest(source.url);
 
@@ -330,42 +418,55 @@ export async function fetchMarketplaceItemsFromSource(
     return [];
   }
 
-  // Get actual installation status from cluster
-  const installedItems = await getInstalledMarketplaceItems();
+  // Get actual installation status from cluster via Helm releases
+  const installedItems = await getInstalledMarketplaceItems(namespace);
 
-  const urlSource = extractOrgRepoFromUrl(source.url) ?? source.displayName ?? source.name;
+  const urlSource =
+    extractOrgRepoFromUrl(source.url) ?? source.displayName ?? source.name;
 
   return manifest.items.map(item => {
-    const itemId = generateItemId(item);
-    // Check if item is installed by matching against various forms of the name
-    const isInstalled = installedItems.has(itemId) ||
-                       installedItems.has(item.name.toLowerCase()) ||
-                       installedItems.has(generateItemIdFromName(item.name));
+    // Construct marketplace item identifier: type/name
+    const itemIdentifier = `${item.type}/${item.name}`;
 
-    return transformGitHubItemToMarketplaceItem(item, isInstalled, urlSource);
+    // Check if item is installed via Helm release with matching annotation
+    const installInfo = installedItems.get(itemIdentifier);
+    const isInstalled = installInfo?.isInstalled || false;
+    const uis = installInfo?.uis || [];
+
+    return transformGitHubItemToMarketplaceItem(
+      item,
+      isInstalled,
+      urlSource,
+      uis,
+    );
   });
 }
 
 export async function getMarketplaceItemsFromSources(
   sources?: MarketplaceSource[],
+  namespace?: string,
 ): Promise<MarketplaceItem[]> {
   // Use default source if none provided
-  const effectiveSources = sources?.length ? sources : [
-    {
-      id: 'default',
-      name: 'ARK marketplace',
-      url: DEFAULT_MARKETPLACE_MANIFEST_URL,
-      displayName: 'ARK marketplace',
-      enabled: true,
-    },
-  ];
+  const effectiveSources = sources?.length
+    ? sources
+    : [
+        {
+          id: 'default',
+          name: 'ARK marketplace',
+          url: DEFAULT_MARKETPLACE_MANIFEST_URL,
+          displayName: 'ARK marketplace',
+          enabled: true,
+        },
+      ];
 
   // Only fetch from enabled sources
   const enabledSources = effectiveSources.filter(s => s.enabled !== false);
 
   // Fetch from all sources in parallel
   const allItemsArrays = await Promise.all(
-    enabledSources.map(source => fetchMarketplaceItemsFromSource(source))
+    enabledSources.map(source =>
+      fetchMarketplaceItemsFromSource(source, namespace),
+    ),
   );
 
   // Flatten and deduplicate items by ID

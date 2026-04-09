@@ -20,6 +20,7 @@ export interface MarketplaceItem {
   screenshots?: string[];
   createdAt: string;
   updatedAt: string;
+  uis?: { url: string; label: string }[];
 }
 
 export type MarketplaceCategory =
