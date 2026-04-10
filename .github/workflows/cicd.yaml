@@ -776,8 +776,8 @@ jobs:
           CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL }}
           CICD_ANTHROPIC_API_KEY: ${{ secrets.CICD_ANTHROPIC_API_KEY }}
           CICD_ANTHROPIC_BASE_URL: ${{ secrets.CICD_ANTHROPIC_BASE_URL }}
-          CICD_AZURE_API_KEY: ${{ secrets.CICD_AZURE_API_KEY }}
-          CICD_AZURE_BASE_URL: ${{ secrets.CICD_AZURE_BASE_URL }}
+          CICD_AZURE_API_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
+          CICD_AZURE_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
         run: |
           cd tests/pytest/ui-tests
           cat > .env << EOF
@@ -894,11 +894,11 @@ jobs:
           CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL }}
           CICD_ANTHROPIC_API_KEY: ${{ secrets.CICD_ANTHROPIC_API_KEY }}
           CICD_ANTHROPIC_BASE_URL: ${{ secrets.CICD_ANTHROPIC_BASE_URL }}
-          CICD_AZURE_API_KEY: ${{ secrets.CICD_AZURE_API_KEY }}
-          CICD_AZURE_BASE_URL: ${{ secrets.CICD_AZURE_BASE_URL }}
+          CICD_AZURE_API_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
+          CICD_AZURE_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
         run: |
           cd tests/pytest/cli-tests/tests
-          pytest . -n 5 --dist loadscope -v --tb=short --log-cli-level=INFO
+          pytest . -n 3 --dist loadscope -v --tb=short --log-cli-level=INFO
 
       - name: Upload CLI test logs
         if: always()
