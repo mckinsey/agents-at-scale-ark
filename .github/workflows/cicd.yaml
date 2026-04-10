@@ -1138,14 +1138,22 @@ jobs:
         if: ${{ !env.ACT && github.ref == 'refs/heads/main' }}
         run: |
           VERSION=$(jq -r '."."' .github/release-please-manifest.json)
-          if [[ "$VERSION" == *-rc.* ]]; then
-            echo "config=.github/release-please-config-rc.json" >> $GITHUB_OUTPUT
-            echo "type=rc" >> $GITHUB_OUTPUT
-            echo "Manifest version $VERSION contains RC suffix, using RC config"
-          else
+
+          # Promotion scenario:
+          # 1. Manifest version is stable (no -rc suffix)
+          # 2. RC tags exist for this version (v0.1.58-rc.*)
+          # 3. Stable tag doesn't exist yet (v0.1.58)
+          RC_TAGS=$(git tag --list "v${VERSION}-rc.*" | head -1)
+          STABLE_TAG=$(git tag --list "v${VERSION}" | head -1)
+
+          if [[ "$VERSION" != *-rc.* && -n "$RC_TAGS" && -z "$STABLE_TAG" ]]; then
             echo "config=.github/release-please-config.json" >> $GITHUB_OUTPUT
             echo "type=stable" >> $GITHUB_OUTPUT
-            echo "Manifest version $VERSION is stable, using stable config"
+            echo "Promotion detected: RC tags exist for v${VERSION}, releasing stable"
+          else
+            echo "config=.github/release-please-config-rc.json" >> $GITHUB_OUTPUT
+            echo "type=rc" >> $GITHUB_OUTPUT
+            echo "Normal development flow, using RC config"
           fi
 
       - name: Create Release
@@ -1154,7 +1162,7 @@ jobs:
         id: release-please
         with:
           manifest-file: .github/release-please-manifest.json
-          config-file: ${{ steps.release-type.outputs.config }}
+          config-file: ${{ steps.release-type.outputs.config || '.github/release-please-config-rc.json' }}
           target-branch: main
 
   release-docs:
@@ -1325,7 +1333,11 @@ jobs:
       
       - name: Trigger Deploy workflow for release
         run: |
-          IS_STABLE=${{ needs.check-release.outputs.release_type == 'stable' }}
+          if [[ "${{ needs.check-release.outputs.release_type }}" == "stable" ]]; then
+            IS_STABLE=true
+          else
+            IS_STABLE=false
+          fi
 
           gh workflow run deploy.yml \
             --field ark_version="${{ needs.check-release.outputs.tag }}" \
@@ -1343,7 +1355,7 @@ jobs:
     runs-on: ubuntu-24.04
     if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' && needs.check-release.outputs.release_type == 'stable' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-k3s
         with:
