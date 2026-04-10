@@ -2,9 +2,9 @@ name: CI/CD
 
 on:
   push:
-    branches: [main, release]
+    branches: [main]
   pull_request:
-    branches: ["main", "release"]
+    branches: ["main"]
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 
@@ -29,7 +29,7 @@ permissions:
 # have the full pipeline run on.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/release' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   # Setup job to determine container cache registry
@@ -1121,36 +1121,46 @@ jobs:
       group: release-please
       cancel-in-progress: false
     outputs:
-      released: ${{ steps.release-please.outputs.release_created || steps.release-please-stable.outputs.release_created }}
-      tag: ${{ steps.release-please.outputs.tag_name || steps.release-please-stable.outputs.tag_name }}
+      released: ${{ steps.release-please.outputs.release_created }}
+      tag: ${{ steps.release-please.outputs.tag_name }}
+      release_type: ${{ steps.release-type.outputs.type }}
     steps:
+      - uses: actions/checkout@v6
+
       - name: Skip Release (Running Locally)
         if: ${{ env.ACT }}
         run: |
           echo "ℹ️  Skipping release when running locally with 'act'"
           echo "   Release creation requires GitHub tokens that are not available locally"
-      - name: Create RC Release
-        if: ${{ !env.ACT && github.ref == 'refs/heads/release' }}
+
+      - name: Determine release type
+        id: release-type
+        if: ${{ !env.ACT && github.ref == 'refs/heads/main' }}
+        run: |
+          VERSION=$(jq -r '."."' .github/release-please-manifest.json)
+          if [[ "$VERSION" == *-rc.* ]]; then
+            echo "config=.github/release-please-config-rc.json" >> $GITHUB_OUTPUT
+            echo "type=rc" >> $GITHUB_OUTPUT
+            echo "Manifest version $VERSION contains RC suffix, using RC config"
+          else
+            echo "config=.github/release-please-config.json" >> $GITHUB_OUTPUT
+            echo "type=stable" >> $GITHUB_OUTPUT
+            echo "Manifest version $VERSION is stable, using stable config"
+          fi
+
+      - name: Create Release
+        if: ${{ !env.ACT && github.ref == 'refs/heads/main' }}
         uses: googleapis/release-please-action@v4
         id: release-please
         with:
           manifest-file: .github/release-please-manifest.json
-          config-file: .github/release-please-config-rc.json
-          target-branch: release
-
-      - name: Create Stable Release
-        if: ${{ !env.ACT && github.ref == 'refs/heads/main' }}
-        uses: googleapis/release-please-action@v4
-        id: release-please-stable
-        with:
-          manifest-file: .github/release-please-manifest.json
-          config-file: .github/release-please-config.json
+          config-file: ${{ steps.release-type.outputs.config }}
           target-branch: main
 
   release-docs:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && (github.ref == 'refs/heads/main') }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' && needs.check-release.outputs.release_type == 'stable' }}
     concurrency:
       group: "pages"
       cancel-in-progress: true
@@ -1166,7 +1176,7 @@ jobs:
   release-libs:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && (github.ref == 'refs/heads/release' || github.ref == 'refs/heads/main') }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@v6
       
@@ -1200,7 +1210,7 @@ jobs:
   release-charts:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && (github.ref == 'refs/heads/release' || github.ref == 'refs/heads/main') }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     strategy:
       matrix:
         chart:
@@ -1232,7 +1242,7 @@ jobs:
   release-ark-cli:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && (github.ref == 'refs/heads/release' || github.ref == 'refs/heads/main') }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@v6
 
@@ -1266,7 +1276,7 @@ jobs:
   release-fark:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && (github.ref == 'refs/heads/release' || github.ref == 'refs/heads/main') }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -1309,13 +1319,13 @@ jobs:
   run-deploy-workflow:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && (github.ref == 'refs/heads/release' || github.ref == 'refs/heads/main') }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@v6
       
       - name: Trigger Deploy workflow for release
         run: |
-          IS_STABLE=${{ github.ref == 'refs/heads/main' }}
+          IS_STABLE=${{ needs.check-release.outputs.release_type == 'stable' }}
 
           gh workflow run deploy.yml \
             --field ark_version="${{ needs.check-release.outputs.tag }}" \
@@ -1331,7 +1341,7 @@ jobs:
   verify-ark-installation:
     needs: [check-release, release-charts, release-ark-cli]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && (github.ref == 'refs/heads/release' || github.ref == 'refs/heads/main') }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' && needs.check-release.outputs.release_type == 'stable' }}
     steps:
       - uses: actions/checkout@v4
 

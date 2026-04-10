@@ -1,100 +1,62 @@
-name: Release Candidate
+name: Promote to Stable
 
 on:
   workflow_dispatch:
-    inputs:
-      action:
-        description: 'cut-rc: push main to release branch (triggers RC pipeline) | promote: create PR to merge release into main'
-        required: true
-        type: choice
-        options:
-          - cut-rc
-          - promote
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
-  cut-rc:
+  promote:
     runs-on: ubuntu-24.04
-    if: inputs.action == 'cut-rc'
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: main
 
-      - name: Push main to release branch
-        run: |
-          git push origin HEAD:release --force
-          echo "Pushed main ($(git rev-parse --short HEAD)) to release branch."
-          echo "The CI/CD pipeline will now run on the release branch."
-          echo "When all tests pass, a new RC tag will be created automatically."
-
-  promote:
-    runs-on: ubuntu-24.04
-    if: inputs.action == 'promote'
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: release
-
-      - name: Verify release branch is ahead of main
-        run: |
-          git fetch origin main
-          BEHIND=$(git rev-list --count HEAD..origin/main)
-          AHEAD=$(git rev-list --count origin/main..HEAD)
-          echo "Release branch is ${AHEAD} commit(s) ahead and ${BEHIND} commit(s) behind main."
-          if [ "$AHEAD" -eq 0 ]; then
-            echo "Error: release branch has no new commits ahead of main. Nothing to promote."
-            exit 1
-          fi
-
-      - name: Get latest RC tag
-        id: latest-rc
-        run: |
-          VERSION="v$(cat version.txt | tr -d '\n')"
-          LATEST_RC=$(git tag --list "${VERSION}-rc.*" --sort=-version:refname | head -1)
-          if [ -z "$LATEST_RC" ]; then
-            echo "Warning: No RC tags found for ${VERSION}. Proceeding anyway."
-            LATEST_RC="no RC tag found"
-          fi
-          echo "rc=${LATEST_RC}" >> $GITHUB_OUTPUT
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-
-      - name: Graduate version in manifest
+      - name: Get current version
+        id: version
         run: |
           MANIFEST=".github/release-please-manifest.json"
           CURRENT=$(jq -r '."."' "$MANIFEST")
           STABLE=$(echo "$CURRENT" | sed 's/-rc\.[0-9]*$//')
 
-          if [ "$CURRENT" != "$STABLE" ]; then
-            echo "Graduating version: $CURRENT → $STABLE"
-            jq --arg v "$STABLE" '."." = $v' "$MANIFEST" > tmp.json
-            mv tmp.json "$MANIFEST"
+          echo "current=${CURRENT}" >> $GITHUB_OUTPUT
+          echo "stable=${STABLE}" >> $GITHUB_OUTPUT
 
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add "$MANIFEST"
-            git commit -m "chore: graduate $CURRENT to $STABLE"
-            git push origin release
-          else
-            echo "Version $CURRENT is already stable, no graduation needed."
+          if [[ "$CURRENT" != *-rc.* ]]; then
+            echo "Error: Current version $CURRENT is not an RC version. Nothing to promote."
+            exit 1
           fi
 
-      - name: Create PR to merge release into main
-        run: |
-          gh pr create \
-            --base main \
-            --head release \
-            --title "chore: promote ${{ steps.latest-rc.outputs.rc }} to release" \
-            --body "## Summary
-          - Promotes release candidate \`${{ steps.latest-rc.outputs.rc }}\` to stable release \`${{ steps.latest-rc.outputs.version }}\`
-          - Merging this PR into \`main\` will trigger Release Please to publish the final \`${{ steps.latest-rc.outputs.version }}\` release
+          LATEST_RC=$(git tag --list "v${CURRENT}" --sort=-version:refname | head -1)
+          if [ -z "$LATEST_RC" ]; then
+            LATEST_RC=$(git tag --list "v${STABLE}-rc.*" --sort=-version:refname | head -1)
+          fi
+          echo "latest_rc=${LATEST_RC:-v${CURRENT}}" >> $GITHUB_OUTPUT
 
-          **Regression testing status:** passed ✅
-          **RC tag:** \`${{ steps.latest-rc.outputs.rc }}\`"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Graduate version in manifest
+        run: |
+          MANIFEST=".github/release-please-manifest.json"
+          CURRENT="${{ steps.version.outputs.current }}"
+          STABLE="${{ steps.version.outputs.stable }}"
+
+          echo "Graduating version: $CURRENT → $STABLE"
+          jq --arg v "$STABLE" '."." = $v' "$MANIFEST" > tmp.json
+          mv tmp.json "$MANIFEST"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$MANIFEST"
+          git commit -m "chore: promote ${{ steps.version.outputs.latest_rc }} to v$STABLE"
+          git push origin main
+
+      - name: Summary
+        run: |
+          echo "## Promotion Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **RC Version:** ${{ steps.version.outputs.latest_rc }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Stable Version:** v${{ steps.version.outputs.stable }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The CI/CD pipeline will now run and Release Please will create the stable release." >> $GITHUB_STEP_SUMMARY
