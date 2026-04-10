@@ -2,7 +2,7 @@ import http from 'http';
 import express from 'express';
 import { CompletionChunkBroker } from '../src/completion-chunk-broker';
 import { createStreamRouter } from '../src/routes/stream';
-import { createTextChunk, createFinishChunk } from './chunk-helpers';
+import { createTextChunk, createFinishChunk } from '../src/testing/chunk-helpers';
 
 function createBrokerServer(opts: { requestTimeout?: number; timeout?: number } = {}): {
   server: http.Server;

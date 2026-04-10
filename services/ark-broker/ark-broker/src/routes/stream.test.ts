@@ -2,7 +2,7 @@ import request from 'supertest';
 import express from 'express';
 import { CompletionChunkBroker } from '../completion-chunk-broker';
 import { createStreamRouter } from './stream';
-import { createTextChunk, createToolCallChunk, createFinishChunk } from '../../test/chunk-helpers';
+import { createTextChunk, createToolCallChunk, createFinishChunk } from '../testing/chunk-helpers';
 
 describe('Streaming API', () => {
   let app: express.Application;
