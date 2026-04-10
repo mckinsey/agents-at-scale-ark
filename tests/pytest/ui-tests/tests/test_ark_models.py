@@ -21,7 +21,7 @@ class TestArkModels:
     
     @pytest.mark.parametrize("prefix,env_key,model_type,model_name,base_url_key", [
         ("openai", "CICD_OPENAI_API_KEY", "openai", "gpt-4o-mini", "CICD_OPENAI_BASE_URL"),
-        ("anthropic", "CICD_ANTHROPIC_API_KEY", "anthropic", "claude-3-haiku-20240307", None),
+        ("anthropic", "CICD_ANTHROPIC_API_KEY", "anthropic", "claude-3-haiku-20240307", "CICD_ANTHROPIC_BASE_URL"),
         ("azure", "CICD_AZURE_API_KEY", "azure", "gpt-35-turbo", "CICD_AZURE_BASE_URL"),
     ])
     def test_create_model_with_secret(self, page: Page, prefix: str, env_key: str, model_type: str, model_name: str, base_url_key: str, model_test_resources: dict):
