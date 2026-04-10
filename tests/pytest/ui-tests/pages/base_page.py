@@ -84,8 +84,19 @@ class BasePage:
         except Exception as e:
             logger.info(f"Selector {selector} not hidden: {e}")
     
+    def wait_for_animations_complete(self, locator, timeout: int = 5000) -> None:
+        try:
+            locator.evaluate(
+                "el => Promise.all(el.getAnimations({subtree: true}).map(a => a.finished))",
+                timeout=timeout
+            )
+        except Exception as e:
+            logger.warning(f"Animation wait failed, proceeding anyway: {e}")
+
     def wait_for_dropdown_options(self, timeout: int = 5000) -> None:
-        self.page.locator("[role='option'], [role='listbox'], [data-slot='select-content']").first.wait_for(state="visible", timeout=timeout)
+        locator = self.page.locator("[role='option'], [role='listbox'], [data-slot='select-content']").first
+        locator.wait_for(state="visible", timeout=timeout)
+        self.wait_for_animations_complete(locator)
     
     def wait_for_modal_open(self, timeout: int = 10000) -> None:
         self.page.locator("[data-slot='dialog-overlay'], [role='dialog'], [data-slot='dialog-content']").first.wait_for(state="visible", timeout=timeout)
