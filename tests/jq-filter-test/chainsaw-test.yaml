@@ -47,7 +47,7 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: test-query-jq-filtered
-        timeout: 4m
+        timeout: 60s
         for:
           condition:
             name: Completed
@@ -65,7 +65,7 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: test-query-unfiltered
-        timeout: 4m
+        timeout: 60s
         for:
           condition:
             name: Completed

@@ -39,7 +39,7 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: message-counter-first
-        timeout: 4m
+        timeout: 60s
         for:
           condition:
             name: Completed
@@ -99,7 +99,7 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: message-counter-second
-        timeout: 4m
+        timeout: 60s
         for:
           condition:
             name: Completed

@@ -122,7 +122,7 @@ spec:
             apiVersion: ark.mckinsey.com/v1alpha1
             kind: Query
             name: partial-tool-valuefrom-query
-            timeout: 4m
+            timeout: 60s
             for:
               condition:
                 name: Completed

@@ -39,20 +39,11 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: test-query-input-default
-        timeout: 4m
+        timeout: 60s
         for:
           condition:
             name: Completed
             value: 'True'
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: test-query-input-default
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -111,20 +102,11 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: test-query-input-type-user
-        timeout: 4m
+        timeout: 60s
         for:
           condition:
             name: Completed
             value: 'True'
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: test-query-input-type-user
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1

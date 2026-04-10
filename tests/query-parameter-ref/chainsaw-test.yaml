@@ -63,20 +63,11 @@ spec:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
           name: test-query-with-params
-          timeout: 4m
+          timeout: 60s
           for:
             condition:
               name: Completed
               value: 'True'
-      - assert:
-          resource:
-            apiVersion: ark.mckinsey.com/v1alpha1
-            kind: Query
-            metadata:
-              name: test-query-with-params
-            status:
-              (conditions[?type == 'Completed']):
-              - status: 'True'
       # Response is immutable after phase: done, no need to retry
       - assert:
           timeout: 1s
@@ -96,20 +87,11 @@ spec:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
           name: test-query-nested-params
-          timeout: 4m
+          timeout: 60s
           for:
             condition:
               name: Completed
               value: 'True'
-      - assert:
-          resource:
-            apiVersion: ark.mckinsey.com/v1alpha1
-            kind: Query
-            metadata:
-              name: test-query-nested-params
-            status:
-              (conditions[?type == 'Completed']):
-              - status: 'True'
       # Response is immutable after phase: done, no need to retry
       - assert:
           timeout: 1s

@@ -36,20 +36,11 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: event-recorder-query
-        timeout: 4m
+        timeout: 60s
         for:
           condition:
             name: Completed
             value: 'True'
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: event-recorder-query
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
