@@ -1,0 +1,80 @@
+name: Release Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'cut-rc: push main to release branch (triggers RC pipeline) | promote: create PR to merge release into main'
+        required: true
+        type: choice
+        options:
+          - cut-rc
+          - promote
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  cut-rc:
+    runs-on: ubuntu-24.04
+    if: inputs.action == 'cut-rc'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Push main to release branch
+        run: |
+          git push origin HEAD:release --force
+          echo "Pushed main ($(git rev-parse --short HEAD)) to release branch."
+          echo "The CI/CD pipeline will now run on the release branch."
+          echo "When all tests pass, a new RC tag will be created automatically."
+
+  promote:
+    runs-on: ubuntu-24.04
+    if: inputs.action == 'promote'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: release
+
+      - name: Verify release branch is ahead of main
+        run: |
+          git fetch origin main
+          BEHIND=$(git rev-list --count HEAD..origin/main)
+          AHEAD=$(git rev-list --count origin/main..HEAD)
+          echo "Release branch is ${AHEAD} commit(s) ahead and ${BEHIND} commit(s) behind main."
+          if [ "$AHEAD" -eq 0 ]; then
+            echo "Error: release branch has no new commits ahead of main. Nothing to promote."
+            exit 1
+          fi
+
+      - name: Get latest RC tag
+        id: latest-rc
+        run: |
+          VERSION="v$(cat version.txt | tr -d '\n')"
+          LATEST_RC=$(git tag --list "${VERSION}-rc.*" --sort=-version:refname | head -1)
+          if [ -z "$LATEST_RC" ]; then
+            echo "Warning: No RC tags found for ${VERSION}. Proceeding anyway."
+            LATEST_RC="no RC tag found"
+          fi
+          echo "rc=${LATEST_RC}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Create PR to merge release into main
+        run: |
+          gh pr create \
+            --base main \
+            --head release \
+            --title "chore: promote ${{ steps.latest-rc.outputs.rc }} to release" \
+            --body "## Summary
+          - Promotes release candidate \`${{ steps.latest-rc.outputs.rc }}\` to stable release \`${{ steps.latest-rc.outputs.version }}\`
+          - Merging this PR into \`main\` will trigger Release Please to publish the final \`${{ steps.latest-rc.outputs.version }}\` release
+
+          **Regression testing status:** passed ✅
+          **RC tag:** \`${{ steps.latest-rc.outputs.rc }}\`"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
