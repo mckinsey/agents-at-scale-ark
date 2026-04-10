@@ -87,7 +87,10 @@ class ToolsPage(BasePage):
         type_trigger.wait_for(state="visible", timeout=15000)
         type_trigger.click()
         
-        self.page.locator("[role='listbox'][data-side][data-state='open']").wait_for(state="visible", timeout=15000)
+        listbox = self.page.locator("[role='listbox'][data-side][data-state='open']")
+        listbox.wait_for(state="visible", timeout=15000)
+        listbox.evaluate("el => Promise.all(el.getAnimations({subtree: true}).map(a => a.finished))")
+        logger.info("Listbox animations complete, clicking HTTP option")
         http_option = self.page.locator("[role='option']:has-text('HTTP')").first
         http_option.click()
         
