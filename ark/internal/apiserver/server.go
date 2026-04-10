@@ -156,6 +156,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, converter storage.TypeConverter) error {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(arkv1alpha1.GroupVersion.Group, Scheme, ParameterCodec, Codecs)
+	apiGroupInfo.NegotiatedSerializer = jsonOnlyNegotiatedSerializer{Codecs}
 
 	printerColumns := GetPrinterColumnRegistry()
 

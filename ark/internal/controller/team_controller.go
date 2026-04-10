@@ -128,6 +128,9 @@ func (r *TeamReconciler) updateStatus(ctx context.Context, team *arkv1alpha1.Tea
 
 	err := r.Status().Update(ctx, team)
 	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
 		logf.FromContext(ctx).Error(err, "failed to update team status")
 	}
 	return err
