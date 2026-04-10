@@ -30,7 +30,7 @@ spec:
         content: |
           MOCK_URL="http://mock-weather-api.$NAMESPACE.svc.cluster.local"
           kubectl run test-mock-weather-ready --image=curlimages/curl --rm -i --restart=Never -n $NAMESPACE -- \
-            curl -f -s "${MOCK_URL}/v1/forecast?latitude=40.71&longitude=-74.01&current_weather=true"
+            curl -f -s --retry 5 --retry-connrefused --retry-delay 1 "${MOCK_URL}/v1/forecast?latitude=40.71&longitude=-74.01&current_weather=true"
         env:
         - name: NAMESPACE
           value: ($namespace)
