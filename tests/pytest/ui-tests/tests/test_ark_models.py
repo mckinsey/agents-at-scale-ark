@@ -33,6 +33,14 @@ class TestArkModels:
         if not secrets.is_visible(secrets.ADD_SECRET_BUTTON):
             pytest.skip("Add Secret button not available")
         
+        api_key = secrets.get_password_from_env(env_key)
+        if not api_key:
+            pytest.skip(f"{env_key} not set or empty")
+        
+        base_url = secrets.get_password_from_env(base_url_key) if base_url_key else None
+        if base_url_key and not base_url:
+            pytest.skip(f"{base_url_key} not set or empty")
+        
         secret_result = secrets.create_secret_with_verification(prefix, env_key)
         
         assert secret_result["popup_visible"], "Secret creation popup should be visible"
@@ -48,7 +56,6 @@ class TestArkModels:
             pytest.skip("Add Model button not available")
         
         model_display_name = models.generate_model_name(prefix)
-        base_url = secrets.get_password_from_env(base_url_key) if base_url_key else None
         
         model_result = models.create_model_with_verification(
             model_name=model_display_name,
