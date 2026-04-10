@@ -34,8 +34,6 @@ def _model_name(provider: str) -> str:
 def _skip_if_missing(config: dict) -> None:
     if not os.environ.get(config["api_key_env"]):
         pytest.skip(f"{config['api_key_env']} not set")
-    if config["base_url_env"] and not os.environ.get(config["base_url_env"]):
-        pytest.skip(f"{config['base_url_env']} not set")
 
 
 @pytest.fixture(scope="module")
