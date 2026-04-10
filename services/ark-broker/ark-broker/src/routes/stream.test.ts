@@ -2,6 +2,7 @@ import request from 'supertest';
 import express from 'express';
 import { CompletionChunkBroker } from '../completion-chunk-broker';
 import { createStreamRouter } from './stream';
+import { createTextChunk, createToolCallChunk, createFinishChunk } from '../testing/chunk-helpers';
 
 describe('Streaming API', () => {
   let app: express.Application;
@@ -12,51 +13,6 @@ describe('Streaming API', () => {
     app = express();
     app.use(express.json());
     app.use('/stream', createStreamRouter(chunks));
-  });
-
-  // Helper to generate OpenAI chunks
-  const createTextChunk = (content: string, index: number = 0) => ({
-    id: `chatcmpl-${Date.now()}`,
-    object: 'chat.completion.chunk',
-    created: Date.now(),
-    model: 'gpt-4',
-    choices: [{
-      index,
-      delta: { content }
-    }]
-  });
-
-  const createToolCallChunk = (toolName: string, args: string, index: number = 0) => ({
-    id: `chatcmpl-${Date.now()}`,
-    object: 'chat.completion.chunk',
-    created: Date.now(),
-    model: 'gpt-4',
-    choices: [{
-      index,
-      delta: {
-        tool_calls: [{
-          index: 0,
-          id: `call_${Date.now()}`,
-          type: 'function',
-          function: {
-            name: toolName,
-            arguments: args
-          }
-        }]
-      }
-    }]
-  });
-
-  const createFinishChunk = (reason: string = 'stop') => ({
-    id: `chatcmpl-${Date.now()}`,
-    object: 'chat.completion.chunk',
-    created: Date.now(),
-    model: 'gpt-4',
-    choices: [{
-      index: 0,
-      delta: {},
-      finish_reason: reason
-    }]
   });
 
   // Helper to send chunks to stream endpoint
