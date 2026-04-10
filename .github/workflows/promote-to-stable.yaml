@@ -1,0 +1,103 @@
+name: Promote to Stable
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Get current version
+        id: version
+        run: |
+          MANIFEST=".github/release-please-manifest.json"
+          CURRENT=$(jq -r '."."' "$MANIFEST")
+          STABLE=$(echo "$CURRENT" | sed 's/-rc\.[0-9]*$//')
+
+          echo "current=${CURRENT}" >> $GITHUB_OUTPUT
+          echo "stable=${STABLE}" >> $GITHUB_OUTPUT
+
+          if [[ "$CURRENT" != *-rc.* ]]; then
+            echo "Error: Current version $CURRENT is not an RC version. Nothing to promote."
+            exit 1
+          fi
+
+          LATEST_RC=$(git tag --list "v${STABLE}-rc.*" --sort=-version:refname | head -1)
+          echo "latest_rc=${LATEST_RC:-v${CURRENT}}" >> $GITHUB_OUTPUT
+
+      - name: Check for existing promotion PR
+        id: check-pr
+        run: |
+          EXISTING_PR=$(gh pr list --base main --head "promote/${{ steps.version.outputs.stable }}" --json number --jq '.[0].number')
+          if [ -n "$EXISTING_PR" ]; then
+            echo "Error: Promotion PR #${EXISTING_PR} already exists for v${{ steps.version.outputs.stable }}"
+            echo "Please merge or close the existing PR first."
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create promotion branch
+        run: |
+          BRANCH="promote/${{ steps.version.outputs.stable }}"
+          git checkout -b "$BRANCH"
+
+      - name: Graduate version in manifest
+        run: |
+          MANIFEST=".github/release-please-manifest.json"
+          CURRENT="${{ steps.version.outputs.current }}"
+          STABLE="${{ steps.version.outputs.stable }}"
+
+          echo "Graduating version: $CURRENT → $STABLE"
+          jq --arg v "$STABLE" '."." = $v' "$MANIFEST" > tmp.json
+          mv tmp.json "$MANIFEST"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$MANIFEST"
+          git commit -m "chore: promote ${{ steps.version.outputs.latest_rc }} to v$STABLE"
+
+      - name: Push branch and create PR
+        run: |
+          BRANCH="promote/${{ steps.version.outputs.stable }}"
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore: promote ${{ steps.version.outputs.latest_rc }} to v${{ steps.version.outputs.stable }}" \
+            --body "## Summary
+
+          Promotes release candidate \`${{ steps.version.outputs.latest_rc }}\` to stable release \`v${{ steps.version.outputs.stable }}\`.
+
+          ### What this PR does
+          - Updates the release-please manifest from \`${{ steps.version.outputs.current }}\` to \`${{ steps.version.outputs.stable }}\`
+
+          ### What happens when merged
+          - CI/CD pipeline runs on main
+          - Release Please creates \`v${{ steps.version.outputs.stable }}\` stable release
+          - Full deployment: containers, Helm charts, npm, PyPI, and docs
+
+          ---
+          **RC Tag:** \`${{ steps.version.outputs.latest_rc }}\`
+          **Stable Version:** \`v${{ steps.version.outputs.stable }}\`"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "## Promotion PR Created" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **RC Version:** ${{ steps.version.outputs.latest_rc }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Stable Version:** v${{ steps.version.outputs.stable }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Merge the PR to trigger the stable release." >> $GITHUB_STEP_SUMMARY
