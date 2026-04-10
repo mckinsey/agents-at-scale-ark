@@ -1121,27 +1121,36 @@ jobs:
       group: release-please
       cancel-in-progress: false
     outputs:
-      released: ${{ steps.release-please.outputs.release_created }}
-      tag: ${{ steps.release-please.outputs.tag_name }}
+      released: ${{ steps.release-please.outputs.release_created || steps.release-please-stable.outputs.release_created }}
+      tag: ${{ steps.release-please.outputs.tag_name || steps.release-please-stable.outputs.tag_name }}
     steps:
       - name: Skip Release (Running Locally)
         if: ${{ env.ACT }}
         run: |
           echo "ℹ️  Skipping release when running locally with 'act'"
           echo "   Release creation requires GitHub tokens that are not available locally"
-      - name: Create Release
+      - name: Create RC Release
         if: ${{ !env.ACT && github.ref == 'refs/heads/release' }}
         uses: googleapis/release-please-action@v4
         id: release-please
         with:
           manifest-file: .github/release-please-manifest.json
-          config-file: .github/release-please-config.json
+          config-file: .github/release-please-config-rc.json
           target-branch: release
+
+      - name: Create Stable Release
+        if: ${{ !env.ACT && github.ref == 'refs/heads/main' }}
+        uses: googleapis/release-please-action@v4
+        id: release-please-stable
+        with:
+          manifest-file: .github/release-please-manifest.json
+          config-file: .github/release-please-config.json
+          target-branch: main
 
   release-docs:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
+    if: ${{ needs.check-release.outputs.released && (github.ref == 'refs/heads/main') }}
     concurrency:
       group: "pages"
       cancel-in-progress: true
@@ -1157,7 +1166,7 @@ jobs:
   release-libs:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
+    if: ${{ needs.check-release.outputs.released && (github.ref == 'refs/heads/release' || github.ref == 'refs/heads/main') }}
     steps:
       - uses: actions/checkout@v6
       
@@ -1191,7 +1200,7 @@ jobs:
   release-charts:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
+    if: ${{ needs.check-release.outputs.released && (github.ref == 'refs/heads/release' || github.ref == 'refs/heads/main') }}
     strategy:
       matrix:
         chart:
@@ -1223,7 +1232,7 @@ jobs:
   release-ark-cli:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
+    if: ${{ needs.check-release.outputs.released && (github.ref == 'refs/heads/release' || github.ref == 'refs/heads/main') }}
     steps:
       - uses: actions/checkout@v6
 
@@ -1257,7 +1266,7 @@ jobs:
   release-fark:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
+    if: ${{ needs.check-release.outputs.released && (github.ref == 'refs/heads/release' || github.ref == 'refs/heads/main') }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -1300,27 +1309,29 @@ jobs:
   run-deploy-workflow:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
+    if: ${{ needs.check-release.outputs.released && (github.ref == 'refs/heads/release' || github.ref == 'refs/heads/main') }}
     steps:
       - uses: actions/checkout@v6
       
       - name: Trigger Deploy workflow for release
         run: |
+          IS_STABLE=${{ github.ref == 'refs/heads/main' }}
+
           gh workflow run deploy.yml \
             --field ark_version="${{ needs.check-release.outputs.tag }}" \
             --field deploy_containers=true \
-            --field deploy_containers_to_latest=true \
-            --field deploy_to_pages=true \
-            --field deploy_to_npm=true \
+            --field deploy_containers_to_latest=${IS_STABLE} \
+            --field deploy_to_pages=${IS_STABLE} \
+            --field deploy_to_npm=${IS_STABLE} \
             --field deploy_helm_chart=true \
-            --field deploy_to_pypi=true
+            --field deploy_to_pypi=${IS_STABLE}
         env:
           GH_TOKEN: ${{ github.token }}
 
   verify-ark-installation:
     needs: [check-release, release-charts, release-ark-cli]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
+    if: ${{ needs.check-release.outputs.released && (github.ref == 'refs/heads/release' || github.ref == 'refs/heads/main') }}
     steps:
       - uses: actions/checkout@v4
 

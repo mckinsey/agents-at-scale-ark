@@ -64,6 +64,26 @@ jobs:
           echo "rc=${LATEST_RC}" >> $GITHUB_OUTPUT
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
+      - name: Graduate version in manifest
+        run: |
+          MANIFEST=".github/release-please-manifest.json"
+          CURRENT=$(jq -r '."."' "$MANIFEST")
+          STABLE=$(echo "$CURRENT" | sed 's/-rc\.[0-9]*$//')
+
+          if [ "$CURRENT" != "$STABLE" ]; then
+            echo "Graduating version: $CURRENT → $STABLE"
+            jq --arg v "$STABLE" '."." = $v' "$MANIFEST" > tmp.json
+            mv tmp.json "$MANIFEST"
+
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add "$MANIFEST"
+            git commit -m "chore: graduate $CURRENT to $STABLE"
+            git push origin release
+          else
+            echo "Version $CURRENT is already stable, no graduation needed."
+          fi
+
       - name: Create PR to merge release into main
         run: |
           gh pr create \
