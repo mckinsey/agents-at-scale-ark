@@ -21,12 +21,6 @@ spec:
         outputs:
         - name: provider
           value: (json_parse($stdout))
-    - script:
-        content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
     - apply:
         resource:
           apiVersion: v1

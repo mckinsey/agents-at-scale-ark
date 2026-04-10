@@ -6,15 +6,6 @@ spec:
   # Skip test due to Gateway API CRD dependency issues in test environment
   skip: true
   steps:
-  - name: setup-rbac
-    try:
-    - script:
-        content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-
   - name: deploy-ark-mcp-server
     try:
     - script:
@@ -79,10 +70,3 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
 
-    cleanup:
-    - script:
-        content: |
-          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
-        env:
-        - name: NAMESPACE
-          value: ($namespace)

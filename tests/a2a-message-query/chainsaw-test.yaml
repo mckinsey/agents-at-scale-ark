@@ -17,13 +17,6 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
-    # Install ark-tenant for RBAC
-    - script:
-        content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
     # Wait for echo A2AServer to be Ready
     - assert:
         resource:
@@ -73,7 +66,6 @@ spec:
     - script:
         content: |
           helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
-          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
         env:
         - name: NAMESPACE
           value: ($namespace)

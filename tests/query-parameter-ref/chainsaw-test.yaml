@@ -16,14 +16,6 @@ spec:
           env:
           - name: NAMESPACE
             value: ($namespace)
-      # Install ark-tenant for RBAC
-      - script:
-          timeout: 60s
-          content: |
-            helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
-          env:
-          - name: NAMESPACE
-            value: ($namespace)
       # Apply ConfigMap, Secret
       - apply:
           file: manifests/a0[2-3]-*.yaml
@@ -142,7 +134,6 @@ spec:
       - script:
           content: |
             helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
-            helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
           env:
           - name: NAMESPACE
             value: ($namespace)
