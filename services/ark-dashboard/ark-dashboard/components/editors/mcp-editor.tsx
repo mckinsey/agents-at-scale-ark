@@ -37,8 +37,10 @@ import {
 import type { MCPServer, Secret } from '@/lib/services';
 import { mcpServersService, secretsService } from '@/lib/services';
 import type {
+  DirectHeader,
   MCPHeader,
   MCPServerCreateRequest,
+  SecretHeader,
 } from '@/lib/services/mcp-servers';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 import { generateMcpProxyYaml } from '@/lib/utils/mcp-template-generator';
@@ -161,16 +163,15 @@ export function McpEditor({
 
     if (mcpServerData?.headers) {
       setHeaders(
-        mcpServerData.headers.map(header => {
+        mcpServerData.headers.map((header: MCPHeader) => {
           const isSecret = 'valueFrom' in header.value;
           return {
             key: generateUniqueKey(),
             name: header.name,
             type: isSecret ? 'secret' : 'direct',
-            value:
-              (isSecret && header.value.valueFrom?.secretKeyRef?.name) ||
-              header.value.value ||
-              '',
+            value: isSecret
+              ? (header as SecretHeader).value.valueFrom.secretKeyRef.name
+              : (header as DirectHeader).value.value || '',
           };
         }),
       );
