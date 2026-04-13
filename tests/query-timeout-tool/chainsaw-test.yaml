@@ -6,7 +6,7 @@ spec:
   description: Test that query timeout propagates to A2A client, allowing slow tool calls to complete
   timeouts:
     apply: 30s
-    assert: 180s
+    assert: 60s
   steps:
   - name: setup-slow-tool
     try:

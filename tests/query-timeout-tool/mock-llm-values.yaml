@@ -39,7 +39,7 @@ config:
                 "type": "function",
                 "function": {
                   "name": "slow-tool",
-                  "arguments": "{\"seconds\": 30}"
+                  "arguments": "{\"seconds\": 5}"
                 }
               }]
             },
@@ -51,4 +51,4 @@ config:
     match: "body.messages[?role=='tool']"
     response:
       status: 200
-      content: '{"choices":[{"message":{"role":"assistant","content":"Done waiting 30 seconds as requested."},"finish_reason":"stop"}]}'
+      content: '{"choices":[{"message":{"role":"assistant","content":"Done waiting 5 seconds as requested."},"finish_reason":"stop"}]}'
