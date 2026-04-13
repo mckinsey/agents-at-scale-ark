@@ -338,16 +338,17 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 	message.Metadata = metadata
 	message.Extensions = []string{arka2a.QueryExtensionURI}
 
-	a2aClient, err := arka2a.CreateA2AClient(ctx, r.Client, address, nil, query.Namespace, query.Name, nil)
-	if err != nil {
-		return nil, engineResponseMeta{}, fmt.Errorf("failed to create A2A client: %w", err)
-	}
-
 	timeout := 5 * time.Minute
 	if query.Spec.Timeout != nil {
 		timeout = query.Spec.Timeout.Duration
 	}
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
+
+	a2aClient, err := arka2a.CreateA2AClient(execCtx, r.Client, address, nil, query.Namespace, query.Name, nil)
+	if err != nil {
+		cancel()
+		return nil, engineResponseMeta{}, fmt.Errorf("failed to create A2A client: %w", err)
+	}
 	defer cancel()
 
 	blocking := true
