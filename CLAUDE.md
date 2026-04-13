@@ -202,6 +202,10 @@ One sentence description.
 - **Use case**: When to use it
 ```
 
+# Build & CI/CD
+
+For build failures, CI issues, CVEs, dependabot management, and test failures, use the **ark-build-manager** agent. It triages failures across workflow runs and delegates to appropriate skills (chainsaw, vulnerability-fixer, ark-dependabot-management, etc.).
+
 # Testing Guidelines
 
 When writing tests for any service, consult `tests/CLAUDE.md` for comprehensive testing patterns and best practices.
@@ -219,6 +223,12 @@ When creating pull requests, use this simple format:
 ```
 
 DO NOT include "Test plan" sections in PR descriptions.
+
+## Environment Variable Naming
+
+Duration env vars must include a unit suffix:
+- `_MS` for milliseconds (e.g., `REQUEST_TIMEOUT_MS`)
+- `_SECONDS` for seconds (e.g., `ARK_MEMORY_HTTP_TIMEOUT_SECONDS`)
 
 ## Pull Request Maintenance
 

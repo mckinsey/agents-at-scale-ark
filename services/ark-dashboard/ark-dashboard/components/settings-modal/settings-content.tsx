@@ -9,7 +9,6 @@ import { SecretsSection } from '@/components/sections/secrets-section';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { ApiKeysSettings } from './api-keys-settings';
-import { ArkServicesSettings } from './ark-services-settings';
 import { ExperimentalFeaturesSettings } from './experimental-features-settings';
 import { ManageMarketplaceSettings } from './manage-marketplace-settings';
 
@@ -30,10 +29,6 @@ export function SettingsContent({ activePage }: SettingsContentProps) {
       'a2a-servers': {
         title: 'A2A Servers',
         component: <A2AServersSection namespace={namespace} />,
-      },
-      'ark-services': {
-        title: 'Ark Services',
-        component: <ArkServicesSettings />,
       },
       memory: {
         title: 'Memory',

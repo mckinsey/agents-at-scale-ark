@@ -48,7 +48,7 @@ Ark's session ID propagates automatically via W3C `baggage` headers as `ark.sess
 For multi-tenant deployments, Ark supports routing traces to tenant-specific OTEL endpoints. This enables:
 
 - **Tenant isolation** - Each tenant's traces go to their own observability backend
-- **Backend flexibility** - Different tenants can use different OTEL backends (Langfuse, Phoenix, Jaeger, Honeycomb, etc.)
+- **Backend flexibility** - Different tenants can use different OTEL backends (Langfuse, Phoenix, Opik, Jaeger, Honeycomb, etc.)
 - **Cost attribution** - Observability costs can be attributed per tenant
 - **Compliance** - Meet data residency or access control requirements
 
@@ -96,6 +96,13 @@ stringData:
   OTEL_EXPORTER_OTLP_HEADERS: "api_key=<phoenix_api_key>"
 ```
 
+**Opik:**
+```yaml
+stringData:
+  OTEL_EXPORTER_OTLP_ENDPOINT: "https://www.comet.com/opik/api/v1/private/otel"
+  OTEL_EXPORTER_OTLP_HEADERS: "Authorization=<opik_api_key>,Comet-Workspace=<workspace_name>,projectName=<project_name>"
+```
+
 **Honeycomb:**
 ```yaml
 stringData:
@@ -120,7 +127,7 @@ When per-tenant OTEL routing is enabled, traces are routed based on the query's 
               │             │             │
               ▼             ▼             ▼
         Primary OTEL   Tenant-A OTEL  Tenant-B OTEL
-        (platform)     (Langfuse)     (Phoenix)
+        (platform)     (Langfuse)     (Opik)
 ```
 
 ### Applying Changes
@@ -193,3 +200,4 @@ These OpenTelemetry environment variables are also supported:
 **Next**: Learn about observability options:
 - **[Phoenix Service](/developer-guide/observability/phoenix-service)** - AI/ML model observability
 - **[Langfuse Service](/developer-guide/observability/langfuse-service)** - Open Source LLM Application/Agent observability, evaluation, and prompt management
+- **[Opik](https://github.com/comet-ml/opik)** - Open-source platform for LLM observability, evaluation, and prompt optimization

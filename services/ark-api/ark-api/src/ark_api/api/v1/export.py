@@ -21,6 +21,7 @@ from ...models.export import (
     ALL_RESOURCE_TYPES
 )
 from .exceptions import handle_k8s_errors
+from ...core.namespace import get_current_context
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,9 @@ router = APIRouter(prefix="/export", tags=["export"])
 
 VERSION = "v1alpha1"
 EXPORT_CONFIGMAP_NAME = "ark-export-metadata"
-EXPORT_CONFIGMAP_NAMESPACE = "ark-system"
+
+
+EXPORT_CONFIGMAP_NAMESPACE = get_current_context()['namespace']
 
 
 async def get_export_history() -> Dict[str, Any]:  # NOSONAR - Async for consistency with project architecture
@@ -59,41 +62,16 @@ async def update_export_history(timestamp: datetime, resource_counts: Dict[str, 
         history["export_count"] = history.get("export_count", 0) + 1
         history["last_resource_counts"] = resource_counts
 
-        # Check if ConfigMap exists
-        cm_exists = False
-        try:
-            cm = v1.read_namespaced_config_map(
-                name=EXPORT_CONFIGMAP_NAME,
-                namespace=EXPORT_CONFIGMAP_NAMESPACE
-            )
-            cm_exists = True
-        except ApiException as e:
-            if e.status != 404:
-                # Re-raise non-404 errors to be caught by outer exception handler
-                raise
-            # ConfigMap doesn't exist, will create it
-
-        if cm_exists:
-            # Update existing ConfigMap
-            cm.data["history"] = json.dumps(history)
-            v1.patch_namespaced_config_map(
-                name=EXPORT_CONFIGMAP_NAME,
-                namespace=EXPORT_CONFIGMAP_NAMESPACE,
-                body=cm
-            )
-        else:
-            # Create new ConfigMap
-            cm_body = client.V1ConfigMap(
-                metadata=client.V1ObjectMeta(
-                    name=EXPORT_CONFIGMAP_NAME,
-                    namespace=EXPORT_CONFIGMAP_NAMESPACE
-                ),
-                data={"history": json.dumps(history)}
-            )
-            v1.create_namespaced_config_map(
-                namespace=EXPORT_CONFIGMAP_NAMESPACE,
-                body=cm_body
-            )
+        cm = v1.read_namespaced_config_map(
+            name=EXPORT_CONFIGMAP_NAME,
+            namespace=EXPORT_CONFIGMAP_NAMESPACE
+        )
+        cm.data["history"] = json.dumps(history)
+        v1.patch_namespaced_config_map(
+            name=EXPORT_CONFIGMAP_NAME,
+            namespace=EXPORT_CONFIGMAP_NAMESPACE,
+            body=cm
+        )
     except Exception as e:
         logger.error(f"Failed to update export history: {e}")
 
@@ -158,11 +136,7 @@ async def _collect_workflows(
             # Determine namespace
             nonlocal namespace
             if not namespace:
-                try:
-                    with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace", "r") as f:
-                        namespace = f.read().strip()
-                except:
-                    namespace = "default"
+                namespace = get_current_context()['namespace']
 
             # Fetch WorkflowTemplates
             workflow_templates = custom_api.list_namespaced_custom_object(
