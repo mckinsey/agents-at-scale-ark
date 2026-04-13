@@ -231,11 +231,11 @@ func (tr *ToolRegistry) GetToolType(toolName string) string {
 
 	switch executor.(type) {
 	case *NoopExecutor:
-		return "builtin"
+		return ToolTypeBuiltin
 	case *TerminateExecutor:
-		return "builtin"
+		return ToolTypeBuiltin
 	case *SelectNextConversantExecutor:
-		return "builtin"
+		return ToolTypeBuiltin
 	case *HTTPExecutor:
 		return "custom"
 	case *MCPExecutor:

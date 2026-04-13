@@ -60,8 +60,7 @@ func DefaultTeam(team *arkv1alpha1.Team) {
 			if team.Annotations == nil {
 				team.Annotations = make(map[string]string)
 			}
-			team.Annotations[annotations.MigrationWarningPrefix+"selector-prompt"] =
-				"custom selectorPrompt should instruct the agent to use the select-next-conversant tool — add 'Use the select-next-conversant tool to make your selection.' to your selectorPrompt"
+			team.Annotations[annotations.MigrationWarningPrefix+"selector-prompt"] = "custom selectorPrompt should instruct the agent to use the select-next-conversant tool — add 'Use the select-next-conversant tool to make your selection.' to your selectorPrompt"
 		}
 
 	case StrategyGraph:

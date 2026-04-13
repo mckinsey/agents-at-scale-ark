@@ -146,28 +146,34 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	t.registerSelectNextConversantTool(ctx, selectorAgent, candidateNames)
 
 	result, err := selectorAgent.Execute(ctx, NewUserMessage("Select the next participant to respond."), []Message{NewSystemMessage(selectorMessage)}, nil, nil)
-	if err != nil {
-		var selectionMade *SelectionMade
-		if errors.As(err, &selectionMade) {
-			logger := logf.FromContext(ctx)
-			logger.Info("Selector chose", "selectedName", selectionMade.SelectedName)
-			for _, member := range membersToSearch {
-				if member.GetName() == selectionMade.SelectedName {
-					return member, nil
-				}
-			}
-			return nil, &InvalidAgentError{SelectedName: selectionMade.SelectedName}
-		}
-		if IsTerminateTeam(err) {
-			if response := extractTerminateToolResponse(result); response != "" {
-				return nil, &TerminateTeamWithResponse{Response: response, Messages: result.Messages}
-			}
-			return nil, err
-		}
-		return nil, fmt.Errorf("selector agent call failed: %w", err)
+	if err == nil {
+		return nil, fmt.Errorf("selector agent did not use select-next-conversant tool")
 	}
 
-	return nil, fmt.Errorf("selector agent did not use select-next-conversant tool")
+	var selectionMade *SelectionMade
+	if errors.As(err, &selectionMade) {
+		return t.resolveSelectedMember(ctx, selectionMade.SelectedName, membersToSearch)
+	}
+
+	if IsTerminateTeam(err) {
+		if response := extractTerminateToolResponse(result); response != "" {
+			return nil, &TerminateTeamWithResponse{Response: response, Messages: result.Messages}
+		}
+		return nil, err
+	}
+
+	return nil, fmt.Errorf("selector agent call failed: %w", err)
+}
+
+func (t *Team) resolveSelectedMember(ctx context.Context, selectedName string, members []TeamMember) (TeamMember, error) {
+	logger := logf.FromContext(ctx)
+	logger.Info("Selector chose", "selectedName", selectedName)
+	for _, member := range members {
+		if member.GetName() == selectedName {
+			return member, nil
+		}
+	}
+	return nil, &InvalidAgentError{SelectedName: selectedName}
 }
 
 // determineNextMember routes to the appropriate selection logic based on whether graph constraints exist.
