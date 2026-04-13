@@ -28,6 +28,11 @@ rules:
   - apiGroups: [""]
     resources: ["configmaps"]
     verbs: ["get", "list"]
+  # Permission to write export history to a dedicated configmap
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["ark-export-metadata"]
+    verbs: ["update", "patch"]
   # Permission to read services to get the address of the configured streaming service
   - apiGroups: [""]
     resources: ["services"]
