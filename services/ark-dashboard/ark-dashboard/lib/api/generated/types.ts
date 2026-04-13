@@ -361,6 +361,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ark-services/marketplace-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Marketplace Items
+         * @description List Helm releases for marketplace item detection.
+         *
+         *     Returns full Helm release data including chart metadata and annotations
+         *     for marketplace item detection via ark.mckinsey.com/marketplace-item-name.
+         *
+         *     Args:
+         *         namespace: The namespace to list Helm releases from (defaults to current context)
+         *
+         *     Returns:
+         *         HelmReleaseListResponse containing:
+         *         - items: List of Helm releases with chart metadata
+         *         - count: Number of releases found
+         */
+        get: operations["list_marketplace_items_v1_ark_services_marketplace_items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ark-services/{service_name}": {
         parameters: {
             query?: never;
@@ -1294,6 +1325,7 @@ export interface paths {
          *         version: API version (e.g., 'v1')
          *         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
          *         namespace: The namespace (defaults to current context)
+         *         label_selector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
          *
          *     Returns:
          *         Response: List of raw Kubernetes resources as JSON
@@ -1301,6 +1333,7 @@ export interface paths {
          *     Examples:
          *         - GET /v1/resources/api/v1/Pod
          *         - GET /v1/resources/api/v1/Service
+         *         - GET /v1/resources/api/v1/Service?labelSelector=app.kubernetes.io/instance=phoenix
          */
         get: operations["list_core_resources_v1_resources_api__version___kind__get"];
         put?: never;
@@ -1428,6 +1461,7 @@ export interface paths {
          *         version: API version (e.g., 'v1', 'v1alpha1')
          *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
          *         namespace: The namespace (defaults to current context)
+         *         label_selector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
          *         workflowName: Filter by workflow name (partial match, case insensitive)
          *         workflowTemplateName: Filter by workflow template name (partial match, case insensitive)
          *         status: Filter by workflow status
@@ -1440,6 +1474,7 @@ export interface paths {
          *         - GET /v1/resources/apis/batch/v1/Job
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/Workflow?workflowName=my-workflow&status=running
+         *         - GET /v1/resources/v1/Service?labelSelector=app.kubernetes.io/instance=phoenix
          */
         get: operations["list_grouped_resources_v1_resources_apis__group___version___kind__get"];
         put?: never;
@@ -2121,13 +2156,13 @@ export interface components {
             /** Name */
             name: string;
             /** Overrides */
-            overrides?: components["schemas"]["AgentOverride-Input"][] | null;
+            overrides?: components["schemas"]["AgentOverride"][] | null;
             /** Parameters */
-            parameters?: components["schemas"]["AgentParameter-Input"][] | null;
+            parameters?: components["schemas"]["AgentParameter"][] | null;
             /** Prompt */
             prompt?: string | null;
             /** Tools */
-            tools?: components["schemas"]["AgentTool-Input"][] | null;
+            tools?: components["schemas"]["AgentTool"][] | null;
         };
         /**
          * AgentDetailResponse
@@ -2153,9 +2188,9 @@ export interface components {
             /** Namespace */
             namespace: string;
             /** Overrides */
-            overrides?: components["schemas"]["AgentOverride-Output"][] | null;
+            overrides?: components["schemas"]["AgentOverride"][] | null;
             /** Parameters */
-            parameters?: components["schemas"]["AgentParameter-Output"][] | null;
+            parameters?: components["schemas"]["AgentParameter"][] | null;
             /** Prompt */
             prompt?: string | null;
             /** Skills */
@@ -2165,40 +2200,22 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             /** Tools */
-            tools?: components["schemas"]["AgentTool-Output"][] | null;
+            tools?: components["schemas"]["AgentTool"][] | null;
         };
         /**
          * AgentHeader
          * @description HTTP header configuration.
          */
-        "AgentHeader-Input": {
+        AgentHeader: {
             /** Name */
             name: string;
-            value: components["schemas"]["AgentHeaderValue-Input"];
-        };
-        /**
-         * AgentHeader
-         * @description HTTP header configuration.
-         */
-        "AgentHeader-Output": {
-            /** Name */
-            name: string;
-            value: components["schemas"]["AgentHeaderValue-Output"];
+            value: components["schemas"]["AgentHeaderValue"];
         };
         /**
          * AgentHeaderValue
          * @description Value configuration for a header.
          */
-        "AgentHeaderValue-Input": {
-            /** Value */
-            value?: string | null;
-            valueFrom?: components["schemas"]["AgentValueFrom"] | null;
-        };
-        /**
-         * AgentHeaderValue
-         * @description Value configuration for a header.
-         */
-        "AgentHeaderValue-Output": {
+        AgentHeaderValue: {
             /** Value */
             value?: string | null;
             valueFrom?: components["schemas"]["AgentValueFrom"] | null;
@@ -2241,20 +2258,9 @@ export interface components {
          * AgentOverride
          * @description Header override configuration for models and MCP servers.
          */
-        "AgentOverride-Input": {
+        AgentOverride: {
             /** Headers */
-            headers: components["schemas"]["AgentHeader-Input"][];
-            labelSelector?: components["schemas"]["AgentLabelSelector"] | null;
-            /** Resourcetype */
-            resourceType: string;
-        };
-        /**
-         * AgentOverride
-         * @description Header override configuration for models and MCP servers.
-         */
-        "AgentOverride-Output": {
-            /** Headers */
-            headers: components["schemas"]["AgentHeader-Output"][];
+            headers: components["schemas"]["AgentHeader"][];
             labelSelector?: components["schemas"]["AgentLabelSelector"] | null;
             /** Resourcetype */
             resourceType: string;
@@ -2263,18 +2269,7 @@ export interface components {
          * AgentParameter
          * @description Parameter for template processing in prompts and inputs.
          */
-        "AgentParameter-Input": {
-            /** Name */
-            name: string;
-            /** Value */
-            value?: string | null;
-            valueFrom?: components["schemas"]["AgentValueFrom"] | null;
-        };
-        /**
-         * AgentParameter
-         * @description Parameter for template processing in prompts and inputs.
-         */
-        "AgentParameter-Output": {
+        AgentParameter: {
             /** Name */
             name: string;
             /** Value */
@@ -2350,18 +2345,7 @@ export interface components {
          * AgentTool
          * @description Tool configuration for an agent.
          */
-        "AgentTool-Input": {
-            labelSelector?: components["schemas"]["AgentLabelSelector"] | null;
-            /** Name */
-            name?: string | null;
-            /** Type */
-            type: string;
-        };
-        /**
-         * AgentTool
-         * @description Tool configuration for an agent.
-         */
-        "AgentTool-Output": {
+        AgentTool: {
             labelSelector?: components["schemas"]["AgentLabelSelector"] | null;
             /** Name */
             name?: string | null;
@@ -2378,13 +2362,13 @@ export interface components {
             executionEngine?: components["schemas"]["ExecutionEngineRef"] | null;
             modelRef?: components["schemas"]["ModelRef"] | null;
             /** Overrides */
-            overrides?: components["schemas"]["AgentOverride-Input"][] | null;
+            overrides?: components["schemas"]["AgentOverride"][] | null;
             /** Parameters */
-            parameters?: components["schemas"]["AgentParameter-Input"][] | null;
+            parameters?: components["schemas"]["AgentParameter"][] | null;
             /** Prompt */
             prompt?: string | null;
             /** Tools */
-            tools?: components["schemas"]["AgentTool-Input"][] | null;
+            tools?: components["schemas"]["AgentTool"][] | null;
         };
         /**
          * AgentValueFrom
@@ -2406,7 +2390,7 @@ export interface components {
             /** Baseurl */
             baseUrl: string | components["schemas"]["ModelValueSource"];
             /** Headers */
-            headers?: components["schemas"]["AgentHeader-Input"][] | null;
+            headers?: components["schemas"]["AgentHeader"][] | null;
             /** Version */
             version?: string | components["schemas"]["ModelValueSource"] | null;
         };
@@ -2497,7 +2481,7 @@ export interface components {
             /** Baseurl */
             baseUrl: string | components["schemas"]["ModelValueSource"];
             /** Headers */
-            headers?: components["schemas"]["AgentHeader-Input"][] | null;
+            headers?: components["schemas"]["AgentHeader"][] | null;
         };
         /**
          * AzureManagedIdentityConfig
@@ -2538,31 +2522,22 @@ export interface components {
             temperature?: string | null;
         };
         /**
-         * ChatCompletionAssistantMessageParam
-         * @description Messages sent by the model in response to user messages.
+         * ChartMetadata
+         * @description Chart metadata from Helm release.
          */
-        "ChatCompletionAssistantMessageParam-Input": {
-            audio?: components["schemas"]["Audio"] | null;
-            /** Content */
-            content?: string | (components["schemas"]["ChatCompletionContentPartTextParam"] | components["schemas"]["ChatCompletionContentPartRefusalParam"])[] | null;
-            function_call?: components["schemas"]["FunctionCall"] | null;
-            /** Name */
-            name?: string;
-            /** Refusal */
-            refusal?: string | null;
-            /**
-             * Role
-             * @constant
-             */
-            role: "assistant";
-            /** Tool Calls */
-            tool_calls?: (components["schemas"]["ChatCompletionMessageFunctionToolCallParam"] | components["schemas"]["ChatCompletionMessageCustomToolCallParam"])[];
+        ChartMetadata: {
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
+            } | null;
+            /** Description */
+            description?: string | null;
         };
         /**
          * ChatCompletionAssistantMessageParam
          * @description Messages sent by the model in response to user messages.
          */
-        "ChatCompletionAssistantMessageParam-Output": {
+        ChatCompletionAssistantMessageParam: {
             audio?: components["schemas"]["Audio"] | null;
             /** Content */
             content?: string | (components["schemas"]["ChatCompletionContentPartTextParam"] | components["schemas"]["ChatCompletionContentPartRefusalParam"])[] | null;
@@ -2717,23 +2692,7 @@ export interface components {
          * @description Messages sent by an end user, containing prompts or additional context
          *     information.
          */
-        "ChatCompletionUserMessageParam-Input": {
-            /** Content */
-            content: string | (components["schemas"]["ChatCompletionContentPartTextParam"] | components["schemas"]["ChatCompletionContentPartImageParam"] | components["schemas"]["ChatCompletionContentPartInputAudioParam"] | components["schemas"]["File"])[];
-            /** Name */
-            name?: string;
-            /**
-             * Role
-             * @constant
-             */
-            role: "user";
-        };
-        /**
-         * ChatCompletionUserMessageParam
-         * @description Messages sent by an end user, containing prompts or additional context
-         *     information.
-         */
-        "ChatCompletionUserMessageParam-Output": {
+        ChatCompletionUserMessageParam: {
             /** Content */
             content: string | (components["schemas"]["ChatCompletionContentPartTextParam"] | components["schemas"]["ChatCompletionContentPartImageParam"] | components["schemas"]["ChatCompletionContentPartInputAudioParam"] | components["schemas"]["File"])[];
             /** Name */
@@ -2999,6 +2958,42 @@ export interface components {
              * @example healthy
              */
             status: string;
+        };
+        /**
+         * HelmRelease
+         * @description Helm release information for marketplace item detection.
+         *
+         *     Represents a Helm release with chart metadata including annotations
+         *     used for marketplace item identification.
+         */
+        HelmRelease: {
+            /** App Version */
+            app_version: string;
+            /** Chart */
+            chart: string;
+            chart_metadata?: components["schemas"]["ChartMetadata"] | null;
+            /** Chart Version */
+            chart_version: string;
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace: string;
+            /** Revision */
+            revision: number;
+            /** Status */
+            status: string;
+            /** Updated */
+            updated: string;
+        };
+        /**
+         * HelmReleaseListResponse
+         * @description Response model for listing Helm releases.
+         */
+        HelmReleaseListResponse: {
+            /** Count */
+            count: number;
+            /** Items */
+            items: components["schemas"]["HelmRelease"][];
         };
         /** ImageURL */
         ImageURL: {
@@ -3451,7 +3446,7 @@ export interface components {
             /** Baseurl */
             baseUrl: string | components["schemas"]["ModelValueSource"];
             /** Headers */
-            headers?: components["schemas"]["AgentHeader-Input"][] | null;
+            headers?: components["schemas"]["AgentHeader"][] | null;
         };
         /**
          * QueryConfigMapKeyRef
@@ -3478,7 +3473,7 @@ export interface components {
             /** Conversationid */
             conversationId?: string | null;
             /** Input */
-            input: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam-Input"] | components["schemas"]["ChatCompletionAssistantMessageParam-Input"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[];
+            input: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam"] | components["schemas"]["ChatCompletionAssistantMessageParam"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[];
             memory?: components["schemas"]["Memory"] | null;
             /** Metadata */
             metadata?: {
@@ -3487,9 +3482,9 @@ export interface components {
             /** Name */
             name: string;
             /** Overrides */
-            overrides?: components["schemas"]["AgentOverride-Input"][] | null;
+            overrides?: components["schemas"]["AgentOverride"][] | null;
             /** Parameters */
-            parameters?: components["schemas"]["QueryParameter-Input"][] | null;
+            parameters?: components["schemas"]["QueryParameter"][] | null;
             selector?: components["schemas"]["QueryLabelSelector"] | null;
             /** Serviceaccount */
             serviceAccount?: string | null;
@@ -3513,7 +3508,7 @@ export interface components {
             /** Conversationid */
             conversationId?: string | null;
             /** Input */
-            input: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam-Output"] | components["schemas"]["ChatCompletionAssistantMessageParam-Output"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[];
+            input: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam"] | components["schemas"]["ChatCompletionAssistantMessageParam"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[];
             memory?: components["schemas"]["Memory"] | null;
             /** Metadata */
             metadata?: {
@@ -3524,9 +3519,9 @@ export interface components {
             /** Namespace */
             namespace: string;
             /** Overrides */
-            overrides?: components["schemas"]["AgentOverride-Output"][] | null;
+            overrides?: components["schemas"]["AgentOverride"][] | null;
             /** Parameters */
-            parameters?: components["schemas"]["QueryParameter-Output"][] | null;
+            parameters?: components["schemas"]["QueryParameter"][] | null;
             selector?: components["schemas"]["QueryLabelSelector"] | null;
             /** Serviceaccount */
             serviceAccount?: string | null;
@@ -3582,18 +3577,7 @@ export interface components {
          * QueryParameter
          * @description Parameter for template processing in prompts and inputs.
          */
-        "QueryParameter-Input": {
-            /** Name */
-            name: string;
-            /** Value */
-            value?: string | null;
-            valueFrom?: components["schemas"]["QueryValueFrom"] | null;
-        };
-        /**
-         * QueryParameter
-         * @description Parameter for template processing in prompts and inputs.
-         */
-        "QueryParameter-Output": {
+        QueryParameter: {
             /** Name */
             name: string;
             /** Value */
@@ -3622,7 +3606,7 @@ export interface components {
             /** Creationtimestamp */
             creationTimestamp?: string | null;
             /** Input */
-            input: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam-Output"] | components["schemas"]["ChatCompletionAssistantMessageParam-Output"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[];
+            input: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam"] | components["schemas"]["ChatCompletionAssistantMessageParam"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[];
             memory?: components["schemas"]["Memory"] | null;
             /** Name */
             name: string;
@@ -3662,12 +3646,12 @@ export interface components {
             /** Conversationid */
             conversationId?: string | null;
             /** Input */
-            input?: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam-Input"] | components["schemas"]["ChatCompletionAssistantMessageParam-Input"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[] | null;
+            input?: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam"] | components["schemas"]["ChatCompletionAssistantMessageParam"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[] | null;
             memory?: components["schemas"]["Memory"] | null;
             /** Overrides */
-            overrides?: components["schemas"]["AgentOverride-Input"][] | null;
+            overrides?: components["schemas"]["AgentOverride"][] | null;
             /** Parameters */
-            parameters?: components["schemas"]["QueryParameter-Input"][] | null;
+            parameters?: components["schemas"]["QueryParameter"][] | null;
             selector?: components["schemas"]["QueryLabelSelector"] | null;
             /** Serviceaccount */
             serviceAccount?: string | null;
@@ -4567,6 +4551,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ArkServiceListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_marketplace_items_v1_ark_services_marketplace_items_get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelmReleaseListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6542,6 +6558,8 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Label selector for filtering resources (e.g., app.kubernetes.io/instance=phoenix) */
+                labelSelector?: string | null;
             };
             header?: never;
             path: {
@@ -6728,6 +6746,8 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Label selector for filtering resources (e.g., app.kubernetes.io/instance=phoenix) */
+                labelSelector?: string | null;
                 /** @description Filter by workflow name (partial match, case insensitive) */
                 workflowName?: string | null;
                 /** @description Filter by workflow template name (partial match, case insensitive) */

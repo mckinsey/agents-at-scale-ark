@@ -148,12 +148,6 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     icon: Server,
     group: 'runtime',
   },
-  services: {
-    key: 'services',
-    title: 'ARK Services',
-    icon: Settings,
-    group: 'runtime',
-  },
 
   'execution-engines': {
     key: 'execution-engines',

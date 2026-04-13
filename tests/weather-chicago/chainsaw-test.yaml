@@ -130,7 +130,7 @@ spec:
         content: |
           MOCK_URL="http://mock-weather-api.$NAMESPACE.svc.cluster.local"
           kubectl run test-mock-ready --image=curlimages/curl --rm -i --restart=Never -n $NAMESPACE -- \
-            curl -f -s "${MOCK_URL}/v1/search?name=Chicago&count=1"
+            curl -f -s --retry 5 --retry-connrefused --retry-delay 1 "${MOCK_URL}/v1/search?name=Chicago&count=1"
         timeout: 30s
     - apply:
         file: manifests/a05-weather-agent.yaml

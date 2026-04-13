@@ -22,6 +22,9 @@ app:
       memory: "1024Mi"
       cpu: "1000m"
 
+server:
+  requestTimeout: 0
+
 replicaCount: 1
 
 service:

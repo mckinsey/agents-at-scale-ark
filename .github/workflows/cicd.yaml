@@ -150,7 +150,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.1"
+          go-version: "1.26.2"
           cache: true
           cache-dependency-path: |
             ark/go.sum
@@ -192,7 +192,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.1"
+          go-version: "1.26.2"
           cache: true
           cache-dependency-path: |
             ark/go.sum
@@ -879,12 +879,12 @@ jobs:
         run: |
           pip install -r tests/pytest/ui-tests/requirements.txt
 
-      - name: Run File Gateway CLI tests
+      - name: Run CLI tests
         env:
           PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
         run: |
           cd tests/pytest/cli-tests/tests
-          pytest test_file_gateway.py -n 2 --dist loadscope -v --tb=short --log-cli-level=INFO
+          pytest . -n 3 --dist loadscope -v --tb=short --log-cli-level=INFO
 
       - name: Upload CLI test logs
         if: always()
@@ -1047,7 +1047,7 @@ jobs:
       - name: Setup Go for coverage tools
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26.1"
+          go-version: "1.26.2"
 
       - name: Install Python coverage tools
         run: |
@@ -1117,27 +1117,58 @@ jobs:
         build-ark-cli,
       ]
     runs-on: ubuntu-24.04
+    concurrency:
+      group: release-please
+      cancel-in-progress: false
     outputs:
       released: ${{ steps.release-please.outputs.release_created }}
       tag: ${{ steps.release-please.outputs.tag_name }}
+      release_type: ${{ steps.release-type.outputs.type }}
     steps:
+      - uses: actions/checkout@v6
+
       - name: Skip Release (Running Locally)
         if: ${{ env.ACT }}
         run: |
           echo "ℹ️  Skipping release when running locally with 'act'"
           echo "   Release creation requires GitHub tokens that are not available locally"
+
+      - name: Determine release type
+        id: release-type
+        if: ${{ !env.ACT && github.ref == 'refs/heads/main' }}
+        run: |
+          VERSION=$(jq -r '."."' .github/release-please-manifest.json)
+
+          # Promotion scenario:
+          # 1. Manifest version is stable (no -rc suffix)
+          # 2. RC tags exist for this version (v0.1.58-rc.*)
+          # 3. Stable tag doesn't exist yet (v0.1.58)
+          RC_TAGS=$(git tag --list "v${VERSION}-rc.*" | head -1)
+          STABLE_TAG=$(git tag --list "v${VERSION}" | head -1)
+
+          if [[ "$VERSION" != *-rc.* && -n "$RC_TAGS" && -z "$STABLE_TAG" ]]; then
+            echo "config=.github/release-please-config.json" >> $GITHUB_OUTPUT
+            echo "type=stable" >> $GITHUB_OUTPUT
+            echo "Promotion detected: RC tags exist for v${VERSION}, releasing stable"
+          else
+            echo "config=.github/release-please-config-rc.json" >> $GITHUB_OUTPUT
+            echo "type=rc" >> $GITHUB_OUTPUT
+            echo "Normal development flow, using RC config"
+          fi
+
       - name: Create Release
         if: ${{ !env.ACT && github.ref == 'refs/heads/main' }}
         uses: googleapis/release-please-action@v4
         id: release-please
         with:
           manifest-file: .github/release-please-manifest.json
-          config-file: .github/release-please-config.json
+          config-file: ${{ steps.release-type.outputs.config || '.github/release-please-config-rc.json' }}
+          target-branch: main
 
   release-docs:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' && needs.check-release.outputs.release_type == 'stable' }}
     concurrency:
       group: "pages"
       cancel-in-progress: true
@@ -1262,7 +1293,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26.1'
+          go-version: '1.26.2'
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
@@ -1302,14 +1333,68 @@ jobs:
       
       - name: Trigger Deploy workflow for release
         run: |
+          if [[ "${{ needs.check-release.outputs.release_type }}" == "stable" ]]; then
+            IS_STABLE=true
+          else
+            IS_STABLE=false
+          fi
+
           gh workflow run deploy.yml \
             --field ark_version="${{ needs.check-release.outputs.tag }}" \
             --field deploy_containers=true \
-            --field deploy_containers_to_latest=true \
-            --field deploy_to_pages=true \
-            --field deploy_to_npm=true \
+            --field deploy_containers_to_latest=${IS_STABLE} \
+            --field deploy_to_pages=${IS_STABLE} \
+            --field deploy_to_npm=${IS_STABLE} \
             --field deploy_helm_chart=true \
-            --field deploy_to_pypi=true
+            --field deploy_to_pypi=${IS_STABLE}
         env:
           GH_TOKEN: ${{ github.token }}
 
+  verify-ark-installation:
+    needs: [check-release, release-charts, release-ark-cli]
+    runs-on: ubuntu-24.04
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' && needs.check-release.outputs.release_type == 'stable' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-k3s
+        with:
+          metrics-enabled: false
+          traefik-enabled: false
+          k3s-channel: latest
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+
+      - name: Install published ark-cli from npm
+        run: |
+          RELEASE_TAG="${{ needs.check-release.outputs.tag }}"
+          echo "Installing ark-cli@${RELEASE_TAG} from npm registry..."
+          npm install -g @agents-at-scale/ark@${RELEASE_TAG}
+          ark --version
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install test dependencies
+        run: |
+          pip install -r tests/pytest/ui-tests/requirements.txt
+
+      - name: Run complete ARK workflow installation test
+        env:
+          PYTHONPATH: ${{ github.workspace }}/tests/pytest
+        run: |
+          cd tests/pytest
+          pytest test_complete_ark_workflow.py -v --tb=short
+
+      - name: Upload verification test logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ark-installation-verification-logs-${{ github.sha }}
+          path: tests/pytest/*.log
+          retention-days: 7

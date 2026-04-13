@@ -187,7 +187,7 @@ profiles:
             ARK_POSTGRES_PORT=5432 \
             ARK_POSTGRES_DATABASE=ark \
             ARK_POSTGRES_USER=postgres \
-            ARK_POSTGRES_PASSWORD=arkdev123 \
+            ARK_POSTGRES_PASSWORD=arkdev123 \  # EXAMPLE CREDENTIAL - local dev-only, not a real secret
             ARK_POSTGRES_SSL_MODE=disable \
             ARK_APISERVER_PORT=6443 \
             go run cmd/main.go --leader-elect=false --completions-addr=http://ark-completions.ark-system
