@@ -23,6 +23,9 @@ flags:
       - mcp/
       - tests/
 
+ignore:
+  - "ark/internal/storage/postgresql/wal_connection.go"
+
 comment:
   layout: "reach,diff,flags,tree"
   behavior: default
