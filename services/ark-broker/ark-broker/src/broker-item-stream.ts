@@ -12,10 +12,12 @@ import { PaginatedList, PaginationParams, DEFAULT_LIMIT } from './pagination.js'
 export class BrokerItemStream<T> {
   private items: BrokerItem<T>[] = [];
   private nextSequence = 1;
+  private maxItems?: number;
   private fileStore: JsonFileStore<BrokerItem<T>>;
   public eventEmitter = new EventEmitter();
 
   constructor(name: string, path?: string, maxItems?: number) {
+    this.maxItems = maxItems;
     this.fileStore = new JsonFileStore<BrokerItem<T>>(name, path, maxItems);
     const loaded = this.fileStore.load();
     if (loaded) {
@@ -38,6 +40,9 @@ export class BrokerItemStream<T> {
       data
     };
     this.items.push(item);
+    if (this.maxItems && this.items.length > this.maxItems) {
+      this.items = this.items.slice(-this.maxItems);
+    }
     this.eventEmitter.emit('item', item);
     return item;
   }

@@ -2156,13 +2156,13 @@ export interface components {
             /** Name */
             name: string;
             /** Overrides */
-            overrides?: components["schemas"]["AgentOverride-Input"][] | null;
+            overrides?: components["schemas"]["AgentOverride"][] | null;
             /** Parameters */
-            parameters?: components["schemas"]["AgentParameter-Input"][] | null;
+            parameters?: components["schemas"]["AgentParameter"][] | null;
             /** Prompt */
             prompt?: string | null;
             /** Tools */
-            tools?: components["schemas"]["AgentTool-Input"][] | null;
+            tools?: components["schemas"]["AgentTool"][] | null;
         };
         /**
          * AgentDetailResponse
@@ -2188,9 +2188,9 @@ export interface components {
             /** Namespace */
             namespace: string;
             /** Overrides */
-            overrides?: components["schemas"]["AgentOverride-Output"][] | null;
+            overrides?: components["schemas"]["AgentOverride"][] | null;
             /** Parameters */
-            parameters?: components["schemas"]["AgentParameter-Output"][] | null;
+            parameters?: components["schemas"]["AgentParameter"][] | null;
             /** Prompt */
             prompt?: string | null;
             /** Skills */
@@ -2200,40 +2200,22 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             /** Tools */
-            tools?: components["schemas"]["AgentTool-Output"][] | null;
+            tools?: components["schemas"]["AgentTool"][] | null;
         };
         /**
          * AgentHeader
          * @description HTTP header configuration.
          */
-        "AgentHeader-Input": {
+        AgentHeader: {
             /** Name */
             name: string;
-            value: components["schemas"]["AgentHeaderValue-Input"];
-        };
-        /**
-         * AgentHeader
-         * @description HTTP header configuration.
-         */
-        "AgentHeader-Output": {
-            /** Name */
-            name: string;
-            value: components["schemas"]["AgentHeaderValue-Output"];
+            value: components["schemas"]["AgentHeaderValue"];
         };
         /**
          * AgentHeaderValue
          * @description Value configuration for a header.
          */
-        "AgentHeaderValue-Input": {
-            /** Value */
-            value?: string | null;
-            valueFrom?: components["schemas"]["AgentValueFrom"] | null;
-        };
-        /**
-         * AgentHeaderValue
-         * @description Value configuration for a header.
-         */
-        "AgentHeaderValue-Output": {
+        AgentHeaderValue: {
             /** Value */
             value?: string | null;
             valueFrom?: components["schemas"]["AgentValueFrom"] | null;
@@ -2276,20 +2258,9 @@ export interface components {
          * AgentOverride
          * @description Header override configuration for models and MCP servers.
          */
-        "AgentOverride-Input": {
+        AgentOverride: {
             /** Headers */
-            headers: components["schemas"]["AgentHeader-Input"][];
-            labelSelector?: components["schemas"]["AgentLabelSelector"] | null;
-            /** Resourcetype */
-            resourceType: string;
-        };
-        /**
-         * AgentOverride
-         * @description Header override configuration for models and MCP servers.
-         */
-        "AgentOverride-Output": {
-            /** Headers */
-            headers: components["schemas"]["AgentHeader-Output"][];
+            headers: components["schemas"]["AgentHeader"][];
             labelSelector?: components["schemas"]["AgentLabelSelector"] | null;
             /** Resourcetype */
             resourceType: string;
@@ -2298,18 +2269,7 @@ export interface components {
          * AgentParameter
          * @description Parameter for template processing in prompts and inputs.
          */
-        "AgentParameter-Input": {
-            /** Name */
-            name: string;
-            /** Value */
-            value?: string | null;
-            valueFrom?: components["schemas"]["AgentValueFrom"] | null;
-        };
-        /**
-         * AgentParameter
-         * @description Parameter for template processing in prompts and inputs.
-         */
-        "AgentParameter-Output": {
+        AgentParameter: {
             /** Name */
             name: string;
             /** Value */
@@ -2385,18 +2345,7 @@ export interface components {
          * AgentTool
          * @description Tool configuration for an agent.
          */
-        "AgentTool-Input": {
-            labelSelector?: components["schemas"]["AgentLabelSelector"] | null;
-            /** Name */
-            name?: string | null;
-            /** Type */
-            type: string;
-        };
-        /**
-         * AgentTool
-         * @description Tool configuration for an agent.
-         */
-        "AgentTool-Output": {
+        AgentTool: {
             labelSelector?: components["schemas"]["AgentLabelSelector"] | null;
             /** Name */
             name?: string | null;
@@ -2413,13 +2362,13 @@ export interface components {
             executionEngine?: components["schemas"]["ExecutionEngineRef"] | null;
             modelRef?: components["schemas"]["ModelRef"] | null;
             /** Overrides */
-            overrides?: components["schemas"]["AgentOverride-Input"][] | null;
+            overrides?: components["schemas"]["AgentOverride"][] | null;
             /** Parameters */
-            parameters?: components["schemas"]["AgentParameter-Input"][] | null;
+            parameters?: components["schemas"]["AgentParameter"][] | null;
             /** Prompt */
             prompt?: string | null;
             /** Tools */
-            tools?: components["schemas"]["AgentTool-Input"][] | null;
+            tools?: components["schemas"]["AgentTool"][] | null;
         };
         /**
          * AgentValueFrom
@@ -2441,7 +2390,7 @@ export interface components {
             /** Baseurl */
             baseUrl: string | components["schemas"]["ModelValueSource"];
             /** Headers */
-            headers?: components["schemas"]["AgentHeader-Input"][] | null;
+            headers?: components["schemas"]["AgentHeader"][] | null;
             /** Version */
             version?: string | components["schemas"]["ModelValueSource"] | null;
         };
@@ -2532,7 +2481,7 @@ export interface components {
             /** Baseurl */
             baseUrl: string | components["schemas"]["ModelValueSource"];
             /** Headers */
-            headers?: components["schemas"]["AgentHeader-Input"][] | null;
+            headers?: components["schemas"]["AgentHeader"][] | null;
         };
         /**
          * AzureManagedIdentityConfig
@@ -2588,28 +2537,7 @@ export interface components {
          * ChatCompletionAssistantMessageParam
          * @description Messages sent by the model in response to user messages.
          */
-        "ChatCompletionAssistantMessageParam-Input": {
-            audio?: components["schemas"]["Audio"] | null;
-            /** Content */
-            content?: string | (components["schemas"]["ChatCompletionContentPartTextParam"] | components["schemas"]["ChatCompletionContentPartRefusalParam"])[] | null;
-            function_call?: components["schemas"]["FunctionCall"] | null;
-            /** Name */
-            name?: string;
-            /** Refusal */
-            refusal?: string | null;
-            /**
-             * Role
-             * @constant
-             */
-            role: "assistant";
-            /** Tool Calls */
-            tool_calls?: (components["schemas"]["ChatCompletionMessageFunctionToolCallParam"] | components["schemas"]["ChatCompletionMessageCustomToolCallParam"])[];
-        };
-        /**
-         * ChatCompletionAssistantMessageParam
-         * @description Messages sent by the model in response to user messages.
-         */
-        "ChatCompletionAssistantMessageParam-Output": {
+        ChatCompletionAssistantMessageParam: {
             audio?: components["schemas"]["Audio"] | null;
             /** Content */
             content?: string | (components["schemas"]["ChatCompletionContentPartTextParam"] | components["schemas"]["ChatCompletionContentPartRefusalParam"])[] | null;
@@ -2764,23 +2692,7 @@ export interface components {
          * @description Messages sent by an end user, containing prompts or additional context
          *     information.
          */
-        "ChatCompletionUserMessageParam-Input": {
-            /** Content */
-            content: string | (components["schemas"]["ChatCompletionContentPartTextParam"] | components["schemas"]["ChatCompletionContentPartImageParam"] | components["schemas"]["ChatCompletionContentPartInputAudioParam"] | components["schemas"]["File"])[];
-            /** Name */
-            name?: string;
-            /**
-             * Role
-             * @constant
-             */
-            role: "user";
-        };
-        /**
-         * ChatCompletionUserMessageParam
-         * @description Messages sent by an end user, containing prompts or additional context
-         *     information.
-         */
-        "ChatCompletionUserMessageParam-Output": {
+        ChatCompletionUserMessageParam: {
             /** Content */
             content: string | (components["schemas"]["ChatCompletionContentPartTextParam"] | components["schemas"]["ChatCompletionContentPartImageParam"] | components["schemas"]["ChatCompletionContentPartInputAudioParam"] | components["schemas"]["File"])[];
             /** Name */
@@ -3534,7 +3446,7 @@ export interface components {
             /** Baseurl */
             baseUrl: string | components["schemas"]["ModelValueSource"];
             /** Headers */
-            headers?: components["schemas"]["AgentHeader-Input"][] | null;
+            headers?: components["schemas"]["AgentHeader"][] | null;
         };
         /**
          * QueryConfigMapKeyRef
@@ -3561,7 +3473,7 @@ export interface components {
             /** Conversationid */
             conversationId?: string | null;
             /** Input */
-            input: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam-Input"] | components["schemas"]["ChatCompletionAssistantMessageParam-Input"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[];
+            input: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam"] | components["schemas"]["ChatCompletionAssistantMessageParam"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[];
             memory?: components["schemas"]["Memory"] | null;
             /** Metadata */
             metadata?: {
@@ -3570,9 +3482,9 @@ export interface components {
             /** Name */
             name: string;
             /** Overrides */
-            overrides?: components["schemas"]["AgentOverride-Input"][] | null;
+            overrides?: components["schemas"]["AgentOverride"][] | null;
             /** Parameters */
-            parameters?: components["schemas"]["QueryParameter-Input"][] | null;
+            parameters?: components["schemas"]["QueryParameter"][] | null;
             selector?: components["schemas"]["QueryLabelSelector"] | null;
             /** Serviceaccount */
             serviceAccount?: string | null;
@@ -3596,7 +3508,7 @@ export interface components {
             /** Conversationid */
             conversationId?: string | null;
             /** Input */
-            input: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam-Output"] | components["schemas"]["ChatCompletionAssistantMessageParam-Output"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[];
+            input: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam"] | components["schemas"]["ChatCompletionAssistantMessageParam"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[];
             memory?: components["schemas"]["Memory"] | null;
             /** Metadata */
             metadata?: {
@@ -3607,9 +3519,9 @@ export interface components {
             /** Namespace */
             namespace: string;
             /** Overrides */
-            overrides?: components["schemas"]["AgentOverride-Output"][] | null;
+            overrides?: components["schemas"]["AgentOverride"][] | null;
             /** Parameters */
-            parameters?: components["schemas"]["QueryParameter-Output"][] | null;
+            parameters?: components["schemas"]["QueryParameter"][] | null;
             selector?: components["schemas"]["QueryLabelSelector"] | null;
             /** Serviceaccount */
             serviceAccount?: string | null;
@@ -3665,18 +3577,7 @@ export interface components {
          * QueryParameter
          * @description Parameter for template processing in prompts and inputs.
          */
-        "QueryParameter-Input": {
-            /** Name */
-            name: string;
-            /** Value */
-            value?: string | null;
-            valueFrom?: components["schemas"]["QueryValueFrom"] | null;
-        };
-        /**
-         * QueryParameter
-         * @description Parameter for template processing in prompts and inputs.
-         */
-        "QueryParameter-Output": {
+        QueryParameter: {
             /** Name */
             name: string;
             /** Value */
@@ -3705,7 +3606,7 @@ export interface components {
             /** Creationtimestamp */
             creationTimestamp?: string | null;
             /** Input */
-            input: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam-Output"] | components["schemas"]["ChatCompletionAssistantMessageParam-Output"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[];
+            input: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam"] | components["schemas"]["ChatCompletionAssistantMessageParam"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[];
             memory?: components["schemas"]["Memory"] | null;
             /** Name */
             name: string;
@@ -3745,12 +3646,12 @@ export interface components {
             /** Conversationid */
             conversationId?: string | null;
             /** Input */
-            input?: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam-Input"] | components["schemas"]["ChatCompletionAssistantMessageParam-Input"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[] | null;
+            input?: string | (components["schemas"]["ChatCompletionDeveloperMessageParam"] | components["schemas"]["ChatCompletionSystemMessageParam"] | components["schemas"]["ChatCompletionUserMessageParam"] | components["schemas"]["ChatCompletionAssistantMessageParam"] | components["schemas"]["ChatCompletionToolMessageParam"] | components["schemas"]["ChatCompletionFunctionMessageParam"])[] | null;
             memory?: components["schemas"]["Memory"] | null;
             /** Overrides */
-            overrides?: components["schemas"]["AgentOverride-Input"][] | null;
+            overrides?: components["schemas"]["AgentOverride"][] | null;
             /** Parameters */
-            parameters?: components["schemas"]["QueryParameter-Input"][] | null;
+            parameters?: components["schemas"]["QueryParameter"][] | null;
             selector?: components["schemas"]["QueryLabelSelector"] | null;
             /** Serviceaccount */
             serviceAccount?: string | null;
