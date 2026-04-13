@@ -2,8 +2,8 @@ apiVersion: v2
 name: ark-broker
 description: Simple in-cluster ephemeral memory for Ark
 type: application
-version: 0.1.58-rc.1
-appVersion: 0.1.58-rc.1
+version: 0.1.58-rc.2
+appVersion: 0.1.58-rc.2
 annotations:
   ark.mckinsey.com/service: ark-broker
   ark.mckinsey.com/resources: service
