@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.58-rc.2](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.58-rc.1...v0.1.58-rc.2) (2026-04-13)
+
+
+### Bug Fixes
+
+* devspace broker hook race ([#1483](https://github.com/mckinsey/agents-at-scale-ark/issues/1483)) ([59e73e7](https://github.com/mckinsey/agents-at-scale-ark/commit/59e73e7ad50c35506cdc350309b6854775383eb7))
+* Update to new query param names ([#1854](https://github.com/mckinsey/agents-at-scale-ark/issues/1854)) ([dbbd475](https://github.com/mckinsey/agents-at-scale-ark/commit/dbbd4750f12bf9d72c9a4bbb6be6d7ebf40d1414))
+
 ## [0.1.58-rc.1](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.58-rc...v0.1.58-rc.1) (2026-04-13)
 
 
