@@ -54,11 +54,11 @@ $(ARK_API_STAMP_DEPS): $(ARK_API_SERVICE_SOURCE_DIR)/pyproject.toml $(ARK_SDK_WH
 	@mkdir -p $(ARK_API_SERVICE_SOURCE_DIR)/out
 	# Copy wheel to service directory for Docker build
 	cp $(ARK_SDK_WHL) $(ARK_API_SERVICE_SOURCE_DIR)/out/
-	# Update pyproject.toml to use local wheel file
+	# Update pyproject.toml to use local wheel file (use actual wheel filename from ARK_SDK_WHL)
 	cd $(ARK_API_SERVICE_SOURCE_DIR) && \
-	sed -i.bak 's|path = "../../../out/ark-sdk/py-sdk/dist/ark_sdk-.*\.whl"|path = "./out/ark_sdk-$(shell cat $(BUILD_ROOT)/version.txt)-py3-none-any.whl"|' pyproject.toml && \
+	sed -i.bak 's|path = "../../../out/ark-sdk/py-sdk/dist/ark_sdk-.*\.whl"|path = "./out/$(notdir $(ARK_SDK_WHL))"|' pyproject.toml && \
 	uv remove ark_sdk || true && \
-	uv add ./out/ark_sdk-$(shell cat $(BUILD_ROOT)/version.txt)-py3-none-any.whl && \
+	uv add ./out/$(notdir $(ARK_SDK_WHL)) && \
 	rm -f uv.lock && uv sync
 	@touch $@
 
@@ -91,11 +91,11 @@ $(ARK_API_STAMP_INSTALL): $(ARK_API_STAMP_BUILD) $$(LOCALHOST_GATEWAY_STAMP_INST
 	echo "Installing ark-api..."
 	@mkdir -p $(ARK_API_SERVICE_DIR)/ark-api/out
 	cp $(ARK_SDK_WHL) $(ARK_API_SERVICE_DIR)/ark-api/out/
-	# Update pyproject.toml to use local wheel file
+	# Update pyproject.toml to use local wheel file (use actual wheel filename from ARK_SDK_WHL)
 	cd $(ARK_API_SERVICE_DIR)/ark-api && \
-	sed -i.bak 's|path = "../../out/ark-sdk/py-sdk/dist/ark_sdk-.*\.whl"|path = "./out/ark_sdk-$(shell cat $(BUILD_ROOT)/version.txt)-py3-none-any.whl"|' pyproject.toml && \
+	sed -i.bak 's|path = "../../out/ark-sdk/py-sdk/dist/ark_sdk-.*\.whl"|path = "./out/$(notdir $(ARK_SDK_WHL))"|' pyproject.toml && \
 	uv remove ark_sdk || true && \
-	uv add ./out/ark_sdk-$(shell cat $(BUILD_ROOT)/version.txt)-py3-none-any.whl && \
+	uv add ./out/$(notdir $(ARK_SDK_WHL)) && \
 	rm -f uv.lock && uv sync
 	cd ${ARK_API_SERVICE_DIR}
 	./scripts/build-and-push.sh -i $(ARK_API_IMAGE) -t $(ARK_API_TAG) -f $(ARK_API_SERVICE_DIR)/Dockerfile -c $(ARK_API_SERVICE_DIR)
