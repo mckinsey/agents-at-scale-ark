@@ -20,7 +20,7 @@ CRD_GLOBS=(
 PEP440_VERSION=$(python3 -c "from packaging.version import Version; print(Version('$(cat ../../version.txt)'))")
 WHEEL_NAME="ark_sdk-${PEP440_VERSION}-py3-none-any.whl"
 
-if [ -e "$OUT_DIR/py-sdk/dist/$WHEEL_NAME" ]; then
+if [[ -e "$OUT_DIR/py-sdk/dist/$WHEEL_NAME" ]]; then
   echo ">> ARK SDK Already built - skipping"
   exit 0
 fi
