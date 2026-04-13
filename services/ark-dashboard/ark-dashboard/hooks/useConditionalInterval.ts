@@ -31,5 +31,5 @@ export function useConditionalInterval({
       const id = setInterval(tick, delay);
       return () => clearInterval(id);
     }
-  }, [delay, condition]);
+  }, [delay, condition, savedCallback.current]);
 }
