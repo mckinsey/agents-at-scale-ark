@@ -36,7 +36,7 @@ dependencies = [
 package = true
 
 [tool.uv.sources]
-ark-sdk = { path = "out/ark_sdk-0.1.57-py3-none-any.whl" }
+ark-sdk = { path = "out/ark_sdk-0.1.58rc0-py3-none-any.whl" }
 
 [tool.coverage.run]
 data_file = "coverage/.coverage"
