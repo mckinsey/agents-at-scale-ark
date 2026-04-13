@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.1.58-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.57...v0.1.58-rc) (2026-04-10)
+
+
+### Features
+
+* add missing file for release candidate ([#1832](https://github.com/mckinsey/agents-at-scale-ark/issues/1832)) ([e3eba31](https://github.com/mckinsey/agents-at-scale-ark/commit/e3eba31a5a6606f2f9f9164a6c1375b5dcd67912))
+* **ark-sdk:** expose annotations in ExecutionEngineRequest ([#1761](https://github.com/mckinsey/agents-at-scale-ark/issues/1761)) ([43b3c3a](https://github.com/mckinsey/agents-at-scale-ark/commit/43b3c3a8e3ade9af3c979d9ae4dd8c194deb4803))
+* marketplace install detection and url discovery ([#1767](https://github.com/mckinsey/agents-at-scale-ark/issues/1767)) ([0305ef9](https://github.com/mckinsey/agents-at-scale-ark/commit/0305ef97b13bc9caf6bab74cadcf47e7c41c57d0))
+* OpenSpec change proposal for marketplace installation detection and UI URL discovery ([#1616](https://github.com/mckinsey/agents-at-scale-ark/issues/1616)) ([740eac3](https://github.com/mckinsey/agents-at-scale-ark/commit/740eac3997fa90871aa4c0be350bf4730d04b44d))
+* Switch between namespaces for landing page ([#1110](https://github.com/mckinsey/agents-at-scale-ark/issues/1110)) ([2daa994](https://github.com/mckinsey/agents-at-scale-ark/commit/2daa9949bb10da63a4e3094d0f900e4fa90fcc3e))
+
+
+### Bug Fixes
+
+* align tool type naming in docs and fark CLI ([#109](https://github.com/mckinsey/agents-at-scale-ark/issues/109)) ([#1778](https://github.com/mckinsey/agents-at-scale-ark/issues/1778)) ([7e3264a](https://github.com/mckinsey/agents-at-scale-ark/commit/7e3264abaf6f9f54e704e3e9005b94e5712406c9))
+* **ark-sdk:** exclude health endpoint from OTEL ASGI traces ([#1786](https://github.com/mckinsey/agents-at-scale-ark/issues/1786)) ([4db3722](https://github.com/mckinsey/agents-at-scale-ark/commit/4db3722ee873a9332f1455e3c201cbd3565ee9cb))
+* **controller:** read A2A native contextId from response messages ([#1646](https://github.com/mckinsey/agents-at-scale-ark/issues/1646)) ([4672265](https://github.com/mckinsey/agents-at-scale-ark/commit/4672265ab72f3f7b3f6fdb5846be9c0c81539dcf))
+* CVE-2025-62718 in axios ([#1827](https://github.com/mckinsey/agents-at-scale-ark/issues/1827)) ([1410c97](https://github.com/mckinsey/agents-at-scale-ark/commit/1410c97de63f1a373713d1e389a24520c18448f0))
+* **docs:** restore CLAUDE.md content lost in PR [#1776](https://github.com/mckinsey/agents-at-scale-ark/issues/1776) ([#1792](https://github.com/mckinsey/agents-at-scale-ark/issues/1792)) ([47890ba](https://github.com/mckinsey/agents-at-scale-ark/commit/47890ba4c1302e7bcfb6b7fcb2b34c76e1047471))
+* fix export history tracking and remove homepage warning banner ([#1555](https://github.com/mckinsey/agents-at-scale-ark/issues/1555)) ([882e09b](https://github.com/mckinsey/agents-at-scale-ark/commit/882e09b9b6f163cd8362429800b82760a9eebe08))
+* fixed URL backslash chars ([#1647](https://github.com/mckinsey/agents-at-scale-ark/issues/1647)) ([50c8ab7](https://github.com/mckinsey/agents-at-scale-ark/commit/50c8ab7105979f47dfe382fa4868482dc7bfdd97))
+* GHSA-f886-m6hf-6m8v brace-expansion DoS vulnerability ([#1666](https://github.com/mckinsey/agents-at-scale-ark/issues/1666)) ([0ef59ef](https://github.com/mckinsey/agents-at-scale-ark/commit/0ef59ef5f1f492767acc76f00ca1721b24030c23))
+* GHSA-p8p7-x288-28g6 request SSRF vulnerability in ark-landing-page ([#1667](https://github.com/mckinsey/agents-at-scale-ark/issues/1667)) ([9aa0ca2](https://github.com/mckinsey/agents-at-scale-ark/commit/9aa0ca214505dcdd60d0772e1ace8f81c84b91ae))
+* prerelease config fix ([#1837](https://github.com/mckinsey/agents-at-scale-ark/issues/1837)) ([3aee0a4](https://github.com/mckinsey/agents-at-scale-ark/commit/3aee0a40194eece820c114caf6ed7029e5b0c3d1))
+* prevent concurrent release-please executions ([#963](https://github.com/mckinsey/agents-at-scale-ark/issues/963)) ([d8e04d1](https://github.com/mckinsey/agents-at-scale-ark/commit/d8e04d19191b37ab5fd5fe1ae399b0bf17f80b25)), closes [#741](https://github.com/mckinsey/agents-at-scale-ark/issues/741)
+* prevent streaming failures for long-running agents ([#1788](https://github.com/mckinsey/agents-at-scale-ark/issues/1788)) ([ddad37d](https://github.com/mckinsey/agents-at-scale-ark/commit/ddad37d02955459a8afee23d7fd813c154f8ee6a))
+* remove non-namespaced HTTP routes ([#581](https://github.com/mckinsey/agents-at-scale-ark/issues/581)) ([#1785](https://github.com/mckinsey/agents-at-scale-ark/issues/1785)) ([fa0f8ed](https://github.com/mckinsey/agents-at-scale-ark/commit/fa0f8ed4ed7c559561257841ed42a6426334dd1c))
+* resolve Radix Select option detachment in tool editor ([#1645](https://github.com/mckinsey/agents-at-scale-ark/issues/1645)) ([3ab3738](https://github.com/mckinsey/agents-at-scale-ark/commit/3ab3738ad29186b6ee69d1926799015345c151f8))
+* wait for ServiceMonitor CRD established condition using chainsaw assert ([#1789](https://github.com/mckinsey/agents-at-scale-ark/issues/1789)) ([f1d0e3d](https://github.com/mckinsey/agents-at-scale-ark/commit/f1d0e3d8badec17eef51dd938e2b8c2b74a169f3))
+* webhook match conditions ([#1820](https://github.com/mckinsey/agents-at-scale-ark/issues/1820)) ([a9e1c61](https://github.com/mckinsey/agents-at-scale-ark/commit/a9e1c61940dfdcd97775d912cc11ce3948d67a5b))
+
 ## [0.1.57](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.56...v0.1.57) (2026-04-02)
 
 
