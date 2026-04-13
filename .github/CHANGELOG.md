@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.58-rc.2](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.58-rc.1...v0.1.58-rc.2) (2026-04-13)
+
+
+### Bug Fixes
+
+* devspace broker hook race ([#1483](https://github.com/mckinsey/agents-at-scale-ark/issues/1483)) ([59e73e7](https://github.com/mckinsey/agents-at-scale-ark/commit/59e73e7ad50c35506cdc350309b6854775383eb7))
+* Update to new query param names ([#1854](https://github.com/mckinsey/agents-at-scale-ark/issues/1854)) ([dbbd475](https://github.com/mckinsey/agents-at-scale-ark/commit/dbbd4750f12bf9d72c9a4bbb6be6d7ebf40d1414))
+
+## [0.1.58-rc.1](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.58-rc...v0.1.58-rc.1) (2026-04-13)
+
+
+### Bug Fixes
+
+* GHSA-q4gf-8mx6-v5v3 - Next.js DoS vulnerability in Server Components ([#1848](https://github.com/mckinsey/agents-at-scale-ark/issues/1848)) ([1c8519b](https://github.com/mckinsey/agents-at-scale-ark/commit/1c8519b65fb7f7ececbab142b0c3dbd67d6d4241))
+* use correct sdk file name ([#1850](https://github.com/mckinsey/agents-at-scale-ark/issues/1850)) ([c5252a4](https://github.com/mckinsey/agents-at-scale-ark/commit/c5252a411777d164af5dc7f7faf30d505251f50b))
+
 ## [0.1.58-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.57...v0.1.58-rc) (2026-04-10)
 
 
