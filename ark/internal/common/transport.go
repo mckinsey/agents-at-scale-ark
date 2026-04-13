@@ -6,8 +6,10 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"os"
+	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -85,5 +87,18 @@ func NewHTTPClientWithLogging(ctx context.Context) *http.Client {
 func NewHTTPClientWithoutTracing() *http.Client {
 	return &http.Client{
 		Transport: http.DefaultTransport,
+	}
+}
+
+const StreamingKeepAliveInterval = 60 * time.Second
+
+func NewHTTPClientForStreaming() *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = (&net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: StreamingKeepAliveInterval,
+	}).DialContext
+	return &http.Client{
+		Transport: transport,
 	}
 }
