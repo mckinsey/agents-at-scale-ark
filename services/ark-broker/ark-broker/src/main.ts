@@ -5,11 +5,7 @@ import { setupSwagger } from './swagger.js';
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json');
 
-try {
-  setupSwagger(app, version);
-} catch (err) {
-  console.warn('Swagger setup failed (non-critical):', (err as Error).message);
-}
+setupSwagger(app, version);
 
 const PORT = process.env.PORT || '8080';
 const HOST = process.env.HOST || '0.0.0.0';
