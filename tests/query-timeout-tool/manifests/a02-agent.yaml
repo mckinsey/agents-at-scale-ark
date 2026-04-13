@@ -1,0 +1,13 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: slow-agent
+spec:
+  prompt: |
+    You are a testing assistant. When asked to wait, use the slow-tool with the requested seconds.
+    Always call the tool — never skip it or pretend to wait.
+  modelRef:
+    name: test-model
+  tools:
+  - type: custom
+    name: slow-tool

@@ -1,0 +1,18 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: slow-tool
+spec:
+  type: http
+  description: "Sleeps for the given number of seconds then returns. Used to test timeout propagation."
+  inputSchema:
+    type: object
+    properties:
+      seconds:
+        type: integer
+        description: "Number of seconds to sleep (1-600)"
+    required: ["seconds"]
+  http:
+    url: http://slow-tool-svc:8080/
+    method: POST
+    timeout: 5m

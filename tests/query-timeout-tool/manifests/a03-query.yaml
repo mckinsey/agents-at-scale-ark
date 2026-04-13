@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: slow-tool-query
+spec:
+  input: "Use the slow-tool to sleep for 30 seconds"
+  timeout: "3m"
+  target:
+    type: agent
+    name: slow-agent
