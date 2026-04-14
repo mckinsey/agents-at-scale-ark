@@ -1126,6 +1126,8 @@ jobs:
       release_type: ${{ steps.release-type.outputs.type }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-tags: true
 
       - name: Skip Release (Running Locally)
         if: ${{ env.ACT }}
