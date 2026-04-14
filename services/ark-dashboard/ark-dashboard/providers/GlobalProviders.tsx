@@ -4,7 +4,7 @@ import type { PropsWithChildren } from 'react';
 import { Toaster } from 'sonner';
 
 import { SettingsKeyboardShortcut } from '@/components/settings-modal/settings-keyboard-shortcut';
-import { NavigationTracker } from '@/hooks/use-navigation-history';
+import { NavigationTracker } from '@/components/navigation-tracker';
 import { AnalyticsProvider } from '@/lib/analytics/provider';
 import { ChatProvider } from '@/lib/chat-context';
 import { NamespaceProvider } from '@/providers/NamespaceProvider';

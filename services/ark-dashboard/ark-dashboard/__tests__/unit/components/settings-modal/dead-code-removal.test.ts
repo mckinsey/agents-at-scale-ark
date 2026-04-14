@@ -11,7 +11,7 @@ describe('dead code removal', () => {
     expect(module).not.toHaveProperty('activeSettingPageAtom');
   });
 
-  it('should still export SettingPage type from atoms/settings-modal', async () => {
+  it('should still export the settings-modal module', async () => {
     const module = await import('@/atoms/settings-modal');
     expect(module).toBeDefined();
   });

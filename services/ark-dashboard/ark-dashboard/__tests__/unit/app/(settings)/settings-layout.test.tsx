@@ -40,6 +40,6 @@ describe('SettingsLayout', () => {
         <div>Settings Content</div>
       </SettingsLayout>,
     );
-    expect(screen.getByText('Loading ARK Dashboard...')).toBeInTheDocument();
+    expect(screen.getByText('Loading Ark Dashboard...')).toBeInTheDocument();
   });
 });

@@ -1,3 +1,3 @@
 import { atom } from 'jotai';
 
-export const hasSoftNavigatedAtom = atom<boolean>(false);
+export const settingsEntryUrlAtom = atom<string | null>(null);

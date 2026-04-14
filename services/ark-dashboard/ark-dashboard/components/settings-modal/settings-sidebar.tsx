@@ -5,7 +5,7 @@ import { X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 import { isMarketplaceEnabledAtom } from '@/atoms/experimental-features';
-import { hasSoftNavigatedAtom } from '@/atoms/navigation-history';
+import { settingsEntryUrlAtom } from '@/atoms/navigation-history';
 import type { SettingPage } from '@/atoms/settings-modal';
 import { cn } from '@/lib/utils';
 
@@ -18,18 +18,14 @@ type SettingsSidebarProps = {
 export function SettingsSidebar({ activePage }: SettingsSidebarProps) {
   const router = useRouter();
   const isMarketplaceEnabled = useAtomValue(isMarketplaceEnabledAtom);
-  const hasSoftNavigated = useAtomValue(hasSoftNavigatedAtom);
+  const settingsEntryUrl = useAtomValue(settingsEntryUrlAtom);
 
   const handleSettingClick = (settingKey: SettingPage) => {
     router.replace(`/settings/${settingKey}`);
   };
 
   const handleClose = () => {
-    if (hasSoftNavigated) {
-      router.back();
-    } else {
-      router.push('/');
-    }
+    router.push(settingsEntryUrl ?? '/');
   };
 
   return (

@@ -6,18 +6,13 @@ import { useEffect } from 'react';
 import type { SettingPage } from '@/atoms/settings-modal';
 import { SettingsContent } from '@/components/settings-modal/settings-content';
 import { SettingsSidebar } from '@/components/settings-modal/settings-sidebar';
+import { settingsSections } from '@/components/settings-modal/settings-types';
 
 const DEFAULT_SETTINGS_PAGE: SettingPage = 'a2a-servers';
 
-const VALID_SETTINGS_PAGES: SettingPage[] = [
-  'a2a-servers',
-  'ark-services',
-  'memory',
-  'manage-marketplace',
-  'service-api-keys',
-  'secrets',
-  'experimental-features',
-];
+const VALID_SETTINGS_PAGES: SettingPage[] = settingsSections.flatMap(s =>
+  s.items.map(i => i.key),
+);
 
 export default function SettingsPage() {
   const params = useParams();
