@@ -37,11 +37,18 @@ jobs:
       - name: Check for existing promotion PR
         id: check-pr
         run: |
-          EXISTING_PR=$(gh pr list --base main --head "promote/${{ steps.version.outputs.stable }}" --json number --jq '.[0].number')
+          BRANCH="promote/${{ steps.version.outputs.stable }}"
+          EXISTING_PR=$(gh pr list --base main --head "$BRANCH" --json number --jq '.[0].number')
           if [ -n "$EXISTING_PR" ]; then
             echo "Error: Promotion PR #${EXISTING_PR} already exists for v${{ steps.version.outputs.stable }}"
             echo "Please merge or close the existing PR first."
             exit 1
+          fi
+
+          # Clean up orphaned branch from previous failed runs (no PR exists)
+          if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
+            echo "Deleting orphaned branch $BRANCH from previous run"
+            git push origin --delete "$BRANCH" || true
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
