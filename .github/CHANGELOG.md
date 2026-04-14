@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.58-rc.3](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.58-rc.2...v0.1.58-rc.3) (2026-04-13)
+
+
+### Features
+
+* multiple service and version arguments ([#1823](https://github.com/mckinsey/agents-at-scale-ark/issues/1823)) ([6221cf8](https://github.com/mckinsey/agents-at-scale-ark/commit/6221cf811f0e62b8f9761334e4ad24d38df04b82))
+
+
+### Bug Fixes
+
+* pass query timeout to A2A client HTTP transport ([#1857](https://github.com/mckinsey/agents-at-scale-ark/issues/1857)) ([d649f5e](https://github.com/mckinsey/agents-at-scale-ark/commit/d649f5e478de664d1c285ba82ef1a92f81906076))
+* remove duplicate sonar pull_request trigger ([#1858](https://github.com/mckinsey/agents-at-scale-ark/issues/1858)) ([c6d245b](https://github.com/mckinsey/agents-at-scale-ark/commit/c6d245bcaa8f48690bd8e3b3fcd19ac12edbdaa3))
+* replace pg_notify with WAL CDC and stabilize postgresql E2E test… ([#1763](https://github.com/mckinsey/agents-at-scale-ark/issues/1763)) ([a64278d](https://github.com/mckinsey/agents-at-scale-ark/commit/a64278db193bde196d99b9848fb8432007e64a49))
+* upgrade Go to 1.26.2 for CVE-2026-27140 ([#1861](https://github.com/mckinsey/agents-at-scale-ark/issues/1861)) ([20da8b1](https://github.com/mckinsey/agents-at-scale-ark/commit/20da8b1054bd90f67025a3de9e4e9317bfa97182))
+
 ## [0.1.58-rc.2](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.58-rc.1...v0.1.58-rc.2) (2026-04-13)
 
 
