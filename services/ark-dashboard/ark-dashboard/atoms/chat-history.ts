@@ -1,4 +1,5 @@
 import { atomWithStorage, createJSONStorage } from 'jotai/utils';
+import { v4 as uuidv4 } from 'uuid';
 
 import type { ExtendedChatMessage } from '@/lib/types/chat-message';
 
@@ -29,4 +30,5 @@ export const chatHistoryAtom = atomWithStorage<ChatHistoryMap>(
   { getOnInit: false },
 );
 
-export const createNewSessionId = () => `session-${Date.now()}`;
+export const createNewSessionId = (name: string) =>
+  `chat-${name}-${uuidv4().slice(0, 7)}`;

@@ -97,17 +97,33 @@ describe('useChatSession', () => {
   });
 
   describe('initial state', () => {
-    it('should return empty messages and a session ID', () => {
+    it('should return empty messages and a chat-<name>-<shortsha> session ID', () => {
       const { result } = renderHook(
         () => useChatSession({ name: 'test-agent', type: 'agent' }),
         { wrapper },
       );
       expect(result.current.messages).toEqual([]);
-      expect(result.current.sessionId).toMatch(/^session-/);
+      expect(result.current.sessionId).toMatch(/^chat-test-agent-[0-9a-f]{7}$/);
       expect(result.current.isProcessing).toBe(false);
       expect(result.current.error).toBeNull();
       expect(result.current.tokenUsage).toBeUndefined();
       expect(result.current.messageTokenUsage).toBeUndefined();
+    });
+
+    it('should give distinct chats distinct session ids even when one chat has already opened', () => {
+      const first = renderHook(
+        () => useChatSession({ name: 'coding-team', type: 'team' }),
+        { wrapper },
+      );
+      const second = renderHook(
+        () => useChatSession({ name: 'code-reviewer', type: 'agent' }),
+        { wrapper },
+      );
+      expect(first.result.current.sessionId).toMatch(/^chat-coding-team-/);
+      expect(second.result.current.sessionId).toMatch(/^chat-code-reviewer-/);
+      expect(first.result.current.sessionId).not.toEqual(
+        second.result.current.sessionId,
+      );
     });
   });
 

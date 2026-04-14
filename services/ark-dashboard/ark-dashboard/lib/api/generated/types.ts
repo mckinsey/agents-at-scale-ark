@@ -511,6 +511,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/broker/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Sessions
+         * @description Get or stream sessions from the broker. Sessions are global broker state, not memory-scoped, but the memory parameter selects which broker service to query.
+         */
+        get: operations["get_sessions_v1_broker_sessions_get"];
+        put?: never;
+        post?: never;
+        /**
+         * Purge Sessions
+         * @description Purge all sessions from the broker.
+         */
+        delete: operations["purge_sessions_v1_broker_sessions_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/broker/traces": {
         parameters: {
             query?: never;
@@ -4859,6 +4883,72 @@ export interface operations {
         };
     };
     purge_messages_v1_broker_messages_delete: {
+        parameters: {
+            query?: {
+                /** @description Memory resource name */
+                memory?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_sessions_v1_broker_sessions_get: {
+        parameters: {
+            query?: {
+                /** @description Stream sessions via SSE */
+                watch?: boolean;
+                /** @description Memory resource name */
+                memory?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    purge_sessions_v1_broker_sessions_delete: {
         parameters: {
             query?: {
                 /** @description Memory resource name */
