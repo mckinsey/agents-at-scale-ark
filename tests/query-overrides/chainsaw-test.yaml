@@ -19,12 +19,6 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
-    - script:
-        content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --wait
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
     - apply:
         file: manifests/a01-secret-overrides.yaml
     - apply:
@@ -75,14 +69,15 @@ spec:
 
   - name: wait-for-query-completion
     try:
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: query-overrides-test-query
-          status:
-            phase: done
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: query-overrides-test-query
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     catch:
     - events: {}
     - describe:
@@ -140,14 +135,15 @@ spec:
     try:
     - apply:
         file: manifests/a06-query-tool.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: query-overrides-test-query-tool
-          status:
-            phase: done
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: query-overrides-test-query-tool
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     - script:
         env:
         - name: NAMESPACE
@@ -193,14 +189,15 @@ spec:
     try:
     - apply:
         file: manifests/a07-query-precedence.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: query-overrides-precedence-test
-          status:
-            phase: done
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: query-overrides-precedence-test
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     - script:
         env:
         - name: NAMESPACE
@@ -232,7 +229,6 @@ spec:
     - script:
         content: |
           helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
-          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
         env:
         - name: NAMESPACE
           value: ($namespace)

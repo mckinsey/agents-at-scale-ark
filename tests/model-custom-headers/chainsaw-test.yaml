@@ -17,13 +17,6 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
-    # Install ark-tenant for RBAC
-    - script:
-        content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --wait
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
     # Apply Secret and ConfigMap for headers
     - apply:
         file: manifests/a0[1-2]-*.yaml
@@ -41,15 +34,15 @@ spec:
     - apply:
         file: manifests/a0[5-6]-*.yaml
     # Wait for Query to complete
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: custom-headers-query
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: custom-headers-query
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     # Verify headers were received correctly
     # Mock-llm echoes back the headers object as JSON in the response content
     - assert:
@@ -76,7 +69,6 @@ spec:
     - script:
         content: |
           helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
-          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
         env:
         - name: NAMESPACE
           value: ($namespace)

@@ -24,6 +24,17 @@ You will need a Kubernetes cluster to install Ark into, you can use [Minikube](h
 
 In most cases the default installation options will be sufficient. This will install the Ark dependencies, the controller, the APIs and the dashboard. You can optionally setup a `default` model that will be the default used by agents.
 
+# Version Pinning
+
+Pin specific Ark or marketplace versions using semantic versioning:
+
+```bash
+ark install --ark-version 0.1.50                          # Install specific Ark version
+ark install marketplace/services/phoenix --marketplace-version 0.1.7  # Pin marketplace item
+```
+
+If a version doesn't exist, installation continues with a warning. Find available versions in [GitHub releases](https://github.com/mckinsey/agents-at-scale-ark/releases).
+
 To run in local development mode, which runs all components in a local Kubernetes cluster with live-reload, prvodies DNS to all services, allows to install additional services like Minio, use:
 
 ```bash

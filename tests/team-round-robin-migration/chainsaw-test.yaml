@@ -21,12 +21,6 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
-    - script:
-        content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
     - apply:
         file: manifests/*.yaml
     - wait:
@@ -80,24 +74,24 @@ spec:
 
   - name: wait-for-queries
     try:
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: query-with-turns
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: query-without-turns
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: query-with-turns
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: query-without-turns
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     catch:
     - events: {}
     - describe:
@@ -144,7 +138,6 @@ spec:
     - script:
         content: |
           helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
-          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
         env:
         - name: NAMESPACE
           value: ($namespace)
