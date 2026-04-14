@@ -202,7 +202,7 @@ wheels = [
 
 [[package]]
 name = "ark-api"
-version = "0.1.58rc1"
+version = "0.1.57"
 source = { editable = "." }
 dependencies = [
     { name = "a2a-sdk", extra = ["http-server"] },
@@ -237,7 +237,7 @@ dependencies = [
 requires-dist = [
     { name = "a2a-sdk", extras = ["http-server"], specifier = ">=0.3.0" },
     { name = "aiofiles", specifier = ">=24.1.0" },
-    { name = "ark-sdk", path = "out/ark_sdk-0.1.58rc1-py3-none-any.whl" },
+    { name = "ark-sdk", path = "out/ark_sdk-0.1.57-py3-none-any.whl" },
     { name = "bcrypt", specifier = ">=4.0.0" },
     { name = "coverage", specifier = ">=7.10.4" },
     { name = "dpath", specifier = ">=2.2.0" },
@@ -246,11 +246,11 @@ requires-dist = [
     { name = "kubernetes-asyncio", specifier = ">=33.3.0" },
     { name = "openai", specifier = ">=1.100.2" },
     { name = "openpyxl", specifier = ">=3.1.0" },
-    { name = "opentelemetry-api", specifier = ">=1.38.0" },
-    { name = "opentelemetry-exporter-otlp", specifier = ">=1.38.0" },
-    { name = "opentelemetry-instrumentation-fastapi", specifier = ">=0.59b0" },
-    { name = "opentelemetry-instrumentation-httpx", specifier = ">=0.59b0" },
-    { name = "opentelemetry-sdk", specifier = ">=1.38.0" },
+    { name = "opentelemetry-api", specifier = ">=1.20.0" },
+    { name = "opentelemetry-exporter-otlp", specifier = ">=1.20.0" },
+    { name = "opentelemetry-instrumentation-fastapi", specifier = ">=0.41b0" },
+    { name = "opentelemetry-instrumentation-httpx", specifier = ">=0.41b0" },
+    { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
     { name = "pandas", specifier = ">=2.2.0" },
     { name = "protobuf", specifier = ">=6.33.4" },
     { name = "pyhelm3", specifier = ">=0.4.0" },
@@ -265,8 +265,8 @@ requires-dist = [
 
 [[package]]
 name = "ark-sdk"
-version = "0.1.58rc1"
-source = { path = "out/ark_sdk-0.1.58rc1-py3-none-any.whl" }
+version = "0.1.57"
+source = { path = "out/ark_sdk-0.1.57-py3-none-any.whl" }
 dependencies = [
     { name = "a2a-sdk", extra = ["http-server"] },
     { name = "build" },
@@ -284,7 +284,7 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 wheels = [
-    { filename = "ark_sdk-0.1.58rc1-py3-none-any.whl", hash = "sha256:b1831b1256483fe6b01cc3ae9449d579bdd45e84a9d090fb5229d82aad223efc" },
+    { filename = "ark_sdk-0.1.57-py3-none-any.whl", hash = "sha256:915c099e7a5ffa88fd8d435ec2d042cde5cf26936214298effb818a3d6f091c5" },
 ]
 
 [package.metadata]
