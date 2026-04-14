@@ -16,12 +16,6 @@ spec:
         outputs:
         - name: azure
           value: (json_parse($stdout))
-    - script:
-        content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
     - apply:
         file: manifests/*.yaml
 
@@ -49,15 +43,15 @@ spec:
 
   - name: wait-for-filtered-query-completion
     try:
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: test-query-jq-filtered
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-jq-filtered
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     catch:
     - events: {}
     - describe:
@@ -67,15 +61,15 @@ spec:
 
   - name: wait-for-unfiltered-query-completion
     try:
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: test-query-unfiltered
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-unfiltered
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     catch:
     - events: {}
     - describe:
@@ -110,10 +104,3 @@ spec:
             (contains(response.content, 'author')): true
             (contains(response.content, 'slides')): true
 
-    cleanup:
-    - script:
-        content: |
-          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
