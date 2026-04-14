@@ -15,12 +15,6 @@ spec:
         outputs:
         - name: azure
           value: (json_parse($stdout))
-    - script:
-        content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
     - apply:
         file: manifests/*.yaml
     - wait:
@@ -92,15 +86,15 @@ spec:
               name: research-team
             - type: team
               name: synthesis-team
-    - assert:
-        timeout: 2m
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: team-of-teams-query
-          status:
-            phase: done
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: team-of-teams-query
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -117,10 +111,4 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: team-of-teams-query
-    cleanup:
-    - script:
-        content: |
-          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
+

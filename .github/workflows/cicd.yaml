@@ -1126,6 +1126,8 @@ jobs:
       release_type: ${{ steps.release-type.outputs.type }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-tags: true
 
       - name: Skip Release (Running Locally)
         if: ${{ env.ACT }}
@@ -1149,6 +1151,7 @@ jobs:
           if [[ "$VERSION" != *-rc.* && -n "$RC_TAGS" && -z "$STABLE_TAG" ]]; then
             echo "config=.github/release-please-config.json" >> $GITHUB_OUTPUT
             echo "type=stable" >> $GITHUB_OUTPUT
+            echo "release_as=${VERSION}" >> $GITHUB_OUTPUT
             echo "Promotion detected: RC tags exist for v${VERSION}, releasing stable"
           else
             echo "config=.github/release-please-config-rc.json" >> $GITHUB_OUTPUT
@@ -1164,6 +1167,7 @@ jobs:
           manifest-file: .github/release-please-manifest.json
           config-file: ${{ steps.release-type.outputs.config || '.github/release-please-config-rc.json' }}
           target-branch: main
+          release-as: ${{ steps.release-type.outputs.release_as || '' }}
 
   release-docs:
     needs: [check-release]

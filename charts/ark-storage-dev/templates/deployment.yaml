@@ -17,6 +17,13 @@ spec:
       containers:
         - name: postgresql
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          args:
+            - "-c"
+            - "wal_level=logical"
+            - "-c"
+            - "max_wal_senders=4"
+            - "-c"
+            - "max_replication_slots=4"
           ports:
             - containerPort: 5432
           env:
