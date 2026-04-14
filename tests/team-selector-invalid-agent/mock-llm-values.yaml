@@ -22,7 +22,6 @@ terminationGracePeriodSeconds: 1
 
 config:
   rules:
-  # Health/models endpoint for Model availability check
   - path: "/v1/models"
     method: "GET"
     response:
@@ -40,8 +39,7 @@ config:
           ]
         }
 
-  # Catch-all - return invalid agent name to test termination
   - path: "/v1/chat/completions"
     response:
       status: 200
-      content: '{"choices":[{"message":{"role":"assistant","content":"invalid-agent-name"},"finish_reason":"stop"}]}'
+      content: '{"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_001","type":"function","function":{"name":"select-next-conversant","arguments":"{\"name\":\"invalid-agent-name\"}"}}]},"finish_reason":"tool_calls"}]}'
