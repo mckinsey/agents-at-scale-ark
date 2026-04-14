@@ -138,6 +138,23 @@ func TestDefaultTeam(t *testing.T) {
 		}
 	})
 
+	t.Run("adds migration warning for selector with custom prompt missing select-next-conversant", func(t *testing.T) {
+		team := &arkv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{Name: "t"},
+			Spec: arkv1alpha1.TeamSpec{
+				Strategy: StrategySelector,
+				Selector: &arkv1alpha1.TeamSelectorSpec{
+					SelectorPrompt: "Pick the best agent for the task.",
+				},
+			},
+		}
+		DefaultTeam(team)
+		key := annotations.MigrationWarningPrefix + "selector-prompt"
+		if team.Annotations[key] == "" {
+			t.Fatal("expected migration warning for selector prompt without select-next-conversant")
+		}
+	})
+
 	t.Run("migrates graph to sequential with loops disabled", func(t *testing.T) {
 		maxTurns := 10
 		team := &arkv1alpha1.Team{

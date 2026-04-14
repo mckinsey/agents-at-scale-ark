@@ -691,3 +691,32 @@ func TestGetSelectNextConversantTool(t *testing.T) {
 		require.Equal(t, "solo", enumValues[0])
 	})
 }
+
+func TestRemoveTool(t *testing.T) {
+	telemetryProvider := noop.NewProvider()
+	eventingProvider := eventnoop.NewProvider()
+	registry := NewToolRegistry(nil, telemetryProvider.ToolRecorder(), eventingProvider.ToolRecorder())
+
+	registry.RegisterTool(ToolDefinition{Name: "tool-a"}, &NoopExecutor{})
+	registry.RegisterTool(ToolDefinition{Name: "tool-b"}, &NoopExecutor{})
+	require.Len(t, registry.GetToolDefinitions(), 2)
+
+	registry.RemoveTool("tool-a")
+	defs := registry.GetToolDefinitions()
+	require.Len(t, defs, 1)
+	require.Equal(t, "tool-b", defs[0].Name)
+	require.Equal(t, "unknown", registry.GetToolType("tool-a"))
+}
+
+func TestClearTools(t *testing.T) {
+	telemetryProvider := noop.NewProvider()
+	eventingProvider := eventnoop.NewProvider()
+	registry := NewToolRegistry(nil, telemetryProvider.ToolRecorder(), eventingProvider.ToolRecorder())
+
+	registry.RegisterTool(ToolDefinition{Name: "tool-a"}, &NoopExecutor{})
+	registry.RegisterTool(ToolDefinition{Name: "tool-b"}, &NoopExecutor{})
+	require.Len(t, registry.GetToolDefinitions(), 2)
+
+	registry.ClearTools()
+	require.Empty(t, registry.GetToolDefinitions())
+}

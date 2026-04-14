@@ -5,6 +5,7 @@ package completions
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"text/template"
@@ -13,6 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	eventnoop "mckinsey.com/ark/internal/eventing/noop"
+	"mckinsey.com/ark/internal/telemetry/noop"
 )
 
 func TestBuildLegalTransitions(t *testing.T) {
@@ -1122,4 +1125,74 @@ func TestExecuteSelector_WithTerminateTool(t *testing.T) {
 	assert.True(t, foundToolCall, "Expected to find terminate tool call in messages")
 
 	require.Len(t, stream.chunks, 1, "Expected terminate response to be streamed")
+}
+
+func TestSelectMember_WithTerminateTeamError(t *testing.T) {
+	members := []TeamMember{
+		&mockTeamMember{name: "agent1"},
+		&mockTeamMember{name: "agent2"},
+	}
+
+	mockSelector := &mockSelectorAgent{returnTerminateResponse: "Done."}
+	team := &Team{
+		Members:       members,
+		selectorAgent: mockSelector,
+	}
+
+	ctx := context.Background()
+	tmpl, err := template.New("test").Parse("test")
+	require.NoError(t, err)
+
+	member, err := team.selectMember(ctx, []Message{}, tmpl, "agent1, agent2", "roles", nil)
+
+	assert.Nil(t, member)
+	require.Error(t, err)
+	var terminateResp *TerminateTeamWithResponse
+	require.True(t, errors.As(err, &terminateResp))
+	assert.Equal(t, "Done.", terminateResp.Response)
+}
+
+func TestSelectMember_WithGenericError(t *testing.T) {
+	members := []TeamMember{
+		&mockTeamMember{name: "agent1"},
+	}
+
+	mockSelector := &mockSelectorAgent{returnError: fmt.Errorf("LLM provider error")}
+	team := &Team{
+		Members:       members,
+		selectorAgent: mockSelector,
+	}
+
+	ctx := context.Background()
+	tmpl, err := template.New("test").Parse("test")
+	require.NoError(t, err)
+
+	member, err := team.selectMember(ctx, []Message{}, tmpl, "agent1", "roles", nil)
+
+	assert.Nil(t, member)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "selector agent call failed")
+	assert.Contains(t, err.Error(), "LLM provider error")
+}
+
+func TestRegisterSelectNextConversantTool_WithRealAgent(t *testing.T) {
+	telemetryProvider := noop.NewProvider()
+	eventingProvider := eventnoop.NewProvider()
+
+	registry := NewToolRegistry(nil, telemetryProvider.ToolRecorder(), eventingProvider.ToolRecorder())
+	agent := &Agent{
+		Tools: registry,
+	}
+
+	team := &Team{}
+	ctx := context.Background()
+
+	team.registerSelectNextConversantTool(ctx, agent, []string{"agent-a", "agent-b"})
+
+	defs := agent.Tools.GetToolDefinitions()
+	require.Len(t, defs, 1)
+	assert.Equal(t, BuiltinToolSelectNextConversant, defs[0].Name)
+
+	toolType := agent.Tools.GetToolType(BuiltinToolSelectNextConversant)
+	assert.Equal(t, ToolTypeBuiltin, toolType)
 }

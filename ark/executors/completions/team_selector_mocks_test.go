@@ -38,6 +38,7 @@ type mockSelectorAgent struct {
 	returnName              string
 	returnEmpty             bool
 	returnTerminateResponse string
+	returnError             error
 	capturedHistory         []Message
 }
 
@@ -47,6 +48,9 @@ func newMockSelectorAgent() *mockSelectorAgent {
 
 func (m *mockSelectorAgent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	m.capturedHistory = history
+	if m.returnError != nil {
+		return nil, m.returnError
+	}
 	if m.returnEmpty {
 		return &ExecutionResult{Messages: []Message{}}, nil
 	}
