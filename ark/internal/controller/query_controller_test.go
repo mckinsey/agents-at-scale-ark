@@ -204,6 +204,50 @@ var _ = Describe("Query Controller", func() {
 			Expect(k8sClient.Delete(ctx, createdQuery)).Should(Succeed())
 		})
 	})
+
+	Context("When updating status of a deleted query", func() {
+		ctx := context.Background()
+
+		It("should not error", func() {
+			const deletedQueryName = "test-deleted-status-query"
+
+			deletedQuery := &arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      deletedQueryName,
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.QuerySpec{
+					Target: &arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
+				},
+			}
+			Expect(deletedQuery.Spec.SetInputString("hello")).To(Succeed())
+			Expect(k8sClient.Create(ctx, deletedQuery)).To(Succeed())
+
+			controllerReconciler := &QueryReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			By("reconciling to initialize status")
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: deletedQueryName, Namespace: "default"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("deleting the query")
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: deletedQueryName, Namespace: "default"}, deletedQuery)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, deletedQuery)).To(Succeed())
+
+			By("reconciling with deletionTimestamp to remove finalizer and fully delete")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: deletedQueryName, Namespace: "default"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("calling updateStatus on the deleted query should not error")
+			Expect(controllerReconciler.updateStatus(ctx, deletedQuery, "Running")).To(Succeed())
+		})
+	})
 })
 
 var _ = Describe("Query Controller Fallback Raw", func() {
