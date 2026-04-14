@@ -193,6 +193,8 @@ spec:
 
 The selector agent is given a `select-next-conversant` tool whose `name` parameter is an enum of valid candidates. For graph-constrained teams, the enum only includes members reachable from the current node. This ensures the selector can only pick a valid next participant.
 
+If the tool returns a name not in the enum, the team terminates with a warning. If the selector agent does not call the tool at all, the team also terminates with a warning.
+
 ## Default Selector Prompt
 
 When no custom `selectorPrompt` is specified:

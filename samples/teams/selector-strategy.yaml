@@ -33,6 +33,16 @@ spec:
       type: built-in
 ---
 apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: technical-expert
+spec:
+  description: Technical architecture and engineering expert
+  prompt: |
+    You are a technical expert. Your role is to evaluate technical feasibility,
+    recommend architectures, and assess engineering trade-offs. Be very brief and concise. Do not ask user any questions.
+---
+apiVersion: ark.mckinsey.com/v1alpha1
 kind: Team
 metadata:
   name: consulting-team

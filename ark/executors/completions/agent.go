@@ -41,6 +41,10 @@ func (a *Agent) FullName() string {
 	return a.Namespace + "/" + a.Name
 }
 
+func (a *Agent) GetToolRegistry() *ToolRegistry {
+	return a.Tools
+}
+
 // Execute executes the agent with optional event emission for tool calls
 func (a *Agent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	ctx, span := a.telemetryRecorder.StartAgentExecution(ctx, a.Name, a.Namespace)

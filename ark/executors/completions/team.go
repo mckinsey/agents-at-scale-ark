@@ -18,6 +18,7 @@ import (
 type SelectorAgentInterface interface {
 	Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error)
 	FullName() string
+	GetToolRegistry() *ToolRegistry
 }
 
 type Team struct {

@@ -120,6 +120,38 @@ func TestTerminateTeamWithResponse(t *testing.T) {
 	})
 }
 
+func TestToolNotCalledError(t *testing.T) {
+	t.Run("error message", func(t *testing.T) {
+		err := &ToolNotCalledError{}
+		expected := "selector agent did not use the select-next-conversant tool"
+		if err.Error() != expected {
+			t.Errorf("Error() = %q, expected %q", err.Error(), expected)
+		}
+	})
+
+	t.Run("is not TerminateTeam", func(t *testing.T) {
+		err := &ToolNotCalledError{}
+		if IsTerminateTeam(err) {
+			t.Error("IsTerminateTeam() should return false for ToolNotCalledError")
+		}
+	})
+
+	t.Run("is not SelectionMade", func(t *testing.T) {
+		err := &ToolNotCalledError{}
+		if IsSelectionMade(err) {
+			t.Error("IsSelectionMade() should return false for ToolNotCalledError")
+		}
+	})
+
+	t.Run("errors.As matches", func(t *testing.T) {
+		var target *ToolNotCalledError
+		err := &ToolNotCalledError{}
+		if !errors.As(err, &target) {
+			t.Error("errors.As should match ToolNotCalledError")
+		}
+	})
+}
+
 func TestSelectionMade(t *testing.T) {
 	t.Run("error message includes selected name", func(t *testing.T) {
 		err := &SelectionMade{SelectedName: "analyst"}

@@ -272,9 +272,12 @@ func (tr *ToolRegistry) ExecuteTool(ctx context.Context, call ToolCall) (ToolRes
 	result, err := executor.Execute(ctx, call)
 	if err != nil {
 		tr.telemetryRecorder.RecordError(span, err)
-		if IsTerminateTeam(err) || IsSelectionMade(err) {
+		if IsTerminateTeam(err) {
 			operationData["terminationMessage"] = "TerminateTeam"
 			tr.eventingRecorder.Complete(ctx, "ToolCall", "Tool execution completed with termination", operationData)
+		} else if IsSelectionMade(err) {
+			operationData["selectionResult"] = "SelectionMade"
+			tr.eventingRecorder.Complete(ctx, "ToolCall", "Tool execution completed with selection", operationData)
 		} else {
 			tr.eventingRecorder.Fail(ctx, "ToolCall", fmt.Sprintf("Tool execution failed: %v", err), err, operationData)
 		}

@@ -143,11 +143,16 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	for i, m := range membersToSearch {
 		candidateNames[i] = m.GetName()
 	}
-	t.registerSelectNextConversantTool(ctx, selectorAgent, candidateNames)
+	if len(candidateNames) == 0 {
+		return nil, NewTerminateTeamWithReason("no candidates available for selection")
+	}
+	if err := t.registerSelectNextConversantTool(ctx, selectorAgent, candidateNames); err != nil {
+		return nil, err
+	}
 
 	result, err := selectorAgent.Execute(ctx, NewUserMessage("Select the next participant to respond."), []Message{NewSystemMessage(selectorMessage)}, nil, nil)
 	if err == nil {
-		return nil, fmt.Errorf("selector agent did not use select-next-conversant tool")
+		return nil, &ToolNotCalledError{}
 	}
 
 	var selectionMade *SelectionMade
@@ -254,14 +259,14 @@ func (t *Team) buildLegalTransitionsMap() map[string][]TeamMember {
 	return legalTransitions
 }
 
-func (t *Team) registerSelectNextConversantTool(ctx context.Context, selectorAgent SelectorAgentInterface, candidates []string) {
-	agent, ok := selectorAgent.(*Agent)
-	if !ok {
-		logf.FromContext(ctx).Info("Cannot register select-next-conversant tool: selector agent is not a local *Agent", "selectorType", fmt.Sprintf("%T", selectorAgent))
-		return
+func (t *Team) registerSelectNextConversantTool(_ context.Context, selectorAgent SelectorAgentInterface, candidates []string) error {
+	registry := selectorAgent.GetToolRegistry()
+	if registry == nil {
+		return fmt.Errorf("select-next-conversant tool requires a selector agent with a tool registry")
 	}
-	agent.Tools.RemoveTool(BuiltinToolSelectNextConversant)
-	agent.Tools.RegisterTool(GetSelectNextConversantTool(candidates), &SelectNextConversantExecutor{})
+	registry.RemoveTool(BuiltinToolSelectNextConversant)
+	registry.RegisterTool(GetSelectNextConversantTool(candidates), &SelectNextConversantExecutor{})
+	return nil
 }
 
 func extractTerminateToolResponse(result *ExecutionResult) string {
@@ -278,13 +283,20 @@ func extractTerminateToolResponse(result *ExecutionResult) string {
 
 func (t *Team) handleMemberSelectionError(ctx context.Context, err error, newMessages *[]Message) (shouldTerminate bool, returnErr error) {
 	var invalidAgentErr *InvalidAgentError
+	var toolNotCalledErr *ToolNotCalledError
 	switch {
 	case errors.As(err, &invalidAgentErr):
 		warningContent := fmt.Sprintf("Selector returned invalid agent name: %s", invalidAgentErr.SelectedName)
 		warningMessage := NewSystemMessage(warningContent)
 		*newMessages = append(*newMessages, warningMessage)
 
-		// Stream the warning message immediately so it appears during execution
+		StreamSystemMessage(ctx, t.eventStream, warningContent)
+		return true, nil
+	case errors.As(err, &toolNotCalledErr):
+		warningContent := "Selector agent did not use the select-next-conversant tool"
+		warningMessage := NewSystemMessage(warningContent)
+		*newMessages = append(*newMessages, warningMessage)
+
 		StreamSystemMessage(ctx, t.eventStream, warningContent)
 		return true, nil
 	case IsTerminateTeam(err):

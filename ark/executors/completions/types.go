@@ -109,6 +109,12 @@ func (e *TerminateTeamWithResponse) Unwrap() error {
 	return &e.base
 }
 
+type ToolNotCalledError struct{}
+
+func (e *ToolNotCalledError) Error() string {
+	return "selector agent did not use the select-next-conversant tool"
+}
+
 type SelectionMade struct {
 	SelectedName string
 }
