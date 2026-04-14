@@ -8,6 +8,7 @@ import type {
   MarketplaceItemDetail,
   MarketplaceResponse,
 } from '@/lib/api/generated/marketplace-types';
+import { retryQueryHandler } from '@/lib/utils/query-retry';
 
 import { marketplaceService } from './marketplace';
 
@@ -15,6 +16,7 @@ export function useGetMarketplaceItems(filters?: MarketplaceFilters) {
   return useQuery<MarketplaceResponse>({
     queryKey: ['marketplace', filters],
     queryFn: () => marketplaceService.getMarketplaceItems(filters),
+    retry: retryQueryHandler,
   });
 }
 
@@ -23,15 +25,7 @@ export function useGetMarketplaceItemById(id: string) {
     queryKey: ['marketplace', id],
     queryFn: () => marketplaceService.getMarketplaceItemById(id),
     enabled: Boolean(id),
-    retry: (failureCount, error) => {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = error.status as number | undefined;
-        if (status && status >= 400 && status < 500) {
-          return false;
-        }
-      }
-      return failureCount < 3;
-    },
+    retry: retryQueryHandler,
   });
 }
 
