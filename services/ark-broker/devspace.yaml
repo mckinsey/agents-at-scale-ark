@@ -8,6 +8,14 @@ pipelines:
   dev: |-
     build_images --all
     create_deployments --all
+
+    echo "Waiting for restart-controller hook job to complete..."
+    kubectl wait --for=condition=complete job -l app.kubernetes.io/component=restart-hook -n ${DEVSPACE_NAMESPACE:-default} --timeout=120s 2>/dev/null || true
+
+    echo "Waiting for ark-controller to stabilize after restart..."
+    kubectl rollout status deployment/ark-controller-devspace -n ark-system --timeout=120s 2>/dev/null || \
+      kubectl rollout status deployment/ark-controller -n ark-system --timeout=120s 2>/dev/null || true
+
     start_dev --all
 
 images:

@@ -122,7 +122,7 @@ spec:
             {{- toYaml .Values.controllerManager.container.resources | nindent 12 }}
           securityContext:
             {{- toYaml .Values.controllerManager.container.securityContext | nindent 12 }}
-          {{- if or (and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable)) .Values.customCACert.enabled }}
+          {{- if or (and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable)) .Values.customCACert.enabled .Values.controllerManager.extraVolumeMounts }}
           volumeMounts:
             {{- if and .Values.webhook.enable .Values.certmanager.enable }}
             - name: webhook-cert
@@ -139,12 +139,15 @@ spec:
               mountPath: /etc/ssl/certs/custom-ca
               readOnly: true
             {{- end }}
+            {{- with .Values.controllerManager.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
       securityContext:
         {{- toYaml .Values.controllerManager.securityContext | nindent 8 }}
       serviceAccountName: {{ .Values.controllerManager.serviceAccountName }}
       terminationGracePeriodSeconds: {{ .Values.controllerManager.terminationGracePeriodSeconds }}
-      {{- if or (and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable)) .Values.customCACert.enabled }}
+      {{- if or (and .Values.certmanager.enable (or .Values.webhook.enable .Values.metrics.enable)) .Values.customCACert.enabled .Values.controllerManager.extraVolumes }}
       volumes:
         {{- if and .Values.webhook.enable .Values.certmanager.enable }}
         - name: webhook-cert
@@ -163,5 +166,8 @@ spec:
             items:
               - key: {{ .Values.customCACert.key }}
                 path: {{ .Values.customCACert.key }}
+        {{- end }}
+        {{- with .Values.controllerManager.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
       {{- end }}

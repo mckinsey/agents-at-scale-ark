@@ -2,9 +2,9 @@
 
 import type { components } from '@/lib/api/generated/types';
 
-type QueryParameterInput = components['schemas']['QueryParameter-Input'];
-type QueryParameterOutput = components['schemas']['QueryParameter-Output'];
-type AgentParameterOutput = components['schemas']['AgentParameter-Output'];
+type QueryParameterInput = components['schemas']['QueryParameter'];
+type QueryParameterOutput = components['schemas']['QueryParameter'];
+type AgentParameterOutput = components['schemas']['AgentParameter'];
 
 export interface QueryParameter {
   name: string;

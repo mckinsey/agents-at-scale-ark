@@ -2,7 +2,7 @@
 
 import logging
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any
+from typing import Any
 from pydantic import BaseModel
 
 
@@ -19,7 +19,7 @@ class Model(BaseModel):
     """Model configuration for LLM providers."""
     name: str
     type: str
-    config: Dict[str, Any] = {}
+    config: dict[str, Any] = {}
 
 
 class AgentConfig(BaseModel):
@@ -28,9 +28,10 @@ class AgentConfig(BaseModel):
     namespace: str
     prompt: str
     description: str = ""
-    parameters: List[Parameter] = []
+    parameters: list[Parameter] = []
     model: Model
-    labels: Dict[str, str] = {}
+    labels: dict[str, str] = {}
+    annotations: dict[str, str] = {}
 
 
 class MCPServerConfig(BaseModel):
@@ -38,8 +39,8 @@ class MCPServerConfig(BaseModel):
     url: str
     transport: str = "http"
     timeout: str = "30s"
-    headers: Dict[str, str] = {}
-    tools: List[str] = []
+    headers: dict[str, str] = {}
+    tools: list[str] = []
 
 
 class Message(BaseModel):
@@ -56,13 +57,15 @@ class ExecutionEngineRequest(BaseModel):
     """Request to execute an agent."""
     agent: AgentConfig
     userInput: Message
-    mcpServers: List[MCPServerConfig] = []
+    mcpServers: list[MCPServerConfig] = []
     conversationId: str = ""
+    query_annotations: dict[str, str] = {}
+    execution_engine_annotations: dict[str, str] = {}
 
 
 class ExecutionEngineResponse(BaseModel):
     """Response from agent execution."""
-    messages: List[Message]
+    messages: list[Message]
     error: str = ""
 
 
@@ -75,24 +78,24 @@ class BaseExecutor(ABC):
         logger.info(f"{engine_name} executor initialized")
 
     @abstractmethod
-    async def execute_agent(self, request: ExecutionEngineRequest) -> List[Message]:
+    async def execute_agent(self, request: ExecutionEngineRequest) -> list[Message]:
         """Execute an agent with the given request.
-        
+
         Args:
             request: The execution request containing agent config and user input
-            
+
         Returns:
             List of response messages from the agent execution
-            
+
         Raises:
             Exception: If execution fails
         """
         pass
 
-    def _resolve_prompt(self, agent_config, base_prompt: str = None) -> str:
+    def _resolve_prompt(self, agent_config, base_prompt: str = "You are a helpful assistant.") -> str:
         """Resolve agent prompt with parameter substitution."""
-        prompt = base_prompt or agent_config.prompt or "You are a helpful assistant."
-        
+        prompt = agent_config.prompt or base_prompt
+
         for param in agent_config.parameters:
             placeholder = f"{{{param.name}}}"
             prompt = prompt.replace(placeholder, param.value)

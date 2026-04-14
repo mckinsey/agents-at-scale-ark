@@ -139,7 +139,6 @@ httpRoute:
   # Hostnames this route matches
   hostnames:
     - "127.0.0.1.nip.io"
-    - "dashboard.127.0.0.1.nip.io"
     - "dashboard.default.127.0.0.1.nip.io"
   # Routing rules (if not specified, defaults to routing all paths to the service)
   # rules:
