@@ -934,15 +934,25 @@ chainsaw test tests/ --test-dir tests/queries --pause-on-failure
 Two things make Radix UI Select options unstable for Playwright:
 
 1. **Floating UI positioning**: The dropdown portal DOM nodes are replaced when Floating UI calculates position, causing "element was detached from the DOM". Floating UI sets `data-side` once positioning is done.
-2. **Open animation**: `data-side` is set before the entry animation (zoom-in, slide-in) finishes. Playwright sees the bounding box still changing and reports "element is not stable". Radix sets `data-state="open"` only after the animation completes.
+2. **Open animation**: `data-state="open"` fires at the *start* of the entry animation (zoom-in, slide-in), not the end. Playwright sees the bounding box still changing and reports "element is not stable". The animation must fully complete before options are clickable.
 
-Wait for both before clicking:
+Wait for the listbox to be visible, then wait for all CSS animations to finish before clicking:
 
 ```python
 trigger.click()
-page.locator("[role='listbox'][data-side][data-state='open']").wait_for(state="visible", timeout=15000)
+listbox = page.locator("[role='listbox'][data-side][data-state='open']")
+listbox.wait_for(state="visible", timeout=15000)
+self.wait_for_animations_complete(listbox)  # BasePage helper
 page.locator("[role='option']:has-text('HTTP')").first.click()
 ```
+
+`wait_for_animations_complete` uses the Web Animations API to block until all running animations on the element and its subtree finish:
+
+```python
+locator.evaluate("el => Promise.all(el.getAnimations({subtree: true}).map(a => a.finished))")
+```
+
+`{subtree: true}` is required — without it, `getAnimations()` only checks the listbox container, not the option elements that are actually animating.
 
 If options are still detaching after this, the likely cause is a parent component re-rendering while the dropdown is open (e.g. a `form.watch()` call in React Hook Form re-rendering on blur/validation). Fix it in the component by replacing `form.watch(name)` with `useWatch({ control, name })`, which only re-renders when the field value changes.
 
