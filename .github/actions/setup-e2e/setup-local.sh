@@ -105,6 +105,19 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
   )
 fi
 
+if [ "${INSTALL_COVERAGE}" = "true" ]; then
+  echo "=== Including coverage collection in Helm install ==="
+  kubectl create namespace ark-system 2>/dev/null || true
+  kubectl -n ark-system apply -f "${SCRIPT_DIR}/coverage-pvc.yaml" || echo "Coverage PVC may already exist"
+  HELM_ARGS+=(
+    --set controllerManager.container.env.GOCOVERDIR=/workspace/coverage
+    --set 'controllerManager.extraVolumeMounts[0].name=coverage-volume'
+    --set 'controllerManager.extraVolumeMounts[0].mountPath=/workspace/coverage'
+    --set 'controllerManager.extraVolumes[0].name=coverage-volume'
+    --set 'controllerManager.extraVolumes[0].persistentVolumeClaim.claimName=coverage-data'
+  )
+fi
+
 helm upgrade --install ark-controller ./dist/chart "${HELM_ARGS[@]}"
 
 helm upgrade --install ark-completions ./executors/completions/chart \
@@ -113,15 +126,6 @@ helm upgrade --install ark-completions ./executors/completions/chart \
   --set image.repository="${REGISTRY}/ark-completions" \
   --set image.tag="${ARK_IMAGE_TAG}" \
   --set image.pullPolicy=IfNotPresent
-
-# Apply coverage configuration if requested
-if [ "${INSTALL_COVERAGE}" = "true" ]; then
-  echo "=== Setting up Coverage Collection ==="
-  kubectl -n ark-system apply -f "${SCRIPT_DIR}/coverage-pvc.yaml" || echo "Coverage PVC may already exist"
-  kubectl -n ark-system patch deployment ark-controller --patch-file "${SCRIPT_DIR}/coverage-patch.yaml"
-  # Restart deployment to apply coverage configuration
-  kubectl -n ark-system rollout restart deployment/ark-controller
-fi
 
 # Wait for ARK deployment to be ready
 echo "=== Waiting for ARK Deployment ==="
@@ -176,6 +180,44 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
     exit 1
   fi
   echo "PostgreSQL backend verified (no CRDs present, API served via aggregated API server)"
+
+  echo "=== Verifying controllers are reconciling ==="
+  PROBE_NS="ark-readiness-probe"
+  kubectl create namespace "${PROBE_NS}" 2>/dev/null || true
+  kubectl apply -f - <<'PROBE_EOF'
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: readiness-probe
+  namespace: ark-readiness-probe
+spec:
+  type: openai
+  model:
+    value: gpt-4.1-mini
+  config:
+    openai:
+      baseUrl:
+        value: "https://localhost:1/v1"
+      apiKey:
+        value: "probe"
+PROBE_EOF
+  PROBE_OK=false
+  for i in $(seq 1 60); do
+    CONDITIONS=$(kubectl get model readiness-probe -n "${PROBE_NS}" -o jsonpath='{.status.conditions}' 2>/dev/null)
+    if [ -n "${CONDITIONS}" ] && [ "${CONDITIONS}" != "null" ] && [ "${CONDITIONS}" != "[]" ]; then
+      echo "Controllers are reconciling (Model got status conditions after ${i}s)"
+      PROBE_OK=true
+      break
+    fi
+    sleep 1
+  done
+  kubectl delete namespace "${PROBE_NS}" --wait=false 2>/dev/null || true
+  if [ "${PROBE_OK}" != "true" ]; then
+    echo "ERROR: Controllers not reconciling after 60s — Model readiness-probe never got status conditions"
+    echo "Controller logs:"
+    kubectl -n ark-system logs deployment/ark-controller --tail=30
+    exit 1
+  fi
 fi
 
 echo
