@@ -53,7 +53,7 @@ help: ## Display this help.
 manifests: controller-gen ## Generate CRDs and sync to Helm chart.
 	$(CONTROLLER_GEN) rbac:roleName=ark-controller-role,fileName=ark_controller_role.yaml crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 	@./scripts/sync-chart-crds.sh
-	@./scripts/patch-webhook-match-conditions.sh
+	@./scripts/patch-webhook-match-conditions.py
 	@mkdir -p internal/apiserver/crds
 	@cp config/crd/bases/*.yaml internal/apiserver/crds/
 
