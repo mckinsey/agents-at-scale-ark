@@ -66,15 +66,15 @@ spec:
             maxTurns: 6
             selector:
               agent: coordinator
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: selector-team-query
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: selector-team-query
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1

@@ -14,14 +14,15 @@ spec:
       try:
         - apply:
             file: ../../shared/mock-geocoding-api.yaml
-        - assert:
-            resource:
-              apiVersion: apps/v1
-              kind: Deployment
-              metadata:
-                name: mock-geocoding-api
-              status:
-                readyReplicas: 1
+        - wait:
+            apiVersion: apps/v1
+            kind: Deployment
+            name: mock-geocoding-api
+            timeout: 2m
+            for:
+              condition:
+                name: Available
+                value: 'True'
         - assert:
             resource:
               apiVersion: v1
@@ -90,14 +91,15 @@ spec:
             file: manifests/agent.yaml
         - apply:
             file: manifests/query.yaml
-        - assert:
-            resource:
-              apiVersion: ark.mckinsey.com/v1alpha1
-              kind: Query
-              metadata:
-                name: partial-tool-query
-              status:
-                phase: done
+        - wait:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Query
+            name: partial-tool-query
+            timeout: 60s
+            for:
+              condition:
+                name: Completed
+                value: 'True'
         - assert:
             resource:
               apiVersion: ark.mckinsey.com/v1alpha1

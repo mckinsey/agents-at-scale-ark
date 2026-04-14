@@ -82,15 +82,18 @@ class ToolsPage(BasePage):
         logger.info(f"Tool name should be: {tool_name}")
         name_input.fill(tool_name)
         logger.info(f"Name in name input is {name_input.input_value()}")
-        
+
         type_trigger = self.page.locator("button#type, button[name='type'], [role='combobox']:has-text('Select'), [data-slot='trigger']").first
         type_trigger.wait_for(state="visible", timeout=15000)
         type_trigger.click()
-        
-        self.page.locator("[role='listbox'][data-side][data-state='open']").wait_for(state="visible", timeout=15000)
+
+        listbox = self.page.locator("[role='listbox'][data-side][data-state='open']")
+        listbox.wait_for(state="visible", timeout=15000)
+        self.wait_for_animations_complete(listbox)
+        logger.info("Listbox animations complete, clicking HTTP option")
         http_option = self.page.locator("[role='option']:has-text('HTTP')").first
         http_option.click()
-        
+
         description_input = self.page.locator("input#description, input[name='description'], [role='dialog'] input:nth-of-type(2)").first
         description_input.wait_for(state="visible", timeout=15000)
         description_input.fill(description)

@@ -85,16 +85,15 @@ spec:
                 to: coordinator
   - name: wait-for-query-completion
     try:
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: test-graph-selector-team
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
-        timeout: 360s
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-graph-selector-team
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
   - name: validate-graph-selector-execution
     try:
     - assert:
