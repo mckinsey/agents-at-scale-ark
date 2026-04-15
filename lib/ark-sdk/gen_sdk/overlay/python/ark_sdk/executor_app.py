@@ -249,6 +249,9 @@ class A2AExecutorAdapter(AgentExecutor):
                     message_id="error-response",
                 )
             )
+        finally:
+            self.executor._broker_client = None
+            self.executor._streamed = False
 
     async def cancel(self, context: Any, event_queue: EventQueue) -> None:
         pass
