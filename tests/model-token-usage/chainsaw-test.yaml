@@ -15,12 +15,6 @@ spec:
         outputs:
         - name: azure
           value: (json_parse($stdout))
-    - script:
-        content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
     - apply:
         file: manifests/*.yaml
 
@@ -38,14 +32,15 @@ spec:
 
   - name: wait-for-query-completion
     try:
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: model-token-query
-          status:
-            phase: done
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: model-token-query
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
 
   - name: validate-model-response
     try:
@@ -77,10 +72,3 @@ spec:
     catch:
       - events: {}
 
-    cleanup:
-    - script:
-        content: |
-          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
-        env:
-        - name: NAMESPACE
-          value: ($namespace)

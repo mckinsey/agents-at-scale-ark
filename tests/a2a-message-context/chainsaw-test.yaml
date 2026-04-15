@@ -16,12 +16,6 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
-    - script:
-        content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1prealpha1
@@ -41,15 +35,15 @@ spec:
     try:
     - apply:
         file: manifests/a01-query-first.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: message-counter-first
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: message-counter-first
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         timeout: 1s
         resource:
@@ -101,15 +95,15 @@ spec:
             target:
               type: agent
               name: message-counter-agent
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: message-counter-second
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: message-counter-second
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         timeout: 1s
         resource:
@@ -131,7 +125,6 @@ spec:
     - script:
         content: |
           helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
-          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
         env:
         - name: NAMESPACE
           value: ($namespace)

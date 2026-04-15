@@ -60,14 +60,15 @@ spec:
             strategy: sequential
             loops: true
             maxTurns: 2
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: max-turns-team-query
-          status:
-            phase: done
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: max-turns-team-query
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1

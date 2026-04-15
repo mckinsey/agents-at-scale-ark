@@ -33,15 +33,15 @@ spec:
             labels:
               app.kubernetes.io/instance: mock-llm
               app.kubernetes.io/managed-by: Helm
-    # Wait for MCP resources created from chart to be Ready
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: MCPServer
-          metadata:
-            name: mock-llm-mcp
-          status:
-            (contains(conditions[?type == 'Available'].status || `[]`, 'True')): true
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: MCPServer
+        name: mock-llm-mcp
+        timeout: 2m
+        for:
+          condition:
+            name: Available
+            value: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -50,7 +50,6 @@ spec:
             name: mock-llm-echo-tool
           status:
             state: Ready
-    # Wait for MCP Tools to be discovered (ARK creates mock-llm-mcp-echo Tool discovering MCPServer tools)
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
