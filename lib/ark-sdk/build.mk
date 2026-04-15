@@ -6,9 +6,8 @@ ARK_SDK_OUT := $(OUT)/$(ARK_SDK_LIB_NAME)
 
 # Library-specific variables
 ARK_SDK_VERSION := $(shell cat version.txt)
-# Normalize version to PEP 440 format for wheel filename (e.g., 0.1.58-rc -> 0.1.58rc0)
-# Uses Python's packaging library which handles all edge cases (rc, rc0, rc.1, rc-2, etc.)
-ARK_SDK_PEP440_VERSION := $(shell python3 -c "from packaging.version import Version; print(Version('$(ARK_SDK_VERSION)'))")
+# Normalize version to PEP 440 format for wheel filename (e.g., 0.1.58-rc.3 -> 0.1.58rc3)
+ARK_SDK_PEP440_VERSION := $(shell echo '$(ARK_SDK_VERSION)' | sed 's/-rc\./rc/')
 ARK_SDK_WHEEL_NAME := ark_sdk-$(ARK_SDK_PEP440_VERSION)-py3-none-any.whl
 ARK_SDK_WHL := $(ARK_SDK_OUT)/py-sdk/dist/$(ARK_SDK_WHEEL_NAME)
 ARK_SDK_CRD_FILES := $(wildcard ark/config/crd/bases/ark*.yaml)

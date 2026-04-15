@@ -50,17 +50,18 @@ export function useChatSession({
   );
   const chatKey = `${type}-${name}`;
 
-  const initSessionIdRef = useRef<string>(
-    lastConversationId || createNewSessionId(),
-  );
+  const pendingSessionIdRef = useRef<string | null>(null);
 
   const chatSession = useMemo(() => {
     const existing = chatHistory?.[chatKey];
     if (existing?.messages !== undefined && existing?.sessionId) {
       return existing;
     }
-    return { messages: [], sessionId: initSessionIdRef.current };
-  }, [chatHistory, chatKey]);
+    if (!pendingSessionIdRef.current) {
+      pendingSessionIdRef.current = createNewSessionId(name);
+    }
+    return { messages: [], sessionId: pendingSessionIdRef.current };
+  }, [chatHistory, chatKey, name]);
 
   const chatMessages = chatSession.messages;
   const sessionId = chatSession.sessionId;
@@ -68,14 +69,15 @@ export function useChatSession({
 
   useEffect(() => {
     if (!chatHistory?.[chatKey]) {
-      const sessionIdToUse = initSessionIdRef.current;
+      const sessionIdToUse = pendingSessionIdRef.current ?? createNewSessionId(name);
+      pendingSessionIdRef.current = sessionIdToUse;
       setLastConversationId(sessionIdToUse);
       setChatHistory(prev => ({
         ...(prev || {}),
         [chatKey]: { messages: [], sessionId: sessionIdToUse },
       }));
     }
-  }, [chatKey, chatHistory, setChatHistory, setLastConversationId]);
+  }, [chatKey, chatHistory, name, setChatHistory, setLastConversationId]);
 
   const updateChatMessages = useCallback(
     (
@@ -745,8 +747,8 @@ export function useChatSession({
   );
 
   const clearChat = useCallback(() => {
-    const newSessionId = createNewSessionId();
-    initSessionIdRef.current = newSessionId;
+    const newSessionId = createNewSessionId(name);
+    pendingSessionIdRef.current = newSessionId;
     setLastConversationId(newSessionId);
     setChatHistory(prev => ({
       ...(prev || {}),
@@ -758,7 +760,7 @@ export function useChatSession({
       },
     }));
     setError(null);
-  }, [chatKey, setChatHistory, setLastConversationId]);
+  }, [chatKey, name, setChatHistory, setLastConversationId]);
 
   return {
     messages: chatMessages,
