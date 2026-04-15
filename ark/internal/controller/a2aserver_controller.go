@@ -195,6 +195,9 @@ func (r *A2AServerReconciler) updateStatusWithConditions(ctx context.Context, a2
 	}
 	err := r.Status().Update(ctx, a2aServer)
 	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
 		logf.FromContext(ctx).Error(err, "failed to update A2AServer status")
 	}
 	return err

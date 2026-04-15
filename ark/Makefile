@@ -53,6 +53,7 @@ help: ## Display this help.
 manifests: controller-gen ## Generate CRDs and sync to Helm chart.
 	$(CONTROLLER_GEN) rbac:roleName=ark-controller-role,fileName=ark_controller_role.yaml crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 	@./scripts/sync-chart-crds.sh
+	@./scripts/patch-webhook-match-conditions.py
 	@mkdir -p internal/apiserver/crds
 	@cp config/crd/bases/*.yaml internal/apiserver/crds/
 
@@ -92,7 +93,7 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 ##@ Build
 
 .PHONY: build
-build: validate-chart-crds manifests generate fmt vet ## Build manager binary.
+build: validate-chart-crds validate-chart-webhooks manifests generate fmt vet ## Build manager binary.
 	go build $(LDFLAGS) -o bin/manager cmd/main.go
 
 .PHONY: build-completions
@@ -137,6 +138,10 @@ chart: manifests
 .PHONY: validate-chart-crds
 validate-chart-crds: ## Validate that CRDs in Helm chart match source CRDs
 	@./scripts/validate-chart-crds.sh
+
+.PHONY: validate-chart-webhooks
+validate-chart-webhooks: ## Validate that webhooks in Helm chart match source webhooks
+	@./scripts/validate-chart-webhooks.sh
 
 .PHONY: build-container
 build-container: ## Build the ark-controller

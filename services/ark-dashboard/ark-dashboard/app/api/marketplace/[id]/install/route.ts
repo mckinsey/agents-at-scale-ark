@@ -25,6 +25,18 @@ async function checkHelmAvailable(): Promise<{
   }
 }
 
+/**
+ * Maps source item type to marketplace installation path category.
+ * Services and executors have dedicated paths; agents and demos use 'agents'.
+ */
+function getMarketplaceCategoryPath(
+  itemType?: 'service' | 'agent' | 'demo' | 'executor',
+): string {
+  if (itemType === 'service') return 'services';
+  if (itemType === 'executor') return 'executors';
+  return 'agents';
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -79,7 +91,7 @@ export async function POST(
     // Return the command for user to run
     if (mode === 'command') {
       // Generate both helm and ark CLI commands
-      const arkCommand = `ark install marketplace/${item.type === 'service' ? 'services' : 'agents'}/${id}`;
+      const arkCommand = `ark install marketplace/${getMarketplaceCategoryPath(item.type)}/${id}`;
 
       return NextResponse.json({
         status: 'command',
@@ -103,9 +115,7 @@ export async function POST(
           status: 'command',
           name: item.name || id,
           helmCommand,
-          arkCommand: `ark install marketplace/${
-            item.type === 'service' ? 'services' : 'agents'
-          }/${id}`,
+          arkCommand: `ark install marketplace/${getMarketplaceCategoryPath(item.type)}/${id}`,
           namespace: ark.namespace,
           message:
             'Direct installation not available. Run this command in your terminal:',
@@ -133,9 +143,7 @@ export async function POST(
         status: 'command',
         name: item.name || id,
         helmCommand,
-        arkCommand: `ark install marketplace/${
-          item.type === 'service' ? 'services' : 'agents'
-        }/${id}`,
+        arkCommand: `ark install marketplace/${getMarketplaceCategoryPath(item.type)}/${id}`,
         namespace: ark.namespace,
         message:
           'Direct installation not available. Run this command in your terminal:',
