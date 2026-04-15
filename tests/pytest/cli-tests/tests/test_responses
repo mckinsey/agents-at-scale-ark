@@ -1,0 +1,593 @@
+import base64
+import json
+import os
+import subprocess
+import time
+
+import pytest
+import requests
+
+REASONING_KEY = "executor-openai-responses.ark.mckinsey.com/reasoning"
+TOOLS_KEY     = "executor-openai-responses.ark.mckinsey.com/tools"
+SCHEMA_KEY    = "executor-openai-responses.ark.mckinsey.com/output-schema"
+
+MODEL_NON_GPT5 = "gpt-4o"
+MODEL_GPT5     = "gpt-5.2-2025-12-11"
+MODEL_O1       = "o1"
+MODEL_O3       = "o3"
+MODEL_O4_MINI  = "o4-mini"
+
+WEB_SEARCH_TOOL = [
+    {
+        "type": "web_search_preview",
+        "user_location": {"type": "approximate", "country": "GB", "city": "London", "region": "London"},
+    }
+]
+
+COMPANY_LOOKUP_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "company_name":           {"type": "string"},
+        "website_url":            {"type": "string"},
+        "companies_house_number": {"type": "string"},
+        "registered_address":     {"type": "string"},
+        "company_status":         {"type": "string"},
+    },
+    "required": [
+        "company_name", "website_url", "companies_house_number",
+        "registered_address", "company_status",
+    ],
+    "additionalProperties": False,
+}
+
+SQL_CFG_TOOL = [
+    {
+        "type": "custom",
+        "name": "generate_sql",
+        "description": "Generate a valid read-only PostgreSQL SELECT query constrained by grammar",
+        "format": {
+            "type": "grammar",
+            "syntax": "lark",
+            "definition": (
+                'SP: " "\nCOMMA: ","\nGT: ">"\nLT: "<"\nEQ: "="\nSEMI: ";"\n\n'
+                'start: "SELECT" SP select_list SP "FROM" SP table '
+                'where_clause? order_clause? limit_clause SEMI\n\n'
+                'select_list: "*" | column (COMMA SP column)*\ncolumn: IDENTIFIER\n\n'
+                'table: IDENTIFIER\n\n'
+                'where_clause: SP "WHERE" SP condition (SP "AND" SP condition)*\n'
+                'condition: IDENTIFIER SP op SP value\n'
+                'op: GT | LT | EQ | ">=" | "<=" | "!="\n'
+                'value: NUMBER | QUOTED_STRING\n\n'
+                'order_clause: SP "ORDER" SP "BY" SP IDENTIFIER SP ("ASC" | "DESC")\n'
+                'limit_clause: SP "LIMIT" SP NUMBER\n\n'
+                'IDENTIFIER: /[A-Za-z_][A-Za-z0-9_]*/\nNUMBER: /[0-9]+/\n'
+                "QUOTED_STRING: /\\'[^']*\\'/\n"
+            ),
+        },
+    }
+]
+
+
+@pytest.mark.executor
+class TestOpenAIResponsesExecutor:
+    """
+    Live E2E tests for executor-openai-responses against PR #211 patterns.
+
+    Tests patterns from:
+      feat(openai-responses): improve example agents and docs
+      https://github.com/mckinsey/agents-at-scale-marketplace/pull/211
+
+    Required env vars:
+      CICD_OPENAI_API_KEY    API key / JWT for the OpenAI or gateway endpoint
+      CICD_OPENAI_BASE_URL   Base URL (defaults to https://api.openai.com/v1)
+
+    Optional env vars:
+      EXECUTOR_URL           Full URL of the /execute endpoint.
+                             If unset, the test auto-discovers and port-forwards
+                             svc/executor-openai-responses on a free local port.
+    """
+
+    executor_url: str = ""
+    api_key: str = ""
+    base_url: str = ""
+    _pf_proc: subprocess.Popen = None
+
+    @classmethod
+    def setup_class(cls):
+        cls.api_key = os.environ.get("CICD_OPENAI_API_KEY", "")
+        if not cls.api_key:
+            pytest.skip("CICD_OPENAI_API_KEY not set")
+
+        cls.base_url = os.environ.get("CICD_OPENAI_BASE_URL", "")
+        if not cls.base_url:
+            pytest.skip("CICD_OPENAI_BASE_URL not set")
+
+        cls.executor_url = os.environ.get("EXECUTOR_URL", "")
+        if not cls.executor_url:
+            cls.executor_url, cls._pf_proc = cls._start_port_forward()
+
+        cls._wait_for_executor()
+        cls._clear_sessions()
+
+    @classmethod
+    def teardown_class(cls):
+        if cls._pf_proc is not None:
+            cls._pf_proc.terminate()
+            cls._pf_proc = None
+
+    @classmethod
+    def _start_port_forward(cls) -> tuple:
+        result = subprocess.run(
+            ["kubectl", "get", "svc", "executor-openai-responses", "-n", "default"],
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            pytest.skip(
+                "executor-openai-responses service not found and EXECUTOR_URL not set. "
+                "Deploy the executor or set EXECUTOR_URL."
+            )
+
+        port = 18080
+        proc = subprocess.Popen(
+            ["kubectl", "port-forward", "-n", "default",
+             "svc/executor-openai-responses", f"{port}:8000"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        time.sleep(2)
+        return f"http://localhost:{port}/execute", proc
+
+    @classmethod
+    def _wait_for_executor(cls, retries: int = 10, delay: float = 1.0):
+        health_url = cls.executor_url.replace("/execute", "/health")
+        for _ in range(retries):
+            try:
+                resp = requests.get(health_url, timeout=3)
+                if resp.status_code == 200:
+                    return
+            except requests.exceptions.ConnectionError:
+                pass
+            time.sleep(delay)
+        pytest.skip(f"Executor not reachable at {cls.executor_url} after {retries} retries")
+
+    @classmethod
+    def _clear_sessions(cls):
+        pod = subprocess.run(
+            ["kubectl", "get", "pod", "-n", "default",
+             "-l", "app=executor-openai-responses",
+             "-o", "jsonpath={.items[0].metadata.name}"],
+            capture_output=True, text=True,
+        )
+        if pod.returncode == 0 and pod.stdout.strip():
+            subprocess.run(
+                ["kubectl", "exec", "-n", "default", pod.stdout.strip(),
+                 "--", "rm", "-rf", "/data/sessions/"],
+                capture_output=True,
+            )
+
+    def _make_request(
+        self,
+        user_input: str,
+        model: str = MODEL_NON_GPT5,
+        prompt: str = "You are a helpful assistant.",
+        agent_annotations: dict = None,
+        ee_annotations: dict = None,
+        query_annotations: dict = None,
+        conversation_id: str = "",
+    ) -> dict:
+        return {
+            "agent": {
+                "name": "test-agent",
+                "namespace": "default",
+                "prompt": prompt,
+                "model": {
+                    "name": model,
+                    "type": "completions",
+                    "config": {
+                        "openai": {
+                            "apiKey": self.api_key,
+                            "baseUrl": self.base_url,
+                        }
+                    },
+                },
+                "annotations": agent_annotations or {},
+            },
+            "userInput": {"role": "user", "content": user_input},
+            "execution_engine_annotations": ee_annotations or {},
+            "query_annotations": query_annotations or {},
+            "conversationId": conversation_id,
+        }
+
+    def _post(self, payload: dict, timeout: int = 60) -> tuple:
+        resp = requests.post(self.executor_url, json=payload, timeout=timeout)
+        data = resp.json()
+        messages = data.get("messages", [])
+        content = messages[0]["content"] if messages else ""
+        return resp.status_code, content, data
+
+    # ------------------------------------------------------------------
+    # T01 — Basic happy path: /execute returns a valid response
+    # Verifies executor handles execution_engine_annotations, query_annotations,
+    # and AgentConfig.annotations without crashing (requires ark-sdk >= 0.1.59).
+    # ------------------------------------------------------------------
+
+    @pytest.mark.executor
+    def test_t01_basic_happy_path_sdk_0159_fix(self):
+        status, content, data = self._post(
+            self._make_request(
+                "What does GDPR stand for? Spell out the full name.",
+                conversation_id="t01-happy-path",
+            )
+        )
+        assert status == 200, (
+            f"HTTP {status} — executor crashed. "
+            f"If this is AttributeError on execution_engine_annotations, "
+            f"the pod is running ark-sdk < 0.1.59. Upgrade the SDK. "
+            f"Response: {data}"
+        )
+        assert data.get("error", "") == "", f"Executor returned error: {data['error']}"
+        assert content, "No content in response"
+        assert "general data protection regulation" in content.lower(), (
+            f"Expected full GDPR expansion in response, got: {content[:200]}"
+        )
+
+    @pytest.mark.executor
+    def test_t13_reasoning_cascade(self):
+        status, content, data = self._post(
+            self._make_request(
+                "How many permanent members does the UN Security Council have?",
+                model=MODEL_NON_GPT5,
+                agent_annotations={REASONING_KEY: '{"effort": "medium"}'},
+                ee_annotations={REASONING_KEY: '{"effort": "high"}'},
+                query_annotations={REASONING_KEY: '{"effort": "low"}'},
+                conversation_id="t13-cascade-test",
+            )
+        )
+        assert status == 200, f"HTTP {status}: {data}"
+        assert content, "Empty response"
+        assert "5" in content or "five" in content.lower(), (
+            f"Expected '5' or 'five' (permanent members) with query-level reasoning, got: {content[:200]}"
+        )
+
+    @pytest.mark.executor
+    def test_t14_web_search_only(self):
+        status, content, data = self._post(
+            self._make_request(
+                "ADAM GROOMING BN LTD",
+                model=MODEL_GPT5,
+                prompt=(
+                    "You are an expert web search agent located in UK. "
+                    "Find the official business website of a given UK company. "
+                    "Return only the company's own domain — never URLs from Companies House, "
+                    "LinkedIn, Yell, Google Maps, or any directory. Return only the URL."
+                ),
+                agent_annotations={
+                    TOOLS_KEY: json.dumps(WEB_SEARCH_TOOL),
+                    REASONING_KEY: '{"effort": "low"}',
+                },
+                conversation_id="t14-websearch-test",
+            ),
+            timeout=60,
+        )
+        assert status == 200, f"HTTP {status}: {data}"
+        assert content, "Empty response"
+        assert any(w in content.lower() for w in ["http", "www", ".com"]), (
+            f"Expected a URL in response, got: {content[:200]}"
+        )
+
+
+    @pytest.mark.executor
+    def test_t15_web_search_structured_output(self):
+        status, content, data = self._post(
+            self._make_request(
+                "ADAM GROOMING BN LTD",
+                model=MODEL_GPT5,
+                prompt=(
+                    "You are a company research assistant in the UK. "
+                    "Search the web and return structured data for: "
+                    "1. official company name, 2. primary website URL, "
+                    "3. UK Companies House registration number, "
+                    "4. official registered address, 5. current company status."
+                ),
+                agent_annotations={
+                    TOOLS_KEY: json.dumps(WEB_SEARCH_TOOL),
+                    REASONING_KEY: '{"effort": "medium"}',
+                    SCHEMA_KEY: json.dumps(COMPANY_LOOKUP_SCHEMA),
+                },
+                conversation_id="t15-struct-websearch-test",
+            ),
+            timeout=90,
+        )
+        assert status == 200, f"HTTP {status}: {data}"
+        assert content, "Empty response"
+
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            pytest.fail(f"Response is not valid JSON: {content[:300]}")
+
+        required = {
+            "company_name", "website_url", "companies_house_number",
+            "registered_address", "company_status",
+        }
+        missing = required - set(parsed.keys())
+        assert not missing, f"JSON missing fields {missing}: {content[:300]}"
+
+
+    @pytest.mark.executor
+    def test_t16_sql_cfg_custom_tool(self):
+        status, content, data = self._post(
+            self._make_request(
+                "Retrieve all active contracts with a total value above 50000 from the contracts table, ordered by value descending, limited to 10 results",
+                model=MODEL_GPT5,
+                prompt=(
+                    "You are a SQL query generator. Generate a valid PostgreSQL SELECT "
+                    "query using the generate_sql tool. Only SELECT queries allowed."
+                ),
+                agent_annotations={
+                    TOOLS_KEY: json.dumps(SQL_CFG_TOOL),
+                    REASONING_KEY: '{"effort": "low"}',
+                },
+                conversation_id="t16-sql-cfg-test",
+            )
+        )
+        assert status == 200, f"HTTP {status}: {data}"
+        assert content, "Empty response"
+        assert "SELECT" in content.upper() and "FROM" in content.upper(), (
+            f"Expected a SQL SELECT statement, got: {content[:200]}"
+        )
+
+
+    @pytest.mark.executor
+    def test_t17_query_level_reasoning_only(self):
+        status, content, data = self._post(
+            self._make_request(
+                "What are the key differences between retrieval-augmented generation and fine-tuning for enterprise knowledge management?",
+                model=MODEL_GPT5,
+                query_annotations={REASONING_KEY: '{"effort": "low"}'},
+                conversation_id="t17-query-reasoning-test",
+            )
+        )
+        assert status == 200, f"HTTP {status}: {data}"
+        assert len(content) > 50, f"Unexpectedly short response: {repr(content)}"
+        assert any(w in content.lower() for w in ["retrieval", "fine-tun", "knowledge"]), (
+            f"Response does not address the question: {content[:200]}"
+        )
+
+
+    @pytest.mark.executor
+    def test_t18_debug_logging_tools_forwarded(self):
+        status, content, data = self._post(
+            self._make_request(
+                "What is the current base interest rate set by the Bank of England?",
+                model=MODEL_NON_GPT5,
+                agent_annotations={TOOLS_KEY: json.dumps([{"type": "web_search_preview"}])},
+                conversation_id="t18-debug-logging-test",
+            ),
+            timeout=60,
+        )
+        assert status == 200, f"HTTP {status}: {data}"
+        assert len(content) > 10, f"Unexpectedly short response: {repr(content)}"
+        assert "%" in content or "percent" in content.lower() or "rate" in content.lower(), (
+            f"Expected interest rate information in response, got: {content[:200]}"
+        )
+
+
+
+    @pytest.mark.executor
+    def test_t19a_gpt52_enables_reasoning(self):
+        status, content, data = self._post(
+            self._make_request(
+                (
+                    "A portfolio of 5 UK commercial properties generates monthly rents of "
+                    "£2,200, £1,750, £3,100, £1,900, and £2,650. "
+                    "What is the total annual rental income?"
+                ),
+                model="gpt-5.2-2025-12-11",
+                agent_annotations={REASONING_KEY: '{"effort": "low"}'},
+                conversation_id="t19a-gpt52-reasoning-test",
+            )
+        )
+        assert status == 200, f"HTTP {status}: {data}"
+        assert content, "Empty response"
+        assert "139,200" in content or "139200" in content, (
+            f"Expected annual rental income of £139,200, got: {content[:200]}"
+        )
+
+    @pytest.mark.executor
+    def test_t19b_o3_reasoning_effort(self):
+        status, content, data = self._post(
+            self._make_request(
+                (
+                    "A fund of £50,000 is invested at a compound annual growth rate of 7% "
+                    "for 3 years. What is the final value to the nearest pound?"
+                ),
+                model="o3",
+                agent_annotations={REASONING_KEY: '{"effort": "low"}'},
+                conversation_id="t19b-o3-reasoning-test",
+            )
+        )
+        assert status == 200, f"HTTP {status}: {data}"
+        assert content, "Empty response"
+        assert "61,252" in content or "61252" in content, (
+            f"Expected compound growth result of £61,252, got: {content[:200]}"
+        )
+
+
+    @pytest.mark.executor
+    def test_t20_tool_cascade_query_overrides_agent(self):
+        status, content, data = self._post(
+            self._make_request(
+                "What are the current average commercial office rental rates per square foot in the city centre?",
+                model=MODEL_GPT5,
+                prompt="You are a commercial property research assistant. Answer questions about real estate markets in the user's location.",
+                agent_annotations={
+                    TOOLS_KEY: json.dumps([{
+                        "type": "web_search_preview",
+                        "user_location": {
+                            "type": "approximate",
+                            "country": "GB",
+                            "city": "London",
+                            "region": "London",
+                        },
+                    }]),
+                },
+                query_annotations={
+                    TOOLS_KEY: json.dumps([{
+                        "type": "web_search_preview",
+                        "user_location": {
+                            "type": "approximate",
+                            "country": "US",
+                            "city": "New York",
+                            "region": "New York",
+                        },
+                    }]),
+                },
+                conversation_id="t20-tool-cascade-test",
+            ),
+            timeout=60,
+        )
+        assert status == 200, f"HTTP {status}: {data}"
+        assert len(content) > 10, f"Unexpectedly short response: {repr(content)}"
+        assert any(w in content.lower() for w in ["new york", "york", "nyc", "manhattan"]), (
+            f"Expected New York result (query annotation should override agent's London location). "
+            f"Got: {content[:300]}"
+        )
+
+    # ------------------------------------------------------------------
+    # T21 — o4-mini basic completion (no reasoning params)
+    # o4-mini: compact reasoning model for cost-efficient straightforward tasks.
+    # Per best practices: use direct prompts, no "think step by step".
+    # ------------------------------------------------------------------
+
+    @pytest.mark.executor
+    def test_t21_o4_mini_basic_completion(self):
+        status, content, data = self._post(
+            self._make_request(
+                "What is the legal definition of a data processor under GDPR, and how does it differ from a data controller?",
+                model=MODEL_O4_MINI,
+                prompt="You are a legal and compliance assistant. Answer questions about data protection law accurately and concisely.",
+                conversation_id="t21-o4mini-basic-test",
+            ),
+            timeout=60,
+        )
+        assert status == 200, f"HTTP {status}: {data}"
+        assert content, "Empty response"
+        assert len(content) > 50, f"Unexpectedly short response: {repr(content)}"
+        assert any(w in content.lower() for w in ["processor", "controller", "gdpr", "personal data"]), (
+            f"Response does not address GDPR data roles: {content[:200]}"
+        )
+
+    # ------------------------------------------------------------------
+    # T22 — o4-mini with low reasoning effort
+    # o4-mini: compact reasoning model for cost-efficient straightforward tasks.
+    # Best practices: use low effort for simple problems with o4-mini.
+    # ------------------------------------------------------------------
+
+    @pytest.mark.executor
+    def test_t22_o4_mini_reasoning_effort(self):
+        status, content, data = self._post(
+            self._make_request(
+                (
+                    "A SaaS company has £180,000 in annual recurring revenue across 60 customers. "
+                    "Three enterprise customers churn, each paying £2,400 per year. "
+                    "What is the new ARR after churn?"
+                ),
+                model=MODEL_O4_MINI,
+                prompt="You are a SaaS financial analyst. Provide precise numerical answers.",
+                agent_annotations={REASONING_KEY: '{"effort": "low"}'},
+                conversation_id="t22-o4mini-reasoning-test",
+            ),
+            timeout=60,
+        )
+        assert status == 200, f"HTTP {status}: {data}"
+        assert content, "Empty response"
+        assert "172,800" in content or "172800" in content, (
+            f"Expected new ARR of £172,800 after churn, got: {content[:200]}"
+        )
+
+
+    @pytest.mark.executor
+    def test_t23_o3_high_reasoning_complex_problem(self):
+        status, content, data = self._post(
+            self._make_request(
+                (
+                    "A law firm charges the following rates: Associate £250/hour, "
+                    "Senior Associate £400/hour, Partner £650/hour. "
+                    "A client engagement requires 40 hours of Associate work, "
+                    "15 hours of Senior Associate work, and 8 hours of Partner work. "
+                    "A 10% discount applies because the client has a 3-year retainer. "
+                    "What is the total invoice amount after the discount?"
+                ),
+                model=MODEL_O3,
+                prompt="You are a legal billing analyst. Provide the exact final invoice amount in pounds.",
+                agent_annotations={REASONING_KEY: '{"effort": "high"}'},
+                conversation_id="t23-o3-complex-reasoning-test",
+            ),
+            timeout=120,
+        )
+        assert status == 200, f"HTTP {status}: {data}"
+        assert content, "Empty response"
+        assert "19,080" in content or "19080" in content, (
+            f"Expected discounted invoice of £19,080, got: {content[:200]}"
+        )
+
+    @pytest.mark.executor
+    def test_t24_o1_medium_reasoning_document_analysis(self):
+        status, content, data = self._post(
+            self._make_request(
+                (
+                    "```\n"
+                    "Contract clause: The licensee may not sublicense, sell, resell, "
+                    "transfer, assign, or otherwise commercially exploit or make available "
+                    "to any third party the Service or the Content.\n"
+                    "```\n"
+                    "Does this clause prohibit SaaS reselling? Answer yes or no with one reason."
+                ),
+                model=MODEL_O1,
+                prompt="You are a legal analysis assistant. Analyze contract clauses accurately.",
+                agent_annotations={REASONING_KEY: '{"effort": "medium"}'},
+                conversation_id="t24-o1-doc-analysis-test",
+            ),
+            timeout=120,
+        )
+        assert status == 200, f"HTTP {status}: {data}"
+        assert content, "Empty response"
+        assert "yes" in content.lower(), (
+            f"Expected 'yes' (clause prohibits reselling), got: {content[:200]}"
+        )
+
+    @pytest.mark.executor
+    def test_t25_multi_turn_zdr_limit(self):
+        conv_id = "t25-multi-turn-zdr"
+
+        status1, content1, data1 = self._post(
+            self._make_request(
+                "My name is Alex and I work in financial risk management. Remember this.",
+                model=MODEL_GPT5,
+                prompt="You are a helpful assistant with memory of the conversation.",
+                conversation_id=conv_id,
+            )
+        )
+        assert status1 == 200, f"Turn 1 failed with HTTP {status1}: {data1}"
+        assert content1, "Turn 1: empty response"
+
+        status2, content2, data2 = self._post(
+            self._make_request(
+                "What is my name and what field do I work in?",
+                model=MODEL_GPT5,
+                prompt="You are a helpful assistant with memory of the conversation.",
+                conversation_id=conv_id,
+            )
+        )
+        error2 = data2.get("error", "")
+        assert status2 == 500, (
+            f"Expected HTTP 500 (ZDR rejection) on turn 2, got {status2}. "
+            f"If this is 200 the gateway ZDR policy may have changed. Response: {data2}"
+        )
+        assert "Zero Data Retention" in error2, (
+            f"Expected ZDR error on turn 2, got: {error2[:300]}"
+        )
+        assert "previous_response_id" in error2, (
+            f"Expected previous_response_id in error, got: {error2[:300]}"
+        )
