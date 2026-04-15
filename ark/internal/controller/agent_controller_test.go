@@ -501,5 +501,43 @@ var _ = Describe("Agent Controller", func() {
 
 			Expect(controllerReconciler.agentDependsOnExecutionEngine(agentWithoutEngine, "any-engine")).To(BeFalse())
 		})
+
+		It("should not error when updating status of a deleted agent", func() {
+			const deletedAgentName = "test-deleted-status-agent"
+			deletedAgentNamespacedName := types.NamespacedName{
+				Name:      deletedAgentName,
+				Namespace: "default",
+			}
+
+			By("creating an agent")
+			deletedAgent := &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      deletedAgentName,
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.AgentSpec{
+					Prompt: "test prompt",
+				},
+			}
+			Expect(k8sClient.Create(ctx, deletedAgent)).To(Succeed())
+
+			controllerReconciler := &AgentReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Eventing: eventnoop.NewProvider(),
+			}
+
+			By("reconciling to initialize status")
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: deletedAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("deleting the agent")
+			Expect(k8sClient.Delete(ctx, deletedAgent)).To(Succeed())
+
+			By("calling updateStatus on the deleted agent should not error")
+			Expect(controllerReconciler.updateStatus(ctx, deletedAgent)).To(Succeed())
+		})
 	})
 })

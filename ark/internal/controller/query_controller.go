@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -653,6 +654,9 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 	}
 	err := r.Status().Update(ctx, query)
 	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
 		logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
 	}
 	return err

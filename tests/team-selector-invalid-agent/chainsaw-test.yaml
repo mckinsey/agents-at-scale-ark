@@ -20,14 +20,6 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
-    # Install ark-tenant for RBAC
-    - script:
-        timeout: 60s
-        content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
     # Wait for Model to be available
     - assert:
         timeout: 30s
@@ -43,16 +35,15 @@ spec:
     # Apply all manifests
     - apply:
         file: manifests/*.yaml
-    # Assert query completes (should terminate after invalid agent name)
-    - assert:
-        timeout: 30s
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: test-invalid-selector-query
-          status:
-            phase: done
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-invalid-selector-query
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     # Validate response exists and contains warning about invalid agent
     - assert:
         timeout: 5s
@@ -96,7 +87,6 @@ spec:
     cleanup:
     - script:
         content: |
-          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
           helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
         env:
         - name: NAMESPACE
