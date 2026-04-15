@@ -80,6 +80,20 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
   kubectl -n ark-system wait --for=condition=ready pod -l app=ark-storage-dev --timeout=120s
 fi
 
+echo "=== Pre-pulling test images (background) ==="
+IMAGE_PULL_PIDS=()
+for img in \
+  docker.io/curlimages/curl:latest \
+  docker.io/mockserver/mockserver:5.15.0 \
+  ghcr.io/orange-opensource/hurl:6.1.1 \
+  docker.io/python:3.12-bookworm \
+  ghcr.io/dwmkerr/mock-llm:0.1.28 \
+  ghcr.io/dwmkerr/mock-llm:latest; do
+  sudo k3s ctr images pull "$img" &
+  IMAGE_PULL_PIDS+=($!)
+done
+echo "Image pulls started (PIDs: ${IMAGE_PULL_PIDS[*]})"
+
 echo "=== Installing ARK Controller ==="
 cd "${REPO_ROOT}/ark"
 
@@ -219,6 +233,12 @@ PROBE_EOF
     exit 1
   fi
 fi
+
+echo "=== Waiting for image pre-pulls to complete ==="
+for pid in "${IMAGE_PULL_PIDS[@]}"; do
+  wait "$pid" || echo "Warning: image pull PID $pid failed"
+done
+echo "Image pre-pulls done"
 
 echo
 echo "=== Setup Complete! ==="
