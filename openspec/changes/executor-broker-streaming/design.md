@@ -35,6 +35,8 @@ The simplest path to unblocking the UI. `ExecutorApp` calls `execute_agent()`, g
 
 Executors call `await self.stream_chunk(token)` inside `execute_agent()`. `ExecutorApp` injects a live `BrokerClient` before calling `execute_agent()` when the broker is configured. This keeps the executor interface simple (single method, same return type) and makes streaming opt-in without breaking existing executors.
 
+`stream_chunk()` sets a boolean flag `_streamed` on the executor instance. After `execute_agent()` returns, `ExecutorApp` checks `_streamed` to decide whether to skip the single-chunk fallback. Thread safety is not a concern — asyncio executors run in a single event loop thread, so `_streamed` is never accessed concurrently.
+
 **Alternative considered**: Separate `stream_agent()` async generator method. Rejected — requires executors to restructure their execution loop into a generator, and introduces two methods that both need to be kept in sync.
 
 ### Decision: OpenAI `chat.completion.chunk` format
