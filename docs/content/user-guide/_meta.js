@@ -12,6 +12,7 @@ export default {
   tools: 'Creating Tools and MCP Servers',
   'workflow-templates': 'Workflow Templates',
   files: 'Managing Files',
+  'executor-credentials': 'Configuring Executor Credentials',
   'ark-cli': 'The Ark CLI',
 
   '---patterns': { type: 'separator', title: 'Patterns and guidance' },
