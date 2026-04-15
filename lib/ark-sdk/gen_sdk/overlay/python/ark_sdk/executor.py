@@ -2,8 +2,11 @@
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any, Optional
 from pydantic import BaseModel
+
+if TYPE_CHECKING:
+    from .broker import BrokerClient
 
 
 logger = logging.getLogger(__name__)
@@ -75,7 +78,15 @@ class BaseExecutor(ABC):
     def __init__(self, engine_name: str):
         """Initialize the executor with a name."""
         self.engine_name = engine_name
+        self._broker_client: Optional["BrokerClient"] = None
+        self._streamed: bool = False
         logger.info(f"{engine_name} executor initialized")
+
+    async def stream_chunk(self, chunk: str) -> None:
+        """Send a streaming chunk to the broker. No-op if broker not configured."""
+        if self._broker_client:
+            self._streamed = True
+            await self._broker_client.send_chunk(chunk)
 
     @abstractmethod
     async def execute_agent(self, request: ExecutionEngineRequest) -> list[Message]:
