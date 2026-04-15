@@ -21,17 +21,15 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
     # Wait for Model to be available
-    - assert:
-        timeout: 30s
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          metadata:
-            name: test-model
-          status:
-            conditions:
-            - type: ModelAvailable
-              status: "True"
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model
+        timeout: 90s
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
     # Apply all manifests
     - apply:
         file: manifests/*.yaml
