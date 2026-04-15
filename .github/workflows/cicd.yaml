@@ -774,11 +774,19 @@ jobs:
         env:
           CICD_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
           CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL }}
+          CICD_ANTHROPIC_API_KEY: ${{ secrets.CICD_ANTHROPIC_API_KEY }}
+          CICD_ANTHROPIC_BASE_URL: ${{ secrets.CICD_ANTHROPIC_BASE_URL }}
+          CICD_AZURE_API_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
+          CICD_AZURE_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
         run: |
           cd tests/pytest/ui-tests
           cat > .env << EOF
           CICD_OPENAI_API_KEY=${CICD_OPENAI_API_KEY}
           CICD_OPENAI_BASE_URL=${CICD_OPENAI_BASE_URL}
+          CICD_ANTHROPIC_API_KEY=${CICD_ANTHROPIC_API_KEY}
+          CICD_ANTHROPIC_BASE_URL=${CICD_ANTHROPIC_BASE_URL}
+          CICD_AZURE_API_KEY=${CICD_AZURE_API_KEY}
+          CICD_AZURE_BASE_URL=${CICD_AZURE_BASE_URL}
           EOF
 
       - name: Start port-forwarding
@@ -882,6 +890,12 @@ jobs:
       - name: Run CLI tests
         env:
           PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
+          CICD_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
+          CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
+          CICD_ANTHROPIC_API_KEY: ${{ secrets.CICD_ANTHROPIC_API_KEY }}
+          CICD_ANTHROPIC_BASE_URL: ${{ secrets.CICD_ANTHROPIC_BASE_URL }}
+          CICD_AZURE_API_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
+          CICD_AZURE_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
         run: |
           cd tests/pytest/cli-tests/tests
           pytest . -n 3 --dist loadscope -v --tb=short --log-cli-level=INFO
@@ -904,6 +918,84 @@ jobs:
         with:
           name: cluster-logs-cli-${{ github.sha }}
           path: /tmp/cluster-logs
+          retention-days: 7
+
+  e2e-executor-tests:
+    needs: [setup-container-cache-registry, build-containers]
+    runs-on: ubuntu-24.04
+    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' && secrets.CICD_OPENAI_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-e2e
+        with:
+          ark-image-tag: ${{ github.sha }}
+          install-coverage: "false"
+          ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
+          ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
+          ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install executor test dependencies
+        run: |
+          pip install -r tests/pytest/ui-tests/requirements.txt
+          pip install httpx
+
+      - name: Deploy executor-openai-responses
+        env:
+          OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
+        run: |
+          kubectl create secret generic openai-executor-ci-token \
+            --from-literal=token="${OPENAI_API_KEY}" \
+            --namespace default \
+            --dry-run=client -o yaml | kubectl apply -f -
+          helm upgrade --install executor-openai-responses \
+            oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/executor-openai-responses \
+            --namespace default \
+            --set openai.secretName=openai-executor-ci-token \
+            --set openai.secretKey=token \
+            --set openai.baseUrl="${OPENAI_BASE_URL}" \
+            --wait \
+            --timeout=5m
+
+      - name: Port-forward executor service
+        run: |
+          kubectl port-forward -n default svc/executor-openai-responses 18080:8000 &
+          sleep 3
+
+      - name: Run executor E2E tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
+          EXECUTOR_URL: "http://localhost:18080/execute"
+          CICD_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
+          CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL }}
+        run: |
+          cd tests/pytest/cli-tests/tests
+          pytest test_openai_responses_executor.py -v --tb=short --log-cli-level=INFO
+
+      - name: Upload executor test logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: executor-test-logs-${{ github.sha }}
+          path: tests/pytest/cli-tests/tests/*.log
+          retention-days: 7
+
+      - name: Collect cluster logs
+        if: always()
+        run: kubectl cluster-info dump --all-namespaces --output-directory=/tmp/cluster-logs-executor
+
+      - name: Upload cluster logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cluster-logs-executor-${{ github.sha }}
+          path: /tmp/cluster-logs-executor
           retention-days: 7
 
   build-charts:
@@ -1117,17 +1209,12 @@ jobs:
         build-ark-cli,
       ]
     runs-on: ubuntu-24.04
-    concurrency:
-      group: release-please
-      cancel-in-progress: false
     outputs:
       released: ${{ steps.release-please.outputs.release_created }}
       tag: ${{ steps.release-please.outputs.tag_name }}
       release_type: ${{ steps.release-type.outputs.type }}
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-tags: true
 
       - name: Skip Release (Running Locally)
         if: ${{ env.ACT }}
@@ -1151,7 +1238,6 @@ jobs:
           if [[ "$VERSION" != *-rc.* && -n "$RC_TAGS" && -z "$STABLE_TAG" ]]; then
             echo "config=.github/release-please-config.json" >> $GITHUB_OUTPUT
             echo "type=stable" >> $GITHUB_OUTPUT
-            echo "release_as=${VERSION}" >> $GITHUB_OUTPUT
             echo "Promotion detected: RC tags exist for v${VERSION}, releasing stable"
           else
             echo "config=.github/release-please-config-rc.json" >> $GITHUB_OUTPUT
@@ -1167,7 +1253,6 @@ jobs:
           manifest-file: .github/release-please-manifest.json
           config-file: ${{ steps.release-type.outputs.config || '.github/release-please-config-rc.json' }}
           target-branch: main
-          release-as: ${{ steps.release-type.outputs.release_as || '' }}
 
   release-docs:
     needs: [check-release]
