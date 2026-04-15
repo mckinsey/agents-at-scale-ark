@@ -35,6 +35,21 @@ var (
 	ParameterCodec = runtime.NewParameterCodec(Scheme)
 )
 
+type jsonOnlyNegotiatedSerializer struct {
+	serializer.CodecFactory
+}
+
+func (s jsonOnlyNegotiatedSerializer) SupportedMediaTypes() []runtime.SerializerInfo {
+	all := s.CodecFactory.SupportedMediaTypes()
+	result := make([]runtime.SerializerInfo, 0, len(all))
+	for _, info := range all {
+		if info.MediaType != runtime.ContentTypeProtobuf {
+			result = append(result, info)
+		}
+	}
+	return result
+}
+
 func init() {
 	utilruntime.Must(arkv1alpha1.AddToScheme(Scheme))
 	utilruntime.Must(arkv1prealpha1.AddToScheme(Scheme))
@@ -99,6 +114,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	serverConfig := genericapiserver.NewConfig(Codecs)
+	serverConfig.Serializer = jsonOnlyNegotiatedSerializer{Codecs}
 	serverConfig.EffectiveVersion = compatibility.DefaultBuildEffectiveVersion()
 	serverConfig.RequestTimeout = 24 * time.Hour
 	serverConfig.MinRequestTimeout = 86400
@@ -140,6 +156,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 func (s *Server) installAPIGroups(server *genericapiserver.GenericAPIServer, converter storage.TypeConverter) error {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(arkv1alpha1.GroupVersion.Group, Scheme, ParameterCodec, Codecs)
+	apiGroupInfo.NegotiatedSerializer = jsonOnlyNegotiatedSerializer{Codecs}
 
 	printerColumns := GetPrinterColumnRegistry()
 

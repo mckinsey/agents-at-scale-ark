@@ -274,6 +274,9 @@ func (r *AgentReconciler) updateStatus(ctx context.Context, agent *arkv1alpha1.A
 
 	err := r.Status().Update(ctx, agent)
 	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
 		logf.FromContext(ctx).Error(err, "failed to update agent status")
 	}
 	return err
