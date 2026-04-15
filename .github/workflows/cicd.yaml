@@ -891,7 +891,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
           CICD_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
-          CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL }}
+          CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
           CICD_ANTHROPIC_API_KEY: ${{ secrets.CICD_ANTHROPIC_API_KEY }}
           CICD_ANTHROPIC_BASE_URL: ${{ secrets.CICD_ANTHROPIC_BASE_URL }}
           CICD_AZURE_API_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
