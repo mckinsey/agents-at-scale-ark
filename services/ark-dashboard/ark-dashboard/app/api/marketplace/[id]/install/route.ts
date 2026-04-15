@@ -25,6 +25,10 @@ async function checkHelmAvailable(): Promise<{
   }
 }
 
+/**
+ * Maps source item type to marketplace installation path category.
+ * Services and executors have dedicated paths; agents and demos use 'agents'.
+ */
 function getMarketplaceCategoryPath(
   itemType?: 'service' | 'agent' | 'demo' | 'executor',
 ): string {

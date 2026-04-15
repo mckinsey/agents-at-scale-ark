@@ -129,6 +129,20 @@ describe('marketplace-fetcher', () => {
         expect(result.type).toBe('service')
       })
 
+      it('maps "demo" to "demo"', () => {
+        const result = transformGitHubItemToMarketplaceItem(
+          makeGitHubItem({ type: 'demo' }),
+        )
+        expect(result.type).toBe('demo')
+      })
+
+      it('maps "executor" to "executor"', () => {
+        const result = transformGitHubItemToMarketplaceItem(
+          makeGitHubItem({ type: 'executor' }),
+        )
+        expect(result.type).toBe('executor')
+      })
+
       it('maps undefined type to "component"', () => {
         const result = transformGitHubItemToMarketplaceItem(
           makeGitHubItem(),
