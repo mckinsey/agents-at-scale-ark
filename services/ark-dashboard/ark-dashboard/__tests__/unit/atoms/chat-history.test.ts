@@ -110,6 +110,18 @@ describe('Chat History Atoms', () => {
       });
     });
 
+    it('should restore sessions from sessionStorage on a new store (page refresh)', () => {
+      const session: ChatSession = {
+        messages: [{ role: 'user', content: 'Hello' }],
+        sessionId: 'session-1',
+      };
+      store.set(chatHistoryAtom, { 'agent-test': session });
+
+      const newStore = createStore();
+      const restored = newStore.get(chatHistoryAtom);
+      expect(restored['agent-test']).toEqual(session);
+    });
+
     it('should store multiple sessions independently', () => {
       const session1: ChatSession = {
         messages: [],
