@@ -1,7 +1,6 @@
-import json
 import logging
 import pytest
-from playwright.sync_api import Page, expect
+from playwright.sync_api import Page
 from pages.secrets_page import SecretsPage
 from pages.models_page import ModelsPage
 from pages.agents_page import AgentsPage

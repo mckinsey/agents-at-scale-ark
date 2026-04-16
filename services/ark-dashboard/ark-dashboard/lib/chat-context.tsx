@@ -10,7 +10,7 @@ interface ChatContextType {
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 const getInitialOpenChats = (): string[] => {
-  if (typeof window === 'undefined') return [];
+  if (typeof globalThis.window === 'undefined') return [];
 
   try {
     const stored = sessionStorage.getItem('open-chat-windows');
