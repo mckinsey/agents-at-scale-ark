@@ -18,7 +18,10 @@ class AgentsPage(BasePage):
     SAVE_BUTTON = "button:has-text('Create Agent'), button:has-text('Save Changes'), button:has-text('Add Agent'), button:has-text('Create'), button:has-text('Save'), button[type='submit']"
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
     CONFIRM_DELETE_BUTTON = "button:has-text('Delete'), button:has-text('Confirm'), button:has-text('Yes')"
-    
+    CHAT_BUTTON = "button:has(svg.lucide-message-circle)"
+    CHAT_WINDOW = "div[data-slot='card']"
+    CLOSE_CHAT_BUTTON = "button[aria-label='Close chat']"
+
     TEST_DATA = {
         "default": {
             "description": "handle queries",
@@ -55,6 +58,21 @@ class AgentsPage(BasePage):
                     self.wait_for_navigation_complete()
                     self.wait_for_element(self.ADD_AGENT_BUTTON, timeout=10000)
         return False
+
+    def open_agent_chat(self, agent_name: str):
+        if self.page.locator(self.CHAT_WINDOW).is_visible(timeout=100):
+            logger.error("Chat already open")
+            return
+        row = self.page.locator(f"[role='link']:has(p.truncate.text-sm.font-medium:has-text('{agent_name}'))").first
+        row.locator(self.CHAT_BUTTON).click()
+        self.wait_for_element(self.CHAT_WINDOW)
+
+    def close_agent_chat(self):
+        if not self.page.locator(self.CHAT_WINDOW).is_visible(timeout=1000):
+            logger.error("Chat not open")
+            return
+        self.page.locator(self.CLOSE_CHAT_BUTTON).first.click()
+        self.wait_for_element_hidden(self.CHAT_WINDOW, timeout=5000)
     
     def check_for_error_banner(self) -> dict:
         logger.info("Checking for error banners...")
