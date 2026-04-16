@@ -296,6 +296,20 @@ describe('ChatManager', () => {
     });
   });
 
+  it('should restore chat windows on mount without dispatching events', () => {
+    mockOpenChatWindows.push({ name: 'restored-agent', type: 'agent' });
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+
+    render(<ChatManager />);
+
+    expect(
+      screen.getByTestId('floating-chat-restored-agent'),
+    ).toBeInTheDocument();
+    expect(dispatchSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'open-floating-chat' }),
+    );
+  });
+
   it('should persist open chat windows to sessionStorage', async () => {
     render(<ChatManager />);
 

@@ -19,40 +19,32 @@ interface ChatWindow {
 }
 
 export default function ChatManager() {
-  const [chatWindows, setChatWindows] = useState<ChatWindow[]>([]);
   const [openChatWindows, setOpenChatWindows] = useAtom(openChatWindowsAtom);
+  const [chatWindows, setChatWindows] = useState<ChatWindow[]>(() =>
+    openChatWindows.map(({ name, type, strategy, graphEdges }, index) => ({
+      id: `${name}-${Date.now()}-${index}`,
+      name,
+      type,
+      position: index,
+      strategy,
+      graphEdges,
+    })),
+  );
   const pendingEventsRef = useRef<
     Array<{ type: 'opened' | 'closed'; name: string }>
   >([]);
-  const restoredRef = useRef(false);
 
   useEffect(() => {
-    if (!restoredRef.current) {
-      restoredRef.current = true;
-      openChatWindows.forEach(({ name, type, strategy, graphEdges }) => {
-        window.dispatchEvent(
-          new CustomEvent('open-floating-chat', {
-            detail: { name, type, strategy, graphEdges },
-          }),
-        );
-      });
-    }
-  }, [openChatWindows]);
-
-  useEffect(() => {
-    if (restoredRef.current) {
-      setOpenChatWindows(
-        chatWindows.map(({ name, type, strategy, graphEdges }) => ({
-          name,
-          type,
-          strategy,
-          graphEdges,
-        })),
-      );
-    }
+    setOpenChatWindows(
+      chatWindows.map(({ name, type, strategy, graphEdges }) => ({
+        name,
+        type,
+        strategy,
+        graphEdges,
+      })),
+    );
   }, [chatWindows, setOpenChatWindows]);
 
-  // Handle pending events after state updates
   useEffect(() => {
     if (pendingEventsRef.current.length > 0) {
       const events = [...pendingEventsRef.current];
@@ -78,14 +70,11 @@ export default function ChatManager() {
       const id = `${name}-${Date.now()}`;
 
       setChatWindows(prev => {
-        // Check if a chat with this name already exists
         const existingChat = prev.find(chat => chat.name === name);
         if (existingChat) return prev;
 
-        // Queue event to be dispatched after state update
         pendingEventsRef.current.push({ type: 'opened', name });
 
-        // Add new chat window
         return [
           ...prev,
           {
@@ -107,20 +96,16 @@ export default function ChatManager() {
         const existingChat = prev.find(chat => chat.name === name);
 
         if (existingChat) {
-          // Queue event to be dispatched after state update
           pendingEventsRef.current.push({ type: 'closed', name });
 
-          // Close existing chat
           const newWindows = prev.filter(chat => chat.id !== existingChat.id);
           return newWindows.map((chat, index) => ({
             ...chat,
             position: index,
           }));
         } else {
-          // Queue event to be dispatched after state update
           pendingEventsRef.current.push({ type: 'opened', name });
 
-          // Open new chat
           const id = `${name}-${Date.now()}`;
           return [
             ...prev,
@@ -161,14 +146,12 @@ export default function ChatManager() {
     setChatWindows(prev => {
       const closingChat = prev.find(chat => chat.id === id);
       if (closingChat) {
-        // Queue event to be dispatched after state update
         pendingEventsRef.current.push({
           type: 'closed',
           name: closingChat.name,
         });
       }
       const newWindows = prev.filter(chat => chat.id !== id);
-      // Recalculate positions
       return newWindows.map((chat, index) => ({
         ...chat,
         position: index,
