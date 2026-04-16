@@ -13,7 +13,7 @@ import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { useListQueries } from '@/lib/services/queries-hooks';
 
 const DEFAULT_PAGE_SIZE = 25;
-const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const PAGE_SIZE_OPTIONS = [10, 15, 25, 50, 100];
 const SEARCH_DEBOUNCE_MS = 400;
 
 function parsePage(raw: string | null): number {
