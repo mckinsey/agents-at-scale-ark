@@ -220,36 +220,32 @@ class AgentsPage(BasePage):
             logger.warning("Could not open model dropdown")
         
         model_selected = False
-        for attempt in range(3):
+        for attempt in range(5):
             model_option = self.page.get_by_role("option", name=model_name, exact=True)
             if model_option.count() > 0:
                 logger.info(f"Found exact match for model: {model_name}")
                 model_option.first.click(force=True)
                 model_selected = True
                 break
-            
+
             model_option_alt = self.page.locator(f"[role='option']:has-text('{model_name}')").first
             if model_option_alt.count() > 0:
                 logger.info(f"Found partial match for model: {model_name}")
                 model_option_alt.click(force=True)
                 model_selected = True
                 break
-            
-            if attempt < 2:
-                logger.info(f"Model {model_name} not in dropdown yet, retrying ({attempt + 1}/3)...")
+
+            if attempt < 4:
+                logger.info(f"Model {model_name} not in dropdown yet, retrying ({attempt + 1}/5)...")
                 self.page.keyboard.press("Escape")
                 self.wait_for_element_hidden("[role='option']", timeout=3000)
+                self.page.wait_for_timeout(3000)
                 model_trigger.click(force=True)
-                self.page.locator("[role='option']").first.wait_for(state="visible", timeout=3000)
-        
+                self.page.locator("[role='option']").first.wait_for(state="visible", timeout=5000)
+
         if not model_selected:
-            first_option = self.page.locator("[role='option']").first
-            if first_option.count() > 0:
-                logger.warning(f"Could not find model {model_name}, selecting first available")
-                first_option.click(force=True)
-            else:
-                logger.warning(f"No model options available")
-        
+            raise Exception(f"Could not find model '{model_name}' in dropdown after 5 attempts")
+
         logger.info(f"Model {model_name} selected")
         
         if tools:
