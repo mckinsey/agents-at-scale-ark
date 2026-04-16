@@ -1008,7 +1008,7 @@ jobs:
           CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
         run: |
           cd tests/pytest/cli-tests/tests
-          pytest test_responses.py -n auto --dist loadscope -v --tb=short --log-cli-level=INFO
+          pytest test_responses.py -n 4 auto --dist loadscope -v --tb=short --log-cli-level=INFO
 
       - name: Upload executor test logs
         if: always()
