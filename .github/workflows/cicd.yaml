@@ -954,7 +954,9 @@ jobs:
         run: |
           helm upgrade --install executor-openai-responses \
             oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/executor-openai-responses \
+            --version 0.1.3 \
             --namespace default \
+            --set app.image.pullPolicy=Always \
             --wait \
             --timeout=5m
           kubectl set env deployment/executor-openai-responses \
