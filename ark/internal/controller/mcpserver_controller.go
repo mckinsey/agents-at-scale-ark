@@ -243,6 +243,9 @@ func (r *MCPServerReconciler) updateStatus(ctx context.Context, mcpServer *arkv1
 	}
 	err := r.Status().Update(ctx, mcpServer)
 	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
 		logf.FromContext(ctx).Error(err, "failed to update MCPServer status")
 	}
 	return err
