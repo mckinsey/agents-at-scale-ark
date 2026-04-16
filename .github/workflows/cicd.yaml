@@ -952,33 +952,17 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
           OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
         run: |
-          kubectl create secret generic openai-executor-ci-token \
-            --from-literal=token="${OPENAI_API_KEY}" \
-            --namespace default \
-            --dry-run=client -o yaml | kubectl apply -f -
-          cat > /tmp/executor-values.yaml << EOF
-          app:
-            env:
-              - name: HOST
-                value: "0.0.0.0"
-              - name: PORT
-                value: "8000"
-              - name: OTEL_INSTRUMENTATION_A2A_SDK_ENABLED
-                value: "false"
-              - name: OPENAI_API_KEY
-                valueFrom:
-                  secretKeyRef:
-                    name: openai-executor-ci-token
-                    key: token
-              - name: OPENAI_BASE_URL
-                value: "${OPENAI_BASE_URL}"
-          EOF
           helm upgrade --install executor-openai-responses \
             oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/executor-openai-responses \
             --namespace default \
-            --values /tmp/executor-values.yaml \
             --wait \
             --timeout=5m
+          kubectl set env deployment/executor-openai-responses \
+            -n default \
+            OPENAI_API_KEY="${OPENAI_API_KEY}" \
+            OPENAI_BASE_URL="${OPENAI_BASE_URL}"
+          kubectl rollout status deployment/executor-openai-responses \
+            -n default --timeout=2m
 
       - name: Diagnose executor pod
         if: ${{ env.HAS_OPENAI_KEY == 'true' }}
@@ -1008,7 +992,7 @@ jobs:
           CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
         run: |
           cd tests/pytest/cli-tests/tests
-          pytest test_responses.py -n 4 auto --dist loadscope -v --tb=short --log-cli-level=INFO
+          pytest test_responses.py -n auto --dist loadscope -v --tb=short --log-cli-level=INFO
 
       - name: Upload executor test logs
         if: always()
