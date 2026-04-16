@@ -1,6 +1,6 @@
 """API routes for Query resources."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Query
 from typing import Optional
 from ark_sdk.models.query_v1alpha1 import QueryV1alpha1
@@ -82,18 +82,79 @@ def query_to_detail_response(query: dict) -> QueryDetailResponse:
     )
 
 
+def _extract_search_text(spec_input) -> str:
+    """Flatten query input to a single lowercase string for substring search.
+
+    Handles: None, plain str, and chat-message arrays where content is either
+    a str or a list of parts with a string ``text`` field (e.g. OpenAI
+    multimodal text parts ``{"type": "text", "text": "..."}``).
+    Non-text parts (images, tool calls) are ignored.
+    """
+    if spec_input is None:
+        return ""
+    if isinstance(spec_input, str):
+        return spec_input.lower()
+    if isinstance(spec_input, list):
+        parts = []
+        for msg in spec_input:
+            if not isinstance(msg, dict):
+                continue
+            content = msg.get("content")
+            if isinstance(content, str):
+                parts.append(content)
+            elif isinstance(content, list):
+                for piece in content:
+                    if isinstance(piece, dict) and isinstance(piece.get("text"), str):
+                        parts.append(piece["text"])
+        return " ".join(parts).lower()
+    return ""
+
+
+def _creation_timestamp_key(item_dict: dict):
+    """Sort key (timestamp, name). Missing timestamp sorts last when reversed."""
+    meta = item_dict.get("metadata", {})
+    ts = meta.get("creationTimestamp")
+    name = meta.get("name", "")
+    if not ts:
+        return (datetime.min.replace(tzinfo=timezone.utc), name)
+    dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    return (dt, name)
+
+
 @router.get("", response_model=QueryListResponse)
 @handle_k8s_errors(operation="list", resource_type="query")
-async def list_queries(namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> QueryListResponse:
-    """List all queries in a namespace."""
+async def list_queries(
+    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(25, ge=1, le=500, description="Items per page (clamped to 100)"),
+    search: Optional[str] = Query(None, description="Case-insensitive substring match over query input text"),
+) -> QueryListResponse:
+    """List queries in a namespace with pagination and text search."""
+    effective_page_size = min(page_size, 100)
     async with with_ark_client(namespace, VERSION) as ark_client:
         result = await ark_client.queries.a_list()
-        
-        queries = [query_to_response(item.to_dict()) for item in result]
-        
+        raw_items = [item.to_dict() for item in result]
+
+        if search:
+            needle = search.lower()
+            raw_items = [
+                item for item in raw_items
+                if needle in _extract_search_text(item.get("spec", {}).get("input"))
+            ]
+
+        raw_items.sort(key=_creation_timestamp_key, reverse=True)
+
+        total = len(raw_items)
+        start = (page - 1) * effective_page_size
+        end = start + effective_page_size
+        page_items = [query_to_response(item) for item in raw_items[start:end]]
+
         return QueryListResponse(
-            items=queries,
-            count=len(queries)
+            items=page_items,
+            count=len(page_items),
+            total=total,
+            page=page,
+            page_size=effective_page_size,
         )
 
 
