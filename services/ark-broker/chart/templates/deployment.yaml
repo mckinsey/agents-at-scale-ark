@@ -61,6 +61,8 @@ spec:
               value: "{{ .Values.persistence.mountPath }}/{{ .Values.persistence.traceFileName }}"
             - name: EVENT_FILE_PATH
               value: "{{ .Values.persistence.mountPath }}/{{ .Values.persistence.eventFileName }}"
+            - name: SESSIONS_FILE_PATH
+              value: "{{ .Values.persistence.mountPath }}/{{ .Values.persistence.sessionsFileName }}"
             {{- end }}
           {{- if .Values.persistence.enabled }}
           volumeMounts:

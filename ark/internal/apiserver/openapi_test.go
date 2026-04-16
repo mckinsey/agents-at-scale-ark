@@ -4,6 +4,8 @@ package apiserver
 
 import (
 	"testing"
+
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 func TestGetOpenAPIDefinitions(t *testing.T) {
@@ -113,4 +115,32 @@ func TestAPIVersionByKind(t *testing.T) {
 			t.Errorf("APIVersion(%q) = %q, want %q", tt.kind, got, tt.expected)
 		}
 	}
+}
+
+func TestJsonOnlyNegotiatedSerializerExcludesProtobuf(t *testing.T) {
+	s := jsonOnlyNegotiatedSerializer{Codecs}
+	for _, info := range s.SupportedMediaTypes() {
+		if info.MediaType == runtime.ContentTypeProtobuf {
+			t.Error("SupportedMediaTypes should not include protobuf")
+		}
+	}
+}
+
+func TestJsonOnlyNegotiatedSerializerIncludesJSON(t *testing.T) {
+	s := jsonOnlyNegotiatedSerializer{Codecs}
+	for _, info := range s.SupportedMediaTypes() {
+		if info.MediaType == runtime.ContentTypeJSON {
+			return
+		}
+	}
+	t.Error("SupportedMediaTypes should include JSON")
+}
+
+func TestCodecsIncludesProtobufConfirmingFilterIsNeeded(t *testing.T) {
+	for _, info := range Codecs.SupportedMediaTypes() {
+		if info.MediaType == runtime.ContentTypeProtobuf {
+			return
+		}
+	}
+	t.Error("expected Codecs to include protobuf before filtering")
 }
