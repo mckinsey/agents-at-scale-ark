@@ -12,8 +12,10 @@ export default {
   tools: 'Creating Tools and MCP Servers',
   'workflow-templates': 'Workflow Templates',
   files: 'Managing Files',
-  'executor-credentials': 'Configuring Executor Credentials',
   'ark-cli': 'The Ark CLI',
+
+  '---configuration': { type: 'separator', title: 'Configuration' },
+  'executor-credentials': 'Configuring Executor Credentials',
 
   '---patterns': { type: 'separator', title: 'Patterns and guidance' },
   'tips-on-building-agentic-use-cases': 'Tips on Building Agentic Use Cases',
