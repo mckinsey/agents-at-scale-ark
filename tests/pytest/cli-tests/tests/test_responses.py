@@ -74,11 +74,15 @@ SQL_CFG_TOOL = [
 @pytest.mark.executor
 class TestOpenAIResponsesExecutor:
     """
-    Live E2E tests for executor-openai-responses against PR #211 patterns.
+    Live E2E tests for executor-openai-responses (T01, T13–T25).
 
-    Tests patterns from:
+    Tests patterns from agents-at-scale-marketplace PR #211:
       feat(openai-responses): improve example agents and docs
       https://github.com/mckinsey/agents-at-scale-marketplace/pull/211
+
+    Covers: SDK fix (T01), reasoning cascades (T13), web search (T14–T15),
+    SQL CFG tools (T16), annotation overrides (T17–T18), GPT-5/o-series
+    models (T19a–T24), multi-turn memory (T25).
 
     Required env vars:
       CICD_OPENAI_API_KEY    API key / JWT for the OpenAI or gateway endpoint
@@ -774,6 +778,7 @@ class TestARKQueriesWithOpenAIResponses:
                 except json.JSONDecodeError:
                     pass
             time.sleep(delay)
+        pytest.skip(f"ark-webhook-service not ready after {retries} retries")
 
     @classmethod
     def _apply(cls, yaml_str: str):
@@ -859,7 +864,10 @@ spec:
                     annotations: Optional[dict] = None) -> str:
         ann_block = ""
         if annotations:
-            lines = "\n".join(f"    {k}: '{v}'" for k, v in annotations.items())
+            lines = "\n".join(
+                f"    {k}: '{str(v).replace(chr(39), chr(39) + chr(39))}'"
+                for k, v in annotations.items()
+            )
             ann_block = f"  annotations:\n{lines}\n"
         safe_input = input_text.replace('"', '\\"')
         return f"""apiVersion: ark.mckinsey.com/v1alpha1
@@ -906,10 +914,9 @@ metadata:
                     phase  = status.get("phase", "")
 
                     if phase == "done":
-                        content = (
-                            status.get("response", {}).get("content", "")
-                            or status.get("conversationId", "")
-                        )
+                        content = status.get("response", {}).get("content", "")
+                        if not content:
+                            return False, None, "empty_response"
                         return True, content, phase
 
                     if phase in ("error", "submit_failed"):

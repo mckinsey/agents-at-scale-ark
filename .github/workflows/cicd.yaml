@@ -945,7 +945,6 @@ jobs:
       - name: Install executor test dependencies
         run: |
           pip install -r tests/pytest/ui-tests/requirements.txt
-          pip install httpx
 
       - name: Deploy executor-openai-responses
         if: ${{ env.HAS_OPENAI_KEY == 'true' }}
@@ -1006,10 +1005,10 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
           EXECUTOR_URL: ${{ env.HAS_OPENAI_KEY == 'true' && 'http://localhost:18080/execute' || '' }}
           CICD_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
-          CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL }}
+          CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
         run: |
           cd tests/pytest/cli-tests/tests
-          pytest test_responses.py -v --tb=short --log-cli-level=INFO
+          pytest test_responses.py -n auto --dist loadscope -v --tb=short --log-cli-level=INFO
 
       - name: Upload executor test logs
         if: always()
@@ -1242,6 +1241,9 @@ jobs:
         build-ark-cli,
       ]
     runs-on: ubuntu-24.04
+    concurrency:
+      group: release-please
+      cancel-in-progress: false
     outputs:
       released: ${{ steps.release-please.outputs.release_created }}
       tag: ${{ steps.release-please.outputs.tag_name }}
