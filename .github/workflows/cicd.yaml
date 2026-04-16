@@ -957,12 +957,27 @@ jobs:
             --from-literal=token="${OPENAI_API_KEY}" \
             --namespace default \
             --dry-run=client -o yaml | kubectl apply -f -
+          cat > /tmp/executor-values.yaml << EOF
+          app:
+            env:
+              - name: HOST
+                value: "0.0.0.0"
+              - name: PORT
+                value: "8000"
+              - name: OTEL_INSTRUMENTATION_A2A_SDK_ENABLED
+                value: "false"
+              - name: OPENAI_API_KEY
+                valueFrom:
+                  secretKeyRef:
+                    name: openai-executor-ci-token
+                    key: token
+              - name: OPENAI_BASE_URL
+                value: "${OPENAI_BASE_URL}"
+          EOF
           helm upgrade --install executor-openai-responses \
             oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/executor-openai-responses \
             --namespace default \
-            --set openai.secretName=openai-executor-ci-token \
-            --set openai.secretKey=token \
-            --set openai.baseUrl="${OPENAI_BASE_URL}" \
+            --values /tmp/executor-values.yaml \
             --wait \
             --timeout=5m
 
