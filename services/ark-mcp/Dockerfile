@@ -1,4 +1,4 @@
-FROM python:3.15.0a8-slim
+FROM python:3.14.4-slim
 
 WORKDIR /app
 
@@ -18,7 +18,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 COPY ark-mcp/pyproject.toml ark-mcp/uv.lock ./
 
 # Copy wheel files
-COPY ark-mcp/out/ark*.whl ./
+COPY ark-mcp/out/ark*.whl ./out/
 
 # Copy source code only (not pyproject.toml again)
 COPY ark-mcp/src/ ./src/
