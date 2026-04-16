@@ -4,7 +4,7 @@ import { Provider, createStore } from 'jotai';
 import { useRouter } from 'next/navigation';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { hasSoftNavigatedAtom } from '@/atoms/navigation-history';
+import { settingsEntryUrlAtom } from '@/atoms/navigation-history';
 import type { SettingPage } from '@/atoms/settings-modal';
 import { SettingsSidebar } from '@/components/settings-modal/settings-sidebar';
 
@@ -64,16 +64,15 @@ describe('SettingsSidebar', () => {
     expect(mockReplace).toHaveBeenCalledWith('/settings/memory');
   });
 
-  it('should call router.back() when close button is clicked and soft navigation occurred', async () => {
-    store.set(hasSoftNavigatedAtom, true);
+  it('should navigate to entry URL when close button is clicked after soft navigation', async () => {
+    store.set(settingsEntryUrlAtom, '/agents');
 
     const user = userEvent.setup();
     renderWithStore();
 
     await user.click(screen.getByLabelText('Close settings'));
 
-    expect(mockBack).toHaveBeenCalled();
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockPush).toHaveBeenCalledWith('/agents');
   });
 
   it('should navigate to home when close button is clicked on direct navigation', async () => {
