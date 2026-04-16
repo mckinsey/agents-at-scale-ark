@@ -18,7 +18,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 COPY ark-mcp/pyproject.toml ark-mcp/uv.lock ./
 
 # Copy wheel files
-COPY ark-mcp/out/ark*.whl ./out/
+COPY ark-mcp/out/ark*.whl ./
 
 # Copy source code only (not pyproject.toml again)
 COPY ark-mcp/src/ ./src/

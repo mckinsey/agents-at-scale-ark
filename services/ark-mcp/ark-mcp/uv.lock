@@ -201,7 +201,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "ark-sdk", path = "out/ark_sdk-0.1.59-py3-none-any.whl" },
+    { name = "ark-sdk", path = "ark_sdk-0.1.59-py3-none-any.whl" },
     { name = "fastmcp", specifier = ">=0.5.0" },
     { name = "kubernetes-asyncio", specifier = ">=24.0.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
@@ -216,7 +216,7 @@ provides-extras = ["dev"]
 [[package]]
 name = "ark-sdk"
 version = "0.1.59"
-source = { path = "out/ark_sdk-0.1.59-py3-none-any.whl" }
+source = { path = "ark_sdk-0.1.59-py3-none-any.whl" }
 dependencies = [
     { name = "a2a-sdk", extra = ["http-server"] },
     { name = "build" },
