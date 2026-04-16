@@ -10,7 +10,7 @@ vi.mock('next/navigation', () => ({
   usePathname: vi.fn(),
 }));
 
-import { SettingsKeyboardShortcut } from '@/components/settings-modal/settings-keyboard-shortcut';
+import { SettingsKeyboardShortcut } from '@/components/settings/settings-keyboard-shortcut';
 
 describe('SettingsKeyboardShortcut', () => {
   const mockPush = vi.fn();

@@ -6,10 +6,9 @@ import { useRouter } from 'next/navigation';
 
 import { isMarketplaceEnabledAtom } from '@/atoms/experimental-features';
 import { settingsEntryUrlAtom } from '@/atoms/navigation-history';
-import type { SettingPage } from '@/atoms/settings-modal';
 import { cn } from '@/lib/utils';
 
-import { MANAGE_MARKETPLACE_KEY, settingsSections } from './settings-types';
+import { MANAGE_MARKETPLACE_KEY, type SettingPage, settingsSections } from './settings-types';
 
 type SettingsSidebarProps = {
   activePage: SettingPage;

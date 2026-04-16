@@ -20,7 +20,7 @@ export default function DashboardLayout({
       <div className="flex h-screen w-screen flex-col items-center justify-center gap-2">
         <Spinner className="mr-2" />
         <div className="muted text-lg font-semibold">
-          Loading ARK Dashboard...
+          Loading Ark Dashboard...
         </div>
       </div>
     );

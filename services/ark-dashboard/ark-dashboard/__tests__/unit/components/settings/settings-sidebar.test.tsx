@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { settingsEntryUrlAtom } from '@/atoms/navigation-history';
-import type { SettingPage } from '@/atoms/settings-modal';
-import { SettingsSidebar } from '@/components/settings-modal/settings-sidebar';
+import type { SettingPage } from '@/components/settings/settings-types';
+import { SettingsSidebar } from '@/components/settings/settings-sidebar';
 
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(),

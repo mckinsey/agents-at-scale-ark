@@ -3,10 +3,9 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
-import type { SettingPage } from '@/atoms/settings-modal';
-import { SettingsContent } from '@/components/settings-modal/settings-content';
-import { SettingsSidebar } from '@/components/settings-modal/settings-sidebar';
-import { settingsSections } from '@/components/settings-modal/settings-types';
+import { SettingsContent } from '@/components/settings/settings-content';
+import { SettingsSidebar } from '@/components/settings/settings-sidebar';
+import { type SettingPage, settingsSections } from '@/components/settings/settings-types';
 
 const DEFAULT_SETTINGS_PAGE: SettingPage = 'a2a-servers';
 

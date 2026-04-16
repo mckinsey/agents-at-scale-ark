@@ -3,7 +3,7 @@ import { Provider, createStore } from 'jotai';
 import { describe, expect, it } from 'vitest';
 
 import { experimentalFeatureGroups } from '@/components/experimental-features-dialog/experimental-features';
-import { ExperimentalFeaturesSettings } from '@/components/settings-modal/experimental-features-settings';
+import { ExperimentalFeaturesSettings } from '@/components/settings/experimental-features-settings';
 
 describe('ExperimentalFeaturesSettings', () => {
   const renderWithStore = () => {

@@ -14,13 +14,13 @@ vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => ({ namespace: 'default', isNamespaceResolved: true }),
 }));
 
-vi.mock('@/components/settings-modal/settings-content', () => ({
+vi.mock('@/components/settings/settings-content', () => ({
   SettingsContent: ({ activePage }: { activePage: string }) => (
     <div data-testid="settings-content">{activePage}</div>
   ),
 }));
 
-vi.mock('@/components/settings-modal/settings-sidebar', () => ({
+vi.mock('@/components/settings/settings-sidebar', () => ({
   SettingsSidebar: ({ activePage }: { activePage: string }) => (
     <div data-testid="settings-sidebar">{activePage}</div>
   ),

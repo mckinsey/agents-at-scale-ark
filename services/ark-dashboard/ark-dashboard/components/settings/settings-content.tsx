@@ -2,7 +2,7 @@
 
 import { Suspense, useMemo } from 'react';
 
-import type { SettingPage } from '@/atoms/settings-modal';
+import type { SettingPage } from './settings-types';
 import { MemorySection } from '@/components/sections';
 import { A2AServersSection } from '@/components/sections/a2a-servers-section';
 import { SecretsSection } from '@/components/sections/secrets-section';

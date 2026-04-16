@@ -253,7 +253,7 @@ export function AppSidebar() {
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="text-sidebar-accent-foreground font-medium">
-                    ARK Dashboard
+                    Ark Dashboard
                   </span>
                   <span className="text-xs">
                     {isPending
