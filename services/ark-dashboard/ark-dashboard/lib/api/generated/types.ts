@@ -1237,7 +1237,7 @@ export interface paths {
         };
         /**
          * List Queries
-         * @description List all queries in a namespace.
+         * @description List queries in a namespace with pagination and text search.
          */
         get: operations["list_queries_v1_queries_get"];
         put?: never;
@@ -3596,6 +3596,21 @@ export interface components {
             count: number;
             /** Items */
             items: components["schemas"]["QueryResponse"][];
+            /**
+             * Page
+             * @default 1
+             */
+            page: number;
+            /**
+             * Page Size
+             * @default 25
+             */
+            page_size: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
         };
         /**
          * QueryParameter
@@ -6403,6 +6418,12 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Page number (1-indexed) */
+                page?: number;
+                /** @description Items per page (clamped to 100) */
+                page_size?: number;
+                /** @description Case-insensitive substring match over query input text */
+                search?: string | null;
             };
             header?: never;
             path?: never;
