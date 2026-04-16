@@ -1,14 +1,14 @@
 'use client';
 
 import { useAtom, useAtomValue } from 'jotai';
-import type {
-  ChatCompletionChunk,
-  ChatCompletionMessageParam,
-} from 'openai/resources/chat/completions';
 import type { RefObject } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { chatHistoryAtom, createNewSessionId } from '@/atoms/chat-history';
+import {
+  type TokenUsage,
+  chatHistoryAtom,
+  createNewSessionId,
+} from '@/atoms/chat-history';
 import {
   isChatStreamingEnabledAtom,
   queryTimeoutSettingAtom,
@@ -16,10 +16,12 @@ import {
 import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { hashPromptSync } from '@/lib/analytics/utils';
+import type { ChatType } from '@/lib/chat-events';
 import { chatService } from '@/lib/services';
-import type { ExtendedChatMessage } from '@/lib/types/chat-message';
-
-type ChatType = 'model' | 'team' | 'agent';
+import type {
+  ArkExtendedChunk,
+  ExtendedChatMessage,
+} from '@/lib/types/chat-message';
 
 interface UseChatSessionParams {
   name: string;
@@ -34,6 +36,8 @@ interface UseChatSessionReturn {
   sendMessage: (message: string) => Promise<void>;
   clearChat: () => void;
   messagesEndRef: RefObject<HTMLDivElement | null>;
+  tokenUsage?: TokenUsage;
+  messageTokenUsage?: Record<number, TokenUsage>;
 }
 
 export function useChatSession({
@@ -46,31 +50,34 @@ export function useChatSession({
   );
   const chatKey = `${type}-${name}`;
 
-  const initSessionIdRef = useRef<string>(
-    lastConversationId || createNewSessionId(),
-  );
+  const pendingSessionIdRef = useRef<string | null>(null);
 
   const chatSession = useMemo(() => {
     const existing = chatHistory?.[chatKey];
     if (existing?.messages !== undefined && existing?.sessionId) {
       return existing;
     }
-    return { messages: [], sessionId: initSessionIdRef.current };
-  }, [chatHistory, chatKey]);
+    if (!pendingSessionIdRef.current) {
+      pendingSessionIdRef.current = createNewSessionId(name);
+    }
+    return { messages: [], sessionId: pendingSessionIdRef.current };
+  }, [chatHistory, chatKey, name]);
 
   const chatMessages = chatSession.messages;
   const sessionId = chatSession.sessionId;
+  const conversationId = (chatSession as { conversationId?: string }).conversationId;
 
   useEffect(() => {
     if (!chatHistory?.[chatKey]) {
-      const sessionIdToUse = initSessionIdRef.current;
+      const sessionIdToUse = pendingSessionIdRef.current ?? createNewSessionId(name);
+      pendingSessionIdRef.current = sessionIdToUse;
       setLastConversationId(sessionIdToUse);
       setChatHistory(prev => ({
         ...(prev || {}),
         [chatKey]: { messages: [], sessionId: sessionIdToUse },
       }));
     }
-  }, [chatKey, chatHistory, setChatHistory, setLastConversationId]);
+  }, [chatKey, chatHistory, name, setChatHistory, setLastConversationId]);
 
   const updateChatMessages = useCallback(
     (
@@ -88,6 +95,49 @@ export function useChatSession({
         return {
           ...safePrev,
           [chatKey]: { ...currentSession, messages: newMessages },
+        };
+      });
+    },
+    [chatKey, setChatHistory],
+  );
+
+  const updateTokenUsage = useCallback(
+    (usage: TokenUsage) => {
+      setChatHistory(prev => {
+        const safePrev = prev || {};
+        const currentSession = safePrev[chatKey];
+        if (!currentSession) return safePrev;
+        const currentUsage = currentSession.tokenUsage || {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+        };
+        return {
+          ...safePrev,
+          [chatKey]: {
+            ...currentSession,
+            tokenUsage: {
+              prompt_tokens: currentUsage.prompt_tokens + usage.prompt_tokens,
+              completion_tokens:
+                currentUsage.completion_tokens + usage.completion_tokens,
+              total_tokens: currentUsage.total_tokens + usage.total_tokens,
+            },
+          },
+        };
+      });
+    },
+    [chatKey, setChatHistory],
+  );
+
+  const updateConversationId = useCallback(
+    (newConversationId: string) => {
+      setChatHistory(prev => {
+        const safePrev = prev || {};
+        const currentSession = safePrev[chatKey];
+        if (!currentSession) return safePrev;
+        return {
+          ...safePrev,
+          [chatKey]: { ...currentSession, conversationId: newConversationId },
         };
       });
     },
@@ -142,11 +192,13 @@ export function useChatSession({
       ]);
 
       let accumulatedContent = '';
+      let messageTokenUsage: TokenUsage | null = null;
       const accumulatedToolCalls: Array<{
         id: string;
         type: 'function';
         function: { name: string; arguments: string };
       }> = [];
+      const pendingSystemMessages: Array<string> = [];
 
       let hasError = false;
       let errorMessage = '';
@@ -180,42 +232,49 @@ export function useChatSession({
         }
       };
 
+      const addSystemMessagesAndNewAssistant = () => {
+        const systemMsgCount = pendingSystemMessages.length;
+        updateChatMessages(prev => {
+          const systemMsgs = pendingSystemMessages.map(content => ({
+            role: 'system' as const,
+            content,
+          }));
+          return [
+            ...prev,
+            ...systemMsgs,
+            { role: 'assistant', content: '' } as ExtendedChatMessage,
+          ];
+        });
+        pendingSystemMessages.length = 0;
+        currentMessageIndex += systemMsgCount + 1;
+      };
+
       for await (const chunk of chatService.streamChatResponse(
-        messageArray as ChatCompletionMessageParam[],
+        userMessage,
         type,
         name,
         sessionId,
+        conversationId,
         queryTimeout,
       )) {
-        if ('error' in chunk && chunk.error) {
+        const typedChunk = chunk as unknown as ArkExtendedChunk;
+
+        if (typedChunk.error) {
           hasError = true;
-          const errorObj = chunk.error as {
-            message?: string;
-            code?: string;
-          };
-          errorMessage = errorObj.message || 'An error occurred';
-          if ('ark' in chunk) {
-            const arkData = chunk.ark as { query?: string };
-            queryName = arkData.query || '';
-          }
+          errorMessage = typedChunk.error.message || 'An error occurred';
+          queryName = typedChunk.ark?.query || '';
           break;
         }
 
-        const typedChunk = chunk as unknown as ChatCompletionChunk;
+        if (typedChunk?.id === 'chatcmpl-final' && typedChunk.ark) {
+          const arkData = typedChunk.ark;
 
-        if (typedChunk?.id === 'chatcmpl-final' && 'ark' in chunk) {
-          const arkData = chunk.ark as {
-            completedQuery?: {
-              metadata?: { name?: string };
-              status?: {
-                phase?: string;
-                response?: {
-                  content?: string;
-                  raw?: string;
-                };
-              };
-            };
-          };
+          const returnedConversationId =
+            arkData.completedQuery?.status?.conversationId;
+          if (returnedConversationId) {
+            updateConversationId(returnedConversationId);
+          }
+
           if (arkData.completedQuery?.status?.phase === 'error') {
             hasError = true;
             errorMessage =
@@ -231,34 +290,56 @@ export function useChatSession({
               console.error('Failed to parse completed query messages:', e);
             }
           }
+
+          const arkTokenUsage =
+            arkData.completedQuery?.status?.tokenUsage;
+          const usage: TokenUsage | null = arkTokenUsage
+            ? {
+                prompt_tokens: arkTokenUsage.promptTokens || 0,
+                completion_tokens: arkTokenUsage.completionTokens || 0,
+                total_tokens: arkTokenUsage.totalTokens || 0,
+              }
+            : typedChunk?.usage
+              ? {
+                  prompt_tokens: typedChunk.usage.prompt_tokens ?? 0,
+                  completion_tokens: typedChunk.usage.completion_tokens ?? 0,
+                  total_tokens: typedChunk.usage.total_tokens ?? 0,
+                }
+              : null;
+
+          if (usage) {
+            messageTokenUsage = usage;
+            updateTokenUsage(usage);
+          }
         }
 
-        if ('ark' in chunk) {
-          const arkData = chunk.ark as { agent?: string };
+        if (typedChunk.ark) {
+          const arkData = typedChunk.ark;
+
+          if (arkData.systemMessage) {
+            pendingSystemMessages.push(arkData.systemMessage);
+          }
+
           const chunkAgent = arkData.agent;
 
-          if (chunkAgent && chunkAgent !== currentAgent) {
+          // Check if we need to start a new assistant message
+          const isNewAgent = chunkAgent && chunkAgent !== currentAgent;
+          const isNewTurn = chunkAgent === currentAgent && turnComplete;
+
+          if (isNewAgent || isNewTurn) {
+            // Finalize previous message if it exists
             if (currentAgent) {
               finalizeCurrentMessage();
               accumulatedContent = '';
               accumulatedToolCalls.length = 0;
-              currentMessageIndex++;
-              updateChatMessages(prev => [
-                ...prev,
-                { role: 'assistant', content: '' } as ExtendedChatMessage,
-              ]);
             }
-            currentAgent = chunkAgent;
-            turnComplete = false;
-          } else if (chunkAgent === currentAgent && turnComplete) {
-            finalizeCurrentMessage();
-            accumulatedContent = '';
-            accumulatedToolCalls.length = 0;
-            currentMessageIndex++;
-            updateChatMessages(prev => [
-              ...prev,
-              { role: 'assistant', content: '' } as ExtendedChatMessage,
-            ]);
+
+            // Add system messages + new assistant message
+            addSystemMessagesAndNewAssistant();
+
+            if (isNewAgent) {
+              currentAgent = chunkAgent;
+            }
             turnComplete = false;
           }
         }
@@ -324,6 +405,36 @@ export function useChatSession({
       }
 
       finalizeCurrentMessage();
+
+      if (messageTokenUsage) {
+        const assistantIndex = currentMessageIndex;
+        setChatHistory(prev => {
+          const safePrev = prev || {};
+          const currentSession = safePrev[chatKey];
+          if (!currentSession) return safePrev;
+          return {
+            ...safePrev,
+            [chatKey]: {
+              ...currentSession,
+              messageTokenUsage: {
+                ...(currentSession.messageTokenUsage || {}),
+                [assistantIndex]: messageTokenUsage,
+              },
+            },
+          };
+        });
+      }
+
+      if (pendingSystemMessages.length > 0) {
+        updateChatMessages(prev => {
+          const systemMsgs = pendingSystemMessages.map(content => ({
+            role: 'system' as const,
+            content,
+          }));
+          return [...prev, ...systemMsgs];
+        });
+        pendingSystemMessages.length = 0;
+      }
 
       if (hasError) {
         const hasTerminateToolCall = accumulatedToolCalls.some(
@@ -398,12 +509,17 @@ export function useChatSession({
     },
     [
       buildChatMessages,
+      chatKey,
       chatMessages,
+      conversationId,
       name,
       queryTimeout,
       sessionId,
+      setChatHistory,
       type,
       updateChatMessages,
+      updateConversationId,
+      updateTokenUsage,
     ],
   );
 
@@ -412,10 +528,11 @@ export function useChatSession({
       const messageArray = buildChatMessages(chatMessages, userMessage);
 
       const query = await chatService.submitChatQuery(
-        messageArray as ChatCompletionMessageParam[],
+        userMessage,
         type,
         name,
         sessionId,
+        conversationId,
         undefined,
         queryTimeout,
       );
@@ -430,6 +547,14 @@ export function useChatSession({
           const result = await chatService.getQueryResult(query.name);
 
           if (result.terminal) {
+            const fullQuery = await chatService.getQuery(query.name);
+            const queryConversationId = (
+              fullQuery?.status as { conversationId?: string } | undefined
+            )?.conversationId;
+            if (queryConversationId) {
+              updateConversationId(queryConversationId);
+            }
+
             if (result.status === 'done') {
               if (result.messages && result.messages.length > 0) {
                 updateChatMessages(prev => [
@@ -622,15 +747,20 @@ export function useChatSession({
   );
 
   const clearChat = useCallback(() => {
-    const newSessionId = createNewSessionId();
-    initSessionIdRef.current = newSessionId;
+    const newSessionId = createNewSessionId(name);
+    pendingSessionIdRef.current = newSessionId;
     setLastConversationId(newSessionId);
     setChatHistory(prev => ({
       ...(prev || {}),
-      [chatKey]: { messages: [], sessionId: newSessionId },
+      [chatKey]: {
+        messages: [],
+        sessionId: newSessionId,
+        tokenUsage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        messageTokenUsage: {},
+      },
     }));
     setError(null);
-  }, [chatKey, setChatHistory, setLastConversationId]);
+  }, [chatKey, name, setChatHistory, setLastConversationId]);
 
   return {
     messages: chatMessages,
@@ -640,5 +770,7 @@ export function useChatSession({
     sendMessage,
     clearChat,
     messagesEndRef,
+    tokenUsage: chatSession.tokenUsage,
+    messageTokenUsage: chatSession.messageTokenUsage,
   };
 }

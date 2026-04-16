@@ -7,7 +7,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/openai/openai-go"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -16,7 +15,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
-	completions "mckinsey.com/ark/executors/completions"
 )
 
 var _ = Describe("Query Controller", func() {
@@ -206,29 +204,64 @@ var _ = Describe("Query Controller", func() {
 			Expect(k8sClient.Delete(ctx, createdQuery)).Should(Succeed())
 		})
 	})
-})
 
-var _ = Describe("Query Controller Message Serialization", func() {
-	Context("When serializing messages", func() {
-		It("should serialize all message types correctly", func() {
-			messages := []completions.Message{
-				completions.Message(openai.AssistantMessage("hello")),
-				completions.Message(openai.UserMessage("hi")),
-				completions.Message(openai.SystemMessage("sys")),
-				completions.Message(openai.ToolMessage("tool-content", "tool-1")),
+	Context("When updating status of a deleted query", func() {
+		ctx := context.Background()
+
+		It("should not error", func() {
+			const deletedQueryName = "test-deleted-status-query"
+
+			deletedQuery := &arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      deletedQueryName,
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.QuerySpec{
+					Target: &arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
+				},
+			}
+			Expect(deletedQuery.Spec.SetInputString("hello")).To(Succeed())
+			Expect(k8sClient.Create(ctx, deletedQuery)).To(Succeed())
+
+			controllerReconciler := &QueryReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
 			}
 
-			jsonStr := serializeMessages(messages)
-			Expect(jsonStr).To(ContainSubstring("assistant"))
-			Expect(jsonStr).To(ContainSubstring("user"))
-			Expect(jsonStr).To(ContainSubstring("system"))
-			Expect(jsonStr).To(ContainSubstring("tool"))
+			By("reconciling to initialize status")
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: deletedQueryName, Namespace: "default"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("deleting the query")
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: deletedQueryName, Namespace: "default"}, deletedQuery)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, deletedQuery)).To(Succeed())
+
+			By("reconciling with deletionTimestamp to remove finalizer and fully delete")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: deletedQueryName, Namespace: "default"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("calling updateStatus on the deleted query should not error")
+			Expect(controllerReconciler.updateStatus(ctx, deletedQuery, "Running")).To(Succeed())
+		})
+	})
+})
+
+var _ = Describe("Query Controller Fallback Raw", func() {
+	Context("When building fallback raw JSON", func() {
+		It("should produce assistant message JSON", func() {
+			jsonStr := buildFallbackRaw("hello")
+			Expect(jsonStr).To(ContainSubstring(`"role":"assistant"`))
+			Expect(jsonStr).To(ContainSubstring(`"content":"hello"`))
 		})
 
-		It("should return empty array for unknown message types", func() {
-			messages := []completions.Message{{}}
-			jsonStr := serializeMessages(messages)
-			Expect(jsonStr).To(Equal("null"))
+		It("should handle empty text", func() {
+			jsonStr := buildFallbackRaw("")
+			Expect(jsonStr).To(ContainSubstring(`"role":"assistant"`))
+			Expect(jsonStr).To(ContainSubstring(`"content":""`))
 		})
 	})
 })

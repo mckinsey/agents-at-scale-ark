@@ -15,12 +15,6 @@ spec:
         outputs:
         - name: azure
           value: (json_parse($stdout))
-    - script:
-        content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
     - apply:
         file: manifests/a01-secret.yaml
     - apply:
@@ -81,10 +75,3 @@ spec:
         kind: Agent
         name: test-agent
 
-    cleanup:
-    - script:
-        content: |
-          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
-        env:
-        - name: NAMESPACE
-          value: ($namespace)

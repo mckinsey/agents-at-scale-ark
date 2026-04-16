@@ -28,6 +28,11 @@ rules:
   - apiGroups: [""]
     resources: ["configmaps"]
     verbs: ["get", "list"]
+  # Permission to write export history to a dedicated configmap
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["ark-export-metadata"]
+    verbs: ["update", "patch"]
   # Permission to read services to get the address of the configured streaming service
   - apiGroups: [""]
     resources: ["services"]
@@ -42,7 +47,7 @@ rules:
     verbs: ["get", "list"]
   # Ark resources
   - apiGroups: ["ark.mckinsey.com"]
-    resources: ["models", "agents", "queries", "teams", "tools", "workflows", "arktemplates", "mcpservers", "a2aservers", "memories", "evaluations", "evaluators", "a2atasks"]
+    resources: ["models", "agents", "queries", "teams", "tools", "workflows", "arktemplates", "mcpservers", "a2aservers", "memories", "a2atasks", "executionengines"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   # Argo Workflows resources
   - apiGroups: ["argoproj.io"]

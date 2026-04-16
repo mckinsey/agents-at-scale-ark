@@ -31,6 +31,9 @@ CLEAN_TARGETS += $(ARK_MCP_SERVICE_SOURCE_DIR)/dist
 CLEAN_TARGETS += $(ARK_MCP_SERVICE_SOURCE_DIR)/build
 CLEAN_TARGETS += $(ARK_MCP_SERVICE_SOURCE_DIR)/.coverage
 CLEAN_TARGETS += $(ARK_MCP_SERVICE_SOURCE_DIR)/htmlcov
+# Clean up build artifacts
+CLEAN_TARGETS += $(ARK_MCP_SERVICE_SOURCE_DIR)/ark_sdk-*.whl
+CLEAN_TARGETS += $(ARK_MCP_SERVICE_SOURCE_DIR)/pyproject.toml.bak
 
 # Define phony targets
 .PHONY: $(ARK_MCP_SERVICE_NAME)-build $(ARK_MCP_SERVICE_NAME)-install $(ARK_MCP_SERVICE_NAME)-uninstall $(ARK_MCP_SERVICE_NAME)-dev $(ARK_MCP_SERVICE_NAME)-dev-deps $(ARK_MCP_SERVICE_NAME)-test $(ARK_MCP_SERVICE_NAME)-clean-stamps
@@ -42,8 +45,15 @@ $(eval $(call CLEAN_STAMPS_TEMPLATE,$(ARK_MCP_SERVICE_NAME)))
 $(ARK_MCP_SERVICE_NAME)-deps: $(ARK_MCP_STAMP_DEPS)
 $(ARK_MCP_STAMP_DEPS): $(ARK_MCP_SERVICE_SOURCE_DIR)/pyproject.toml $(ARK_SDK_WHL) | $(OUT)
 	@mkdir -p $(dir $@)
-	cd $(ARK_MCP_SERVICE_SOURCE_DIR) && uv remove ark_sdk || true && \
-	uv add $(ARK_SDK_WHL) && \
+	# Remove old wheels before copying new one
+	rm -f $(ARK_MCP_SERVICE_SOURCE_DIR)/ark_sdk-*.whl
+	# Copy wheel to service directory for Docker build
+	cp $(ARK_SDK_WHL) $(ARK_MCP_SERVICE_SOURCE_DIR)/
+	# Update pyproject.toml to use local wheel file (use actual wheel filename from ARK_SDK_WHL)
+	cd $(ARK_MCP_SERVICE_SOURCE_DIR) && \
+	sed -i.bak 's|path = "../../../out/ark-sdk/py-sdk/dist/ark_sdk-.*\.whl"|path = "./$(notdir $(ARK_SDK_WHL))"|' pyproject.toml && \
+	uv remove ark_sdk || true && \
+	uv add ./$(notdir $(ARK_SDK_WHL)) && \
 	rm -f uv.lock && uv sync
 	@touch $@
 

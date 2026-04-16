@@ -27,11 +27,6 @@ export const settingsSections: SettingsSection[] = [
         icon: Server,
       },
       {
-        key: 'ark-services',
-        label: 'Ark Services',
-        icon: Server,
-      },
-      {
         key: 'memory',
         label: 'Memory',
         icon: Database,

@@ -27,11 +27,13 @@ const mockIsMarketplaceService = vi.fn();
 const mockGetMarketplaceItem = vi.fn();
 const mockGetAllMarketplaceServices = vi.fn();
 const mockGetAllMarketplaceAgents = vi.fn();
+const mockGetAllMarketplaceExecutors = vi.fn();
 vi.mock('../../marketplaceServices.js', () => ({
   isMarketplaceService: mockIsMarketplaceService,
   getMarketplaceItem: mockGetMarketplaceItem,
   getAllMarketplaceServices: mockGetAllMarketplaceServices,
   getAllMarketplaceAgents: mockGetAllMarketplaceAgents,
+  getAllMarketplaceExecutors: mockGetAllMarketplaceExecutors,
 }));
 
 const mockOutput = {
@@ -108,6 +110,29 @@ describe('uninstall command', () => {
     expect(mockOutput.success).toHaveBeenCalledWith(
       'ark-api uninstalled successfully'
     );
+  });
+
+  it('uninstalls multiple services sequentially', async () => {
+    const mockServices = {
+      'ark-api': {
+        name: 'ark-api',
+        helmReleaseName: 'ark-api',
+        namespace: 'ark-system',
+      },
+      'ark-dashboard': {
+        name: 'ark-dashboard',
+        helmReleaseName: 'ark-dashboard',
+        namespace: 'ark-system',
+      },
+    };
+    mockGetInstallableServices.mockReturnValue(mockServices);
+    mockExeca.mockResolvedValue({stdout: ''});
+
+    const command = createUninstallCommand(mockConfig);
+    await command.parseAsync(['node', 'test', 'ark-api', 'ark-dashboard']);
+
+    expect(mockOutput.success).toHaveBeenCalledWith('ark-api uninstalled successfully');
+    expect(mockOutput.success).toHaveBeenCalledWith('ark-dashboard uninstalled successfully');
   });
 
   it('shows error when service not found', async () => {
@@ -225,6 +250,7 @@ describe('uninstall command', () => {
       phoenix: {name: 'phoenix'},
     });
     mockGetAllMarketplaceAgents.mockResolvedValue(null);
+    mockGetAllMarketplaceExecutors.mockResolvedValue(null);
 
     const command = createUninstallCommand(mockConfig);
 

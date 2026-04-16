@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -24,9 +25,9 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
-	completions "mckinsey.com/ark/executors/completions"
 	arka2a "mckinsey.com/ark/internal/a2a"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
+	"mckinsey.com/ark/internal/resolution"
 	"mckinsey.com/ark/internal/telemetry"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 	otelimpl "mckinsey.com/ark/internal/telemetry/otel"
@@ -191,11 +192,13 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	if sessionId == "" {
 		sessionId = string(obj.UID)
 	}
-	if member, err := baggage.NewMember("session.id", sessionId); err == nil {
+	if member, err := baggage.NewMember("ark.session.id", sessionId); err == nil {
 		if bag, err := baggage.New(member); err == nil {
 			opCtx = baggage.ContextWithBaggage(opCtx, bag)
 		}
 	}
+
+	queryInput := extractUserInput(opCtx, obj, r.Client)
 
 	opCtx, dispatchSpan := r.Telemetry.Tracer().Start(opCtx, fmt.Sprintf("query.%s.dispatch", obj.Name),
 		telemetry.WithSpanKind(telemetry.SpanKindChain),
@@ -252,6 +255,8 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	}
 	if engineMeta.ConversationId != "" {
 		obj.Status.ConversationId = engineMeta.ConversationId
+	} else if engineMeta.A2AContextID != "" {
+		obj.Status.ConversationId = engineMeta.A2AContextID
 	}
 
 	queryStatus := r.determineQueryStatus(response)
@@ -259,7 +264,17 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	_ = r.updateStatusWithDuration(opCtx, &obj, queryStatus, duration)
 
 	log.Info("query execution completed", "query", obj.Name, "status", queryStatus, "duration", duration.Duration)
-	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", nil)
+
+	var operationData map[string]string
+	if queryInput != "" {
+		const maxDisplayInputLength = 48
+		displayInput := queryInput
+		if len(displayInput) > maxDisplayInputLength {
+			displayInput = displayInput[:maxDisplayInputLength-3] + "..."
+		}
+		operationData = map[string]string{"input": displayInput}
+	}
+	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", operationData)
 }
 
 func (r *QueryReconciler) resolveDispatchAddress(ctx context.Context, target arkv1alpha1.QueryTarget, namespace string) (string, error) {
@@ -310,22 +325,31 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 	}
 
 	userText := extractUserInput(ctx, query, r.Client)
-	message := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
-		protocol.NewTextPart(userText),
-	})
+	var message protocol.Message
+	if query.Spec.ConversationId != "" {
+		conversationId := query.Spec.ConversationId
+		message = protocol.NewMessageWithContext(protocol.MessageRoleUser, []protocol.Part{
+			protocol.NewTextPart(userText),
+		}, nil, &conversationId)
+	} else {
+		message = protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+			protocol.NewTextPart(userText),
+		})
+	}
 	message.Metadata = metadata
 	message.Extensions = []string{arka2a.QueryExtensionURI}
-
-	a2aClient, err := arka2a.CreateA2AClient(ctx, r.Client, address, nil, query.Namespace, query.Name, nil)
-	if err != nil {
-		return nil, engineResponseMeta{}, fmt.Errorf("failed to create A2A client: %w", err)
-	}
 
 	timeout := 5 * time.Minute
 	if query.Spec.Timeout != nil {
 		timeout = query.Spec.Timeout.Duration
 	}
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
+
+	a2aClient, err := arka2a.CreateA2AClient(execCtx, r.Client, address, nil, query.Namespace, query.Name, nil)
+	if err != nil {
+		cancel()
+		return nil, engineResponseMeta{}, fmt.Errorf("failed to create A2A client: %w", err)
+	}
 	defer cancel()
 
 	blocking := true
@@ -353,8 +377,7 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 
 	rawJSON := engineMeta.MessagesRaw
 	if rawJSON == "" {
-		responseMessages := []completions.Message{completions.NewAssistantMessage(responseText)}
-		rawJSON = serializeMessages(responseMessages)
+		rawJSON = buildFallbackRaw(responseText)
 	}
 
 	response := &arkv1alpha1.Response{
@@ -375,30 +398,19 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 }
 
 func extractUserInput(ctx context.Context, query arkv1alpha1.Query, k8sClient client.Client) string {
-	inputMessages, err := completions.GetQueryInputMessages(ctx, query, k8sClient)
+	text, err := resolution.ResolveQueryInputText(ctx, query, k8sClient)
 	if err != nil {
 		return ""
 	}
-	return completions.ExtractUserMessageContent(inputMessages)
+	return text
 }
 
-func serializeMessages(messages []completions.Message) string {
-	var actualMessages []interface{}
-	for _, msg := range messages {
-		switch {
-		case msg.OfAssistant != nil:
-			actualMessages = append(actualMessages, msg.OfAssistant)
-		case msg.OfUser != nil:
-			actualMessages = append(actualMessages, msg.OfUser)
-		case msg.OfSystem != nil:
-			actualMessages = append(actualMessages, msg.OfSystem)
-		case msg.OfTool != nil:
-			actualMessages = append(actualMessages, msg.OfTool)
-		case msg.OfFunction != nil:
-			actualMessages = append(actualMessages, msg.OfFunction)
-		}
-	}
-	rawBytes, err := json.Marshal(actualMessages)
+func buildFallbackRaw(responseText string) string {
+	msg := []struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}{{Role: "assistant", Content: responseText}}
+	rawBytes, err := json.Marshal(msg)
 	if err != nil {
 		return "[]"
 	}
@@ -443,16 +455,23 @@ func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMet
 		return responseMeta
 	}
 
-	var msgMeta map[string]any
-	if msg, ok := result.Result.(*protocol.Message); ok {
-		msgMeta = msg.Metadata
-	}
-
-	if msgMeta == nil {
+	msg, ok := result.Result.(*protocol.Message)
+	if !ok {
 		return responseMeta
 	}
 
-	arkData, ok := msgMeta[arka2a.QueryExtensionMetadataKey]
+	if msg.ContextID != nil && *msg.ContextID != "" {
+		responseMeta.A2AContextID = *msg.ContextID
+	}
+	if msg.TaskID != nil && *msg.TaskID != "" {
+		responseMeta.A2ATaskID = *msg.TaskID
+	}
+
+	if msg.Metadata == nil {
+		return responseMeta
+	}
+
+	arkData, ok := msg.Metadata[arka2a.QueryExtensionMetadataKey]
 	if !ok {
 		return responseMeta
 	}
@@ -635,6 +654,9 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 	}
 	err := r.Status().Update(ctx, query)
 	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
 		logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
 	}
 	return err

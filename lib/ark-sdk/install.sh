@@ -16,7 +16,11 @@ CRD_GLOBS=(
   "../../services/**/crd/*.yml"
 )
 
-if [ -e $OUT_DIR/py-sdk/dist/ark_sdk-$(cat ../../version.txt)-py3-none-any.whl ]; then
+# Get PEP 440 normalized version for wheel filename (e.g., 0.1.58-rc.3 -> 0.1.58rc3)
+PEP440_VERSION=$(cat ../../version.txt | sed 's/-rc\./rc/')
+WHEEL_NAME="ark_sdk-${PEP440_VERSION}-py3-none-any.whl"
+
+if [[ -e "$OUT_DIR/py-sdk/dist/$WHEEL_NAME" ]]; then
   echo ">> ARK SDK Already built - skipping"
   exit 0
 fi

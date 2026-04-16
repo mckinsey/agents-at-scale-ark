@@ -3,7 +3,6 @@
 import { useAtomValue } from 'jotai';
 import { Copy } from 'lucide-react';
 import { useParams, useSearchParams } from 'next/navigation';
-import { useRouter } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -12,7 +11,6 @@ import { ErrorResponseContent } from '@/components/ErrorResponseContent';
 import JsonDisplay from '@/components/JsonDisplay';
 import type { BreadcrumbElement } from '@/components/common/page-header';
 import { PageHeader } from '@/components/common/page-header';
-import { QueryEvaluationActions } from '@/components/query-actions';
 import { QueryMemoryField } from '@/components/query-fields/query-memory-field';
 import { QueryTargetsField } from '@/components/query-fields/query-targets-field';
 import { Button } from '@/components/ui/button';
@@ -31,10 +29,10 @@ import {
 import type { components } from '@/lib/api/generated/types';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { useMarkdownProcessor } from '@/lib/hooks/use-markdown-processor';
 import {
   agentsService,
-  evaluationsService,
   memoriesService,
   modelsService,
   teamsService,
@@ -44,6 +42,7 @@ import type { Agent } from '@/lib/services/agents';
 import { queriesService } from '@/lib/services/queries';
 import type { ToolDetail } from '@/lib/services/tools';
 import { cn } from '@/lib/utils';
+import { useNamespace } from '@/providers/NamespaceProvider';
 import {
   type QueryParameter,
   extractAgentRequiredParams,
@@ -130,12 +129,6 @@ interface QueryStatus {
     };
     content?: string;
   };
-  evaluations?: Array<{
-    evaluatorName?: string;
-    score?: string;
-    passed?: boolean;
-    metadata?: Record<string, string>;
-  }>;
   tokenUsage?: {
     promptTokens?: number;
     completionTokens?: number;
@@ -349,7 +342,8 @@ function QueryStreamingField({
 function QueryDetailContent() {
   const params = useParams();
   const searchParams = useSearchParams();
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
+  const { namespace } = useNamespace();
   const queryId = params.id as string;
   const targetTool = searchParams.get('target_tool');
   const isNew = queryId === 'new';
@@ -357,7 +351,6 @@ function QueryDetailContent() {
 
   const [query, setQuery] = useState<TypedQueryDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [evaluationCount, setEvaluationCount] = useState(0);
   const [availableTargets, setAvailableTargets] = useState<
     Array<{ name: string; type: 'agent' | 'model' | 'team' | 'tool' }>
   >([]);
@@ -503,7 +496,7 @@ function QueryDetailContent() {
       });
 
       // Navigate to the created query
-      router.push(`/query/${savedQuery.name}`);
+      push(`/query/${savedQuery.name}`);
     } catch (error) {
       console.error('Failed to save query:', error);
       toast.error('Failed to Execute Query', {
@@ -606,15 +599,6 @@ function QueryDetailContent() {
           ] === 'true';
         setStreaming(isStreamingEnabled);
 
-        // Load evaluation count
-        try {
-          const evaluationSummary =
-            await evaluationsService.getEvaluationSummary(queryId);
-          setEvaluationCount(evaluationSummary.total || 0);
-        } catch (error) {
-          console.error('Failed to load evaluation count:', error);
-          setEvaluationCount(0);
-        }
       } catch (error) {
         toast.error('Failed to Load Query', {
           description:
@@ -628,7 +612,7 @@ function QueryDetailContent() {
     };
 
     loadQuery();
-  }, [queryId, isNew, targetTool, defaultQueryTimeout]);
+  }, [queryId, isNew, targetTool, defaultQueryTimeout, namespace]);
 
   // Fetch tool schema when target is a tool
   useEffect(() => {
@@ -675,7 +659,7 @@ function QueryDetailContent() {
       <div className="flex h-screen items-center justify-center">
         <div className="text-center">
           <h1 className="mb-2 text-xl font-semibold">Query Not Found</h1>
-          <Button variant="outline" onClick={() => router.back()}>
+          <Button variant="outline" onClick={() => push('/queries')}>
             ← Back to Queries
           </Button>
         </div>
@@ -697,13 +681,12 @@ function QueryDetailContent() {
         currentPage={pageTitle}
         actions={
           <>
-            {!isNew && <QueryEvaluationActions queryName={queryId} />}
             {isNew && (
               <>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => router.push(`/query/new`)}>
+                  onClick={() => push(`/query/new`)}>
                   New Query
                 </Button>
                 <Button
@@ -719,7 +702,7 @@ function QueryDetailContent() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => router.push(`/query/new`)}>
+                onClick={() => push(`/query/new`)}>
                 New Query
               </Button>
             )}
@@ -928,12 +911,6 @@ function QueryDetailContent() {
                       {query.status?.tokenUsage
                         ? `${query.status.tokenUsage.promptTokens || 0} / ${query.status.tokenUsage.completionTokens || 0}`
                         : '—'}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className={FIELD_HEADING_STYLES}>Evaluations</td>
-                    <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
-                      {evaluationCount}
                     </td>
                   </tr>
                 </tbody>

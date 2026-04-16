@@ -1,0 +1,45 @@
+terminationGracePeriodSeconds: 3
+ark:
+  model:
+    enabled: true
+    name: test-model
+    type: completions
+    provider: openai
+    model: gpt-4
+    apiKey: mock-api-key
+
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "gpt-4",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            }
+          ]
+        }
+
+  - path: "/v1/chat/completions"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}]}'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'Agent A')"
+    response:
+        status: 200
+        content: '{"choices":[{"message":{"role":"assistant","content":"AGENT-A: Task completed successfully."},"finish_reason":"stop"}]}'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'Agent B')"
+    response:
+        status: 200
+        content: '{"choices":[{"message":{"role":"assistant","content":"AGENT-B: Task completed successfully."},"finish_reason":"stop"}]}'

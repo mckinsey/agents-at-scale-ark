@@ -13,6 +13,7 @@ vi.mock('@/lib/services/chat', () => ({
     streamChatResponse: vi.fn(),
     submitChatQuery: vi.fn(),
     getQueryResult: vi.fn(),
+    getQuery: vi.fn().mockResolvedValue({ status: { conversationId: '' } }),
   },
 }));
 
@@ -93,7 +94,10 @@ function renderEmbeddedChatPanel(props: {
 }
 
 describe('EmbeddedChatPanel', () => {
-  it('should use persisted conversation ID as sessionId when available', () => {
+  it('should not reuse a persisted conversation ID from another chat', () => {
+    // The old behavior bled the global lastConversationId into every new chat
+    // popup, so two distinct chats ended up with the same broker sessionId.
+    // Each chat popup should now mint its own chat-<name>-<sha> id.
     sessionStorage.setItem(
       'last-conversation-id',
       JSON.stringify('persisted-session-123'),
@@ -102,7 +106,8 @@ describe('EmbeddedChatPanel', () => {
     renderEmbeddedChatPanel({ name: 'test-agent', type: 'agent' });
 
     const atomValue = store.get(lastConversationIdAtom);
-    expect(atomValue).toBe('persisted-session-123');
+    expect(atomValue).toMatch(/^chat-test-agent-[0-9a-f]{7}$/);
+    expect(atomValue).not.toBe('persisted-session-123');
   });
 
   it('should persist new sessionId to atom on new chat creation', async () => {
@@ -133,7 +138,7 @@ describe('EmbeddedChatPanel', () => {
                   spans: [
                     {
                       attributes: [
-                        { key: 'session.id', value: 'session-A' },
+                        { key: 'ark.session.id', value: 'session-A' },
                         { key: 'agent', value: 'test-agent' },
                       ],
                       startTimeUnixNano: '1704103200000000000',
@@ -228,7 +233,7 @@ describe('EmbeddedChatPanel', () => {
                   spans: [
                     {
                       attributes: [
-                        { key: 'session.id', value: 'session-A' },
+                        { key: 'ark.session.id', value: 'session-A' },
                         { key: 'agent', value: 'test-agent' },
                       ],
                       startTimeUnixNano: '1704103200000000000',
@@ -240,7 +245,7 @@ describe('EmbeddedChatPanel', () => {
                   spans: [
                     {
                       attributes: [
-                        { key: 'session.id', value: 'session-B' },
+                        { key: 'ark.session.id', value: 'session-B' },
                         { key: 'agent', value: 'test-agent' },
                       ],
                       startTimeUnixNano: '1704103260000000000',
@@ -252,7 +257,7 @@ describe('EmbeddedChatPanel', () => {
                   spans: [
                     {
                       attributes: [
-                        { key: 'session.id', value: 'session-A' },
+                        { key: 'ark.session.id', value: 'session-A' },
                         { key: 'agent', value: 'test-agent' },
                       ],
                       startTimeUnixNano: '1704103320000000000',

@@ -151,6 +151,22 @@ describe('POST /api/marketplace/[id]/install', () => {
     expect(data.arkCommand).toBe('ark install marketplace/agents/my-agent');
   });
 
+  it('should use executors in arkCommand for executor type', async () => {
+    mockGetRawMarketplaceItemById.mockResolvedValueOnce({
+      ...baseItem,
+      type: 'executor',
+    });
+
+    const request = createRequest('http://localhost/api/marketplace/my-executor/install', {
+      method: 'POST',
+      body: JSON.stringify({ mode: 'command' }),
+    });
+    const response = await POST(request, { params: Promise.resolve({ id: 'my-executor' }) });
+    const data = await response.json();
+
+    expect(data.arkCommand).toBe('ark install marketplace/executors/my-executor');
+  });
+
   it('should execute helm and return success in direct mode when helm available', async () => {
     mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
     mockExecSuccess({ stdout: 'v3.12.0', stderr: '' });

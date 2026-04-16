@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/openai/openai-go"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -20,10 +19,7 @@ const (
 )
 
 const (
-	// QueryTypeUser represents a query with string input that gets converted to a single message with role="user"
 	QueryTypeUser = "user"
-	// QueryTypeMessages represents a query with an array of OpenAI ChatCompletionMessageParamUnion objects
-	QueryTypeMessages = "messages"
 )
 
 type QueryTarget struct {
@@ -33,6 +29,15 @@ type QueryTarget struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
+}
+
+// QueryRef references a Query resource by name and namespace.
+type QueryRef struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+	// +kubebuilder:validation:Optional
+	Namespace string `json:"namespace,omitempty"`
 }
 
 type MemoryRef struct {
@@ -45,13 +50,12 @@ type MemoryRef struct {
 
 type QuerySpec struct {
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Enum=user;messages
+	// +kubebuilder:validation:Enum=user
 	// +kubebuilder:default=user
 	Type string `json:"type,omitempty"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:pruning:PreserveUnknownFields
 	// +kubebuilder:validation:Schemaless
-	// Input can be a string (type=user) or []openai.ChatCompletionMessageParamUnion (type=messages)
 	Input runtime.RawExtension `json:"input"`
 	// +kubebuilder:validation:Optional
 	// Parameters for template processing in the input field
@@ -70,6 +74,8 @@ type QuerySpec struct {
 	SessionId string `json:"sessionId,omitempty"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MinLength=1
+	// ConversationId is sent as A2A ContextID when dispatching to execution engines.
+	// Engines use it for conversation threading (e.g., memory lookup, session management).
 	ConversationId string `json:"conversationId,omitempty"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default="720h"
@@ -87,7 +93,9 @@ type QuerySpec struct {
 // A2AMetadata contains optional A2A protocol metadata
 type A2AMetadata struct {
 	// +kubebuilder:validation:Optional
-	// ContextID from the A2A protocol when the target is an A2A agent
+	// ContextID returned by the execution engine via A2A protocol response.
+	// For the completions engine this is the broker conversation UUID.
+	// For named engines this is whatever context ID the engine returned.
 	ContextID string `json:"contextId,omitempty"`
 	// +kubebuilder:validation:Optional
 	// TaskID from the A2A protocol when the target is an A2A agent and a task was created
@@ -163,20 +171,6 @@ func (q *QuerySpec) GetInputString() (string, error) {
 	return inputString, nil
 }
 
-// GetInputMessages returns the input as []openai.ChatCompletionMessageParamUnion when type="messages"
-func (q *QuerySpec) GetInputMessages() ([]openai.ChatCompletionMessageParamUnion, error) {
-	if q.Type != QueryTypeMessages {
-		return nil, fmt.Errorf("cannot get message input for type=%s, expected type=%s", q.Type, QueryTypeMessages)
-	}
-
-	var messages []openai.ChatCompletionMessageParamUnion
-	if err := json.Unmarshal(q.Input.Raw, &messages); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal input as messages: %w", err)
-	}
-
-	return messages, nil
-}
-
 // SetInputString sets the input as a string and updates type to "user" (or keeps it empty for default)
 func (q *QuerySpec) SetInputString(input string) error {
 	inputBytes, err := json.Marshal(input)
@@ -190,30 +184,6 @@ func (q *QuerySpec) SetInputString(input string) error {
 	}
 	q.Input.Raw = inputBytes
 	return nil
-}
-
-// SetInputMessages sets the input as []openai.ChatCompletionMessageParamUnion and updates type to "messages"
-func (q *QuerySpec) SetInputMessages(messages []openai.ChatCompletionMessageParamUnion) error {
-	inputBytes, err := json.Marshal(messages)
-	if err != nil {
-		return fmt.Errorf("failed to marshal message input: %w", err)
-	}
-
-	q.Type = QueryTypeMessages
-	q.Input.Raw = inputBytes
-	return nil
-}
-
-// GetInputAsGeneric returns the input as either string or []openai.ChatCompletionMessageParamUnion based on type
-func (q *QuerySpec) GetInputAsGeneric() (interface{}, error) {
-	switch q.Type {
-	case QueryTypeUser, "": // Empty type defaults to user/string input
-		return q.GetInputString()
-	case QueryTypeMessages:
-		return q.GetInputMessages()
-	default:
-		return nil, fmt.Errorf("unknown input type: %s", q.Type)
-	}
 }
 
 func init() {

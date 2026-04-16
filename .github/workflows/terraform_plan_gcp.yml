@@ -19,7 +19,7 @@ jobs:
     runs-on: ${{vars.GH_RUNNER_LABEL || 'ubuntu-latest' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Authenticate to GCP (Workload Identity)
         uses: google-github-actions/auth@v1

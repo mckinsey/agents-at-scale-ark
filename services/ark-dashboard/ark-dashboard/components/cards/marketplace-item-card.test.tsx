@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import copy from 'copy-to-clipboard';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import type { MarketplaceItem } from '@/lib/api/generated/marketplace-types';
@@ -10,9 +11,11 @@ import { MarketplaceItemCard } from './marketplace-item-card';
 
 vi.mock('@/lib/services/marketplace-hooks');
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('copy-to-clipboard');
 
 const mockMutateAsync = vi.fn();
 const mockUseInstallMarketplaceItem = vi.mocked(useInstallMarketplaceItem);
+const mockCopy = vi.mocked(copy);
 
 function makeItem(overrides?: Partial<MarketplaceItem>): MarketplaceItem {
   return {
@@ -30,6 +33,7 @@ function makeItem(overrides?: Partial<MarketplaceItem>): MarketplaceItem {
     tags: [],
     createdAt: '2024-01-01',
     updatedAt: '2024-01-01',
+    uis: undefined,
     ...overrides,
   };
 }
@@ -88,6 +92,27 @@ describe('MarketplaceItemCard', () => {
     );
 
     expect(screen.getByText('Agent')).toBeInTheDocument();
+  });
+
+  it('renders View button for demo items and opens repository URL', () => {
+    const spy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const demoUrl = 'https://github.com/example/demo';
+
+    renderWithProviders(
+      <MarketplaceItemCard
+        item={makeItem({ type: 'demo', repository: demoUrl })}
+      />,
+    );
+
+    const viewButton = screen.getByRole('button', { name: /view/i });
+    expect(viewButton).toBeInTheDocument();
+    expect(viewButton).not.toBeDisabled();
+
+    fireEvent.click(viewButton);
+
+    expect(spy).toHaveBeenCalledWith(demoUrl, '_blank');
+
+    spy.mockRestore();
   });
 
   it('renders up to 4 tags', () => {
@@ -259,6 +284,109 @@ describe('MarketplaceItemCard', () => {
       );
     });
   });
+
+  describe('UI buttons for installed items', () => {
+    it('renders UI buttons when item is installed and has uis array', () => {
+      const spy = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+      renderWithProviders(
+        <MarketplaceItemCard
+          item={makeItem({
+            status: 'installed',
+            uis: [
+              { url: 'https://phoenix.example.com', label: 'Phoenix Dashboard' },
+            ],
+          })}
+        />,
+      );
+
+      const uiButton = screen.getByRole('button', { name: /phoenix dashboard/i });
+      expect(uiButton).toBeInTheDocument();
+
+      fireEvent.click(uiButton);
+      expect(spy).toHaveBeenCalledWith('https://phoenix.example.com', '_blank');
+
+      spy.mockRestore();
+    });
+
+    it('renders multiple UI buttons when item has multiple uis', () => {
+      renderWithProviders(
+        <MarketplaceItemCard
+          item={makeItem({
+            status: 'installed',
+            uis: [
+              { url: 'https://phoenix.example.com', label: 'Phoenix' },
+              { url: 'https://minio.example.com', label: 'MinIO' },
+            ],
+          })}
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: /phoenix/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /minio/i })).toBeInTheDocument();
+    });
+
+    it('does not render UI buttons when item is not installed', () => {
+      renderWithProviders(
+        <MarketplaceItemCard
+          item={makeItem({
+            status: 'available',
+            uis: [
+              { url: 'https://phoenix.example.com', label: 'Phoenix' },
+            ],
+          })}
+        />,
+      );
+
+      expect(screen.queryByRole('button', { name: /phoenix/i })).not.toBeInTheDocument();
+    });
+
+    it('does not render UI buttons when uis array is empty', () => {
+      renderWithProviders(
+        <MarketplaceItemCard
+          item={makeItem({
+            status: 'installed',
+            uis: [],
+          })}
+        />,
+      );
+
+      expect(screen.getByText('Installed')).toBeInTheDocument();
+    });
+
+    it('does not render UI buttons when uis is undefined', () => {
+      renderWithProviders(
+        <MarketplaceItemCard
+          item={makeItem({
+            status: 'installed',
+          })}
+        />,
+      );
+
+      expect(screen.getByText('Installed')).toBeInTheDocument();
+    });
+
+    it('opens URL in new tab when UI button is clicked', () => {
+      const spy = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+      renderWithProviders(
+        <MarketplaceItemCard
+          item={makeItem({
+            status: 'installed',
+            uis: [
+              { url: 'https://test.example.com', label: 'Test UI' },
+            ],
+          })}
+        />,
+      );
+
+      const uiButton = screen.getByRole('button', { name: /test ui/i });
+      fireEvent.click(uiButton);
+
+      expect(spy).toHaveBeenCalledWith('https://test.example.com', '_blank');
+      spy.mockRestore();
+    });
+  });
 });
 
 describe('InstallCommandDialog', () => {
@@ -294,15 +422,15 @@ describe('InstallCommandDialog', () => {
     return allButtons.filter(b => b !== closeBtn);
   }
 
-  it('copy to clipboard calls writeText and shows success toast', async () => {
+  it('copy to clipboard calls copy library and shows success toast', async () => {
     const { toast } = await import('sonner');
+
+    mockCopy.mockReturnValue(true);
 
     await openDialogWithCommands({
       arkCommand: 'ark install test',
       helmCommand: 'helm install test',
     });
-
-    const spy = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
 
     const copyButtons = getCopyButtonsInDialog();
     expect(copyButtons.length).toBe(2);
@@ -310,20 +438,19 @@ describe('InstallCommandDialog', () => {
     fireEvent.click(copyButtons[0]);
 
     await waitFor(() => {
-      expect(spy).toHaveBeenCalledWith('ark install test');
+      expect(mockCopy).toHaveBeenCalledWith('ark install test');
     });
     expect(toast.success).toHaveBeenCalledWith('Command copied to clipboard');
-    spy.mockRestore();
   });
 
   it('copy failure shows error toast', async () => {
     const { toast } = await import('sonner');
 
+    mockCopy.mockReturnValue(false);
+
     await openDialogWithCommands({
       arkCommand: 'ark install test',
     });
-
-    const spy = vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new Error('Clipboard denied'));
 
     const copyButtons = getCopyButtonsInDialog();
     expect(copyButtons.length).toBe(1);
@@ -332,7 +459,6 @@ describe('InstallCommandDialog', () => {
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith('Failed to copy to clipboard');
     });
-    spy.mockRestore();
   });
 
   it('shows both helm and ark command sections', async () => {

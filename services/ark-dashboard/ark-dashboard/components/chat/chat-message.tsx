@@ -1,8 +1,8 @@
 import { AlertCircle } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
 import { ToolCall, type ToolCallData } from '@/components/chat/tool-call';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { useMarkdownProcessor } from '@/lib/hooks/use-markdown-processor';
 import { getResourceEventsUrl } from '@/lib/utils/events';
 
@@ -15,6 +15,11 @@ interface ChatMessageProps {
   viewMode?: 'text' | 'markdown';
   toolCalls?: ToolCallData[];
   sender?: string;
+  tokenUsage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
 }
 
 export function ChatMessage({
@@ -26,11 +31,12 @@ export function ChatMessage({
   queryName,
   toolCalls,
   sender,
+  tokenUsage,
 }: Readonly<ChatMessageProps>) {
   const isUser = role === 'user';
   const isFailed = status === 'failed';
   const markdownContent = useMarkdownProcessor(content);
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
   const contentRef = useRef<HTMLDivElement>(null);
   const [needsExpansion, setNeedsExpansion] = useState(false);
   const [expandedWidth, setExpandedWidth] = useState<number | null>(null);
@@ -40,7 +46,7 @@ export function ChatMessage({
   const handleErrorIconClick = () => {
     if (queryName) {
       const eventsUrl = getResourceEventsUrl('Query', queryName);
-      router.push(eventsUrl);
+      push(eventsUrl);
     }
   };
 
@@ -191,6 +197,13 @@ export function ChatMessage({
                 </button>
               )}
             </div>
+            {!isUser && tokenUsage && tokenUsage.total_tokens > 0 && (
+              <div className="text-muted-foreground text-xs opacity-60">
+                {tokenUsage.total_tokens.toLocaleString()} tokens (
+                {tokenUsage.prompt_tokens.toLocaleString()} in,{' '}
+                {tokenUsage.completion_tokens.toLocaleString()} out)
+              </div>
+            )}
           </div>
         </div>
       )}

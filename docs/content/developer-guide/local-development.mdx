@@ -45,6 +45,12 @@ cert-manager or gateway-api are installed by default to disable them use env var
 ENABLE_CERT_MANAGER=false devspace dev
 ```
 
+Argo Workflows is opt-in. To enable it, set `ENABLE_ARGO`:
+
+```bash
+ENABLE_ARGO=true devspace dev
+```
+
 ## Storage Backend Selection
 
 The ark-controller supports two storage backends: etcd (default) and PostgreSQL. Use the `STORAGE_BACKEND` environment variable to select:
@@ -70,7 +76,7 @@ Switching between storage backends is destructive. Resources created with etcd (
 
 The completions engine runs as a standalone pod. This allows independent code sync and restart — changing engine code only restarts the engine, not the controller.
 
-DevSpace deploys the engine using the chart at `executors/completions/chart/`. The controller connects via `--completions-addr=http://ark-completions.ark-system:9090`.
+DevSpace deploys the engine using the chart at `executors/completions/chart/`. The controller connects via `--completions-addr=http://ark-completions.ark-system`.
 
 ```bash
 # Both controller and completions engine start with devspace dev

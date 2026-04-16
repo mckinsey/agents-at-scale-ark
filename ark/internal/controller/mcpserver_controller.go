@@ -64,12 +64,10 @@ func (r *MCPServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
-	// Initialize conditions if empty
 	if len(mcpServer.Status.Conditions) == 0 {
 		if err := r.reconcileConditionsInitializing(ctx, &mcpServer); err != nil {
 			return ctrl.Result{}, err
 		}
-		// Return early to avoid double reconciliation, let the status update trigger next reconcile
 		return ctrl.Result{}, nil
 	}
 
@@ -245,6 +243,9 @@ func (r *MCPServerReconciler) updateStatus(ctx context.Context, mcpServer *arkv1
 	}
 	err := r.Status().Update(ctx, mcpServer)
 	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
 		logf.FromContext(ctx).Error(err, "failed to update MCPServer status")
 	}
 	return err

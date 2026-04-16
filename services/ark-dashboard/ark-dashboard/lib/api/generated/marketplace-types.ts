@@ -8,6 +8,7 @@ export interface MarketplaceItem {
   version: string;
   author: string;
   repository?: string;
+  source?: string;
   documentation?: string;
   installCommand?: string;
   status: MarketplaceItemStatus;
@@ -19,6 +20,7 @@ export interface MarketplaceItem {
   screenshots?: string[];
   createdAt: string;
   updatedAt: string;
+  uis?: { url: string; label: string }[];
 }
 
 export type MarketplaceCategory =
@@ -34,7 +36,9 @@ export type MarketplaceItemType =
   | 'service'
   | 'component'
   | 'template'
-  | 'plugin';
+  | 'plugin'
+  | 'demo'
+  | 'executor';
 
 export type MarketplaceItemStatus =
   | 'available'

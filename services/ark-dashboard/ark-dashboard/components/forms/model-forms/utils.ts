@@ -81,6 +81,22 @@ export function createConfig(
         ...(formValues.modelARN && { modelArn: formValues.modelARN }),
       };
       return config;
+    case 'anthropic':
+      (config as Record<string, unknown>).anthropic = {
+        apiKey: {
+          valueFrom: {
+            secretKeyRef: {
+              name: formValues.secret,
+              key: 'token',
+            },
+          },
+        },
+        baseUrl: formValues.baseUrl,
+        ...(formValues.anthropicVersion && {
+          version: { value: formValues.anthropicVersion },
+        }),
+      };
+      return config;
   }
 }
 
@@ -121,6 +137,15 @@ export function getResetValues(currentFormValues: FormValues): FormValues {
         bedrockSecretAccessKeySecretName: '',
         region: '',
         modelARN: '',
+      };
+    case 'anthropic':
+      return {
+        name: currentFormValues.name,
+        provider: currentFormValues.provider,
+        model: currentFormValues.model,
+        secret: '',
+        baseUrl: '',
+        anthropicVersion: '',
       };
   }
 }
@@ -310,6 +335,32 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
           getConfigValue<string>(model.config, [
             'bedrock',
             'modelArn',
+            'value',
+          ]) || '',
+      };
+    case 'anthropic':
+      return {
+        name: model.name,
+        provider: model.provider as 'anthropic',
+        model: model.model,
+        secret:
+          getConfigValue<string>(model.config, [
+            'anthropic',
+            'apiKey',
+            'valueFrom',
+            'secretKeyRef',
+            'name',
+          ]) || '',
+        baseUrl:
+          getConfigValue<string>(model.config, [
+            'anthropic',
+            'baseUrl',
+            'value',
+          ]) || '',
+        anthropicVersion:
+          getConfigValue<string>(model.config, [
+            'anthropic',
+            'version',
             'value',
           ]) || '',
       };

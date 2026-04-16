@@ -1,6 +1,21 @@
 # Chainsaw Testing Guide
 
-This document covers best practices for writing chainsaw tests in the ARK project.
+This document covers best practices for writing chainsaw tests in the Ark project.
+
+## Test Taxonomy
+
+Tests use labels in `chainsaw-test.yaml` metadata to control when they run.
+
+### Label-Based Selectors
+
+| Label | Meaning | CI Trigger |
+|---|---|---|
+| *(no label)* | Standard tests, use mock-llm | Always runs (`!llm,!postgresql` or `!llm`) |
+| `llm: "true"` | Requires real LLM API keys | `e2e-tests-llm` job only |
+| `multi-provider: "true"` | Runs per-provider via `chainsaw-multi` script | `e2e-tests-llm` job |
+| `postgresql: "true"` | Requires PostgreSQL backend | Excluded from etcd-only runs |
+| `requires-images: "true"` | Requires built container images | Conditional |
+| `standard: "true"` | Explicit standard marker | Always runs |
 
 ### Basic Test Layout
 ```
@@ -117,7 +132,20 @@ Agents don't have a `status.phase` field, so only assert existence:
 ```
 
 ### Query Assertions
-Queries should assert `phase: done` for successful completion:
+Use `wait:` with the `Completed` condition to wait for query completion. This uses a Kubernetes watch instead of polling, which reduces API server load:
+```yaml
+- wait:
+    apiVersion: ark.mckinsey.com/v1alpha1
+    kind: Query
+    name: test-query
+    timeout: 4m
+    for:
+      condition:
+        name: Completed
+        value: 'True'
+```
+
+Use `assert:` only for post-completion validation where the query is already known to be done:
 ```yaml
 - assert:
     resource:
@@ -527,12 +555,15 @@ spec:
           helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
     - apply:
         file: manifests/*.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          status:
-            phase: done
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query
+        timeout: 4m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     catch:
     - events: {}
     - describe:
@@ -588,14 +619,15 @@ Separate query completion waiting from validation steps to ensure proper timing:
 ```yaml
 - name: wait-for-query-completion
   try:
-  - assert:
-      resource:
-        apiVersion: ark.mckinsey.com/v1alpha1
-        kind: Query
-        metadata:
-          name: test-query
-        status:
-          phase: done
+  - wait:
+      apiVersion: ark.mckinsey.com/v1alpha1
+      kind: Query
+      name: test-query
+      timeout: 4m
+      for:
+        condition:
+          name: Completed
+          value: 'True'
 
 - name: validate-response
   try:
@@ -863,14 +895,17 @@ jsonpath "$.result.messageId" exists
       content: kubectl exec test-pod -- hurl --test /tests/test.hurl
 
 # Then test ARK integration
-- name: test-ark-integration
+- name: wait-for-query-completion
   try:
-  - assert:
-      resource:
-        apiVersion: ark.mckinsey.com/v1alpha1
-        kind: Query
-        status:
-          phase: done
+  - wait:
+      apiVersion: ark.mckinsey.com/v1alpha1
+      kind: Query
+      name: test-query
+      timeout: 4m
+      for:
+        condition:
+          name: Completed
+          value: 'True'
 ```
 
 This pattern validates both the service's HTTP API functionality and its integration with the ARK platform.
@@ -891,5 +926,35 @@ chainsaw test tests/ --test-dir tests/queries --pause-on-failure
 
 ### Validation
 - Each test should pass independently when run individually
+
+## Playwright UI Testing
+
+### Radix UI Select
+
+Two things make Radix UI Select options unstable for Playwright:
+
+1. **Floating UI positioning**: The dropdown portal DOM nodes are replaced when Floating UI calculates position, causing "element was detached from the DOM". Floating UI sets `data-side` once positioning is done.
+2. **Open animation**: `data-state="open"` fires at the *start* of the entry animation (zoom-in, slide-in), not the end. Playwright sees the bounding box still changing and reports "element is not stable". The animation must fully complete before options are clickable.
+
+Wait for the listbox to be visible, then wait for all CSS animations to finish before clicking:
+
+```python
+trigger.click()
+listbox = page.locator("[role='listbox'][data-side][data-state='open']")
+listbox.wait_for(state="visible", timeout=15000)
+self.wait_for_animations_complete(listbox)  # BasePage helper
+page.locator("[role='option']:has-text('HTTP')").first.click()
+```
+
+`wait_for_animations_complete` uses the Web Animations API to block until all running animations on the element and its subtree finish:
+
+```python
+locator.evaluate("el => Promise.all(el.getAnimations({subtree: true}).map(a => a.finished))")
+```
+
+`{subtree: true}` is required — without it, `getAnimations()` only checks the listbox container, not the option elements that are actually animating.
+
+If options are still detaching after this, the likely cause is a parent component re-rendering while the dropdown is open (e.g. a `form.watch()` call in React Hook Form re-rendering on blur/validation). Fix it in the component by replacing `form.watch(name)` with `useWatch({ control, name })`, which only re-renders when the field value changes.
+
 - Query tests should reach `phase: done`
 - No RBAC permission errors in events

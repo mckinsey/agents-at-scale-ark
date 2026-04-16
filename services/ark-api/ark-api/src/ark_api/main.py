@@ -77,7 +77,7 @@ def extract_session_context(request: Request):
     session_id = request.headers.get("x-session-id")
     if session_id:
         # Add session to baggage
-        ctx = baggage.set_baggage("session.id", session_id, context=ctx)
+        ctx = baggage.set_baggage("ark.session.id", session_id, context=ctx)
     
     return ctx, session_id
 

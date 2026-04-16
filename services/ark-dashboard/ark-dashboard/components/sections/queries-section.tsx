@@ -9,12 +9,10 @@ import {
   RefreshCw,
   Trash2,
 } from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { toast } from 'sonner';
 
-import { EvaluationStatusIndicator } from '@/components/evaluation';
+import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import {
   Empty,
@@ -32,10 +30,12 @@ import {
 } from '@/components/ui/tooltip';
 import type { components } from '@/lib/api/generated/types';
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { queriesService } from '@/lib/services/queries';
 import { useListQueries } from '@/lib/services/queries-hooks';
 import { getResourceEventsUrl } from '@/lib/utils/events';
 import { formatAge } from '@/lib/utils/time';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
 type QueryResponse = components['schemas']['QueryResponse'];
 
@@ -52,11 +52,12 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(
     const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
     const [outputViewMode, setOutputViewMode] =
       useState<OutputViewMode>('content'); // NEW
-    const router = useRouter();
+    const { push } = useNamespacedNavigation();
+    const { namespace } = useNamespace();
 
     useImperativeHandle(ref, () => ({
       openAddEditor: () => {
-        router.push(`/query/new`);
+        push(`/query/new`);
       },
     }));
 
@@ -375,9 +376,6 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(
                         <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
                           Token Usage (Prompt / Completion)
                         </th>
-                        <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
-                          Evaluations
-                        </th>
                         <th className="px-3 py-2 text-center text-sm font-medium text-gray-900 dark:text-gray-100">
                           Status
                         </th>
@@ -390,7 +388,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(
                       {sortedQueries.length === 0 ? (
                         <tr>
                           <td
-                            colSpan={11}
+                            colSpan={10}
                             className="px-3 py-8 text-center text-xs text-gray-500 dark:text-gray-400">
                             <Empty>
                               <EmptyHeader>
@@ -404,14 +402,14 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(
                                 </EmptyDescription>
                               </EmptyHeader>
                               <EmptyContent>
-                                <Link href="/query/new">
+                                <NamespacedLink href="/query/new">
                                   <Button asChild>
                                     <div>
                                       <Plus className="h-4 w-4" />
                                       Create Query
                                     </div>
                                   </Button>
-                                </Link>
+                                </NamespacedLink>
                               </EmptyContent>
                               <Button
                                 variant="link"
@@ -439,7 +437,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(
                               key={query.name}
                               className="cursor-pointer border-b border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900/30"
                               onClick={() =>
-                                router.push(`/query/${query.name}`)
+                                push(`/query/${query.name}`)
                               }>
                               <td className="px-3 py-3 font-mono text-sm text-gray-900 dark:text-gray-100">
                                 {query.name}
@@ -488,14 +486,6 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(
                               </td>
                               <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
                                 {formatTokenUsage(query)}
-                              </td>
-                              <td className="px-3 py-3 align-middle text-sm text-gray-900 dark:text-gray-100">
-                                <div className="flex items-center justify-center">
-                                  <EvaluationStatusIndicator
-                                    queryName={query.name}
-                                    compact={true}
-                                  />
-                                </div>
                               </td>
                               <td className="px-3 py-3 text-center">
                                 {getStatusBadge(getStatus(query), query.name)}

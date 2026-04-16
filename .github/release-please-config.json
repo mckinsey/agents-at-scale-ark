@@ -57,11 +57,6 @@
           "jsonpath": "project.version"
         },
         {
-          "type": "toml",
-          "path": "services/ark-evaluator/pyproject.toml",
-          "jsonpath": "project.version"
-        },
-        {
           "type": "generic",
           "path": "ark/version.txt"
         },
@@ -91,16 +86,6 @@
         },
         {
           "type": "yaml",
-          "path": "services/ark-evaluator/chart/Chart.yaml",
-          "jsonpath": "$.version"
-        },
-        {
-          "type": "yaml",
-          "path": "services/ark-evaluator/chart/Chart.yaml",
-          "jsonpath": "$.appVersion"
-        },
-        {
-          "type": "yaml",
           "path": "ark/dist/chart/Chart.yaml",
           "jsonpath": "$.version"
         },
@@ -112,6 +97,16 @@
         {
           "type": "yaml",
           "path": "samples/agent-hosting/hosted-langchain-agents/chart/Chart.yaml",
+          "jsonpath": "$.appVersion"
+        },
+        {
+          "type": "yaml",
+          "path": "ark/executors/completions/chart/Chart.yaml",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "ark/executors/completions/chart/Chart.yaml",
           "jsonpath": "$.appVersion"
         },
         {

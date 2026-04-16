@@ -255,11 +255,102 @@ func TestExtractEngineResponseMeta(t *testing.T) {
 		assert.NotEmpty(t, meta.MessagesRaw)
 	})
 
+	t.Run("extracts native A2A contextId and taskId from message", func(t *testing.T) {
+		contextID := "native-ctx"
+		taskID := "native-task"
+		msg := &protocol.Message{
+			Role:      protocol.MessageRoleAgent,
+			Parts:     []protocol.Part{protocol.NewTextPart("response")},
+			ContextID: &contextID,
+			TaskID:    &taskID,
+		}
+
+		result := &protocol.MessageResult{Result: msg}
+		meta := extractEngineResponseMeta(result)
+		assert.Equal(t, "native-ctx", meta.A2AContextID)
+		assert.Equal(t, "native-task", meta.A2ATaskID)
+	})
+
+	t.Run("ark metadata a2a fields override native message fields", func(t *testing.T) {
+		nativeCtx := "native-ctx"
+		nativeTask := "native-task"
+		msg := &protocol.Message{
+			Role:      protocol.MessageRoleAgent,
+			Parts:     []protocol.Part{protocol.NewTextPart("response")},
+			ContextID: &nativeCtx,
+			TaskID:    &nativeTask,
+			Metadata: map[string]any{
+				arka2a.QueryExtensionMetadataKey: map[string]any{
+					"a2a": map[string]any{
+						"contextId": "ark-ctx",
+						"taskId":    "ark-task",
+					},
+				},
+			},
+		}
+
+		result := &protocol.MessageResult{Result: msg}
+		meta := extractEngineResponseMeta(result)
+		assert.Equal(t, "ark-ctx", meta.A2AContextID)
+		assert.Equal(t, "ark-task", meta.A2ATaskID)
+	})
+
 	t.Run("non-message result returns empty meta", func(t *testing.T) {
 		task := &protocol.Task{ID: "t1"}
 		result := &protocol.MessageResult{Result: task}
 		meta := extractEngineResponseMeta(result)
 		assert.Empty(t, meta.ConversationId)
+	})
+}
+
+func TestConversationIdToContextId(t *testing.T) {
+	t.Run("conversationId creates message with contextId", func(t *testing.T) {
+		conversationId := "conv-123"
+		message := protocol.NewMessageWithContext(protocol.MessageRoleUser, []protocol.Part{
+			protocol.NewTextPart("hello"),
+		}, nil, &conversationId)
+		require.NotNil(t, message.ContextID)
+		assert.Equal(t, "conv-123", *message.ContextID)
+	})
+
+	t.Run("empty conversationId creates message without contextId", func(t *testing.T) {
+		message := protocol.NewMessage(protocol.MessageRoleUser, []protocol.Part{
+			protocol.NewTextPart("hello"),
+		})
+		assert.Nil(t, message.ContextID)
+	})
+
+	t.Run("status.conversationId set from engineMeta.ConversationId", func(t *testing.T) {
+		meta := engineResponseMeta{ConversationId: "conv-from-engine", A2AContextID: "ctx-from-a2a"}
+		var query arkv1alpha1.Query
+		if meta.ConversationId != "" {
+			query.Status.ConversationId = meta.ConversationId
+		} else if meta.A2AContextID != "" {
+			query.Status.ConversationId = meta.A2AContextID
+		}
+		assert.Equal(t, "conv-from-engine", query.Status.ConversationId)
+	})
+
+	t.Run("status.conversationId falls back to A2AContextID", func(t *testing.T) {
+		meta := engineResponseMeta{A2AContextID: "ctx-from-a2a"}
+		var query arkv1alpha1.Query
+		if meta.ConversationId != "" {
+			query.Status.ConversationId = meta.ConversationId
+		} else if meta.A2AContextID != "" {
+			query.Status.ConversationId = meta.A2AContextID
+		}
+		assert.Equal(t, "ctx-from-a2a", query.Status.ConversationId)
+	})
+
+	t.Run("status.conversationId empty when neither set", func(t *testing.T) {
+		meta := engineResponseMeta{}
+		var query arkv1alpha1.Query
+		if meta.ConversationId != "" {
+			query.Status.ConversationId = meta.ConversationId
+		} else if meta.A2AContextID != "" {
+			query.Status.ConversationId = meta.A2AContextID
+		}
+		assert.Empty(t, query.Status.ConversationId)
 	})
 }
 
@@ -276,14 +367,14 @@ func TestSessionIDBaggage(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		member, err := baggage.NewMember("session.id", sessionId)
+		member, err := baggage.NewMember("ark.session.id", sessionId)
 		require.NoError(t, err)
 		bag, err := baggage.New(member)
 		require.NoError(t, err)
 		ctx = baggage.ContextWithBaggage(ctx, bag)
 
 		extractedBag := baggage.FromContext(ctx)
-		assert.Equal(t, "explicit-session", extractedBag.Member("session.id").Value())
+		assert.Equal(t, "explicit-session", extractedBag.Member("ark.session.id").Value())
 	})
 
 	t.Run("baggage uses UID when session ID is empty", func(t *testing.T) {
@@ -301,13 +392,13 @@ func TestSessionIDBaggage(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		member, err := baggage.NewMember("session.id", sessionId)
+		member, err := baggage.NewMember("ark.session.id", sessionId)
 		require.NoError(t, err)
 		bag, err := baggage.New(member)
 		require.NoError(t, err)
 		ctx = baggage.ContextWithBaggage(ctx, bag)
 
 		extractedBag := baggage.FromContext(ctx)
-		assert.Equal(t, "uid-123", extractedBag.Member("session.id").Value())
+		assert.Equal(t, "uid-123", extractedBag.Member("ark.session.id").Value())
 	})
 }

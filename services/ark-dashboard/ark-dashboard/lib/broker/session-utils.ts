@@ -1,4 +1,4 @@
-interface StreamEntry {
+export interface StreamEntry {
   id: string;
   timestamp: string;
   data: unknown;
@@ -31,7 +31,7 @@ export function extractQueryIdAndSessionId(entry: StreamEntry): {
         if (queryAttr?.value) {
           queryId = queryAttr.value as string;
         }
-        const sessionAttr = attributes.find(attr => attr?.key === 'session.id');
+        const sessionAttr = attributes.find(attr => attr?.key === 'ark.session.id');
         if (sessionAttr?.value) {
           sessionId = sessionAttr.value as string;
           break;
@@ -85,6 +85,41 @@ export function sortEntriesByTimestampAndSequence(
       typeof bData?.sequenceNumber === 'number' ? bData.sequenceNumber : 0;
     return aSeq - bSeq;
   });
+}
+
+const MAX_DISPLAY_LENGTH = 48;
+
+function getInputFromEvent(data: unknown): string | undefined {
+  if (!data || typeof data !== 'object') return undefined;
+  const record = data as Record<string, unknown>;
+
+  if (typeof record.input === 'string' && record.input.trim()) {
+    return record.input.trim();
+  }
+
+  if (record.data && typeof record.data === 'object') {
+    const inner = record.data as Record<string, unknown>;
+    if (typeof inner.input === 'string' && inner.input.trim()) {
+      return inner.input.trim();
+    }
+  }
+
+  return undefined;
+}
+
+export function getSessionDisplayNameFromEntries(
+  entries: StreamEntry[],
+  sessionId: string,
+): string {
+  for (const entry of entries) {
+    const input = getInputFromEvent(entry.data);
+    if (input) {
+      return input.length <= MAX_DISPLAY_LENGTH
+        ? input
+        : input.slice(0, MAX_DISPLAY_LENGTH - 3) + '...';
+    }
+  }
+  return sessionId;
 }
 
 export function groupEntriesBySession(

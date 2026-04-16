@@ -68,7 +68,6 @@ describe('export command', () => {
       'models',
       'agents',
       'teams',
-      'evaluators',
       'mcpservers',
       'a2aservers',
     ];

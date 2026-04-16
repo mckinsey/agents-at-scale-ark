@@ -10,4 +10,4 @@ spec:
     app: ark-completions
   ports:
     - port: {{ .Values.port }}
-      targetPort: {{ .Values.port }}
+      targetPort: {{ .Values.targetPort }}
