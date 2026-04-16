@@ -981,6 +981,20 @@ jobs:
             --wait \
             --timeout=5m
 
+      - name: Diagnose executor pod
+        if: ${{ env.HAS_OPENAI_KEY == 'true' }}
+        run: |
+          echo "=== Executor pod env vars ==="
+          kubectl exec -n default deployment/executor-openai-responses -- env | grep -E "OPENAI|HOST|PORT" || true
+          echo "=== Connectivity test from pod ==="
+          OPENAI_URL=$(kubectl exec -n default deployment/executor-openai-responses -- env | grep OPENAI_BASE_URL | cut -d= -f2 || echo "not set")
+          echo "OPENAI_BASE_URL in pod: ${OPENAI_URL}"
+          DOMAIN=$(echo "${OPENAI_URL}" | sed 's|https://||' | cut -d/ -f1)
+          kubectl exec -n default deployment/executor-openai-responses -- sh -c "nslookup ${DOMAIN} 2>&1 || true"
+          kubectl exec -n default deployment/executor-openai-responses -- sh -c "wget -q --spider --timeout=5 ${OPENAI_URL} 2>&1 || true"
+          echo "=== Executor pod logs ==="
+          kubectl logs -n default deployment/executor-openai-responses --tail=50 || true
+
       - name: Port-forward executor service
         if: ${{ env.HAS_OPENAI_KEY == 'true' }}
         run: |
