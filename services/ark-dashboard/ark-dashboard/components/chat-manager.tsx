@@ -52,11 +52,11 @@ export default function ChatManager() {
 
       events.forEach(event => {
         if (event.type === 'opened') {
-          window.dispatchEvent(
+          globalThis.dispatchEvent(
             new CustomEvent('chat-opened', { detail: { name: event.name } }),
           );
         } else {
-          window.dispatchEvent(
+          globalThis.dispatchEvent(
             new CustomEvent('chat-closed', { detail: { name: event.name } }),
           );
         }
@@ -122,20 +122,20 @@ export default function ChatManager() {
       });
     };
 
-    window.addEventListener(
+    globalThis.addEventListener(
       'open-floating-chat',
       handleOpenChat as EventListener,
     );
-    window.addEventListener(
+    globalThis.addEventListener(
       'toggle-floating-chat',
       handleToggleChat as EventListener,
     );
     return () => {
-      window.removeEventListener(
+      globalThis.removeEventListener(
         'open-floating-chat',
         handleOpenChat as EventListener,
       );
-      window.removeEventListener(
+      globalThis.removeEventListener(
         'toggle-floating-chat',
         handleToggleChat as EventListener,
       );

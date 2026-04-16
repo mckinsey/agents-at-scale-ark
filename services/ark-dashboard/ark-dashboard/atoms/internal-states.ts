@@ -16,7 +16,7 @@ export const filesBrowserPrefixAtom = atom(
     }
 
     // First read - initialize from sessionStorage
-    if (typeof globalThis.window === 'undefined') {
+    if (typeof globalThis.window !== 'undefined') {
       try {
         const stored = sessionStorage.getItem(SESSION_STORAGE_KEY);
         if (stored) {
@@ -30,7 +30,7 @@ export const filesBrowserPrefixAtom = atom(
   },
   (get, set, newValue: string) => {
     set(filesBrowserPrefixBaseAtom, newValue);
-    if (typeof globalThis.window === 'undefined') {
+    if (typeof globalThis.window !== 'undefined') {
       sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(newValue));
     }
   },
@@ -46,7 +46,7 @@ export const lastConversationIdAtom = atom(
     }
 
     // First read - initialize from sessionStorage
-    if (typeof globalThis.window === 'undefined') {
+    if (typeof globalThis.window !== 'undefined') {
       try {
         const stored = sessionStorage.getItem(LAST_CONVERSATION_ID_KEY);
         if (stored) {
@@ -60,7 +60,7 @@ export const lastConversationIdAtom = atom(
   },
   (get, set, newValue: string | null) => {
     set(lastConversationIdBaseAtom, newValue);
-    if (typeof globalThis.window === 'undefined') {
+    if (typeof globalThis.window !== 'undefined') {
       if (newValue === null) {
         sessionStorage.removeItem(LAST_CONVERSATION_ID_KEY);
       } else {
@@ -89,7 +89,7 @@ export const openChatWindowsAtom = atom(
       return value;
     }
 
-    if (typeof globalThis.window === 'undefined') {
+    if (typeof globalThis.window !== 'undefined') {
       try {
         const stored = sessionStorage.getItem(OPEN_CHAT_WINDOWS_KEY);
         if (stored) {
@@ -106,7 +106,7 @@ export const openChatWindowsAtom = atom(
   },
   (_get, set, newValue: OpenChatWindow[]) => {
     set(openChatWindowsBaseAtom, newValue);
-    if (typeof globalThis.window === 'undefined') {
+    if (typeof globalThis.window !== 'undefined') {
       sessionStorage.setItem(
         OPEN_CHAT_WINDOWS_KEY,
         JSON.stringify(newValue),

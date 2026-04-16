@@ -28,7 +28,7 @@ export const chatHistoryAtom = atom(
     const value = get(chatHistoryBaseAtom);
     if (value !== null) return value;
 
-    if (typeof globalThis.window === 'undefined') {
+    if (typeof globalThis.window !== 'undefined') {
       try {
         const stored = sessionStorage.getItem(CHAT_HISTORY_KEY);
         if (stored) {
@@ -51,7 +51,7 @@ export const chatHistoryAtom = atom(
     const current = get(chatHistoryAtom);
     const newValue = typeof update === 'function' ? update(current) : update;
     set(chatHistoryBaseAtom, newValue);
-    if (typeof globalThis.window === 'undefined') {
+    if (typeof globalThis.window !== 'undefined') {
       sessionStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(newValue));
     }
   },

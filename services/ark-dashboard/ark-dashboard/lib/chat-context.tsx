@@ -47,15 +47,15 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setOpenChats(prev => prev.filter(chat => chat !== name));
     };
 
-    window.addEventListener('chat-opened', handleChatOpened as EventListener);
-    window.addEventListener('chat-closed', handleChatClosed as EventListener);
+    globalThis.addEventListener('chat-opened', handleChatOpened as EventListener);
+    globalThis.addEventListener('chat-closed', handleChatClosed as EventListener);
 
     return () => {
-      window.removeEventListener(
+      globalThis.removeEventListener(
         'chat-opened',
         handleChatOpened as EventListener,
       );
-      window.removeEventListener(
+      globalThis.removeEventListener(
         'chat-closed',
         handleChatClosed as EventListener,
       );
