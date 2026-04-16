@@ -898,7 +898,7 @@ jobs:
           CICD_AZURE_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
         run: |
           cd tests/pytest/cli-tests/tests
-          pytest . -n 3 --dist loadscope -v --tb=short --log-cli-level=INFO
+          pytest . -n 3 --dist loadscope -v --tb=short --log-cli-level=INFO -m "not executor"
 
       - name: Upload CLI test logs
         if: always()
@@ -923,7 +923,7 @@ jobs:
   e2e-executor-tests:
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
-    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' && secrets.CICD_OPENAI_API_KEY != '' }}
+    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
     steps:
       - uses: actions/checkout@v6
 
@@ -946,6 +946,7 @@ jobs:
           pip install httpx
 
       - name: Deploy executor-openai-responses
+        if: ${{ secrets.CICD_OPENAI_API_KEY != '' }}
         env:
           OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
           OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
@@ -964,6 +965,7 @@ jobs:
             --timeout=5m
 
       - name: Port-forward executor service
+        if: ${{ secrets.CICD_OPENAI_API_KEY != '' }}
         run: |
           kubectl port-forward -n default svc/executor-openai-responses 18080:8000 &
           sleep 3
@@ -971,7 +973,7 @@ jobs:
       - name: Run executor E2E tests
         env:
           PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
-          EXECUTOR_URL: "http://localhost:18080/execute"
+          EXECUTOR_URL: ${{ secrets.CICD_OPENAI_API_KEY != '' && 'http://localhost:18080/execute' || '' }}
           CICD_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
           CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL }}
         run: |
