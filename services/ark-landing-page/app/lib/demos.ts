@@ -13,20 +13,20 @@ export async function fetchDemos(): Promise<Demo[]> {
   const coreApi = kc.makeApiClient(k8s.CoreV1Api);
   const customApi = kc.makeApiClient(k8s.CustomObjectsApi);
 
-  const namespacesResponse = await coreApi.listNamespace();
-  const demoNamespaces = namespacesResponse.items.filter(ns => {
+  const namespacesResponse = await coreApi.listNamespace() as any;
+  const demoNamespaces = namespacesResponse.body.items.filter((ns: any) => {
     const labels = ns.metadata?.labels || {};
     return labels['ark.mckinsey.com/demo'] === 'true';
   });
 
-  const httpRoutesResponse = await customApi.listClusterCustomObject({
+  const httpRoutesResponse = await customApi.listClusterCustomObject(
     group: 'gateway.networking.k8s.io',
     version: 'v1',
     plural: 'httproutes'
-  }) as { items: Array<{ metadata?: { namespace?: string } }> };
+  ) as any;
 
   const namespacesWithRoutes = new Set(
-    httpRoutesResponse.items.map(route => route.metadata?.namespace).filter(Boolean)
+    httpRoutesResponse.body.items.map((route: any) => route.metadata?.namespace).filter(Boolean)
   );
 
   return demoNamespaces
