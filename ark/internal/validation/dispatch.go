@@ -27,6 +27,8 @@ func (v *Validator) Validate(ctx context.Context, obj runtime.Object) ([]string,
 		return ValidateA2AServer(o)
 	case *arkv1prealpha1.ExecutionEngine:
 		return v.ValidateExecutionEngine(ctx, o)
+	case *arkv1alpha1.ArkConfig:
+		return ValidateArkConfig(ctx, o)
 	}
 	return nil, nil
 }

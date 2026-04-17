@@ -314,6 +314,7 @@ func setupWebhooks(mgr ctrl.Manager) {
 		{"Agent", webhookv1.SetupAgentWebhookWithManager},
 		{"Query", webhookv1.SetupQueryWebhookWithManager},
 		{"Evaluation", webhookv1.SetupEvaluationWebhookWithManager},
+		{"ArkConfig", webhookv1.SetupArkConfigWebhookWithManager},
 		{"Tool", webhookv1.SetupToolWebhookWithManager},
 		{"Model", webhookv1.SetupModelWebhookWithManager},
 		{"MCPServer", webhookv1.SetupMCPServerWebhookWithManager},
