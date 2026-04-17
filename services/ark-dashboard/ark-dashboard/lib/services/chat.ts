@@ -379,26 +379,15 @@ export const chatService = {
   },
 
   async *streamChatResponse(
-    input: string,
-    targetType: string,
-    targetName: string,
-    sessionId?: string,
-    conversationId?: string,
-    timeout?: string,
+    queryName: string,
+    abortSignal?: AbortSignal
   ): AsyncGenerator<Record<string, unknown>, void, unknown> {
-    const query = await this.submitChatQuery(
-      input,
-      targetType,
-      targetName,
-      sessionId,
-      conversationId,
-      true,
-      timeout,
-    );
-
-    const queryName = query.name;
+    
     const response = await fetch(
       `/api/v1/broker/chunks?watch=true&query-id=${queryName}`,
+      {
+        signal: abortSignal
+      }
     );
 
     if (!response.ok) {
@@ -435,4 +424,8 @@ export const chatService = {
       reader.releaseLock();
     }
   },
+
+  async cancelQuery(queryName: string): Promise<QueryDetailResponse> {
+    return await apiClient.patch(`/api/v1/queries/${queryName}/cancel`)
+  }
 };
