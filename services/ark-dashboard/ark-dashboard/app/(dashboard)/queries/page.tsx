@@ -11,21 +11,14 @@ import { Input } from '@/components/ui/input';
 import { Pagination } from '@/components/ui/pagination';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { useListQueries } from '@/lib/services/queries-hooks';
+import {
+  DEFAULT_PAGE_SIZE,
+  parsePage,
+  parsePageSize,
+} from '@/lib/utils/pagination';
 
-const DEFAULT_PAGE_SIZE = 25;
 const PAGE_SIZE_OPTIONS = [10, 15, 25, 50, 100];
 const SEARCH_DEBOUNCE_MS = 400;
-
-function parsePage(raw: string | null): number {
-  const n = raw ? parseInt(raw, 10) : 1;
-  return Number.isFinite(n) && n >= 1 ? n : 1;
-}
-
-function parsePageSize(raw: string | null): number {
-  const n = raw ? parseInt(raw, 10) : DEFAULT_PAGE_SIZE;
-  if (!Number.isFinite(n) || n <= 0) return DEFAULT_PAGE_SIZE;
-  return Math.min(n, 100);
-}
 
 export default function QueriesPage() {
   const router = useRouter();

@@ -33,6 +33,7 @@ import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { queriesService } from '@/lib/services/queries';
 import { useListQueries } from '@/lib/services/queries-hooks';
 import { getResourceEventsUrl } from '@/lib/utils/events';
+import { parsePage, parsePageSize } from '@/lib/utils/pagination';
 import { formatAge } from '@/lib/utils/time';
 
 type QueryResponse = components['schemas']['QueryResponse'];
@@ -42,19 +43,6 @@ type OutputViewMode = 'content' | 'raw';
 interface QueriesSectionProps {
   readonly searchTerm: string;
   readonly onClearSearch: () => void;
-}
-
-const DEFAULT_PAGE_SIZE = 25;
-
-function parsePage(raw: string | null): number {
-  const n = raw ? parseInt(raw, 10) : 1;
-  return Number.isFinite(n) && n >= 1 ? n : 1;
-}
-
-function parsePageSize(raw: string | null): number {
-  const n = raw ? parseInt(raw, 10) : DEFAULT_PAGE_SIZE;
-  if (!Number.isFinite(n) || n <= 0) return DEFAULT_PAGE_SIZE;
-  return Math.min(n, 100);
 }
 
 export const QueriesSection = forwardRef<
