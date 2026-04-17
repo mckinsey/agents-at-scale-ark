@@ -70,6 +70,8 @@ deployments:
           namespaces:
             - ark-system
             - default
+        restartController:
+          enabled: false
 
 dev:
   ark-broker:
