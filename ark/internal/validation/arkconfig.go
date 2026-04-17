@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
@@ -36,9 +35,6 @@ func resolveTTL(
 	}
 	cfg, err := lookup.GetArkConfig(ctx)
 	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return fallback
-		}
 		return fallback
 	}
 	if v := pick(&cfg.Spec); v != nil {
