@@ -1,46 +1,77 @@
 import { type VariantProps, cva } from 'class-variance-authority';
 import * as React from 'react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '../../lib/utils';
+import { Close } from '../icons/Close';
+import { Button } from './button';
+import { IconShell } from './icon-shell';
 
 const alertVariants = cva(
-  'relative w-full rounded-lg border px-4 py-3 text-sm grid has-[>svg]:grid-cols-[calc(var(--spacing)*4)_1fr] grid-cols-[0_1fr] has-[>svg]:gap-x-3 gap-y-0.5 items-start [&>svg]:size-4 [&>svg]:translate-y-0.5 [&>svg]:text-current',
+  'group/alert relative w-full bg-fill-onsurface-ui-3 shadow-elevation-2 flex items-center rounded-lg',
   {
     variants: {
-      variant: {
-        default: 'bg-card text-card-foreground',
-        warning: 'text-orange-600 bg-orange-100 dark:text-orange-400 dark:bg-orange-950 *:data-[slot=alert-description]:text-current',
-        destructive:
-          'text-destructive bg-card [&>svg]:text-current *:data-[slot=alert-description]:text-destructive/90',
+      layout: {
+        // Modal layout: vertical card (560px max-width)
+        modal: 'max-w-[560px] px-4 py-6 gap-4',
+        // Long layout: horizontal banner (full width)
+        long: 'p-4 gap-4',
       },
     },
     defaultVariants: {
-      variant: 'default',
+      layout: 'modal',
     },
   },
 );
 
 function Alert({
   className,
-  variant,
+  layout,
   ...props
 }: React.ComponentProps<'div'> & VariantProps<typeof alertVariants>) {
   return (
     <div
       data-slot="alert"
+      data-layout={layout}
       role="alert"
-      className={cn(alertVariants({ variant }), className)}
+      className={cn(alertVariants({ layout }), className)}
       {...props}
     />
   );
 }
 
-function AlertTitle({ className, ...props }: React.ComponentProps<'div'>) {
+function AlertIcon({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
+      data-slot="alert-icon"
+      className={cn(
+        'text-status-information flex size-8 shrink-0 items-center justify-center self-start',
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+function AlertContent({ className, ...props }: React.ComponentProps<'div'>) {
+  return (
+    <div
+      data-slot="alert-content"
+      className={cn(
+        'flex min-w-0 flex-1 flex-col gap-3 pt-1 align-baseline first:pl-4',
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+function AlertTitle({ className, ...props }: React.ComponentProps<'p'>) {
+  return (
+    <p
       data-slot="alert-title"
       className={cn(
-        'col-start-2 line-clamp-1 min-h-4 font-medium tracking-tight',
+        'headings-h4-semibold text-fg-primary',
+        'group-data-[layout=long]/alert:paragraph-large-emphasised',
         className,
       )}
       {...props}
@@ -48,20 +79,37 @@ function AlertTitle({ className, ...props }: React.ComponentProps<'div'>) {
   );
 }
 
-function AlertDescription({
-  className,
-  ...props
-}: React.ComponentProps<'div'>) {
+function AlertDescription({ className, ...props }: React.ComponentProps<'p'>) {
   return (
-    <div
+    <p
       data-slot="alert-description"
-      className={cn(
-        'text-muted-foreground col-start-2 grid justify-items-start gap-1 text-sm [&_p]:leading-relaxed',
-        className,
-      )}
+      className={cn('paragraph-large-primary text-fg-secondary', className)}
       {...props}
     />
   );
 }
 
-export { Alert, AlertTitle, AlertDescription };
+function AlertClose({ ...props }: React.ComponentProps<typeof Button>) {
+  return (
+    <Button
+      {...props}
+      className="self-start"
+      data-slot="alert-close"
+      size="icon"
+      variant="ghost">
+      <IconShell variant="secondary">
+        <Close className="text-[length:inherit]" />
+        <span className="sr-only">Close</span>
+      </IconShell>
+    </Button>
+  );
+}
+
+export {
+  Alert,
+  AlertIcon,
+  AlertContent,
+  AlertTitle,
+  AlertDescription,
+  AlertClose,
+};

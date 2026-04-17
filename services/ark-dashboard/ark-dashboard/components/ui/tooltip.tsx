@@ -3,7 +3,7 @@
 import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 import * as React from 'react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '../../lib/utils';
 
 function TooltipProvider({
   delayDuration = 0,
@@ -40,19 +40,41 @@ function TooltipContent({
   children,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Content>) {
+  // Estimate if content will be multi-line based on text length
+  // With max-w-[220px] and text-xs, roughly 30-35 chars per line
+  const getTextContent = (node: React.ReactNode): string => {
+    if (typeof node === 'string') return node;
+    if (typeof node === 'number') return String(node);
+    if (Array.isArray(node)) return node.map(getTextContent).join('');
+
+    if (React.isValidElement(node)) {
+      const nodeProps = node.props as { children?: React.ReactNode };
+
+      if (nodeProps.children) {
+        return getTextContent(nodeProps.children);
+      }
+    }
+
+    return '';
+  };
+
+  const textContent = getTextContent(children);
+  const estimatedCharsPerLine = 35; // approximate for max-w-[220px] and paragraph-small-primary
+  const isMultiLine = textContent.length > estimatedCharsPerLine;
+
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Content
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
-          'animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 w-fit origin-(--radix-tooltip-content-transform-origin) rounded-md border border-gray-200 bg-white px-4 py-2 text-xs text-balance text-slate-700 shadow-2xl',
+          'bg-fill-primary text-fg-primary-inverse paragraph-small-primary animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 shadow-elevation-1 z-50 w-fit min-w-[36px] origin-(--radix-tooltip-content-transform-origin) text-balance',
+          isMultiLine ? 'max-w-[220px] p-2' : 'max-w-[140px] p-1',
           className,
         )}
         {...props}>
         {children}
-        {/* TODO: The tooltip arrow does not have a border, the content does => looks weird */}
-        <TooltipPrimitive.Arrow className="z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px] bg-white fill-white" />
+        <TooltipPrimitive.Arrow className="fill-fill-primary" />
       </TooltipPrimitive.Content>
     </TooltipPrimitive.Portal>
   );
