@@ -584,8 +584,8 @@ func (in *ArkConfigSpec) DeepCopyInto(out *ArkConfigSpec) {
 		*out = new(v1.Duration)
 		**out = **in
 	}
-	if in.EvalTTL != nil {
-		in, out := &in.EvalTTL, &out.EvalTTL
+	if in.EvaluationTTL != nil {
+		in, out := &in.EvaluationTTL, &out.EvaluationTTL
 		*out = new(v1.Duration)
 		**out = **in
 	}

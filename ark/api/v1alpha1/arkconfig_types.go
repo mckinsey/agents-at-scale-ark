@@ -16,11 +16,11 @@ type ArkConfigSpec struct {
 	// +kubebuilder:validation:Optional
 	QueryTTL *metav1.Duration `json:"queryTTL,omitempty"`
 
-	// EvalTTL is the default TTL injected into Evaluation resources
+	// EvaluationTTL is the default TTL injected into Evaluation resources
 	// that do not specify spec.ttl. If unset, the hardcoded
 	// fallback of 720h is used.
 	// +kubebuilder:validation:Optional
-	EvalTTL *metav1.Duration `json:"evalTTL,omitempty"`
+	EvaluationTTL *metav1.Duration `json:"evaluationTTL,omitempty"`
 }
 
 // ArkConfigStatus is reserved for future status reporting. Currently empty.
@@ -28,9 +28,9 @@ type ArkConfigStatus struct{}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Cluster,shortName=akfg
+// +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="QueryTTL",type=string,JSONPath=`.spec.queryTTL`
-// +kubebuilder:printcolumn:name="EvalTTL",type=string,JSONPath=`.spec.evalTTL`
+// +kubebuilder:printcolumn:name="EvaluationTTL",type=string,JSONPath=`.spec.evaluationTTL`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // ArkConfig is the Schema for cluster-wide Ark defaults.

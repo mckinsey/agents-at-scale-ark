@@ -17,8 +17,6 @@ spec:
     kind: ArkConfig
     listKind: ArkConfigList
     plural: arkconfigs
-    shortNames:
-    - akfg
     singular: arkconfig
   scope: Cluster
   versions:
@@ -26,8 +24,8 @@ spec:
     - jsonPath: .spec.queryTTL
       name: QueryTTL
       type: string
-    - jsonPath: .spec.evalTTL
-      name: EvalTTL
+    - jsonPath: .spec.evaluationTTL
+      name: EvaluationTTL
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
@@ -60,9 +58,9 @@ spec:
               object named "default" is consulted by admission webhooks when
               a Query or Evaluation is created without an explicit ttl.
             properties:
-              evalTTL:
+              evaluationTTL:
                 description: |-
-                  EvalTTL is the default TTL injected into Evaluation resources
+                  EvaluationTTL is the default TTL injected into Evaluation resources
                   that do not specify spec.ttl. If unset, the hardcoded
                   fallback of 720h is used.
                 type: string
