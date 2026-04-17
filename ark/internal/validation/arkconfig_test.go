@@ -75,3 +75,52 @@ func TestResolveEvalTTL_FallbackWhenLookupNil(t *testing.T) {
 		t.Fatalf("want %v, got %v", DefaultTTLFallback, got.Duration)
 	}
 }
+
+func TestDefaultQuery_InjectsTTLWhenMissing(t *testing.T) {
+	cfg := &arkv1alpha1.ArkConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: ArkConfigSingletonName},
+		Spec: arkv1alpha1.ArkConfigSpec{
+			QueryTTL: &metav1.Duration{Duration: time.Hour},
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(cfg).Build()
+	lookup := &fakeLookup{c: c}
+
+	q := &arkv1alpha1.Query{}
+	DefaultQuery(context.Background(), q, lookup)
+
+	if q.Spec.TTL == nil {
+		t.Fatalf("expected TTL to be injected")
+	}
+	if q.Spec.TTL.Duration != time.Hour {
+		t.Fatalf("want 1h, got %v", q.Spec.TTL.Duration)
+	}
+}
+
+func TestDefaultQuery_LeavesExplicitTTLAlone(t *testing.T) {
+	cfg := &arkv1alpha1.ArkConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: ArkConfigSingletonName},
+		Spec: arkv1alpha1.ArkConfigSpec{
+			QueryTTL: &metav1.Duration{Duration: time.Hour},
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(cfg).Build()
+	lookup := &fakeLookup{c: c}
+
+	explicit := metav1.Duration{Duration: 5 * time.Minute}
+	q := &arkv1alpha1.Query{}
+	q.Spec.TTL = &explicit
+	DefaultQuery(context.Background(), q, lookup)
+
+	if q.Spec.TTL.Duration != 5*time.Minute {
+		t.Fatalf("webhook clobbered explicit TTL: got %v", q.Spec.TTL.Duration)
+	}
+}
+
+func TestDefaultQuery_FallbackWhenNoLookup(t *testing.T) {
+	q := &arkv1alpha1.Query{}
+	DefaultQuery(context.Background(), q, nil)
+	if q.Spec.TTL == nil || q.Spec.TTL.Duration != DefaultTTLFallback {
+		t.Fatalf("expected 720h fallback, got %v", q.Spec.TTL)
+	}
+}
