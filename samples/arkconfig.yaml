@@ -1,0 +1,10 @@
+# Cluster-wide default TTLs for Query and Evaluation resources.
+# A ttl field on an individual Query or Evaluation overrides this.
+# Only the object named "default" is consulted by admission webhooks.
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: ArkConfig
+metadata:
+  name: default
+spec:
+  queryTTL: 720h
+  evaluationTTL: 720h
