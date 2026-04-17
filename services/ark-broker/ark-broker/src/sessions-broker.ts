@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { EventEmitter } from 'node:events';
 import type { QueryPhase, SessionEventData } from './types.js';
 import { QueryPhases, EventReasons, ERROR_REASON_SUFFIX } from './types.js';
+import type { PaginationParams, PaginatedList } from './pagination.js';
 
 export interface QueryEntry {
   /** Query resource name from the Ark CRD */
@@ -186,6 +187,76 @@ export class SessionsBroker {
 
   getSession(sessionId: string): SessionEntry | undefined {
     return this.store.sessions[sessionId];
+  }
+
+  paginate(params: PaginationParams, filters?: {
+    status?: 'active' | 'idle' | 'error';
+    dateFrom?: string;
+    dateTo?: string;
+    search?: string;
+  }, sort?: {
+    field: 'date' | 'tokens';
+    direction: 'asc' | 'desc';
+  }): PaginatedList<SessionEntry> {
+    let sessions = Object.values(this.store.sessions);
+
+    if (filters?.status) {
+      sessions = sessions.filter(s => {
+        const queries = Object.values(s.queries);
+        const errors = queries.filter(q => q.phase === 'error');
+        const active = queries.some(q => q.phase === 'running' || q.phase === 'pending');
+
+        if (filters.status === 'error') return errors.length > 0;
+        if (filters.status === 'active') return active;
+        if (filters.status === 'idle') return !active && errors.length === 0;
+        return true;
+      });
+    }
+
+    if (filters?.dateFrom) {
+      const from = new Date(filters.dateFrom).getTime();
+      sessions = sessions.filter(s => new Date(s.lastActivity).getTime() >= from);
+    }
+
+    if (filters?.dateTo) {
+      const to = new Date(filters.dateTo).getTime();
+      sessions = sessions.filter(s => new Date(s.lastActivity).getTime() <= to);
+    }
+
+    if (filters?.search) {
+      const search = filters.search.toLowerCase();
+      sessions = sessions.filter(s =>
+        s.sessionId.toLowerCase().includes(search) ||
+        s.name.toLowerCase().includes(search) ||
+        Object.values(s.queries).some(q =>
+          (q.agent?.toLowerCase() || '').includes(search)
+        )
+      );
+    }
+
+    if (sort) {
+      sessions.sort((a, b) => {
+        let comparison = 0;
+        if (sort.field === 'date') {
+          comparison = new Date(a.lastActivity).getTime() - new Date(b.lastActivity).getTime();
+        }
+        return sort.direction === 'asc' ? comparison : -comparison;
+      });
+    }
+
+    const total = sessions.length;
+    const startIndex = params.cursor || 0;
+    const endIndex = startIndex + params.limit;
+    const items = sessions.slice(startIndex, endIndex);
+    const hasMore = endIndex < total;
+    const nextCursor = hasMore ? endIndex : undefined;
+
+    return {
+      items,
+      total,
+      hasMore,
+      nextCursor,
+    };
   }
 
   getQueryByConversationId(conversationId: string): (QueryEntry & { sessionId: string }) | undefined {

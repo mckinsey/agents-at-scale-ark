@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { SessionsBroker } from '../sessions-broker.js';
 import { streamSSE } from '../sse.js';
 import type { SessionEventData } from '../types.js';
+import { parsePaginationParams, PaginationError } from '../pagination.js';
 
 export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
   const router = Router();
@@ -35,9 +36,34 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
       });
     } else {
       try {
-        const store = sessionsBroker.getAll();
-        res.json(store);
+        const hasPaginationParams = req.query['limit'] || req.query['cursor'];
+
+        if (hasPaginationParams) {
+          const params = parsePaginationParams(req.query as Record<string, unknown>);
+
+          const filters = {
+            status: req.query['status'] as 'active' | 'idle' | 'error' | undefined,
+            dateFrom: req.query['dateFrom'] as string | undefined,
+            dateTo: req.query['dateTo'] as string | undefined,
+            search: req.query['search'] as string | undefined,
+          };
+
+          const sort = req.query['sort'] ? {
+            field: req.query['sort'] as 'date' | 'tokens',
+            direction: (req.query['order'] || 'desc') as 'asc' | 'desc',
+          } : undefined;
+
+          const result = sessionsBroker.paginate(params, filters, sort);
+          res.json(result);
+        } else {
+          const store = sessionsBroker.getAll();
+          res.json(store);
+        }
       } catch (error) {
+        if (error instanceof PaginationError) {
+          res.status(400).json({ error: error.message });
+          return;
+        }
         console.error('[SESSIONS] Failed to get sessions:', error);
         const err = error as Error;
         res.status(500).json({ error: err.message });

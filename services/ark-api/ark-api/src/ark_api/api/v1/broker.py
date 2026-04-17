@@ -236,9 +236,29 @@ async def get_chunks(
 async def get_sessions(
     watch: bool = Query(False, description="Stream sessions via SSE"),
     memory: str = Query("default", description="Memory resource name"),
+    limit: Optional[int] = Query(None, description="Max sessions to return"),
+    cursor: Optional[int] = Query(None, description="Cursor for pagination"),
+    status: Optional[str] = Query(None, description="Filter by status (active/idle/error)"),
+    dateFrom: Optional[str] = Query(None, description="Filter sessions from this date"),
+    dateTo: Optional[str] = Query(None, description="Filter sessions to this date"),
+    search: Optional[str] = Query(None, description="Search by session ID or participant"),
+    sort: Optional[str] = Query(None, description="Sort field (date/tokens)"),
+    order: Optional[str] = Query(None, description="Sort order (asc/desc)"),
 ):
     """Get or stream sessions from the broker. Sessions are global broker state, not memory-scoped, but the memory parameter selects which broker service to query."""
-    return await proxy_broker_request(memory, "/sessions", watch, {})
+    return await proxy_broker_request(
+        memory, "/sessions", watch,
+        {
+            "limit": limit,
+            "cursor": cursor,
+            "status": status,
+            "dateFrom": dateFrom,
+            "dateTo": dateTo,
+            "search": search,
+            "sort": sort,
+            "order": order,
+        }
+    )
 
 
 async def proxy_broker_delete(memory: str, path: str):

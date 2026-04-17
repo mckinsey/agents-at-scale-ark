@@ -10,6 +10,7 @@ import {
   Key,
   Lock,
   type LucideIcon,
+  MessageSquare,
   Package,
   Play,
   Search,
@@ -106,6 +107,12 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     icon: Activity,
     group: 'monitoring',
     enablerFeature: BROKER_FEATURE_KEY,
+  },
+  'sessions-conversations': {
+    key: 'sessions-conversations',
+    title: 'Sessions',
+    icon: MessageSquare,
+    group: 'monitoring',
   },
 
   // Operations
