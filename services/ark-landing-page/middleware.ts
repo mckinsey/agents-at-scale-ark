@@ -10,7 +10,7 @@ export default auth(async (req: NextRequestWithAuth) => {
       const baseURL = process.env.BASE_URL;
 
       const newUrl = new URL(
-        `${SIGNIN_PATH}?callbackUrl=${encodeURIComponent(baseURL!)}`,
+        `${SIGNIN_PATH}?callbackUrl=${encodeURIComponent(baseURL ?? '')}`,
         baseURL,
       );
 

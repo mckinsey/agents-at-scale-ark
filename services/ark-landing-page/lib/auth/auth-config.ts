@@ -71,8 +71,8 @@ const OIDCProvider = createOIDCProvider({
 });
 
 function getSessionMaxAge() {
-  const maxAgeFromEnv = parseInt(process.env.SESSION_MAX_AGE || '');
-  return isNaN(maxAgeFromEnv) ? DEFAULT_SESSION_MAX_AGE : maxAgeFromEnv;
+  const maxAgeFromEnv = Number.parseInt(process.env.SESSION_MAX_AGE || '', 10);
+  return Number.isNaN(maxAgeFromEnv) ? DEFAULT_SESSION_MAX_AGE : maxAgeFromEnv;
 }
 
 const session: NextAuthConfig['session'] = {
