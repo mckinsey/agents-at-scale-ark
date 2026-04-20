@@ -126,11 +126,10 @@ def _creation_timestamp_key(item_dict: dict):
 async def list_queries(
     namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
-    page_size: int = Query(25, ge=1, le=500, description="Items per page (clamped to 100)"),
-    search: Optional[str] = Query(None, description="Case-insensitive substring match over query input text"),
+    page_size: int = Query(25, ge=1, le=100, description="Items per page"),
+    search: Optional[str] = Query(None, max_length=200, description="Case-insensitive substring match over query input text"),
 ) -> QueryListResponse:
     """List queries in a namespace with pagination and text search."""
-    effective_page_size = min(page_size, 100)
     async with with_ark_client(namespace, VERSION) as ark_client:
         result = await ark_client.queries.a_list()
         raw_items = [item.to_dict() for item in result]
@@ -145,8 +144,8 @@ async def list_queries(
         raw_items.sort(key=_creation_timestamp_key, reverse=True)
 
         total = len(raw_items)
-        start = (page - 1) * effective_page_size
-        end = start + effective_page_size
+        start = (page - 1) * page_size
+        end = start + page_size
         page_items = [query_to_response(item) for item in raw_items[start:end]]
 
         return QueryListResponse(
@@ -154,7 +153,7 @@ async def list_queries(
             count=len(page_items),
             total=total,
             page=page,
-            page_size=effective_page_size,
+            page_size=page_size,
         )
 
 

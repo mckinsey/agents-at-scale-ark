@@ -31,12 +31,13 @@ export default function QueriesPage() {
 
   const [searchInput, setSearchInput] = useState<string>(urlSearch);
 
-  const { data } = useListQueries({
+  const queriesQuery = useListQueries({
     page,
     pageSize,
     search: urlSearch || undefined,
   });
 
+  const { data } = queriesQuery;
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const pageTitle = data ? `Queries (${total})` : 'Queries';
@@ -117,6 +118,7 @@ export default function QueriesPage() {
             <Input
               type="search"
               placeholder="Search query text..."
+              aria-label="Search queries"
               value={searchInput}
               onChange={e => setSearchInput(e.target.value)}
               className="pl-10"
@@ -128,6 +130,7 @@ export default function QueriesPage() {
           ref={queriesSectionRef}
           searchTerm={urlSearch}
           onClearSearch={handleClearSearch}
+          queryResult={queriesQuery}
         />
 
         {total > pageSize && (

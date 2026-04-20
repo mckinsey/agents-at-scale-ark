@@ -7,7 +7,6 @@ import {
   RefreshCw,
   Trash2,
 } from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -31,28 +30,25 @@ import type { components } from '@/lib/api/generated/types';
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { queriesService } from '@/lib/services/queries';
-import { useListQueries } from '@/lib/services/queries-hooks';
+import type { useListQueries } from '@/lib/services/queries-hooks';
 import { getResourceEventsUrl } from '@/lib/utils/events';
-import { parsePage, parsePageSize } from '@/lib/utils/pagination';
 import { formatAge } from '@/lib/utils/time';
 
 type QueryResponse = components['schemas']['QueryResponse'];
+type ListQueriesResult = ReturnType<typeof useListQueries>;
 
 type OutputViewMode = 'content' | 'raw';
 
 interface QueriesSectionProps {
   readonly searchTerm: string;
   readonly onClearSearch: () => void;
+  readonly queryResult: ListQueriesResult;
 }
 
 export const QueriesSection = forwardRef<
   { openAddEditor: () => void },
   QueriesSectionProps
->(function QueriesSection({ searchTerm, onClearSearch }, ref) {
-  const searchParams = useSearchParams();
-  const page = parsePage(searchParams.get('page'));
-  const pageSize = parsePageSize(searchParams.get('pageSize'));
-
+>(function QueriesSection({ searchTerm, onClearSearch, queryResult }, ref) {
   const [outputViewMode, setOutputViewMode] = useState<OutputViewMode>('content');
   const { push } = useNamespacedNavigation();
 
@@ -62,14 +58,7 @@ export const QueriesSection = forwardRef<
     },
   }));
 
-  const {
-    data,
-    isLoading,
-    isFetching,
-    isError,
-    error,
-    refetch,
-  } = useListQueries({ page, pageSize, search: searchTerm || undefined });
+  const { data, isLoading, isFetching, isError, error, refetch } = queryResult;
 
   useEffect(() => {
     if (isError) {
@@ -83,10 +72,7 @@ export const QueriesSection = forwardRef<
   const queries = data?.items ?? [];
   const total = data?.total ?? 0;
 
-  const truncate = (text: string, maxLen = 120) =>
-    text.length > maxLen ? text.slice(0, maxLen) + '...' : text;
-
-  const truncateText = (text: string | undefined, maxLength: number = 120) => {
+  const truncate = (text: string | undefined, maxLength: number = 120): string => {
     if (!text) return '-';
     const newlineIndex = text.indexOf('\n');
     const cutoffIndex =
@@ -161,7 +147,7 @@ export const QueriesSection = forwardRef<
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger className="text-left">
-              {truncateText(text)}
+              {truncate(text)}
             </TooltipTrigger>
             {text && text.length > 120 && (
               <TooltipContent className="max-w-md">
@@ -345,7 +331,7 @@ export const QueriesSection = forwardRef<
                           <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
                             <TooltipProvider>
                               <Tooltip>
-                                <TooltipTrigger className="text-left">{truncateText(inputDisplayText)}</TooltipTrigger>
+                                <TooltipTrigger className="text-left">{truncate(inputDisplayText)}</TooltipTrigger>
                                 {inputDisplayText && inputDisplayText.length > 50 && (
                                   <TooltipContent className="max-w-md">
                                     <p className="whitespace-pre-wrap">{inputDisplayText}</p>
@@ -438,7 +424,10 @@ function StatusDot({ variant, onCancel }: StatusDotProps) {
               <span className={`inline-flex h-[16px] w-[16px] items-center rounded-full text-xs font-medium ${getVariantClasses()}`} />
               <span
                 className="ml-2 cursor-pointer text-xs text-gray-500 underline hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-                onClick={onCancel}>
+                onClick={e => {
+                  e.stopPropagation();
+                  onCancel();
+                }}>
                 Cancel
               </span>
             </div>

@@ -60,13 +60,18 @@ class TestQueriesPagination(unittest.TestCase):
         self.assertEqual(body["count"], 5)
         self.assertEqual(len(body["items"]), 5)
 
-    def test_page_size_clamped_to_100(self):
+    def test_page_size_max_100_accepted(self):
         items = [_query_item(f"q-{i}", "x", i) for i in range(200)]
         with self._patch_ark_client(items):
-            r = self.client.get("/v1/queries?page_size=500")
+            r = self.client.get("/v1/queries?page_size=100")
         body = r.json()
         self.assertEqual(body["page_size"], 100)
         self.assertEqual(len(body["items"]), 100)
+
+    def test_page_size_over_100_returns_422(self):
+        with self._patch_ark_client([]):
+            r = self.client.get("/v1/queries?page_size=500")
+        self.assertEqual(r.status_code, 422)
 
     def test_page_zero_returns_422(self):
         with self._patch_ark_client([]):
@@ -76,6 +81,22 @@ class TestQueriesPagination(unittest.TestCase):
     def test_page_size_zero_returns_422(self):
         with self._patch_ark_client([]):
             r = self.client.get("/v1/queries?page_size=0")
+        self.assertEqual(r.status_code, 422)
+
+    def test_page_beyond_range_returns_empty_items(self):
+        items = [_query_item(f"q-{i}", f"input {i}", i) for i in range(30)]
+        with self._patch_ark_client(items):
+            r = self.client.get("/v1/queries?page=999")
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertEqual(body["total"], 30)
+        self.assertEqual(body["count"], 0)
+        self.assertEqual(body["items"], [])
+        self.assertEqual(body["page"], 999)
+
+    def test_search_over_max_length_returns_422(self):
+        with self._patch_ark_client([]):
+            r = self.client.get("/v1/queries?search=" + "a" * 201)
         self.assertEqual(r.status_code, 422)
 
     def test_sort_newest_first(self):
