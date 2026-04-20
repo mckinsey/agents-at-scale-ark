@@ -27,6 +27,18 @@ class ModelsPage(BasePage):
             "model_name": "gpt-4o-mini",
             "env_key": "CICD_OPENAI_API_KEY",
             "base_url_key": "CICD_OPENAI_BASE_URL"
+        },
+        "anthropic": {
+            "model_type": "anthropic",
+            "model_name": "claude-3-haiku-20240307",
+            "env_key": "CICD_ANTHROPIC_API_KEY",
+            "base_url_key": None
+        },
+        "azure": {
+            "model_type": "azure",
+            "model_name": "gpt-35-turbo",
+            "env_key": "CICD_AZURE_API_KEY",
+            "base_url_key": "CICD_AZURE_BASE_URL"
         }
     }
     
@@ -60,12 +72,13 @@ class ModelsPage(BasePage):
             name_element = self.page.get_by_text(model_name, exact=True).first
             row_container = name_element.locator("../../..").first
             row_text = row_container.inner_text().lower()
-            
+
             if "true" in row_text or "available" in row_text:
                 return True
             logger.warning(f"Model {model_name} is not yet available")
             return False
         except Exception as e:
+            logger.debug(f"Could not check availability for model {model_name}: {e}")
             return False
     
     def _select_from_combobox(self, trigger_selector: str, option_text: str) -> None:
@@ -76,7 +89,7 @@ class ModelsPage(BasePage):
         self.page.locator(f"[role='option']:has-text('{option_text}')").first.click()
         self.wait_for_element_hidden("[role='listbox'], [data-slot='select-content']", timeout=3000)
 
-    def create_model_with_verification(self, model_name: str, model_type: str, model: str, secret_name: str, base_url: str) -> dict:
+    def create_model_with_verification(self, model_name: str, model_type: str, model: str, secret_name: str, base_url: str = None) -> dict:
         logger.info(f"Creating {model_type} model: {model_name}")
         
         self.page.locator(self.ADD_MODEL_BUTTON).first.click()
@@ -95,9 +108,15 @@ class ModelsPage(BasePage):
         
         self._select_from_combobox("[role='combobox']:has-text('Select a secret'), [role='combobox']:has-text('Select secret')", secret_name)
         
-        base_url_input = self.page.locator(self.BASE_URL_INPUT).first
-        base_url_input.wait_for(state="visible", timeout=5000)
-        base_url_input.fill(base_url)
+        if base_url:
+            try:
+                base_url_input = self.page.locator(self.BASE_URL_INPUT).first
+                base_url_input.wait_for(state="visible", timeout=3000)
+                base_url_input.fill(base_url)
+            except TimeoutError as e:
+                logger.info(f"No base URL field visible for {model_type}, skipping: {e}")
+            except Exception as e:
+                logger.warning(f"Unexpected error filling base URL for {model_type}: {e}")
         
         submit_button = self.page.locator("button:has-text('Create Model'), button[type='submit']:has-text('Create')").first
         submit_button.wait_for(state="visible", timeout=5000)
