@@ -950,7 +950,6 @@ jobs:
         if: ${{ env.HAS_OPENAI_KEY == 'true' }}
         env:
           OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
-          OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
         run: |
           helm upgrade --install executor-openai-responses \
             oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/executor-openai-responses \
@@ -962,7 +961,7 @@ jobs:
           kubectl set env deployment/executor-openai-responses \
             -n default \
             OPENAI_API_KEY="${OPENAI_API_KEY}" \
-            OPENAI_BASE_URL="${OPENAI_BASE_URL}"
+            OPENAI_BASE_URL="https://api.openai.com/v1"
           kubectl rollout status deployment/executor-openai-responses \
             -n default --timeout=2m
 
@@ -991,7 +990,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
           EXECUTOR_URL: ${{ env.HAS_OPENAI_KEY == 'true' && 'http://localhost:18080/execute' || '' }}
           CICD_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
-          CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
+          CICD_OPENAI_BASE_URL: "https://api.openai.com/v1"
         run: |
           cd tests/pytest/cli-tests/tests
           pytest test_responses.py -n auto --dist loadscope -v --tb=short --log-cli-level=INFO
