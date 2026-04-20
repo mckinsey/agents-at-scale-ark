@@ -1,6 +1,6 @@
 {
   "name": "ark-broker",
-  "version": "0.1.60-rc",
+  "version": "0.1.60",
   "description": "Ark broker for memory, telemetry streaming, and observability",
   "main": "dist/main.js",
   "type": "module",
