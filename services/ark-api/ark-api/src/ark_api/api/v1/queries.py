@@ -25,6 +25,8 @@ router = APIRouter(
 # CRD configuration
 VERSION = "v1alpha1"
 
+NAMESPACE_QUERY_DESCRIPTION = "Namespace for this request (defaults to current context)"
+
 
 def query_to_response(query: dict) -> QueryResponse:
     """Convert a Kubernetes query object to response model."""
@@ -82,31 +84,45 @@ def query_to_detail_response(query: dict) -> QueryDetailResponse:
     )
 
 
+def _extract_content_text(content) -> list[str]:
+    """Extract text fragments from a single message ``content`` value.
+
+    ``content`` may be a plain string or a list of OpenAI multimodal parts
+    such as ``{"type": "text", "text": "..."}``. Non-text parts are ignored.
+    """
+    if isinstance(content, str):
+        return [content]
+    if not isinstance(content, list):
+        return []
+    return [
+        piece["text"]
+        for piece in content
+        if isinstance(piece, dict) and isinstance(piece.get("text"), str)
+    ]
+
+
+def _extract_messages_text(messages: list) -> str:
+    """Flatten a chat-message array into a lowercase search string."""
+    parts: list[str] = []
+    for msg in messages:
+        if isinstance(msg, dict):
+            parts.extend(_extract_content_text(msg.get("content")))
+    return " ".join(parts).lower()
+
+
 def _extract_search_text(spec_input) -> str:
     """Flatten query input to a single lowercase string for substring search.
 
     Handles: None, plain str, and chat-message arrays where content is either
-    a str or a list of parts with a string ``text`` field (e.g. OpenAI
-    multimodal text parts ``{"type": "text", "text": "..."}``).
-    Non-text parts (images, tool calls) are ignored.
+    a str or a list of multimodal parts. Non-text parts (images, tool calls)
+    are ignored.
     """
     if spec_input is None:
         return ""
     if isinstance(spec_input, str):
         return spec_input.lower()
     if isinstance(spec_input, list):
-        parts = []
-        for msg in spec_input:
-            if not isinstance(msg, dict):
-                continue
-            content = msg.get("content")
-            if isinstance(content, str):
-                parts.append(content)
-            elif isinstance(content, list):
-                for piece in content:
-                    if isinstance(piece, dict) and isinstance(piece.get("text"), str):
-                        parts.append(piece["text"])
-        return " ".join(parts).lower()
+        return _extract_messages_text(spec_input)
     return ""
 
 
@@ -124,7 +140,7 @@ def _creation_timestamp_key(item_dict: dict):
 @router.get("", response_model=QueryListResponse)
 @handle_k8s_errors(operation="list", resource_type="query")
 async def list_queries(
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)"),
+    namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(25, ge=1, le=100, description="Items per page"),
     search: Optional[str] = Query(None, max_length=200, description="Case-insensitive substring match over query input text"),
@@ -161,7 +177,7 @@ async def list_queries(
 @handle_k8s_errors(operation="create", resource_type="query")
 async def create_query(
     query: QueryCreateRequest,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION)
 ) -> QueryDetailResponse:
     """Create a new query."""
     async with with_ark_client(namespace, VERSION) as ark_client:
@@ -222,7 +238,7 @@ async def create_query(
 
 @router.get("/{query_name}", response_model=QueryDetailResponse)
 @handle_k8s_errors(operation="get", resource_type="query")
-async def get_query(query_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> QueryDetailResponse:
+async def get_query(query_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION)) -> QueryDetailResponse:
     """Get a specific query."""
     async with with_ark_client(namespace, VERSION) as ark_client:
         result = await ark_client.queries.a_get(query_name)
@@ -235,7 +251,7 @@ async def get_query(query_name: str, namespace: Optional[str] = Query(None, desc
 async def update_query(
     query_name: str,
     query: QueryUpdateRequest,
-    namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")
+    namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION)
 ) -> QueryDetailResponse:
     """Update a specific query."""
     async with with_ark_client(namespace, VERSION) as ark_client:
@@ -283,7 +299,7 @@ async def update_query(
 
 @router.patch("/{query_name}/cancel", response_model=QueryDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="query")
-async def cancel_query(query_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> QueryDetailResponse:
+async def cancel_query(query_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION)) -> QueryDetailResponse:
     """Cancel a specific query by setting spec.cancel to true."""
     async with with_ark_client(namespace, VERSION) as ark_client:
         patch = {"spec": {"cancel": True}}
@@ -292,7 +308,7 @@ async def cancel_query(query_name: str, namespace: Optional[str] = Query(None, d
 
 @router.delete("/{query_name}", status_code=204)
 @handle_k8s_errors(operation="delete", resource_type="query")
-async def delete_query(query_name: str, namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")) -> None:
+async def delete_query(query_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION)) -> None:
     """Delete a specific query."""
     async with with_ark_client(namespace, VERSION) as ark_client:
         await ark_client.queries.a_delete(query_name)

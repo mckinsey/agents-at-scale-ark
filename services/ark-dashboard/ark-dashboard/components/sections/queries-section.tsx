@@ -415,26 +415,30 @@ function StatusDot({ variant, onCancel }: StatusDotProps) {
 
   if (variant === 'running' && onCancel) {
     return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger>
-            <div className="inline-flex items-center rounded-full bg-blue-100 px-4 py-2 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-              <span className={`inline-flex h-[16px] w-[16px] items-center rounded-full text-xs font-medium ${getVariantClasses()}`} />
+      <div className="inline-flex items-center rounded-full bg-blue-100 px-4 py-2 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
               <span
-                className="ml-2 cursor-pointer text-xs text-gray-500 underline hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-                onClick={e => {
-                  e.stopPropagation();
-                  onCancel();
-                }}>
-                Cancel
-              </span>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>{getStatusName()}</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+                className={`inline-flex h-[16px] w-[16px] items-center rounded-full text-xs font-medium ${getVariantClasses()}`}
+                aria-label={getStatusName()}
+              />
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{getStatusName()}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        <button
+          type="button"
+          className="ml-2 cursor-pointer bg-transparent p-0 text-xs text-gray-500 underline hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+          onClick={e => {
+            e.stopPropagation();
+            onCancel();
+          }}>
+          Cancel
+        </button>
+      </div>
     );
   }
 
