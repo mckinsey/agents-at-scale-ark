@@ -207,6 +207,24 @@ func (m *mcpServerMock) sayHi(ctx context.Context, req *mcpsdk.CallToolRequest, 
 	}, nil, nil
 }
 
+func TestCreateTransportHasNoClientTimeout(t *testing.T) {
+	for _, transportType := range []string{sseTransport, httpTransport} {
+		t.Run(transportType, func(t *testing.T) {
+			transport, err := createTransport("http://localhost:8888", nil, transportType)
+			require.NoError(t, err)
+
+			switch tr := transport.(type) {
+			case *mcpsdk.SSEClientTransport:
+				require.Zero(t, tr.HTTPClient.Timeout, "http.Client.Timeout must be zero; it would kill long-lived SSE streams")
+			case *mcpsdk.StreamableClientTransport:
+				require.Zero(t, tr.HTTPClient.Timeout, "http.Client.Timeout must be zero; it would kill the standalone SSE stream of the Streamable-HTTP transport")
+			default:
+				t.Fatalf("unexpected transport type %T", transport)
+			}
+		})
+	}
+}
+
 func waitForServer(t *testing.T, ctx context.Context, url string, timeout time.Duration) error {
 	t.Helper()
 
