@@ -21,17 +21,19 @@ jobs:
         run: |
           MANIFEST=".github/release-please-manifest.json"
           CURRENT=$(jq -r '."."' "$MANIFEST")
-          STABLE=$(echo "$CURRENT" | sed 's/-rc\.[0-9]*$//')
+          # Handle both -rc and -rc.N formats
+          STABLE=$(echo "$CURRENT" | sed 's/-rc.*$//')
 
           echo "current=${CURRENT}" >> $GITHUB_OUTPUT
           echo "stable=${STABLE}" >> $GITHUB_OUTPUT
 
-          if [[ "$CURRENT" != *-rc.* ]]; then
+          if [[ "$CURRENT" != *-rc* ]]; then
             echo "Error: Current version $CURRENT is not an RC version. Nothing to promote."
             exit 1
           fi
 
-          LATEST_RC=$(git tag --list "v${STABLE}-rc.*" --sort=-version:refname | head -1)
+          # Handle both -rc and -rc.N tag formats
+          LATEST_RC=$(git tag --list "v${STABLE}-rc*" --sort=-version:refname | head -1)
           echo "latest_rc=${LATEST_RC:-v${CURRENT}}" >> $GITHUB_OUTPUT
 
       - name: Check for existing promotion PR
@@ -58,7 +60,7 @@ jobs:
           BRANCH="promote/${{ steps.version.outputs.stable }}"
           git checkout -b "$BRANCH"
 
-      - name: Graduate version in manifest
+      - name: Graduate version in manifest and add release-as
         run: |
           MANIFEST=".github/release-please-manifest.json"
           CURRENT="${{ steps.version.outputs.current }}"
@@ -68,9 +70,14 @@ jobs:
           jq --arg v "$STABLE" '."." = $v' "$MANIFEST" > tmp.json
           mv tmp.json "$MANIFEST"
 
+          # Add release-as to stable config (required because release-please ignores action input in manifest mode)
+          jq --arg v "$STABLE" '. + {"release-as": $v}' .github/release-please-config.json > tmp.json
+          mv tmp.json .github/release-please-config.json
+          echo "Added release-as: $STABLE to stable config"
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "$MANIFEST"
+          git add "$MANIFEST" .github/release-please-config.json
           git commit -m "chore: promote ${{ steps.version.outputs.latest_rc }} to v$STABLE"
 
       - name: Push branch and create PR
@@ -88,6 +95,7 @@ jobs:
 
           ### What this PR does
           - Updates the release-please manifest from \`${{ steps.version.outputs.current }}\` to \`${{ steps.version.outputs.stable }}\`
+          - Adds \`release-as\` to stable config (required because release-please ignores action input in manifest mode)
 
           ### What happens when merged
           - CI/CD pipeline runs on main
