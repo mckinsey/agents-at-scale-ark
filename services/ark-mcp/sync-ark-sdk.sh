@@ -6,7 +6,7 @@
 set -euo pipefail
 
 # Get PEP 440 normalized version for wheel filename (e.g., 0.1.58-rc.3 -> 0.1.58rc3)
-PEP440_VERSION=$(cat ../../version.txt | sed 's/-rc\./rc/')
+PEP440_VERSION=$(cat ../../version.txt | sed 's/-rc\.\([0-9]*\)/rc\1/;s/-rc$/rc0/')
 WHEEL_NAME="ark_sdk-${PEP440_VERSION}-py3-none-any.whl"
 
 rm -rf ark-mcp/out
