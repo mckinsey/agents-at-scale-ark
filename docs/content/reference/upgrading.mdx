@@ -27,7 +27,6 @@ ark install -y --ark-version 0.2.0
 Useful flags:
 
 - `--marketplace-version <version>` — pin the marketplace chart version
-- `--wait-for-ready <timeout>` — block until Ark is ready (e.g. `--wait-for-ready 2m`); requires `-y`
 
 Run `ark install --help` for the full list.
 
@@ -57,7 +56,6 @@ Useful flags:
 
 - `-n, --namespace <namespace>` — export from a single namespace
 - `-t, --types <types>` — comma-separated list of resource types (e.g. `-t models,agents,teams`)
-- `-l, --labels <selector>` — filter by label selector
 
 <Callout type="warning">
 Not included in the default export: `queries`, `memories`, `executionengines`, `a2atasks`, and any non-Ark CRDs such as Argo `WorkflowTemplate`. Back those up separately with `kubectl get <kind> -A -o yaml` if you need them on the destination.
