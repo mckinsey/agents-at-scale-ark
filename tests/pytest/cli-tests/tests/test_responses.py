@@ -622,6 +622,10 @@ class TestOpenAIResponsesExecutor:
                 conversation_id=conv_id,
             )
         )
+        if status2 == 500 and "Zero Data Retention" in str(data2):
+            pytest.skip(
+                "Gateway enforces Zero Data Retention — previous_response_id not supported"
+            )
         assert status2 == 200, f"Turn 2 failed with HTTP {status2}: {data2}"
         assert content2, "Turn 2: empty response"
         assert "alex" in content2.lower(), (
