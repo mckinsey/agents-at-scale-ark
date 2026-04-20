@@ -6420,7 +6420,7 @@ export interface operations {
                 namespace?: string | null;
                 /** @description Page number (1-indexed) */
                 page?: number;
-                /** @description Items per page (clamped to 100) */
+                /** @description Items per page */
                 page_size?: number;
                 /** @description Case-insensitive substring match over query input text */
                 search?: string | null;
