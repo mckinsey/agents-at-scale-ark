@@ -83,7 +83,7 @@ export const QueriesSection = forwardRef<
   };
 
   const getInputDisplayText = (
-    input: string | { role: string; content?: string | unknown }[] | undefined,
+    input: string | { role: string; content?: unknown }[] | undefined,
   ): string => {
     if (!input) return '-';
     if (typeof input === 'string') return input;
@@ -137,8 +137,6 @@ export const QueriesSection = forwardRef<
 
   const getStatus = (query: QueryResponse) =>
     (query.status as { phase?: string })?.phase || '—';
-
-  const getOutput = (query: QueryResponse) => getFirstResponseText(query) || '-';
 
   const renderOutputCell = (query: QueryResponse) => {
     const text = getFirstResponseText(query) || '';
