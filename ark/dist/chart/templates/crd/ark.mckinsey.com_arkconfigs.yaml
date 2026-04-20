@@ -24,9 +24,6 @@ spec:
     - jsonPath: .spec.queryTTL
       name: QueryTTL
       type: string
-    - jsonPath: .spec.evaluationTTL
-      name: EvaluationTTL
-      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -56,14 +53,8 @@ spec:
             description: |-
               ArkConfigSpec defines cluster-wide Ark defaults. The singleton
               object named "default" is consulted by admission webhooks when
-              a Query or Evaluation is created without an explicit ttl.
+              a Query is created without an explicit ttl.
             properties:
-              evaluationTTL:
-                description: |-
-                  EvaluationTTL is the default TTL injected into Evaluation resources
-                  that do not specify spec.ttl. If unset, the hardcoded
-                  fallback of 720h is used.
-                type: string
               queryTTL:
                 description: |-
                   QueryTTL is the default TTL injected into Query resources

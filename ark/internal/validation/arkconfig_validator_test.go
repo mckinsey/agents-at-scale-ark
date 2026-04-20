@@ -14,8 +14,7 @@ func TestValidateArkConfig_AcceptsDefault(t *testing.T) {
 	cfg := &arkv1alpha1.ArkConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: ArkConfigSingletonName},
 		Spec: arkv1alpha1.ArkConfigSpec{
-			QueryTTL:      &metav1.Duration{Duration: time.Hour},
-			EvaluationTTL: &metav1.Duration{Duration: 24 * time.Hour},
+			QueryTTL: &metav1.Duration{Duration: time.Hour},
 		},
 	}
 	warnings, err := ValidateArkConfig(context.Background(), cfg)
@@ -53,15 +52,3 @@ func TestValidateArkConfig_RejectsNegativeQueryTTL(t *testing.T) {
 	}
 }
 
-func TestValidateArkConfig_RejectsNegativeEvaluationTTL(t *testing.T) {
-	cfg := &arkv1alpha1.ArkConfig{
-		ObjectMeta: metav1.ObjectMeta{Name: ArkConfigSingletonName},
-		Spec: arkv1alpha1.ArkConfigSpec{
-			EvaluationTTL: &metav1.Duration{Duration: -time.Hour},
-		},
-	}
-	_, err := ValidateArkConfig(context.Background(), cfg)
-	if err == nil {
-		t.Fatalf("expected error for negative EvaluationTTL")
-	}
-}

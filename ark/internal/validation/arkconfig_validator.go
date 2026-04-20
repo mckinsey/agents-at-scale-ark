@@ -18,8 +18,5 @@ func ValidateArkConfig(_ context.Context, cfg *arkv1alpha1.ArkConfig) ([]string,
 	if cfg.Spec.QueryTTL != nil && cfg.Spec.QueryTTL.Duration <= 0 {
 		return warnings, fmt.Errorf("spec.queryTTL must be a positive duration, got %v", cfg.Spec.QueryTTL.Duration)
 	}
-	if cfg.Spec.EvaluationTTL != nil && cfg.Spec.EvaluationTTL.Duration <= 0 {
-		return warnings, fmt.Errorf("spec.evaluationTTL must be a positive duration, got %v", cfg.Spec.EvaluationTTL.Duration)
-	}
 	return warnings, nil
 }

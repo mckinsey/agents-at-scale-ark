@@ -55,27 +55,6 @@ func TestResolveQueryTTL_UsesArkConfigValue(t *testing.T) {
 	}
 }
 
-func TestResolveEvalTTL_UsesArkConfigValue(t *testing.T) {
-	cfg := &arkv1alpha1.ArkConfig{
-		ObjectMeta: metav1.ObjectMeta{Name: ArkConfigSingletonName},
-		Spec: arkv1alpha1.ArkConfigSpec{
-			EvaluationTTL: &metav1.Duration{Duration: 48 * time.Hour},
-		},
-	}
-	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(cfg).Build()
-	got := ResolveEvalTTL(context.Background(), &fakeLookup{c: c})
-	if got.Duration != 48*time.Hour {
-		t.Fatalf("want 48h, got %v", got.Duration)
-	}
-}
-
-func TestResolveEvalTTL_FallbackWhenLookupNil(t *testing.T) {
-	got := ResolveEvalTTL(context.Background(), nil)
-	if got.Duration != DefaultTTLFallback {
-		t.Fatalf("want %v, got %v", DefaultTTLFallback, got.Duration)
-	}
-}
-
 func TestDefaultQuery_InjectsTTLWhenMissing(t *testing.T) {
 	cfg := &arkv1alpha1.ArkConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: ArkConfigSingletonName},

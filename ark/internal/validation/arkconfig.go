@@ -50,11 +50,3 @@ func ResolveQueryTTL(ctx context.Context, lookup ArkConfigLookup) metav1.Duratio
 		return s.QueryTTL
 	})
 }
-
-// ResolveEvalTTL returns the TTL to inject into an Evaluation that has
-// no explicit spec.ttl.
-func ResolveEvalTTL(ctx context.Context, lookup ArkConfigLookup) metav1.Duration {
-	return resolveTTL(ctx, lookup, func(s *arkv1alpha1.ArkConfigSpec) *metav1.Duration {
-		return s.EvaluationTTL
-	})
-}

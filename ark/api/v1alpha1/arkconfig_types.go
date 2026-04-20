@@ -8,19 +8,13 @@ import (
 
 // ArkConfigSpec defines cluster-wide Ark defaults. The singleton
 // object named "default" is consulted by admission webhooks when
-// a Query or Evaluation is created without an explicit ttl.
+// a Query is created without an explicit ttl.
 type ArkConfigSpec struct {
 	// QueryTTL is the default TTL injected into Query resources
 	// that do not specify spec.ttl. If unset, the hardcoded
 	// fallback of 720h is used.
 	// +kubebuilder:validation:Optional
 	QueryTTL *metav1.Duration `json:"queryTTL,omitempty"`
-
-	// EvaluationTTL is the default TTL injected into Evaluation resources
-	// that do not specify spec.ttl. If unset, the hardcoded
-	// fallback of 720h is used.
-	// +kubebuilder:validation:Optional
-	EvaluationTTL *metav1.Duration `json:"evaluationTTL,omitempty"`
 }
 
 // ArkConfigStatus is reserved for future status reporting. Currently empty.
@@ -30,7 +24,6 @@ type ArkConfigStatus struct{}
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="QueryTTL",type=string,JSONPath=`.spec.queryTTL`
-// +kubebuilder:printcolumn:name="EvaluationTTL",type=string,JSONPath=`.spec.evaluationTTL`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // ArkConfig is the Schema for cluster-wide Ark defaults.

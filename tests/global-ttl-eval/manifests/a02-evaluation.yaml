@@ -1,6 +1,0 @@
-apiVersion: ark.mckinsey.com/v1alpha1
-kind: Evaluation
-metadata:
-  name: test-evaluation-global-ttl
-spec:
-  type: direct
