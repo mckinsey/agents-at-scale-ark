@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.1.60-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.59...v0.1.60-rc) (2026-04-20)
+
+
+### Features
+
+* **ark-sdk:** add broker streaming support to ExecutorApp ([#1893](https://github.com/mckinsey/agents-at-scale-ark/issues/1893)) ([a47b6a8](https://github.com/mckinsey/agents-at-scale-ark/commit/a47b6a8c8f49f19fcb99ed9f27c5509335caaac1))
+* **broker-sessions:** live sessions tab with proxy, persistence, and per-chat ids ([#1612](https://github.com/mckinsey/agents-at-scale-ark/issues/1612)) ([6952e1f](https://github.com/mckinsey/agents-at-scale-ark/commit/6952e1f2f07274af8fbdb2021fc1300b9b759997))
+
+
+### Bug Fixes
+
+* **ci:** stabilize release pipeline and k3s CI reliability ([#1922](https://github.com/mckinsey/agents-at-scale-ark/issues/1922)) ([882afa6](https://github.com/mckinsey/agents-at-scale-ark/commit/882afa6196e22c5790e8fa948e18daa90d133df9))
+* executor marketplace type added ([#1880](https://github.com/mckinsey/agents-at-scale-ark/issues/1880)) ([5e4eb9d](https://github.com/mckinsey/agents-at-scale-ark/commit/5e4eb9d855cc65af10f870172ab171806d32b3a4))
+* persist webhook matchConditions across make manifests ([#1877](https://github.com/mckinsey/agents-at-scale-ark/issues/1877)) ([0e677c6](https://github.com/mckinsey/agents-at-scale-ark/commit/0e677c60d843d49afe913a3fa2efedbc51953150))
+* resolve apiVersion in Azure model config for AsyncAzureOpenAI ([#1921](https://github.com/mckinsey/agents-at-scale-ark/issues/1921)) ([01bf358](https://github.com/mckinsey/agents-at-scale-ark/commit/01bf3584176d34b0c709a5dacda7ea32c65b8b72))
+* resolve intermittent 503s in postgresql backend by disabling nonfunctional protobuf support ([#1841](https://github.com/mckinsey/agents-at-scale-ark/issues/1841)) ([819ee32](https://github.com/mckinsey/agents-at-scale-ark/commit/819ee32c8416c26681bd644428f035b4dab8b6e9))
+* **skills:** prevent anchoring bias in issue-creation task breakdowns ([#1905](https://github.com/mckinsey/agents-at-scale-ark/issues/1905)) ([ee3240f](https://github.com/mckinsey/agents-at-scale-ark/commit/ee3240f280f53f97c5f864c30ee801261c3170c4))
+* Use sed to sync ark-sdk instead of python package ([#1876](https://github.com/mckinsey/agents-at-scale-ark/issues/1876)) ([8921a2d](https://github.com/mckinsey/agents-at-scale-ark/commit/8921a2d7bfe2d44390e999d80971d2bebb0e6232))
+
 ## [0.1.59](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.58...v0.1.59) (2026-04-14)
 
 
