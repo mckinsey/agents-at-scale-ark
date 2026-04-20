@@ -221,6 +221,9 @@ async def _resolve_provider_config(provider_config_obj: Any, namespace: str) -> 
     base_url_vs = getattr(provider_config_obj, "base_url", None) or getattr(provider_config_obj, "baseUrl", None)
     if base_url_vs:
         config["baseUrl"] = await _resolve_value_source(base_url_vs, namespace)
+    api_version_vs = getattr(provider_config_obj, "api_version", None) or getattr(provider_config_obj, "apiVersion", None)
+    if api_version_vs:
+        config["apiVersion"] = await _resolve_value_source(api_version_vs, namespace)
     if hasattr(provider_config_obj, "properties") and provider_config_obj.properties:
         config["properties"] = provider_config_obj.properties
     return config

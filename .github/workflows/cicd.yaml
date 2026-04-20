@@ -774,11 +774,19 @@ jobs:
         env:
           CICD_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
           CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL }}
+          CICD_ANTHROPIC_API_KEY: ${{ secrets.CICD_ANTHROPIC_API_KEY }}
+          CICD_ANTHROPIC_BASE_URL: ${{ secrets.CICD_ANTHROPIC_BASE_URL }}
+          CICD_AZURE_API_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
+          CICD_AZURE_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
         run: |
           cd tests/pytest/ui-tests
           cat > .env << EOF
           CICD_OPENAI_API_KEY=${CICD_OPENAI_API_KEY}
           CICD_OPENAI_BASE_URL=${CICD_OPENAI_BASE_URL}
+          CICD_ANTHROPIC_API_KEY=${CICD_ANTHROPIC_API_KEY}
+          CICD_ANTHROPIC_BASE_URL=${CICD_ANTHROPIC_BASE_URL}
+          CICD_AZURE_API_KEY=${CICD_AZURE_API_KEY}
+          CICD_AZURE_BASE_URL=${CICD_AZURE_BASE_URL}
           EOF
 
       - name: Start port-forwarding
@@ -882,6 +890,12 @@ jobs:
       - name: Run CLI tests
         env:
           PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
+          CICD_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
+          CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
+          CICD_ANTHROPIC_API_KEY: ${{ secrets.CICD_ANTHROPIC_API_KEY }}
+          CICD_ANTHROPIC_BASE_URL: ${{ secrets.CICD_ANTHROPIC_BASE_URL }}
+          CICD_AZURE_API_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
+          CICD_AZURE_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
         run: |
           cd tests/pytest/cli-tests/tests
           pytest . -n 3 --dist loadscope -v --tb=short --log-cli-level=INFO
@@ -1117,9 +1131,6 @@ jobs:
         build-ark-cli,
       ]
     runs-on: ubuntu-24.04
-    concurrency:
-      group: release-please
-      cancel-in-progress: false
     outputs:
       released: ${{ steps.release-please.outputs.release_created }}
       tag: ${{ steps.release-please.outputs.tag_name }}
@@ -1365,7 +1376,7 @@ jobs:
         with:
           metrics-enabled: false
           traefik-enabled: false
-          k3s-channel: latest
+          k3s-channel: stable
 
       - name: Setup Node
         uses: actions/setup-node@v4
