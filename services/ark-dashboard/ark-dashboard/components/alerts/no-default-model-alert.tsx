@@ -1,13 +1,18 @@
 'use client';
 
 import { AlertTriangleIcon, ArrowRight } from 'lucide-react';
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { toast } from 'sonner';
 
 import { NamespacedLink } from '@/components/namespaced-link';
-import { Alert, AlertIcon, AlertContent, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import {
+  Alert,
+  AlertContent,
+  AlertDescription,
+  AlertIcon,
+  AlertTitle,
+} from '@/components/ui/alert';
 import { useGetAllModels } from '@/lib/services/models-hooks';
-import { useNamespace } from '@/providers/NamespaceProvider';
 
 export function NoDefaultModelAlert() {
   const { data: models, error } = useGetAllModels();
@@ -30,7 +35,7 @@ export function NoDefaultModelAlert() {
           <AlertIcon className="text-status-warning">
             <AlertTriangleIcon className="text-[25px]" />
           </AlertIcon>
-          <AlertContent>
+          <AlertContent className="flex-row items-center justify-between gap-3 pt-0">
             <AlertTitle>You have no default Model configured.</AlertTitle>
             <AlertDescription className="text-primary flex items-center">
               <span>Configure Default Model</span>
