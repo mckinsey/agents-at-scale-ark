@@ -25,11 +25,11 @@ export interface BaseCardAction {
   onClick: () => void;
   variant?:
     | 'default'
+    | 'accent'
     | 'destructive'
-    | 'outline'
     | 'secondary'
-    | 'ghost'
-    | 'link';
+    | 'outline'
+    | 'ghost';
   className?: string;
   disabled?: boolean;
 }

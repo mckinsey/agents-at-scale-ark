@@ -1,6 +1,6 @@
 import { AlertCircle } from 'lucide-react';
 
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertIcon, AlertContent, AlertDescription } from '@/components/ui/alert';
 import type { Agent, TeamMember } from '@/lib/services';
 
 interface WarningsSectionProps {
@@ -30,11 +30,15 @@ export function WarningsSection({
   }
 
   return (
-    <Alert variant="warning">
-      <AlertCircle className="h-4 w-4" />
-      <AlertDescription>
-        Neither the agents nor the selector have access to the terminate tool, which may prevent the conversation from terminating gracefully. Enable the terminate tool for the selector, or give one or more agents in the team access to the terminate tool.
-      </AlertDescription>
+    <Alert layout="long">
+      <AlertIcon className="text-status-warning">
+        <AlertCircle className="text-[25px]" />
+      </AlertIcon>
+      <AlertContent>
+        <AlertDescription>
+          Neither the agents nor the selector have access to the terminate tool, which may prevent the conversation from terminating gracefully. Enable the terminate tool for the selector, or give one or more agents in the team access to the terminate tool.
+        </AlertDescription>
+      </AlertContent>
     </Alert>
   );
 }

@@ -136,14 +136,14 @@ export default function MarketplaceDetailPage() {
                   </p>
                   <div className="mt-4 flex flex-wrap items-center gap-2">
                     <Badge
-                      variant="secondary"
+                      variant="alternative"
                       className={getCategoryColor(item.category)}>
                       {item.category.replace('-', ' ')}
                     </Badge>
-                    <Badge variant="outline">{item.type}</Badge>
+                    <Badge outline>{item.type}</Badge>
                     {item.featured && (
                       <Badge
-                        variant="secondary"
+                        variant="warning"
                         className="bg-yellow-500/10 text-yellow-700 dark:text-yellow-400">
                         Featured
                       </Badge>
@@ -199,7 +199,7 @@ export default function MarketplaceDetailPage() {
                     <CardContent>
                       <div className="flex flex-wrap gap-2">
                         {item.tags.map(tag => (
-                          <Badge key={tag} variant="secondary">
+                          <Badge key={tag} variant="alternative">
                             {tag}
                           </Badge>
                         ))}
@@ -254,7 +254,7 @@ export default function MarketplaceDetailPage() {
                         {item.changelog.map((entry, index) => (
                           <div key={index}>
                             <div className="flex items-center gap-2">
-                              <Badge variant="outline">{entry.version}</Badge>
+                              <Badge outline>{entry.version}</Badge>
                               <span className="text-muted-foreground text-sm">
                                 {entry.date}
                               </span>
@@ -305,24 +305,26 @@ export default function MarketplaceDetailPage() {
                     </Button>
                   )}
 
-                  {item.status === 'installed' && item.uis && item.uis.length > 0 && (
-                    <>
-                      <Separator />
-                      <div className="space-y-2">
-                        {item.uis.map((ui) => (
-                          <Button
-                            key={ui.url}
-                            variant="outline"
-                            className="w-full justify-start"
-                            onClick={() => window.open(ui.url, '_blank')}>
-                            <ExternalLink className="mr-2 h-4 w-4" />
-                            {ui.label}
-                            <ExternalLink className="ml-auto h-3 w-3" />
-                          </Button>
-                        ))}
-                      </div>
-                    </>
-                  )}
+                  {item.status === 'installed' &&
+                    item.uis &&
+                    item.uis.length > 0 && (
+                      <>
+                        <Separator />
+                        <div className="space-y-2">
+                          {item.uis.map(ui => (
+                            <Button
+                              key={ui.url}
+                              variant="outline"
+                              className="w-full justify-start"
+                              onClick={() => window.open(ui.url, '_blank')}>
+                              <ExternalLink className="mr-2 h-4 w-4" />
+                              {ui.label}
+                              <ExternalLink className="ml-auto h-3 w-3" />
+                            </Button>
+                          ))}
+                        </div>
+                      </>
+                    )}
 
                   <Separator />
 

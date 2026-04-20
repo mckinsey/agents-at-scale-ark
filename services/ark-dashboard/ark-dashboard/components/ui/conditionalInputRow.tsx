@@ -90,7 +90,7 @@ export function ConditionalInputRow({
           <>
             <Select
               value={data.value}
-              onValueChange={value => onChange({ value: value })}>
+              onValueChange={(value) => onChange({ value: value as string })}>
               <SelectTrigger id="thirdValue" aria-invalid={!!valueError}>
                 <SelectValue placeholder="Select a secret" />
               </SelectTrigger>

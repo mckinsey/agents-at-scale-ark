@@ -46,7 +46,7 @@ function TeamFields({
   return (
     <div className="grid gap-2">
       <Label htmlFor="team">Team</Label>
-      <Select value={selectedTeam} onValueChange={setSelectedTeam}>
+      <Select value={selectedTeam} onValueChange={(value) => setSelectedTeam(value as string)}>
         <SelectTrigger id="team">
           <SelectValue
             placeholder={loadingTeams ? 'Loading teams...' : 'Select team...'}

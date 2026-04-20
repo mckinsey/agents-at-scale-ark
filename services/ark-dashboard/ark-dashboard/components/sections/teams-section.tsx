@@ -161,7 +161,7 @@ export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
               Create Team
             </Button>
             <Button
-              variant="link"
+              variant="ghost"
               asChild
               className="text-muted-foreground"
               size="sm">

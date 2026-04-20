@@ -93,7 +93,7 @@ export function ParameterDetailPanel({
             <Settings className="h-4 w-4" />
             <h3 className="font-medium">Parameters</h3>
             {parameters.length > 0 && (
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="alternative" className="text-xs">
                 {parameters.length}
               </Badge>
             )}
@@ -153,7 +153,7 @@ export function ParameterDetailPanel({
                               {param.name || `Parameter ${index + 1}`}
                             </span>
                             {hasLongValue && (
-                              <Badge variant="outline" className="text-xs">
+                              <Badge outline className="text-xs">
                                 Long text
                               </Badge>
                             )}
@@ -228,8 +228,6 @@ export function ParameterDetailPanel({
                           />
                         )}
                       </div>
-
-
                     </CardContent>
                   </CollapsibleContent>
                 </Collapsible>

@@ -153,7 +153,7 @@ export const McpServersSection = forwardRef<
             </Button>
           </EmptyContent>
           <Button
-            variant="link"
+            variant="ghost"
             asChild
             className="text-muted-foreground"
             size="sm">

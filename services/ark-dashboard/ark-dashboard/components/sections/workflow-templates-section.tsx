@@ -121,7 +121,7 @@ export function WorkflowTemplatesSection() {
         </EmptyHeader>
         <EmptyContent></EmptyContent>
         <Button
-          variant="link"
+          variant="ghost"
           asChild
           className="text-muted-foreground"
           size="sm">

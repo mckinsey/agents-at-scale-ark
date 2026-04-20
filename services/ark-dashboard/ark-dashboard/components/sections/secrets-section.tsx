@@ -139,7 +139,7 @@ export const SecretsSection = forwardRef<
             </Button>
           </EmptyContent>
           <Button
-            variant="link"
+            variant="ghost"
             asChild
             className="text-muted-foreground"
             size="sm">

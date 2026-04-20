@@ -145,7 +145,7 @@ export function SelectorDetailPanel({
             <Target className="h-5 w-5" />
             Resource Selector
             {labelCount > 0 && (
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="alternative" className="text-xs">
                 {labelCount} label{labelCount !== 1 ? 's' : ''}
               </Badge>
             )}
@@ -172,8 +172,8 @@ export function SelectorDetailPanel({
           <Label className="text-sm font-medium">Resource Type</Label>
           <Select
             value={selector.resource}
-            onValueChange={value =>
-              onSelectorChange({ ...selector, resource: value })
+            onValueChange={(value) =>
+              onSelectorChange({ ...selector, resource: value as string })
             }>
             <SelectTrigger>
               <SelectValue />

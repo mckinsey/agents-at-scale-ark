@@ -202,16 +202,16 @@ function getSessionTypeIcon(type: SessionType) {
 
 function getStatusBadgeVariant(
   status: StepStatus,
-): 'default' | 'secondary' | 'destructive' | 'outline' {
+): 'success' | 'error' | 'alternative' | 'high-emphasis' {
   switch (status) {
     case 'succeeded':
-      return 'default';
+      return 'success';
     case 'failed':
-      return 'destructive';
+      return 'error';
     case 'running':
-      return 'secondary';
+      return 'alternative';
     default:
-      return 'outline';
+      return 'high-emphasis';
   }
 }
 
@@ -840,7 +840,7 @@ function SessionDetailView({
                   {session.status}
                 </Badge>
                 <Badge
-                  variant="outline"
+                  variant="alternative"
                   className="text-xs font-medium capitalize">
                   {session.type}
                 </Badge>
@@ -930,7 +930,7 @@ function SessionListItem({
             {session.status}
           </Badge>
           <Badge
-            variant="outline"
+            variant="alternative"
             className="h-5 text-xs font-medium capitalize">
             {session.type}
           </Badge>
@@ -1225,7 +1225,7 @@ export function SessionsSection() {
             <div className="flex flex-wrap items-center gap-2 md:ml-auto md:shrink-0">
               <Select
                 value={statusFilter || 'all'}
-                onValueChange={setStatusFilter}>
+                onValueChange={(value) => setStatusFilter(value as string)}>
                 <SelectTrigger className="h-8 w-full border-2 text-sm shadow-sm sm:w-36 md:w-40">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>

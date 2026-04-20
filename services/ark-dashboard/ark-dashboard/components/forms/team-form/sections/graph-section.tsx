@@ -1,7 +1,7 @@
 import { AlertCircle, Network, Trash2 } from 'lucide-react';
 import type { UseFormReturn } from 'react-hook-form';
 
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertIcon, AlertContent, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -89,12 +89,16 @@ export function GraphSection({
       </div>
 
       {agentsWithNoOutgoing.length > 0 && (
-        <Alert variant="warning">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            The following agents have no outgoing edges and will end graph execution:{' '}
-            {agentsWithNoOutgoing.map(m => m.name).join(', ')}
-          </AlertDescription>
+        <Alert layout="long">
+          <AlertIcon className="text-status-warning">
+            <AlertCircle className="text-[25px]" />
+          </AlertIcon>
+          <AlertContent>
+            <AlertDescription>
+              The following agents have no outgoing edges and will end graph execution:{' '}
+              {agentsWithNoOutgoing.map(m => m.name).join(', ')}
+            </AlertDescription>
+          </AlertContent>
         </Alert>
       )}
 
@@ -119,8 +123,8 @@ export function GraphSection({
                   className="hover:bg-muted/50 flex items-center gap-2 rounded-md p-2">
                   <Select
                     value={edge.from || ''}
-                    onValueChange={value =>
-                      updateGraphEdge(index, 'from', value)
+                    onValueChange={(value) =>
+                      updateGraphEdge(index, 'from', value as string)
                     }
                     disabled={disabled}>
                     <SelectTrigger
@@ -150,7 +154,7 @@ export function GraphSection({
                   <span className="text-muted-foreground">→</span>
                   <Select
                     value={edge.to}
-                    onValueChange={value => updateGraphEdge(index, 'to', value)}
+                    onValueChange={(value) => updateGraphEdge(index, 'to', value as string)}
                     disabled={disabled}>
                     <SelectTrigger
                       className={cn(

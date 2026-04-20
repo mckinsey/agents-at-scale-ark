@@ -79,11 +79,12 @@ export function QueryMemoryField({
       <td className="px-3 py-2">
         <Select
           value={value?.name || '__none__'}
-          onValueChange={selectedValue => {
+          onValueChange={(selectedValue) => {
+            const val = selectedValue as string;
             onChange?.(
-              selectedValue === '__none__'
+              val === '__none__'
                 ? undefined
-                : { name: selectedValue },
+                : { name: val },
             );
           }}
           disabled={loading}>

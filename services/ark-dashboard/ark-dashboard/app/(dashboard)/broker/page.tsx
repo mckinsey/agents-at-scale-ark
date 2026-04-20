@@ -580,11 +580,11 @@ export default function BrokerPage() {
               <span className="text-muted-foreground text-sm">Memory:</span>
               <Select
                 value={selectedMemory}
-                onValueChange={value => {
-                  setSelectedMemory(value);
+                onValueChange={(value) => {
+                  setSelectedMemory(value as string);
                   trackEvent({
                     name: 'broker_memory_changed',
-                    properties: { memoryName: value },
+                    properties: { memoryName: value as string },
                   });
                 }}
                 disabled={loading}>

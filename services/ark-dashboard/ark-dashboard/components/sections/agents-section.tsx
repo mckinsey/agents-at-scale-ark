@@ -133,7 +133,7 @@ export const AgentsSection = forwardRef<AgentsSectionHandle, object>(
             )}
           </EmptyContent>
           <Button
-            variant="link"
+            variant="ghost"
             asChild
             className="text-muted-foreground"
             size="sm">

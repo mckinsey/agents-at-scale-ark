@@ -491,7 +491,7 @@ const ToolItem = ({
         <Checkbox
           id={`tool-${tool.id}`}
           checked={isSelected}
-          onCheckedChange={checked => onToggle(tool, checked)}
+          onCheckedChange={checked => onToggle(tool, checked as boolean)}
           className="mt-1"
         />
       )}

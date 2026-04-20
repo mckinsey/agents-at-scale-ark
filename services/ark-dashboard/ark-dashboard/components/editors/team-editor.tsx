@@ -877,8 +877,8 @@ export function TeamEditor({
                               className="hover:bg-muted/50 flex items-center gap-2 rounded-md p-2">
                               <Select
                                 value={edge.from || ''}
-                                onValueChange={value =>
-                                  updateGraphEdge(index, 'from', value)
+                                onValueChange={(value) =>
+                                  updateGraphEdge(index, 'from', value as string)
                                 }
                                 disabled={form.formState.isSubmitting}>
                                 <SelectTrigger
@@ -910,8 +910,8 @@ export function TeamEditor({
                               <span className="text-muted-foreground">→</span>
                               <Select
                                 value={edge.to}
-                                onValueChange={value =>
-                                  updateGraphEdge(index, 'to', value)
+                                onValueChange={(value) =>
+                                  updateGraphEdge(index, 'to', value as string)
                                 }
                                 disabled={form.formState.isSubmitting}>
                                 <SelectTrigger

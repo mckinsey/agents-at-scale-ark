@@ -412,7 +412,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(
                                 </NamespacedLink>
                               </EmptyContent>
                               <Button
-                                variant="link"
+                                variant="ghost"
                                 asChild
                                 className="text-muted-foreground"
                                 size="sm">

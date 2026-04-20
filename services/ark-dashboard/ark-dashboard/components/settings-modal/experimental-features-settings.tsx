@@ -46,7 +46,7 @@ function SelectFeatureRow({ feature }: { feature: SelectSetting }) {
           </div>
         )}
       </div>
-      <Select value={value} onValueChange={setValue}>
+      <Select value={value} onValueChange={(v) => setValue(v as string)}>
         <SelectTrigger className="w-[180px]">
           <SelectValue />
         </SelectTrigger>

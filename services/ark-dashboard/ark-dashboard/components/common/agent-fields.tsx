@@ -46,7 +46,7 @@ function AgentFields({
   return (
     <div className="grid gap-2">
       <Label htmlFor="agent">Agent</Label>
-      <Select value={selectedAgent} onValueChange={setSelectedAgent}>
+      <Select value={selectedAgent} onValueChange={(value) => setSelectedAgent(value as string)}>
         <SelectTrigger id="agent">
           <SelectValue
             placeholder={

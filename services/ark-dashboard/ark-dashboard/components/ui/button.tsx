@@ -73,6 +73,14 @@ const buttonVariants = cva(
           commonDisabled,
           disabledOverlayGradient,
         ],
+        destructive: [
+          'bg-status-error text-fg-primary-inverse',
+          hoverGradient.normal,
+          activeGradient.normal,
+          'focus-visible:ring-offset-1 focus-visible:ring-offset-stroke-active-inverse',
+          commonDisabled,
+          disabledOverlayGradient,
+        ],
         secondary: [
           'bg-fill-muted text-fg-primary',
           hoverGradient.normal,
@@ -131,7 +139,8 @@ function wrapTextNodes(children: React.ReactNode): React.ReactNode {
  * Button props interface with JSDoc for auto-generated documentation
  */
 interface ButtonProps
-  extends React.ComponentProps<'button'>, VariantProps<typeof buttonVariants> {
+  extends React.ComponentProps<'button'>,
+    VariantProps<typeof buttonVariants> {
   /**
    * Render as a child component using Radix Slot.
    * When true, the button will merge its props with its immediate child element.

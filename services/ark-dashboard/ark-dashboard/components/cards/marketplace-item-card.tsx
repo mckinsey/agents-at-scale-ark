@@ -195,14 +195,14 @@ export function MarketplaceItemCard({
             {item.tags.slice(0, 4).map(tag => (
               <Badge
                 key={tag}
-                variant="secondary"
+                variant="alternative"
                 className="px-2 py-0.5 text-xs">
                 {tag}
               </Badge>
             ))}
             {item.tags.length > 4 && (
               <Badge
-                variant="secondary"
+                variant="alternative"
                 className="px-2 py-0.5 text-xs">
                 +{item.tags.length - 4}
               </Badge>

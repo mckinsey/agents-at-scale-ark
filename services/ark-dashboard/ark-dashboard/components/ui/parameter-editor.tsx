@@ -231,8 +231,8 @@ export function ParameterEditor({
                         </Label>
                         <Select
                           value={param.source}
-                          onValueChange={(value: ParameterSource) =>
-                            updateParameter(index, { source: value })
+                          onValueChange={(value) =>
+                            updateParameter(index, { source: value as ParameterSource })
                           }
                           disabled={disabled || isUnsupportedSource}>
                           <SelectTrigger className="h-8 text-xs">

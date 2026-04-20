@@ -288,8 +288,8 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
                   <Settings className="text-muted-foreground h-4 w-4" />
                   <Select
                     value={teamName}
-                    onValueChange={value =>
-                      push(`/teams/${encodeURIComponent(value)}`)
+                    onValueChange={(value) =>
+                      push(`/teams/${encodeURIComponent(value as string)}`)
                     }>
                     <SelectTrigger className="border-border h-8 w-[180px] bg-transparent px-2 text-sm font-medium">
                       <SelectValue placeholder="Select team" />

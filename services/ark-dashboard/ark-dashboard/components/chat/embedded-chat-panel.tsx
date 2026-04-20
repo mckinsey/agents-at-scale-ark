@@ -11,7 +11,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ChatPanel } from '@/components/chat/chat-panel';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Alert, AlertIcon, AlertContent, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -591,25 +591,33 @@ export function EmbeddedChatPanel({
           )}
           {brokerStatus === 'not-installed' && (
             <div className="p-4">
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertTitle>Broker service not available</AlertTitle>
-                <AlertDescription>
-                  For the debug view to work, install the broker service and
-                  turn on the setting in the experimental features window
-                  (Ctrl+E).
-                </AlertDescription>
+              <Alert layout="long">
+                <AlertIcon className="text-status-information">
+                  <Info className="text-[25px]" />
+                </AlertIcon>
+                <AlertContent>
+                  <AlertTitle>Broker service not available</AlertTitle>
+                  <AlertDescription>
+                    For the debug view to work, install the broker service and
+                    turn on the setting in the experimental features window
+                    (Ctrl+E).
+                  </AlertDescription>
+                </AlertContent>
               </Alert>
             </div>
           )}
           {brokerStatus === 'not-running' && (
             <div className="p-4">
-              <Alert variant="destructive">
-                <XCircle className="h-4 w-4" />
-                <AlertTitle>Broker service is not running</AlertTitle>
-                <AlertDescription>
-                  The broker service is installed but is not currently running.
-                </AlertDescription>
+              <Alert layout="long">
+                <AlertIcon className="text-status-error">
+                  <XCircle className="text-[25px]" />
+                </AlertIcon>
+                <AlertContent>
+                  <AlertTitle>Broker service is not running</AlertTitle>
+                  <AlertDescription>
+                    The broker service is installed but is not currently running.
+                  </AlertDescription>
+                </AlertContent>
               </Alert>
             </div>
           )}

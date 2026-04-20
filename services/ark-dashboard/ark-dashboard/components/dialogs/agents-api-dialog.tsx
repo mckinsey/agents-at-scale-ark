@@ -103,7 +103,7 @@ export function AgentsAPIDialog({
         <div className="space-y-4">
           <div className="space-y-2">
             <label className="text-sm font-medium">Select Agent</label>
-            <Select value={selectedAgent} onValueChange={setUserSelectedAgent}>
+            <Select value={selectedAgent} onValueChange={(value) => setUserSelectedAgent(value as string | null)}>
               <SelectTrigger>
                 <SelectValue placeholder="Select an agent" />
               </SelectTrigger>

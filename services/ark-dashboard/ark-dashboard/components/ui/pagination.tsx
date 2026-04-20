@@ -31,8 +31,8 @@ export function Pagination({
   onItemsPerPageChange,
   itemsPerPageOptions = [5, 10, 25, 50, 100],
 }: PaginationProps) {
-  const handleItemsPerPageChange = (value: string) => {
-    onItemsPerPageChange(parseInt(value, 10));
+  const handleItemsPerPageChange = (value: unknown) => {
+    onItemsPerPageChange(parseInt(value as string, 10));
   };
 
   return (

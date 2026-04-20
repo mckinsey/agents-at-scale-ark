@@ -76,7 +76,7 @@ function SelectFeature({ feature }: SelectFeatureProps) {
           </div>
         )}
       </div>
-      <Select value={atomValue} onValueChange={setAtom}>
+      <Select value={atomValue} onValueChange={(value) => setAtom(value as string)}>
         <SelectTrigger className="w-[180px]">
           <SelectValue />
         </SelectTrigger>
