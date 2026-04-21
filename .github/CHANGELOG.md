@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.61-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.60...v0.1.61-rc) (2026-04-21)
+
+
+### Bug Fixes
+
+* remove http timeout that killed long-lived MCP streams ([#1941](https://github.com/mckinsey/agents-at-scale-ark/issues/1941)) ([1cd2cf8](https://github.com/mckinsey/agents-at-scale-ark/commit/1cd2cf81f8c2dca240fbc869eb53530479d7bb22))
+* Set to correct version on bootstrap ([#1950](https://github.com/mckinsey/agents-at-scale-ark/issues/1950)) ([e367c8e](https://github.com/mckinsey/agents-at-scale-ark/commit/e367c8e3e5b7633f51855459cc7e51288d141d62))
+
 ## [0.1.60](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.60...v0.1.60) (2026-04-20)
 
 

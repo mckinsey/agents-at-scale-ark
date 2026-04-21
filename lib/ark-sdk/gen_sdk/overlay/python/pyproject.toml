@@ -1,6 +1,6 @@
 [project]
 name = "ark-sdk"
-version = "0.1.60"
+version = "0.1.61-rc"
 description = "Python SDK for ARK - Agentic Runtime for Kubernetes"
 authors = [
   {name = "McKinsey & Company", email = "dave.kerr@quantumblack.com"},
