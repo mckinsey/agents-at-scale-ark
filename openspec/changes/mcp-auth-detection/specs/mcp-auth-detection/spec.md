@@ -2,9 +2,9 @@
 
 ### Requirement: MCPServer status surfaces structured OAuth authorization metadata
 
-The `MCPServer` CRD (v1alpha1) SHALL include a new optional `status.authorization` object. When the controller detects that an MCP server requires OAuth authorization (per RFC 9728 / MCP 2025-06-18), it SHALL populate the following fields from discovery:
+The `MCPServer` CRD (v1alpha1) SHALL include a new optional `status.authorization` object. Absence of this sub-resource means the server does not require authorization. When the controller detects that an MCP server requires OAuth authorization (per RFC 9728 / MCP 2025-06-18), it SHALL populate the following fields from discovery:
 
-- `required` (`boolean`) — true when the server has responded with `401` plus `WWW-Authenticate: Bearer`.
+- `state` (`string` enum) — current authorization state. One of `Required` (401 observed and discovery succeeded) or `DiscoveryFailed` (401 observed but no usable RFC 9728 metadata was obtained). Future changes extend this enum with `Authorized`, `Expired`, and `RefreshFailed` once token exchange lands. Exposed on the `MCPServer` printcolumn as `AUTH`.
 - `resource` (`string`) — the `resource` value from the protected resource metadata document (RFC 9728 §2).
 - `resourceMetadataURL` (`string`) — the `resource_metadata` URL parsed from the `WWW-Authenticate` header.
 - `resourceName` (`string`, optional) — the `resource_name` from RFC 9728 metadata.
@@ -23,21 +23,21 @@ These fields are **read-only outputs** of the controller; no spec-side inputs ar
 - **GIVEN** an `MCPServer` resource with `spec.address.value = https://mcp.notion.com/mcp` and no authorization headers configured
 - **WHEN** the controller reconciles and the initial MCP `initialize` call returns HTTP 401 with `WWW-Authenticate: Bearer realm="OAuth", resource_metadata="https://mcp.notion.com/.well-known/oauth-protected-resource/mcp"`
 - **THEN** the controller SHALL fetch the resource metadata URL and the `authorization_servers[0]` `/.well-known/oauth-authorization-server` metadata
-- **AND** populate `status.authorization.required = true`, `resource`, `resourceMetadataURL`, `resourceName`, `authorizationServers`, `registrationEndpoint`, `authorizationEndpoint`, `tokenEndpoint`, `scopesSupported`, `grantTypesSupported`, `lastDiscovered`
+- **AND** populate `status.authorization.state = "Required"`, `resource`, `resourceMetadataURL`, `resourceName`, `authorizationServers`, `registrationEndpoint`, `authorizationEndpoint`, `tokenEndpoint`, `scopesSupported`, `grantTypesSupported`, `lastDiscovered`
 - **AND** NOT set `status.toolCount` (auth-required servers never list tools)
 
 #### Scenario: MCP server returns 401 without a parseable WWW-Authenticate header
 
 - **WHEN** the upstream returns 401 but the `WWW-Authenticate` header is missing, is not a `Bearer` challenge, or does not contain a `resource_metadata` parameter
 - **THEN** the controller SHALL set `Available=False` with `reason: AuthorizationDiscoveryFailed` and a message quoting the observed header
-- **AND** SHALL NOT populate `status.authorization` (an incomplete auth status would mislead the dashboard into rendering an authorize flow it cannot complete)
+- **AND** SHALL populate `status.authorization` with `state: DiscoveryFailed`, `resource` derived from the resolved address, and `lastDiscovered` — leaving metadata fields (`resourceMetadataURL`, `authorizationServers`, `authorizationEndpoint`, `tokenEndpoint`, `registrationEndpoint`, `scopesSupported`, `grantTypesSupported`, `resourceName`) empty so the dashboard cannot attempt to drive an OAuth flow
 - **AND** SHALL emit an `AuthorizationRequired` warning event noting the absence of discovery metadata
 
 #### Scenario: Protected resource metadata endpoint is unreachable or malformed
 
 - **WHEN** the `WWW-Authenticate` header advertises a `resource_metadata` URL but the URL cannot be fetched (network error, non-2xx response) or the response body is not valid RFC 9728 JSON
 - **THEN** the controller SHALL set `Available=False` with `reason: AuthorizationDiscoveryFailed` and a message including the underlying fetch/parse error
-- **AND** SHALL NOT populate `status.authorization`
+- **AND** SHALL populate `status.authorization` with `state: DiscoveryFailed` and the `resource` / `lastDiscovered` fields only
 
 #### Scenario: Authorization server metadata endpoint is unreachable
 
@@ -80,6 +80,6 @@ The controller SHALL re-run discovery on every reconciliation cycle that results
 
 #### Scenario: Discovery endpoints become unreachable after initial success
 
-- **WHEN** `status.authorization.required` was previously `true` and a follow-up discovery probe fails (e.g. the RFC 9728 endpoint is temporarily down)
+- **WHEN** `status.authorization.state` was previously `Required` and a follow-up discovery probe fails (e.g. the RFC 9728 endpoint is temporarily down)
 - **THEN** `status.authorization` SHALL retain the previously-discovered values
 - **AND** the controller SHALL log the probe failure and continue requeuing on `pollInterval`

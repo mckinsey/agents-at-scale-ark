@@ -28,19 +28,39 @@ type MCPServerSpec struct {
 	PollInterval *metav1.Duration `json:"pollInterval,omitempty"`
 }
 
+// MCPServerAuthorizationState enumerates the observable authorization
+// states of an MCP server. An empty value (the absence of the
+// `authorization` sub-resource) means authorization is not required.
+// Future changes will extend this enum with `Authorized`, `Expired`,
+// and `RefreshFailed` once token exchange lands.
+// +kubebuilder:validation:Enum=Required;DiscoveryFailed
+type MCPServerAuthorizationState string
+
+const (
+	// MCPServerAuthorizationStateRequired indicates the server responded
+	// with HTTP 401 and RFC 9728 discovery succeeded.
+	MCPServerAuthorizationStateRequired MCPServerAuthorizationState = "Required"
+
+	// MCPServerAuthorizationStateDiscoveryFailed indicates the server
+	// responded with HTTP 401 but no usable RFC 9728 metadata could be
+	// obtained.
+	MCPServerAuthorizationStateDiscoveryFailed MCPServerAuthorizationState = "DiscoveryFailed"
+)
+
 // MCPServerAuthorizationStatus surfaces OAuth 2.1 / RFC 9728 Protected
 // Resource Metadata discovered from an MCP server that requires
 // authorization, per the MCP 2025-06-18 authorization specification.
 //
-// Populated by the controller when a server responds with HTTP 401 and a
-// parseable WWW-Authenticate header. Read-only — consumers (dashboard,
-// future ark-api OAuth flow) use this as a stable contract.
+// Populated by the controller when a server responds with HTTP 401.
+// Read-only — consumers (dashboard, future ark-api OAuth flow) use
+// this as a stable contract. Absence of this sub-resource means
+// authorization is not required.
 type MCPServerAuthorizationStatus struct {
-	// Required is true when the server has responded with HTTP 401 plus a
-	// WWW-Authenticate: Bearer challenge, indicating OAuth authorization
-	// is needed before tool discovery can proceed.
+	// State names the current authorization state. Exposed on the
+	// MCPServer printcolumn as AUTH. Empty (absent) means the server
+	// does not require authorization.
 	// +kubebuilder:validation:Optional
-	Required bool `json:"required,omitempty"`
+	State MCPServerAuthorizationState `json:"state,omitempty"`
 
 	// Resource is the canonical URI of the protected MCP resource, taken
 	// from the `resource` field of the RFC 9728 Protected Resource
@@ -120,7 +140,7 @@ type MCPServerStatus struct {
 // +kubebuilder:printcolumn:name="Available",type="string",JSONPath=".status.conditions[?(@.type=='Available')].status"
 // +kubebuilder:printcolumn:name="Discovering",type="string",JSONPath=".status.conditions[?(@.type=='Discovering')].status",description="Discovery status"
 // +kubebuilder:printcolumn:name="Tools",type="integer",JSONPath=".status.toolCount",description="Number of tools"
-// +kubebuilder:printcolumn:name="Auth",type="boolean",JSONPath=".status.authorization.required",description="Authorization required"
+// +kubebuilder:printcolumn:name="Auth",type="string",JSONPath=".status.authorization.state",description="OAuth authorization state"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age"
 type MCPServer struct {
 	metav1.TypeMeta   `json:",inline"`

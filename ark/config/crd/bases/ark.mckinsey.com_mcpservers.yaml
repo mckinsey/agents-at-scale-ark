@@ -26,10 +26,10 @@ spec:
       jsonPath: .status.toolCount
       name: Tools
       type: integer
-    - description: Authorization required
-      jsonPath: .status.authorization.required
+    - description: OAuth authorization state
+      jsonPath: .status.authorization.state
       name: Auth
-      type: boolean
+      type: string
     - description: Age
       jsonPath: .metadata.creationTimestamp
       name: Age
@@ -280,12 +280,6 @@ spec:
                       RegistrationEndpoint is the RFC 7591 dynamic client registration
                       endpoint, when the authorization server supports it.
                     type: string
-                  required:
-                    description: |-
-                      Required is true when the server has responded with HTTP 401 plus a
-                      WWW-Authenticate: Bearer challenge, indicating OAuth authorization
-                      is needed before tool discovery can proceed.
-                    type: boolean
                   resource:
                     description: |-
                       Resource is the canonical URI of the protected MCP resource, taken
@@ -309,6 +303,15 @@ spec:
                     items:
                       type: string
                     type: array
+                  state:
+                    description: |-
+                      State names the current authorization state. Exposed on the
+                      MCPServer printcolumn as AUTH. Empty (absent) means the server
+                      does not require authorization.
+                    enum:
+                    - Required
+                    - DiscoveryFailed
+                    type: string
                   tokenEndpoint:
                     description: |-
                       TokenEndpoint is the OAuth 2.1 token endpoint

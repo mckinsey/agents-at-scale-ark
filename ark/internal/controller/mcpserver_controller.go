@@ -279,7 +279,7 @@ func (r *MCPServerReconciler) handleAuthorizationRequired(ctx context.Context, m
 
 	prev := mcpServer.Status.Authorization
 	authStatus := &arkv1alpha1.MCPServerAuthorizationStatus{
-		Required:             true,
+		State:                arkv1alpha1.MCPServerAuthorizationStateRequired,
 		Resource:             rm.Resource,
 		ResourceMetadataURL:  metaURL,
 		ResourceName:         rm.ResourceName,
@@ -320,7 +320,7 @@ func (r *MCPServerReconciler) handleAuthorizationRequired(ctx context.Context, m
 	r.reconcileCondition(mcpServer, MCPServerAvailable, metav1.ConditionFalse, MCPServerReasonAuthorizationRequired, message)
 	r.reconcileCondition(mcpServer, MCPServerDiscovering, metav1.ConditionFalse, MCPServerReasonAuthorizationRequired, "Cannot attempt tool discovery until authorization is complete")
 
-	firstEntry := prev == nil || !prev.Required
+	firstEntry := prev == nil || prev.State != arkv1alpha1.MCPServerAuthorizationStateRequired
 	urlChanged := prev != nil && prev.ResourceMetadataURL != authStatus.ResourceMetadataURL
 	if firstEntry || urlChanged {
 		r.Eventing.MCPServerRecorder().AuthorizationRequired(ctx, mcpServer, message)
@@ -331,12 +331,20 @@ func (r *MCPServerReconciler) handleAuthorizationRequired(ctx context.Context, m
 
 // reconcileConditionsAuthorizationDiscoveryFailed sets conditions when
 // the server returned 401 but we could not extract a usable OAuth
-// metadata document — without one, no downstream consumer can drive an
-// auth flow, so the server is surfaced in a failure state.
+// metadata document. status.authorization is populated with
+// State=DiscoveryFailed only — metadata fields are left empty so the
+// dashboard cannot mistakenly drive an OAuth flow without a valid
+// authorization server.
 func (r *MCPServerReconciler) reconcileConditionsAuthorizationDiscoveryFailed(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, reason string) error {
 	log := logf.FromContext(ctx)
 	mcpServer.Status.ToolCount = 0
-	mcpServer.Status.Authorization = nil
+
+	now := metav1.Now()
+	mcpServer.Status.Authorization = &arkv1alpha1.MCPServerAuthorizationStatus{
+		State:          arkv1alpha1.MCPServerAuthorizationStateDiscoveryFailed,
+		Resource:       mcpServer.Status.ResolvedAddress,
+		LastDiscovered: &now,
+	}
 
 	message := fmt.Sprintf("Authorization required but discovery failed: %s", reason)
 	changed1 := r.reconcileCondition(mcpServer, MCPServerAvailable, metav1.ConditionFalse, MCPServerReasonAuthorizationDiscoveryFailed, message)
