@@ -108,8 +108,8 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     group: 'monitoring',
     enablerFeature: BROKER_FEATURE_KEY,
   },
-  'sessions-conversations': {
-    key: 'sessions-conversations',
+  'session-history': {
+    key: 'session-history',
     title: 'Sessions',
     icon: MessageSquare,
     group: 'monitoring',

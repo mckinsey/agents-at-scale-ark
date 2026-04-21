@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
+import { ArrowUpDown, BarChart3, Coins, Plus, Search } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useListSessions } from '@/lib/services/broker-sessions-hooks';
@@ -15,12 +16,13 @@ interface Props {
   onSelectSession: (sessionId: string) => void;
   selectedSessionId: string | null;
   searchQuery: string;
+  onSearchChange: (query: string) => void;
 }
 
 type SortField = 'date' | 'tokens';
 type SortDirection = 'asc' | 'desc';
 
-export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery }: Props) {
+export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery, onSearchChange }: Props) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'idle' | 'error'>('all');
   const [dateFilter, setDateFilter] = useState<'all' | '24h' | '7d' | '30d'>('all');
@@ -94,68 +96,88 @@ export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery 
   }
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-4 gap-4 rounded-lg border p-4">
-        <div>
-          <div className="text-sm text-muted-foreground">Total Sessions</div>
-          <div className="text-2xl font-bold">{totalSessions}</div>
+    <div className="space-y-6">
+      <div className="flex items-center gap-6 rounded-lg border p-4 text-sm">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="size-4 text-muted-foreground" />
+          <span className="font-medium text-muted-foreground">{totalSessions}</span>
+          <span className="text-muted-foreground">Sessions</span>
         </div>
-        <div>
-          <div className="text-sm text-muted-foreground">Active</div>
-          <div className="text-2xl font-bold text-blue-600">{activeSessions}</div>
+        <div className="flex items-center gap-2">
+          <Coins className="size-4 text-muted-foreground" />
+          <span className="font-medium text-muted-foreground">{totalTokens.toLocaleString()}</span>
+          <span className="text-muted-foreground">Tokens</span>
         </div>
-        <div>
-          <div className="text-sm text-muted-foreground">Errors</div>
-          <div className="text-2xl font-bold text-red-600">{errorSessions}</div>
+        <div className="flex items-center gap-2">
+          <span className="size-2 rounded-full bg-blue-500" />
+          <span className="font-medium text-muted-foreground">{activeSessions}</span>
+          <span className="text-muted-foreground">active</span>
         </div>
-        <div>
-          <div className="text-sm text-muted-foreground">Total Tokens</div>
-          <div className="text-2xl font-bold">{totalTokens.toLocaleString()}</div>
+        <div className="flex items-center gap-2">
+          <span className="size-2 rounded-full bg-red-500" />
+          <span className="font-medium text-muted-foreground">{errorSessions}</span>
+          <span className="text-muted-foreground">errors</span>
         </div>
       </div>
 
       <div className="flex items-center gap-2">
-        <Select value={statusFilter} onValueChange={(value: typeof statusFilter) => setStatusFilter(value)}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="idle">Idle</SelectItem>
-            <SelectItem value="error">Error</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            placeholder="Search"
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="pl-10"
+          />
+        </div>
         <Select value={dateFilter} onValueChange={(value: typeof dateFilter) => setDateFilter(value)}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="Date Range" />
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Date range" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Time</SelectItem>
+            <SelectItem value="all">Choose option</SelectItem>
             <SelectItem value="24h">Last 24h</SelectItem>
             <SelectItem value="7d">Last 7 days</SelectItem>
             <SelectItem value="30d">Last 30 days</SelectItem>
           </SelectContent>
         </Select>
-        <Button variant="ghost" size="icon" onClick={() => refetch()}>
-          <RefreshCw className="size-4" />
+        <Select value={statusFilter} onValueChange={(value: typeof statusFilter) => setStatusFilter(value)}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="idle">Idle</SelectItem>
+            <SelectItem value="error">Error</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button>
+          <Plus className="mr-2 size-4" />
+          New session
         </Button>
       </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-          <Button variant="ghost" size="sm" onClick={() => toggleSort('date')}>
-            Date
-            {sortField === 'date' && (
-              sortDirection === 'asc' ? <ChevronUp className="ml-1 size-4" /> : <ChevronDown className="ml-1 size-4" />
-            )}
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => toggleSort('tokens')}>
+      <div className="rounded-lg border">
+        <div className="grid grid-cols-[2fr_3fr_1fr_1fr_auto] gap-4 border-b bg-muted/50 px-4 py-3 text-sm font-medium text-muted-foreground">
+          <button
+            className="flex items-center gap-1 text-left"
+            onClick={() => toggleSort('date')}
+          >
+            Name
+            <ArrowUpDown className="size-3" />
+          </button>
+          <div>Participants</div>
+          <div>Convos</div>
+          <button
+            className="flex items-center gap-1 text-left"
+            onClick={() => toggleSort('tokens')}
+          >
             Tokens
-            {sortField === 'tokens' && (
-              sortDirection === 'asc' ? <ChevronUp className="ml-1 size-4" /> : <ChevronDown className="ml-1 size-4" />
-            )}
-          </Button>
+            <ArrowUpDown className="size-3" />
+          </button>
+          <div className="w-8" />
         </div>
 
         {sessions.map((session) => (
@@ -174,7 +196,7 @@ export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery 
         )}
 
         {hasMore && (
-          <div className="flex flex-col items-center gap-2 pt-4">
+          <div className="flex flex-col items-center gap-2 border-t p-4">
             <Button
               variant="outline"
               onClick={() => setCursor(data?.nextCursor || 0)}

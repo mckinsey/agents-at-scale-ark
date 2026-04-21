@@ -2,13 +2,14 @@
 
 import { use } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Bot, Coins, MessageSquare, Users, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
 import { Skeleton } from '@/components/ui/skeleton';
-import { formatAge } from '@/lib/utils/time';
+import { ConversationsTab } from '@/components/sessions-conversations/conversations-tab';
+import { LogsTab } from '@/components/sessions-conversations/logs-tab';
 
 interface Props {
   params: Promise<{
@@ -34,7 +35,7 @@ export default function SessionDetailPage({ params }: Props) {
   if (isError || !session) {
     return (
       <div className="flex h-full flex-col space-y-6 p-8">
-        <Button variant="ghost" onClick={() => router.push('/sessions-conversations')}>
+        <Button variant="ghost" onClick={() => router.push('/session-history')}>
           <ArrowLeft className="mr-2 size-4" />
           Back to all sessions
         </Button>
@@ -45,67 +46,77 @@ export default function SessionDetailPage({ params }: Props) {
     );
   }
 
+  const sessionDate = new Date(session.createdAt).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+
+  function getParticipantIcon(type: string) {
+    if (type === 'agent') return <Bot className="size-4" />;
+    if (type === 'team') return <Users className="size-4" />;
+    if (type === 'tool') return <Wrench className="size-4" />;
+    return <Bot className="size-4" />;
+  }
+
   return (
     <div className="flex h-full flex-col space-y-6 p-8">
-      <Button variant="ghost" onClick={() => router.push('/sessions-conversations')} className="w-fit">
+      <Button variant="ghost" onClick={() => router.push('/session-history')} className="w-fit cursor-pointer">
         <ArrowLeft className="mr-2 size-4" />
         Back to all sessions
       </Button>
 
-      <div className="space-y-4">
+      <div className="space-y-4 rounded-lg border p-6">
         <div className="flex items-start justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold">{session.sessionId}</h1>
-              <Badge variant={session.status === 'error' ? 'destructive' : session.status === 'active' ? 'default' : 'secondary'}>
-                {session.status}
-              </Badge>
-            </div>
-            <div className="mt-1 text-sm text-muted-foreground">
-              {formatAge(session.createdAt)}
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-4 gap-6 rounded-lg border p-6">
-          <div className="space-y-1">
-            <div className="text-sm text-muted-foreground">Tokens</div>
-            <div className="text-3xl font-bold">{session.totalTokens.toLocaleString()}</div>
-          </div>
-          <div className="space-y-1">
-            <div className="text-sm text-muted-foreground">Conversations</div>
-            <div className="text-3xl font-bold">{session.conversationCount}</div>
-          </div>
-          <div className="space-y-1">
-            <div className="text-sm text-muted-foreground">Participants</div>
-            <div className="text-3xl font-bold">{session.participants.length}</div>
-          </div>
-          <div className="space-y-1">
-            <div className="text-sm text-muted-foreground">Errors</div>
-            <div className="text-3xl font-bold text-red-600">{session.errorCount}</div>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <div className="text-sm font-medium">Participants</div>
-          <div className="flex flex-wrap gap-2">
-            {session.participants.map(p => (
-              <div
-                key={p.id}
-                className="flex items-center gap-2 rounded-md border bg-card px-3 py-2"
-              >
-                <span className="text-lg">
-                  {p.type === 'agent' && '🤖'}
-                  {p.type === 'team' && '👥'}
-                  {p.type === 'tool' && '🔧'}
-                </span>
-                <span className="font-medium">{p.name}</span>
-                {p.isActive && (
-                  <span className="size-2 rounded-full bg-green-500" />
-                )}
+          <div className="space-y-3">
+            <div className="text-sm text-muted-foreground">{sessionDate}</div>
+            <div className="flex items-center gap-4 text-sm">
+              <h1 className="text-xl font-semibold">{session.sessionId}</h1>
+              <div className="flex items-center gap-1">
+                <Coins className="size-4 text-muted-foreground" />
+                <span className="font-medium">{session.totalTokens.toLocaleString()}</span>
+                <span className="text-muted-foreground">Tokens</span>
               </div>
-            ))}
+              <div className="flex items-center gap-1">
+                <MessageSquare className="size-4 text-muted-foreground" />
+                <span className="font-medium">{session.conversationCount}</span>
+                <span className="text-muted-foreground">Conversations</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Users className="size-4 text-muted-foreground" />
+                <span className="font-medium">{session.participants.length}</span>
+                <span className="text-muted-foreground">Participants</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="size-2 rounded-full bg-red-500" />
+                <span className="font-medium">{session.errorCount}</span>
+                <span className="text-muted-foreground">errors</span>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {session.participants.map(p => (
+                <div
+                  key={p.id}
+                  className="flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm"
+                >
+                  {getParticipantIcon(p.type)}
+                  <span>{p.name}</span>
+                  {p.isActive && (
+                    <span className="size-2 rounded-full bg-blue-500" />
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
+          <Badge
+            variant={session.status === 'error' ? 'destructive' : session.status === 'active' ? 'default' : 'secondary'}
+            className="capitalize"
+          >
+            {session.status}
+          </Badge>
         </div>
       </div>
 
@@ -116,36 +127,11 @@ export default function SessionDetailPage({ params }: Props) {
         </TabsList>
 
         <TabsContent value="history" className="flex-1">
-          <div className="grid h-full grid-cols-[300px_1fr] gap-4">
-            <div className="space-y-2 rounded-lg border p-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium">Conversations</h3>
-                <Button variant="ghost" size="sm">+</Button>
-              </div>
-              <div className="flex flex-col items-center justify-center py-12 text-center text-sm text-muted-foreground">
-                Conversations list - Coming in Iteration 3
-              </div>
-            </div>
-
-            <div className="flex flex-col rounded-lg border">
-              <div className="flex-1 p-6">
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                  Messages panel - Coming in Iteration 3
-                </div>
-              </div>
-              <div className="border-t p-4">
-                <div className="flex items-center justify-center text-sm text-muted-foreground">
-                  Chat input - Coming in Iteration 3
-                </div>
-              </div>
-            </div>
-          </div>
+          <ConversationsTab sessionId={session_id} />
         </TabsContent>
 
         <TabsContent value="logs" className="flex-1">
-          <div className="flex h-full items-center justify-center rounded-lg border p-12 text-sm text-muted-foreground">
-            Logs tab - Coming in Iteration 6
-          </div>
+          <LogsTab sessionId={session_id} />
         </TabsContent>
       </Tabs>
     </div>

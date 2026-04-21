@@ -1,9 +1,10 @@
 'use client';
 
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Trash2, Bot, Users, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { BrokerSession } from '@/lib/services/broker-sessions';
-import { formatAge } from '@/lib/utils/time';
 
 interface Props {
   session: BrokerSession;
@@ -11,16 +12,29 @@ interface Props {
   onSelect: (sessionId: string) => void;
 }
 
+function getParticipantIcon(type: string) {
+  if (type === 'agent') return <Bot className="size-4" />;
+  if (type === 'team') return <Users className="size-4" />;
+  if (type === 'tool') return <Wrench className="size-4" />;
+  return <Bot className="size-4" />;
+}
+
 export function SessionTableRow({ session, isSelected, onSelect }: Props) {
+  const sessionTime = new Date(session.createdAt).toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+
   return (
     <div
       className={cn(
-        'flex cursor-pointer items-center gap-4 rounded-lg border p-4 transition-colors hover:bg-muted/50',
-        isSelected && 'border-primary bg-muted'
+        'grid grid-cols-[2fr_3fr_1fr_1fr_auto] gap-4 border-b px-4 py-3 transition-colors hover:bg-muted/50 cursor-pointer',
+        isSelected && 'bg-muted'
       )}
       onClick={() => onSelect(session.sessionId)}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         <span
           className={cn(
             'inline-block size-2 rounded-full',
@@ -29,46 +43,55 @@ export function SessionTableRow({ session, isSelected, onSelect }: Props) {
             session.status === 'idle' && 'bg-gray-400'
           )}
         />
-        {session.errorCount > 0 && (
-          <Badge variant="destructive" className="text-xs">
-            {session.errorCount}
-          </Badge>
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="font-medium">{session.sessionId}</span>
+            {session.errorCount > 0 && (
+              <Badge variant="secondary" className="text-xs">
+                {session.errorCount}
+              </Badge>
+            )}
+          </div>
+          <div className="text-xs text-muted-foreground">{sessionTime}</div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {session.participants.slice(0, 3).map((p) => (
+          <div
+            key={p.id}
+            className="flex items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-xs"
+          >
+            {getParticipantIcon(p.type)}
+            <span>{p.name}</span>
+          </div>
+        ))}
+        {session.participants.length > 3 && (
+          <span className="text-xs text-muted-foreground">
+            +{session.participants.length - 3}
+          </span>
         )}
       </div>
 
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-medium">{session.sessionId}</div>
-        <div className="flex flex-wrap gap-1 pt-1">
-          {session.participants.slice(0, 3).map((p) => (
-            <Badge key={p.id} variant="outline" className="text-xs">
-              {p.type === 'agent' && '🤖'}
-              {p.type === 'team' && '👥'}
-              {p.type === 'tool' && '🔧'}
-              {' '}{p.name}
-              {p.isActive && <span className="ml-1 size-1.5 rounded-full bg-green-500" />}
-            </Badge>
-          ))}
-          {session.participants.length > 3 && (
-            <span className="text-xs text-muted-foreground">
-              +{session.participants.length - 3} more
-            </span>
-          )}
-        </div>
+      <div className="flex items-center text-sm">
+        {session.conversationCount}
       </div>
 
-      <div className="flex items-center gap-6 text-sm text-muted-foreground">
-        <div>
-          <div className="font-medium">{session.conversationCount}</div>
-          <div className="text-xs">Conversations</div>
-        </div>
-        <div>
-          <div className="font-medium">{session.totalTokens.toLocaleString()}</div>
-          <div className="text-xs">Tokens</div>
-        </div>
-        <div>
-          <div className="font-medium">{formatAge(session.lastActivity)}</div>
-          <div className="text-xs">Last Activity</div>
-        </div>
+      <div className="flex items-center text-sm">
+        {session.totalTokens.toLocaleString()}
+      </div>
+
+      <div className="flex items-center">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8"
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
+        >
+          <Trash2 className="size-4 text-muted-foreground" />
+        </Button>
       </div>
     </div>
   );
