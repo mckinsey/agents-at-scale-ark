@@ -1,0 +1,5 @@
+pytest>=8.2.0
+kubernetes>=30.0.0
+pyyaml>=6.0.2
+requests>=2.25.0
+pytest-xdist>=3.5.0
