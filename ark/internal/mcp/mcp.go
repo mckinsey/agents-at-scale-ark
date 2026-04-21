@@ -84,15 +84,8 @@ func performBackoff(ctx context.Context, attempt int, url string) error {
 	}
 }
 
-func createTransport(url string, headers map[string]string, timeout time.Duration, transportType string) (mcpsdk.Transport, error) {
-	var httpClient *http.Client
-	if transportType == sseTransport {
-		httpClient = &http.Client{}
-	} else {
-		httpClient = &http.Client{
-			Timeout: timeout,
-		}
-	}
+func createTransport(url string, headers map[string]string, transportType string) (mcpsdk.Transport, error) {
+	httpClient := &http.Client{}
 
 	if len(headers) > 0 {
 		httpClient.Transport = &headerTransport{
@@ -135,10 +128,10 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return t.base.RoundTrip(req)
 }
 
-func attemptMCPConnection(ctx context.Context, mcpClient *mcpsdk.Client, url string, headers map[string]string, httpTimeout time.Duration, transportType string) (*mcpsdk.ClientSession, error) {
+func attemptMCPConnection(ctx context.Context, mcpClient *mcpsdk.Client, url string, headers map[string]string, transportType string) (*mcpsdk.ClientSession, error) {
 	log := logf.FromContext(ctx)
 
-	transport, err := createTransport(url, headers, httpTimeout, transportType)
+	transport, err := createTransport(url, headers, transportType)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create MCP client transport for %s: %w", url, err)
 	}
@@ -170,7 +163,7 @@ func createMCPClientWithRetry(ctx context.Context, url string, headers map[strin
 			}
 		}
 
-		session, err := attemptMCPConnection(ctx, mcpClient, url, headers, httpTimeout, transportType)
+		session, err := attemptMCPConnection(ctx, mcpClient, url, headers, transportType)
 		if err == nil {
 			return &MCPClient{
 				URL:     url,
