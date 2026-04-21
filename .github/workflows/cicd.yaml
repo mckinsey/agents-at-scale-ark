@@ -1474,10 +1474,7 @@ jobs:
 
           git checkout -b "$BRANCH"
 
-          jq --arg v "$NEXT" '."." = $v' .github/release-please-manifest.json > tmp.json
-          mv tmp.json .github/release-please-manifest.json
-
-          # Clean up release-as from both configs
+          # Clean up release-as from both configs (don't update manifest - release-please calculates version from tags)
           if jq -e 'has("release-as")' .github/release-please-config.json > /dev/null 2>&1; then
             jq 'del(."release-as")' .github/release-please-config.json > tmp.json
             mv tmp.json .github/release-please-config.json
@@ -1490,7 +1487,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          git commit -m "chore: bootstrap $NEXT RC cycle after v${{ steps.next-version.outputs.current }} stable release"
+          git commit -m "chore: bootstrap v$NEXT RC cycle after v${{ steps.next-version.outputs.current }} stable release"
           git push origin "$BRANCH"
 
           gh pr create \
@@ -1502,11 +1499,10 @@ jobs:
           Bootstraps the next development cycle after stable release v${{ steps.next-version.outputs.current }}.
 
           ### What this PR does
-          - Updates manifest to \`$NEXT\`
           - Cleans up \`release-as\` from config files
 
           ### What happens when merged
-          - First RC release will be v${NEXT}-rc
+          - Release-please will create v${NEXT}-rc from conventional commits
           - Subsequent releases: v${NEXT}-rc.1 → rc.2 → ... → v${NEXT} (stable)
 
           ---
