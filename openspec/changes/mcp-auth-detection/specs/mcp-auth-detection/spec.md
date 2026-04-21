@@ -28,10 +28,23 @@ These fields are **read-only outputs** of the controller; no spec-side inputs ar
 
 #### Scenario: MCP server returns 401 without a parseable WWW-Authenticate header
 
-- **WHEN** the upstream returns 401 but the `WWW-Authenticate` header is missing or does not contain `resource_metadata`
-- **THEN** the controller SHALL set `status.authorization.required = true` with only `resource` (derived from `spec.address`) populated
-- **AND** log a warning identifying the server as non-compliant with the MCP 2025-06-18 authorization spec
-- **AND** emit an `AuthorizationRequired` event noting the absence of discovery metadata
+- **WHEN** the upstream returns 401 but the `WWW-Authenticate` header is missing, is not a `Bearer` challenge, or does not contain a `resource_metadata` parameter
+- **THEN** the controller SHALL set `Available=False` with `reason: AuthorizationDiscoveryFailed` and a message quoting the observed header
+- **AND** SHALL NOT populate `status.authorization` (an incomplete auth status would mislead the dashboard into rendering an authorize flow it cannot complete)
+- **AND** SHALL emit an `AuthorizationRequired` warning event noting the absence of discovery metadata
+
+#### Scenario: Protected resource metadata endpoint is unreachable or malformed
+
+- **WHEN** the `WWW-Authenticate` header advertises a `resource_metadata` URL but the URL cannot be fetched (network error, non-2xx response) or the response body is not valid RFC 9728 JSON
+- **THEN** the controller SHALL set `Available=False` with `reason: AuthorizationDiscoveryFailed` and a message including the underlying fetch/parse error
+- **AND** SHALL NOT populate `status.authorization`
+
+#### Scenario: Authorization server metadata endpoint is unreachable
+
+- **WHEN** RFC 9728 metadata was fetched successfully but the subsequent RFC 8414 `oauth-authorization-server` endpoint cannot be reached
+- **THEN** the controller SHALL still set `Available=False` with `reason: AuthorizationRequired`
+- **AND** SHALL populate `status.authorization` with the RFC 9728 fields only (leaving `authorizationEndpoint`, `tokenEndpoint`, `registrationEndpoint`, `grantTypesSupported` empty)
+- **AND** SHALL log the RFC 8414 fetch failure at INFO level
 
 #### Scenario: MCP server response is not an auth failure
 
