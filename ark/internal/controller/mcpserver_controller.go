@@ -264,13 +264,15 @@ func (r *MCPServerReconciler) handleAuthorizationRequired(ctx context.Context, m
 	log := logf.FromContext(ctx)
 	mcpServer.Status.ToolCount = 0
 
+	timeout := parseTimeout(mcpServer.Spec.Timeout)
+
 	metaURL, ok := arkmcp.ParseResourceMetadataURL(ue.WWWAuthenticate)
 	if !ok {
 		reason := fmt.Sprintf("server returned HTTP 401 but WWW-Authenticate header did not advertise RFC 9728 resource_metadata URL (header=%q)", ue.WWWAuthenticate)
 		return r.reconcileConditionsAuthorizationDiscoveryFailed(ctx, mcpServer, reason)
 	}
 
-	rm, err := arkmcp.FetchProtectedResourceMetadata(ctx, metaURL, mcpServer.Status.ResolvedAddress)
+	rm, err := arkmcp.FetchProtectedResourceMetadata(ctx, metaURL, mcpServer.Status.ResolvedAddress, timeout)
 	if err != nil {
 		reason := fmt.Sprintf("failed to fetch protected resource metadata at %s: %v", metaURL, err)
 		log.Error(err, "protected resource metadata fetch failed", "url", metaURL)
@@ -291,7 +293,7 @@ func (r *MCPServerReconciler) handleAuthorizationRequired(ctx context.Context, m
 	}
 
 	if len(rm.AuthorizationServers) > 0 {
-		if as, err := arkmcp.FetchAuthorizationServerMetadata(ctx, rm.AuthorizationServers[0]); err != nil {
+		if as, err := arkmcp.FetchAuthorizationServerMetadata(ctx, rm.AuthorizationServers[0], timeout); err != nil {
 			// RFC 8414 metadata is advisory for surfacing state; a failure
 			// here is logged but does not invalidate the AuthorizationRequired
 			// signal, because the resource metadata itself was valid.
@@ -404,15 +406,7 @@ func (r *MCPServerReconciler) createMCPClient(ctx context.Context, mcpServer *ar
 		headers = resolvedHeaders
 	}
 
-	// Parse timeout from MCPServer spec (default to 30s if not specified)
-	timeout := 30 * time.Second
-	if mcpServer.Spec.Timeout != "" {
-		parsedTimeout, err := time.ParseDuration(mcpServer.Spec.Timeout)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse timeout %s: %w", mcpServer.Spec.Timeout, err)
-		}
-		timeout = parsedTimeout
-	}
+	timeout := parseTimeout(mcpServer.Spec.Timeout)
 
 	// MCP settings are not needed for listing tools, etc.
 	mcpClient, err := arkmcp.NewMCPClient(ctx, mcpURL, headers, mcpServer.Spec.Transport, timeout, arkmcp.MCPSettings{})
@@ -584,4 +578,20 @@ func (r *MCPServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&arkv1alpha1.MCPServer{}).
 		Named("mcpserver").
 		Complete(r)
+}
+
+// parseTimeout returns the MCPServer spec timeout as a duration,
+// defaulting to 30s when unset and ignoring parse errors (the webhook
+// already validates the format; an invalid string at reconcile time is
+// treated as "use the default" rather than failing the whole reconcile).
+func parseTimeout(raw string) time.Duration {
+	const defaultTimeout = 30 * time.Second
+	if raw == "" {
+		return defaultTimeout
+	}
+	t, err := time.ParseDuration(raw)
+	if err != nil {
+		return defaultTimeout
+	}
+	return t
 }

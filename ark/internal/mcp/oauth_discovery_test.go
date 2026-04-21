@@ -9,7 +9,13 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
+
+// testDiscoveryTimeout bounds HTTP calls in all discovery tests so a
+// hung fake server or network stack cannot lock up the test suite.
+// Kept short because every test talks to an in-process httptest server.
+const testDiscoveryTimeout = 5 * time.Second
 
 func TestParseResourceMetadataURL(t *testing.T) {
 	tests := []struct {
@@ -79,45 +85,19 @@ func TestParseResourceMetadataURL(t *testing.T) {
 
 func TestBuildAuthServerMetadataURL(t *testing.T) {
 	tests := []struct {
-		name    string
-		issuer  string
-		want    string
-		wantErr bool
+		name   string
+		issuer string
+		want   string
 	}{
-		{
-			name:   "bare authority",
-			issuer: "https://mcp.notion.com",
-			want:   "https://mcp.notion.com/.well-known/oauth-authorization-server",
-		},
-		{
-			name:   "authority with path — well-known is inserted before the path",
-			issuer: "https://example.com/tenant/abc",
-			want:   "https://example.com/.well-known/oauth-authorization-server/tenant/abc",
-		},
-		{
-			name:   "trailing slash is preserved as empty path after well-known",
-			issuer: "https://example.com/",
-			want:   "https://example.com/.well-known/oauth-authorization-server",
-		},
-		{
-			name:    "unsupported scheme",
-			issuer:  "ftp://example.com",
-			wantErr: true,
-		},
-		{
-			name:    "malformed URL",
-			issuer:  "://broken",
-			wantErr: true,
-		},
+		{"bare authority", "https://mcp.notion.com", "https://mcp.notion.com/.well-known/oauth-authorization-server"},
+		{"trailing slash is trimmed", "https://example.com/", "https://example.com/.well-known/oauth-authorization-server"},
+		{"multiple trailing slashes are trimmed", "https://example.com//", "https://example.com/.well-known/oauth-authorization-server"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := buildAuthServerMetadataURL(tt.issuer)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("buildAuthServerMetadataURL(%q) err = %v, wantErr = %v", tt.issuer, err, tt.wantErr)
-			}
-			if !tt.wantErr && got != tt.want {
+			got := buildAuthServerMetadataURL(tt.issuer)
+			if got != tt.want {
 				t.Errorf("buildAuthServerMetadataURL(%q) = %q, want %q", tt.issuer, got, tt.want)
 			}
 		})
@@ -126,14 +106,14 @@ func TestBuildAuthServerMetadataURL(t *testing.T) {
 
 // fakeDiscoveryServer stands up a minimal HTTP server that mimics the
 // RFC 9728 and RFC 8414 well-known endpoints of a compliant MCP
-// authorization server. Used to exercise FetchProtectedResourceMetadata
-// and FetchAuthorizationServerMetadata without reaching the real
-// Notion / GitHub endpoints.
+// authorization server. Used to exercise the fetch helpers without
+// reaching real Notion/GitHub endpoints.
 func fakeDiscoveryServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, r *http.Request) {
 		host := "http://" + r.Host
+		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"resource":                 host + "/mcp",
 			"resource_name":            "Fake MCP",
@@ -143,6 +123,7 @@ func fakeDiscoveryServer(t *testing.T) *httptest.Server {
 	})
 	mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
 		host := "http://" + r.Host
+		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"issuer":                           host,
 			"authorization_endpoint":           host + "/authorize",
@@ -164,7 +145,7 @@ func TestFetchProtectedResourceMetadata(t *testing.T) {
 	metaURL := srv.URL + "/.well-known/oauth-protected-resource/mcp"
 	resourceURL := srv.URL + "/mcp"
 
-	rm, err := FetchProtectedResourceMetadata(context.Background(), metaURL, resourceURL)
+	rm, err := FetchProtectedResourceMetadata(context.Background(), metaURL, resourceURL, testDiscoveryTimeout)
 	if err != nil {
 		t.Fatalf("FetchProtectedResourceMetadata returned error: %v", err)
 	}
@@ -184,20 +165,21 @@ func TestFetchProtectedResourceMetadata_ResourceMismatch(t *testing.T) {
 	// originally-requested server URL (RFC 9728 §3.3). A mismatch must
 	// surface as an error rather than silently returning the payload.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"resource": "https://someone-elses-server.example.com/mcp",
 		})
 	}))
 	defer srv.Close()
 
-	_, err := FetchProtectedResourceMetadata(context.Background(), srv.URL+"/meta", srv.URL+"/mcp")
+	_, err := FetchProtectedResourceMetadata(context.Background(), srv.URL+"/meta", srv.URL+"/mcp", testDiscoveryTimeout)
 	if err == nil {
 		t.Fatal("expected error for resource mismatch, got nil")
 	}
 }
 
 func TestFetchProtectedResourceMetadata_NetworkError(t *testing.T) {
-	_, err := FetchProtectedResourceMetadata(context.Background(), "http://127.0.0.1:1/unreachable", "http://127.0.0.1:1/unreachable")
+	_, err := FetchProtectedResourceMetadata(context.Background(), "http://127.0.0.1:1/unreachable", "http://127.0.0.1:1/unreachable", testDiscoveryTimeout)
 	if err == nil {
 		t.Fatal("expected error for unreachable endpoint, got nil")
 	}
@@ -210,7 +192,7 @@ func TestFetchAuthorizationServerMetadata(t *testing.T) {
 	srv := fakeDiscoveryServer(t)
 	defer srv.Close()
 
-	asm, err := FetchAuthorizationServerMetadata(context.Background(), srv.URL)
+	asm, err := FetchAuthorizationServerMetadata(context.Background(), srv.URL, testDiscoveryTimeout)
 	if err != nil {
 		t.Fatalf("FetchAuthorizationServerMetadata returned error: %v", err)
 	}

@@ -38,6 +38,7 @@ func fakeMCPServer(compliant bool) *httptest.Server {
 
 	mux.HandleFunc("/.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, r *http.Request) {
 		host := "http://" + r.Host
+		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"resource":                 host + "/mcp",
 			"resource_name":            "Fake MCP (Test)",
@@ -48,6 +49,7 @@ func fakeMCPServer(compliant bool) *httptest.Server {
 
 	mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
 		host := "http://" + r.Host
+		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"issuer":                           host,
 			"authorization_endpoint":           host + "/authorize",
