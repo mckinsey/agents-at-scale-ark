@@ -11,11 +11,12 @@ Splitting into two Deployments makes each pod's Ready condition mean exactly wha
 - `ark/cmd/main.go` takes a required `--role={apiserver,controller}` flag
 - In `apiserver` role, the process only starts the embedded aggregated API server + WAL consumer; no reconcilers, no webhooks
 - In `controller` role, the process only starts controller-runtime (reconcilers + webhooks) and talks to the aggregated API via the normal k8s client path (kube-apiserver → `APIService` proxy → `ark-apiserver` Service)
-- Helm chart `ark/dist/chart` always renders a `controller` Deployment. When `storage.backend=postgresql` it additionally renders an `apiserver` Deployment. Etcd backend stays single-Deployment (no aggregated API server is needed on etcd)
+- `ark/dist/chart` remains the `ark-controller` chart — reconcilers, webhooks, CRDs. On the split it drops the apiserver args/ports and sets `--role=controller`
+- New chart `ark/dist/chart-apiserver` owns the `ark-apiserver` Deployment, the `ark-apiserver` Service (selector `app.kubernetes.io/name=ark-apiserver`), the `APIService` CR, and the apiserver-side RBAC. Installed only on the PostgreSQL backend
+- Two Helm releases on PostgreSQL (`ark-apiserver` + `ark-controller`); one Helm release on etcd (`ark-controller` only)
 - Two leader-election Leases: `ark-apiserver-leader` (for the WAL consumer singleton) and `ark-controller-leader` (for the reconciler loop)
-- `ark-apiserver` Service selector points at `app.kubernetes.io/name=ark-apiserver` on PostgreSQL; Service is not rendered on etcd
-- Startup ordering: `ark-controller` waits on `ark-apiserver` readiness via init container plus a Helm pre-upgrade hook
-- Helm upgrade from the current embedded topology to the split topology is one-way and zero-data-loss: the pre-upgrade hook brings up `ark-apiserver`, the APIService selector flips, then `ark-controller` is upgraded to drop the embedded API server args
+- Startup ordering via install order (`ark-apiserver` first) plus an `ark-controller` init container that blocks on APIService `Available=True`; no cross-chart Helm hooks
+- Upgrade from the current embedded topology is a two-step sequence: (1) `helm install ark-apiserver ark/dist/chart-apiserver --wait` takes ownership of the APIService and flips the endpoints to the new pods; (2) `helm upgrade ark-controller ark/dist/chart` drops the embedded apiserver args. No window where the APIService is unavailable
 - `tools/ark-cli/src/lib/readinessChecks.ts` drops the probe Model check entirely — layer 0 covers reconciler readiness via the `ark-controller` Deployment's `Ready` condition
 - `setup-local.sh:132-220` is reduced to per-Deployment `kubectl wait` calls, dropping the API-group poll / aggregated-API stability / probe Model blocks
 - No `combined` role, no `deployment.split` value, no transitional escape hatch. A clean two-role topology is the single supported production configuration
@@ -33,14 +34,16 @@ Splitting into two Deployments makes each pod's Ready condition mean exactly wha
 - `ark/cmd/main.go` — `--role` flag becomes required; role-scoped setup paths; no fallthrough
 - `ark/internal/apiserver/server.go` — unchanged (already a `Manager.Runnable`)
 - `ark/internal/storage/postgresql/wal_consumer.go` — lifecycle scoped to the apiserver role; add leader-election within the apiserver replica set
-- `ark/dist/chart/templates/manager/manager.yaml` — renamed/refactored to the controller-only Deployment; drop apiserver args/ports
-- `ark/dist/chart/templates/apiserver/deployment.yaml` — new file, rendered only when `storage.backend=postgresql`
-- `ark/dist/chart/templates/apiserver/service.yaml` — selector `app.kubernetes.io/name=ark-apiserver`, rendered only when `storage.backend=postgresql`
-- `ark/dist/chart/templates/apiserver/apiservice.yaml` — rendered only when `storage.backend=postgresql`; selector flip handled as part of the pre-upgrade hook ordering
-- `ark/dist/chart/templates/apiserver/rbac.yaml` — split RBAC: apiserver ServiceAccount gets PG secret access; controller ServiceAccount drops it
-- `ark/dist/chart/templates/hooks/pre-upgrade-apiserver.yaml` — new file, pre-upgrade Helm hook that brings up `ark-apiserver` and waits for APIService `Available=True` before the controller Deployment rollout proceeds
-- `ark/dist/chart/values.yaml` — per-role image/replicas/resources blocks; no mode flag
-- `ark/dist/chart/values.schema.json` — schema updates
+- `ark/dist/chart/templates/manager/manager.yaml` — drop apiserver args/ports; set `--role=controller`
+- `ark/dist/chart/templates/init/wait-for-apiserver.yaml` — `ark-controller` init container block that waits on APIService `Available=True`
+- `ark/dist/chart/values.yaml` — drop apiserver-related values; controller-only config remains
+- `ark/dist/chart-apiserver/` — new chart directory
+- `ark/dist/chart-apiserver/Chart.yaml` — name `ark-apiserver`, version aligned with the operator release
+- `ark/dist/chart-apiserver/values.yaml` + `values.schema.json` — apiserver image/replicas/resources, PG connection config, `ark-apiserver-leader` Lease config
+- `ark/dist/chart-apiserver/templates/deployment.yaml` — runs `--role=apiserver`
+- `ark/dist/chart-apiserver/templates/service.yaml` — selector `app.kubernetes.io/name=ark-apiserver`, name `ark-apiserver` (stable across migrations)
+- `ark/dist/chart-apiserver/templates/apiservice.yaml` — `APIService` CR targeting the Service; owned by this chart
+- `ark/dist/chart-apiserver/templates/rbac.yaml` — apiserver ServiceAccount + PG secret access
 - `.github/actions/setup-e2e/setup-local.sh` — drop lines 132-220 and rely on per-Deployment `kubectl wait`
 - `tools/ark-cli/src/lib/readinessChecks.ts` — drop `waitForControllerReconciling`; add `ark-apiserver` to the deployments polled at layer 0 when the PostgreSQL backend is detected
 - `tools/ark-cli/src/arkServices.ts` — add `ark-apiserver` as a core service

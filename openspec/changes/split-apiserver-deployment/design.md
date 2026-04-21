@@ -61,25 +61,38 @@ WAL logical replication uses a named replication slot. Multiple consumers on the
 - Leader election within the apiserver Deployment picks the WAL-consumer replica (`ark-apiserver-leader` Lease)
 - Non-leader replicas still serve API reads — they just skip the WAL setup path
 
-### Decision: Upgrade path uses a Helm pre-upgrade hook, not a staged rollout
+### Decision: Two separate Helm charts, not one chart with conditional templates
 
-The Helm upgrade from current topology to split must be zero-data-loss and require no manual intervention. The pre-upgrade hook:
-1. Applies the `ark-apiserver` Deployment and Service
-2. Blocks until the `ark-apiserver` pods are Ready and the APIService reports `Available=True`
-3. Flips the APIService selector from `ark-controller` pods to `ark-apiserver` pods
-4. Only then returns, allowing Helm to proceed with the `ark-controller` Deployment upgrade (drop apiserver args, switch to `--role=controller`)
+`ark/dist/chart` remains the ark-controller chart (reconcilers, webhooks, CRDs). A new chart `ark/dist/chart-apiserver` owns the apiserver Deployment, the `ark-apiserver` Service, the `APIService` CR, and the apiserver-side RBAC. Operators install one chart on etcd (`ark-controller` only) and two charts on PostgreSQL (`ark-apiserver` first, then `ark-controller`).
 
-At no point between steps 1 and 3 is the APIService unavailable. Rollback via `helm rollback` reverses the hook. The approach is one-way with respect to intent (we are moving to split), but fully reversible in practice via Helm's own rollback semantics.
+Rationale:
+- The two Deployments have independent lifecycles (upgrades, rollbacks, scale decisions). Independent Helm releases match that.
+- Values schemas diverge: `ark-apiserver` needs PG connection config and replica count; `ark-controller` needs neither.
+- RBAC is naturally split: each chart creates the ServiceAccount it needs and only the permissions that role requires.
+- Upgrade ordering is expressed directly as "install/upgrade `ark-apiserver` first, then `ark-controller`" instead of smuggled through template conditionals and hooks inside one chart.
 
-**Alternative considered**: staged rollout over two releases with a `deployment.split` flag defaulting `false`, then flipped `true` in a follow-up release. Rejected — it forces us to carry the combined code path for at least one release, which reintroduces the readiness ambiguity the split is meant to eliminate.
+**Alternative considered**: one chart with `.Values.storage.backend` gating conditional templates for the apiserver Deployment. Rejected — it couples two release lifecycles, hides the apiserver upgrade path inside hooks of a chart named `ark-controller`, and makes it harder to version the apiserver independently (e.g., ship an apiserver-only patch for a perf fix without bumping the controller chart).
 
-### Decision: Controller waits for apiserver via init container plus the Helm hook
+**Alternative considered**: an umbrella `ark-operator` chart that depends on both. Deferred — not needed for v1 of the split; operators can install both charts with a two-line `helm install` script. An umbrella chart can be added later without blocking this change.
 
-Startup ordering matters: if `ark-controller` starts its informers before `ark-apiserver` is serving, LIST+WATCH requests fail and restart backoff kicks in. Two mechanisms in defence:
-1. The Helm pre-upgrade hook above (covers Helm upgrade flow)
-2. `ark-controller` Deployment init container `wait-for-apiserver` that runs `kubectl wait apiservice v1alpha1.ark.mckinsey.com --for=condition=Available` (covers pod restarts after the upgrade is complete)
+### Decision: Upgrade path is a two-step Helm install, no cross-chart hooks
 
-Either alone is probably sufficient; both together is cheap insurance.
+The migration from the current embedded topology to the split topology is:
+
+1. `helm install ark-apiserver ark/dist/chart-apiserver --wait` — creates the new Deployment, Service, and RBAC. The chart also takes ownership of the `APIService` CR, updating its selector to `app.kubernetes.io/name=ark-apiserver`. At this point the APIService endpoints flip from the old controller pods (which are still running the embedded apiserver) to the new apiserver pods.
+2. `helm upgrade ark-controller ark/dist/chart` — the new chart version drops the apiserver args/ports from the controller Deployment and sets `--role=controller`. Existing reconcilers continue as the pod rolls.
+
+Between step 1 and step 2 the cluster is briefly in a mixed state: the new apiserver pods serve the API, the old controller pods still have the embedded apiserver running but it is no longer reachable because the Service no longer selects them. This is intentional — there is no window where the APIService is unavailable, because step 1 completes before step 2 begins. The embedded apiserver in the old controller pods is harmless until those pods roll out of existence in step 2.
+
+Rollback is per-chart: `helm rollback ark-controller` reverts the controller changes; if the apiserver chart also needs rollback, `helm rollback ark-apiserver` reverses step 1 and the APIService selector returns to the old controller pods.
+
+**Alternative considered**: a single-chart pre-upgrade hook that installs the apiserver resources and flips the APIService selector in one Helm transaction. Rejected — it smuggles two release lifecycles through one hook. It also makes it hard to upgrade the apiserver without touching the controller chart (and vice versa) once the migration is complete.
+
+### Decision: Controller waits for apiserver via init container
+
+Startup ordering matters: if `ark-controller` starts its informers before `ark-apiserver` is serving, LIST+WATCH requests fail and restart backoff kicks in. The `ark-controller` Deployment includes an init container `wait-for-apiserver` that runs `kubectl wait apiservice v1alpha1.ark.mckinsey.com --for=condition=Available`. This covers both the initial install (where `helm install ark-apiserver` runs before `helm install ark-controller`) and any controller pod restart after the split is established.
+
+We do not need a cross-chart Helm hook: the two-step install ordering plus the init container is sufficient. Operators or CI who run the commands out of order are caught by the init container blocking.
 
 ### Decision: `ark-apiserver` Service name stable across backends
 
@@ -101,5 +114,7 @@ With split deployments mandatory on the backend that used to need the probe Mode
 
 - Does the reconciler's client-side informer cache need any tuning now that watches traverse more hops (resync intervals, throttling)?
 - Should we measure the write-latency impact on a representative benchmark (e.g., 1 k Models reconciling in parallel) before cutting over, or is "works in E2E" sufficient evidence?
-- Separate Helm chart (`ark-apiserver`) vs. same chart with conditional templates? Separate chart is cleaner for versioning but adds a new release artefact. Current proposal: same chart, conditional templates.
-- Do we ship the change in a single release (upgrade-in-place via the pre-upgrade hook) or gate it behind a release-note-documented manual step? Current proposal: single release, automated upgrade.
+- Do we ship the change in a single release (operators run the two `helm install` / `helm upgrade` commands themselves) or provide an umbrella `ark-operator` chart that encapsulates the two-step install? Current proposal: two separate installs, umbrella chart deferred.
+- Does `make dev` / `devspace dev` need to spin up both charts, or do we keep a single-process local-dev path that bypasses the split? Likely the former (honour the production topology), but confirm with the dev-experience owners.
+- Who owns WAL leader failover testing under load? §6 covers perf but not the reliability case of the apiserver leader pod dying mid-reconcile.
+- What does post-split log grep look like for operators whose runbooks assume `kubectl logs deployment/ark-controller` contains API server messages? §5.4 flags it; need to decide whether to ship a migration helper (e.g., a `docs/operator-migration.md`).

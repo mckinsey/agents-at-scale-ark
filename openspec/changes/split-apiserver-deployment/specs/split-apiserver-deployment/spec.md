@@ -25,32 +25,35 @@ The ark-controller binary SHALL accept a required `--role={apiserver,controller}
 - **WHEN** the binary is started without `--role`
 - **THEN** the process exits with a non-zero status and a log message indicating the flag is required
 
-### Requirement: Helm chart renders topology per backend
+### Requirement: Two separate Helm charts own the two Deployments
 
-On `storage.backend=etcd`, the chart SHALL render a single `ark-controller` Deployment running `--role=controller` and no `ark-apiserver` Deployment, Service, or APIService. On `storage.backend=postgresql`, the chart SHALL additionally render an `ark-apiserver` Deployment, an `ark-apiserver` Service with selector `app.kubernetes.io/name=ark-apiserver`, and an `APIService` resource targeting that Service.
+The `ark/dist/chart` chart (`ark-controller`) SHALL render only the controller Deployment, CRDs, webhooks, and controller-side RBAC. The `ark/dist/chart-apiserver` chart (`ark-apiserver`) SHALL render the apiserver Deployment, the `ark-apiserver` Service, the `APIService` CR, and the apiserver-side RBAC. On etcd, only the `ark-controller` chart is installed. On PostgreSQL, both charts are installed, with `ark-apiserver` first.
 
-#### Scenario: etcd backend renders a single Deployment
+#### Scenario: etcd backend is a single-chart install
 
 - **WHEN** `helm install ark-controller ark/dist/chart --set storage.backend=etcd`
 - **THEN** one `ark-controller` Deployment is rendered, running `--role=controller`
-- **AND** no `ark-apiserver` Deployment, Service, or APIService is present
+- **AND** no `ark-apiserver` Deployment, Service, APIService, or chart installation is present
 - **AND** existing etcd-backend functionality is unchanged
 
-#### Scenario: postgresql backend renders two Deployments with ordered startup
+#### Scenario: postgresql backend is a two-chart install with ordered startup
 
-- **WHEN** `helm install ark-controller ark/dist/chart --set storage.backend=postgresql`
-- **THEN** an `ark-apiserver` Deployment is rendered running `--role=apiserver`
-- **AND** an `ark-controller` Deployment is rendered running `--role=controller`
+- **WHEN** `helm install ark-apiserver ark/dist/chart-apiserver --wait` completes
+- **AND** `helm install ark-controller ark/dist/chart --set storage.backend=postgresql` runs
+- **THEN** the `ark-apiserver` Deployment is running `--role=apiserver`
+- **AND** the `ark-controller` Deployment is running `--role=controller`
 - **AND** the `ark-apiserver` Service has selector `app.kubernetes.io/name=ark-apiserver`
-- **AND** the `ark-controller` Deployment includes an init container `wait-for-apiserver` that blocks on APIService `Available=True`
-- **AND** a Helm pre-upgrade hook ensures the APIService is `Available` before the controller rollout proceeds
+- **AND** the `APIService` CR targeting `ark-system/ark-apiserver` is present and `Available=True`
+- **AND** the `ark-controller` Deployment includes an init container `wait-for-apiserver` that blocks on APIService `Available=True` for any pod restart after install
 
 #### Scenario: upgrading from embedded topology to split preserves cluster state
 
-- **WHEN** `helm upgrade` runs on a cluster currently running the embedded topology (single `ark-controller` Deployment with `storage.backend=postgresql`) with existing Agent/Model/Query resources
-- **THEN** the upgrade succeeds without data loss
-- **AND** existing resources remain queryable via the aggregated API throughout the upgrade (no window where the APIService is unavailable)
-- **AND** reconciliation of existing resources resumes on the new `ark-controller` Deployment without manual intervention
+- **WHEN** `helm install ark-apiserver ark/dist/chart-apiserver --wait` runs on a cluster currently running the embedded topology (single `ark-controller` Deployment with `storage.backend=postgresql`), followed by `helm upgrade ark-controller ark/dist/chart` with the new chart version
+- **THEN** the two-step upgrade succeeds without data loss
+- **AND** the `APIService` endpoints flip from the old controller pods to the new apiserver pods during step 1, with no window where the APIService is unavailable
+- **AND** existing Agent/Model/Query resources remain queryable via the aggregated API throughout the upgrade
+- **AND** reconciliation of existing resources resumes on the new `ark-controller` Deployment after step 2 without manual intervention
+- **AND** `helm rollback` on either chart reverses its side of the migration independently
 
 ### Requirement: Per-role readiness probes distinguish API serving from reconciler liveness
 

@@ -8,16 +8,31 @@
 - [ ] 1.6 Add health endpoints: `/readyz` on apiserver returns 200 when PG connected and API serving; on controller returns 200 when informers synced and at least one reconcile has completed
 - [ ] 1.7 Unit tests for role dispatch, leader-election scoping, and the non-leader-skips-WAL path
 
-## 2. Helm chart
+## 2. Helm charts
 
-- [ ] 2.1 Rename the existing controller Deployment template to reflect its controller-only responsibility; drop apiserver args/ports from it; set `--role=controller`
-- [ ] 2.2 New `ark/dist/chart/templates/apiserver/deployment.yaml` rendered when `storage.backend=postgresql`; `--role=apiserver` arg; per-replica image and resources from values
-- [ ] 2.3 New `ark/dist/chart/templates/apiserver/service.yaml` with selector `app.kubernetes.io/name=ark-apiserver`, rendered when `storage.backend=postgresql`
-- [ ] 2.4 `apiservice.yaml` rendered when `storage.backend=postgresql`; target the apiserver Service
-- [ ] 2.5 Split RBAC: apiserver ServiceAccount gets PG secret access; controller ServiceAccount drops it
-- [ ] 2.6 `templates/hooks/pre-upgrade-apiserver.yaml` — Helm pre-upgrade hook that applies the apiserver Deployment/Service, waits for `APIService v1alpha1.ark.mckinsey.com` condition `Available=True`, flips the APIService selector, then returns
-- [ ] 2.7 `ark-controller` Deployment init container `wait-for-apiserver` that blocks on the APIService condition (covers pod restarts after initial upgrade)
-- [ ] 2.8 Chart template unit tests (`helm template` snapshot) for etcd and postgresql backends
+### ark-controller chart (`ark/dist/chart`)
+
+- [ ] 2.1 Drop apiserver args/ports from the controller Deployment; add `--role=controller` arg
+- [ ] 2.2 Add init container `wait-for-apiserver` that runs `kubectl wait apiservice v1alpha1.ark.mckinsey.com --for=condition=Available --timeout=5m`
+- [ ] 2.3 Remove apiserver-related values from `values.yaml` and schema; the controller chart no longer knows about the apiserver
+- [ ] 2.4 Remove APIService CR, `ark-apiserver` Service, and apiserver RBAC from this chart — they move to the new chart
+- [ ] 2.5 Chart template unit tests (`helm template` snapshot) covering etcd and postgresql topologies
+
+### ark-apiserver chart (new, `ark/dist/chart-apiserver`)
+
+- [ ] 2.6 Scaffold `ark/dist/chart-apiserver/` with `Chart.yaml` (name `ark-apiserver`), `values.yaml`, `values.schema.json`, `templates/`
+- [ ] 2.7 `templates/deployment.yaml` — runs `--role=apiserver`; image, replicas, resources from values; leader-election enabled via `ark-apiserver-leader` Lease
+- [ ] 2.8 `templates/service.yaml` — name `ark-apiserver` (stable, matches today's Service name); selector `app.kubernetes.io/name=ark-apiserver`
+- [ ] 2.9 `templates/apiservice.yaml` — `APIService` `v1alpha1.ark.mckinsey.com` targeting the Service; ownership migrates from the controller chart via Helm annotation takeover (`helm.sh/resource-policy: keep` on the controller side during transition, or a one-time manual `kubectl apply` documented in the upgrade notes)
+- [ ] 2.10 `templates/rbac.yaml` — ServiceAccount, ClusterRole/Binding with PG secret access; no reconciler permissions
+- [ ] 2.11 Chart template unit tests (`helm template` snapshot)
+- [ ] 2.12 Release-process update: the apiserver chart is released on the same cadence as the controller chart, version-aligned per release
+
+### Install/upgrade integration
+
+- [ ] 2.13 Update `scripts/deploy/deploy-controller.sh` (and any other deploy scripts) to install `ark-apiserver` first, then `ark-controller`, on postgresql; install only `ark-controller` on etcd
+- [ ] 2.14 Update `devspace.yaml` to depend on / deploy both charts in the correct order for local development
+- [ ] 2.15 Document the APIService ownership handover for the transition release (existing installs have the APIService owned by the controller chart; first upgrade hands it to the apiserver chart)
 
 ## 3. E2E setup
 
