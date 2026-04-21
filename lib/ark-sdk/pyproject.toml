@@ -1,6 +1,6 @@
 [project]
 name = "ark-sdk-builder"
-version = "0.1.60-rc"
+version = "0.1.60"
 requires-python = ">= 3.12"
 dependencies = [
     "build",
