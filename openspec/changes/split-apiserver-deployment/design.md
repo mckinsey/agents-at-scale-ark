@@ -21,72 +21,85 @@ The 10-consecutive-probe aggregated-API stability check and the probe Model chec
 
 **Goals:**
 - Deployment readiness means exactly what it says: `ark-apiserver` Ready = API is serving; `ark-controller` Ready = reconcilers started
-- Remove the probe Model check from `ark status --wait-for-ready` and `setup-local.sh` once the split is the default
+- Remove the probe Model check from both `ark status --wait-for-ready` and `setup-local.sh`
 - Enable independent horizontal scaling of the API server (read-heavy) separately from reconcilers (leader-elected singleton)
 - Independent rolling upgrades (a server-side fix like #1841 lands without touching reconcilers)
-- Backward compatibility: existing installs keep working on `combined` mode until the next major
+- Zero-data-loss Helm upgrade from the current embedded topology to the split topology
 
 **Non-Goals:**
-- Changing the etcd-backed path (CRDs continue to be served by kube-apiserver; no split needed)
+- Changing the etcd-backed path (CRDs continue to be served by kube-apiserver; no split needed, single Deployment stays)
 - Multi-writer WAL consumers — WAL consumption stays singleton, scaling the API Deployment does not imply N WAL consumers
 - API schema changes — the `ark.mckinsey.com/v1alpha1` and `v1prealpha1` groups are untouched
 - Moving webhooks out of the controller process — webhooks stay with reconcilers
+- Preserving the embedded-in-controller topology as a supported production configuration
 
 ## Decisions
 
-### Decision: Single binary with `--role` flag, not two separate binaries
+### Decision: Single binary with required `--role={apiserver,controller}` flag
 
-Keeping one binary avoids a second image build, a second entry in the release process, and a second place where version drift can occur. `--role={combined,apiserver,controller}` branches at startup. The `combined` role preserves today's behaviour byte-for-byte.
+One binary avoids a second image build, a second release artefact, and a second place where version drift can occur. `--role` branches at startup. There is no `combined` fallback — operators explicitly choose a role, and the Helm chart wires them correctly for each backend.
 
-**Alternative considered**: two binaries (`ark-apiserver`, `ark-controller`). Rejected — the Go code is shared (schemes, storage, validation), and separate binaries would either duplicate it or require a shared lib package. The `--role` flag is strictly simpler.
+**Alternative considered**: two binaries (`ark-apiserver`, `ark-controller`). Rejected — Go code is shared (schemes, storage, validation), separate binaries would either duplicate it or need a shared lib package. The `--role` flag is strictly simpler.
+
+**Alternative considered**: keep a `combined` role as an escape hatch for migration. Rejected — it preserves the readiness ambiguity that motivates this work, forces three-way branching through `main.go` / the Helm chart / the CLI, and keeps a deprecated code path alive indefinitely. The cost of solving upgrade as a one-way Helm-hook problem (see below) is lower than the cost of carrying a legacy mode.
+
+### Decision: Etcd backend stays single-Deployment
+
+On etcd, CRDs are registered in kube-apiserver directly and there is no aggregated API server. Running a second Deployment in `apiserver` mode would have nothing to do. Etcd backend deploys only the `controller` role Deployment, which is indistinguishable from today's etcd install except that `--role=controller` is now passed explicitly.
 
 ### Decision: WAL consumer lives on the apiserver side, not the controller side
 
-The WAL consumer's job is to translate PG change events into watch notifications for API-server-side WATCH streams. In `combined` mode it happens to be in the same process as the reconciler; conceptually it is part of the API server. After the split, watchers that the reconciler's informer opens go through the full k8s API path (kube-apiserver → APIService proxy → ark-apiserver → WAL consumer → stream back). This matches how every other aggregated API works.
+The WAL consumer's job is to translate PG change events into watch notifications for API-server-side WATCH streams. Conceptually it is part of the API server. After the split, watchers opened by the reconciler's informer go through the full k8s API path (kube-apiserver → APIService proxy → ark-apiserver → WAL consumer → stream back). This matches how every other aggregated API works.
 
 **Alternative considered**: WAL consumer on the controller side, with reconcilers reading PG directly. Rejected — breaks the single-source-of-truth model (API server becomes advisory), and makes `kubectl watch agents` from outside the cluster see a different stream than what the reconciler sees.
 
-### Decision: Single WAL consumer even when API Deployment has N replicas
+### Decision: Single WAL consumer even when the apiserver Deployment has N replicas
 
 WAL logical replication uses a named replication slot. Multiple consumers on the same slot corrupt the stream. Therefore:
-- The API Deployment may have N replicas for read scaling
+- The apiserver Deployment may have N replicas for read scaling
 - Only one replica runs the WAL consumer; the others serve reads only
-- Leader election within the API Deployment picks the WAL-consumer replica (`ark-apiserver-leader` Lease)
+- Leader election within the apiserver Deployment picks the WAL-consumer replica (`ark-apiserver-leader` Lease)
 - Non-leader replicas still serve API reads — they just skip the WAL setup path
 
-### Decision: Controller waits for apiserver via Helm hook + init container
+### Decision: Upgrade path uses a Helm pre-upgrade hook, not a staged rollout
+
+The Helm upgrade from current topology to split must be zero-data-loss and require no manual intervention. The pre-upgrade hook:
+1. Applies the `ark-apiserver` Deployment and Service
+2. Blocks until the `ark-apiserver` pods are Ready and the APIService reports `Available=True`
+3. Flips the APIService selector from `ark-controller` pods to `ark-apiserver` pods
+4. Only then returns, allowing Helm to proceed with the `ark-controller` Deployment upgrade (drop apiserver args, switch to `--role=controller`)
+
+At no point between steps 1 and 3 is the APIService unavailable. Rollback via `helm rollback` reverses the hook. The approach is one-way with respect to intent (we are moving to split), but fully reversible in practice via Helm's own rollback semantics.
+
+**Alternative considered**: staged rollout over two releases with a `deployment.split` flag defaulting `false`, then flipped `true` in a follow-up release. Rejected — it forces us to carry the combined code path for at least one release, which reintroduces the readiness ambiguity the split is meant to eliminate.
+
+### Decision: Controller waits for apiserver via init container plus the Helm hook
 
 Startup ordering matters: if `ark-controller` starts its informers before `ark-apiserver` is serving, LIST+WATCH requests fail and restart backoff kicks in. Two mechanisms in defence:
-1. Helm post-install hook `ark-apiserver-wait` that blocks until the APIService reports `Available=True`
-2. `ark-controller` Deployment uses an init container `wait-for-apiserver` that runs `kubectl wait apiservice v1alpha1.ark.mckinsey.com --for=condition=Available`
+1. The Helm pre-upgrade hook above (covers Helm upgrade flow)
+2. `ark-controller` Deployment init container `wait-for-apiserver` that runs `kubectl wait apiservice v1alpha1.ark.mckinsey.com --for=condition=Available` (covers pod restarts after the upgrade is complete)
 
 Either alone is probably sufficient; both together is cheap insurance.
 
-### Decision: `deployment.split` is a per-release Helm value, not auto-detected
+### Decision: `ark-apiserver` Service name stable across backends
 
-Making the chart behave differently based on cluster state introduces implicit behaviour that is hard to debug. An explicit `deployment.split: true|false` in values, defaulting `false` for one release, CI-flipped in the same release, and promoted to `true` default in the following release, makes the rollout observable and revertable.
+The `APIService` CR points to `ark-system/ark-apiserver`. On the PostgreSQL backend that Service is rendered with selector `app.kubernetes.io/name=ark-apiserver`. On etcd the Service is not rendered because there is no aggregated API server. Users who reference `ark-apiserver.ark-system.svc` in code keep working on PostgreSQL.
 
-### Decision: Keep `ark-apiserver` Service name stable across modes
+### Decision: `readinessChecks.ts` drops the probe Model path entirely
 
-The `APIService` CR points to `ark-system/ark-apiserver`. That Service exists today with a selector that matches `ark-controller` pods. After split, the same Service name persists but its selector flips to `app.kubernetes.io/name=ark-apiserver`. The APIService CR is unchanged. Users who reference `ark-apiserver.ark-system.svc` in code keep working.
-
-### Decision: `readinessChecks.ts` collapses layer 5 into layer 0 when split is detected
-
-Detection is cheap: `kubectl get deployment ark-apiserver -n ark-system` succeeds iff split is enabled. When both `ark-apiserver` and `ark-controller` Deployments exist, layer 0 (`waitForDeploymentReady` per service) covers what layer 5 previously needed. The probe Model code path is kept for the transition period (combined mode) and removed when combined mode is deprecated.
+With split deployments mandatory on the backend that used to need the probe Model, there is no scenario where the probe is required. Layer 5 (`waitForControllerReconciling`) is deleted. `ark-apiserver` is added to the list of core services that layer 0 waits for when the PostgreSQL backend is detected (no CRD present).
 
 ## Risks / Trade-offs
 
-- **Extra network hops for reconciler writes**: today the reconciler's k8s client talks to the embedded API server in-process (µs). After the split, writes go client → kube-apiserver → APIService proxy → ark-apiserver pod → PG (likely 1–5 ms). Reads stay on local informer cache, so latency is only on writes (status updates). For a busy cluster with high status-update frequency, this is measurable. Benchmark before making split the default.
+- **Extra network hops for reconciler writes**: today the reconciler's k8s client talks to the embedded API server in-process (µs). After the split, writes go client → kube-apiserver → APIService proxy → ark-apiserver pod → PG (likely 1–5 ms). Reads stay on local informer cache, so latency is only on writes (status updates). For a busy cluster with high status-update frequency, this is measurable. Benchmark before cutting over.
 - **Two sets of logs/metrics**: debugging becomes "which Deployment has the problem?". Partially offset by clearer signals (each Deployment now reports its own readiness accurately).
-- **Helm complexity**: conditional template rendering, two Deployments, two Services (or one with flipped selector), init container, Helm hook. More to review, more to break.
-- **Migration risk**: existing clusters running `combined` must flip to `split` at some point. If the flip is not in-place-upgradeable (e.g., PG connection pool collision), operators need a documented downtime window. Acceptance criterion: `helm upgrade` from combined to split must succeed on a live cluster with zero data loss.
-- **WAL leader election adds moving parts**: replication slot races are a known class of bug (see PR #1763 context). The switchover from one WAL consumer pod to another during a split-mode rolling upgrade must be tested under load.
+- **Helm upgrade blast radius**: the pre-upgrade hook is critical path. A bug in the hook script means the upgrade fails and operators must roll back. Mitigation: CI integration test that runs `helm upgrade` from an existing PostgreSQL install with seeded Agent/Model/Query resources and verifies all resources are still queryable after the upgrade.
+- **WAL leader election adds moving parts**: replication slot races are a known class of bug (see PR #1763). The switchover from one WAL consumer pod to another during a split-mode rolling upgrade must be tested under load.
 - **"embedded" pattern disappears**: some users may have workflows that assume the API server lives in `ark-controller` logs. Communicate via release notes and docs.
 
 ## Open Questions
 
 - Does the reconciler's client-side informer cache need any tuning now that watches traverse more hops (resync intervals, throttling)?
-- For `combined` mode during the transition, should the `ark-apiserver` Service selector remain `ark-controller` (as today) or switch to a label added to both Deployments (e.g., `ark.mckinsey.com/component=apiserver`)? The latter future-proofs without breaking today.
-- Should we measure the write-latency impact on a representative benchmark (e.g., 1 k Models reconciling in parallel) before promoting split to default, or is "works in E2E" sufficient evidence?
-- Separate Helm chart (`ark-apiserver`) vs. same chart with conditional templates? Separate chart is cleaner for versioning but adds a new release artefact.
-- When combined mode is removed, do we also remove the `--role=combined` code path, or keep it as a dev convenience (single process = easier local debugging)?
+- Should we measure the write-latency impact on a representative benchmark (e.g., 1 k Models reconciling in parallel) before cutting over, or is "works in E2E" sufficient evidence?
+- Separate Helm chart (`ark-apiserver`) vs. same chart with conditional templates? Separate chart is cleaner for versioning but adds a new release artefact. Current proposal: same chart, conditional templates.
+- Do we ship the change in a single release (upgrade-in-place via the pre-upgrade hook) or gate it behind a release-note-documented manual step? Current proposal: single release, automated upgrade.

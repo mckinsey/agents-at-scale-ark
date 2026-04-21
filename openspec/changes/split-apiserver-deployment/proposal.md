@@ -8,38 +8,40 @@ Splitting into two Deployments makes each pod's Ready condition mean exactly wha
 
 ## What Changes
 
-- `ark/cmd/main.go` gains a `--role={combined,apiserver,controller}` flag (default `combined` for backward compatibility)
-- In `apiserver` mode, the process only starts the embedded aggregated API server + WAL consumer; no reconcilers, no webhooks
-- In `controller` mode, the process only starts controller-runtime (reconcilers + webhooks) and talks to the aggregated API via the normal k8s client path (kube-apiserver → `APIService` proxy → `ark-apiserver` Service)
-- Helm chart `ark/dist/chart` adds a second `Deployment` (`ark-apiserver`) when `storage.backend=postgresql` and `deployment.split=true`; `ark-controller` Deployment stops serving the API in that mode
+- `ark/cmd/main.go` takes a required `--role={apiserver,controller}` flag
+- In `apiserver` role, the process only starts the embedded aggregated API server + WAL consumer; no reconcilers, no webhooks
+- In `controller` role, the process only starts controller-runtime (reconcilers + webhooks) and talks to the aggregated API via the normal k8s client path (kube-apiserver → `APIService` proxy → `ark-apiserver` Service)
+- Helm chart `ark/dist/chart` always renders a `controller` Deployment. When `storage.backend=postgresql` it additionally renders an `apiserver` Deployment. Etcd backend stays single-Deployment (no aggregated API server is needed on etcd)
 - Two leader-election Leases: `ark-apiserver-leader` (for the WAL consumer singleton) and `ark-controller-leader` (for the reconciler loop)
-- `ark-apiserver` Service selector flips to `app.kubernetes.io/name=ark-apiserver` when split is enabled
-- Startup ordering: `ark-controller` waits on `ark-apiserver` readiness (init container or Helm hook)
-- `tools/ark-cli/src/lib/readinessChecks.ts` drops layer 5 when both Deployments exist and are Ready — the probe Model is no longer needed
-- Migration path: `storage.backend=postgresql` + `deployment.split=false` (default) keeps the embedded behaviour; CI flips `deployment.split=true` first; docs/defaults follow after a release cycle of burn-in
+- `ark-apiserver` Service selector points at `app.kubernetes.io/name=ark-apiserver` on PostgreSQL; Service is not rendered on etcd
+- Startup ordering: `ark-controller` waits on `ark-apiserver` readiness via init container plus a Helm pre-upgrade hook
+- Helm upgrade from the current embedded topology to the split topology is one-way and zero-data-loss: the pre-upgrade hook brings up `ark-apiserver`, the APIService selector flips, then `ark-controller` is upgraded to drop the embedded API server args
+- `tools/ark-cli/src/lib/readinessChecks.ts` drops the probe Model check entirely — layer 0 covers reconciler readiness via the `ark-controller` Deployment's `Ready` condition
+- `setup-local.sh:132-220` is reduced to per-Deployment `kubectl wait` calls, dropping the API-group poll / aggregated-API stability / probe Model blocks
+- No `combined` role, no `deployment.split` value, no transitional escape hatch. A clean two-role topology is the single supported production configuration
 
 ## Capabilities
 
 ### New Capabilities
-- `split-apiserver-deployment`: the aggregated API server runs as its own Deployment, distinct from the reconciler Deployment, with per-component readiness probes and independent lifecycle
+- `split-apiserver-deployment`: the aggregated API server runs as its own Deployment on the PostgreSQL backend, distinct from the reconciler Deployment, with per-component readiness probes and independent lifecycle
 
 ### Modified Capabilities
-- `postgresql-backend`: no longer implies "embedded in ark-controller" — the backend is served by the dedicated `ark-apiserver` Deployment when split is enabled
+- `postgresql-backend`: served by a dedicated `ark-apiserver` Deployment. The embedded-in-controller implementation is removed
 
 ## Impact
 
-- `ark/cmd/main.go` — `--role` flag, conditional setup paths
-- `ark/cmd/apiserver/` — optional new entrypoint (or keep single binary with role flag)
-- `ark/internal/apiserver/server.go` — no changes expected; already a `Manager.Runnable`
-- `ark/internal/storage/postgresql/wal_consumer.go` — confirm WAL consumer belongs on the apiserver side; add leader-election within the apiserver fleet
-- `ark/dist/chart/templates/manager/manager.yaml` — skip API server ports/args when `deployment.split=true`
-- `ark/dist/chart/templates/apiserver/deployment.yaml` — new file, rendered only when `deployment.split=true`
-- `ark/dist/chart/templates/apiserver/service.yaml` — selector flips based on split mode
-- `ark/dist/chart/templates/apiserver/apiservice.yaml` — unchanged target, selector follows the Service
-- `ark/dist/chart/templates/apiserver/rbac.yaml` — split RBAC: API-side gets PG secrets, controller-side drops them
-- `ark/dist/chart/values.yaml` — `deployment.split` flag and per-role image/replicas/resources
+- `ark/cmd/main.go` — `--role` flag becomes required; role-scoped setup paths; no fallthrough
+- `ark/internal/apiserver/server.go` — unchanged (already a `Manager.Runnable`)
+- `ark/internal/storage/postgresql/wal_consumer.go` — lifecycle scoped to the apiserver role; add leader-election within the apiserver replica set
+- `ark/dist/chart/templates/manager/manager.yaml` — renamed/refactored to the controller-only Deployment; drop apiserver args/ports
+- `ark/dist/chart/templates/apiserver/deployment.yaml` — new file, rendered only when `storage.backend=postgresql`
+- `ark/dist/chart/templates/apiserver/service.yaml` — selector `app.kubernetes.io/name=ark-apiserver`, rendered only when `storage.backend=postgresql`
+- `ark/dist/chart/templates/apiserver/apiservice.yaml` — rendered only when `storage.backend=postgresql`; selector flip handled as part of the pre-upgrade hook ordering
+- `ark/dist/chart/templates/apiserver/rbac.yaml` — split RBAC: apiserver ServiceAccount gets PG secret access; controller ServiceAccount drops it
+- `ark/dist/chart/templates/hooks/pre-upgrade-apiserver.yaml` — new file, pre-upgrade Helm hook that brings up `ark-apiserver` and waits for APIService `Available=True` before the controller Deployment rollout proceeds
+- `ark/dist/chart/values.yaml` — per-role image/replicas/resources blocks; no mode flag
 - `ark/dist/chart/values.schema.json` — schema updates
-- `.github/actions/setup-e2e/setup-local.sh` — add `DEPLOYMENT_SPLIT` arg and pass-through to Helm; lines 184-220 (probe Model) can be removed once split is the default
-- `tools/ark-cli/src/lib/readinessChecks.ts` — when split is detected (both Deployments exist), skip `waitForControllerReconciling`; rely on `kubectl wait` against each Deployment
-- `tools/ark-cli/src/arkServices.ts` — add `ark-apiserver` as a core service so layer 0 covers it automatically
+- `.github/actions/setup-e2e/setup-local.sh` — drop lines 132-220 and rely on per-Deployment `kubectl wait`
+- `tools/ark-cli/src/lib/readinessChecks.ts` — drop `waitForControllerReconciling`; add `ark-apiserver` to the deployments polled at layer 0 when the PostgreSQL backend is detected
+- `tools/ark-cli/src/arkServices.ts` — add `ark-apiserver` as a core service
 - No changes to controller reconcilers, webhooks, or CRD definitions
