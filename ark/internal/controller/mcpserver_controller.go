@@ -131,24 +131,7 @@ func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer arkv1
 	mcpServer.Status.ResolvedAddress = resolvedAddress
 	mcpClient, err := r.createMCPClient(ctx, &mcpServer)
 	if err != nil {
-		if ue, ok := arkmcp.IsUnauthorizedError(err); ok {
-			if err := r.handleAuthorizationRequired(ctx, &mcpServer, ue); err != nil {
-				return ctrl.Result{}, err
-			}
-			if err := r.deleteAllMCPTools(ctx, mcpServer.Namespace, mcpServer.Name); err != nil {
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{RequeueAfter: getPollInterval(mcpServer.Spec.PollInterval)}, nil
-		}
-
-		if err := r.reconcileConditionsClientCreationFailed(ctx, &mcpServer, err); err != nil {
-			return ctrl.Result{}, err
-		}
-
-		if err := r.deleteAllMCPTools(ctx, mcpServer.Namespace, mcpServer.Name); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{RequeueAfter: getPollInterval(mcpServer.Spec.PollInterval)}, nil
+		return r.handleClientCreationError(ctx, &mcpServer, err)
 	}
 
 	// Previous reconcile may have left authorization status populated;
@@ -249,6 +232,27 @@ func (r *MCPServerReconciler) reconcileConditionsToolCreationFailed(ctx context.
 		return r.updateStatus(ctx, mcpServer)
 	}
 	return nil
+}
+
+// handleClientCreationError dispatches failures from createMCPClient to
+// the appropriate condition handler — the OAuth discovery path for a
+// 401 response, the generic client-creation path otherwise — and
+// cleans up any tools owned by the server.
+func (r *MCPServerReconciler) handleClientCreationError(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, err error) (ctrl.Result, error) {
+	requeue := ctrl.Result{RequeueAfter: getPollInterval(mcpServer.Spec.PollInterval)}
+
+	if ue, ok := arkmcp.IsUnauthorizedError(err); ok {
+		if err := r.handleAuthorizationRequired(ctx, mcpServer, ue); err != nil {
+			return ctrl.Result{}, err
+		}
+	} else if err := r.reconcileConditionsClientCreationFailed(ctx, mcpServer, err); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if err := r.deleteAllMCPTools(ctx, mcpServer.Namespace, mcpServer.Name); err != nil {
+		return ctrl.Result{}, err
+	}
+	return requeue, nil
 }
 
 // handleAuthorizationRequired runs RFC 9728 + RFC 8414 discovery using

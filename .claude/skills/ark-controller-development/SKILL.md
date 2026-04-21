@@ -62,10 +62,15 @@ make build
 ### After Any Go Code Change
 
 ```bash
-make lint-fix    # Format and fix linting
+make lint-fix    # Format and auto-fix what the linter can fix
+make lint        # Fail fast on issues CI will reject — MANDATORY
 make build       # Build and validate
 make test        # Run unit + envtest suites
 ```
+
+`make lint` runs the same `golangci-lint` rules CI enforces. Running it
+locally before pushing is non-negotiable — red PR checks cost more than
+the minute the lint takes.
 
 ## Leverage Existing Code — Don't Reinvent
 
@@ -159,6 +164,7 @@ Required coverage for a controller branch:
 Before saying "done":
 
 - [ ] `make manifests` clean (if types changed)
+- [ ] `make lint` clean — same rules CI enforces
 - [ ] `make build` green
 - [ ] `make test` green — paste or reference output
 - [ ] New `_test.go` exists for every new function / branch
