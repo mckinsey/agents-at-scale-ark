@@ -147,6 +147,6 @@ jobs:
           auth_client_secret: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_SECRET }}
 
       - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@7.1.0
+        uses: SonarSource/sonarqube-scan-action@v7.1.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
