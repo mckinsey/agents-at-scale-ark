@@ -144,40 +144,21 @@ spec:
           condition:
             name: Completed
             value: 'True'
-    - script:
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
-        content: |
-          RESPONSE=$(kubectl -n $NAMESPACE get query query-overrides-test-query-tool -o jsonpath='{.status.response.content}')
-
-          echo "=== Query Tool Response Content ==="
-          echo "$RESPONSE"
-          echo "=========================="
-
-          if echo "$RESPONSE" | grep -qi "x-query-override-mcp-static"; then
-            echo "✓ Tool response contains x-query-override-mcp-static header"
-          else
-            echo "✗ Tool response missing x-query-override-mcp-static header"
-            exit 1
-          fi
-
-          if echo "$RESPONSE" | grep -qi "query-mcp-override-secret-value"; then
-            echo "✓ Tool response contains x-query-override-mcp-secret header value"
-          else
-            echo "✗ Tool response missing x-query-override-mcp-secret header value"
-            exit 1
-          fi
-
-          if echo "$RESPONSE" | grep -qi "query-mcp-override-configmap"; then
-            echo "✓ Tool response contains x-query-override-mcp-configmap header value"
-          else
-            echo "✗ Tool response missing x-query-override-mcp-configmap header value"
-            exit 1
-          fi
-
-          echo ""
-          echo "✅ All query MCP override headers verified via tool"
+    # Completed=True can fire before response.content is populated on the
+    # same status update. Use an assert with JP `contains()` so chainsaw
+    # retries until all three header markers are present, instead of a
+    # shell script that fails on the first empty read.
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: query-overrides-test-query-tool
+          status:
+            (response != null): true
+            (contains(response.content, 'x-query-override-mcp-static')): true
+            (contains(response.content, 'query-mcp-override-secret-value')): true
+            (contains(response.content, 'query-mcp-override-configmap')): true
     catch:
     - events: {}
     - describe:

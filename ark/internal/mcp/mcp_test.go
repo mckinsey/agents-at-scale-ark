@@ -210,7 +210,7 @@ func (m *mcpServerMock) sayHi(ctx context.Context, req *mcpsdk.CallToolRequest, 
 func TestCreateTransportHasNoClientTimeout(t *testing.T) {
 	for _, transportType := range []string{sseTransport, httpTransport} {
 		t.Run(transportType, func(t *testing.T) {
-			transport, err := createTransport("http://localhost:8888", nil, transportType)
+			transport, _, err := createTransport("http://localhost:8888", nil, transportType)
 			require.NoError(t, err)
 
 			switch tr := transport.(type) {
