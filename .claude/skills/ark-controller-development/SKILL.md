@@ -68,6 +68,25 @@ make build       # Build and validate
 make test        # Run unit + envtest suites
 ```
 
+### Before Opening a PR
+
+Run the chainsaw e2e suite against a live cluster — unit + envtest
+don't exercise the full apply → reconcile → status loop. Prefer the
+deterministic mock-llm suite; only run the LLM-backed tests when the
+change specifically touches that path (saves cost + avoids flakes from
+real LLM providers).
+
+```bash
+# Deterministic suite (default)
+(cd tests && chainsaw test --selector '!llm')
+
+# LLM suite — only when your change needs it
+(cd tests && chainsaw test --selector 'llm')
+```
+
+See the `chainsaw` skill for patterns and antipatterns (e.g. prefer
+chainsaw `assert` over shell `grep`; prefer `wait` over polling).
+
 `make lint` runs the same `golangci-lint` rules CI enforces. Running it
 locally before pushing is non-negotiable — red PR checks cost more than
 the minute the lint takes.
@@ -167,6 +186,7 @@ Before saying "done":
 - [ ] `make lint` clean — same rules CI enforces
 - [ ] `make build` green
 - [ ] `make test` green — paste or reference output
+- [ ] Chainsaw deterministic suite (`chainsaw test --selector '!llm'`) green; LLM suite only if change requires it
 - [ ] New `_test.go` exists for every new function / branch
 - [ ] Helm chart CRDs regenerated and committed
 - [ ] OpenAPI / Python SDK / TypeScript SDK regenerated if CRD changed
