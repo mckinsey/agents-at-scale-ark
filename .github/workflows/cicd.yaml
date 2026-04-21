@@ -1152,18 +1152,27 @@ jobs:
         run: |
           VERSION=$(jq -r '."."' .github/release-please-manifest.json)
 
+          # Extract base version (remove -rc or -rc.* suffix if present)
+          BASE_VERSION="${VERSION%-rc*}"
+
+          echo "Manifest version: $VERSION"
+          echo "Base version: $BASE_VERSION"
+
           # Promotion scenario:
           # 1. Manifest version is stable (no -rc suffix)
-          # 2. RC tags exist for this version (v0.1.58-rc.*)
-          # 3. Stable tag doesn't exist yet (v0.1.58)
-          RC_TAGS=$(git tag --list "v${VERSION}-rc.*" | head -1)
-          STABLE_TAG=$(git tag --list "v${VERSION}" | head -1)
+          # 2. RC tags exist for this version (v0.1.60-rc*)
+          # 3. Stable tag doesn't exist yet (v0.1.60)
+          RC_TAGS=$(git tag --list "v${BASE_VERSION}-rc*" | head -1)
+          STABLE_TAG=$(git tag --list "v${BASE_VERSION}" | head -1)
 
-          if [[ "$VERSION" != *-rc.* && -n "$RC_TAGS" && -z "$STABLE_TAG" ]]; then
+          echo "RC tags for v${BASE_VERSION}: $RC_TAGS"
+          echo "Stable tag v${BASE_VERSION}: $STABLE_TAG"
+
+          if [[ "$VERSION" != *-rc* && -n "$RC_TAGS" && -z "$STABLE_TAG" ]]; then
             echo "config=.github/release-please-config.json" >> $GITHUB_OUTPUT
             echo "type=stable" >> $GITHUB_OUTPUT
-            echo "release_as=${VERSION}" >> $GITHUB_OUTPUT
-            echo "Promotion detected: RC tags exist for v${VERSION}, releasing stable"
+            echo "release_as=${BASE_VERSION}" >> $GITHUB_OUTPUT
+            echo "Promotion detected: RC tags exist for v${BASE_VERSION}, releasing stable"
           else
             echo "config=.github/release-please-config-rc.json" >> $GITHUB_OUTPUT
             echo "type=rc" >> $GITHUB_OUTPUT
