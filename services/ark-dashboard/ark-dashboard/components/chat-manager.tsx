@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAtom } from 'jotai';
 
 import type { ChatType } from '@/lib/chat-events';
@@ -30,10 +30,6 @@ export default function ChatManager() {
       graphEdges,
     })),
   );
-  const pendingEventsRef = useRef<
-    Array<{ type: 'opened' | 'closed'; name: string }>
-  >([]);
-
   useEffect(() => {
     setOpenChatWindows(
       chatWindows.map(({ name, type, strategy, graphEdges }) => ({
@@ -46,25 +42,6 @@ export default function ChatManager() {
   }, [chatWindows, setOpenChatWindows]);
 
   useEffect(() => {
-    if (pendingEventsRef.current.length > 0) {
-      const events = [...pendingEventsRef.current];
-      pendingEventsRef.current = [];
-
-      events.forEach(event => {
-        if (event.type === 'opened') {
-          globalThis.dispatchEvent(
-            new CustomEvent('chat-opened', { detail: { name: event.name } }),
-          );
-        } else {
-          globalThis.dispatchEvent(
-            new CustomEvent('chat-closed', { detail: { name: event.name } }),
-          );
-        }
-      });
-    }
-  }, [chatWindows]);
-
-  useEffect(() => {
     const handleOpenChat = (event: CustomEvent) => {
       const { name, type, strategy, graphEdges } = event.detail;
       const id = `${name}-${Date.now()}`;
@@ -72,8 +49,6 @@ export default function ChatManager() {
       setChatWindows(prev => {
         const existingChat = prev.find(chat => chat.name === name);
         if (existingChat) return prev;
-
-        pendingEventsRef.current.push({ type: 'opened', name });
 
         return [
           ...prev,
@@ -96,16 +71,12 @@ export default function ChatManager() {
         const existingChat = prev.find(chat => chat.name === name);
 
         if (existingChat) {
-          pendingEventsRef.current.push({ type: 'closed', name });
-
           const newWindows = prev.filter(chat => chat.id !== existingChat.id);
           return newWindows.map((chat, index) => ({
             ...chat,
             position: index,
           }));
         } else {
-          pendingEventsRef.current.push({ type: 'opened', name });
-
           const id = `${name}-${Date.now()}`;
           return [
             ...prev,
@@ -144,13 +115,6 @@ export default function ChatManager() {
 
   const handleCloseChat = (id: string) => {
     setChatWindows(prev => {
-      const closingChat = prev.find(chat => chat.id === id);
-      if (closingChat) {
-        pendingEventsRef.current.push({
-          type: 'closed',
-          name: closingChat.name,
-        });
-      }
       const newWindows = prev.filter(chat => chat.id !== id);
       return newWindows.map((chat, index) => ({
         ...chat,
