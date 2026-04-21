@@ -71,7 +71,7 @@ export function createSessionsRouter(sessionsBroker: SessionsBroker): Router {
     }
   });
 
-  router.get('/sessions/:session_id', (req, res) => {
+  router.get('/:session_id', (req, res) => {
     try {
       const { session_id } = req.params;
       const session = sessionsBroker.getSession(session_id);

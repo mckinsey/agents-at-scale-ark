@@ -261,6 +261,15 @@ async def get_sessions(
     )
 
 
+@router.get("/sessions/{session_id}")
+async def get_session(
+    session_id: str,
+    memory: str = Query("default", description="Memory resource name"),
+):
+    """Get a single session by ID from the broker."""
+    return await proxy_broker_request(memory, f"/sessions/{session_id}", False, {})
+
+
 async def proxy_broker_delete(memory: str, path: str):
     """Proxy DELETE requests to broker."""
     broker_url = await get_broker_url(memory)

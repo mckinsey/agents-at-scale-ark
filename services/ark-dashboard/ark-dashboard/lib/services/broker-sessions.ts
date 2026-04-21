@@ -81,6 +81,14 @@ export const brokerSessionsService = {
       nextCursor: response.nextCursor,
     };
   },
+
+  async getSession(sessionId: string): Promise<BrokerSession | null> {
+    const response = await apiClient.get<any>(`/api/v1/broker/sessions/${sessionId}`);
+    if (!response) {
+      return null;
+    }
+    return enrichSessionData(response);
+  },
 };
 
 function enrichSessionData(session: any): BrokerSession {

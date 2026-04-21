@@ -8,3 +8,12 @@ export const useListSessions = (params?: SessionsListParams) => {
     refetchInterval: 5000,
   });
 };
+
+export const useGetSession = (sessionId: string | null) => {
+  return useQuery({
+    queryKey: ['broker-session', sessionId],
+    queryFn: () => sessionId ? brokerSessionsService.getSession(sessionId) : null,
+    enabled: !!sessionId,
+    refetchInterval: 5000,
+  });
+};

@@ -8,7 +8,6 @@ import { Input } from '@/components/ui/input';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 
 export default function SessionsConversationsPage() {
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   return (
@@ -35,8 +34,8 @@ export default function SessionsConversationsPage() {
 
       <div className="flex-1">
         <SessionsTable
-          onSelectSession={setSelectedSessionId}
-          selectedSessionId={selectedSessionId}
+          onSelectSession={(sessionId) => window.location.href = `/sessions/${sessionId}`}
+          selectedSessionId={null}
           searchQuery={searchQuery}
         />
       </div>
