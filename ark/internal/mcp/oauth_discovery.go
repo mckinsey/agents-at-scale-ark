@@ -4,6 +4,13 @@
 // authorization, per RFC 9728 (Protected Resource Metadata) and
 // RFC 8414 (Authorization Server Metadata), as invoked by the MCP
 // 2025-06-18 authorization specification.
+//
+// The RFC 9728 wire type is re-exported from
+// github.com/modelcontextprotocol/go-sdk/oauthex — the go-sdk keeps its
+// parsers and fetchers behind the `mcp_go_client_oauth` build tag, but
+// the `ProtectedResourceMetadata` struct itself is publicly available,
+// so we reuse it and implement the small amount of HTTP + header
+// parsing the controller needs.
 package mcp
 
 import (
@@ -13,81 +20,96 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/oauthex"
 )
 
-// ProtectedResourceMetadata mirrors the subset of RFC 9728 Protected
-// Resource Metadata fields consumed by the Ark controller.
-type ProtectedResourceMetadata struct {
-	Resource               string   `json:"resource"`
-	ResourceName           string   `json:"resource_name,omitempty"`
-	AuthorizationServers   []string `json:"authorization_servers,omitempty"`
-	BearerMethodsSupported []string `json:"bearer_methods_supported,omitempty"`
-	ScopesSupported        []string `json:"scopes_supported,omitempty"`
-}
+// ProtectedResourceMetadata is the RFC 9728 document shape. We re-export
+// the go-sdk type so downstream code depends on a single definition.
+type ProtectedResourceMetadata = oauthex.ProtectedResourceMetadata
 
-// AuthorizationServerMetadata mirrors the subset of RFC 8414
-// Authorization Server Metadata fields consumed by the Ark controller.
+// AuthorizationServerMetadata is the subset of RFC 8414 fields the
+// controller surfaces on `status.authorization`. The upstream go-sdk
+// struct is behind a build tag, so we define our own here.
 type AuthorizationServerMetadata struct {
-	Issuer                string   `json:"issuer"`
-	AuthorizationEndpoint string   `json:"authorization_endpoint,omitempty"`
-	TokenEndpoint         string   `json:"token_endpoint,omitempty"`
-	RegistrationEndpoint  string   `json:"registration_endpoint,omitempty"`
-	ScopesSupported       []string `json:"scopes_supported,omitempty"`
-	GrantTypesSupported   []string `json:"grant_types_supported,omitempty"`
-	CodeChallengeMethods  []string `json:"code_challenge_methods_supported,omitempty"`
+	Issuer                        string   `json:"issuer"`
+	AuthorizationEndpoint         string   `json:"authorization_endpoint,omitempty"`
+	TokenEndpoint                 string   `json:"token_endpoint,omitempty"`
+	RegistrationEndpoint          string   `json:"registration_endpoint,omitempty"`
+	ScopesSupported               []string `json:"scopes_supported,omitempty"`
+	GrantTypesSupported           []string `json:"grant_types_supported,omitempty"`
+	CodeChallengeMethodsSupported []string `json:"code_challenge_methods_supported,omitempty"`
 }
 
-// ParseWWWAuthenticate extracts the `resource_metadata` URL from a
-// `WWW-Authenticate: Bearer ...` header as specified in RFC 9728 §5.1.
-// Returns ok=false when the header is missing, not a Bearer challenge,
-// or does not include a resource_metadata parameter.
-func ParseWWWAuthenticate(header string) (resourceMetadataURL string, ok bool) {
+const (
+	// RFC 8414 §3 — well-known URI for authorization server metadata.
+	authorizationServerWellKnown = "/.well-known/oauth-authorization-server"
+
+	// discoveryTimeout caps individual metadata fetches so a slow or
+	// unreachable authorization server cannot block reconciliation.
+	discoveryTimeout = 10 * time.Second
+)
+
+// newDiscoveryClient returns the http.Client used for metadata fetches.
+// Tests replace its Transport to route requests to httptest servers.
+var newDiscoveryClient = func() *http.Client {
+	return &http.Client{Timeout: discoveryTimeout}
+}
+
+// ParseResourceMetadataURL extracts the `resource_metadata` parameter
+// from a `WWW-Authenticate: Bearer ...` header as specified in
+// RFC 9728 §5.1. Returns ok=false when the header is missing, is not a
+// Bearer challenge, or does not include a resource_metadata parameter.
+func ParseResourceMetadataURL(header string) (resourceMetadataURL string, ok bool) {
 	header = strings.TrimSpace(header)
 	if header == "" {
 		return "", false
 	}
-	// Challenge format: Bearer param1="v1", param2="v2", ...
-	// Case-insensitive scheme.
-	if !strings.HasPrefix(strings.ToLower(header), "bearer") {
+	if !strings.EqualFold(leadingWord(header), "bearer") {
 		return "", false
 	}
 	params := strings.TrimSpace(header[len("bearer"):])
-	for _, part := range splitAuthParams(params) {
+	for _, part := range splitOnUnquotedComma(params) {
 		kv := strings.SplitN(part, "=", 2)
 		if len(kv) != 2 {
 			continue
 		}
 		key := strings.ToLower(strings.TrimSpace(kv[0]))
-		val := strings.TrimSpace(kv[1])
-		val = strings.Trim(val, `"`)
-		if key == "resource_metadata" {
-			return val, val != ""
+		val := strings.Trim(strings.TrimSpace(kv[1]), `"`)
+		if key == "resource_metadata" && val != "" {
+			return val, true
 		}
 	}
 	return "", false
 }
 
-// splitAuthParams splits the parameter portion of an auth challenge on
-// commas that are not inside quoted strings.
-func splitAuthParams(s string) []string {
+// leadingWord returns the first whitespace-delimited token of s.
+func leadingWord(s string) string {
+	for i := 0; i < len(s); i++ {
+		if s[i] == ' ' || s[i] == '\t' {
+			return s[:i]
+		}
+	}
+	return s
+}
+
+// splitOnUnquotedComma splits s on commas that are not inside a quoted
+// string, so `realm="OAuth, really"` is not split on the inner comma.
+func splitOnUnquotedComma(s string) []string {
 	var out []string
 	var buf strings.Builder
 	inQuote := false
 	for i := 0; i < len(s); i++ {
-		c := s[i]
-		switch c {
-		case '"':
+		switch c := s[i]; {
+		case c == '"':
 			inQuote = !inQuote
 			buf.WriteByte(c)
-		case ',':
-			if inQuote {
-				buf.WriteByte(c)
-			} else {
-				out = append(out, strings.TrimSpace(buf.String()))
-				buf.Reset()
-			}
+		case c == ',' && !inQuote:
+			out = append(out, strings.TrimSpace(buf.String()))
+			buf.Reset()
 		default:
 			buf.WriteByte(c)
 		}
@@ -98,39 +120,37 @@ func splitAuthParams(s string) []string {
 	return out
 }
 
-// FetchProtectedResourceMetadata GETs the RFC 9728 metadata document at
-// the given URL and returns the decoded subset the controller uses.
-func FetchProtectedResourceMetadata(ctx context.Context, metadataURL string) (*ProtectedResourceMetadata, error) {
-	body, err := fetchJSON(ctx, metadataURL)
-	if err != nil {
+// FetchProtectedResourceMetadata GETs the RFC 9728 document at
+// metadataURL and validates that its `resource` field matches
+// resourceURL (RFC 9728 §3.3).
+func FetchProtectedResourceMetadata(ctx context.Context, metadataURL, resourceURL string) (*ProtectedResourceMetadata, error) {
+	var prm ProtectedResourceMetadata
+	if err := fetchJSON(ctx, metadataURL, &prm); err != nil {
 		return nil, fmt.Errorf("fetch protected resource metadata %s: %w", metadataURL, err)
 	}
-	var meta ProtectedResourceMetadata
-	if err := json.Unmarshal(body, &meta); err != nil {
-		return nil, fmt.Errorf("decode protected resource metadata %s: %w", metadataURL, err)
+	if prm.Resource != resourceURL {
+		return nil, fmt.Errorf("protected resource metadata at %s advertises resource=%q, expected %q", metadataURL, prm.Resource, resourceURL)
 	}
-	return &meta, nil
+	return &prm, nil
 }
 
 // FetchAuthorizationServerMetadata GETs the RFC 8414 metadata document
-// for the given issuer. Prefers the issuer-prefixed form recommended by
-// RFC 8414 (`<issuer>/.well-known/oauth-authorization-server`).
+// for the given issuer, deriving the well-known URL per RFC 8414 §3.
 func FetchAuthorizationServerMetadata(ctx context.Context, issuer string) (*AuthorizationServerMetadata, error) {
 	metadataURL, err := buildAuthServerMetadataURL(issuer)
 	if err != nil {
 		return nil, err
 	}
-	body, err := fetchJSON(ctx, metadataURL)
-	if err != nil {
+	var asm AuthorizationServerMetadata
+	if err := fetchJSON(ctx, metadataURL, &asm); err != nil {
 		return nil, fmt.Errorf("fetch authorization server metadata %s: %w", metadataURL, err)
 	}
-	var meta AuthorizationServerMetadata
-	if err := json.Unmarshal(body, &meta); err != nil {
-		return nil, fmt.Errorf("decode authorization server metadata %s: %w", metadataURL, err)
-	}
-	return &meta, nil
+	return &asm, nil
 }
 
+// buildAuthServerMetadataURL derives the RFC 8414 well-known metadata
+// URL for an issuer. Per RFC 8414 §3 the well-known path is inserted
+// between the authority and any existing path component.
 func buildAuthServerMetadataURL(issuer string) (string, error) {
 	u, err := url.Parse(issuer)
 	if err != nil {
@@ -139,28 +159,27 @@ func buildAuthServerMetadataURL(issuer string) (string, error) {
 	if u.Scheme != "https" && u.Scheme != "http" {
 		return "", fmt.Errorf("issuer %s must be http(s)", issuer)
 	}
-	// RFC 8414 §3: well-known URI is derived by inserting
-	// /.well-known/oauth-authorization-server between the authority and
-	// any existing path.
-	path := strings.TrimSuffix(u.Path, "/")
-	u.Path = "/.well-known/oauth-authorization-server" + path
+	u.Path = path.Join(authorizationServerWellKnown, u.Path)
 	return u.String(), nil
 }
 
-func fetchJSON(ctx context.Context, endpoint string) ([]byte, error) {
+func fetchJSON(ctx context.Context, endpoint string, v any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	req.Header.Set("Accept", "application/json")
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := newDiscoveryClient().Do(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("unexpected HTTP %d from %s", resp.StatusCode, endpoint)
+		return fmt.Errorf("unexpected HTTP %d", resp.StatusCode)
 	}
-	return io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(body, v)
 }

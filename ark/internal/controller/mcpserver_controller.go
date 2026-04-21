@@ -264,13 +264,13 @@ func (r *MCPServerReconciler) handleAuthorizationRequired(ctx context.Context, m
 	log := logf.FromContext(ctx)
 	mcpServer.Status.ToolCount = 0
 
-	metaURL, ok := arkmcp.ParseWWWAuthenticate(ue.WWWAuthenticate)
+	metaURL, ok := arkmcp.ParseResourceMetadataURL(ue.WWWAuthenticate)
 	if !ok {
 		reason := fmt.Sprintf("server returned HTTP 401 but WWW-Authenticate header did not advertise RFC 9728 resource_metadata URL (header=%q)", ue.WWWAuthenticate)
 		return r.reconcileConditionsAuthorizationDiscoveryFailed(ctx, mcpServer, reason)
 	}
 
-	rm, err := arkmcp.FetchProtectedResourceMetadata(ctx, metaURL)
+	rm, err := arkmcp.FetchProtectedResourceMetadata(ctx, metaURL, mcpServer.Status.ResolvedAddress)
 	if err != nil {
 		reason := fmt.Sprintf("failed to fetch protected resource metadata at %s: %v", metaURL, err)
 		log.Error(err, "protected resource metadata fetch failed", "url", metaURL)
