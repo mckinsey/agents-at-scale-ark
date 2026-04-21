@@ -29,6 +29,12 @@ Ark is a declarative toolkit for building and hosting distributed AI agents. By 
 
 Built on Kubernetes, Ark lets you deploy a dev-friendly cluster in minutes or scale agentic workloads across existing infrastructure. Leverage proven patterns for security, monitoring, and RBAC—avoiding bespoke overhead while maintaining a portable, production-ready foundation for your AI projects.
 
+## Why Ark?
+
+Ark is designed for rapid, democratic development of agentic systems. The entire stack is built on open-source Kubernetes technology designed for running distributed systems. It can run comfortably on a single developer's machine or be deployed into a Kubernetes cluster across multi-cloud and on-prem environments. Developers and operations teams have full visibility into the entire stack, from the highest to the lowest levels.
+
+Because each workload is a declarative specification of agent behavior rather than proprietary code, teams can re-platform individual use cases onto specialized or proprietary stacks when needed, typically with minimal migration overhead.
+
 ## Features
 
 - **Declarative Agents** — Define agents as Kubernetes custom resources with prompts, tools, and model references
