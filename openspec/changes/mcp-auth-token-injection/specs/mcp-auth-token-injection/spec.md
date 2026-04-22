@@ -23,9 +23,9 @@ The `MCPServer` CRD (v1alpha1) SHALL gain an optional `spec.authorization` objec
 - **WHEN** a user submits an `MCPServer` whose `spec.authorization.tokenSecretRef.name` contains a namespace qualifier or otherwise refers to a cross-namespace Secret
 - **THEN** the validating webhook SHALL reject the admission with a message identifying the offending field
 
-### Requirement: MCPServerAuthorizationState enum is extended with token lifecycle values
+### Requirement: MCPServerAuthorizationState enum gains a single Authorized value
 
-The `MCPServerAuthorizationState` enum SHALL be extended to `Required | DiscoveryFailed | Authorized | Expired | RefreshFailed`. Existing detection behaviour for `Required` and `DiscoveryFailed` SHALL be preserved unchanged.
+The `MCPServerAuthorizationState` enum SHALL be extended with exactly one new value, `Authorized`. The complete enum SHALL be `Required | DiscoveryFailed | Authorized`. Existing detection behaviour for `Required` and `DiscoveryFailed` SHALL be preserved unchanged. Any failure observed after reaching `Authorized` — refresh failure, natural token expiry with no usable refresh token, or a 401 response from the MCP server on an in-flight call — SHALL collapse the state back to `Required` rather than introducing a dedicated failure state.
 
 #### Scenario: Controller successfully injects a Bearer token
 
@@ -128,22 +128,26 @@ When `status.authorization.state` is `Authorized` and `now >= expires_at - 60s`,
 - **THEN** the existing `refresh_token` key in the Secret SHALL be preserved unchanged
 - **AND** `access_token` and `expires_at` SHALL be updated
 
-#### Scenario: Refresh fails but access token is still valid
+#### Scenario: Refresh fails when state was Authorized
 
-- **WHEN** the refresh attempt returns a network error or a non-2xx response, and `now < expires_at`
-- **THEN** `status.authorization.state` SHALL be set to `RefreshFailed`
-- **AND** the Secret SHALL be left unchanged
-- **AND** the controller SHALL emit a `Warning` event with reason `RefreshFailed`
+- **GIVEN** an `MCPServer` in state `Authorized`
+- **WHEN** the refresh attempt returns a network error or a non-2xx response (regardless of whether the current `access_token` is still nominally within its lifetime)
+- **THEN** `status.authorization.state` SHALL be rolled back to `Required`
+- **AND** the Secret SHALL be left unchanged so the caller retains an audit trail
+- **AND** the controller SHALL emit a `TokenRejected` Warning event exactly once for this transition, as defined by the `TokenRejected` requirement below
+- **AND** the controller SHALL NOT inject an `Authorization` header on subsequent reconciles until the Secret is repopulated
 
-#### Scenario: Refresh fails and access token has expired
+#### Scenario: Natural token expiry with no usable refresh token
 
-- **WHEN** the refresh attempt fails AND `now >= expires_at`
-- **THEN** `status.authorization.state` SHALL be set to `Expired`
-- **AND** the controller SHALL NOT inject an `Authorization` header until the Secret is repopulated
+- **GIVEN** an `MCPServer` in state `Authorized` where the Secret has no `refresh_token` (or the refresh attempt is impossible, e.g. missing `client_id`) and `now >= expires_at`
+- **WHEN** the controller reconciles
+- **THEN** `status.authorization.state` SHALL be rolled back to `Required`
+- **AND** the controller SHALL emit a `TokenRejected` Warning event exactly once for this transition
+- **AND** the Secret's existing keys SHALL be preserved
 
 ### Requirement: Controller publishes access token expiry on status.authorization.expiresAt
 
-The controller SHALL populate `status.authorization.expiresAt` (`metav1.Time`, optional) on every successful initial authorization and every successful refresh, computed as `time.Now().UTC().Add(time.Duration(expires_in) * time.Second)` against the OAuth 2.0 token response. The controller SHALL leave `status.authorization.expiresAt` unchanged when a refresh fails (paired with the `RefreshFailed` or `Expired` state transition). The controller SHALL clear `status.authorization.expiresAt` whenever `status.authorization` is reset to absent — that is, a successful unauthenticated reconcile or removal of `spec.authorization`. No kubectl printcolumn SHALL be added for `expiresAt`; the existing `AUTH` (state) column from `mcp-auth-detection` remains the only printcolumn.
+The controller SHALL populate `status.authorization.expiresAt` (`metav1.Time`, optional) on every successful initial authorization and every successful refresh (both of which result in `status.authorization.state = Authorized`), computed as `time.Now().UTC().Add(time.Duration(expires_in) * time.Second)` against the OAuth 2.0 token response. The controller SHALL leave `status.authorization.expiresAt` unchanged on any rollback from `Authorized` to `Required`, so operators can still see when the last good token was minted. The controller SHALL clear `status.authorization.expiresAt` whenever `status.authorization` is reset to absent — that is, a successful unauthenticated reconcile or removal of `spec.authorization`. No kubectl printcolumn SHALL be added for `expiresAt`; the existing `AUTH` (state) column from `mcp-auth-detection` remains the only printcolumn.
 
 #### Scenario: Initial authorization populates expiresAt
 
@@ -160,12 +164,12 @@ The controller SHALL populate `status.authorization.expiresAt` (`metav1.Time`, o
 - **THEN** `status.authorization.expiresAt` SHALL be updated to `T2 + 3600s` in UTC
 - **AND** `status.authorization.lastRefreshed` SHALL be updated to `T2`
 
-#### Scenario: Refresh failure preserves expiresAt
+#### Scenario: Rollback to Required preserves expiresAt
 
 - **GIVEN** an `MCPServer` in state `Authorized` with `status.authorization.expiresAt = T1`
-- **WHEN** the controller attempts a refresh and receives a network error or non-2xx response
+- **WHEN** the controller rolls the state back to `Required` for any reason (refresh failure, natural expiry, or 401-on-use)
 - **THEN** `status.authorization.expiresAt` SHALL remain `T1`, unchanged
-- **AND** `status.authorization.state` SHALL be `RefreshFailed` or `Expired` as defined in the refresh requirement
+- **AND** `status.authorization.state` SHALL be `Required` as defined in the refresh requirement
 
 #### Scenario: Authorization cleared removes expiresAt
 
@@ -174,9 +178,9 @@ The controller SHALL populate `status.authorization.expiresAt` (`metav1.Time`, o
 - **THEN** `status.authorization` SHALL be cleared in its entirety
 - **AND** `status.authorization.expiresAt` SHALL therefore be absent
 
-### Requirement: Controller transitions back to Required on IdP-side revocation
+### Requirement: Controller rolls back to Required on IdP-side revocation
 
-When the MCPServer is in state `Authorized`, `RefreshFailed`, or `Expired` and the next MCP call receives HTTP 401 with a `WWW-Authenticate` Bearer challenge, the controller SHALL re-run RFC 9728 / RFC 8414 discovery and SHALL set `status.authorization.state` to `Required`. The Secret's `access_token` and `refresh_token` keys SHALL be preserved so that the operator has an audit trail; they are overwritten when an external caller next repopulates the Secret.
+When the MCPServer is in state `Authorized` and the next MCP call receives HTTP 401 with a `WWW-Authenticate` Bearer challenge, the controller SHALL re-run RFC 9728 / RFC 8414 discovery and SHALL set `status.authorization.state` to `Required`. The Secret's `access_token` and `refresh_token` keys SHALL be preserved so that the operator has an audit trail; they are overwritten when an external caller next repopulates the Secret. The controller SHALL emit the `TokenRejected` Warning event defined below for this transition.
 
 #### Scenario: MCP server returns 401 despite a valid-looking Bearer token
 
@@ -185,7 +189,42 @@ When the MCPServer is in state `Authorized`, `RefreshFailed`, or `Expired` and t
 - **THEN** the controller SHALL set `status.authorization.state = Required`
 - **AND** SHALL re-run RFC 9728 + RFC 8414 discovery as defined in `mcp-auth-detection`
 - **AND** SHALL NOT delete the Secret or any of its keys
-- **AND** SHALL emit a `Warning` event with reason `AuthorizationRevoked`
+- **AND** SHALL emit a Kubernetes `Warning` event with reason `TokenRejected` whose message includes the observed `WWW-Authenticate` header
+
+### Requirement: TokenRejected event is emitted on Authorized to Required transitions
+
+The controller SHALL emit a Kubernetes `Warning` event with reason `TokenRejected` when, and only when, `status.authorization.state` transitions from `Authorized` to `Required`. This event covers every rollback path — refresh failure, natural token expiry with no usable refresh token, and 401 on an in-flight MCP call. The event message SHALL include either the observed `WWW-Authenticate` header (for 401-on-use) or a short summary of the refresh-endpoint failure (for refresh failures) so that operators can see what the upstream said without tailing controller logs.
+
+The event MUST NOT be emitted on any other transition — in particular, it MUST NOT fire when the prior `status.authorization.state` was empty, `Required`, or `DiscoveryFailed`. The existing `AuthorizationRequired` event defined by `mcp-auth-detection` continues to cover first-time transitions into `Required`.
+
+The event MUST be emitted exactly once per `Authorized → Required` transition. Subsequent reconciles that keep the state at `Required` MUST NOT emit duplicate `TokenRejected` events; duplicates are only permissible if the state has in the meantime reached `Authorized` and rolled back again.
+
+#### Scenario: Refresh failure from Authorized emits TokenRejected once
+
+- **GIVEN** an MCPServer in state `Authorized`
+- **WHEN** the controller attempts a refresh and it fails
+- **THEN** the controller SHALL emit exactly one `Warning` event with reason `TokenRejected` whose message summarises the refresh failure
+- **AND** subsequent reconciles that keep the state at `Required` SHALL NOT emit additional `TokenRejected` events
+
+#### Scenario: 401 on an in-flight MCP call from Authorized emits TokenRejected with WWW-Authenticate
+
+- **GIVEN** an MCPServer in state `Authorized`
+- **WHEN** the next MCP call returns HTTP 401 with a `WWW-Authenticate` header such as `Bearer error="invalid_token", error_description="token revoked"`
+- **THEN** the controller SHALL emit a `Warning` event with reason `TokenRejected` whose message includes the `WWW-Authenticate` header text (optionally truncated)
+
+#### Scenario: First-time transition into Required does not emit TokenRejected
+
+- **GIVEN** a new MCPServer whose previous `status.authorization.state` is empty (no detection has run yet) or `DiscoveryFailed`
+- **WHEN** the controller observes a 401 and transitions `status.authorization.state` to `Required` for the first time
+- **THEN** the controller SHALL emit the existing `AuthorizationRequired` event per `mcp-auth-detection`
+- **AND** SHALL NOT emit a `TokenRejected` event
+
+#### Scenario: Refresh failure when state was already Required does not emit TokenRejected
+
+- **GIVEN** an MCPServer in state `Required` (e.g. the caller populated the Secret with a bad token, so the first refresh attempt fails)
+- **WHEN** the controller attempts a refresh and it fails
+- **THEN** the controller SHALL keep `status.authorization.state` at `Required`
+- **AND** SHALL NOT emit a `TokenRejected` event (because the prior state was not `Authorized`)
 
 ### Requirement: Helm chart provisions the token Secret shell without writing data
 
