@@ -1,0 +1,68 @@
+terminationGracePeriodSeconds: 1
+ark:
+  model:
+    enabled: true
+    name: test-model-mock
+    type: completions
+    provider: openai
+    model: gpt-4.1-mini
+    pollInterval: 3s
+    apiKey: mock-api-key
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+    ephemeral-storage: 128Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+    ephemeral-storage: 128Mi
+
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "gpt-4.1-mini",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            }
+          ]
+        }
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'research specialist')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"researcher-output"},"finish_reason":"stop"}]}'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'data analysis expert')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"analyst-output"},"finish_reason":"stop"}]}'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'synthesis specialist')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"synthesizer-output"},"finish_reason":"stop"}]}'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'coordination specialist')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"coordinator-output"},"finish_reason":"stop"}]}'
+
+  - path: "/v1/chat/completions"
+    response:
+      status: 500
+      content: '"Unrecognised agent"'
