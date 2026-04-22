@@ -78,13 +78,15 @@ func (m *mockSelectorAgent) Execute(ctx context.Context, userInput Message, hist
 		toolMsg := ToolMessage(m.returnTerminateResponse, "tool-call-id")
 		return &ExecutionResult{
 			Messages: []Message{assistantMsg, toolMsg},
-		}, &TerminateTeamWithResponse{Response: m.returnTerminateResponse}
+			Signal:   &TerminateSignal{},
+		}, nil
 	}
 	return &ExecutionResult{
 		Messages: []Message{
 			NewAssistantMessage(m.returnName),
 		},
-	}, &SelectionMade{SelectedName: m.returnName}
+		Signal: &SelectionMadeSignal{SelectedName: m.returnName},
+	}, nil
 }
 
 func (m *mockSelectorAgent) FullName() string {

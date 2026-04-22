@@ -2,6 +2,7 @@ package completions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/openai/openai-go"
@@ -57,12 +58,28 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 
 	result, err := a.executeAgent(ctx, userInput, history, memory, eventStream)
 	if err != nil {
-		a.telemetryRecorder.RecordError(span, err)
-		if !IsTerminateTeam(err) && !IsSelectionMade(err) {
-			a.eventingRecorder.Fail(ctx, "AgentExecution", fmt.Sprintf("Agent execution failed: %v", err), err, operationData)
-			return nil, err
+		if IsTerminateTeam(err) {
+			if result == nil {
+				result = &ExecutionResult{}
+			}
+			result.Signal = &TerminateSignal{}
+			a.telemetryRecorder.RecordSuccess(span)
+			a.eventingRecorder.Complete(ctx, "AgentExecution", "Agent execution completed with termination", operationData)
+			return result, nil
 		}
-		return result, err
+		var selectionMade *SelectionMade
+		if errors.As(err, &selectionMade) {
+			if result == nil {
+				result = &ExecutionResult{}
+			}
+			result.Signal = &SelectionMadeSignal{SelectedName: selectionMade.SelectedName}
+			a.telemetryRecorder.RecordSuccess(span)
+			a.eventingRecorder.Complete(ctx, "AgentExecution", "Agent execution completed with selection", operationData)
+			return result, nil
+		}
+		a.telemetryRecorder.RecordError(span, err)
+		a.eventingRecorder.Fail(ctx, "AgentExecution", fmt.Sprintf("Agent execution failed: %v", err), err, operationData)
+		return nil, err
 	}
 
 	a.telemetryRecorder.RecordSuccess(span)

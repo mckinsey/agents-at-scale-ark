@@ -760,57 +760,27 @@ func TestRecordTurnOutput(t *testing.T) {
 }
 
 func TestCompleteTurnOnError(t *testing.T) {
-	tests := []struct {
-		name          string
-		err           error
-		wantTerminate bool
-		wantReturnErr bool
-	}{
-		{
-			name:          "TerminateTeam error triggers termination",
-			err:           &TerminateTeam{},
-			wantTerminate: true,
-			wantReturnErr: false,
-		},
-		{
-			name:          "regular error returns error",
-			err:           errors.New("execution failed"),
-			wantTerminate: false,
-			wantReturnErr: true,
-		},
+	mockTelemetry := &mockTeamRecorder{}
+	mockEventing := &mockEventingRecorder{}
+	mockSpan := &mockTelemetrySpan{}
+
+	team := &Team{
+		telemetryRecorder: mockTelemetry,
+		eventingRecorder:  mockEventing,
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockTelemetry := &mockTeamRecorder{}
-			mockEventing := &mockEventingRecorder{}
-			mockSpan := &mockTelemetrySpan{}
-
-			team := &Team{
-				telemetryRecorder: mockTelemetry,
-				eventingRecorder:  mockEventing,
-			}
-
-			ctx := context.Background()
-			tel := turnTelemetry{
-				span: mockSpan,
-			}
-
-			shouldTerminate, returnErr := team.completeTurnOnError(ctx, tel, tt.err)
-
-			assert.Equal(t, tt.wantTerminate, shouldTerminate)
-			if tt.wantReturnErr {
-				assert.Error(t, returnErr)
-			} else {
-				assert.NoError(t, returnErr)
-			}
-			assert.True(t, mockTelemetry.recordErrorCalled)
-			assert.True(t, mockSpan.ended)
-			assert.True(t, mockEventing.failCalled)
-			assert.False(t, mockTelemetry.recordSuccessCalled)
-			assert.False(t, mockEventing.completeCalled)
-		})
+	ctx := context.Background()
+	tel := turnTelemetry{
+		span: mockSpan,
 	}
+
+	team.completeTurnOnError(ctx, tel, errors.New("execution failed"))
+
+	assert.True(t, mockTelemetry.recordErrorCalled)
+	assert.True(t, mockSpan.ended)
+	assert.True(t, mockEventing.failCalled)
+	assert.False(t, mockTelemetry.recordSuccessCalled)
+	assert.False(t, mockEventing.completeCalled)
 }
 
 func TestCompleteTurnOnSuccess(t *testing.T) {
@@ -998,6 +968,7 @@ func TestSelectMember_SelectorPrompt(t *testing.T) {
 			prompt := mockSelector.capturedHistory[0].OfSystem.Content.OfString.Value
 
 			assert.Contains(t, prompt, tt.wantPromptContains)
+			assert.Contains(t, prompt, "Use the select-next-conversant tool to express your next conversant selection.")
 
 			if tt.wantPromptSuffix != "" {
 				assert.True(t, strings.HasSuffix(prompt, tt.wantPromptSuffix),

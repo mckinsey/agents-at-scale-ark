@@ -121,6 +121,8 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	}
 
 	selectorMessage := buf.String()
+	selectorMessage += "\n\nUse the select-next-conversant tool to express your next conversant selection."
+
 	if t.Selector != nil && t.Selector.EnableTerminateTool != nil && *t.Selector.EnableTerminateTool {
 		terminatePrompt := defaultTerminatePrompt
 		if t.Selector.TerminatePrompt != "" {
@@ -151,23 +153,26 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	}
 
 	result, err := selectorAgent.Execute(ctx, NewUserMessage("Select the next participant to respond."), []Message{NewSystemMessage(selectorMessage)}, nil, nil)
-	if err == nil {
+	if err != nil {
+		return nil, fmt.Errorf("selector agent call failed: %w", err)
+	}
+
+	if result.Signal == nil {
 		return nil, &ToolNotCalledError{}
 	}
 
-	var selectionMade *SelectionMade
-	if errors.As(err, &selectionMade) {
-		return t.resolveSelectedMember(ctx, selectionMade.SelectedName, membersToSearch)
+	if sig, ok := result.Signal.(*SelectionMadeSignal); ok {
+		return t.resolveSelectedMember(ctx, sig.SelectedName, membersToSearch)
 	}
 
-	if IsTerminateTeam(err) {
+	if _, ok := result.Signal.(*TerminateSignal); ok {
 		if response := extractTerminateToolResponse(result); response != "" {
 			return nil, &TerminateTeamWithResponse{Response: response, Messages: result.Messages}
 		}
-		return nil, err
+		return nil, NewTerminateTeamWithReason("selector agent terminated")
 	}
 
-	return nil, fmt.Errorf("selector agent call failed: %w", err)
+	return nil, fmt.Errorf("selector agent returned unexpected signal: %s", result.Signal.SignalType())
 }
 
 func (t *Team) resolveSelectedMember(ctx context.Context, selectedName string, members []TeamMember) (TeamMember, error) {
@@ -346,15 +351,10 @@ func (t *Team) recordTurnOutput(tel turnTelemetry, newMessages []Message) {
 	}
 }
 
-func (t *Team) completeTurnOnError(ctx context.Context, tel turnTelemetry, err error) (shouldTerminate bool, returnErr error) {
+func (t *Team) completeTurnOnError(ctx context.Context, tel turnTelemetry, err error) {
 	t.telemetryRecorder.RecordError(tel.span, err)
 	tel.span.End()
 	t.eventingRecorder.Fail(ctx, "TeamTurn", fmt.Sprintf("Team turn failed: %v", err), err, tel.opData)
-
-	if IsTerminateTeam(err) {
-		return true, nil
-	}
-	return false, err
 }
 
 func (t *Team) completeTurnOnSuccess(ctx context.Context, tel turnTelemetry) {
@@ -399,19 +399,20 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 
 		turnCtx, tel := t.startTurnTelemetry(ctx, turn, nextMember.GetName(), nextMember.GetType())
 
-		err = t.executeMemberAndAccumulate(turnCtx, nextMember, userInput, &messages, &newMessages, turn)
+		signal, err := t.executeMemberAndAccumulate(turnCtx, nextMember, userInput, &messages, &newMessages, turn)
 
 		t.recordTurnOutput(tel, newMessages)
 
 		if err != nil {
-			shouldTerminate, returnErr := t.completeTurnOnError(turnCtx, tel, err)
-			if shouldTerminate {
-				return newMessages, nil
-			}
-			return newMessages, returnErr
+			t.completeTurnOnError(turnCtx, tel, err)
+			return newMessages, err
 		}
 
 		t.completeTurnOnSuccess(turnCtx, tel)
+
+		if _, ok := signal.(*TerminateSignal); ok {
+			return newMessages, nil
+		}
 
 		previousMember = nextMember.GetName()
 
