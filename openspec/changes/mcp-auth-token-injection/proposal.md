@@ -9,7 +9,8 @@ The mechanism used to *obtain* the initial tokens (a future Ark CLI OAuth dance,
 ## What Changes
 
 - `MCPServer` CRD gains `spec.authorization.tokenSecretRef` — a reference to a namespaced Secret with defaulted keys (`access_token`, `refresh_token`, `expires_at`, `client_id`, `client_secret`).
-- `MCPServerAuthorizationState` enum extended with `Authorized`, `Expired`, `RefreshFailed`.
+- `MCPServerAuthorizationState` enum extended with a single new value: `Authorized`. The final set is `Required | DiscoveryFailed | Authorized`. Any failure mode (refresh failure, natural token expiry, IdP-side revocation) collapses the state back to `Required` rather than introducing dedicated failure states.
+- A new `TokenRejected` Kubernetes `Warning` event is emitted only when the prior state was `Authorized` and the controller has just rolled it back to `Required`. First-time transitions into `Required` continue to emit the existing `AuthorizationRequired` event from `mcp-auth-detection`.
 - `status.authorization.expiresAt` published alongside the existing `lastRefreshed` field.
 - Controller reads the referenced Secret on each reconcile, injects a Bearer header alongside existing `spec.headers`, refreshes the access token when within 60s of expiry, writes rotated tokens back to the Secret, and transitions state on success/failure/revocation.
 - Validating webhook rejects manifests where `spec.authorization` is set AND `spec.headers[Authorization]` is present (case-insensitive). Controller re-checks as defence-in-depth.
@@ -22,7 +23,7 @@ The mechanism used to *obtain* the initial tokens (a future Ark CLI OAuth dance,
 - `mcp-auth-token-injection`: CRD, controller, webhook, RBAC, and Helm changes that let the controller consume an externally-populated token Secret and drive refresh + injection going forward.
 
 ### Modified Capabilities
-- `mcp-auth-detection`: enum widened to include `Authorized | Expired | RefreshFailed`. Detection behaviour is unchanged.
+- `mcp-auth-detection`: enum widened with one additional value, `Authorized`. Detection behaviour is unchanged.
 
 ## Impact
 
