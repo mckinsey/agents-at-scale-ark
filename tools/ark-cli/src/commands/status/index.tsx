@@ -16,6 +16,7 @@ import {
 } from '../../lib/waitForReady.js';
 import {
   runReadinessChecks,
+  detectStorageBackend,
   type ReadinessCheckResult,
 } from '../../lib/readinessChecks.js';
 import {arkServices} from '../../arkServices.js';
@@ -311,6 +312,7 @@ export async function checkStatus(
 
     if (options?.waitForReady) {
       const timeoutSeconds = parseTimeoutToSeconds(options.waitForReady);
+      const backend = await detectStorageBackend();
 
       let servicesToWait: ArkService[] = [];
       if (serviceNames && serviceNames.length > 0) {
@@ -322,7 +324,8 @@ export async function checkStatus(
             (s): s is ArkService =>
               s !== undefined &&
               s.k8sDeploymentName !== undefined &&
-              s.namespace !== undefined
+              s.namespace !== undefined &&
+              (!s.requiresBackend || s.requiresBackend === backend)
           );
 
         if (servicesToWait.length === 0) {
@@ -337,7 +340,8 @@ export async function checkStatus(
             s.enabled &&
             s.category === 'core' &&
             s.k8sDeploymentName &&
-            s.namespace
+            s.namespace &&
+            (!s.requiresBackend || s.requiresBackend === backend)
         );
       }
 
