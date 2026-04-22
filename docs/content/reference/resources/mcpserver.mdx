@@ -51,6 +51,50 @@ spec:
 
 See [Tools](/reference/resources/tools) for creating Tool resources that connect to MCP servers.
 
+## OAuth-Protected Servers
+
+Remote MCP servers that require OAuth (e.g. `https://mcp.notion.com/mcp`, GitHub Copilot MCP) respond to unauthenticated requests with `HTTP 401` and a `WWW-Authenticate: Bearer` challenge per [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728) and the [MCP 2025-06-18 authorization spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization).
+
+When Ark detects this, it performs OAuth metadata discovery and populates `status.authorization`:
+
+```yaml
+kubectl get mcpserver notion -o yaml
+```
+```yaml
+status:
+  authorization:
+    state: Required                    # Required | DiscoveryFailed
+    resource: https://mcp.notion.com/mcp
+    resourceName: Notion MCP (Beta)
+    authorizationServers: [https://mcp.notion.com]
+    authorizationEndpoint: https://mcp.notion.com/authorize
+    tokenEndpoint: https://mcp.notion.com/token
+    registrationEndpoint: https://mcp.notion.com/register
+    grantTypesSupported: [authorization_code, refresh_token]
+  conditions:
+  - type: Available
+    status: "False"
+    reason: AuthorizationRequired
+    message: "OAuth authorization required for Notion MCP (Beta)..."
+```
+
+`kubectl get mcpservers` shows the state in the `AUTH` column:
+
+```
+NAME     AVAILABLE   TOOLS   AUTH
+notion   False               Required
+github   False               Required
+shell    True        1
+```
+
+| `state` value | Meaning |
+|---------------|---------|
+| _(empty)_     | Server does not require OAuth. |
+| `Required`    | Server returned 401 and metadata discovery succeeded. Ready for an authorize flow. |
+| `DiscoveryFailed` | Server returned 401 but no usable RFC 9728 metadata was found. Dashboard/CLI cannot drive an OAuth flow against this server. |
+
+The end-to-end OAuth flow (dynamic client registration, PKCE, token exchange, dashboard "Authorize" button, `fark mcp auth` CLI) ships in follow-up changes. This phase surfaces the state on the CRD so downstream consumers have a stable contract to act on.
+
 ## Key Features
 
 - Standardized Model Context Protocol implementation
@@ -58,6 +102,7 @@ See [Tools](/reference/resources/tools) for creating Tool resources that connect
 - Service reference integration with Kubernetes
 - Secure credential management
 - Tool and resource discovery
+- OAuth authorization state detection (RFC 9728)
 
 ## Sample Resources
 

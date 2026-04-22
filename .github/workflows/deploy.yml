@@ -347,7 +347,7 @@ jobs:
         with:
           metrics-enabled: false
           traefik-enabled: false
-          k3s-channel: latest
+          k3s-channel: stable
 
       - name: Setup Node
         uses: actions/setup-node@v6
