@@ -515,7 +515,7 @@ var _ = Describe("MCPServer Controller — Bearer token injection via tokenSecre
 		const acceptedToken = "initial-valid-token"
 		const rotatedToken = "server-rotated-to-this"
 
-		var currentExpected = acceptedToken
+		currentExpected := acceptedToken
 		srv := httptest.NewServer(mux401Toggling(&currentExpected))
 		defer func() { srv.CloseClientConnections(); srv.Close() }()
 
