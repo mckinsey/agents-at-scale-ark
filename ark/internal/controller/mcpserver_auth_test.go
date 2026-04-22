@@ -18,8 +18,34 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/eventing"
+	eventmock "mckinsey.com/ark/internal/eventing/mock"
 	eventnoop "mckinsey.com/ark/internal/eventing/noop"
+	eventrecorder "mckinsey.com/ark/internal/eventing/recorder"
 )
+
+// mcpEventProvider wraps a MockEventEmitter with the minimum MCPServerRecorder
+// surface needed by tests that assert on emitted events. Other recorders
+// return nil — none of the MCPServer controller paths exercise them.
+type mcpEventProvider struct {
+	emitter  *eventmock.MockEventEmitter
+	recorder eventing.MCPServerRecorder
+}
+
+func newMCPEventProvider() *mcpEventProvider {
+	e := eventmock.NewMockEventEmitter()
+	return &mcpEventProvider{emitter: e, recorder: eventrecorder.NewMCPServerRecorder(e)}
+}
+
+func (p *mcpEventProvider) ModelRecorder() eventing.ModelRecorder                     { return nil }
+func (p *mcpEventProvider) A2aRecorder() eventing.A2aRecorder                         { return nil }
+func (p *mcpEventProvider) AgentRecorder() eventing.AgentRecorder                     { return nil }
+func (p *mcpEventProvider) TeamRecorder() eventing.TeamRecorder                       { return nil }
+func (p *mcpEventProvider) ExecutionEngineRecorder() eventing.ExecutionEngineRecorder { return nil }
+func (p *mcpEventProvider) ToolRecorder() eventing.ToolRecorder                       { return nil }
+func (p *mcpEventProvider) MCPServerRecorder() eventing.MCPServerRecorder             { return p.recorder }
+func (p *mcpEventProvider) QueryRecorder() eventing.QueryRecorder                     { return nil }
+func (p *mcpEventProvider) MemoryRecorder() eventing.MemoryRecorder                   { return nil }
 
 type fakeMCPServerOpts struct {
 	compliant              bool
@@ -27,6 +53,11 @@ type fakeMCPServerOpts struct {
 	brokenAuthServer       bool
 }
 
+// fakeMCPServer serves the minimal surface a protected MCP server
+// exposes during discovery: an MCP endpoint that returns 401 with
+// a WWW-Authenticate challenge, and the RFC 9728 + RFC 8414
+// well-known documents. The behaviour is switched by `compliant` so
+// the AuthorizationDiscoveryFailed path can be exercised too.
 func fakeMCPServer(compliant bool) *httptest.Server {
 	return fakeMCPServerWithOpts(fakeMCPServerOpts{compliant: compliant})
 }
@@ -371,7 +402,7 @@ var _ = Describe("MCPServer Controller — Bearer token injection via tokenSecre
 			Scheme:   k8sClient.Scheme(),
 			Eventing: eventnoop.NewProvider(),
 		}
-		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"}, 3)).To(Succeed())
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
 
 		out := &arkv1alpha1.MCPServer{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out)).To(Succeed())
@@ -389,7 +420,7 @@ var _ = Describe("MCPServer Controller — Bearer token injection via tokenSecre
 		Expect(avail.Reason).To(Equal(MCPServerReasonAuthorized))
 
 		prevTransition := avail.LastTransitionTime
-		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"}, 2)).To(Succeed())
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
 		out2 := &arkv1alpha1.MCPServer{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out2)).To(Succeed())
 		availAfter := findCondition(out2.Status.Conditions, MCPServerAvailable)
@@ -431,7 +462,7 @@ var _ = Describe("MCPServer Controller — Bearer token injection via tokenSecre
 			Scheme:   k8sClient.Scheme(),
 			Eventing: eventnoop.NewProvider(),
 		}
-		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"}, 3)).To(Succeed())
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
 
 		out := &arkv1alpha1.MCPServer{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out)).To(Succeed())
@@ -466,7 +497,7 @@ var _ = Describe("MCPServer Controller — Bearer token injection via tokenSecre
 			Scheme:   k8sClient.Scheme(),
 			Eventing: eventnoop.NewProvider(),
 		}
-		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"}, 3)).To(Succeed())
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
 
 		out := &arkv1alpha1.MCPServer{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out)).To(Succeed())
@@ -474,4 +505,165 @@ var _ = Describe("MCPServer Controller — Bearer token injection via tokenSecre
 		Expect(out.Status.Authorization).NotTo(BeNil())
 		Expect(out.Status.Authorization.State).To(Equal(arkv1alpha1.MCPServerAuthorizationStateRequired))
 	})
+
+	It("emits a TokenRejected Warning event when the upstream returns 401 after a previously Authorized state", func() {
+		// Server initially accepts token A. Flip it to expect token B
+		// mid-test so the stored Secret becomes stale — the next
+		// reconcile observes a fresh 401 from a server whose last
+		// observed state was Authorized. That is the transition the
+		// TokenRejected event exists to surface.
+		const acceptedToken = "initial-valid-token"
+		const rotatedToken = "server-rotated-to-this"
+
+		var currentExpected = acceptedToken
+		srv := httptest.NewServer(mux401Toggling(&currentExpected))
+		defer func() { srv.CloseClientConnections(); srv.Close() }()
+
+		const name = "mcp-auth-token-rejected"
+		const secretName = "mcp-auth-token-rejected-secret"
+		expiry := time.Now().Add(1 * time.Hour).UTC().Truncate(time.Second)
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: "default"},
+			Data: map[string][]byte{
+				"access_token": []byte(acceptedToken),
+				"expires_at":   []byte(expiry.Format(time.RFC3339)),
+			},
+		}
+		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+		DeferCleanup(func() { _ = k8sClient.Delete(ctx, secret) })
+
+		mcpServer := &arkv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec: arkv1alpha1.MCPServerSpec{
+				Address:   arkv1alpha1.ValueSource{Value: srv.URL + "/mcp"},
+				Transport: "http",
+				Timeout:   "5s",
+				Authorization: &arkv1alpha1.MCPServerAuthorizationSpec{
+					TokenSecretRef: arkv1alpha1.TokenSecretReference{Name: secretName},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, mcpServer)).To(Succeed())
+		DeferCleanup(func() { _ = k8sClient.Delete(ctx, mcpServer) })
+
+		evtProvider := newMCPEventProvider()
+		r := &MCPServerReconciler{Client: k8sClient, Scheme: k8sClient.Scheme(), Eventing: evtProvider}
+
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
+		out := &arkv1alpha1.MCPServer{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out)).To(Succeed())
+		Expect(out.Status.Authorization.State).To(Equal(arkv1alpha1.MCPServerAuthorizationStateAuthorized))
+
+		// Server rotates; stored token is now stale.
+		currentExpected = rotatedToken
+
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
+		out2 := &arkv1alpha1.MCPServer{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out2)).To(Succeed())
+		Expect(out2.Status.Authorization.State).To(Equal(arkv1alpha1.MCPServerAuthorizationStateRequired))
+
+		events := evtProvider.emitter.GetEvents()
+		var tokenRejected *eventmock.Event
+		for i := range events {
+			if events[i].Reason == "TokenRejected" {
+				tokenRejected = &events[i]
+				break
+			}
+		}
+		Expect(tokenRejected).NotTo(BeNil(), "expected a TokenRejected event on Authorized → Required transition")
+		Expect(tokenRejected.Type).To(Equal("Warning"))
+		Expect(tokenRejected.Message).To(ContainSubstring("previously-Authorized"))
+	})
+
+	It("does NOT emit TokenRejected on the first-time Required transition (no prior Authorized state)", func() {
+		// Secret has no access_token → controller never marks Authorized.
+		// The 401 path runs but must emit AuthorizationRequired, not
+		// TokenRejected.
+		srv := fakeAuthorizedMCPServer("never-used-in-this-test")
+		defer func() { srv.CloseClientConnections(); srv.Close() }()
+
+		const name = "mcp-auth-first-required"
+		const secretName = "mcp-auth-first-required-secret"
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: "default"},
+			Data:       map[string][]byte{},
+		}
+		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+		DeferCleanup(func() { _ = k8sClient.Delete(ctx, secret) })
+
+		mcpServer := &arkv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec: arkv1alpha1.MCPServerSpec{
+				Address:   arkv1alpha1.ValueSource{Value: srv.URL + "/mcp"},
+				Transport: "http",
+				Timeout:   "5s",
+				Authorization: &arkv1alpha1.MCPServerAuthorizationSpec{
+					TokenSecretRef: arkv1alpha1.TokenSecretReference{Name: secretName},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, mcpServer)).To(Succeed())
+		DeferCleanup(func() { _ = k8sClient.Delete(ctx, mcpServer) })
+
+		evtProvider := newMCPEventProvider()
+		r := &MCPServerReconciler{Client: k8sClient, Scheme: k8sClient.Scheme(), Eventing: evtProvider}
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
+
+		for _, e := range evtProvider.emitter.GetEvents() {
+			Expect(e.Reason).NotTo(Equal("TokenRejected"),
+				"TokenRejected must not fire without a prior Authorized state")
+		}
+	})
 })
+
+// mux401Toggling returns a handler that acts like fakeAuthorizedMCPServer
+// but reads its expected bearer token from a pointer so the test can flip
+// it between reconciles to simulate an upstream rotation or revocation.
+func mux401Toggling(expected *string) *http.ServeMux {
+	mux := http.NewServeMux()
+	server := mcpsdk.NewServer(&mcpsdk.Implementation{Name: "auth-mcp", Version: "v0.1.0"}, nil)
+	mcpsdk.AddTool(server, &mcpsdk.Tool{Name: "ping", Description: "ping"},
+		func(ctx context.Context, req *mcpsdk.CallToolRequest, _ any) (*mcpsdk.CallToolResult, any, error) {
+			return &mcpsdk.CallToolResult{}, nil, nil
+		})
+	mcpHandler := mcpsdk.NewStreamableHTTPHandler(
+		func(r *http.Request) *mcpsdk.Server { return server },
+		&mcpsdk.StreamableHTTPOptions{Stateless: true, JSONResponse: true},
+	)
+	mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer "+*expected {
+			host := "http://" + r.Host
+			w.Header().Set("WWW-Authenticate",
+				`Bearer realm="OAuth", resource_metadata="`+host+`/.well-known/oauth-protected-resource/mcp", error="invalid_token"`)
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"invalid_token"}`))
+			return
+		}
+		mcpHandler.ServeHTTP(w, r)
+	})
+	mux.HandleFunc("/.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, r *http.Request) {
+		host := "http://" + r.Host
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"resource":              host + "/mcp",
+			"resource_name":         "Fake MCP (Test)",
+			"authorization_servers": []string{host},
+		})
+	})
+	mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
+		host := "http://" + r.Host
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"issuer":                           host,
+			"authorization_endpoint":           host + "/authorize",
+			"token_endpoint":                   host + "/token",
+			"registration_endpoint":            host + "/register",
+			"response_types_supported":         []string{"code"},
+			"grant_types_supported":            []string{"authorization_code", "refresh_token"},
+			"code_challenge_methods_supported": []string{"S256"},
+		})
+	})
+	return mux
+}
