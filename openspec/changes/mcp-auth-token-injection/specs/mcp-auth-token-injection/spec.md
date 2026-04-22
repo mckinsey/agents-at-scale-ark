@@ -2,14 +2,14 @@
 
 ### Requirement: MCPServer spec carries an optional authorization block referencing a token Secret
 
-The `MCPServer` CRD (v1alpha1) SHALL gain an optional `spec.authorization` object with a required `tokenSecretRef`. `tokenSecretRef` SHALL reference a Kubernetes Secret in the same namespace as the MCPServer and MAY override the key names used within the Secret, defaulting to `access_token`, `refresh_token`, `expires_at`, `client_id`, `client_secret`. When `spec.authorization` is unset, the controller SHALL NOT attempt to inject any Authorization header.
+The `MCPServer` CRD (v1alpha1) SHALL gain an optional `spec.authorization` object with a required `tokenSecretRef`. `tokenSecretRef` SHALL reference a Kubernetes Secret in the same namespace as the MCPServer and MAY override the key names used within the Secret via `accessTokenKey`, `refreshTokenKey`, `expiresAtKey`, `clientIDKey`, `clientSecretKey`, defaulting respectively to `access_token`, `refresh_token`, `expires_at`, `client_id`, `client_secret`. When `spec.authorization` is unset, the controller SHALL NOT attempt to inject any Authorization header.
 
 #### Scenario: MCPServer is created with authorization configured
 
 - **GIVEN** an `MCPServer` with `spec.authorization.tokenSecretRef.name = notion-mcp-token`
 - **WHEN** the controller reconciles the resource
-- **THEN** the controller SHALL resolve a Secret named `notion-mcp-token` in the same namespace
-- **AND** SHALL use the default keys `access_token`, `refresh_token`, `expires_at`, `client_id`, `client_secret` unless overridden under `spec.authorization.tokenSecretRef.keys`
+- **THEN** the controller SHALL resolve a Secret named `notion-mcp-token` in the same namespace as the MCPServer
+- **AND** SHALL use the default key names `access_token`, `refresh_token`, `expires_at`, `client_id`, `client_secret` unless overridden on `spec.authorization.tokenSecretRef`
 
 #### Scenario: MCPServer omits spec.authorization
 
@@ -18,158 +18,63 @@ The `MCPServer` CRD (v1alpha1) SHALL gain an optional `spec.authorization` objec
 - **THEN** the controller SHALL NOT read any Secret for token injection
 - **AND** SHALL NOT add an `Authorization` header to MCP requests
 
-#### Scenario: tokenSecretRef references a Secret in a different namespace
-
-- **WHEN** a user submits an `MCPServer` whose `spec.authorization.tokenSecretRef.name` contains a namespace qualifier or otherwise refers to a cross-namespace Secret
-- **THEN** the validating webhook SHALL reject the admission with a message identifying the offending field
-
 ### Requirement: MCPServerAuthorizationState enum gains a single Authorized value
 
-The `MCPServerAuthorizationState` enum SHALL be extended with exactly one new value, `Authorized`. The complete enum SHALL be `Required | DiscoveryFailed | Authorized`. Existing detection behaviour for `Required` and `DiscoveryFailed` SHALL be preserved unchanged. Any failure observed after reaching `Authorized` — refresh failure, natural token expiry with no usable refresh token, or a 401 response from the MCP server on an in-flight call — SHALL collapse the state back to `Required` rather than introducing a dedicated failure state.
+The `MCPServerAuthorizationState` enum SHALL be extended with exactly one new value, `Authorized`. The complete enum SHALL be `Required | DiscoveryFailed | Authorized`. Existing detection behaviour for `Required` and `DiscoveryFailed` SHALL be preserved unchanged. An HTTP 401 observed on an in-flight MCP call after reaching `Authorized` SHALL collapse the state back to `Required` rather than introducing a dedicated failure state.
 
-#### Scenario: Controller successfully injects a Bearer token
+#### Scenario: Controller successfully lists tools using an injected Bearer
 
-- **GIVEN** an `MCPServer` whose referenced Secret contains a non-empty `access_token` and an `expires_at` in the future
-- **WHEN** the controller reconciles and constructs the MCP client
+- **GIVEN** an `MCPServer` whose referenced Secret contains a non-empty `access_token`
+- **WHEN** the controller reconciles, injects the Bearer, and successfully lists tools on the MCP server
 - **THEN** `status.authorization.state` SHALL be `Authorized`
-- **AND** `status.authorization.lastRefreshed` SHALL reflect either the initial observation of the populated Secret or the most recent successful refresh
+- **AND** the `Available` condition SHALL be `True` with reason `Authorized`
 
 ### Requirement: Controller injects Bearer access token into MCP requests when authorization is configured
 
-When `spec.authorization` is set and the referenced Secret contains a non-empty `access_token`, the controller SHALL inject `Authorization: Bearer <access_token>` into the MCP client's header map on every reconcile. Any other headers in `spec.headers` SHALL be preserved unchanged.
+When `spec.authorization` is set and the referenced Secret contains a non-empty `access_token`, the controller SHALL inject `Authorization: Bearer <access_token>` into the MCP client's header map on every reconcile. Other entries in `spec.headers` SHALL be preserved unchanged.
 
 #### Scenario: spec.headers defines non-auth headers alongside authorization
 
-- **GIVEN** an `MCPServer` with `spec.headers = [{name: "X-Org-Id", value: "acme"}]` and a valid token in the referenced Secret
+- **GIVEN** an `MCPServer` with `spec.headers = [{name: "X-Org-Id", value: "acme"}]` and a non-empty `access_token` in the referenced Secret
 - **WHEN** the controller builds the MCP client
 - **THEN** the outgoing MCP request SHALL include both `X-Org-Id: acme` and `Authorization: Bearer <access_token>`
 
 #### Scenario: Secret is missing when reconcile runs
 
 - **WHEN** `spec.authorization.tokenSecretRef` points at a Secret that does not exist
-- **THEN** the controller SHALL set `status.authorization.state` to `Required`
-- **AND** SHALL NOT make MCP requests with an `Authorization` header
-- **AND** SHALL preserve the existing RFC 9728 metadata fields on `status.authorization`
+- **THEN** the controller SHALL NOT inject an `Authorization` header
+- **AND** behaviour SHALL fall through to the existing `mcp-auth-detection` 401 discovery path, resulting in `status.authorization.state = Required` (or `DiscoveryFailed` if RFC 9728 metadata is unavailable)
 
 #### Scenario: Secret exists but access_token key is empty or missing
 
 - **WHEN** the referenced Secret exists but the configured `access_token` key is absent or contains an empty value
-- **THEN** the controller SHALL treat the MCPServer as state `Required`
-- **AND** SHALL NOT make MCP requests with an `Authorization` header
-
-### Requirement: Conflict between spec.authorization and spec.headers[Authorization] is rejected
-
-An MCPServer with `spec.authorization` set MUST NOT also declare an entry in `spec.headers` whose `name` equals `Authorization` (case-insensitive, using `strings.EqualFold`). This conflict SHALL be rejected at two layers as defence-in-depth.
-
-The validating webhook SHALL deny admission when `spec.authorization` is non-nil and any `spec.headers[i].name` equals `Authorization` case-insensitively. The error message SHALL name the offending header index and both conflicting fields so the operator can correct either side.
-
-If such a conflict reaches reconcile (webhook disabled, direct etcd write, or upgrade race), the controller SHALL NOT issue any request to the MCP server, SHALL NOT mark the MCPServer `Authorized`, and SHALL set both `Available=False` and `Discovering=False` conditions with reason `AuthorizationHeaderConflict`. It SHALL emit a Kubernetes `Warning` event with reason `AuthorizationHeaderConflict` naming the offending header, SHALL NOT mutate `status.authorization`, and SHALL requeue on the standard `pollInterval` so the resource self-heals once the conflict is removed.
-
-#### Scenario: Webhook rejects apply when spec.authorization and Authorization header both set
-
-- **GIVEN** an `MCPServer` manifest with `spec.authorization.tokenSecretRef.name = notion-mcp-token` AND `spec.headers = [{name: "X-Org-Id", value: "acme"}, {name: "Trace-Id", value: "..."}, {name: "Authorization", value: "Bearer legacy"}]`
-- **WHEN** the operator runs `kubectl apply -f` against the cluster
-- **THEN** the validating webhook SHALL deny admission
-- **AND** the error message SHALL name the offending header index (`spec.headers[2]`) and indicate that it conflicts with `spec.authorization.tokenSecretRef`
-
-#### Scenario: Webhook allows apply when spec.headers contains only non-Authorization entries
-
-- **GIVEN** an `MCPServer` manifest with `spec.authorization` set and `spec.headers = [{name: "X-Org-Id", value: "acme"}, {name: "Trace-Id", value: "..."}]`
-- **WHEN** the operator runs `kubectl apply -f` against the cluster
-- **THEN** the validating webhook SHALL admit the resource
-- **AND** the controller SHALL proceed with Bearer injection as specified
-
-#### Scenario: Webhook allows Authorization in spec.headers when spec.authorization is absent
-
-- **GIVEN** an `MCPServer` manifest with `spec.authorization` unset and `spec.headers = [{name: "Authorization", value: "Bearer static-token"}]`
-- **WHEN** the operator runs `kubectl apply -f` against the cluster
-- **THEN** the validating webhook SHALL admit the resource
-- **AND** the controller SHALL send the static `Authorization` header unchanged on MCP requests
-
-#### Scenario: Controller detects conflict that bypassed the webhook
-
-- **GIVEN** an `MCPServer` where `spec.authorization` is set AND `spec.headers` contains an entry named `authorization` (any case), e.g. the webhook was disabled or the resource was written directly to etcd during upgrade
-- **WHEN** the controller reconciles the resource
-- **THEN** the controller SHALL NOT issue any request to the MCP server
-- **AND** SHALL set condition `Available=False` with reason `AuthorizationHeaderConflict`
-- **AND** SHALL set condition `Discovering=False` with reason `AuthorizationHeaderConflict`
-- **AND** SHALL emit a Kubernetes `Warning` event with reason `AuthorizationHeaderConflict` naming the offending header
-- **AND** SHALL NOT mutate `status.authorization`
-- **AND** SHALL requeue on `pollInterval`
-
-#### Scenario: Controller clears conflict once the offending header is removed
-
-- **GIVEN** an `MCPServer` previously in conflict with conditions `Available=False` / `Discovering=False` reason `AuthorizationHeaderConflict`
-- **WHEN** the user removes the `Authorization` entry from `spec.headers`
-- **THEN** on the next reconcile the controller SHALL clear the `AuthorizationHeaderConflict` reason from both conditions
-- **AND** SHALL resume the normal authorization flow (detection, Bearer injection, refresh) as specified elsewhere in this capability
-
-### Requirement: Controller refreshes access tokens before expiry
-
-When `status.authorization.state` is `Authorized` and `now >= expires_at - 60s`, the controller SHALL attempt an OAuth 2.0 refresh (RFC 6749 §6) against the `tokenEndpoint` using the stored `refresh_token`, `client_id`, and (if present) `client_secret`. On success, the controller SHALL atomically update the Secret's `access_token`, `expires_at`, and (if returned by the authorization server) `refresh_token` keys in a single PATCH and SHALL set `status.authorization.lastRefreshed` to the current time. The controller SHALL NOT materialise tokens into the CRD spec or status beyond `state`, `lastRefreshed`, and `expiresAt`.
-
-#### Scenario: Token is within 60s of expiry and refresh succeeds
-
-- **GIVEN** a Secret with `expires_at` that is 30s in the future and a valid `refresh_token`
-- **WHEN** the controller reconciles
-- **THEN** the controller SHALL POST `grant_type=refresh_token` with `refresh_token`, `client_id`, and `client_secret` (if present) to the `tokenEndpoint`
-- **AND** on receiving a 2xx response, SHALL write the new `access_token`, `expires_at`, and (if present) rotated `refresh_token` to the Secret in a single PATCH
-- **AND** SHALL keep `status.authorization.state = Authorized`
-
-#### Scenario: Refresh response rotates the refresh_token
-
-- **WHEN** the token endpoint returns a new `refresh_token` in addition to a new `access_token`
-- **THEN** the controller SHALL overwrite the Secret's `refresh_token` key with the new value
-- **AND** the previous `refresh_token` value SHALL NOT be retained
-
-#### Scenario: Refresh response omits refresh_token
-
-- **WHEN** the token endpoint returns only a new `access_token` and `expires_in`
-- **THEN** the existing `refresh_token` key in the Secret SHALL be preserved unchanged
-- **AND** `access_token` and `expires_at` SHALL be updated
-
-#### Scenario: Refresh fails when state was Authorized
-
-- **GIVEN** an `MCPServer` in state `Authorized`
-- **WHEN** the refresh attempt returns a network error or a non-2xx response (regardless of whether the current `access_token` is still nominally within its lifetime)
-- **THEN** `status.authorization.state` SHALL be rolled back to `Required`
-- **AND** the Secret SHALL be left unchanged so the caller retains an audit trail
-- **AND** the controller SHALL emit a `TokenRejected` Warning event exactly once for this transition, as defined by the `TokenRejected` requirement below
-- **AND** the controller SHALL NOT inject an `Authorization` header on subsequent reconciles until the Secret is repopulated
-
-#### Scenario: Natural token expiry with no usable refresh token
-
-- **GIVEN** an `MCPServer` in state `Authorized` where the Secret has no `refresh_token` (or the refresh attempt is impossible, e.g. missing `client_id`) and `now >= expires_at`
-- **WHEN** the controller reconciles
-- **THEN** `status.authorization.state` SHALL be rolled back to `Required`
-- **AND** the controller SHALL emit a `TokenRejected` Warning event exactly once for this transition
-- **AND** the Secret's existing keys SHALL be preserved
+- **THEN** the controller SHALL NOT inject an `Authorization` header
+- **AND** behaviour SHALL fall through to the existing 401 discovery path as above
 
 ### Requirement: Controller publishes access token expiry on status.authorization.expiresAt
 
-The controller SHALL populate `status.authorization.expiresAt` (`metav1.Time`, optional) on every successful initial authorization and every successful refresh (both of which result in `status.authorization.state = Authorized`), computed as `time.Now().UTC().Add(time.Duration(expires_in) * time.Second)` against the OAuth 2.0 token response. The controller SHALL leave `status.authorization.expiresAt` unchanged on any rollback from `Authorized` to `Required`, so operators can still see when the last good token was minted. The controller SHALL clear `status.authorization.expiresAt` whenever `status.authorization` is reset to absent — that is, a successful unauthenticated reconcile or removal of `spec.authorization`. No kubectl printcolumn SHALL be added for `expiresAt`; the existing `AUTH` (state) column from `mcp-auth-detection` remains the only printcolumn.
+On every successful transition to `Authorized`, the controller SHALL populate `status.authorization.expiresAt` (`metav1.Time`, optional) by parsing the Secret's `expires_at` key (default `expires_at`; overridable via `expiresAtKey`). If the key is absent, empty, or unparseable, the controller SHALL leave `status.authorization.expiresAt` absent and log the skip — this SHALL NOT prevent the `Authorized` transition. The controller SHALL leave `status.authorization.expiresAt` unchanged on any rollback from `Authorized` to `Required`, so operators can still see when the last good token was minted. The controller SHALL clear `status.authorization.expiresAt` whenever `status.authorization` is reset to absent. No kubectl printcolumn SHALL be added for `expiresAt`; the existing `AUTH` (state) column from `mcp-auth-detection` remains the only printcolumn.
 
-#### Scenario: Initial authorization populates expiresAt
+#### Scenario: Authorized reconcile publishes expiresAt from the Secret
 
-- **GIVEN** an `MCPServer` in state `Required` with a Helm-managed Secret shell
-- **WHEN** an external caller populates the Secret with `access_token`, `refresh_token`, and an `expires_at` corresponding to wall-clock `T + 3600s` (derived from an OAuth token response `expires_in: 3600` received at `T`)
-- **AND** the controller next reconciles and observes the populated Secret
-- **THEN** `status.authorization.expiresAt` SHALL be set to `T + 3600s` in UTC
-- **AND** `status.authorization.state` SHALL be `Authorized`
+- **GIVEN** an `MCPServer` whose referenced Secret contains a non-empty `access_token` and an `expires_at` of `2026-04-22T12:00:00Z`
+- **WHEN** the controller reconciles, injects the Bearer, and tool-list succeeds
+- **THEN** `status.authorization.state` SHALL be `Authorized`
+- **AND** `status.authorization.expiresAt` SHALL be `2026-04-22T12:00:00Z`
 
-#### Scenario: Successful refresh updates expiresAt
+#### Scenario: expires_at key missing does not block Authorized
 
-- **GIVEN** an `MCPServer` in state `Authorized` with `status.authorization.expiresAt = T1`
-- **WHEN** the controller performs a successful refresh at wall-clock `T2` and the token endpoint returns `expires_in: 3600`
-- **THEN** `status.authorization.expiresAt` SHALL be updated to `T2 + 3600s` in UTC
-- **AND** `status.authorization.lastRefreshed` SHALL be updated to `T2`
+- **GIVEN** an `MCPServer` whose referenced Secret contains a non-empty `access_token` but no `expires_at` key
+- **WHEN** the controller reconciles and tool-list succeeds
+- **THEN** `status.authorization.state` SHALL be `Authorized`
+- **AND** `status.authorization.expiresAt` SHALL be absent
 
 #### Scenario: Rollback to Required preserves expiresAt
 
 - **GIVEN** an `MCPServer` in state `Authorized` with `status.authorization.expiresAt = T1`
-- **WHEN** the controller rolls the state back to `Required` for any reason (refresh failure, natural expiry, or 401-on-use)
+- **WHEN** the controller rolls the state back to `Required` in response to a 401 on an in-flight MCP call
 - **THEN** `status.authorization.expiresAt` SHALL remain `T1`, unchanged
-- **AND** `status.authorization.state` SHALL be `Required` as defined in the refresh requirement
+- **AND** `status.authorization.state` SHALL be `Required`
 
 #### Scenario: Authorization cleared removes expiresAt
 
@@ -180,37 +85,29 @@ The controller SHALL populate `status.authorization.expiresAt` (`metav1.Time`, o
 
 ### Requirement: Controller rolls back to Required on IdP-side revocation
 
-When the MCPServer is in state `Authorized` and the next MCP call receives HTTP 401 with a `WWW-Authenticate` Bearer challenge, the controller SHALL re-run RFC 9728 / RFC 8414 discovery and SHALL set `status.authorization.state` to `Required`. The Secret's `access_token` and `refresh_token` keys SHALL be preserved so that the operator has an audit trail; they are overwritten when an external caller next repopulates the Secret. The controller SHALL emit the `TokenRejected` Warning event defined below for this transition.
+When the MCPServer is in state `Authorized` and the next MCP call receives HTTP 401 with a `WWW-Authenticate` Bearer challenge, the controller SHALL re-run RFC 9728 / RFC 8414 discovery and SHALL set `status.authorization.state` to `Required`. The Secret SHALL be left unchanged — the controller has no write RBAC on Secrets in Stage 1 — so the operator retains an audit trail; the caller repopulates the Secret out-of-band. The controller SHALL emit the `TokenRejected` Warning event defined below for this transition.
 
 #### Scenario: MCP server returns 401 despite a valid-looking Bearer token
 
-- **GIVEN** an MCPServer in state `Authorized` with an unexpired `access_token`
-- **WHEN** the next MCP `initialize` call returns HTTP 401 with a parseable `WWW-Authenticate` header
+- **GIVEN** an MCPServer in state `Authorized`
+- **WHEN** the next MCP call returns HTTP 401 with a parseable `WWW-Authenticate` header
 - **THEN** the controller SHALL set `status.authorization.state = Required`
 - **AND** SHALL re-run RFC 9728 + RFC 8414 discovery as defined in `mcp-auth-detection`
-- **AND** SHALL NOT delete the Secret or any of its keys
+- **AND** SHALL NOT delete, update, or patch the Secret or any of its keys
 - **AND** SHALL emit a Kubernetes `Warning` event with reason `TokenRejected` whose message includes the observed `WWW-Authenticate` header
 
 ### Requirement: TokenRejected event is emitted on Authorized to Required transitions
 
-The controller SHALL emit a Kubernetes `Warning` event with reason `TokenRejected` when, and only when, `status.authorization.state` transitions from `Authorized` to `Required`. This event covers every rollback path — refresh failure, natural token expiry with no usable refresh token, and 401 on an in-flight MCP call. The event message SHALL include either the observed `WWW-Authenticate` header (for 401-on-use) or a short summary of the refresh-endpoint failure (for refresh failures) so that operators can see what the upstream said without tailing controller logs.
+The controller SHALL emit a Kubernetes `Warning` event with reason `TokenRejected` when, and only when, it observes an HTTP 401 from the MCP server while the prior persisted `status.authorization.state` was `Authorized`. The event message SHALL include the observed `WWW-Authenticate` header (optionally truncated) so that operators can see what the upstream said without tailing controller logs.
 
 The event MUST NOT be emitted on any other transition — in particular, it MUST NOT fire when the prior `status.authorization.state` was empty, `Required`, or `DiscoveryFailed`. The existing `AuthorizationRequired` event defined by `mcp-auth-detection` continues to cover first-time transitions into `Required`.
 
-The event MUST be emitted exactly once per `Authorized → Required` transition. Subsequent reconciles that keep the state at `Required` MUST NOT emit duplicate `TokenRejected` events; duplicates are only permissible if the state has in the meantime reached `Authorized` and rolled back again.
-
-#### Scenario: Refresh failure from Authorized emits TokenRejected once
-
-- **GIVEN** an MCPServer in state `Authorized`
-- **WHEN** the controller attempts a refresh and it fails
-- **THEN** the controller SHALL emit exactly one `Warning` event with reason `TokenRejected` whose message summarises the refresh failure
-- **AND** subsequent reconciles that keep the state at `Required` SHALL NOT emit additional `TokenRejected` events
-
-#### Scenario: 401 on an in-flight MCP call from Authorized emits TokenRejected with WWW-Authenticate
+#### Scenario: 401 from Authorized emits TokenRejected with WWW-Authenticate
 
 - **GIVEN** an MCPServer in state `Authorized`
 - **WHEN** the next MCP call returns HTTP 401 with a `WWW-Authenticate` header such as `Bearer error="invalid_token", error_description="token revoked"`
 - **THEN** the controller SHALL emit a `Warning` event with reason `TokenRejected` whose message includes the `WWW-Authenticate` header text (optionally truncated)
+- **AND** `status.authorization.state` SHALL be `Required`
 
 #### Scenario: First-time transition into Required does not emit TokenRejected
 
@@ -219,49 +116,22 @@ The event MUST be emitted exactly once per `Authorized → Required` transition.
 - **THEN** the controller SHALL emit the existing `AuthorizationRequired` event per `mcp-auth-detection`
 - **AND** SHALL NOT emit a `TokenRejected` event
 
-#### Scenario: Refresh failure when state was already Required does not emit TokenRejected
+#### Scenario: 401 when state was already Required does not emit TokenRejected
 
-- **GIVEN** an MCPServer in state `Required` (e.g. the caller populated the Secret with a bad token, so the first refresh attempt fails)
-- **WHEN** the controller attempts a refresh and it fails
+- **GIVEN** an MCPServer in state `Required` (e.g. the caller populated the Secret with a bad token, so the first attempt fails)
+- **WHEN** the controller observes another 401
 - **THEN** the controller SHALL keep `status.authorization.state` at `Required`
 - **AND** SHALL NOT emit a `TokenRejected` event (because the prior state was not `Authorized`)
 
-### Requirement: Helm chart provisions the token Secret shell without writing data
+### Requirement: Controller RBAC grants read-only access to Secrets
 
-The Ark Helm chart SHALL ship a template that creates one Kubernetes Secret per MCPServer whose `spec.authorization.tokenSecretRef.name` is referenced in chart values. The rendered Secret SHALL have `type: Opaque`, MUST carry a `ark.mckinsey.com/mcpserver: <name>` label, and MUST omit both `data:` and `stringData:` blocks so that GitOps controllers (ArgoCD, Flux) do not prune controller-written keys. The controller SHALL NOT set an `OwnerReference` from the Secret to the MCPServer; lifecycle ownership SHALL remain with the Helm release.
+The Ark controller ServiceAccount's Role / ClusterRole SHALL include `get`, `list`, and `watch` verbs on the `secrets` resource in namespaces that the controller watches. In Stage 1 it SHALL NOT include `create`, `update`, `patch`, or `delete` on `secrets`. The controller is strictly a reader of the token Secret; lifecycle ownership stays with whoever created the Secret (Helm, admin, out-of-band tool).
 
-#### Scenario: Rendered Helm template has no data block
+#### Scenario: Controller reads a token Secret
 
-- **WHEN** `helm template` is run over the chart with an MCPServer using `spec.authorization.tokenSecretRef.name = notion-mcp-token`
-- **THEN** the rendered Secret manifest SHALL contain `type: Opaque` and `metadata.labels["ark.mckinsey.com/mcpserver"] = notion-mcp`
-- **AND** SHALL NOT contain any `data:` or `stringData:` field
-
-#### Scenario: GitOps sync does not prune controller-written keys
-
-- **GIVEN** an ArgoCD Application managing the chart where an external caller previously populated the Secret with tokens
-- **WHEN** ArgoCD performs a sync
-- **THEN** the Secret's `data` keys SHALL remain intact because the chart declares no `data` field (the declarative diff ignores fields that are not declared)
-
-#### Scenario: helm uninstall removes the Secret
-
-- **WHEN** the operator runs `helm uninstall <release>` against a release that included the MCPServer
-- **THEN** the Secret SHALL be deleted as part of the Helm release cleanup
-- **AND** any stored tokens SHALL be gone from the cluster
-
-### Requirement: Controller RBAC grants Secret read/write but not create/delete
-
-The Ark controller ServiceAccount's Role / ClusterRole SHALL include `get`, `list`, `watch`, `update`, and `patch` verbs on the `secrets` resource in namespaces that the controller watches. It SHALL NOT include `create` or `delete` on `secrets`. This keeps Secret lifecycle ownership with Helm (or whatever created the Secret shell).
-
-#### Scenario: Controller attempts to create a Secret
-
-- **WHEN** an implementation bug causes the controller to call `Create` on a Secret
-- **THEN** the Kubernetes API SHALL reject the request with `Forbidden`
-- **AND** the controller SHALL log the error and surface it via a `Warning` event — it SHALL NOT silently succeed or create the Secret by any other means
-
-#### Scenario: Controller refreshes a token
-
-- **WHEN** the controller performs a successful refresh and writes new keys to the Secret
-- **THEN** the API call SHALL be a `PATCH` (or `Update`) — not a `Create` or `Delete` — and the Secret's `metadata.labels` and `metadata.ownerReferences` SHALL be preserved unchanged
+- **WHEN** the controller reconciles an `MCPServer` with `spec.authorization.tokenSecretRef` set
+- **THEN** the controller's API calls against the Secret SHALL be limited to `get`, `list`, or `watch`
+- **AND** SHALL NOT include `Create`, `Update`, `Patch`, or `Delete`
 
 ### Requirement: Coexistence with mcp-auth-detection is preserved
 
@@ -270,9 +140,9 @@ All behaviours defined by `mcp-auth-detection` SHALL continue to hold unchanged.
 #### Scenario: Authorization configured but detection has not yet run
 
 - **GIVEN** a new `MCPServer` with `spec.authorization.tokenSecretRef` set and an empty `status.authorization`
-- **WHEN** the controller reconciles for the first time
+- **WHEN** the controller reconciles for the first time and the Secret has not yet been populated
 - **THEN** detection SHALL run as specified in `mcp-auth-detection` and populate `status.authorization` with the RFC 9728 / RFC 8414 fields
-- **AND** only after discovery succeeds SHALL the endpoint metadata required for external token acquisition be available on the CRD status
+- **AND** `status.authorization.state` SHALL be `Required` (or `DiscoveryFailed` if metadata is unavailable)
 
 #### Scenario: MCPServer removes spec.authorization after successful auth
 
