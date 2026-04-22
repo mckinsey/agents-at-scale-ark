@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -338,16 +339,17 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 	message.Metadata = metadata
 	message.Extensions = []string{arka2a.QueryExtensionURI}
 
-	a2aClient, err := arka2a.CreateA2AClient(ctx, r.Client, address, nil, query.Namespace, query.Name, nil)
-	if err != nil {
-		return nil, engineResponseMeta{}, fmt.Errorf("failed to create A2A client: %w", err)
-	}
-
 	timeout := 5 * time.Minute
 	if query.Spec.Timeout != nil {
 		timeout = query.Spec.Timeout.Duration
 	}
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
+
+	a2aClient, err := arka2a.CreateA2AClient(execCtx, r.Client, address, nil, query.Namespace, query.Name, nil)
+	if err != nil {
+		cancel()
+		return nil, engineResponseMeta{}, fmt.Errorf("failed to create A2A client: %w", err)
+	}
 	defer cancel()
 
 	blocking := true
@@ -652,6 +654,9 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 	}
 	err := r.Status().Update(ctx, query)
 	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
 		logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
 	}
 	return err

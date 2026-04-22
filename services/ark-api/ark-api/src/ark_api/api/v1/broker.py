@@ -32,7 +32,7 @@ async def get_broker_url(memory_name: str) -> Optional[str]:
         async with with_ark_client(None, VERSION) as client:
             memory_dicts = await get_all_memory_resources(client, memory_name)
             if not memory_dicts:
-                logger.warning(f"No memory resource found with name: {memory_name}")
+                logger.warning("No memory resource found for requested name")
                 return None
             return get_memory_service_address(memory_dicts[0])
     except Exception as e:
@@ -232,6 +232,15 @@ async def get_chunks(
     )
 
 
+@router.get("/sessions")
+async def get_sessions(
+    watch: bool = Query(False, description="Stream sessions via SSE"),
+    memory: str = Query("default", description="Memory resource name"),
+):
+    """Get or stream sessions from the broker. Sessions are global broker state, not memory-scoped, but the memory parameter selects which broker service to query."""
+    return await proxy_broker_request(memory, "/sessions", watch, {})
+
+
 async def proxy_broker_delete(memory: str, path: str):
     """Proxy DELETE requests to broker."""
     broker_url = await get_broker_url(memory)
@@ -280,3 +289,9 @@ async def purge_messages(memory: str = Query("default", description="Memory reso
 async def purge_chunks(memory: str = Query("default", description="Memory resource name")):
     """Purge all chunks from the broker."""
     return await proxy_broker_delete(memory, "/stream")
+
+
+@router.delete("/sessions")
+async def purge_sessions(memory: str = Query("default", description="Memory resource name")):
+    """Purge all sessions from the broker."""
+    return await proxy_broker_delete(memory, "/sessions")

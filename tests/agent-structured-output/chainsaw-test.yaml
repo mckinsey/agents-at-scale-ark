@@ -21,12 +21,6 @@ spec:
         outputs:
         - name: provider
           value: (json_parse($stdout))
-    - script:
-        content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
     - apply:
         resource:
           apiVersion: v1
@@ -68,16 +62,16 @@ spec:
     
   - name: verify-query-completion
     try:
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: structured-output-test-query
-            namespace: ($namespace)
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: structured-output-test-query
+        namespace: ($namespace)
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     catch:
     - events: {}
     - describe:
@@ -96,8 +90,6 @@ spec:
             name: structured-output-test-query
             namespace: ($namespace)
           status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
             (contains(['positive', 'negative', 'neutral'], json_parse(response.content).sentiment)): true
             (json_parse(response.content).confidence >= `0`): true
             (json_parse(response.content).confidence <= `1`): true

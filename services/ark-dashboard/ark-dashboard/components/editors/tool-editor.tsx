@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Label } from '@radix-ui/react-label';
 import { Maximize2, Minimize2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
 import * as z from 'zod';
@@ -136,7 +136,7 @@ export function ToolEditor({
 
   const selectedType = useWatch({ control: form.control, name: 'type' });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (open) {
       form.reset();
       setIsInputSchemaExpanded(false);

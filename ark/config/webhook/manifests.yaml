@@ -10,6 +10,29 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
+      path: /mutate-ark-mckinsey-com-v1alpha1-agent
+  failurePolicy: Fail
+  matchConditions:
+  - name: not-being-deleted
+    expression: "!has(object.metadata.deletionTimestamp)"
+  name: magent-v1.kb.io
+  rules:
+  - apiGroups:
+    - ark.mckinsey.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - agents
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
       path: /mutate-ark-mckinsey-com-v1alpha1-model
   failurePolicy: Fail
   matchConditions:
@@ -79,6 +102,29 @@ kind: ValidatingWebhookConfiguration
 metadata:
   name: validating-webhook-configuration
 webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-ark-mckinsey-com-v1alpha1-agent
+  failurePolicy: Fail
+  matchConditions:
+  - name: not-being-deleted
+    expression: "!has(object.metadata.deletionTimestamp)"
+  name: vagent-v1.kb.io
+  rules:
+  - apiGroups:
+    - ark.mckinsey.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - agents
+  sideEffects: None
 - admissionReviewVersions:
   - v1
   clientConfig:

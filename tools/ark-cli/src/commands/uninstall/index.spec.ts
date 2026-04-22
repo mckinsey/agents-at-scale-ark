@@ -112,6 +112,29 @@ describe('uninstall command', () => {
     );
   });
 
+  it('uninstalls multiple services sequentially', async () => {
+    const mockServices = {
+      'ark-api': {
+        name: 'ark-api',
+        helmReleaseName: 'ark-api',
+        namespace: 'ark-system',
+      },
+      'ark-dashboard': {
+        name: 'ark-dashboard',
+        helmReleaseName: 'ark-dashboard',
+        namespace: 'ark-system',
+      },
+    };
+    mockGetInstallableServices.mockReturnValue(mockServices);
+    mockExeca.mockResolvedValue({stdout: ''});
+
+    const command = createUninstallCommand(mockConfig);
+    await command.parseAsync(['node', 'test', 'ark-api', 'ark-dashboard']);
+
+    expect(mockOutput.success).toHaveBeenCalledWith('ark-api uninstalled successfully');
+    expect(mockOutput.success).toHaveBeenCalledWith('ark-dashboard uninstalled successfully');
+  });
+
   it('shows error when service not found', async () => {
     mockGetInstallableServices.mockReturnValue({
       'ark-api': {name: 'ark-api'},

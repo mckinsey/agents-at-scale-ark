@@ -18,22 +18,25 @@ class TestQueriesCLI:
     
     @classmethod
     def setup_class(cls):
-        import json
-        import os
         cls.helper = QueriesHelper()
-        
-        script_path = os.path.join(os.path.dirname(__file__), "../../../scripts/setup-model-provider.sh")
-        result = subprocess.run(
-            ["bash", script_path, "auto"],
-            capture_output=True,
-            text=True
-        )
-        
-        if result.returncode == 0:
-            try:
-                cls.provider_config = json.loads(result.stdout.strip())
-            except:
-                cls.provider_config = None
+
+        if os.environ.get("CICD_AZURE_API_KEY") and os.environ.get("CICD_AZURE_BASE_URL"):
+            cls.provider_config = {
+                "type": "azure",
+                "model": "gpt-4.1-mini",
+                "token": os.environ["CICD_AZURE_API_KEY"],
+                "url": os.environ["CICD_AZURE_BASE_URL"],
+                "apiVersion": os.environ.get("CICD_AZURE_API_VERSION", "2024-12-01-preview"),
+            }
+        elif os.environ.get("CICD_OPENAI_API_KEY") and os.environ.get("CICD_OPENAI_BASE_URL"):
+            cls.provider_config = {
+                "type": "openai",
+                "model": os.environ.get("CICD_OPENAI_MODEL", "gpt-4o-mini"),
+                "token": os.environ["CICD_OPENAI_API_KEY"],
+                "url": os.environ["CICD_OPENAI_BASE_URL"],
+            }
+        else:
+            cls.provider_config = None
     
     @classmethod
     def teardown_class(cls):

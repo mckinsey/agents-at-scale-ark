@@ -21,12 +21,6 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
-    - script:
-        content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
     - apply:
         file: manifests/*.yaml
     - wait:
@@ -78,15 +72,15 @@ spec:
             conditions:
             - type: Available
               status: "True"
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: sequential-team-query
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: sequential-team-query
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -127,7 +121,6 @@ spec:
     - script:
         content: |
           helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
-          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
         env:
         - name: NAMESPACE
           value: ($namespace)

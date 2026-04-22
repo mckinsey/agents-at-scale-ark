@@ -17,13 +17,6 @@ spec:
         env:
         - name: NAMESPACE
           value: ($namespace)
-    # Install ark-tenant for RBAC
-    - script:
-        content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
-        env:
-        - name: NAMESPACE
-          value: ($namespace)
     # Wait for echo A2AServer to be Ready
     - assert:
         resource:
@@ -37,16 +30,15 @@ spec:
     - apply:
         file: manifests/a01-query.yaml
     # Wait for Query to complete
-    - assert:
-        timeout: 10s
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: echo-test-query
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: echo-test-query
+        timeout: 60s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     # Verify response contains the echoed message
     - assert:
         timeout: 1s
@@ -74,7 +66,6 @@ spec:
     - script:
         content: |
           helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
-          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
         env:
         - name: NAMESPACE
           value: ($namespace)
