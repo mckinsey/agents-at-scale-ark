@@ -77,10 +77,11 @@ type TokenSecretReference struct {
 // states of an MCP server. An empty value (the absence of the
 // `authorization` sub-resource) means authorization is not required.
 // `Authorized` indicates the controller successfully listed tools using
-// a Bearer token from `spec.authorization.tokenSecretRef`. `Expired`
-// and `RefreshFailed` are reserved for the refresh loop and are not yet
-// emitted by the controller.
-// +kubebuilder:validation:Enum=Required;DiscoveryFailed;Authorized;Expired;RefreshFailed
+// a Bearer token from `spec.authorization.tokenSecretRef`. A 401 from the
+// upstream — expiry, revocation, refresh failure — collapses back to
+// `Required` and emits a `TokenRejected` event so the transition is
+// observable without a dedicated state.
+// +kubebuilder:validation:Enum=Required;DiscoveryFailed;Authorized
 type MCPServerAuthorizationState string
 
 const (
@@ -97,14 +98,6 @@ const (
 	// connected to the MCP server using a Bearer token resolved from
 	// `spec.authorization.tokenSecretRef`.
 	MCPServerAuthorizationStateAuthorized MCPServerAuthorizationState = "Authorized"
-
-	// MCPServerAuthorizationStateExpired indicates the stored access
-	// token has expired and no successful refresh has restored it.
-	MCPServerAuthorizationStateExpired MCPServerAuthorizationState = "Expired"
-
-	// MCPServerAuthorizationStateRefreshFailed indicates a refresh
-	// attempt failed while the stored access token is still valid.
-	MCPServerAuthorizationStateRefreshFailed MCPServerAuthorizationState = "RefreshFailed"
 )
 
 // MCPServerAuthorizationStatus surfaces OAuth 2.1 / RFC 9728 Protected

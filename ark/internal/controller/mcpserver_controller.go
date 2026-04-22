@@ -365,6 +365,14 @@ func (r *MCPServerReconciler) handleAuthorizationRequired(ctx context.Context, m
 	log := logf.FromContext(ctx)
 	mcpServer.Status.ToolCount = 0
 
+	// Distinguish first-time auth requirement from a previously-Authorized
+	// server that has lost its credentials (token expiry, revocation, or
+	// refresh failure). Emit TokenRejected so the transition is visible in
+	// events without a dedicated CRD state.
+	if prev := mcpServer.Status.Authorization; prev != nil && prev.State == arkv1alpha1.MCPServerAuthorizationStateAuthorized {
+		r.Eventing.MCPServerRecorder().TokenRejected(ctx, mcpServer, fmt.Sprintf("upstream returned HTTP 401 for previously-Authorized server; bearer token rejected (%q)", ue.WWWAuthenticate))
+	}
+
 	timeout := parseTimeout(mcpServer.Spec.Timeout)
 
 	metaURL, ok := arkmcp.ParseResourceMetadataURL(ue.WWWAuthenticate)
