@@ -155,12 +155,12 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          curl -v "$SONAR_HOST_URL/api/v2/analysis/version" \
+          curl -v "https://sonarqube.mckinsey.com/api/v2/analysis/version" \
             -H "Authorization: Bearer $SONAR_TOKEN"
 
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v7.1.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: "${{ secrets.SONAR_HOST_URL }}"
+          SONAR_HOST_URL: "https://sonarqube.mckinsey.com"
           PROJECT_KEY: ${{ secrets.SONARQUBE_PROJECT_KEY }}
