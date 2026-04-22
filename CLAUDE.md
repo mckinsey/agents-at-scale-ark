@@ -4,52 +4,24 @@
 
 # Pre-Push Gates (Non-Negotiable)
 
-BEFORE pushing ANY commit, the following MUST pass locally. No exceptions.
-A red CI run costs more than the minute these checks take.
+BEFORE pushing ANY commit, `make lint` and `make test` MUST pass locally
+in every directory the change touches. Exact commands per stack live in
+"Build Instructions" below; do not skip them.
 
-For any Go change under `ark/`:
-
-```bash
-cd ark
-make manifests    # if CRD types changed
-make lint         # gofumpt + golangci-lint — FAILURE HERE BLOCKS PUSH
-make build        # compile check
-make test         # unit + envtest
-```
-
-For Python services (`services/ark-api`, `services/ark-mcp`, etc.):
-
-```bash
-cd services/<name>
-make lint
-make test
-```
-
-For TypeScript (`tools/ark-cli`, `services/ark-broker`, etc.):
-
-```bash
-cd <path>
-npm run lint
-npm test
-```
-
-## Hard Rules
-
-- **Never push with lint failures.** `make lint` locally BEFORE every push.
-  Lint is the same rule set CI enforces (`golangci-lint` + `gofumpt` for Go,
-  `ruff`/`pyright` for Python, `eslint` for TypeScript). A local pass is the
-  minimum bar.
-- **Never push with failing tests.** `make test` green before every push.
+- **Never push with lint failures.** Same rules CI enforces
+  (`golangci-lint` + `gofumpt` for Go, `ruff`/`pyright` for Python,
+  `eslint` for TypeScript). Local pass is the minimum bar.
+- **Never push with failing tests.**
 - **Never bypass hooks** (`--no-verify`, `--no-gpg-sign`) unless the user
-  explicitly asks. If a pre-commit hook fails, fix the cause, re-stage, and
-  commit again.
-- **Never assume "one small change" is safe to push unlinted.** The smallest
-  changes most often hide `gofumpt` or whitespace diffs. Run the gates.
-
-If a tool is missing locally (e.g. `golangci-lint`, `gofumpt`), install it —
-do not skip the step. The toolchain exists in `ark/bin/` once `make` has
-been run once; fall back to `go install` for standalone tools like
-`gofumpt`.
+  explicitly asks.
+- **"One-line changes" hide `gofumpt` and whitespace diffs the most.** Run
+  the gates regardless of change size.
+- **Tooling gotcha (Go):** `GOLANGCI_LINT_VERSION` in `ark/Makefile` may
+  lag local Go. If `make lint` errors with *"Go language version ... used
+  to build golangci-lint is lower than the targeted Go version"*, fall
+  back to `gofumpt -l .` (install via `go install mvdan.cc/gofumpt@latest`)
+  — this catches the formatting rule that breaks CI most often. Full
+  `golangci-lint` still runs in CI.
 
 # Project Structure
 
