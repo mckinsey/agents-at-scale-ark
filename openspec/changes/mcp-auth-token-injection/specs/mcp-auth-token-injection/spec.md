@@ -32,7 +32,7 @@ The `MCPServerAuthorizationState` enum SHALL be extended to `Required | Discover
 - **GIVEN** an `MCPServer` whose referenced Secret contains a non-empty `access_token` and an `expires_at` in the future
 - **WHEN** the controller reconciles and constructs the MCP client
 - **THEN** `status.authorization.state` SHALL be `Authorized`
-- **AND** `status.authorization.lastRefreshed` SHALL reflect either the initial CLI write time or the most recent successful refresh
+- **AND** `status.authorization.lastRefreshed` SHALL reflect either the initial observation of the populated Secret or the most recent successful refresh
 
 ### Requirement: Controller injects Bearer access token into MCP requests when authorization is configured
 
@@ -148,7 +148,7 @@ The controller SHALL populate `status.authorization.expiresAt` (`metav1.Time`, o
 #### Scenario: Initial authorization populates expiresAt
 
 - **GIVEN** an `MCPServer` in state `Required` with a Helm-managed Secret shell
-- **WHEN** the operator runs `ark mcp auth <name>` and the token endpoint returns `{ access_token, expires_in: 3600, ... }` at wall-clock `T`
+- **WHEN** an external caller populates the Secret with `access_token`, `refresh_token`, and an `expires_at` corresponding to wall-clock `T + 3600s` (derived from an OAuth token response `expires_in: 3600` received at `T`)
 - **AND** the controller next reconciles and observes the populated Secret
 - **THEN** `status.authorization.expiresAt` SHALL be set to `T + 3600s` in UTC
 - **AND** `status.authorization.state` SHALL be `Authorized`
@@ -176,7 +176,7 @@ The controller SHALL populate `status.authorization.expiresAt` (`metav1.Time`, o
 
 ### Requirement: Controller transitions back to Required on IdP-side revocation
 
-When the MCPServer is in state `Authorized`, `RefreshFailed`, or `Expired` and the next MCP call receives HTTP 401 with a `WWW-Authenticate` Bearer challenge, the controller SHALL re-run RFC 9728 / RFC 8414 discovery and SHALL set `status.authorization.state` to `Required`. The Secret's `access_token` and `refresh_token` keys SHALL be preserved so that the operator has an audit trail; they are overwritten on the next successful CLI authorization.
+When the MCPServer is in state `Authorized`, `RefreshFailed`, or `Expired` and the next MCP call receives HTTP 401 with a `WWW-Authenticate` Bearer challenge, the controller SHALL re-run RFC 9728 / RFC 8414 discovery and SHALL set `status.authorization.state` to `Required`. The Secret's `access_token` and `refresh_token` keys SHALL be preserved so that the operator has an audit trail; they are overwritten when an external caller next repopulates the Secret.
 
 #### Scenario: MCP server returns 401 despite a valid-looking Bearer token
 
@@ -186,47 +186,6 @@ When the MCPServer is in state `Authorized`, `RefreshFailed`, or `Expired` and t
 - **AND** SHALL re-run RFC 9728 + RFC 8414 discovery as defined in `mcp-auth-detection`
 - **AND** SHALL NOT delete the Secret or any of its keys
 - **AND** SHALL emit a `Warning` event with reason `AuthorizationRevoked`
-
-### Requirement: ark CLI performs OAuth 2.1 Authorization Code + PKCE to populate the token Secret
-
-The `ark mcp auth <name>` command SHALL obtain tokens via OAuth 2.1 Authorization Code with PKCE (RFC 7636), using an RFC 8252 loopback redirect URI (`http://127.0.0.1:<port>/callback` on a dynamically-allocated port). When the authorization server advertises a `registration_endpoint` (RFC 7591), the CLI SHALL perform Dynamic Client Registration unless a `client_id` is already present in the target Secret and `--force-register` was not passed. The CLI SHALL write `access_token`, `refresh_token`, `expires_at`, `client_id`, and (when applicable) `client_secret` to the referenced Secret in a single PATCH. The CLI SHALL NOT create the Secret; if the Secret does not exist the CLI SHALL fail with an actionable error.
-
-#### Scenario: Happy path against mcp.notion.com/mcp
-
-- **GIVEN** an `MCPServer` with `status.authorization.state = Required`, `registrationEndpoint`, `authorizationEndpoint`, `tokenEndpoint`, and `scopesSupported` populated, and a Helm-managed Secret existing in the MCPServer's namespace
-- **WHEN** the operator runs `ark mcp auth notion-mcp`
-- **THEN** the CLI SHALL bind 127.0.0.1 on an ephemeral port
-- **AND** SHALL perform RFC 7591 DCR and receive a `client_id` (and possibly `client_secret`)
-- **AND** SHALL generate a PKCE `code_verifier` and `code_challenge` using the `S256` method
-- **AND** SHALL open the user's browser to the `authorizationEndpoint` with `response_type=code`, `code_challenge`, `code_challenge_method=S256`, a `redirect_uri` matching the loopback port, the advertised scopes, and a fresh `state`
-- **AND** on receiving a `code` on the loopback callback, SHALL exchange it at the `tokenEndpoint` using the stored `code_verifier`
-- **AND** SHALL PATCH the referenced Secret with `access_token`, `refresh_token`, `expires_at`, `client_id`, `client_secret` in a single update
-- **AND** on the next controller reconcile, `status.authorization.state` SHALL transition to `Authorized`
-
-#### Scenario: Target Secret does not exist
-
-- **WHEN** the operator runs `ark mcp auth <name>` and the Secret named by `spec.authorization.tokenSecretRef.name` is missing
-- **THEN** the CLI SHALL exit with a non-zero status
-- **AND** SHALL print an error instructing the operator to install/sync the Ark Helm chart (or create the Secret shell manually) before retrying
-
-#### Scenario: Authorization server does not advertise RFC 7591 registration
-
-- **WHEN** the operator runs `ark mcp auth <name>` and `status.authorization.registrationEndpoint` is empty
-- **THEN** the CLI SHALL exit with a non-zero status
-- **AND** SHALL print an error indicating that manual client registration is not yet supported
-
-#### Scenario: Re-running the CLI with an existing registered client
-
-- **GIVEN** the referenced Secret already contains `client_id` (and optionally `client_secret`)
-- **WHEN** the operator runs `ark mcp auth <name>` without `--force-register`
-- **THEN** the CLI SHALL skip DCR and reuse the stored client credentials
-- **AND** SHALL run the authorization code + PKCE flow, overwriting `access_token`, `refresh_token`, `expires_at`
-
-#### Scenario: Operator passes --force-register
-
-- **WHEN** the operator runs `ark mcp auth <name> --force-register`
-- **THEN** the CLI SHALL perform DCR regardless of stored `client_id`
-- **AND** SHALL overwrite `client_id` and `client_secret` in the Secret with the newly-registered values
 
 ### Requirement: Helm chart provisions the token Secret shell without writing data
 
@@ -240,7 +199,7 @@ The Ark Helm chart SHALL ship a template that creates one Kubernetes Secret per 
 
 #### Scenario: GitOps sync does not prune controller-written keys
 
-- **GIVEN** an ArgoCD Application managing the chart where a previous `ark mcp auth` run populated the Secret
+- **GIVEN** an ArgoCD Application managing the chart where an external caller previously populated the Secret with tokens
 - **WHEN** ArgoCD performs a sync
 - **THEN** the Secret's `data` keys SHALL remain intact because the chart declares no `data` field (the declarative diff ignores fields that are not declared)
 
@@ -274,7 +233,7 @@ All behaviours defined by `mcp-auth-detection` SHALL continue to hold unchanged.
 - **GIVEN** a new `MCPServer` with `spec.authorization.tokenSecretRef` set and an empty `status.authorization`
 - **WHEN** the controller reconciles for the first time
 - **THEN** detection SHALL run as specified in `mcp-auth-detection` and populate `status.authorization` with the RFC 9728 / RFC 8414 fields
-- **AND** only after discovery succeeds SHALL the CLI have the endpoint metadata it needs to run
+- **AND** only after discovery succeeds SHALL the endpoint metadata required for external token acquisition be available on the CRD status
 
 #### Scenario: MCPServer removes spec.authorization after successful auth
 

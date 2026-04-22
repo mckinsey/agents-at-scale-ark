@@ -45,51 +45,30 @@
 - [ ] 6.2 Confirm `helm template` output has no `data:` field (unit-test the template)
 - [ ] 6.3 Document in chart `README.md` that GitOps tooling must ignore `data` diffs on these Secrets
 
-## 7. ark CLI — `ark mcp auth <name>`
+## 7. Documentation
 
-- [ ] 7.1 New command skeleton; accepts `-n / --namespace` flag, falls back to kube context
-- [ ] 7.2 Fetch `MCPServer`; read `spec.authorization.tokenSecretRef` and `status.authorization` (registration/authorization/token endpoints, scopes)
-- [ ] 7.3 Fail fast with actionable errors: MCPServer missing, `spec.authorization` unset, `status.authorization.state != Required`, Secret missing, `registrationEndpoint` absent
-- [ ] 7.4 Bind 127.0.0.1 on an ephemeral port; register callback handler at `/callback`
-- [ ] 7.5 Perform RFC 7591 DCR (reusing stored `client_id` / `client_secret` if present and `--force-register` is not set)
-- [ ] 7.6 Generate PKCE `code_verifier` / `code_challenge` (S256) per RFC 7636
-- [ ] 7.7 Open the user's browser to the authorization endpoint with `response_type=code`, `redirect_uri`, `code_challenge`, `scope`, `state`
-- [ ] 7.8 On callback, exchange `code` for tokens at the token endpoint
-- [ ] 7.9 PATCH the Secret with all five keys in a single update
-- [ ] 7.10 Print next-steps message and exit cleanly
+- [ ] 7.1 Operator guide: Secret contract (keys, lifecycle, who writes what), state machine walkthrough (`Required` → populated → `Authorized`), and refresh behaviour
+- [ ] 7.2 Troubleshooting: `RefreshFailed`, `Expired`, token revoked at IdP
+- [ ] 7.3 GitOps guide: how ArgoCD / Flux users should configure ignore rules for the Secret `data` field
 
-## 8. Documentation
+## 8. Tests — controller
 
-- [ ] 8.1 Operator guide: first-time auth against `mcp.notion.com/mcp` (create MCPServer → wait for `Required` → run CLI → verify `Authorized`)
-- [ ] 8.2 Troubleshooting: `RefreshFailed`, `Expired`, token revoked at IdP
-- [ ] 8.3 GitOps guide: how ArgoCD / Flux users should configure ignore rules for the Secret `data` field
+- [ ] 8.1 Unit test: Secret missing → state `Required`, no Bearer injected
+- [ ] 8.2 Unit test: Secret present, token unexpired → state `Authorized`, Bearer injected
+- [ ] 8.3 Unit test: Token within 60s of expiry → refresh called, new tokens PATCH'd
+- [ ] 8.4 Unit test: Refresh returns rotated `refresh_token` → both keys updated atomically
+- [ ] 8.5 Unit test: Refresh fails, access token valid → state `RefreshFailed`
+- [ ] 8.6 Unit test: Refresh fails, access token also expired → state `Expired`
+- [ ] 8.7 Unit test: MCP returns 401 with valid Bearer → state `Required`, tokens preserved
+- [ ] 8.8 Unit test: controller with `spec.authorization` set AND `spec.headers[Authorization]` present (webhook bypassed) does NOT issue MCP requests, sets `Available=False` and `Discovering=False` with reason `AuthorizationHeaderConflict`, emits `Warning` event, leaves `status.authorization` untouched
+- [ ] 8.9 Unit test: once the offending header is removed, the next reconcile clears the `AuthorizationHeaderConflict` reason and resumes the normal auth flow
+- [ ] 8.10 Unit test: Cross-namespace `tokenSecretRef` rejected by webhook
+- [ ] 8.11 Unit test: Initial auth sets `status.authorization.expiresAt` to `now + expires_in`
+- [ ] 8.12 Unit test: Successful refresh updates `expiresAt` to `now + expires_in`; `lastRefreshed` also advances
+- [ ] 8.13 Unit test: Refresh failure (both `RefreshFailed` and `Expired` branches) leaves `expiresAt` unchanged
+- [ ] 8.14 Unit test: Removing `spec.authorization` on a reachable-without-auth server clears `status.authorization` including `expiresAt`
 
-## 9. Tests — controller
+## 9. Tests — end-to-end
 
-- [ ] 9.1 Unit test: Secret missing → state `Required`, no Bearer injected
-- [ ] 9.2 Unit test: Secret present, token unexpired → state `Authorized`, Bearer injected
-- [ ] 9.3 Unit test: Token within 60s of expiry → refresh called, new tokens PATCH'd
-- [ ] 9.4 Unit test: Refresh returns rotated `refresh_token` → both keys updated atomically
-- [ ] 9.5 Unit test: Refresh fails, access token valid → state `RefreshFailed`
-- [ ] 9.6 Unit test: Refresh fails, access token also expired → state `Expired`
-- [ ] 9.7 Unit test: MCP returns 401 with valid Bearer → state `Required`, tokens preserved
-- [ ] 9.8 Unit test: controller with `spec.authorization` set AND `spec.headers[Authorization]` present (webhook bypassed) does NOT issue MCP requests, sets `Available=False` and `Discovering=False` with reason `AuthorizationHeaderConflict`, emits `Warning` event, leaves `status.authorization` untouched
-- [ ] 9.9 Unit test: once the offending header is removed, the next reconcile clears the `AuthorizationHeaderConflict` reason and resumes the normal auth flow
-- [ ] 9.10 Unit test: Cross-namespace `tokenSecretRef` rejected by webhook
-- [ ] 9.11 Unit test: Initial auth sets `status.authorization.expiresAt` to `now + expires_in`
-- [ ] 9.12 Unit test: Successful refresh updates `expiresAt` to `now + expires_in`; `lastRefreshed` also advances
-- [ ] 9.13 Unit test: Refresh failure (both `RefreshFailed` and `Expired` branches) leaves `expiresAt` unchanged
-- [ ] 9.14 Unit test: Removing `spec.authorization` on a reachable-without-auth server clears `status.authorization` including `expiresAt`
-
-## 10. Tests — CLI
-
-- [ ] 10.1 Unit test: CLI fails with actionable error when MCPServer missing / auth state not `Required` / Secret missing / `registrationEndpoint` absent
-- [ ] 10.2 Unit test: DCR skipped when `client_id` present unless `--force-register`
-- [ ] 10.3 Unit test: PKCE verifier / challenge generated per RFC 7636
-- [ ] 10.4 Integration test (mock AS): full code → token exchange, Secret PATCH'd with all five keys
-
-## 11. Tests — end-to-end
-
-- [ ] 11.1 Chainsaw test against a mock OAuth-protected MCP server: detection → `Required` → CLI-emulated Secret write → controller transitions to `Authorized` → agent successfully calls MCP tool
-- [ ] 11.2 Chainsaw test: expiry within 60s → controller refreshes without user intervention
-- [ ] 11.3 Manual trust-anchor validation: full `mcp.notion.com/mcp` flow documented in the operator guide
+- [ ] 9.1 Chainsaw test against a mock OAuth-protected MCP server: detection → `Required` → externally-populated Secret → controller transitions to `Authorized` → agent successfully calls MCP tool
+- [ ] 9.2 Chainsaw test: expiry within 60s → controller refreshes without user intervention
