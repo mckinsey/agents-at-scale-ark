@@ -1,0 +1,62 @@
+terminationGracePeriodSeconds: 1
+ark:
+  model:
+    enabled: true
+    name: test-model-mock
+    type: completions
+    provider: openai
+    model: gpt-4.1-mini
+    pollInterval: 3s
+    apiKey: mock-api-key
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+    ephemeral-storage: 128Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+    ephemeral-storage: 128Mi
+
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "gpt-4.1-mini",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            }
+          ]
+        }
+
+  - path: "/v1/chat/completions"
+    match: "@"
+    response:
+      status: 200
+      content: |
+        {
+          "id": "mock-{{timestamp}}",
+          "object": "chat.completion",
+          "model": "{{jmes request body.model}}",
+          "choices": [{
+            "message": {
+              "role": "assistant",
+              "content": "Some specialist knowledge would go here."
+            },
+            "finish_reason": "stop"
+          }],
+          "usage": {
+            "prompt_tokens": 50,
+            "completion_tokens": 20,
+            "total_tokens": 70
+          }
+        }
