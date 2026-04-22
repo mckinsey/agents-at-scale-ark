@@ -360,8 +360,6 @@ spec:
                     - Required
                     - DiscoveryFailed
                     - Authorized
-                    - Expired
-                    - RefreshFailed
                     type: string
                   tokenEndpoint:
                     description: |-
