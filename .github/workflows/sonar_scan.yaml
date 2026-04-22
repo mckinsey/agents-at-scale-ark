@@ -1,7 +1,11 @@
 name: SonarQube Scan
 
 on:
-  # Trigger analysis when pushing to your main branches, and when creating a pull request.
+  workflow_call:
+    inputs:
+      branch:
+        type: string
+        required: false
   push:
     branches:
       - main
@@ -145,6 +149,14 @@ jobs:
           organization: ${{ secrets.CF_ORGANIZATION }}
           auth_client_id: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_ID }}
           auth_client_secret: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_SECRET }}
+
+      - name: Debug SonarQube connectivity
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          curl -v "$SONAR_HOST_URL/api/v2/analysis/version" \
+            -H "Authorization: Bearer $SONAR_TOKEN"
 
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v7.1.0
