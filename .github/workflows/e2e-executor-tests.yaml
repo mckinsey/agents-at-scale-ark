@@ -41,18 +41,33 @@ jobs:
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
 
+      - name: Verify secret configuration
+        if: ${{ env.HAS_OPENAI_KEY == 'true' }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
+        run: |
+          KEY_LENGTH=${#OPENAI_API_KEY}
+          echo "Secret length: $KEY_LENGTH characters"
+          if [ "$KEY_LENGTH" -lt 10 ]; then
+            echo "::error::CICD_OPENAI_API_KEY appears to be invalid (too short: $KEY_LENGTH chars)"
+            exit 1
+          fi
+          echo "Secret first 4 chars: ${OPENAI_API_KEY:0:4}..."
+          echo "Secret looks valid"
+
       - name: Create OpenAI credentials secret
         if: ${{ env.HAS_OPENAI_KEY == 'true' }}
         env:
           OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
         run: |
-          printf '%s' "$OPENAI_API_KEY" > /tmp/api-key
           kubectl create secret generic openai-credentials \
-            --from-file=OPENAI_API_KEY=/tmp/api-key \
+            --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" \
             --from-literal=OPENAI_BASE_URL='https://api.openai.com/v1' \
             --namespace default \
             --dry-run=client -o yaml | kubectl apply -f -
-          rm /tmp/api-key
+          echo "Verifying secret was created correctly..."
+          KEY_IN_SECRET=$(kubectl get secret openai-credentials -n default -o jsonpath='{.data.OPENAI_API_KEY}' | base64 -d | wc -c)
+          echo "Secret stored length: $KEY_IN_SECRET bytes"
 
       - name: Deploy executor-openai-responses
         if: ${{ env.HAS_OPENAI_KEY == 'true' }}
@@ -173,3 +188,4 @@ jobs:
           name: cluster-logs-executor-${{ github.sha }}
           path: /tmp/cluster-logs-executor
           retention-days: 7
+
