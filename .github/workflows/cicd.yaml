@@ -675,6 +675,17 @@ jobs:
             --wait \
             --timeout=5m
 
+      - name: Deploy ark-broker
+        run: |
+          helm upgrade --install ark-broker services/ark-broker/chart \
+            --namespace default \
+            --create-namespace \
+            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/ark-broker" \
+            --set app.image.tag="${{ github.sha }}" \
+            --set app.image.pullPolicy="Always" \
+            --wait \
+            --timeout=5m
+
       - name: Deploy ark-dashboard
         run: |
           helm upgrade --install ark-dashboard services/ark-dashboard/chart \
@@ -689,6 +700,7 @@ jobs:
       - name: Wait for services to be ready
         run: |
           kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=ark-broker -n default --timeout=120s
           kubectl wait --for=condition=ready pod -l app=ark-dashboard -n default --timeout=120s
 
       - name: Update Argo Workflows dependencies
