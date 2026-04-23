@@ -27,6 +27,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from .broker import BrokerClient, discover_broker_url
 from .executor import BaseExecutor
 from .extensions.query import (
     QUERY_EXTENSION_URI,
@@ -208,12 +209,28 @@ class A2AExecutorAdapter(AgentExecutor):
         query_ref = extract_query_ref(context.message)
         request = await resolve_query(query_ref, user_text, conversation_id=conversation_id)
 
+        broker_url = await discover_broker_url(query_ref.namespace)
+        broker = BrokerClient(
+            base_url=broker_url,
+            query_name=query_ref.name,
+            session_id=conversation_id,
+            agent_name=request.agent.name,
+        ) if broker_url else None
+
+        self.executor._broker_client = broker
+        self.executor._streamed = False
+
         try:
             response_messages = await self.executor.execute_agent(request)
             response_text = ""
             for msg in response_messages:
                 if msg.role == "assistant" and msg.content:
                     response_text += msg.content
+
+            if broker:
+                if not self.executor._streamed:
+                    await broker.send_chunk(response_text, finish_reason="stop")
+                await broker.complete()
 
             response_msg = A2AMessage(
                 role="agent",
@@ -232,6 +249,9 @@ class A2AExecutorAdapter(AgentExecutor):
                     message_id="error-response",
                 )
             )
+        finally:
+            self.executor._broker_client = None
+            self.executor._streamed = False
 
     async def cancel(self, context: Any, event_queue: EventQueue) -> None:
         pass

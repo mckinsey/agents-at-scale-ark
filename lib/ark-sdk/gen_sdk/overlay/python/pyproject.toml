@@ -1,6 +1,6 @@
 [project]
 name = "ark-sdk"
-version = "0.1.59"
+version = "0.1.61-rc"
 description = "Python SDK for ARK - Agentic Runtime for Kubernetes"
 authors = [
   {name = "McKinsey & Company", email = "dave.kerr@quantumblack.com"},
@@ -35,7 +35,7 @@ dependencies = [
   "PyJWT[crypto]>=2.10.0",
   "pydantic-settings>=2.0.0",
   "uvicorn[standard]>=0.24.0",
-  "a2a-sdk[http-server]>=0.3.0",
+  "a2a-sdk[http-server]>=0.3.0,<1.0.0",
 ]
 
 [project.optional-dependencies]
