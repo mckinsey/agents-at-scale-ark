@@ -77,6 +77,11 @@ kind: ConfigMap
 metadata:
   name: ark-config-broker
   namespace: default
+  labels:
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    meta.helm.sh/release-name: ark-broker
+    meta.helm.sh/release-namespace: default
 data:
   enabled: "true"
   serviceRef: |
