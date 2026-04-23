@@ -160,27 +160,30 @@ spec:
         )
         
         assert result.returncode == 0 or "already exists" in result.stderr.lower(), f"Failed to create model: {result.stderr}"
-        
+
         import time
-        time.sleep(2)
-        
-        result = subprocess.run(
-            ["kubectl", "get", "model", self.model_name, "-n", "default", "-o", "json"],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        
-        if result.returncode == 0:
-            import json
-            model_data = json.loads(result.stdout)
-            conditions = model_data.get("status", {}).get("conditions", [])
-            available = any(
-                c.get("type") == "ModelAvailable" and c.get("status") == "True"
-                for c in conditions
+        import json
+        deadline = time.time() + 30
+        available = False
+        while time.time() < deadline:
+            result = subprocess.run(
+                ["kubectl", "get", "model", self.model_name, "-n", "default", "-o", "json"],
+                capture_output=True,
+                text=True,
+                timeout=10
             )
-            if not available:
-                pytest.skip("Model not available yet")
+            if result.returncode == 0:
+                model_data = json.loads(result.stdout)
+                conditions = model_data.get("status", {}).get("conditions", [])
+                available = any(
+                    c.get("type") == "ModelAvailable" and c.get("status") == "True"
+                    for c in conditions
+                )
+                if available:
+                    break
+            time.sleep(2)
+        if not available:
+            pytest.skip("Model not available after 30s")
         
         agent_yaml = f"""apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
