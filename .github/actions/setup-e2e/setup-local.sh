@@ -234,6 +234,19 @@ PROBE_EOF
   fi
 fi
 
+echo "=== Installing ARK Broker ==="
+helm upgrade --install ark-broker "${REPO_ROOT}/services/ark-broker/chart" \
+  --namespace default \
+  --create-namespace \
+  --set app.image.repository="${REGISTRY}/ark-broker" \
+  --set app.image.tag="${ARK_IMAGE_TAG}" \
+  --set app.image.pullPolicy=IfNotPresent \
+  --wait --wait-for-jobs --timeout=300s
+
+echo "=== Waiting for ARK services after broker installation ==="
+kubectl -n ark-system rollout status deployment/ark-controller --timeout=120s
+kubectl -n ark-system rollout status deployment/ark-completions --timeout=120s
+
 echo "=== Waiting for image pre-pulls to complete ==="
 for pid in "${IMAGE_PULL_PIDS[@]}"; do
   wait "$pid" || echo "Warning: image pull PID $pid failed"
