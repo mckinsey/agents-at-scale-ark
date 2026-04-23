@@ -26,6 +26,10 @@ spec:
       jsonPath: .status.toolCount
       name: Tools
       type: integer
+    - description: OAuth authorization state
+      jsonPath: .status.authorization.state
+      name: Auth
+      type: string
     - description: Age
       jsonPath: .metadata.creationTimestamp
       name: Age
@@ -240,6 +244,80 @@ spec:
           status:
             description: MCPServerStatus defines the observed state of MCPServer
             properties:
+              authorization:
+                description: |-
+                  Authorization holds OAuth 2.1 / RFC 9728 discovery metadata when the
+                  MCP server requires authorization. Populated by the controller when
+                  a 401 response is received; not set otherwise.
+                properties:
+                  authorizationEndpoint:
+                    description: |-
+                      AuthorizationEndpoint is the OAuth 2.1 authorization endpoint
+                      (RFC 8414 `authorization_endpoint`).
+                    type: string
+                  authorizationServers:
+                    description: |-
+                      AuthorizationServers is the list of authorization server issuers
+                      the MCP resource trusts (RFC 9728 `authorization_servers`).
+                    items:
+                      type: string
+                    type: array
+                  grantTypesSupported:
+                    description: |-
+                      GrantTypesSupported is the set of OAuth grant types the
+                      authorization server supports (RFC 8414 `grant_types_supported`).
+                    items:
+                      type: string
+                    type: array
+                  lastDiscovered:
+                    description: |-
+                      LastDiscovered is the timestamp of the most recent successful
+                      discovery probe against the server.
+                    format: date-time
+                    type: string
+                  registrationEndpoint:
+                    description: |-
+                      RegistrationEndpoint is the RFC 7591 dynamic client registration
+                      endpoint, when the authorization server supports it.
+                    type: string
+                  resource:
+                    description: |-
+                      Resource is the canonical URI of the protected MCP resource, taken
+                      from the `resource` field of the RFC 9728 Protected Resource
+                      Metadata document.
+                    type: string
+                  resourceMetadataURL:
+                    description: |-
+                      ResourceMetadataURL is the `resource_metadata` URL parsed from the
+                      server's WWW-Authenticate header (RFC 9728 §5.1).
+                    type: string
+                  resourceName:
+                    description: |-
+                      ResourceName is the human-readable name of the protected resource
+                      (RFC 9728 `resource_name`), e.g. "Notion MCP (Beta)".
+                    type: string
+                  scopesSupported:
+                    description: |-
+                      ScopesSupported is the list of OAuth scopes advertised by the
+                      authorization server (RFC 8414 `scopes_supported`).
+                    items:
+                      type: string
+                    type: array
+                  state:
+                    description: |-
+                      State names the current authorization state. Exposed on the
+                      MCPServer printcolumn as AUTH. Empty (absent) means the server
+                      does not require authorization.
+                    enum:
+                    - Required
+                    - DiscoveryFailed
+                    type: string
+                  tokenEndpoint:
+                    description: |-
+                      TokenEndpoint is the OAuth 2.1 token endpoint
+                      (RFC 8414 `token_endpoint`).
+                    type: string
+                type: object
               conditions:
                 description: Conditions represent the latest available observations
                   of the MCP server's state
