@@ -1,7 +1,11 @@
-import pytest
-import sys
+import base64
+import json
 import os
 import subprocess
+import sys
+import time
+
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
@@ -57,8 +61,6 @@ class TestQueriesCLI:
         )
     
     def test_setup_prerequisites(self):
-        import base64
-        
         if not self.provider_config:
             pytest.skip("No model provider credentials configured")
         
@@ -161,8 +163,6 @@ spec:
         
         assert result.returncode == 0 or "already exists" in result.stderr.lower(), f"Failed to create model: {result.stderr}"
 
-        import time
-        import json
         deadline = time.time() + 30
         available = False
         while time.time() < deadline:
@@ -182,8 +182,7 @@ spec:
                 if available:
                     break
             time.sleep(2)
-        if not available:
-            pytest.skip("Model not available after 30s")
+        assert available, f"Model {self.model_name} did not become available within 30s"
         
         agent_yaml = f"""apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
