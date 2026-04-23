@@ -11,11 +11,20 @@ rules:
   - ""
   resources:
   - configmaps
-  - secrets
   - services
   verbs:
   - get
   - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - ""
