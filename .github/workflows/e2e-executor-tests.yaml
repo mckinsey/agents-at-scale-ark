@@ -41,10 +41,17 @@ jobs:
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
 
+      - name: Create OpenAI credentials secret
+        if: ${{ env.HAS_OPENAI_KEY == 'true' }}
+        run: |
+          kubectl create secret generic openai-credentials \
+            --from-literal=OPENAI_API_KEY='${{ secrets.CICD_OPENAI_API_KEY }}' \
+            --from-literal=OPENAI_BASE_URL='https://api.openai.com/v1' \
+            --namespace default \
+            --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Deploy executor-openai-responses
         if: ${{ env.HAS_OPENAI_KEY == 'true' }}
-        env:
-          OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
         run: |
           helm upgrade --install executor-openai-responses \
             oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/executor-openai-responses \
@@ -53,10 +60,10 @@ jobs:
             --set app.image.pullPolicy=Always \
             --wait \
             --timeout=5m
-          kubectl set env deployment/executor-openai-responses \
-            -n default \
-            OPENAI_API_KEY="${OPENAI_API_KEY}" \
-            OPENAI_BASE_URL="https://api.openai.com/v1"
+
+          kubectl patch deployment executor-openai-responses -n default --type=json -p='[
+            {"op": "add", "path": "/spec/template/spec/containers/0/envFrom", "value": [{"secretRef": {"name": "openai-credentials"}}]}
+          ]'
           kubectl rollout status deployment/executor-openai-responses \
             -n default --timeout=2m
 
