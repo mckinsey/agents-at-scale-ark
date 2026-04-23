@@ -12,7 +12,7 @@ require (
 	github.com/google/jsonschema-go v0.4.2
 	github.com/itchyny/gojq v0.12.17
 	github.com/jackc/pglogrepl v0.0.0-20251213150135-2e8d0df862c1
-	github.com/jackc/pgx/v5 v5.9.1
+	github.com/jackc/pgx/v5 v5.9.2
 	github.com/lib/pq v1.11.1
 	github.com/onsi/ginkgo/v2 v2.22.0
 	github.com/onsi/gomega v1.36.1
