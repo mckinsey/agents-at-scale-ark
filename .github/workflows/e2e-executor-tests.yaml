@@ -81,9 +81,7 @@ jobs:
             --wait \
             --timeout=5m
 
-          kubectl patch deployment executor-openai-responses -n default --type=json -p='[
-            {"op": "add", "path": "/spec/template/spec/containers/0/envFrom", "value": [{"secretRef": {"name": "openai-credentials"}}]}
-          ]'
+          kubectl set env deployment/executor-openai-responses -n default --from=secret/openai-credentials --overwrite
           kubectl rollout status deployment/executor-openai-responses \
             -n default --timeout=2m
 
