@@ -32,6 +32,21 @@ const (
 	// Condition types
 	MCPServerAvailable   = "Available"
 	MCPServerDiscovering = "Discovering"
+
+	// Condition reason used on the Available condition when the MCP
+	// server has responded with HTTP 401 and OAuth discovery has
+	// populated status.authorization. Distinct from ClientCreationFailed
+	// so consumers can branch on auth state without string-matching the
+	// error message.
+	MCPServerReasonAuthorizationRequired = "AuthorizationRequired"
+
+	// MCPServerReasonAuthorizationDiscoveryFailed is used when the server
+	// returns HTTP 401 but fails to advertise OAuth metadata per
+	// RFC 9728 — e.g. missing or malformed WWW-Authenticate header, or
+	// the protected resource metadata endpoint is unreachable / returns
+	// an invalid document. The dashboard cannot offer an authorize flow
+	// in this state, so it is surfaced as a failure, not a success.
+	MCPServerReasonAuthorizationDiscoveryFailed = "AuthorizationDiscoveryFailed"
 )
 
 type MCPServerReconciler struct {
@@ -116,14 +131,13 @@ func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer arkv1
 	mcpServer.Status.ResolvedAddress = resolvedAddress
 	mcpClient, err := r.createMCPClient(ctx, &mcpServer)
 	if err != nil {
-		if err := r.reconcileConditionsClientCreationFailed(ctx, &mcpServer, err); err != nil {
-			return ctrl.Result{}, err
-		}
+		return r.handleClientCreationError(ctx, &mcpServer, err)
+	}
 
-		if err := r.deleteAllMCPTools(ctx, mcpServer.Namespace, mcpServer.Name); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{RequeueAfter: getPollInterval(mcpServer.Spec.PollInterval)}, nil
+	// Previous reconcile may have left authorization status populated;
+	// once the client connects successfully, clear it.
+	if mcpServer.Status.Authorization != nil {
+		mcpServer.Status.Authorization = nil
 	}
 
 	mcpTools, err := mcpClient.ListTools(ctx)
@@ -220,6 +234,136 @@ func (r *MCPServerReconciler) reconcileConditionsToolCreationFailed(ctx context.
 	return nil
 }
 
+// handleClientCreationError dispatches failures from createMCPClient to
+// the appropriate condition handler — the OAuth discovery path for a
+// 401 response, the generic client-creation path otherwise — and
+// cleans up any tools owned by the server.
+func (r *MCPServerReconciler) handleClientCreationError(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, err error) (ctrl.Result, error) {
+	requeue := ctrl.Result{RequeueAfter: getPollInterval(mcpServer.Spec.PollInterval)}
+
+	if ue, ok := arkmcp.IsUnauthorizedError(err); ok {
+		if err := r.handleAuthorizationRequired(ctx, mcpServer, ue); err != nil {
+			return ctrl.Result{}, err
+		}
+	} else if err := r.reconcileConditionsClientCreationFailed(ctx, mcpServer, err); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if err := r.deleteAllMCPTools(ctx, mcpServer.Namespace, mcpServer.Name); err != nil {
+		return ctrl.Result{}, err
+	}
+	return requeue, nil
+}
+
+// handleAuthorizationRequired runs RFC 9728 + RFC 8414 discovery using
+// the WWW-Authenticate challenge captured by the MCP transport. On
+// success it populates status.authorization and sets the
+// AuthorizationRequired condition. On discovery failure (missing or
+// malformed WWW-Authenticate, unreachable metadata endpoint, invalid
+// metadata document) it sets the AuthorizationDiscoveryFailed condition
+// instead — without a usable metadata document the dashboard cannot
+// drive an OAuth flow, so the server is surfaced as failed rather than
+// silently degraded.
+func (r *MCPServerReconciler) handleAuthorizationRequired(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, ue *arkmcp.UnauthorizedError) error {
+	log := logf.FromContext(ctx)
+	mcpServer.Status.ToolCount = 0
+
+	timeout := parseTimeout(mcpServer.Spec.Timeout)
+
+	metaURL, ok := arkmcp.ParseResourceMetadataURL(ue.WWWAuthenticate)
+	if !ok {
+		reason := fmt.Sprintf("server returned HTTP 401 but WWW-Authenticate header did not advertise RFC 9728 resource_metadata URL (header=%q)", ue.WWWAuthenticate)
+		return r.reconcileConditionsAuthorizationDiscoveryFailed(ctx, mcpServer, reason)
+	}
+
+	rm, err := arkmcp.FetchProtectedResourceMetadata(ctx, metaURL, mcpServer.Status.ResolvedAddress, timeout)
+	if err != nil {
+		reason := fmt.Sprintf("failed to fetch protected resource metadata at %s: %v", metaURL, err)
+		log.Error(err, "protected resource metadata fetch failed", "url", metaURL)
+		return r.reconcileConditionsAuthorizationDiscoveryFailed(ctx, mcpServer, reason)
+	}
+
+	prev := mcpServer.Status.Authorization
+	authStatus := &arkv1alpha1.MCPServerAuthorizationStatus{
+		State:                arkv1alpha1.MCPServerAuthorizationStateRequired,
+		Resource:             rm.Resource,
+		ResourceMetadataURL:  metaURL,
+		ResourceName:         rm.ResourceName,
+		AuthorizationServers: rm.AuthorizationServers,
+		ScopesSupported:      rm.ScopesSupported,
+	}
+	if authStatus.Resource == "" {
+		authStatus.Resource = mcpServer.Status.ResolvedAddress
+	}
+
+	if len(rm.AuthorizationServers) > 0 {
+		if as, err := arkmcp.FetchAuthorizationServerMetadata(ctx, rm.AuthorizationServers[0], timeout); err != nil {
+			// RFC 8414 metadata is advisory for surfacing state; a failure
+			// here is logged but does not invalidate the AuthorizationRequired
+			// signal, because the resource metadata itself was valid.
+			log.Info("authorization server metadata fetch failed, continuing with resource metadata only", "issuer", rm.AuthorizationServers[0], "error", err.Error())
+		} else {
+			authStatus.AuthorizationEndpoint = as.AuthorizationEndpoint
+			authStatus.TokenEndpoint = as.TokenEndpoint
+			authStatus.RegistrationEndpoint = as.RegistrationEndpoint
+			authStatus.GrantTypesSupported = as.GrantTypesSupported
+			if len(as.ScopesSupported) > 0 {
+				authStatus.ScopesSupported = as.ScopesSupported
+			}
+		}
+	}
+
+	now := metav1.Now()
+	authStatus.LastDiscovered = &now
+	mcpServer.Status.Authorization = authStatus
+
+	displayName := authStatus.ResourceName
+	if displayName == "" {
+		displayName = authStatus.Resource
+	}
+	message := fmt.Sprintf("OAuth authorization required for %s. Authorize via dashboard or CLI.", displayName)
+
+	r.reconcileCondition(mcpServer, MCPServerAvailable, metav1.ConditionFalse, MCPServerReasonAuthorizationRequired, message)
+	r.reconcileCondition(mcpServer, MCPServerDiscovering, metav1.ConditionFalse, MCPServerReasonAuthorizationRequired, "Cannot attempt tool discovery until authorization is complete")
+
+	firstEntry := prev == nil || prev.State != arkv1alpha1.MCPServerAuthorizationStateRequired
+	urlChanged := prev != nil && prev.ResourceMetadataURL != authStatus.ResourceMetadataURL
+	if firstEntry || urlChanged {
+		r.Eventing.MCPServerRecorder().AuthorizationRequired(ctx, mcpServer, message)
+	}
+
+	return r.updateStatus(ctx, mcpServer)
+}
+
+// reconcileConditionsAuthorizationDiscoveryFailed sets conditions when
+// the server returned 401 but we could not extract a usable OAuth
+// metadata document. status.authorization is populated with
+// State=DiscoveryFailed only — metadata fields are left empty so the
+// dashboard cannot mistakenly drive an OAuth flow without a valid
+// authorization server.
+func (r *MCPServerReconciler) reconcileConditionsAuthorizationDiscoveryFailed(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, reason string) error {
+	log := logf.FromContext(ctx)
+	mcpServer.Status.ToolCount = 0
+
+	now := metav1.Now()
+	mcpServer.Status.Authorization = &arkv1alpha1.MCPServerAuthorizationStatus{
+		State:          arkv1alpha1.MCPServerAuthorizationStateDiscoveryFailed,
+		Resource:       mcpServer.Status.ResolvedAddress,
+		LastDiscovered: &now,
+	}
+
+	message := fmt.Sprintf("Authorization required but discovery failed: %s", reason)
+	changed1 := r.reconcileCondition(mcpServer, MCPServerAvailable, metav1.ConditionFalse, MCPServerReasonAuthorizationDiscoveryFailed, message)
+	changed2 := r.reconcileCondition(mcpServer, MCPServerDiscovering, metav1.ConditionFalse, MCPServerReasonAuthorizationDiscoveryFailed, "Cannot attempt tool discovery until authorization metadata can be discovered")
+
+	if changed1 || changed2 {
+		log.Error(nil, "MCP authorization discovery failed", "server", mcpServer.Name, "reason", reason)
+		r.Eventing.MCPServerRecorder().AuthorizationRequired(ctx, mcpServer, message)
+		return r.updateStatus(ctx, mcpServer)
+	}
+	return nil
+}
+
 // reconcileConditionsReady updates conditions when MCPServer is ready
 func (r *MCPServerReconciler) reconcileConditionsReady(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, toolCount int, toolsChanged bool) error {
 	mcpServer.Status.ToolCount = toolCount
@@ -266,15 +410,7 @@ func (r *MCPServerReconciler) createMCPClient(ctx context.Context, mcpServer *ar
 		headers = resolvedHeaders
 	}
 
-	// Parse timeout from MCPServer spec (default to 30s if not specified)
-	timeout := 30 * time.Second
-	if mcpServer.Spec.Timeout != "" {
-		parsedTimeout, err := time.ParseDuration(mcpServer.Spec.Timeout)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse timeout %s: %w", mcpServer.Spec.Timeout, err)
-		}
-		timeout = parsedTimeout
-	}
+	timeout := parseTimeout(mcpServer.Spec.Timeout)
 
 	// MCP settings are not needed for listing tools, etc.
 	mcpClient, err := arkmcp.NewMCPClient(ctx, mcpURL, headers, mcpServer.Spec.Transport, timeout, arkmcp.MCPSettings{})
@@ -446,4 +582,20 @@ func (r *MCPServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&arkv1alpha1.MCPServer{}).
 		Named("mcpserver").
 		Complete(r)
+}
+
+// parseTimeout returns the MCPServer spec timeout as a duration,
+// defaulting to 30s when unset and ignoring parse errors (the webhook
+// already validates the format; an invalid string at reconcile time is
+// treated as "use the default" rather than failing the whole reconcile).
+func parseTimeout(raw string) time.Duration {
+	const defaultTimeout = 30 * time.Second
+	if raw == "" {
+		return defaultTimeout
+	}
+	t, err := time.ParseDuration(raw)
+	if err != nil {
+		return defaultTimeout
+	}
+	return t
 }
