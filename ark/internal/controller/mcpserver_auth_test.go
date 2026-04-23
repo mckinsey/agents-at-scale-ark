@@ -616,6 +616,134 @@ var _ = Describe("MCPServer Controller — Bearer token injection via tokenSecre
 				"TokenRejected must not fire without a prior Authorized state")
 		}
 	})
+
+	It("emits AuthorizationSecretUnresolvable when the referenced Secret does not exist", func() {
+		srv := fakeAuthorizedMCPServer("never-used")
+		defer func() { srv.CloseClientConnections(); srv.Close() }()
+
+		const name = "mcp-auth-secret-missing"
+		mcpServer := &arkv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec: arkv1alpha1.MCPServerSpec{
+				Address:   arkv1alpha1.ValueSource{Value: srv.URL + "/mcp"},
+				Transport: "http",
+				Timeout:   "5s",
+				Authorization: &arkv1alpha1.MCPServerAuthorizationSpec{
+					TokenSecretRef: arkv1alpha1.TokenSecretReference{Name: "does-not-exist-at-all"},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, mcpServer)).To(Succeed())
+		DeferCleanup(func() { _ = k8sClient.Delete(ctx, mcpServer) })
+
+		evtProvider := newMCPEventProvider()
+		r := &MCPServerReconciler{Client: k8sClient, Scheme: k8sClient.Scheme(), Eventing: evtProvider}
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
+
+		var found *eventmock.Event
+		for i := range evtProvider.emitter.GetEvents() {
+			if evtProvider.emitter.GetEvents()[i].Reason == "AuthorizationSecretUnresolvable" {
+				e := evtProvider.emitter.GetEvents()[i]
+				found = &e
+				break
+			}
+		}
+		Expect(found).NotTo(BeNil(), "expected AuthorizationSecretUnresolvable event when Secret is missing")
+		Expect(found.Type).To(Equal("Warning"))
+		Expect(found.Message).To(ContainSubstring("does-not-exist-at-all"))
+		Expect(found.Message).To(ContainSubstring("spec.authorization.tokenSecretRef.name"))
+	})
+
+	It("emits AuthorizationSecretUnresolvable for an overridden *Key that is absent from the Secret", func() {
+		srv := fakeAuthorizedMCPServer("never-used")
+		defer func() { srv.CloseClientConnections(); srv.Close() }()
+
+		const name = "mcp-auth-custom-key-missing"
+		const secretName = "mcp-auth-custom-key-missing-secret"
+
+		// Secret has data under the DEFAULT key names but the user has
+		// overridden accessTokenKey to something else — which is absent.
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: "default"},
+			Data: map[string][]byte{
+				"access_token": []byte("value-under-the-wrong-key"),
+			},
+		}
+		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+		DeferCleanup(func() { _ = k8sClient.Delete(ctx, secret) })
+
+		mcpServer := &arkv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec: arkv1alpha1.MCPServerSpec{
+				Address:   arkv1alpha1.ValueSource{Value: srv.URL + "/mcp"},
+				Transport: "http",
+				Timeout:   "5s",
+				Authorization: &arkv1alpha1.MCPServerAuthorizationSpec{
+					TokenSecretRef: arkv1alpha1.TokenSecretReference{
+						Name:           secretName,
+						AccessTokenKey: "MY_CUSTOM_ACCESS_TOKEN",
+					},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, mcpServer)).To(Succeed())
+		DeferCleanup(func() { _ = k8sClient.Delete(ctx, mcpServer) })
+
+		evtProvider := newMCPEventProvider()
+		r := &MCPServerReconciler{Client: k8sClient, Scheme: k8sClient.Scheme(), Eventing: evtProvider}
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
+
+		var found *eventmock.Event
+		for i := range evtProvider.emitter.GetEvents() {
+			if evtProvider.emitter.GetEvents()[i].Reason == "AuthorizationSecretUnresolvable" {
+				e := evtProvider.emitter.GetEvents()[i]
+				found = &e
+				break
+			}
+		}
+		Expect(found).NotTo(BeNil(), "expected AuthorizationSecretUnresolvable event for overridden key")
+		Expect(found.Type).To(Equal("Warning"))
+		Expect(found.Message).To(ContainSubstring("MY_CUSTOM_ACCESS_TOKEN"))
+		Expect(found.Message).To(ContainSubstring("accessTokenKey"))
+	})
+
+	It("stays SILENT when default keys are absent from the Secret (legitimate shell state)", func() {
+		srv := fakeAuthorizedMCPServer("never-used")
+		defer func() { srv.CloseClientConnections(); srv.Close() }()
+
+		const name = "mcp-auth-shell-silent"
+		const secretName = "mcp-auth-shell-silent-secret"
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: "default"},
+			Data:       map[string][]byte{},
+		}
+		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+		DeferCleanup(func() { _ = k8sClient.Delete(ctx, secret) })
+
+		mcpServer := &arkv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec: arkv1alpha1.MCPServerSpec{
+				Address:   arkv1alpha1.ValueSource{Value: srv.URL + "/mcp"},
+				Transport: "http",
+				Timeout:   "5s",
+				Authorization: &arkv1alpha1.MCPServerAuthorizationSpec{
+					TokenSecretRef: arkv1alpha1.TokenSecretReference{Name: secretName},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, mcpServer)).To(Succeed())
+		DeferCleanup(func() { _ = k8sClient.Delete(ctx, mcpServer) })
+
+		evtProvider := newMCPEventProvider()
+		r := &MCPServerReconciler{Client: k8sClient, Scheme: k8sClient.Scheme(), Eventing: evtProvider}
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
+
+		for _, e := range evtProvider.emitter.GetEvents() {
+			Expect(e.Reason).NotTo(Equal("AuthorizationSecretUnresolvable"),
+				"default-key absence on an existing Secret must not fire Unresolvable — that is the legitimate shell state")
+		}
+	})
 })
 
 // mux401Toggling returns a handler that acts like fakeAuthorizedMCPServer

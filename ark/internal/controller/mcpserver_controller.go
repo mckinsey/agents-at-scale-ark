@@ -190,14 +190,21 @@ func (r *MCPServerReconciler) resolveAuthorizationMaterial(ctx context.Context, 
 	material := &authorizationMaterial{secretName: ref.Name}
 
 	secret := &corev1.Secret{}
-	key := types.NamespacedName{Name: ref.Name, Namespace: mcpServer.Namespace}
-	if err := r.Get(ctx, key, secret); err != nil {
+	nn := types.NamespacedName{Name: ref.Name, Namespace: mcpServer.Namespace}
+	if err := r.Get(ctx, nn, secret); err != nil {
 		if errors.IsNotFound(err) {
-			log.Info("authorization secret not found, falling through to 401 discovery path", "secret", ref.Name)
+			msg := fmt.Sprintf("Secret %q not found in namespace %q — referenced by spec.authorization.tokenSecretRef.name", ref.Name, mcpServer.Namespace)
+			log.Info(msg)
+			r.Eventing.MCPServerRecorder().AuthorizationSecretUnresolvable(ctx, mcpServer, msg)
 			return material, nil
 		}
 		return nil, fmt.Errorf("failed to read authorization secret %s: %w", ref.Name, err)
 	}
+
+	// Emit a Warning event whenever the user-configured (non-default) key
+	// name is absent from the Secret. Silent on default-key absence since
+	// an empty shell Secret is the expected pre-auth state.
+	r.warnOnMissingOverriddenKeys(ctx, mcpServer, secret, ref)
 
 	accessKey := ref.AccessTokenKey
 	if accessKey == "" {
@@ -222,6 +229,37 @@ func (r *MCPServerReconciler) resolveAuthorizationMaterial(ctx context.Context, 
 	}
 
 	return material, nil
+}
+
+// warnOnMissingOverriddenKeys emits an AuthorizationSecretUnresolvable
+// event for each `*Key` override on TokenSecretReference whose configured
+// value differs from the default AND is absent from the Secret. Default
+// key absence is silent — it matches the expected shape of a freshly
+// provisioned, unpopulated shell Secret.
+func (r *MCPServerReconciler) warnOnMissingOverriddenKeys(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, secret *corev1.Secret, ref arkv1alpha1.TokenSecretReference) {
+	overrides := []struct {
+		fieldName string
+		value     string
+		fallback  string
+	}{
+		{"accessTokenKey", ref.AccessTokenKey, "access_token"},
+		{"refreshTokenKey", ref.RefreshTokenKey, "refresh_token"},
+		{"expiresAtKey", ref.ExpiresAtKey, "expires_at"},
+		{"clientIDKey", ref.ClientIDKey, "client_id"},
+		{"clientSecretKey", ref.ClientSecretKey, "client_secret"},
+	}
+	for _, o := range overrides {
+		if o.value == "" || o.value == o.fallback {
+			continue
+		}
+		if _, ok := secret.Data[o.value]; ok {
+			continue
+		}
+		msg := fmt.Sprintf(
+			"Secret %q has no key %q — spec.authorization.tokenSecretRef.%s was overridden",
+			ref.Name, o.value, o.fieldName)
+		r.Eventing.MCPServerRecorder().AuthorizationSecretUnresolvable(ctx, mcpServer, msg)
+	}
 }
 
 // applyAuthorizationSuccess reconciles status.authorization after a
