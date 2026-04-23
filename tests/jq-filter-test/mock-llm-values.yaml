@@ -1,0 +1,62 @@
+terminationGracePeriodSeconds: 1
+ark:
+  model:
+    enabled: true
+    name: test-model-mock
+    type: completions
+    provider: openai
+    model: gpt-4.1-mini
+    pollInterval: 3s
+    apiKey: mock-api-key
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+    ephemeral-storage: 128Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+    ephemeral-storage: 128Mi
+
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "gpt-4.1-mini",
+              "object": "model",
+              "created": 1687882411,
+              "owned_by": "openai"
+            }
+          ]
+        }
+
+  - path: "/v1/chat/completions"
+    response:
+      status: 500
+      content: '"Unrecognised agent"'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'test agent')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","tool_calls":[{"id":"call_json","type":"function","function":{"name":"test-json-api","arguments":"{}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":50,"completion_tokens":10,"total_tokens":60}}'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[-1].content || '', 'Sample Slide Show')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"Sample Slide Show"},"finish_reason":"stop"}],"usage":{"prompt_tokens":60,"completion_tokens":5,"total_tokens":65}}'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[-1].content || '', 'author')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"The slideshow data contains the author, title, and slides fields from the API response."},"finish_reason":"stop"}],"usage":{"prompt_tokens":80,"completion_tokens":15,"total_tokens":95}}'
