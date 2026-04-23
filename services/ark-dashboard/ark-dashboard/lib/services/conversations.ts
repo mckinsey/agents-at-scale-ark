@@ -23,11 +23,7 @@ export interface ConversationMessage {
 
 export const conversationsService = {
   async getConversations(sessionId: string): Promise<Conversation[]> {
-    const sessions = await apiClient.get<{ sessions: Record<string, any> }>(
-      '/api/v1/broker/sessions'
-    );
-
-    const session = sessions.sessions[sessionId];
+    const session = await apiClient.get<any>(`/api/v1/broker/sessions/${sessionId}`);
     if (!session) return [];
 
     const queries = Object.values(session.queries || {});
@@ -39,50 +35,49 @@ export const conversationsService = {
       conversationMap.set(query.conversationId, [...existing, query]);
     });
 
-    const conversations = await Promise.all(
-      Array.from(conversationMap.entries()).map(async ([convId, queries]): Promise<Conversation> => {
-        const hasError = queries.some(q => q.phase === 'error');
-        const isActive = queries.some(q => q.phase === 'running' || q.phase === 'pending');
+    const conversations = Array.from(conversationMap.entries()).map(([convId, queries]): Conversation => {
+      const hasError = queries.some(q => q.phase === 'error');
+      const isActive = queries.some(q => q.phase === 'running' || q.phase === 'pending');
 
-        const participants = Array.from(new Set(queries.map(q => q.agent || q.team).filter(Boolean))) as string[];
-        const participantName = participants[0] || convId;
+      const participants = Array.from(new Set(queries.map(q => q.agent || q.team).filter(Boolean))) as string[];
+      const participantName = participants[0] || convId;
 
-        let messageCount = 0;
-        let toolCallCount = 0;
+      const messageCount = queries.length;
+      const toolCallCount = 0;
 
-        try {
-          const messages = await conversationsService.getMessages(convId);
-          messageCount = messages.length;
-          toolCallCount = messages.filter(m => m.message.tool_calls && m.message.tool_calls.length > 0).length;
-        } catch (error) {
-          console.error(`Failed to fetch messages for conversation ${convId}:`, error);
-        }
+      const status: 'active' | 'completed' | 'error' = hasError ? 'error' : isActive ? 'active' : 'completed';
 
-        const status: 'active' | 'completed' | 'error' = hasError ? 'error' : isActive ? 'active' : 'completed';
-
-        return {
-          conversationId: convId,
-          name: participantName,
-          participants,
-          messageCount,
-          toolCallCount,
-          tokens: 0,
-          duration: calculateDuration(queries[0].createdAt, queries[queries.length - 1].completedAt),
-          status,
-          startTime: queries[0].createdAt,
-        };
-      })
-    );
+      return {
+        conversationId: convId,
+        name: participantName,
+        participants,
+        messageCount,
+        toolCallCount,
+        tokens: 0,
+        duration: calculateDuration(queries[0].createdAt, queries[queries.length - 1].completedAt),
+        status,
+        startTime: queries[0].createdAt,
+      };
+    });
 
     return conversations;
   },
 
-  async getMessages(conversationId: string): Promise<ConversationMessage[]> {
-    const response = await apiClient.get<{ items: ConversationMessage[] }>(
-      `/api/v1/broker/messages?conversation_id=${conversationId}`
-    );
-    return response.items || [];
+  /**
+   * Get messages for a conversation from the Memory Broker.
+   */
+  async getMessages(sessionId: string, conversationId: string): Promise<ConversationMessage[]> {
+    try {
+      const response = await apiClient.get<{ items: ConversationMessage[] }>(
+        `/api/v1/broker/messages?conversation_id=${conversationId}`
+      );
+      return response.items || [];
+    } catch (error) {
+      console.error(`Failed to fetch messages for conversation ${conversationId}:`, error);
+      return [];
+    }
   },
+
 
   async sendMessage(params: {
     conversationId: string;

@@ -1,4 +1,4 @@
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { ToolCall, type ToolCallData } from '@/components/chat/tool-call';
@@ -35,13 +35,33 @@ export function ChatMessage({
 }: Readonly<ChatMessageProps>) {
   const isUser = role === 'user';
   const isFailed = status === 'failed';
-  const markdownContent = useMarkdownProcessor(content);
   const { push } = useNamespacedNavigation();
   const contentRef = useRef<HTMLDivElement>(null);
   const [needsExpansion, setNeedsExpansion] = useState(false);
   const [expandedWidth, setExpandedWidth] = useState<number | null>(null);
+  const [isContentExpanded, setIsContentExpanded] = useState(false);
 
   const showErrorIcon = isFailed && queryName;
+
+  const isLongContent = (text: string): boolean => {
+    const lines = text.split('\n').length;
+    return lines > 15 || text.length > 1000;
+  };
+
+  const getTruncatedContent = (text: string): string => {
+    const lines = text.split('\n');
+    if (lines.length <= 15) {
+      return text.slice(0, 1000);
+    }
+    return lines.slice(0, 15).join('\n');
+  };
+
+  const contentIsLong = isLongContent(content);
+  const displayContent = contentIsLong && !isContentExpanded
+    ? getTruncatedContent(content)
+    : content;
+
+  const markdownContent = useMarkdownProcessor(displayContent);
 
   const handleErrorIconClick = () => {
     if (queryName) {
@@ -178,22 +198,41 @@ export function ChatMessage({
                 {sender}
               </div>
             )}
-            <div className="flex items-center gap-2">
-              <div ref={contentRef} className="min-w-0 flex-1 overflow-x-auto">
-                {viewMode === 'markdown' ? (
-                  <div className="text-sm break-words">{markdownContent}</div>
-                ) : (
-                  <pre className="m-0 border-0 bg-transparent p-0 font-mono text-sm whitespace-pre-wrap">
-                    {content}
-                  </pre>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <div ref={contentRef} className="min-w-0 flex-1 overflow-x-auto">
+                  {viewMode === 'markdown' ? (
+                    <div className="text-sm break-words">{markdownContent}</div>
+                  ) : (
+                    <pre className="m-0 border-0 bg-transparent p-0 font-mono text-sm whitespace-pre-wrap">
+                      {displayContent}
+                    </pre>
+                  )}
+                </div>
+                {showErrorIcon && (
+                  <button
+                    onClick={handleErrorIconClick}
+                    className="hover:bg-destructive/20 flex-shrink-0 rounded p-1 transition-colors"
+                    title="View events for this query">
+                    <AlertCircle className="h-4 w-4" />
+                  </button>
                 )}
               </div>
-              {showErrorIcon && (
+              {contentIsLong && (
                 <button
-                  onClick={handleErrorIconClick}
-                  className="hover:bg-destructive/20 flex-shrink-0 rounded p-1 transition-colors"
-                  title="View events for this query">
-                  <AlertCircle className="h-4 w-4" />
+                  onClick={() => setIsContentExpanded(!isContentExpanded)}
+                  className="flex items-center gap-1 text-xs opacity-70 hover:opacity-100 transition-opacity">
+                  {isContentExpanded ? (
+                    <>
+                      <ChevronDown className="h-3 w-3" />
+                      Show less
+                    </>
+                  ) : (
+                    <>
+                      <ChevronRight className="h-3 w-3" />
+                      Show more
+                    </>
+                  )}
                 </button>
               )}
             </div>

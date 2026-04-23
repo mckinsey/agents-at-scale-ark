@@ -14,7 +14,7 @@ interface Props {
 }
 
 export function MessageDisplay({ conversationId, sessionId }: Props) {
-  const { data: messages, isLoading } = useGetMessages(conversationId);
+  const { data: messages, isLoading } = useGetMessages(sessionId, conversationId);
   const { data: conversations } = useListConversations(sessionId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -39,17 +39,30 @@ export function MessageDisplay({ conversationId, sessionId }: Props) {
         </div>
       </div>
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
-        {messages?.map((msg, idx) => (
-          <ChatMessage
-            key={idx}
-            role={msg.message.role === 'tool' ? 'system' : msg.message.role}
-            content={msg.message.content || ''}
-            queryName={msg.query_id}
-            toolCalls={msg.message.tool_calls}
-            sender={msg.message.name}
-          />
-        ))}
-        <div ref={messagesEndRef} />
+        {messages && messages.length > 0 ? (
+          <>
+            {messages.map((msg, idx) => (
+              <ChatMessage
+                key={idx}
+                role={msg.message.role === 'tool' ? 'system' : msg.message.role}
+                content={msg.message.content || ''}
+                queryName={msg.query_id}
+                toolCalls={msg.message.tool_calls}
+                sender={msg.message.name}
+              />
+            ))}
+            <div ref={messagesEndRef} />
+          </>
+        ) : (
+          <div className="flex h-full items-center justify-center text-center text-muted-foreground">
+            <div>
+              <p className="mb-2 text-sm">No conversation messages available</p>
+              <p className="text-xs">
+                Workflow sessions don't have conversational messages. Check the Logs tab for execution details.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -10,12 +10,12 @@ export const useListConversations = (sessionId: string | null) => {
   });
 };
 
-export const useGetMessages = (conversationId: string | null) => {
+export const useGetMessages = (sessionId: string | null, conversationId: string | null) => {
   return useQuery({
-    queryKey: ['messages', conversationId],
+    queryKey: ['messages', sessionId, conversationId],
     queryFn: () =>
-      conversationId ? conversationsService.getMessages(conversationId) : [],
-    enabled: !!conversationId,
+      sessionId && conversationId ? conversationsService.getMessages(sessionId, conversationId) : [],
+    enabled: !!sessionId && !!conversationId,
     refetchInterval: 2000,
   });
 };
