@@ -10,7 +10,7 @@ permissions:
   packages: read
 
 env:
-  EXECUTOR_CHART_VERSION: '0.1.3'
+  EXECUTOR_CHART_VERSION: '0.1.5'
 
 jobs:
   e2e-executor-tests:
