@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.61-rc.1](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.61-rc...v0.1.61-rc.1) (2026-04-23)
+
+
+### Features
+
+* **dashboard:** refactor YAML view to use resource API ([#1972](https://github.com/mckinsey/agents-at-scale-ark/issues/1972)) ([038809c](https://github.com/mckinsey/agents-at-scale-ark/commit/038809c71e250b7e78ad7f60b5226de838c72abc)), closes [#1881](https://github.com/mckinsey/agents-at-scale-ark/issues/1881)
+* **mcp-auth:** surface OAuth authorization state on MCPServer CRD ([#1946](https://github.com/mckinsey/agents-at-scale-ark/issues/1946)) ([bd7d89f](https://github.com/mckinsey/agents-at-scale-ark/commit/bd7d89fe52c4d0b3f486168f6fa402af1411e182))
+
+
+### Bug Fixes
+
+* **completions:** include conversationId in streaming final chunk ([#1980](https://github.com/mckinsey/agents-at-scale-ark/issues/1980)) ([151e809](https://github.com/mckinsey/agents-at-scale-ark/commit/151e8090cf8c6ea75f7115275d020a8e12326f07))
+* Persist chat window state across browser refresh ([#1565](https://github.com/mckinsey/agents-at-scale-ark/issues/1565)) ([a300856](https://github.com/mckinsey/agents-at-scale-ark/commit/a300856e9c46db310ca96ac9bf56e9addefbaaae))
+
 ## [0.1.61-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.60...v0.1.61-rc) (2026-04-21)
 
 
