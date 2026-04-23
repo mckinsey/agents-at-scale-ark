@@ -2,21 +2,39 @@ apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   name: model-properties
+  labels:
+    llm: "true"
 spec:
   description: Test model with custom properties (temperature, max_tokens, top_p, penalties)
+  timeouts:
+    apply: 60s
+    assert: 300s
+    exec: 120s
   steps:
-  - name: step-1
+  - name: setup-model
     try:
     - script:
-        skipLogOutput: true
-        content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
-    - apply:
-        file: manifests/*.yaml
+        content: bash ../setup/setup-${MODEL}.sh $NAMESPACE
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+
+  - name: create-model-with-properties
+    try:
+    - script:
+        content: bash ../setup/setup-model-properties.sh $NAMESPACE
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Model
@@ -25,29 +43,20 @@ spec:
         for:
           condition:
             name: ModelAvailable
-            value: 'True' 
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          metadata:
-            name: test-model-properties
-          spec:
-            config:
-              azure:
-                properties:
-                  temperature:
-                    value: "0.1"
-                  max_tokens:
-                    value: "100"
-                  top_p:
-                    value: "0.9"
-                  frequency_penalty:
-                    value: "0.5"
-                  presence_penalty:
-                    value: "0.3"
-                  seed:
-                    value: "42"
+            value: 'True'
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-properties
+
+  - name: run-query
+    try:
+    - apply:
+        file: manifests/agent.yaml
+    - apply:
+        file: manifests/query.yaml
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -80,4 +89,3 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: model-properties-query
-

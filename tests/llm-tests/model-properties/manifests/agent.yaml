@@ -4,7 +4,7 @@ metadata:
   name: properties-test-agent
 spec:
   prompt: |
-    You are testing model properties. 
+    You are testing model properties.
     Generate exactly 3 words, then stop.
     Use creative and varied vocabulary.
   modelRef:
