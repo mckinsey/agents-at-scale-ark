@@ -82,6 +82,11 @@ jobs:
             --timeout=5m
 
           kubectl set env deployment/executor-openai-responses -n default --from=secret/openai-credentials --overwrite
+
+          echo "=== Verifying deployment env spec ==="
+          DEPLOYED_KEY_LENGTH=$(kubectl get deployment executor-openai-responses -n default -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="OPENAI_API_KEY")].value}' | wc -c)
+          echo "OPENAI_API_KEY length in deployment spec: $DEPLOYED_KEY_LENGTH chars"
+
           kubectl rollout status deployment/executor-openai-responses \
             -n default --timeout=2m
 
@@ -90,6 +95,14 @@ jobs:
         run: |
           echo "=== Executor pod env vars ==="
           kubectl exec -n default deployment/executor-openai-responses -- env | grep -E "OPENAI|HOST|PORT" || true
+
+          echo "=== Checking actual OPENAI_API_KEY length inside pod ==="
+          kubectl exec -n default deployment/executor-openai-responses -- python3 -c "
+          import os
+          key = os.environ.get('OPENAI_API_KEY', '')
+          print(f'OPENAI_API_KEY length: {len(key)} chars')
+          print(f'First 4 chars: {key[:4]}...')
+          " || echo "Pod env check failed"
 
           echo "=== Pod details ==="
           kubectl get pod -n default -l app=executor-openai-responses -o wide
