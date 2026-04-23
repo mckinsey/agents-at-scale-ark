@@ -12,8 +12,6 @@ import {
 const WORKFLOW_KEY = (ns: string) => `ark-dashboard:workflow-layout:${ns}`;
 const AGENTS_KEY = (ns: string) => `ark-dashboard:agents-layout:${ns}`;
 const TEAMS_KEY = (ns: string) => `ark-dashboard:teams-layout:${ns}`;
-const LEGACY_ORDER_KEY = (ns: string) =>
-  `ark-dashboard:workflow-templates-order:${ns}`;
 
 describe('parseLayout', () => {
   it('returns an empty layout for non-objects', () => {
@@ -138,36 +136,19 @@ describe('useResourceLayout', () => {
     expect(result.current.layout.ungroupedOrder).toEqual(['b']);
   });
 
-  it('migrates from a legacy order key when new key is missing', () => {
-    localStorage.setItem(
-      LEGACY_ORDER_KEY('default'),
-      JSON.stringify(['one', 'two']),
-    );
-    const { result } = renderHook(() =>
-      useResourceLayout({
-        storagePrefix: 'ark-dashboard:workflow-layout:',
-        legacyOrderPrefix: 'ark-dashboard:workflow-templates-order:',
-        namespace: 'default',
-      }),
-    );
-    expect(result.current.layout).toEqual({
-      sections: [],
-      ungroupedOrder: ['one', 'two'],
-    });
-  });
 });
 
 describe('wrapper hooks', () => {
   beforeEach(() => localStorage.clear());
   afterEach(() => localStorage.clear());
 
-  it('useWorkflowsLayout uses the workflow-templates prefix and legacy migration', () => {
+  it('useWorkflowsLayout uses the workflow-templates prefix', () => {
     localStorage.setItem(
-      LEGACY_ORDER_KEY('default'),
-      JSON.stringify(['a', 'b']),
+      WORKFLOW_KEY('default'),
+      JSON.stringify({ sections: [], ungroupedOrder: ['w1'] }),
     );
     const { result } = renderHook(() => useWorkflowsLayout('default'));
-    expect(result.current.layout.ungroupedOrder).toEqual(['a', 'b']);
+    expect(result.current.layout.ungroupedOrder).toEqual(['w1']);
   });
 
   it('useAgentsLayout uses the agents prefix', () => {
@@ -186,29 +167,5 @@ describe('wrapper hooks', () => {
     );
     const { result } = renderHook(() => useTeamsLayout('default'));
     expect(result.current.layout.ungroupedOrder).toEqual(['red-team']);
-  });
-
-  it('agents + teams prefixes do not migrate from the legacy order key', () => {
-    localStorage.setItem(
-      LEGACY_ORDER_KEY('default'),
-      JSON.stringify(['ignored']),
-    );
-    const { result: a } = renderHook(() => useAgentsLayout('default'));
-    const { result: t } = renderHook(() => useTeamsLayout('default'));
-    expect(a.current.layout.ungroupedOrder).toEqual([]);
-    expect(t.current.layout.ungroupedOrder).toEqual([]);
-  });
-
-  it('workflow layout key takes precedence over legacy key', () => {
-    localStorage.setItem(
-      LEGACY_ORDER_KEY('default'),
-      JSON.stringify(['legacy']),
-    );
-    localStorage.setItem(
-      WORKFLOW_KEY('default'),
-      JSON.stringify({ sections: [], ungroupedOrder: ['new'] }),
-    );
-    const { result } = renderHook(() => useWorkflowsLayout('default'));
-    expect(result.current.layout.ungroupedOrder).toEqual(['new']);
   });
 });

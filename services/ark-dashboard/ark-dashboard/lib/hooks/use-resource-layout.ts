@@ -8,8 +8,6 @@ import {
 const WORKFLOW_TEMPLATES_PREFIX = 'ark-dashboard:workflow-layout:';
 const AGENTS_PREFIX = 'ark-dashboard:agents-layout:';
 const TEAMS_PREFIX = 'ark-dashboard:teams-layout:';
-const WORKFLOW_TEMPLATES_ORDER_LEGACY_PREFIX =
-  'ark-dashboard:workflow-templates-order:';
 
 export function parseLayout(raw: unknown): SectionedLayout {
   if (!raw || typeof raw !== 'object') return EMPTY_LAYOUT;
@@ -48,36 +46,17 @@ export function parseLayout(raw: unknown): SectionedLayout {
 
 interface ResourceLayoutOptions {
   storagePrefix: string;
-  legacyOrderPrefix?: string;
   namespace: string;
 }
 
 function readLayout({
   storagePrefix,
-  legacyOrderPrefix,
   namespace,
 }: ResourceLayoutOptions): SectionedLayout {
   if (typeof window === 'undefined') return EMPTY_LAYOUT;
   try {
     const raw = window.localStorage.getItem(`${storagePrefix}${namespace}`);
     if (raw) return parseLayout(JSON.parse(raw));
-
-    if (legacyOrderPrefix) {
-      const legacy = window.localStorage.getItem(
-        `${legacyOrderPrefix}${namespace}`,
-      );
-      if (legacy) {
-        const parsed: unknown = JSON.parse(legacy);
-        if (Array.isArray(parsed)) {
-          return {
-            sections: [],
-            ungroupedOrder: parsed.filter(
-              (v): v is string => typeof v === 'string',
-            ),
-          };
-        }
-      }
-    }
   } catch {
     // fall through
   }
@@ -95,16 +74,13 @@ export interface UseResourceLayoutResult {
 
 export function useResourceLayout({
   storagePrefix,
-  legacyOrderPrefix,
   namespace,
 }: ResourceLayoutOptions): UseResourceLayoutResult {
   const [layout, setLayoutState] = useState<SectionedLayout>(EMPTY_LAYOUT);
 
   useEffect(() => {
-    setLayoutState(
-      readLayout({ storagePrefix, legacyOrderPrefix, namespace }),
-    );
-  }, [storagePrefix, legacyOrderPrefix, namespace]);
+    setLayoutState(readLayout({ storagePrefix, namespace }));
+  }, [storagePrefix, namespace]);
 
   const setLayout = useCallback<UseResourceLayoutResult['setLayout']>(
     update => {
@@ -133,7 +109,6 @@ export function useResourceLayout({
 export function useWorkflowsLayout(namespace: string) {
   return useResourceLayout({
     storagePrefix: WORKFLOW_TEMPLATES_PREFIX,
-    legacyOrderPrefix: WORKFLOW_TEMPLATES_ORDER_LEGACY_PREFIX,
     namespace,
   });
 }
