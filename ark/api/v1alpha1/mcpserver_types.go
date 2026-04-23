@@ -171,6 +171,12 @@ type MCPServerAuthorizationStatus struct {
 	// may have `get` on mcpservers but not on secrets.
 	// +kubebuilder:validation:Optional
 	ExpiresAt *metav1.Time `json:"expiresAt,omitempty"`
+
+	// LastRefreshed is the timestamp of the most recent successful token
+	// refresh. Absent when tokens were last populated by an external
+	// actor (CLI, Helm, admin) and never refreshed by the controller.
+	// +kubebuilder:validation:Optional
+	LastRefreshed *metav1.Time `json:"lastRefreshed,omitempty"`
 }
 
 // MCPServerStatus defines the observed state of MCPServer

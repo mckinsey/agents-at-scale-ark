@@ -41,3 +41,11 @@ func (t *mcpServerRecorder) AuthorizationRequired(ctx context.Context, obj runti
 func (t *mcpServerRecorder) TokenRejected(ctx context.Context, obj runtime.Object, reason string) {
 	t.emitter.EmitWarning(ctx, obj, "TokenRejected", reason)
 }
+
+func (t *mcpServerRecorder) TokenRefreshed(ctx context.Context, obj runtime.Object, reason string) {
+	t.emitter.EmitNormal(ctx, obj, "TokenRefreshed", reason)
+}
+
+func (t *mcpServerRecorder) TokenRefreshFailed(ctx context.Context, obj runtime.Object, reason string) {
+	t.emitter.EmitWarning(ctx, obj, "TokenRefreshFailed", reason)
+}

@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -54,6 +56,13 @@ const (
 	// listed tools using a Bearer token resolved from
 	// spec.authorization.tokenSecretRef.
 	MCPServerReasonAuthorized = "Authorized"
+
+	// DefaultMCPRefreshLeadSeconds is how many seconds before the stored
+	// access_token's expires_at the controller will attempt a refresh.
+	// Overridable via ARK_MCP_REFRESH_LEAD_SECONDS. Small enough to avoid
+	// wasted refresh calls, large enough to absorb clock skew between the
+	// controller pod and the IdP plus the refresh round-trip.
+	DefaultMCPRefreshLeadSeconds = 60
 )
 
 type MCPServerReconciler struct {
@@ -68,7 +77,7 @@ type MCPServerReconciler struct {
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=mcpservers/finalizers,verbs=update
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=tools,verbs=get;list;watch;create;update;patch;delete;deletecollection
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch
 
@@ -142,6 +151,13 @@ func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer arkv1
 		return ctrl.Result{}, err
 	}
 
+	if err := r.refreshIfDue(ctx, &mcpServer, authMaterial); err != nil {
+		// Refresh failure is not fatal here — let the existing 401 path
+		// classify the follow-up failure. The stored (expired) token will
+		// drive a 401 → TokenRejected → Required transition next.
+		logf.FromContext(ctx).Info("token refresh failed, falling through to 401 path", "error", err.Error())
+	}
+
 	mcpClient, err := r.createMCPClient(ctx, &mcpServer, authMaterial)
 	if err != nil {
 		return r.handleClientCreationError(ctx, &mcpServer, err)
@@ -175,9 +191,17 @@ func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer arkv1
 // token (treat as the no-token path — controller will land in Required
 // via the existing 401 flow).
 type authorizationMaterial struct {
-	accessToken string
-	expiresAt   *metav1.Time
-	secretName  string
+	accessToken  string
+	refreshToken string
+	clientID     string
+	clientSecret string
+	expiresAt    *metav1.Time
+	secretName   string
+	ref          arkv1alpha1.TokenSecretReference
+	// refreshed is set to the time of the most recent successful refresh
+	// performed during this reconcile, so applyAuthorizationSuccess can
+	// copy it into status.authorization.lastRefreshed.
+	refreshed *metav1.Time
 }
 
 func (r *MCPServerReconciler) resolveAuthorizationMaterial(ctx context.Context, mcpServer *arkv1alpha1.MCPServer) (*authorizationMaterial, error) {
@@ -187,7 +211,7 @@ func (r *MCPServerReconciler) resolveAuthorizationMaterial(ctx context.Context, 
 
 	log := logf.FromContext(ctx)
 	ref := mcpServer.Spec.Authorization.TokenSecretRef
-	material := &authorizationMaterial{secretName: ref.Name}
+	material := &authorizationMaterial{secretName: ref.Name, ref: ref}
 
 	secret := &corev1.Secret{}
 	key := types.NamespacedName{Name: ref.Name, Namespace: mcpServer.Namespace}
@@ -199,18 +223,12 @@ func (r *MCPServerReconciler) resolveAuthorizationMaterial(ctx context.Context, 
 		return nil, fmt.Errorf("failed to read authorization secret %s: %w", ref.Name, err)
 	}
 
-	accessKey := ref.AccessTokenKey
-	if accessKey == "" {
-		accessKey = "access_token"
-	}
-	if raw, ok := secret.Data[accessKey]; ok {
-		material.accessToken = string(raw)
-	}
+	material.accessToken = string(secret.Data[keyOrDefault(ref.AccessTokenKey, "access_token")])
+	material.refreshToken = string(secret.Data[keyOrDefault(ref.RefreshTokenKey, "refresh_token")])
+	material.clientID = string(secret.Data[keyOrDefault(ref.ClientIDKey, "client_id")])
+	material.clientSecret = string(secret.Data[keyOrDefault(ref.ClientSecretKey, "client_secret")])
 
-	expiresKey := ref.ExpiresAtKey
-	if expiresKey == "" {
-		expiresKey = "expires_at"
-	}
+	expiresKey := keyOrDefault(ref.ExpiresAtKey, "expires_at")
 	if raw, ok := secret.Data[expiresKey]; ok && len(raw) > 0 {
 		parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(string(raw)))
 		if err != nil {
@@ -222,6 +240,13 @@ func (r *MCPServerReconciler) resolveAuthorizationMaterial(ctx context.Context, 
 	}
 
 	return material, nil
+}
+
+func keyOrDefault(k, fallback string) string {
+	if k == "" {
+		return fallback
+	}
+	return k
 }
 
 // applyAuthorizationSuccess reconciles status.authorization after a
@@ -253,7 +278,109 @@ func (r *MCPServerReconciler) applyAuthorizationSuccess(mcpServer *arkv1alpha1.M
 	auth.Resource = mcpServer.Status.ResolvedAddress
 	auth.ExpiresAt = material.expiresAt
 	auth.LastDiscovered = &now
+	if material.refreshed != nil {
+		auth.LastRefreshed = material.refreshed
+	}
 	mcpServer.Status.Authorization = auth
+}
+
+// refreshIfDue calls the token endpoint with grant_type=refresh_token
+// when the stored access_token is within DefaultMCPRefreshLeadSeconds of
+// expiry. On success, it writes the new tokens to the Secret and
+// updates the in-memory authorizationMaterial so the imminent MCP call
+// uses the fresh token. Emits TokenRefreshed (Normal) or TokenRefreshFailed
+// (Warning) events.
+//
+// Requirements: material must carry refresh_token + client_id + client_secret,
+// and status.authorization must have a tokenEndpoint populated by prior
+// discovery. Missing any of these → no-op; the existing 401 path owns
+// re-auth.
+func (r *MCPServerReconciler) refreshIfDue(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, material *authorizationMaterial) error {
+	if material == nil || material.accessToken == "" || material.refreshToken == "" {
+		return nil
+	}
+	if material.expiresAt == nil {
+		return nil
+	}
+	lead := time.Duration(refreshLeadSeconds()) * time.Second
+	if time.Until(material.expiresAt.Time) > lead {
+		return nil
+	}
+	prevAuth := mcpServer.Status.Authorization
+	if prevAuth == nil || prevAuth.TokenEndpoint == "" {
+		return fmt.Errorf("token_endpoint missing from status.authorization; cannot refresh")
+	}
+
+	log := logf.FromContext(ctx)
+	log.Info("refreshing MCP access token", "server", mcpServer.Name, "expiresAt", material.expiresAt.Time.UTC().Format(time.RFC3339))
+
+	resp, err := arkmcp.RefreshToken(ctx, arkmcp.TokenRefreshRequest{
+		TokenEndpoint: prevAuth.TokenEndpoint,
+		ClientID:      material.clientID,
+		ClientSecret:  material.clientSecret,
+		RefreshToken:  material.refreshToken,
+		Resource:      prevAuth.Resource,
+	}, parseTimeout(mcpServer.Spec.Timeout))
+	if err != nil {
+		r.Eventing.MCPServerRecorder().TokenRefreshFailed(ctx, mcpServer, fmt.Sprintf("token refresh failed: %v", err))
+		return err
+	}
+
+	newAccess := resp.AccessToken
+	newRefresh := resp.RefreshToken
+	if newRefresh == "" {
+		// RFC 6749 §6: refresh_token is optional in the response. Keep the
+		// previously-stored refresh_token when the IdP does not rotate.
+		newRefresh = material.refreshToken
+	}
+	newExpiresAt := time.Now().UTC().Add(time.Duration(resp.ExpiresIn) * time.Second).Truncate(time.Second)
+
+	if err := r.persistRefreshedSecret(ctx, mcpServer, material, newAccess, newRefresh, newExpiresAt); err != nil {
+		r.Eventing.MCPServerRecorder().TokenRefreshFailed(ctx, mcpServer, fmt.Sprintf("persist refreshed tokens: %v", err))
+		return err
+	}
+
+	material.accessToken = newAccess
+	material.refreshToken = newRefresh
+	t := metav1.NewTime(newExpiresAt)
+	material.expiresAt = &t
+	refreshedAt := metav1.Now()
+	material.refreshed = &refreshedAt
+
+	r.Eventing.MCPServerRecorder().TokenRefreshed(ctx, mcpServer, fmt.Sprintf("refreshed access_token; next refresh near %s", newExpiresAt.Format(time.RFC3339)))
+	return nil
+}
+
+// persistRefreshedSecret patches the referenced Secret with the new
+// tokens. Uses the override keys from TokenSecretRef if present.
+func (r *MCPServerReconciler) persistRefreshedSecret(ctx context.Context, mcpServer *arkv1alpha1.MCPServer, material *authorizationMaterial, access, refresh string, expiresAt time.Time) error {
+	secret := &corev1.Secret{}
+	key := types.NamespacedName{Name: material.secretName, Namespace: mcpServer.Namespace}
+	if err := r.Get(ctx, key, secret); err != nil {
+		return fmt.Errorf("re-read secret %s: %w", material.secretName, err)
+	}
+	if secret.Data == nil {
+		secret.Data = map[string][]byte{}
+	}
+	secret.Data[keyOrDefault(material.ref.AccessTokenKey, "access_token")] = []byte(access)
+	secret.Data[keyOrDefault(material.ref.RefreshTokenKey, "refresh_token")] = []byte(refresh)
+	secret.Data[keyOrDefault(material.ref.ExpiresAtKey, "expires_at")] = []byte(expiresAt.Format(time.RFC3339))
+	return r.Update(ctx, secret)
+}
+
+// refreshLeadSeconds resolves the ARK_MCP_REFRESH_LEAD_SECONDS env var
+// with DefaultMCPRefreshLeadSeconds as fallback. Invalid / negative
+// values fall back to the default.
+func refreshLeadSeconds() int {
+	v := os.Getenv("ARK_MCP_REFRESH_LEAD_SECONDS")
+	if v == "" {
+		return DefaultMCPRefreshLeadSeconds
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return DefaultMCPRefreshLeadSeconds
+	}
+	return n
 }
 
 // reconcileCondition updates a condition on the MCPServer

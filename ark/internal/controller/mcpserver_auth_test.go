@@ -5,6 +5,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"time"
@@ -615,6 +616,108 @@ var _ = Describe("MCPServer Controller — Bearer token injection via tokenSecre
 			Expect(e.Reason).NotTo(Equal("TokenRejected"),
 				"TokenRejected must not fire without a prior Authorized state")
 		}
+	})
+
+	It("refreshes the access token when expiresAt is within the lead window and emits TokenRefreshed", func() {
+		const initialAccess = "access-v1"
+		const rotatedAccess = "access-v2"
+		const initialRefresh = "refresh-v1"
+		const rotatedRefresh = "refresh-v2"
+
+		currentExpected := initialAccess
+		tokenCalls := 0
+		mux := http.NewServeMux()
+		// Token endpoint — RFC 6749 §6 refresh_token grant
+		mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
+			tokenCalls++
+			_ = r.ParseForm()
+			Expect(r.Form.Get("grant_type")).To(Equal("refresh_token"))
+			Expect(r.Form.Get("refresh_token")).To(Equal(initialRefresh))
+			// Flip the server to accept the rotated token so the subsequent
+			// MCP call with rotatedAccess succeeds.
+			currentExpected = rotatedAccess
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(fmt.Sprintf(
+				`{"access_token":"%s","token_type":"bearer","expires_in":3600,"refresh_token":"%s"}`,
+				rotatedAccess, rotatedRefresh)))
+		})
+		// MCP + discovery endpoints
+		toggling := mux401Toggling(&currentExpected)
+		mux.Handle("/mcp", toggling)
+		mux.Handle("/.well-known/oauth-protected-resource/mcp", toggling)
+		mux.Handle("/.well-known/oauth-authorization-server", toggling)
+
+		srv := httptest.NewServer(mux)
+		defer func() { srv.CloseClientConnections(); srv.Close() }()
+
+		const name = "mcp-auth-refresh"
+		const secretName = "mcp-auth-refresh-secret"
+		// expires in 30s — inside the 60s refresh lead window
+		imminentExpiry := time.Now().Add(30 * time.Second).UTC().Truncate(time.Second)
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: "default"},
+			Data: map[string][]byte{
+				"access_token":  []byte(initialAccess),
+				"refresh_token": []byte(initialRefresh),
+				"expires_at":    []byte(imminentExpiry.Format(time.RFC3339)),
+				"client_id":     []byte("fixture-client"),
+				"client_secret": []byte("fixture-secret"),
+			},
+		}
+		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+		DeferCleanup(func() { _ = k8sClient.Delete(ctx, secret) })
+
+		// Seed status.authorization.tokenEndpoint — refresh only fires when
+		// a prior discovery has populated it.
+		mcpServer := &arkv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec: arkv1alpha1.MCPServerSpec{
+				Address:   arkv1alpha1.ValueSource{Value: srv.URL + "/mcp"},
+				Transport: "http",
+				Timeout:   "5s",
+				Authorization: &arkv1alpha1.MCPServerAuthorizationSpec{
+					TokenSecretRef: arkv1alpha1.TokenSecretReference{Name: secretName},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, mcpServer)).To(Succeed())
+		DeferCleanup(func() { _ = k8sClient.Delete(ctx, mcpServer) })
+
+		// Inject the discovered tokenEndpoint + resource so refresh is
+		// reachable without first provoking a 401.
+		mcpServer.Status.Authorization = &arkv1alpha1.MCPServerAuthorizationStatus{
+			State:         arkv1alpha1.MCPServerAuthorizationStateAuthorized,
+			Resource:      srv.URL + "/mcp",
+			TokenEndpoint: srv.URL + "/token",
+		}
+		Expect(k8sClient.Status().Update(ctx, mcpServer)).To(Succeed())
+
+		evtProvider := newMCPEventProvider()
+		r := &MCPServerReconciler{Client: k8sClient, Scheme: k8sClient.Scheme(), Eventing: evtProvider}
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
+
+		Expect(tokenCalls).To(BeNumerically(">=", 1), "expected at least one refresh call to /token")
+
+		out := &arkv1alpha1.MCPServer{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out)).To(Succeed())
+		Expect(out.Status.Authorization.State).To(Equal(arkv1alpha1.MCPServerAuthorizationStateAuthorized))
+		Expect(out.Status.Authorization.LastRefreshed).NotTo(BeNil())
+
+		rotated := &corev1.Secret{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: "default"}, rotated)).To(Succeed())
+		Expect(string(rotated.Data["access_token"])).To(Equal(rotatedAccess))
+		Expect(string(rotated.Data["refresh_token"])).To(Equal(rotatedRefresh))
+
+		found := false
+		for _, e := range evtProvider.emitter.GetEvents() {
+			if e.Reason == "TokenRefreshed" {
+				found = true
+				Expect(e.Type).To(Equal("Normal"))
+				break
+			}
+		}
+		Expect(found).To(BeTrue(), "expected TokenRefreshed Normal event")
 	})
 })
 

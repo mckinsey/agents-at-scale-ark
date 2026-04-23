@@ -317,6 +317,13 @@ spec:
                       discovery probe against the server.
                     format: date-time
                     type: string
+                  lastRefreshed:
+                    description: |-
+                      LastRefreshed is the timestamp of the most recent successful token
+                      refresh. Absent when tokens were last populated by an external
+                      actor (CLI, Helm, admin) and never refreshed by the controller.
+                    format: date-time
+                    type: string
                   registrationEndpoint:
                     description: |-
                       RegistrationEndpoint is the RFC 7591 dynamic client registration
