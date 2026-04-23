@@ -78,11 +78,8 @@ func fakeMCPServerWithOpts(opts fakeMCPServerOpts) *httptest.Server {
 	return httptest.NewServer(mux)
 }
 
-// reconcileUntilStable calls Reconcile repeatedly up to `maxSteps`
-// times to drive the MCPServer through its initializing condition and
-// the follow-up reconcile that runs discovery.
-func reconcileUntilStable(ctx context.Context, r *MCPServerReconciler, nn types.NamespacedName, maxSteps int) error {
-	for i := 0; i < maxSteps; i++ {
+func reconcileUntilStable(ctx context.Context, r *MCPServerReconciler, nn types.NamespacedName) error {
+	for range 3 {
 		if _, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: nn}); err != nil {
 			return err
 		}
@@ -116,7 +113,7 @@ var _ = Describe("MCPServer Controller — authorization detection", func() {
 			Scheme:   k8sClient.Scheme(),
 			Eventing: eventnoop.NewProvider(),
 		}
-		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"}, 3)).To(Succeed())
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
 
 		out := &arkv1alpha1.MCPServer{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out)).To(Succeed())
@@ -166,7 +163,7 @@ var _ = Describe("MCPServer Controller — authorization detection", func() {
 			Scheme:   k8sClient.Scheme(),
 			Eventing: eventnoop.NewProvider(),
 		}
-		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"}, 3)).To(Succeed())
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
 
 		out := &arkv1alpha1.MCPServer{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out)).To(Succeed())
@@ -202,7 +199,7 @@ var _ = Describe("MCPServer Controller — authorization detection", func() {
 			Scheme:   k8sClient.Scheme(),
 			Eventing: eventnoop.NewProvider(),
 		}
-		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"}, 3)).To(Succeed())
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
 
 		out := &arkv1alpha1.MCPServer{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out)).To(Succeed())
@@ -243,7 +240,7 @@ var _ = Describe("MCPServer Controller — authorization detection", func() {
 			Scheme:   k8sClient.Scheme(),
 			Eventing: eventnoop.NewProvider(),
 		}
-		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"}, 3)).To(Succeed())
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
 
 		out := &arkv1alpha1.MCPServer{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out)).To(Succeed())
