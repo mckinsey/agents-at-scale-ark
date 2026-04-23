@@ -8,4 +8,4 @@ spec:
     Start your response with "IDEA: " to clearly identify your contribution.
     Be concise and focus on innovative solutions or approaches.
   modelRef:
-    name: test-model
+    name: test-model-mock

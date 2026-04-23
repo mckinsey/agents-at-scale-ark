@@ -1,40 +1,36 @@
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
-  name: team-round-robin
+  name: team-sequential-loops
 spec:
   description: Test sequential team with loops execution with brainstormer, critic, and coordinator using terminate tool
   steps:
-  - name: setup-resources
+  - name: setup-mock-llm
     try:
     - script:
-        skipLogOutput: true
+        timeout: 180s
         content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
-    - script:
-        content: |
-          helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+          bash ../shared/install-mock-llm.sh
         env:
         - name: NAMESPACE
           value: ($namespace)
-    - apply:
-        file: manifests/*.yaml
 
-  - name: wait-for-resources
+  - name: wait-for-model-ready
     try:
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Model
-        name: test-model
-        timeout: 3m
+        name: test-model-mock
+        timeout: 90s
         for:
           condition:
             name: ModelAvailable
-            value: 'True' 
+            value: 'True'
+
+  - name: run-query
+    try:
+    - apply:
+        file: manifests/*.yaml
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -58,43 +54,40 @@ spec:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Team
           metadata:
-            name: round-robin-brainstorm-team
-
-  - name: wait-for-query-completion
-    try:
+            name: sequential-loops-team
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
-        name: round-robin-team-query
+        name: sequential-loops-query
         timeout: 60s
         for:
           condition:
             name: Completed
             value: 'True'
-
-  - name: validate-response
-    try:
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Query
           metadata:
-            name: round-robin-team-query
+            name: sequential-loops-query
           status:
             (response != null): true
-            (response.target.name): 'round-robin-brainstorm-team'
-            (length(response.content) > `50`): true
+            (response.target.name): 'sequential-loops-team'
+            (contains(response.raw, 'IDEA:')): true
+            (contains(response.raw, 'CRITIQUE:')): true
+            (contains(response.raw, 'COORDINATION:')): true
             (tokenUsage.totalTokens > `50`): true
     catch:
     - events: {}
     - describe:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
-        name: round-robin-team-query
+        name: sequential-loops-query
+
     cleanup:
     - script:
         content: |
-          helm uninstall ark-tenant --namespace $NAMESPACE --wait --timeout=180s || true
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
         env:
         - name: NAMESPACE
           value: ($namespace)

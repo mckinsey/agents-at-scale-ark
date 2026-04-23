@@ -12,7 +12,7 @@ spec:
     
     Otherwise, encourage continued discussion or ask for more input.
   modelRef:
-    name: test-model
+    name: test-model-mock
   tools:
     - type: built-in
       name: terminate

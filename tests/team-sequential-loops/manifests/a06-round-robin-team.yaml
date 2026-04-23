@@ -1,7 +1,7 @@
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Team
 metadata:
-  name: round-robin-brainstorm-team
+  name: sequential-loops-team
 spec:
   strategy: sequential
   loops: true

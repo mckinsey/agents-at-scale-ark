@@ -1,9 +1,9 @@
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
-  name: round-robin-team-query
+  name: sequential-loops-query
 spec:
   input: "How can we improve customer satisfaction in a software company?"
   target:
     type: team
-    name: round-robin-brainstorm-team
+    name: sequential-loops-team

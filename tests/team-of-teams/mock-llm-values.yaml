@@ -39,6 +39,11 @@ config:
         }
 
   - path: "/v1/chat/completions"
+    response:
+      status: 500
+      content: '"Unrecognised agent"'
+
+  - path: "/v1/chat/completions"
     match: "contains(body.messages[0].content || '', 'research specialist')"
     response:
       status: 200
@@ -61,8 +66,3 @@ config:
     response:
       status: 200
       content: '{"choices":[{"message":{"role":"assistant","content":"coordinator-output"},"finish_reason":"stop"}]}'
-
-  - path: "/v1/chat/completions"
-    response:
-      status: 500
-      content: '"Unrecognised agent"'
