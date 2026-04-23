@@ -152,7 +152,12 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 		return nil, err
 	}
 
-	result, err := selectorAgent.Execute(ctx, NewUserMessage("Select the next participant to respond using the select-next-conversant tool."), []Message{NewSystemMessage(selectorMessage)}, nil, nil)
+	userPrompt := "Select the next participant to respond using the select-next-conversant tool."
+	if t.Selector != nil && t.Selector.EnableTerminateTool != nil && *t.Selector.EnableTerminateTool {
+		userPrompt = "Select the next participant to respond using the select-next-conversant tool, or use the terminate tool if you think the user's original question has been answered."
+	}
+
+	result, err := selectorAgent.Execute(ctx, NewUserMessage(userPrompt), []Message{NewSystemMessage(selectorMessage)}, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("selector agent call failed: %w", err)
 	}
