@@ -25,6 +25,7 @@ flags:
 
 ignore:
   - "ark/internal/storage/postgresql/wal_connection.go"
+  - "**/zz_generated.*.go"
 
 comment:
   layout: "reach,diff,flags,tree"
