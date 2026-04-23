@@ -193,34 +193,45 @@ jobs:
           echo "=== Direct curl test to executor ==="
           echo "API key length being sent: ${#CICD_OPENAI_API_KEY}"
 
-          cat > /tmp/test-request.json << EOF
-          {
-            "agent": {
-              "name": "test-agent",
-              "namespace": "default",
-              "prompt": "You are a helpful assistant.",
-              "model": {
-                "name": "gpt-4.1-mini",
-                "type": "completions",
-                "config": {
-                  "openai": {
-                    "apiKey": "$CICD_OPENAI_API_KEY",
-                    "baseUrl": "$CICD_OPENAI_BASE_URL"
+          echo "=== Checking for special characters in API key ==="
+          python3 -c "
+          import os
+          key = os.environ.get('CICD_OPENAI_API_KEY', '')
+          print(f'Length: {len(key)}')
+          print(f'Contains newline: {chr(10) in key}')
+          print(f'Contains carriage return: {chr(13) in key}')
+          print(f'Printable chars only: {all(c.isprintable() for c in key)}')
+          print(f'ASCII repr: {repr(key[:20])}...')
+          "
+
+          echo ""
+          echo "=== Creating JSON with proper escaping ==="
+          python3 -c "
+          import json
+          import os
+          key = os.environ.get('CICD_OPENAI_API_KEY', '').strip()
+          base_url = os.environ.get('CICD_OPENAI_BASE_URL', '').strip()
+          request = {
+            'agent': {
+              'name': 'test-agent',
+              'namespace': 'default',
+              'prompt': 'You are a helpful assistant.',
+              'model': {
+                'name': 'gpt-4.1-mini',
+                'type': 'completions',
+                'config': {
+                  'openai': {
+                    'apiKey': key,
+                    'baseUrl': base_url
                   }
                 }
               }
             },
-            "userInput": {"role": "user", "content": "Say hello"},
-            "conversationId": "debug-test"
+            'userInput': {'role': 'user', 'content': 'Say hello'},
+            'conversationId': 'debug-test'
           }
-          EOF
-
-          echo "Request file created. API key length in JSON:"
-          python3 -c "
-          import json
-          with open('/tmp/test-request.json') as f:
-            data = json.load(f)
-          key = data['agent']['model']['config']['openai']['apiKey']
+          with open('/tmp/test-request.json', 'w') as f:
+            json.dump(request, f)
           print(f'apiKey in JSON: {len(key)} chars, starts with: {key[:4]}...')
           "
 
