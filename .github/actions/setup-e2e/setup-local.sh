@@ -69,6 +69,21 @@ fi
 echo "=== Installing Gateway API CRDs ==="
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
 
+echo "=== Pre-creating ark-config-broker ConfigMap ==="
+kubectl create namespace default 2>/dev/null || true
+kubectl apply -f - <<'BROKER_CM_EOF'
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ark-config-broker
+  namespace: default
+data:
+  enabled: "true"
+  serviceRef: |
+    name: ark-broker
+    port: "http"
+BROKER_CM_EOF
+
 if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
   echo "=== Installing PostgreSQL (ark-storage-dev) ==="
   helm upgrade --install ark-storage-dev "${REPO_ROOT}/charts/ark-storage-dev" \
@@ -241,11 +256,8 @@ helm upgrade --install ark-broker "${REPO_ROOT}/services/ark-broker/chart" \
   --set app.image.repository="${REGISTRY}/ark-broker" \
   --set app.image.tag="${ARK_IMAGE_TAG}" \
   --set app.image.pullPolicy=IfNotPresent \
-  --wait --wait-for-jobs --timeout=300s
-
-echo "=== Waiting for ARK services after broker installation ==="
-kubectl -n ark-system rollout status deployment/ark-controller --timeout=120s
-kubectl -n ark-system rollout status deployment/ark-completions --timeout=120s
+  --set restartController.enabled=false \
+  --wait --timeout=300s
 
 echo "=== Waiting for image pre-pulls to complete ==="
 for pid in "${IMAGE_PULL_PIDS[@]}"; do
