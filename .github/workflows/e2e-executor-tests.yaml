@@ -164,6 +164,26 @@ jobs:
           echo "=== Health check ==="
           curl -s http://localhost:18080/health
 
+      - name: Debug test env vars
+        if: ${{ env.HAS_OPENAI_KEY == 'true' }}
+        env:
+          CICD_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
+          CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
+        run: |
+          echo "=== Verifying test env vars ==="
+          echo "CICD_OPENAI_API_KEY length in shell: ${#CICD_OPENAI_API_KEY}"
+          echo "CICD_OPENAI_API_KEY first 4 chars: ${CICD_OPENAI_API_KEY:0:4}..."
+
+          echo ""
+          echo "=== Verifying Python can read the env var ==="
+          python3 -c "
+          import os
+          key = os.environ.get('CICD_OPENAI_API_KEY', '')
+          print(f'CICD_OPENAI_API_KEY length in Python: {len(key)}')
+          print(f'First 4 chars: {key[:4]}...')
+          print(f'Actual value starts with sk-: {key.startswith(\"sk-\")}')
+          "
+
       - name: Run executor E2E tests
         if: ${{ env.HAS_OPENAI_KEY == 'true' }}
         env:
