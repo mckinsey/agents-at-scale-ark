@@ -191,26 +191,26 @@ async def proxy_server(
     Proxy requests to a specific resource inside your agentic cluster.
     The goal is to expose over public internet your agentic resources in
     order to perform testing of the resource itself.
-    
+
     Args:
         server_name: Name of the agentic resource. Supported only a2a and mcp.
         path: Remaining path after the server name (will be forwarded as-is)
         request: The incoming FastAPI request
         namespace: The namespace containing the agentic resource
-        
+
     Returns:
         Response: Proxied response from the agentic resource
     """
-    # Get the A2A server's resolved address
     if resource == Resource.A2A:
         resource_url, additional_headers = await _get_a2a_server_address(server_name, namespace)
     elif resource == Resource.MCP:
         resource_url, additional_headers = await _get_mcp_server_address(server_name, namespace)
-    else: 
-        #resource == Resource.SERVICES
-        resource_url = f"http://{server_name}"
+    else:
+        if namespace is None:
+            namespace = get_context()["namespace"]
+        resource_url = f"http://{server_name}.{namespace}.svc.cluster.local"
         additional_headers = {}
-    
+
     logger.info(f"Forwarding at {request.method} {resource_url}")
     return await _proxy_request(resource_url, request, additional_headers)
         
@@ -220,10 +220,10 @@ async def proxy_server(
 
 @router.options("/{resource}/{server_name}/{path:path}")
 @router.get("/{resource}/{server_name}/{path:path}")
-@router.post("/{resource}/{server_name}/{path:path}")  
+@router.post("/{resource}/{server_name}/{path:path}")
 async def proxy_server_path(resource: Resource,
     server_name: str,
-    request: Request, 
+    request: Request,
     path: str,
     namespace: Optional[str] = Query(None, description="Namespace for this request (defaults to current context)")):
 
@@ -232,10 +232,11 @@ async def proxy_server_path(resource: Resource,
     elif resource == Resource.MCP:
         resource_url, additional_headers = await _get_mcp_server_address(server_name, namespace)
     else:
-        #resource == Resource.SERVICES:
-        resource_url = f"http://{server_name}"
+        if namespace is None:
+            namespace = get_context()["namespace"]
+        resource_url = f"http://{server_name}.{namespace}.svc.cluster.local"
         additional_headers = {}
-    
+
     resource_url = f"{resource_url}/{path}" if resource_url[-1]!= "/" \
         else f"{resource_url}{path}"
     logger.info(f"Forwarding at {request.method} {resource_url}")
