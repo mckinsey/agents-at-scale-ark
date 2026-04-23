@@ -1,0 +1,176 @@
+name: E2E Executor Tests (Debug)
+
+on:
+  workflow_dispatch:
+    inputs:
+      executor_chart_version:
+        description: 'Executor chart version to test'
+        required: false
+        default: '0.1.3'
+      run_single_test:
+        description: 'Run single test (e.g., test_t01_basic_happy_path_sdk_0159_fix)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  e2e-executor-tests:
+    runs-on: ubuntu-24.04
+    env:
+      HAS_OPENAI_KEY: ${{ secrets.CICD_OPENAI_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup K3s cluster
+        uses: ./.github/actions/setup-k3s
+        with:
+          metrics-enabled: false
+          traefik-enabled: false
+          k3s-channel: stable
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.14.0"
+
+      - name: Login to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install executor test dependencies
+        run: |
+          pip install -r tests/pytest/cli-tests/requirements.txt
+
+      - name: Deploy executor-openai-responses
+        if: ${{ env.HAS_OPENAI_KEY == 'true' }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
+        run: |
+          helm upgrade --install executor-openai-responses \
+            oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/executor-openai-responses \
+            --version ${{ inputs.executor_chart_version || '0.1.3' }} \
+            --namespace default \
+            --set app.image.pullPolicy=Always \
+            --wait \
+            --timeout=5m
+          kubectl set env deployment/executor-openai-responses \
+            -n default \
+            OPENAI_API_KEY="${OPENAI_API_KEY}" \
+            OPENAI_BASE_URL="https://api.openai.com/v1"
+          kubectl rollout status deployment/executor-openai-responses \
+            -n default --timeout=2m
+
+      - name: Diagnose executor pod environment
+        if: ${{ env.HAS_OPENAI_KEY == 'true' }}
+        run: |
+          echo "=== Executor pod env vars ==="
+          kubectl exec -n default deployment/executor-openai-responses -- env | grep -E "OPENAI|HOST|PORT" || true
+
+          echo "=== Pod details ==="
+          kubectl get pod -n default -l app=executor-openai-responses -o wide
+
+          echo "=== Executor pod logs ==="
+          kubectl logs -n default deployment/executor-openai-responses --tail=50 || true
+
+      - name: Network connectivity diagnostics
+        if: ${{ env.HAS_OPENAI_KEY == 'true' }}
+        run: |
+          echo "=== Testing network from runner host ==="
+          curl -sI https://api.openai.com/v1/models | head -5 || echo "Host curl failed"
+
+          echo ""
+          echo "=== Testing DNS resolution from pod ==="
+          kubectl exec -n default deployment/executor-openai-responses -- python3 -c "
+          import socket
+          try:
+              ip = socket.gethostbyname('api.openai.com')
+              print(f'DNS resolved api.openai.com -> {ip}')
+          except Exception as e:
+              print(f'DNS resolution failed: {e}')
+          " || echo "DNS test failed"
+
+          echo ""
+          echo "=== Testing HTTPS connectivity from pod ==="
+          kubectl exec -n default deployment/executor-openai-responses -- python3 -c "
+          import urllib.request
+          import ssl
+          try:
+              ctx = ssl.create_default_context()
+              req = urllib.request.Request('https://api.openai.com/v1/models', method='HEAD')
+              with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+                  print(f'HTTPS connection successful: {resp.status}')
+          except Exception as e:
+              print(f'HTTPS connection failed: {type(e).__name__}: {e}')
+          " || echo "HTTPS test script failed"
+
+          echo ""
+          echo "=== Testing with httpx (OpenAI SDK dependency) ==="
+          kubectl exec -n default deployment/executor-openai-responses -- python3 -c "
+          import httpx
+          try:
+              resp = httpx.head('https://api.openai.com/v1/models', timeout=10)
+              print(f'httpx connection successful: {resp.status_code}')
+          except Exception as e:
+              print(f'httpx connection failed: {type(e).__name__}: {e}')
+          " || echo "httpx test failed"
+
+          echo ""
+          echo "=== CoreDNS logs ==="
+          kubectl logs -n kube-system -l k8s-app=kube-dns --tail=20 || true
+
+      - name: Port-forward executor service
+        if: ${{ env.HAS_OPENAI_KEY == 'true' }}
+        run: |
+          kubectl port-forward -n default svc/executor-openai-responses 18080:8000 &
+          sleep 3
+          echo "=== Health check ==="
+          curl -s http://localhost:18080/health
+
+      - name: Run executor E2E tests
+        if: ${{ env.HAS_OPENAI_KEY == 'true' }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
+          EXECUTOR_URL: http://localhost:18080/execute
+          CICD_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
+          CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
+        run: |
+          cd tests/pytest/cli-tests/tests
+          if [ -n "${{ inputs.run_single_test }}" ]; then
+            pytest test_responses.py::TestOpenAIResponsesExecutor::${{ inputs.run_single_test }} -v --tb=long --log-cli-level=DEBUG
+          else
+            pytest test_responses.py -n auto --dist loadscope -v --tb=short --log-cli-level=INFO
+          fi
+
+      - name: Post-test executor logs
+        if: always()
+        run: |
+          echo "=== Post-test executor pod logs ==="
+          kubectl logs -n default deployment/executor-openai-responses --tail=100 || true
+
+      - name: Upload executor test logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: executor-test-logs-${{ github.sha }}
+          path: tests/pytest/cli-tests/tests/*.log
+          retention-days: 7
+
+      - name: Collect cluster logs
+        if: always()
+        run: kubectl cluster-info dump --all-namespaces --output-directory=/tmp/cluster-logs-executor
+
+      - name: Upload cluster logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cluster-logs-executor-${{ github.sha }}
+          path: /tmp/cluster-logs-executor
+          retention-days: 7
