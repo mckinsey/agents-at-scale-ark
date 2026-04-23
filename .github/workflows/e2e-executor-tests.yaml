@@ -43,12 +43,16 @@ jobs:
 
       - name: Create OpenAI credentials secret
         if: ${{ env.HAS_OPENAI_KEY == 'true' }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
         run: |
+          printf '%s' "$OPENAI_API_KEY" > /tmp/api-key
           kubectl create secret generic openai-credentials \
-            --from-literal=OPENAI_API_KEY='${{ secrets.CICD_OPENAI_API_KEY }}' \
+            --from-file=OPENAI_API_KEY=/tmp/api-key \
             --from-literal=OPENAI_BASE_URL='https://api.openai.com/v1' \
             --namespace default \
             --dry-run=client -o yaml | kubectl apply -f -
+          rm /tmp/api-key
 
       - name: Deploy executor-openai-responses
         if: ${{ env.HAS_OPENAI_KEY == 'true' }}
