@@ -184,6 +184,54 @@ jobs:
           print(f'Actual value starts with sk-: {key.startswith(\"sk-\")}')
           "
 
+      - name: Test direct curl to executor
+        if: ${{ env.HAS_OPENAI_KEY == 'true' }}
+        env:
+          CICD_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
+          CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
+        run: |
+          echo "=== Direct curl test to executor ==="
+          echo "API key length being sent: ${#CICD_OPENAI_API_KEY}"
+
+          cat > /tmp/test-request.json << EOF
+          {
+            "agent": {
+              "name": "test-agent",
+              "namespace": "default",
+              "prompt": "You are a helpful assistant.",
+              "model": {
+                "name": "gpt-4.1-mini",
+                "type": "completions",
+                "config": {
+                  "openai": {
+                    "apiKey": "$CICD_OPENAI_API_KEY",
+                    "baseUrl": "$CICD_OPENAI_BASE_URL"
+                  }
+                }
+              }
+            },
+            "userInput": {"role": "user", "content": "Say hello"},
+            "conversationId": "debug-test"
+          }
+          EOF
+
+          echo "Request file created. API key length in JSON:"
+          python3 -c "
+          import json
+          with open('/tmp/test-request.json') as f:
+            data = json.load(f)
+          key = data['agent']['model']['config']['openai']['apiKey']
+          print(f'apiKey in JSON: {len(key)} chars, starts with: {key[:4]}...')
+          "
+
+          echo ""
+          echo "=== Sending request to executor ==="
+          curl -s -X POST http://localhost:18080/execute \
+            -H "Content-Type: application/json" \
+            -d @/tmp/test-request.json \
+            | head -c 500
+          echo ""
+
       - name: Run executor E2E tests
         if: ${{ env.HAS_OPENAI_KEY == 'true' }}
         env:
