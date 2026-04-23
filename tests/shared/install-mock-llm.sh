@@ -3,6 +3,7 @@ set -e
 helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
   --version 0.1.28 \
   --namespace "$NAMESPACE" \
+  --values ../mock-llm-values.yaml \
   --values mock-llm-values.yaml \
   --wait --timeout=120s
 
