@@ -1,6 +1,7 @@
 name: E2E Executor Tests (Debug)
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - test/openairesponses
