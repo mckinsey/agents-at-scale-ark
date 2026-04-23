@@ -18,16 +18,21 @@ import (
 	eventnoop "mckinsey.com/ark/internal/eventing/noop"
 )
 
-// fakeMCPServer serves the minimal surface a protected MCP server
-// exposes during discovery: an MCP endpoint that returns 401 with
-// a WWW-Authenticate challenge, and the RFC 9728 + RFC 8414
-// well-known documents. The behaviour is switched by `compliant` so
-// the AuthorizationDiscoveryFailed path can be exercised too.
+type fakeMCPServerOpts struct {
+	compliant              bool
+	brokenResourceMetadata bool
+	brokenAuthServer       bool
+}
+
 func fakeMCPServer(compliant bool) *httptest.Server {
+	return fakeMCPServerWithOpts(fakeMCPServerOpts{compliant: compliant})
+}
+
+func fakeMCPServerWithOpts(opts fakeMCPServerOpts) *httptest.Server {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
-		if compliant {
+		if opts.compliant {
 			host := "http://" + r.Host
 			w.Header().Set("WWW-Authenticate",
 				`Bearer realm="OAuth", resource_metadata="`+host+`/.well-known/oauth-protected-resource/mcp", error="invalid_token"`)
@@ -37,6 +42,10 @@ func fakeMCPServer(compliant bool) *httptest.Server {
 	})
 
 	mux.HandleFunc("/.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, r *http.Request) {
+		if opts.brokenResourceMetadata {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		host := "http://" + r.Host
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -48,6 +57,10 @@ func fakeMCPServer(compliant bool) *httptest.Server {
 	})
 
 	mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
+		if opts.brokenAuthServer {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		host := "http://" + r.Host
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -65,11 +78,8 @@ func fakeMCPServer(compliant bool) *httptest.Server {
 	return httptest.NewServer(mux)
 }
 
-// reconcileUntilStable calls Reconcile repeatedly up to `maxSteps`
-// times to drive the MCPServer through its initializing condition and
-// the follow-up reconcile that runs discovery.
-func reconcileUntilStable(ctx context.Context, r *MCPServerReconciler, nn types.NamespacedName, maxSteps int) error {
-	for i := 0; i < maxSteps; i++ {
+func reconcileUntilStable(ctx context.Context, r *MCPServerReconciler, nn types.NamespacedName) error {
+	for range 3 {
 		if _, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: nn}); err != nil {
 			return err
 		}
@@ -103,7 +113,7 @@ var _ = Describe("MCPServer Controller — authorization detection", func() {
 			Scheme:   k8sClient.Scheme(),
 			Eventing: eventnoop.NewProvider(),
 		}
-		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"}, 3)).To(Succeed())
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
 
 		out := &arkv1alpha1.MCPServer{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out)).To(Succeed())
@@ -130,6 +140,83 @@ var _ = Describe("MCPServer Controller — authorization detection", func() {
 		Expect(disc.Reason).To(Equal(MCPServerReasonAuthorizationRequired))
 	})
 
+	It("surfaces state=DiscoveryFailed when the protected resource metadata endpoint is broken", func() {
+		srv := fakeMCPServerWithOpts(fakeMCPServerOpts{compliant: true, brokenResourceMetadata: true})
+		defer srv.Close()
+
+		const name = "mcp-auth-broken-metadata"
+		mcpServer := &arkv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec: arkv1alpha1.MCPServerSpec{
+				Address:   arkv1alpha1.ValueSource{Value: srv.URL + "/mcp"},
+				Transport: "http",
+				Timeout:   "5s",
+			},
+		}
+		Expect(k8sClient.Create(ctx, mcpServer)).To(Succeed())
+		DeferCleanup(func() {
+			_ = k8sClient.Delete(ctx, mcpServer)
+		})
+
+		r := &MCPServerReconciler{
+			Client:   k8sClient,
+			Scheme:   k8sClient.Scheme(),
+			Eventing: eventnoop.NewProvider(),
+		}
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
+
+		out := &arkv1alpha1.MCPServer{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out)).To(Succeed())
+
+		Expect(out.Status.Authorization).NotTo(BeNil())
+		Expect(out.Status.Authorization.State).To(Equal(arkv1alpha1.MCPServerAuthorizationStateDiscoveryFailed))
+
+		avail := findCondition(out.Status.Conditions, MCPServerAvailable)
+		Expect(avail).NotTo(BeNil())
+		Expect(avail.Reason).To(Equal(MCPServerReasonAuthorizationDiscoveryFailed))
+	})
+
+	It("populates authorization state even when auth server metadata fetch fails", func() {
+		srv := fakeMCPServerWithOpts(fakeMCPServerOpts{compliant: true, brokenAuthServer: true})
+		defer srv.Close()
+
+		const name = "mcp-auth-broken-authserver"
+		mcpServer := &arkv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec: arkv1alpha1.MCPServerSpec{
+				Address:   arkv1alpha1.ValueSource{Value: srv.URL + "/mcp"},
+				Transport: "http",
+				Timeout:   "5s",
+			},
+		}
+		Expect(k8sClient.Create(ctx, mcpServer)).To(Succeed())
+		DeferCleanup(func() {
+			_ = k8sClient.Delete(ctx, mcpServer)
+		})
+
+		r := &MCPServerReconciler{
+			Client:   k8sClient,
+			Scheme:   k8sClient.Scheme(),
+			Eventing: eventnoop.NewProvider(),
+		}
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
+
+		out := &arkv1alpha1.MCPServer{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out)).To(Succeed())
+
+		Expect(out.Status.Authorization).NotTo(BeNil())
+		Expect(out.Status.Authorization.State).To(Equal(arkv1alpha1.MCPServerAuthorizationStateRequired))
+		Expect(out.Status.Authorization.Resource).To(Equal(srv.URL + "/mcp"))
+		Expect(out.Status.Authorization.ResourceName).To(Equal("Fake MCP (Test)"))
+		Expect(out.Status.Authorization.AuthorizationServers).To(ConsistOf(srv.URL))
+		Expect(out.Status.Authorization.AuthorizationEndpoint).To(BeEmpty())
+		Expect(out.Status.Authorization.TokenEndpoint).To(BeEmpty())
+
+		avail := findCondition(out.Status.Conditions, MCPServerAvailable)
+		Expect(avail).NotTo(BeNil())
+		Expect(avail.Reason).To(Equal(MCPServerReasonAuthorizationRequired))
+	})
+
 	It("surfaces state=DiscoveryFailed when the server returns 401 without a usable WWW-Authenticate header", func() {
 		srv := fakeMCPServer(false)
 		defer srv.Close()
@@ -153,7 +240,7 @@ var _ = Describe("MCPServer Controller — authorization detection", func() {
 			Scheme:   k8sClient.Scheme(),
 			Eventing: eventnoop.NewProvider(),
 		}
-		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"}, 3)).To(Succeed())
+		Expect(reconcileUntilStable(ctx, r, types.NamespacedName{Name: name, Namespace: "default"})).To(Succeed())
 
 		out := &arkv1alpha1.MCPServer{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, out)).To(Succeed())

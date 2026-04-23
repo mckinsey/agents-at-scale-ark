@@ -12,12 +12,12 @@ dependencies = [
     "a2a-sdk[http-server]>=0.2.6",
     "langchain>=0.1.0",
     "langchain-openai>=1.1.14",
-    "starlette>=0.27.0",
+    "starlette>=0.49.1",
     "uvicorn>=0.23.0",
-    "python-dotenv>=1.0.0",
+    "python-dotenv>=1.2.2",
     "httpx>=0.25.0",
     "click>=8.0.0",
-    "urllib3>=2.6.0",
+    "urllib3>=2.6.3",
     "protobuf>=6.33.4",
 ]
 
