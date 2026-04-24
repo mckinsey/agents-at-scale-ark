@@ -1,5 +1,6 @@
 import { apiClient } from '@/lib/api/client';
 import type { ChatMessage } from '@/lib/types/chat-message';
+import { generateUUID } from '@/lib/utils/uuid';
 
 export interface Conversation {
   conversationId: string;
@@ -11,6 +12,8 @@ export interface Conversation {
   duration: string;
   status: 'active' | 'completed' | 'error';
   startTime: string;
+  isTemporary?: boolean;
+  participantType?: 'agent' | 'team' | 'tool';
 }
 
 export interface ConversationMessage {
@@ -84,15 +87,40 @@ export const conversationsService = {
     message: string;
     sessionId: string;
     agentName: string;
+    participantType?: 'agent' | 'team' | 'tool';
   }): Promise<void> {
     const { chatService } = await import('./chat');
+
+    const targetName = params.agentName.includes('/')
+      ? params.agentName.split('/').pop() || params.agentName
+      : params.agentName;
+
     await chatService.submitChatQuery(
       params.message,
-      'agent',
-      params.agentName,
+      params.participantType || 'agent',
+      targetName,
       params.sessionId,
       params.conversationId
     );
+  },
+
+  createTemporaryConversation(
+    participantName: string,
+    participantType: 'agent' | 'team' | 'tool'
+  ): Conversation {
+    return {
+      conversationId: generateUUID(),
+      name: participantName,
+      participants: [participantName],
+      messageCount: 0,
+      toolCallCount: 0,
+      tokens: 0,
+      duration: 'ongoing',
+      status: 'active',
+      startTime: new Date().toISOString(),
+      isTemporary: true,
+      participantType,
+    };
   },
 };
 

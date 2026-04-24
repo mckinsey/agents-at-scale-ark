@@ -12,9 +12,13 @@ interface Props {
   onSelect: (id: string) => void;
 }
 
-function getParticipantIcon(name: string) {
-  if (name.includes('team')) return <Users className="size-4" />;
-  if (name.includes('tool')) return <Hammer className="size-4" />;
+function getParticipantIcon(participantType?: 'agent' | 'team' | 'tool', name?: string) {
+  if (participantType === 'team') return <Users className="size-4" />;
+  if (participantType === 'tool') return <Hammer className="size-4" />;
+  if (participantType === 'agent') return <Bot className="size-4" />;
+
+  if (name?.includes('team')) return <Users className="size-4" />;
+  if (name?.includes('tool')) return <Hammer className="size-4" />;
   return <Bot className="size-4" />;
 }
 
@@ -32,7 +36,7 @@ export function ConversationSidebar({ conversations, selectedId, onSelect }: Pro
           onClick={() => onSelect(conv.conversationId)}
         >
           <div className="flex w-full items-center gap-2">
-            {getParticipantIcon(conv.name)}
+            {getParticipantIcon(conv.participantType, conv.name)}
             <span className="flex-1 truncate font-medium">{conv.name}</span>
             <span className="text-xs text-muted-foreground">
               {formatAge(conv.startTime)}

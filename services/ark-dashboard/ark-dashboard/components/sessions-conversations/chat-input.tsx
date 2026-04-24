@@ -3,25 +3,25 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Paperclip, SendHorizontal } from 'lucide-react';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
-import { useSendMessage, useListConversations } from '@/lib/services/conversations-hooks';
+import { SendHorizontal } from 'lucide-react';
+import { useSendMessage } from '@/lib/services/conversations-hooks';
+import type { Conversation } from '@/lib/services/conversations';
 import { toast } from 'sonner';
+
+const FALLBACK_PARTICIPANT_NAME = 'participant';
 
 interface Props {
   conversationId: string;
   sessionId: string;
+  conversation: Conversation | null;
 }
 
-export function ChatInput({ conversationId, sessionId }: Props) {
+export function ChatInput({ conversationId, sessionId, conversation }: Props) {
   const [message, setMessage] = useState('');
-  const [showToolCalls, setShowToolCalls] = useState(false);
   const { mutate: sendMessage, isPending } = useSendMessage();
-  const { data: conversations } = useListConversations(sessionId);
 
-  const conversation = conversations?.find(c => c.conversationId === conversationId);
-  const participantName = conversation?.name || 'participant';
+  const participantName = conversation?.name || FALLBACK_PARTICIPANT_NAME;
+  const participantType = conversation?.participantType;
 
   const handleSend = () => {
     if (!message.trim() || isPending) return;
@@ -32,6 +32,7 @@ export function ChatInput({ conversationId, sessionId }: Props) {
         sessionId,
         message: message.trim(),
         agentName: participantName,
+        participantType,
       },
       {
         onSuccess: () => {
@@ -57,10 +58,6 @@ export function ChatInput({ conversationId, sessionId }: Props) {
   return (
     <div className="border-t p-4">
       <div className="flex gap-2">
-        <Button variant="ghost" size="icon">
-          <Paperclip className="size-4" />
-        </Button>
-
         <Textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
@@ -70,26 +67,13 @@ export function ChatInput({ conversationId, sessionId }: Props) {
           disabled={isPending}
         />
 
-        <div className="flex flex-col gap-2">
-          <Button
-            onClick={handleSend}
-            disabled={!message.trim() || isPending}
-            size="icon"
-          >
-            <SendHorizontal className="size-4" />
-          </Button>
-
-          <div className="flex items-center gap-1">
-            <Checkbox
-              id="show-tool-calls"
-              checked={showToolCalls}
-              onCheckedChange={(checked) => setShowToolCalls(!!checked)}
-            />
-            <Label htmlFor="show-tool-calls" className="text-xs">
-              Tool calls
-            </Label>
-          </div>
-        </div>
+        <Button
+          onClick={handleSend}
+          disabled={!message.trim() || isPending}
+          size="icon"
+        >
+          <SendHorizontal className="size-4" />
+        </Button>
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ export const useListConversations = (sessionId: string | null) => {
     queryFn: () =>
       sessionId ? conversationsService.getConversations(sessionId) : [],
     enabled: !!sessionId,
+    placeholderData: (previousData) => previousData,
   });
 };
 
@@ -28,6 +29,9 @@ export const useSendMessage = () => {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
         queryKey: ['messages', variables.conversationId]
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['conversations', variables.sessionId]
       });
     },
   });

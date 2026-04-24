@@ -1,25 +1,29 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { useGetMessages, useListConversations } from '@/lib/services/conversations-hooks';
+import { useGetMessages } from '@/lib/services/conversations-hooks';
+import type { Conversation } from '@/lib/services/conversations';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { ChatMessage } from '@/components/chat/chat-message';
 import { Bot } from 'lucide-react';
-import type { ConversationMessage } from '@/lib/services/conversations';
+
+const FALLBACK_PARTICIPANT_NAME = 'Participant';
+const FALLBACK_PARTICIPANT_TYPE = 'agent';
 
 interface Props {
   conversationId: string;
   sessionId: string;
+  conversation: Conversation | null;
 }
 
-export function MessageDisplay({ conversationId, sessionId }: Props) {
+export function MessageDisplay({ conversationId, sessionId, conversation }: Props) {
   const { data: messages, isLoading } = useGetMessages(sessionId, conversationId);
-  const { data: conversations } = useListConversations(sessionId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const conversation = conversations?.find(c => c.conversationId === conversationId);
-  const participantName = conversation?.name || 'Participant';
+  const participantName = conversation?.name || FALLBACK_PARTICIPANT_NAME;
+  const participantType = conversation?.participantType || FALLBACK_PARTICIPANT_TYPE;
+  const isTemporary = conversation?.isTemporary || false;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -35,11 +39,20 @@ export function MessageDisplay({ conversationId, sessionId }: Props) {
         <div className="flex items-center gap-2">
           <Bot className="size-5" />
           <span className="font-semibold">{participantName}</span>
-          <Badge variant="outline">Agent</Badge>
+          <Badge variant="outline" className="capitalize">{participantType}</Badge>
         </div>
       </div>
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
-        {messages && messages.length > 0 ? (
+        {isTemporary && (!messages || messages.length === 0) ? (
+          <div className="flex h-full items-center justify-center text-center text-muted-foreground">
+            <div>
+              <p className="mb-2 text-sm">Conversation started with {participantName}</p>
+              <p className="text-xs">
+                Send a message below to begin the conversation
+              </p>
+            </div>
+          </div>
+        ) : messages && messages.length > 0 ? (
           <>
             {messages.map((msg, idx) => (
               <ChatMessage
