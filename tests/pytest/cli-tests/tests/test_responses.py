@@ -32,10 +32,10 @@ from helpers.responses_helper import (
     wait_for_webhook_ready,
     kubectl_apply,
     check_executor_ready,
-    secret_manifest,
-    model_manifest,
-    agent_manifest,
-    query_manifest,
+    build_secret_manifest,
+    build_model_manifest,
+    build_agent_manifest,
+    build_query_manifest,
     submit_query,
     poll_query,
     run_query,
@@ -50,13 +50,13 @@ from helpers.responses_helper import (
 # payloads directly to the executor service's /execute endpoint:
 #
 #   T01        Basic happy path / sdk fix
-#   T02        Reasoning cascade (query > agent > EE priority)
+#   T02        Multi-level annotations accepted without error
 #   T03        Web search only
 #   T04        Web search + structured output
 #   T05        SQL grammar (CFG custom tool)
 #   T06        Query-level reasoning annotation
-#   T07        Debug logging / tools forwarded
-#   T08a–T08b  GPT-5.2 and o3 reasoning effort models
+#   T07        Tools annotation forwarded to model
+#   T08        Reasoning effort across models (parametrized: gpt-5.2, o3)
 #   T09        Tool cascade: query annotation overrides agent annotation
 #   T10        o4-mini basic completion
 #   T11        o4-mini with reasoning effort
@@ -80,9 +80,9 @@ class TestOpenAIResponsesExecutor:
     """
     Live E2E tests for executor-openai-responses (T01–T14).
 
-    Covers: SDK fix (T01), reasoning cascades (T02), web search (T03–T04),
-    SQL CFG tools (T05), annotation overrides (T06–T07), GPT-5/o-series
-    models (T08a–T13), multi-turn memory (T14).
+    Covers: SDK fix (T01), multi-level annotations (T02), web search (T03–T04),
+    SQL CFG tools (T05), annotation overrides (T06–T07), reasoning across
+    models (T08), tool cascade (T09), o-series models (T10–T13), multi-turn memory (T14).
 
     Required env vars:
       CICD_OPENAI_API_KEY    API key / JWT for the OpenAI or gateway endpoint
@@ -121,7 +121,7 @@ class TestOpenAIResponsesExecutor:
             kill_port_forward(cls._pf_port, cls._pf_proc)
             cls.executor_url, cls._pf_proc = start_port_forward(cls._pf_port)
 
-        wait_for_executor(cls.executor_url)
+        wait_for_executor(cls.executor_url, skip_on_failure=True)
         clear_sessions()
 
     @classmethod
@@ -187,7 +187,6 @@ class TestOpenAIResponsesExecutor:
     # and AgentConfig.annotations without crashing (requires ark-sdk >= 0.1.59).
     # ------------------------------------------------------------------
 
-    @pytest.mark.executor
     def test_t01_basic_happy_path_sdk_0159_fix(self):
         status, content, data = self._post(
             self._make_request(
@@ -207,11 +206,12 @@ class TestOpenAIResponsesExecutor:
         )
 
     # ------------------------------------------------------------------
-    # T02 — Reasoning cascade: query annotation takes priority over agent/EE
+    # T02 — Annotations at agent/EE/query levels are accepted without error.
+    # Priority ordering cannot be verified externally; this confirms the
+    # executor processes layered annotations without crashing.
     # ------------------------------------------------------------------
 
-    @pytest.mark.executor
-    def test_t02_reasoning_cascade(self):
+    def test_t02_multi_level_annotations_accepted(self):
         status, content, data = self._post(
             self._make_request(
                 "How many permanent members does the UN Security Council have?",
@@ -228,7 +228,6 @@ class TestOpenAIResponsesExecutor:
             f"Expected '5' or 'five' (permanent members) with query-level reasoning, got: {content[:200]}"
         )
 
-    @pytest.mark.executor
     def test_t03_web_search_only(self):
         status, content, data = self._post(
             self._make_request(
@@ -255,7 +254,6 @@ class TestOpenAIResponsesExecutor:
         )
 
 
-    @pytest.mark.executor
     def test_t04_web_search_structured_output(self):
         status, content, data = self._post(
             self._make_request(
@@ -285,15 +283,11 @@ class TestOpenAIResponsesExecutor:
         except json.JSONDecodeError:
             pytest.fail(f"Response is not valid JSON: {content[:300]}")
 
-        required = {
-            "company_name", "website_url", "companies_house_number",
-            "registered_address", "company_status",
-        }
+        required = set(COMPANY_LOOKUP_SCHEMA["required"])
         missing = required - set(parsed.keys())
         assert not missing, f"JSON missing fields {missing}: {content[:300]}"
 
 
-    @pytest.mark.executor
     def test_t05_sql_cfg_custom_tool(self):
         status, content, data = self._post(
             self._make_request(
@@ -317,7 +311,6 @@ class TestOpenAIResponsesExecutor:
         )
 
 
-    @pytest.mark.executor
     def test_t06_query_level_reasoning_only(self):
         status, content, data = self._post(
             self._make_request(
@@ -334,14 +327,13 @@ class TestOpenAIResponsesExecutor:
         )
 
 
-    @pytest.mark.executor
-    def test_t07_debug_logging_tools_forwarded(self):
+    def test_t07_tools_annotation_forwarded_to_model(self):
         status, content, data = self._post(
             self._make_request(
                 "What is the current base interest rate set by the Bank of England?",
                 model=MODEL_NON_GPT5,
                 agent_annotations={TOOLS_KEY: json.dumps([{"type": "web_search_preview"}])},
-                conversation_id="t07-debug-logging-test",
+                conversation_id="t07-tools-forwarded-test",
             ),
             timeout=60,
         )
@@ -352,47 +344,41 @@ class TestOpenAIResponsesExecutor:
         )
 
 
-    @pytest.mark.executor
-    def test_t08a_gpt52_enables_reasoning(self):
+    @pytest.mark.parametrize("model,user_input,expected", [
+        (
+            MODEL_GPT5,
+            (
+                "A portfolio of 5 UK commercial properties generates monthly rents of "
+                "£2,200, £1,750, £3,100, £1,900, and £2,650. "
+                "What is the total annual rental income?"
+            ),
+            ["139,200", "139200"],
+        ),
+        (
+            MODEL_O3,
+            (
+                "A fund of £50,000 is invested at a compound annual growth rate of 7% "
+                "for 3 years. What is the final value to the nearest pound?"
+            ),
+            ["61,252", "61252"],
+        ),
+    ])
+    def test_t08_reasoning_effort_by_model(self, model, user_input, expected):
         status, content, data = self._post(
             self._make_request(
-                (
-                    "A portfolio of 5 UK commercial properties generates monthly rents of "
-                    "£2,200, £1,750, £3,100, £1,900, and £2,650. "
-                    "What is the total annual rental income?"
-                ),
-                model="gpt-5.2-2025-12-11",
+                user_input,
+                model=model,
                 agent_annotations={REASONING_KEY: '{"effort": "low"}'},
-                conversation_id="t08a-gpt52-reasoning-test",
+                conversation_id=f"t08-reasoning-{model}-test",
             )
         )
         assert status == 200, f"HTTP {status}: {data}"
         assert content, "Empty response"
-        assert "139,200" in content or "139200" in content, (
-            f"Expected annual rental income of £139,200, got: {content[:200]}"
-        )
-
-    @pytest.mark.executor
-    def test_t08b_o3_reasoning_effort(self):
-        status, content, data = self._post(
-            self._make_request(
-                (
-                    "A fund of £50,000 is invested at a compound annual growth rate of 7% "
-                    "for 3 years. What is the final value to the nearest pound?"
-                ),
-                model="o3",
-                agent_annotations={REASONING_KEY: '{"effort": "low"}'},
-                conversation_id="t08b-o3-reasoning-test",
-            )
-        )
-        assert status == 200, f"HTTP {status}: {data}"
-        assert content, "Empty response"
-        assert "61,252" in content or "61252" in content, (
-            f"Expected compound growth result of £61,252, got: {content[:200]}"
+        assert any(e in content for e in expected), (
+            f"Expected one of {expected} with {model} reasoning, got: {content[:200]}"
         )
 
 
-    @pytest.mark.executor
     def test_t09_tool_cascade_query_overrides_agent(self):
         status, content, data = self._post(
             self._make_request(
@@ -432,7 +418,6 @@ class TestOpenAIResponsesExecutor:
             f"Got: {content[:300]}"
         )
 
-    @pytest.mark.executor
     def test_t10_o4_mini_basic_completion(self):
         status, content, data = self._post(
             self._make_request(
@@ -450,7 +435,6 @@ class TestOpenAIResponsesExecutor:
             f"Response does not address GDPR data roles: {content[:200]}"
         )
 
-    @pytest.mark.executor
     def test_t11_o4_mini_reasoning_effort(self):
         status, content, data = self._post(
             self._make_request(
@@ -473,7 +457,6 @@ class TestOpenAIResponsesExecutor:
         )
 
 
-    @pytest.mark.executor
     def test_t12_o3_high_reasoning_complex_problem(self):
         status, content, data = self._post(
             self._make_request(
@@ -498,7 +481,6 @@ class TestOpenAIResponsesExecutor:
             f"Expected discounted invoice of £19,080, got: {content[:200]}"
         )
 
-    @pytest.mark.executor
     def test_t13_o1_medium_reasoning_document_analysis(self):
         status, content, data = self._post(
             self._make_request(
@@ -523,7 +505,6 @@ class TestOpenAIResponsesExecutor:
             f"Expected 'yes' (clause prohibits reselling), got: {content[:200]}"
         )
 
-    @pytest.mark.executor
     def test_t14_multi_turn_memory(self):
         conv_id = "t14-multi-turn-memory"
 
@@ -617,9 +598,9 @@ class TestARKQueriesWithOpenAIResponses:
         check_executor_ready(cls.namespace)
         wait_for_webhook_ready()
         cls._webhook_patched = patch_webhooks("Ignore")
-        kubectl_apply(secret_manifest(cls.secret_name, cls.namespace, cls.api_key, cls.base_url))
-        kubectl_apply(model_manifest(cls.model_name, cls.namespace, cls.secret_name))
-        kubectl_apply(agent_manifest(cls.agent_name, cls.namespace, cls.model_name))
+        kubectl_apply(build_secret_manifest(cls.secret_name, cls.namespace, cls.api_key, cls.base_url))
+        kubectl_apply(build_model_manifest(cls.model_name, cls.namespace, cls.secret_name))
+        kubectl_apply(build_agent_manifest(cls.agent_name, cls.namespace, cls.model_name))
         time.sleep(3)
 
     @classmethod
@@ -648,7 +629,6 @@ class TestARKQueriesWithOpenAIResponses:
     # Validates: Secret → Model → Agent → Query CRD → executor → response
     # ------------------------------------------------------------------
 
-    @pytest.mark.executor
     def test_t15_single_ark_query(self):
         name = unique_name("t15-single")
         success, content, phase = run_query(
@@ -672,7 +652,6 @@ class TestARKQueriesWithOpenAIResponses:
     # returns content that does not contain the expected keyword.
     # ------------------------------------------------------------------
 
-    @pytest.mark.executor
     def test_t16_concurrent_ark_queries(self):
         candidates = [
             ("What does HTTP stand for? Reply with the full name only.",
@@ -748,7 +727,6 @@ class TestARKQueriesWithOpenAIResponses:
     # reasoning effort annotation to exercise the annotation cascade.
     # ------------------------------------------------------------------
 
-    @pytest.mark.executor
     def test_t17_concurrent_with_reasoning(self):
         problems = [
             (
@@ -831,7 +809,6 @@ class TestARKQueriesWithOpenAIResponses:
     # measures real wall-clock throughput.
     # ------------------------------------------------------------------
 
-    @pytest.mark.executor
     def test_t18_burst_then_poll(self):
         inputs = [
             f"Count to {i} and reply with only the number {i}."

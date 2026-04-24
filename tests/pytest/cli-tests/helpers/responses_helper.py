@@ -156,7 +156,7 @@ def reconnect_executor(pf_port: int, pf_proc: Optional[subprocess.Popen],
 
 
 def wait_for_executor(executor_url: str, retries: int = 10, delay: float = 2.0,
-                      skip_on_failure: bool = True) -> None:
+                      skip_on_failure: bool = False) -> None:
     health_url = executor_url.replace("/execute", "/health")
     for _ in range(retries):
         try:
@@ -192,10 +192,10 @@ def clear_sessions() -> None:
 # Kubernetes helpers
 # ---------------------------------------------------------------------------
 
-def kubectl_run(cmd: list, stdin: str = None, timeout: int = 30) -> tuple:
+def kubectl_run(cmd: list, data: str = None, timeout: int = 30) -> tuple:
     try:
         r = subprocess.run(
-            cmd, input=stdin, capture_output=True, text=True, timeout=timeout,
+            cmd, input=data, capture_output=True, text=True, timeout=timeout,
         )
         return r.returncode == 0, r.stdout, r.stderr
     except Exception as e:
@@ -203,6 +203,7 @@ def kubectl_run(cmd: list, stdin: str = None, timeout: int = 30) -> tuple:
 
 
 def patch_webhooks(policy: str) -> bool:
+    """Set failurePolicy on all Ark webhooks to avoid timing-related failures during CRD setup."""
     patched = False
     for kind, resource in [
         ("mutatingwebhookconfiguration",  "ark-mutating-webhook-configuration"),
@@ -245,7 +246,7 @@ def wait_for_webhook_ready(namespace: str = "ark-system",
                     if subset.get("addresses"):
                         return
             except json.JSONDecodeError:
-                pass
+                continue
         time.sleep(delay)
     pytest.skip(f"ark-webhook-service not ready after {retries} retries")
 
@@ -254,7 +255,7 @@ def kubectl_apply(yaml_str: str, namespace: str = "default",
                   retries: int = 3, timeout: int = 120) -> None:
     for attempt in range(retries):
         ok, _, err = kubectl_run(
-            ["kubectl", "apply", "-f", "-"], stdin=yaml_str, timeout=timeout,
+            ["kubectl", "apply", "-f", "-"], data=yaml_str, timeout=timeout,
         )
         if ok:
             return
@@ -277,7 +278,7 @@ def check_executor_ready(namespace: str = "default") -> None:
 # Kubernetes manifest builders
 # ---------------------------------------------------------------------------
 
-def secret_manifest(name: str, namespace: str, api_key: str, base_url: str) -> str:
+def build_secret_manifest(name: str, namespace: str, api_key: str, base_url: str) -> str:
     ak = base64.b64encode(api_key.encode()).decode()
     bu = base64.b64encode(base_url.encode()).decode()
     return f"""apiVersion: v1
@@ -292,7 +293,7 @@ data:
 """
 
 
-def model_manifest(name: str, namespace: str, secret_name: str,
+def build_model_manifest(name: str, namespace: str, secret_name: str,
                    model: str = "gpt-4o") -> str:
     return f"""apiVersion: ark.mckinsey.com/v1alpha1
 kind: Model
@@ -319,7 +320,7 @@ spec:
 """
 
 
-def agent_manifest(name: str, namespace: str, model_name: str,
+def build_agent_manifest(name: str, namespace: str, model_name: str,
                    prompt: str = "You are a concise assistant. Answer questions directly and briefly.\nDo not add unnecessary explanation or caveats.\n") -> str:
     indented_prompt = prompt.strip().replace("\n", "\n    ")
     return f"""apiVersion: ark.mckinsey.com/v1alpha1
@@ -337,12 +338,12 @@ spec:
 """
 
 
-def query_manifest(name: str, namespace: str, agent_name: str,
-                   input_text: str, annotations: Optional[dict] = None) -> str:
+def build_query_manifest(name: str, namespace: str, agent_name: str,
+                         input_text: str, annotations: Optional[dict] = None) -> str:
     ann_block = ""
     if annotations:
         lines = "\n".join(
-            f"    {k}: '{str(v).replace(chr(39), chr(39) + chr(39))}'"
+            f"    {k}: {json.dumps(str(v))}"
             for k, v in annotations.items()
         )
         ann_block = f"  annotations:\n{lines}\n"
@@ -372,7 +373,7 @@ def submit_query(name: str, input_text: str, agent_name: str,
                  annotations: Optional[dict] = None) -> bool:
     ok, _, _ = kubectl_run(
         ["kubectl", "apply", "-f", "-"],
-        stdin=query_manifest(name, namespace, agent_name, input_text, annotations),
+        data=build_query_manifest(name, namespace, agent_name, input_text, annotations),
         timeout=120,
     )
     if ok:
