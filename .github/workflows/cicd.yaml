@@ -531,6 +531,7 @@ jobs:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "true"
           storage-backend: ${{ matrix.storage-backend }}
+          prefetch-test-images: "true"
           ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
@@ -593,6 +594,7 @@ jobs:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "true"
           storage-backend: ${{ matrix.storage-backend }}
+          prefetch-test-images: "true"
           ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}

@@ -15,6 +15,7 @@ REGISTRY_PASSWORD="${DOCKER_CICD_CACHE_REGISTRY_PASSWORD:?required}"
 ARK_IMAGE_TAG="${ARK_IMAGE_TAG:-local-test}"
 INSTALL_COVERAGE="false"
 STORAGE_BACKEND="etcd"
+PREFETCH_TEST_IMAGES="false"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -27,10 +28,15 @@ while [[ $# -gt 0 ]]; do
       STORAGE_BACKEND="$2"
       shift 2
       ;;
+    --prefetch-test-images)
+      PREFETCH_TEST_IMAGES="true"
+      shift
+      ;;
     -h|--help)
-      echo "Usage: $0 [--install-coverage] [--storage-backend etcd|postgresql]"
-      echo "  --install-coverage   Install coverage collection components"
-      echo "  --storage-backend    Storage backend to use (default: etcd)"
+      echo "Usage: $0 [--install-coverage] [--storage-backend etcd|postgresql] [--prefetch-test-images]"
+      echo "  --install-coverage      Install coverage collection components"
+      echo "  --storage-backend       Storage backend to use (default: etcd)"
+      echo "  --prefetch-test-images  Pre-pull chainsaw test images (mock-llm, curl, mockserver, etc.)"
       exit 0
       ;;
     *)
@@ -100,19 +106,21 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
   kubectl -n ark-system wait --for=condition=ready pod -l app=ark-storage-dev --timeout=120s
 fi
 
-echo "=== Pre-pulling test images (background) ==="
 IMAGE_PULL_PIDS=()
-for img in \
-  docker.io/curlimages/curl:latest \
-  docker.io/mockserver/mockserver:5.15.0 \
-  ghcr.io/orange-opensource/hurl:6.1.1 \
-  docker.io/python:3.12-bookworm \
-  ghcr.io/dwmkerr/mock-llm:0.1.28 \
-  ghcr.io/dwmkerr/mock-llm:latest; do
-  sudo k3s ctr images pull "$img" &
-  IMAGE_PULL_PIDS+=($!)
-done
-echo "Image pulls started (PIDs: ${IMAGE_PULL_PIDS[*]})"
+if [ "${PREFETCH_TEST_IMAGES}" = "true" ]; then
+  echo "=== Pre-pulling test images (background) ==="
+  for img in \
+    docker.io/curlimages/curl:latest \
+    docker.io/mockserver/mockserver:5.15.0 \
+    ghcr.io/orange-opensource/hurl:6.1.1 \
+    docker.io/python:3.12-bookworm \
+    ghcr.io/dwmkerr/mock-llm:0.1.28 \
+    ghcr.io/dwmkerr/mock-llm:latest; do
+    sudo k3s ctr images pull "$img" &
+    IMAGE_PULL_PIDS+=($!)
+  done
+  echo "Image pulls started (PIDs: ${IMAGE_PULL_PIDS[*]})"
+fi
 
 echo "=== Installing ARK Controller ==="
 cd "${REPO_ROOT}/ark"
@@ -264,11 +272,13 @@ helm upgrade --install ark-broker "${REPO_ROOT}/services/ark-broker/chart" \
   --set restartController.enabled=false \
   --wait --timeout=300s
 
-echo "=== Waiting for image pre-pulls to complete ==="
-for pid in "${IMAGE_PULL_PIDS[@]}"; do
-  wait "$pid" || echo "Warning: image pull PID $pid failed"
-done
-echo "Image pre-pulls done"
+if [ "${#IMAGE_PULL_PIDS[@]}" -gt 0 ]; then
+  echo "=== Waiting for image pre-pulls to complete ==="
+  for pid in "${IMAGE_PULL_PIDS[@]}"; do
+    wait "$pid" || echo "Warning: image pull PID $pid failed"
+  done
+  echo "Image pre-pulls done"
+fi
 
 echo
 echo "=== Setup Complete! ==="
