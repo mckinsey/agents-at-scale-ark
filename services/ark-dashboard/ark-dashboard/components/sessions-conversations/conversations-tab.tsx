@@ -16,7 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 
 interface Props {
-  sessionId: string;
+  readonly sessionId: string;
 }
 
 interface TempSessionData {
@@ -38,7 +38,7 @@ export function ConversationsTab({ sessionId }: Props) {
   const { data: session } = useGetSession(sessionId);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof globalThis.window === 'undefined') return;
 
     const tempData = localStorage.getItem(`temp-session-${sessionId}`);
     if (!tempData) return;

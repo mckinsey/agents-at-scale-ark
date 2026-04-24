@@ -12,9 +12,58 @@ const FALLBACK_PARTICIPANT_NAME = 'Participant';
 const FALLBACK_PARTICIPANT_TYPE = 'agent';
 
 interface Props {
-  conversationId: string;
-  sessionId: string;
-  conversation: Conversation | null;
+  readonly conversationId: string;
+  readonly sessionId: string;
+  readonly conversation: Conversation | null;
+}
+
+function renderMessageContent(
+  isTemporary: boolean,
+  messages: unknown[] | undefined,
+  participantName: string,
+  messagesEndRef: React.RefObject<HTMLDivElement | null>
+) {
+  if (isTemporary && (!messages || messages.length === 0)) {
+    return (
+      <div className="flex h-full items-center justify-center text-center text-muted-foreground">
+        <div>
+          <p className="mb-2 text-sm">Conversation started with {participantName}</p>
+          <p className="text-xs">
+            Send a message below to begin the conversation
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (messages && messages.length > 0) {
+    return (
+      <>
+        {messages.map((msg: any) => (
+          <ChatMessage
+            key={msg.query_id}
+            role={msg.message.role === 'tool' ? 'system' : msg.message.role}
+            content={msg.message.content || ''}
+            queryName={msg.query_id}
+            toolCalls={msg.message.tool_calls}
+            sender={msg.message.name}
+          />
+        ))}
+        <div ref={messagesEndRef} />
+      </>
+    );
+  }
+
+  return (
+    <div className="flex h-full items-center justify-center text-center text-muted-foreground">
+      <div>
+        <p className="mb-2 text-sm">No conversation messages available</p>
+        <p className="text-xs">
+          Workflow sessions don't have conversational messages. Check the Logs tab for execution details.
+        </p>
+      </div>
+    </div>
+  );
 }
 
 export function MessageDisplay({ conversationId, sessionId, conversation }: Props) {
@@ -43,39 +92,7 @@ export function MessageDisplay({ conversationId, sessionId, conversation }: Prop
         </div>
       </div>
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
-        {isTemporary && (!messages || messages.length === 0) ? (
-          <div className="flex h-full items-center justify-center text-center text-muted-foreground">
-            <div>
-              <p className="mb-2 text-sm">Conversation started with {participantName}</p>
-              <p className="text-xs">
-                Send a message below to begin the conversation
-              </p>
-            </div>
-          </div>
-        ) : messages && messages.length > 0 ? (
-          <>
-            {messages.map((msg, idx) => (
-              <ChatMessage
-                key={idx}
-                role={msg.message.role === 'tool' ? 'system' : msg.message.role}
-                content={msg.message.content || ''}
-                queryName={msg.query_id}
-                toolCalls={msg.message.tool_calls}
-                sender={msg.message.name}
-              />
-            ))}
-            <div ref={messagesEndRef} />
-          </>
-        ) : (
-          <div className="flex h-full items-center justify-center text-center text-muted-foreground">
-            <div>
-              <p className="mb-2 text-sm">No conversation messages available</p>
-              <p className="text-xs">
-                Workflow sessions don't have conversational messages. Check the Logs tab for execution details.
-              </p>
-            </div>
-          </div>
-        )}
+        {renderMessageContent(isTemporary, messages, participantName, messagesEndRef)}
       </div>
     </div>
   );

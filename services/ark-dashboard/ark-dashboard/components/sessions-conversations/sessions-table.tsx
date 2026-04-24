@@ -3,22 +3,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowUpDown, BarChart3, Coins, Plus, Search } from 'lucide-react';
 import { toast } from 'sonner';
-import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useListSessions } from '@/lib/services/broker-sessions-hooks';
-import type { BrokerSession } from '@/lib/services/broker-sessions';
 import { SessionTableRow } from './session-table-row';
 import { NewSessionDialog } from './new-session-dialog';
 
 interface Props {
-  onSelectSession: (sessionId: string) => void;
-  selectedSessionId: string | null;
-  searchQuery: string;
-  onSearchChange: (query: string) => void;
+  readonly onSelectSession: (sessionId: string) => void;
+  readonly selectedSessionId: string | null;
+  readonly searchQuery: string;
+  readonly onSearchChange: (query: string) => void;
 }
 
 type SortField = 'date' | 'tokens';
@@ -42,7 +40,7 @@ export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery,
     return undefined;
   }, [dateFilter]);
 
-  const { data, isLoading, isError, error, refetch } = useListSessions({
+  const { data, isLoading, isError, error } = useListSessions({
     limit: 20,
     cursor,
     status: statusFilter === 'all' ? undefined : statusFilter,

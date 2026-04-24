@@ -12,7 +12,7 @@ import { ConversationsTab } from '@/components/sessions-conversations/conversati
 import { LogsTab } from '@/components/sessions-conversations/logs-tab';
 
 interface Props {
-  params: Promise<{
+  readonly params: Promise<{
     session_id: string;
   }>;
 }
@@ -33,7 +33,7 @@ export default function SessionDetailPage({ params }: Props) {
   const { data: session, isLoading, isError } = useGetSession(session_id);
 
   const tempSessionData = useMemo<TempSessionData | null>(() => {
-    if (typeof window === 'undefined') return null;
+    if (typeof globalThis.window === 'undefined') return null;
     const data = localStorage.getItem(`temp-session-${session_id}`);
     if (!data) return null;
     try {

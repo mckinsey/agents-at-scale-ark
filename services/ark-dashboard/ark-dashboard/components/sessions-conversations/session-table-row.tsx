@@ -1,8 +1,7 @@
 'use client';
 
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Trash2, Bot, Users, Wrench } from 'lucide-react';
+import { Bot, Users, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { BrokerSession } from '@/lib/services/broker-sessions';
 
@@ -81,18 +80,7 @@ export function SessionTableRow({ session, isSelected, onSelect }: Props) {
         {session.totalTokens.toLocaleString()}
       </div>
 
-      <div className="flex items-center">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-8"
-          onClick={(e) => {
-            e.stopPropagation();
-          }}
-        >
-          <Trash2 className="size-4 text-muted-foreground" />
-        </Button>
-      </div>
+      <div className="w-8" />
     </div>
   );
 }

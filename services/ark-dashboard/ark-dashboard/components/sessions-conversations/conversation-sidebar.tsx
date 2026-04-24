@@ -7,9 +7,9 @@ import { cn } from '@/lib/utils';
 import { formatAge } from '@/lib/utils/time';
 
 interface Props {
-  conversations: Conversation[];
-  selectedId: string | null;
-  onSelect: (id: string) => void;
+  readonly conversations: Conversation[];
+  readonly selectedId: string | null;
+  readonly onSelect: (id: string) => void;
 }
 
 function getParticipantIcon(participantType?: 'agent' | 'team' | 'tool', name?: string) {

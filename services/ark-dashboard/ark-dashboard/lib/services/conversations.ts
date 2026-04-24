@@ -2,6 +2,8 @@ import { apiClient } from '@/lib/api/client';
 import type { ChatMessage } from '@/lib/types/chat-message';
 import { generateUUID } from '@/lib/utils/uuid';
 
+export type ParticipantType = 'agent' | 'team' | 'tool';
+
 export interface Conversation {
   conversationId: string;
   name: string;
@@ -13,7 +15,7 @@ export interface Conversation {
   status: 'active' | 'completed' | 'error';
   startTime: string;
   isTemporary?: boolean;
-  participantType?: 'agent' | 'team' | 'tool';
+  participantType?: ParticipantType;
 }
 
 export interface ConversationMessage {
@@ -48,7 +50,14 @@ export const conversationsService = {
       const messageCount = queries.length;
       const toolCallCount = 0;
 
-      const status: 'active' | 'completed' | 'error' = hasError ? 'error' : isActive ? 'active' : 'completed';
+      let status: 'active' | 'completed' | 'error';
+      if (hasError) {
+        status = 'error';
+      } else if (isActive) {
+        status = 'active';
+      } else {
+        status = 'completed';
+      }
 
       return {
         conversationId: convId,
@@ -57,9 +66,9 @@ export const conversationsService = {
         messageCount,
         toolCallCount,
         tokens: 0,
-        duration: calculateDuration(queries[0].createdAt, queries[queries.length - 1].completedAt),
+        duration: calculateDuration(queries.at(0)!.createdAt, queries.at(-1)!.completedAt),
         status,
-        startTime: queries[0].createdAt,
+        startTime: queries.at(0)!.createdAt,
       };
     });
 
@@ -87,7 +96,7 @@ export const conversationsService = {
     message: string;
     sessionId: string;
     agentName: string;
-    participantType?: 'agent' | 'team' | 'tool';
+    participantType?: ParticipantType;
   }): Promise<void> {
     const { chatService } = await import('./chat');
 
@@ -106,7 +115,7 @@ export const conversationsService = {
 
   createTemporaryConversation(
     participantName: string,
-    participantType: 'agent' | 'team' | 'tool'
+    participantType: ParticipantType
   ): Conversation {
     return {
       conversationId: generateUUID(),

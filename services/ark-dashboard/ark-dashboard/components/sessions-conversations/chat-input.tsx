@@ -11,9 +11,9 @@ import { toast } from 'sonner';
 const FALLBACK_PARTICIPANT_NAME = 'participant';
 
 interface Props {
-  conversationId: string;
-  sessionId: string;
-  conversation: Conversation | null;
+  readonly conversationId: string;
+  readonly sessionId: string;
+  readonly conversation: Conversation | null;
 }
 
 export function ChatInput({ conversationId, sessionId, conversation }: Props) {

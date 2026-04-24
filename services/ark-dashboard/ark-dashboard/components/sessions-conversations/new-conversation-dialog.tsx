@@ -16,11 +16,11 @@ import type { Participant as SessionParticipant } from '@/lib/services/broker-se
 import type { Conversation } from '@/lib/services/conversations';
 
 interface Props {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  sessionParticipants: SessionParticipant[];
-  selectedConversation: Conversation | null;
-  onSelectParticipant: (participant: Participant) => void;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly sessionParticipants: SessionParticipant[];
+  readonly selectedConversation: Conversation | null;
+  readonly onSelectParticipant: (participant: Participant) => void;
 }
 
 function getParticipantIcon(type: 'agent' | 'team' | 'tool') {
@@ -44,7 +44,7 @@ export function NewConversationDialog({
 
     const sessionParticipantsList: Participant[] = sessionParticipants.map(p => ({
       name: p.name,
-      type: p.type as 'agent' | 'team' | 'tool',
+      type: p.type,
       description: null,
     }));
 

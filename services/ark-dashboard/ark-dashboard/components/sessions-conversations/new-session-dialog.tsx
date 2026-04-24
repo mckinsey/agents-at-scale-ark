@@ -23,8 +23,8 @@ import { toolsService } from '@/lib/services/tools';
 import { generateUUID } from '@/lib/utils/uuid';
 
 interface Props {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
 }
 
 type ParticipantType = 'agent' | 'team' | 'tool';
@@ -186,6 +186,61 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
     </label>
   );
 
+  const renderTabContent = () => {
+    if (isLoading) {
+      return (
+        <div className="py-8 text-center text-muted-foreground">
+          Loading participants...
+        </div>
+      );
+    }
+
+    if (filteredParticipants.length === 0) {
+      return (
+        <div className="py-8 text-center text-muted-foreground">
+          No participants found
+        </div>
+      );
+    }
+
+    return (
+      <div className="max-h-[400px] space-y-4 overflow-y-auto">
+        {groupedParticipants.agentsGroup.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium text-muted-foreground">
+              Agents ({groupedParticipants.agentsGroup.length})
+            </h3>
+            <div className="space-y-1">
+              {groupedParticipants.agentsGroup.map(renderParticipantItem)}
+            </div>
+          </div>
+        )}
+
+        {groupedParticipants.teamsGroup.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium text-muted-foreground">
+              Teams ({groupedParticipants.teamsGroup.length})
+            </h3>
+            <div className="space-y-1">
+              {groupedParticipants.teamsGroup.map(renderParticipantItem)}
+            </div>
+          </div>
+        )}
+
+        {groupedParticipants.toolsGroup.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium text-muted-foreground">
+              Tools ({groupedParticipants.toolsGroup.length})
+            </h3>
+            <div className="space-y-1">
+              {groupedParticipants.toolsGroup.map(renderParticipantItem)}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-3xl">
@@ -217,50 +272,7 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
             </TabsList>
 
             <TabsContent value={activeTab} className="mt-4">
-              {isLoading ? (
-                <div className="py-8 text-center text-muted-foreground">
-                  Loading participants...
-                </div>
-              ) : filteredParticipants.length === 0 ? (
-                <div className="py-8 text-center text-muted-foreground">
-                  No participants found
-                </div>
-              ) : (
-                <div className="max-h-[400px] space-y-4 overflow-y-auto">
-                  {groupedParticipants.agentsGroup.length > 0 && (
-                    <div className="space-y-2">
-                      <h3 className="text-sm font-medium text-muted-foreground">
-                        Agents ({groupedParticipants.agentsGroup.length})
-                      </h3>
-                      <div className="space-y-1">
-                        {groupedParticipants.agentsGroup.map(renderParticipantItem)}
-                      </div>
-                    </div>
-                  )}
-
-                  {groupedParticipants.teamsGroup.length > 0 && (
-                    <div className="space-y-2">
-                      <h3 className="text-sm font-medium text-muted-foreground">
-                        Teams ({groupedParticipants.teamsGroup.length})
-                      </h3>
-                      <div className="space-y-1">
-                        {groupedParticipants.teamsGroup.map(renderParticipantItem)}
-                      </div>
-                    </div>
-                  )}
-
-                  {groupedParticipants.toolsGroup.length > 0 && (
-                    <div className="space-y-2">
-                      <h3 className="text-sm font-medium text-muted-foreground">
-                        Tools ({groupedParticipants.toolsGroup.length})
-                      </h3>
-                      <div className="space-y-1">
-                        {groupedParticipants.toolsGroup.map(renderParticipantItem)}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
+              {renderTabContent()}
             </TabsContent>
           </Tabs>
         </div>
@@ -268,7 +280,7 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
         <DialogFooter className="border-t pt-4">
           <div className="flex w-full items-center justify-between">
             <span className="text-sm text-muted-foreground">
-              {selectedParticipants.size} participant{selectedParticipants.size !== 1 ? 's' : ''} selected
+              {selectedParticipants.size} participant{selectedParticipants.size === 1 ? '' : 's'} selected
             </span>
             <div className="flex gap-2">
               <Button variant="ghost" onClick={handleClose}>
