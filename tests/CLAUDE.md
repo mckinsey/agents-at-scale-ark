@@ -156,6 +156,41 @@ Use `assert:` only for post-completion validation where the query is already kno
         phase: done
 ```
 
+**Never use `contains()` on response fields without a preceding `wait`.**
+
+JMESPath's `contains()` requires a string or array — it throws a hard type error if the value is `nil`. Before the query completes, `response` is `nil`, so any assertion like `(contains(response.content, 'foo')): true` will immediately error rather than retry:
+
+```yaml
+# Bad - crashes on nil if query hasn't completed yet
+- apply:
+    file: manifests/a04-query.yaml
+- assert:
+    resource:
+      ...
+      status:
+        (contains(response.content, 'expected text')): true
+
+# Good - wait for completion first, then assert
+- apply:
+    file: manifests/a04-query.yaml
+- wait:
+    apiVersion: ark.mckinsey.com/v1alpha1
+    kind: Query
+    name: test-query
+    timeout: 2m
+    for:
+      condition:
+        name: Completed
+        value: 'True'
+- assert:
+    resource:
+      ...
+      status:
+        (contains(response.content, 'expected text')): true
+```
+
+This applies to both success and error queries — the `Completed` condition is set to `True` regardless of outcome (`QuerySucceeded`, `QueryErrored`, `QueryCanceled`).
+
 ### Model Assertions
 Models should assert existence and readiness:
 ```yaml
