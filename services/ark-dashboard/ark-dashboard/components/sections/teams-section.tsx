@@ -29,8 +29,6 @@ import {
 import { type ToggleOption, ToggleSwitch } from '@/components/ui/toggle-switch';
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
 import { useDelayedLoading, useTeamsLayout } from '@/lib/hooks';
-
-const getTeamKey = (team: Team) => team.name;
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import {
   type Agent,
@@ -41,6 +39,8 @@ import {
   teamsService,
 } from '@/lib/services';
 import { useNamespace } from '@/providers/NamespaceProvider';
+
+const getTeamKey = (team: Team) => team.name;
 
 export const TeamsSection = forwardRef<{ openAddEditor: () => void }>(
   function TeamsSection(_, ref) {
