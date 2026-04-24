@@ -20,6 +20,11 @@ router = APIRouter(prefix="/broker", tags=["broker"])
 VERSION = "v1alpha1"
 BROKER_CONNECT_TIMEOUT = float(os.getenv('BROKER_CONNECT_TIMEOUT', '10.0'))
 
+# Query parameter descriptions
+DESC_MEMORY = "Memory resource name"
+DESC_CURSOR = "Cursor for pagination"
+DESC_CURSOR_STREAM = "Cursor for pagination/streaming"
+
 sse_headers = {
     "Cache-Control": "no-cache",
     "Connection": "keep-alive",
@@ -128,7 +133,7 @@ async def proxy_broker_request(
 @router.get("/traces")
 async def get_traces(
     watch: bool = Query(False, description="Stream traces via SSE"),
-    memory: str = Query("default", description="Memory resource name"),
+    memory: str = Query("default", description=DESC_MEMORY),
     limit: int = Query(100, description="Max traces to return"),
     cursor: Optional[int] = Query(None, description="Cursor for pagination"),
     session_id: Optional[str] = Query(None, description="Filter by session ID"),
@@ -146,7 +151,7 @@ async def get_trace(
     watch: bool = Query(False, description="Stream trace spans via SSE"),
     from_beginning: bool = Query(False, alias="from-beginning", description="Include existing spans"),
     cursor: Optional[int] = Query(None, description="Cursor for pagination/streaming"),
-    memory: str = Query("default", description="Memory resource name"),
+    memory: str = Query("default", description=DESC_MEMORY),
 ):
     """Get or stream a specific trace from the broker."""
     params = {"cursor": cursor}
@@ -158,7 +163,7 @@ async def get_trace(
 @router.get("/messages")
 async def get_messages(
     watch: bool = Query(False, description="Stream messages via SSE"),
-    memory: str = Query("default", description="Memory resource name"),
+    memory: str = Query("default", description=DESC_MEMORY),
     limit: int = Query(100, description="Max messages to return"),
     cursor: Optional[int] = Query(None, description="Cursor for pagination"),
     conversation_id: Optional[str] = Query(None, description="Filter by conversation ID"),
@@ -174,7 +179,7 @@ async def get_messages(
 @router.get("/events")
 async def get_events(
     watch: bool = Query(False, description="Stream events via SSE"),
-    memory: str = Query("default", description="Memory resource name"),
+    memory: str = Query("default", description=DESC_MEMORY),
     limit: int = Query(100, description="Max events to return"),
     cursor: Optional[int] = Query(None, description="Cursor for pagination"),
     session_id: Optional[str] = Query(None, description="Filter by session ID"),
@@ -192,7 +197,7 @@ async def get_events_by_query(
     watch: bool = Query(False, description="Stream events via SSE"),
     from_beginning: bool = Query(False, alias="from-beginning", description="Include existing events"),
     cursor: Optional[int] = Query(None, description="Cursor for pagination/streaming"),
-    memory: str = Query("default", description="Memory resource name"),
+    memory: str = Query("default", description=DESC_MEMORY),
     limit: int = Query(100, description="Max events to return"),
 ):
     """Get or stream events for a specific query."""
@@ -206,7 +211,7 @@ async def get_events_by_query(
 async def get_chunks(
     watch: bool = Query(False, description="Stream chunks via SSE"),
     query_id: Optional[str] = Query(None, alias="query-id", description="Filter by query ID"),
-    memory: str = Query("default", description="Memory resource name"),
+    memory: str = Query("default", description=DESC_MEMORY),
     limit: int = Query(100, description="Max chunks to return"),
     cursor: Optional[int] = Query(None, description="Cursor for pagination"),
 ):
@@ -235,7 +240,7 @@ async def get_chunks(
 @router.get("/sessions")
 async def get_sessions(
     watch: bool = Query(False, description="Stream sessions via SSE"),
-    memory: str = Query("default", description="Memory resource name"),
+    memory: str = Query("default", description=DESC_MEMORY),
     limit: Optional[int] = Query(None, description="Max sessions to return"),
     cursor: Optional[int] = Query(None, description="Cursor for pagination"),
     status: Optional[str] = Query(None, description="Filter by status (active/idle/error)"),
@@ -264,7 +269,7 @@ async def get_sessions(
 @router.get("/sessions/{session_id}")
 async def get_session(
     session_id: str,
-    memory: str = Query("default", description="Memory resource name"),
+    memory: str = Query("default", description=DESC_MEMORY),
 ):
     """Get a single session by ID from the broker."""
     return await proxy_broker_request(memory, f"/sessions/{session_id}", False, {})
@@ -297,30 +302,30 @@ async def proxy_broker_delete(memory: str, path: str):
 
 
 @router.delete("/traces")
-async def purge_traces(memory: str = Query("default", description="Memory resource name")):
+async def purge_traces(memory: str = Query("default", description=DESC_MEMORY)):
     """Purge all traces from the broker."""
     return await proxy_broker_delete(memory, "/traces")
 
 
 @router.delete("/events")
-async def purge_events(memory: str = Query("default", description="Memory resource name")):
+async def purge_events(memory: str = Query("default", description=DESC_MEMORY)):
     """Purge all events from the broker."""
     return await proxy_broker_delete(memory, "/events")
 
 
 @router.delete("/messages")
-async def purge_messages(memory: str = Query("default", description="Memory resource name")):
+async def purge_messages(memory: str = Query("default", description=DESC_MEMORY)):
     """Purge all messages from the broker."""
     return await proxy_broker_delete(memory, "/messages")
 
 
 @router.delete("/chunks")
-async def purge_chunks(memory: str = Query("default", description="Memory resource name")):
+async def purge_chunks(memory: str = Query("default", description=DESC_MEMORY)):
     """Purge all chunks from the broker."""
     return await proxy_broker_delete(memory, "/stream")
 
 
 @router.delete("/sessions")
-async def purge_sessions(memory: str = Query("default", description="Memory resource name")):
+async def purge_sessions(memory: str = Query("default", description=DESC_MEMORY)):
     """Purge all sessions from the broker."""
     return await proxy_broker_delete(memory, "/sessions")
