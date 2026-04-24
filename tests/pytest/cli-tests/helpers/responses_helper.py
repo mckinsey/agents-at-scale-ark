@@ -321,6 +321,7 @@ spec:
 
 def agent_manifest(name: str, namespace: str, model_name: str,
                    prompt: str = "You are a concise assistant. Answer questions directly and briefly.\nDo not add unnecessary explanation or caveats.\n") -> str:
+    indented_prompt = prompt.strip().replace("\n", "\n    ")
     return f"""apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
 metadata:
@@ -332,7 +333,8 @@ spec:
   executionEngine:
     name: executor-openai-responses
   prompt: |
-    {prompt}"""
+    {indented_prompt}
+"""
 
 
 def query_manifest(name: str, namespace: str, agent_name: str,
