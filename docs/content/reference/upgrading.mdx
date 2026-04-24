@@ -12,6 +12,71 @@ Ark uses [Semantic Versioning](https://semver.org/). The technical details are i
 
 A detailed record of every change is documented in [`CHANGELOG.md`](https://github.com/mckinsey/agents-at-scale-ark/blob/main/.github/CHANGELOG.md).
 
+## Installing a New Version of Ark
+
+Two scenarios are covered here: upgrading an existing Ark installation in place, and migrating resources to a different cluster.
+
+### Upgrading in place
+
+To move an existing cluster to a new Ark version, reinstall with `--ark-version`:
+
+```bash
+ark install -y --ark-version 0.2.0
+```
+
+Useful flags:
+
+- `--marketplace-version <version>` — pin the marketplace chart version
+
+Run `ark install --help` for the full list.
+
+Your CRD instances (agents, models, teams, tools, mcpservers, a2aservers, queries, memories, executionengines, a2atasks) are **preserved automatically** across the upgrade. The Ark CRDs are installed with the `helm.sh/resource-policy: keep` annotation, so they survive `ark uninstall` and are adopted by the reinstall. Non-Ark resources (for example, Argo `WorkflowTemplate`s) are not touched by Ark's Helm releases at all.
+
+<Callout type="info">
+What is not preserved:
+- **Broker state** — `ark-broker` is an in-memory event bus; messages, chunks, traces, events, sessions, and any conversation history held there are wiped when the broker pod restarts.
+- **In-flight query execution** — the `Query` CRD record survives, but the executor pod processing it is gone. Such queries are typically stuck and need to be cleaned up manually.
+
+Also review the version-specific sections below for manual migration steps that apply to the version you upgraded to.
+</Callout>
+
+### Migrating to a different cluster
+
+To move resources to a new cluster, use `ark export` on the source and `ark import` on the destination. This flow assumes the destination has a fresh Ark install with no overlapping resources.
+
+#### 1. Export from the source cluster
+
+```bash
+ark export -o ark-export.yaml
+```
+
+This captures Ark CRD instances for: `secrets`, `tools`, `models`, `agents`, `teams`, `mcpservers`, `a2aservers`.
+
+Useful flags:
+
+- `-n, --namespace <namespace>` — export from a single namespace
+- `-t, --types <types>` — comma-separated list of resource types (e.g. `-t models,agents,teams`)
+
+<Callout type="warning">
+Not included in the default export: `queries`, `memories`, `executionengines`, `a2atasks`, and any non-Ark CRDs such as Argo `WorkflowTemplate`. Back those up separately with `kubectl get <kind> -A -o yaml` if you need them on the destination.
+</Callout>
+
+#### 2. Install Ark on the destination cluster
+
+```bash
+ark install -y --ark-version 0.2.0
+```
+
+#### 3. Import the exported resources
+
+```bash
+ark import ark-export.yaml
+```
+
+<Callout type="warning">
+`ark import` uses `kubectl create`, which fails for any resource that already exists on the destination. Run it against a clean install, or delete conflicting instances first with `kubectl delete -f ark-export.yaml`.
+</Callout>
+
 ## Unreleased
 
 ### OpenAI-Compatible Endpoints Removed
