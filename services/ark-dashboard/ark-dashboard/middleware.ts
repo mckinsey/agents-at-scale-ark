@@ -59,6 +59,7 @@ async function middleware(request: NextRequest) {
     const fetchOptions: RequestInit = {
       method: request.method,
       headers: backendHeaders,
+      signal: request.signal,
     };
 
     if (request.body) {

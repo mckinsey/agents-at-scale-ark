@@ -642,7 +642,6 @@ describe('chatService', () => {
 
   describe('streamChatResponse', () => {
     const mockFetch = vi.fn();
-    const mockApiPost = vi.mocked(apiClient.post);
 
     beforeEach(() => {
       global.fetch = mockFetch;
@@ -650,8 +649,6 @@ describe('chatService', () => {
     });
 
     it('should stream chat response chunks', async () => {
-      mockApiPost.mockResolvedValueOnce({ name: 'test-query-1' });
-
       const mockReader = {
         read: vi
           .fn()
@@ -674,29 +671,19 @@ describe('chatService', () => {
 
       const chunks: Record<string, unknown>[] = [];
       for await (const chunk of chatService.streamChatResponse(
-        'Hi',
-        'agent',
-        'TestAgent',
+        'test-query-1',
       )) {
         chunks.push(chunk);
       }
 
       expect(chunks).toEqual([{ content: 'Hello' }, { content: 'World' }]);
-      expect(mockApiPost).toHaveBeenCalledWith(
-        '/api/v1/queries/',
-        expect.objectContaining({
-          type: 'user',
-          input: 'Hi',
-        }),
-      );
       expect(mockFetch).toHaveBeenCalledWith(
         '/api/v1/broker/chunks?watch=true&query-id=test-query-1',
+        expect.objectContaining({ signal: undefined }),
       );
     });
 
     it('should handle buffered chunks across reads', async () => {
-      mockApiPost.mockResolvedValueOnce({ name: 'test-query-2' });
-
       const mockReader = {
         read: vi
           .fn()
@@ -719,9 +706,7 @@ describe('chatService', () => {
 
       const chunks: Record<string, unknown>[] = [];
       for await (const chunk of chatService.streamChatResponse(
-        'Hi',
-        'agent',
-        'TestAgent',
+        'test-query-2',
       )) {
         chunks.push(chunk);
       }
@@ -730,8 +715,6 @@ describe('chatService', () => {
     });
 
     it('should skip [DONE] markers', async () => {
-      mockApiPost.mockResolvedValueOnce({ name: 'test-query-3' });
-
       const mockReader = {
         read: vi
           .fn()
@@ -754,9 +737,7 @@ describe('chatService', () => {
 
       const chunks: Record<string, unknown>[] = [];
       for await (const chunk of chatService.streamChatResponse(
-        'Hi',
-        'agent',
-        'TestAgent',
+        'test-query-3',
       )) {
         chunks.push(chunk);
       }
@@ -765,7 +746,6 @@ describe('chatService', () => {
     });
 
     it('should throw error when response is not ok', async () => {
-      mockApiPost.mockResolvedValueOnce({ name: 'test-query-err' });
       mockFetch.mockResolvedValue({
         ok: false,
         statusText: 'Internal Server Error',
@@ -773,16 +753,13 @@ describe('chatService', () => {
 
       await expect(async () => {
         for await (const _ of chatService.streamChatResponse(
-          'Hi',
-          'agent',
-          'TestAgent',
+          'test-query-err',
         )) {
         }
       }).rejects.toThrow('Failed to connect to stream: Internal Server Error');
     });
 
     it('should throw error when no response body', async () => {
-      mockApiPost.mockResolvedValueOnce({ name: 'test-query-nobody' });
       mockFetch.mockResolvedValue({
         ok: true,
         body: null,
@@ -790,16 +767,13 @@ describe('chatService', () => {
 
       await expect(async () => {
         for await (const _ of chatService.streamChatResponse(
-          'Hi',
-          'agent',
-          'TestAgent',
+          'test-query-nobody',
         )) {
         }
       }).rejects.toThrow('No response body available for streaming');
     });
 
     it('should release reader lock when done', async () => {
-      mockApiPost.mockResolvedValueOnce({ name: 'test-query-lock' });
       const mockReader = {
         read: vi.fn().mockResolvedValue({ done: true, value: undefined }),
         releaseLock: vi.fn(),
@@ -811,9 +785,7 @@ describe('chatService', () => {
       });
 
       for await (const _ of chatService.streamChatResponse(
-        'Hi',
-        'agent',
-        'TestAgent',
+        'test-query-lock',
       )) {
       }
 
@@ -821,7 +793,6 @@ describe('chatService', () => {
     });
 
     it('should release reader lock on error', async () => {
-      mockApiPost.mockResolvedValueOnce({ name: 'test-query-lockerr' });
       const mockReader = {
         read: vi.fn().mockRejectedValue(new Error('Read error')),
         releaseLock: vi.fn(),
@@ -834,14 +805,36 @@ describe('chatService', () => {
 
       await expect(async () => {
         for await (const _ of chatService.streamChatResponse(
-          'Hi',
-          'agent',
-          'TestAgent',
+          'test-query-lockerr',
         )) {
         }
       }).rejects.toThrow('Read error');
 
       expect(mockReader.releaseLock).toHaveBeenCalled();
+    });
+
+    it('should forward abort signal to fetch', async () => {
+      const mockReader = {
+        read: vi.fn().mockResolvedValue({ done: true, value: undefined }),
+        releaseLock: vi.fn(),
+      };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        body: { getReader: () => mockReader },
+      });
+
+      const controller = new AbortController();
+      for await (const _ of chatService.streamChatResponse(
+        'test-query-abort',
+        controller.signal,
+      )) {
+      }
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v1/broker/chunks?watch=true&query-id=test-query-abort',
+        expect.objectContaining({ signal: controller.signal }),
+      );
     });
   });
 });
