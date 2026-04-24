@@ -645,7 +645,7 @@ jobs:
 
   e2e-ui-tests:
     needs: [setup-container-cache-registry, build-containers]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-4-core
     if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
     steps:
       - uses: actions/checkout@v6
