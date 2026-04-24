@@ -1279,7 +1279,22 @@ jobs:
       - name: Attach ${{ matrix.chart }} to release
         run: |
           RELEASE_TAG="${{ needs.check-release.outputs.tag }}"
-          gh release upload "$RELEASE_TAG" ${{ matrix.chart }}-*.tgz
+          CLEAN_VERSION="${RELEASE_TAG#v}"
+          CHART="${{ matrix.chart }}"
+
+          BUILT_FILE=$(ls ${CHART}-*.tgz 2>/dev/null | head -1)
+          if [ -z "$BUILT_FILE" ]; then
+            echo "Error: No ${CHART}-*.tgz file found"
+            exit 1
+          fi
+
+          EXPECTED_FILE="${CHART}-${CLEAN_VERSION}.tgz"
+          if [ "$BUILT_FILE" != "$EXPECTED_FILE" ]; then
+            echo "Renaming $BUILT_FILE to $EXPECTED_FILE to match release version"
+            mv "$BUILT_FILE" "$EXPECTED_FILE"
+          fi
+
+          gh release upload "$RELEASE_TAG" "$EXPECTED_FILE"
         env:
           GH_TOKEN: ${{ github.token }}
 
