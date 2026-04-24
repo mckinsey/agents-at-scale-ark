@@ -92,6 +92,7 @@ class ToolsPage(BasePage):
         self.wait_for_animations_complete(listbox)
         logger.info("Listbox animations complete, clicking HTTP option")
         http_option = self.page.locator("[role='option']:has-text('HTTP')").first
+        http_option.wait_for(state="visible", timeout=10000)
         http_option.click()
 
         description_input = self.page.locator("input#description, input[name='description'], [role='dialog'] input:nth-of-type(2)").first
