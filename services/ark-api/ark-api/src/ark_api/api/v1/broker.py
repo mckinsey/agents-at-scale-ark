@@ -37,7 +37,7 @@ async def get_broker_url(memory_name: str) -> Optional[str]:
             return get_memory_service_address(memory_dicts[0])
     except Exception as e:
         logger.error(f"Failed to get memory service address: {e}")
-        raise
+        return None
 
 
 def format_error_response(response_text: str, status_code: int, reason_phrase: str) -> dict:
