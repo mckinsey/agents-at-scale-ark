@@ -94,6 +94,15 @@ spec:
     try:
     - apply:
         file: manifests/query-input-type-default-invalid-input.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-default-invalid-input
+        timeout: 2m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -102,8 +111,6 @@ spec:
             name: test-query-default-invalid-input
           status:
             phase: error
-            (conditions[?type == 'Completed']):
-            - status: 'True'
             (contains(response.content, 'failed to get input string')): true
     catch:
     - events: {}
@@ -116,6 +123,15 @@ spec:
     try:
     - apply:
         file: manifests/query-input-type-user-invalid-input.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-input-type-user-invalid-input
+        timeout: 2m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -124,8 +140,6 @@ spec:
             name: test-query-input-type-user-invalid-input
           status:
             phase: error
-            (conditions[?type == 'Completed']):
-            - status: 'True'
             (contains(response.content, 'failed to get input string')): true
     catch:
     - events: {}
