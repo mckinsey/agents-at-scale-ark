@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowUpDown, BarChart3, Coins, Plus, Search } from 'lucide-react';
 import { toast } from 'sonner';
+import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useListSessions } from '@/lib/services/broker-sessions-hooks';
 import type { BrokerSession } from '@/lib/services/broker-sessions';
 import { SessionTableRow } from './session-table-row';
+import { NewSessionDialog } from './new-session-dialog';
 
 interface Props {
   onSelectSession: (sessionId: string) => void;
@@ -29,6 +31,7 @@ export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery,
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [cursor, setCursor] = useState<number>(0);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   const dateFrom = useMemo(() => {
     if (dateFilter === 'all') return undefined;
@@ -153,7 +156,7 @@ export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery,
             <SelectItem value="error">Error</SelectItem>
           </SelectContent>
         </Select>
-        <Button>
+        <Button onClick={() => setDialogOpen(true)}>
           <Plus className="mr-2 size-4" />
           New session
         </Button>
@@ -210,6 +213,11 @@ export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery,
           </div>
         )}
       </div>
+
+      <NewSessionDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+      />
     </div>
   );
 }

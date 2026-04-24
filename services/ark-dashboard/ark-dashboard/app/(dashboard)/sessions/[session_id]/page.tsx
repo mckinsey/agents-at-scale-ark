@@ -1,6 +1,6 @@
 'use client';
 
-import { use } from 'react';
+import { use, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Bot, Coins, MessageSquare, Users, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -17,12 +17,39 @@ interface Props {
   }>;
 }
 
+interface TempSessionData {
+  sessionId: string;
+  conversationId: string;
+  participants: Array<{
+    name: string;
+    type: 'agent' | 'team' | 'tool';
+  }>;
+  createdAt: string;
+}
+
 export default function SessionDetailPage({ params }: Props) {
   const { session_id } = use(params);
   const router = useRouter();
   const { data: session, isLoading, isError } = useGetSession(session_id);
 
-  if (isLoading) {
+  const tempSessionData = useMemo<TempSessionData | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const data = localStorage.getItem(`temp-session-${session_id}`);
+    if (!data) return null;
+    try {
+      return JSON.parse(data);
+    } catch {
+      return null;
+    }
+  }, [session_id]);
+
+  useEffect(() => {
+    if (session && tempSessionData) {
+      localStorage.removeItem(`temp-session-${session_id}`);
+    }
+  }, [session, tempSessionData, session_id]);
+
+  if (isLoading && !tempSessionData) {
     return (
       <div className="flex h-full flex-col space-y-6 p-8">
         <Skeleton className="h-10 w-48" />
@@ -32,7 +59,7 @@ export default function SessionDetailPage({ params }: Props) {
     );
   }
 
-  if (isError || !session) {
+  if (isError && !tempSessionData) {
     return (
       <div className="flex h-full flex-col space-y-6 p-8">
         <Button variant="ghost" onClick={() => router.push('/session-history')}>
@@ -46,7 +73,26 @@ export default function SessionDetailPage({ params }: Props) {
     );
   }
 
-  const sessionDate = new Date(session.createdAt).toLocaleString('en-US', {
+  const displaySession = session || tempSessionData;
+  const isTemporarySession = !session && !!tempSessionData;
+
+  if (!displaySession) {
+    return (
+      <div className="flex h-full flex-col space-y-6 p-8">
+        <Button variant="ghost" onClick={() => router.push('/session-history')}>
+          <ArrowLeft className="mr-2 size-4" />
+          Back to all sessions
+        </Button>
+        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+          Session not found
+        </div>
+      </div>
+    );
+  }
+
+  const sessionDate = new Date(
+    session?.createdAt || tempSessionData?.createdAt || new Date()
+  ).toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -62,6 +108,18 @@ export default function SessionDetailPage({ params }: Props) {
     return <Bot className="size-4" />;
   }
 
+  const participants = session?.participants || tempSessionData?.participants.map((p, idx) => ({
+    id: `${p.name}-${idx}`,
+    name: p.name,
+    type: p.type,
+    isActive: false,
+  })) || [];
+
+  const totalTokens = session?.totalTokens || 0;
+  const conversationCount = session?.conversationCount || 0;
+  const errorCount = session?.errorCount || 0;
+  const sessionStatus = session?.status || 'active';
+
   return (
     <div className="flex h-full flex-col space-y-6 p-8">
       <Button variant="ghost" onClick={() => router.push('/session-history')} className="w-fit cursor-pointer">
@@ -72,32 +130,39 @@ export default function SessionDetailPage({ params }: Props) {
       <div className="space-y-4 rounded-lg border p-6">
         <div className="flex items-start justify-between">
           <div className="space-y-3">
-            <div className="text-sm text-muted-foreground">{sessionDate}</div>
+            <div className="flex items-center gap-2">
+              <div className="text-sm text-muted-foreground">{sessionDate}</div>
+              {isTemporarySession && (
+                <Badge variant="outline" className="text-xs">
+                  New Session
+                </Badge>
+              )}
+            </div>
             <div className="flex items-center gap-4 text-sm">
-              <h1 className="text-xl font-semibold">{session.sessionId}</h1>
+              <h1 className="text-xl font-semibold">{session_id}</h1>
               <div className="flex items-center gap-1">
                 <Coins className="size-4 text-muted-foreground" />
-                <span className="font-medium">{session.totalTokens.toLocaleString()}</span>
+                <span className="font-medium">{totalTokens.toLocaleString()}</span>
                 <span className="text-muted-foreground">Tokens</span>
               </div>
               <div className="flex items-center gap-1">
                 <MessageSquare className="size-4 text-muted-foreground" />
-                <span className="font-medium">{session.conversationCount}</span>
+                <span className="font-medium">{conversationCount}</span>
                 <span className="text-muted-foreground">Conversations</span>
               </div>
               <div className="flex items-center gap-1">
                 <Users className="size-4 text-muted-foreground" />
-                <span className="font-medium">{session.participants.length}</span>
+                <span className="font-medium">{participants.length}</span>
                 <span className="text-muted-foreground">Participants</span>
               </div>
               <div className="flex items-center gap-1">
                 <span className="size-2 rounded-full bg-red-500" />
-                <span className="font-medium">{session.errorCount}</span>
+                <span className="font-medium">{errorCount}</span>
                 <span className="text-muted-foreground">errors</span>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {session.participants.map(p => (
+              {participants.map(p => (
                 <div
                   key={p.id}
                   className="flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm"
@@ -112,10 +177,10 @@ export default function SessionDetailPage({ params }: Props) {
             </div>
           </div>
           <Badge
-            variant={session.status === 'error' ? 'destructive' : session.status === 'active' ? 'default' : 'secondary'}
+            variant={sessionStatus === 'error' ? 'destructive' : sessionStatus === 'active' ? 'default' : 'secondary'}
             className="capitalize"
           >
-            {session.status}
+            {sessionStatus}
           </Badge>
         </div>
       </div>

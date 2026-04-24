@@ -20,7 +20,7 @@ export function ChatInput({ conversationId, sessionId, conversation }: Props) {
   const [message, setMessage] = useState('');
   const { mutate: sendMessage, isPending } = useSendMessage();
 
-  const participantName = conversation?.name || FALLBACK_PARTICIPANT_NAME;
+  const participantName = conversation?.participants?.[0] || conversation?.name || FALLBACK_PARTICIPANT_NAME;
   const participantType = conversation?.participantType;
 
   const handleSend = () => {

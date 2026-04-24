@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Plus } from 'lucide-react';
 import { useListConversations } from '@/lib/services/conversations-hooks';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
@@ -19,6 +19,16 @@ interface Props {
   sessionId: string;
 }
 
+interface TempSessionData {
+  sessionId: string;
+  conversationId: string;
+  participants: Array<{
+    name: string;
+    type: 'agent' | 'team' | 'tool';
+  }>;
+  createdAt: string;
+}
+
 export function ConversationsTab({ sessionId }: Props) {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [temporaryConversations, setTemporaryConversations] = useState<Conversation[]>([]);
@@ -26,6 +36,39 @@ export function ConversationsTab({ sessionId }: Props) {
 
   const { data: backendConversations, isLoading } = useListConversations(sessionId);
   const { data: session } = useGetSession(sessionId);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const tempData = localStorage.getItem(`temp-session-${sessionId}`);
+    if (!tempData) return;
+
+    try {
+      const parsedData: TempSessionData = JSON.parse(tempData);
+
+      const participantNames = parsedData.participants.map(p => p.name).join(', ');
+      const firstParticipant = parsedData.participants[0];
+
+      const tempConversation: Conversation = {
+        conversationId: parsedData.conversationId,
+        name: participantNames,
+        participantType: firstParticipant.type,
+        participants: parsedData.participants.map(p => p.name),
+        messageCount: 0,
+        toolCallCount: 0,
+        tokens: 0,
+        duration: '0s',
+        status: 'active',
+        startTime: parsedData.createdAt,
+        isTemporary: true,
+      };
+
+      setTemporaryConversations([tempConversation]);
+      setSelectedConversationId(parsedData.conversationId);
+    } catch (error) {
+      console.error('Failed to parse temporary session data:', error);
+    }
+  }, [sessionId]);
 
   const allConversations = useMemo(() => {
     const backend = backendConversations || [];
