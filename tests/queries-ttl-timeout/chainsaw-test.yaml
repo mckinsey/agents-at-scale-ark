@@ -32,6 +32,15 @@ spec:
         file: manifests/a03-agent.yaml
     - apply:
         file: manifests/a04-query.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-math-timeout
+        timeout: 2m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
