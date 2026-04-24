@@ -85,11 +85,11 @@ class TestMarketplaceOpenAIResponsesFeatures:
 
     @classmethod
     def setup_class(cls):
-        cls.api_key = os.environ.get("CICD_OPENAI_API_KEY", "")
+        cls.api_key = os.environ.get("CICD_OPENAI_API_KEY", "").strip()
         if not cls.api_key:
             pytest.skip("CICD_OPENAI_API_KEY not set")
 
-        cls.base_url = os.environ.get("CICD_OPENAI_BASE_URL", "")
+        cls.base_url = os.environ.get("CICD_OPENAI_BASE_URL", "").strip()
         if not cls.base_url:
             pytest.skip("CICD_OPENAI_BASE_URL not set")
 
@@ -549,11 +549,11 @@ class TestMarketplaceAgentLabels:
 
     @classmethod
     def setup_class(cls):
-        cls.api_key = os.environ.get("CICD_OPENAI_API_KEY", "")
+        cls.api_key = os.environ.get("CICD_OPENAI_API_KEY", "").strip()
         if not cls.api_key:
             pytest.skip("CICD_OPENAI_API_KEY not set")
 
-        cls.base_url = os.environ.get("CICD_OPENAI_BASE_URL", "")
+        cls.base_url = os.environ.get("CICD_OPENAI_BASE_URL", "").strip()
         if not cls.base_url:
             pytest.skip("CICD_OPENAI_BASE_URL not set")
 
