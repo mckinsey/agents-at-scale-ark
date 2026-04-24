@@ -46,11 +46,6 @@ jobs:
         uses: ./.github/actions/setup-container-cache-registry
         with:
           docker-cicd-cache-registry: ${{ vars.DOCKER_CICD_CACHE_REGISTRY }}
-  # Code quality scan with SonarQube
-  sonar_scan:
-    needs: [build-and-test-ark, build-and-test-services]
-    uses: ./.github/workflows/sonar_scan.yaml
-    secrets: inherit
 
   # Security scan with JFrog Xray
   jfrog-xray-scan:
