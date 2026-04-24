@@ -41,7 +41,7 @@ function renderMessageContent(
       <>
         {messages.map((msg: any) => (
           <ChatMessage
-            key={msg.query_id}
+            key={`${msg.query_id}-${msg.sequence}`}
             role={msg.message.role === 'tool' ? 'system' : msg.message.role}
             content={msg.message.content || ''}
             queryName={msg.query_id}
