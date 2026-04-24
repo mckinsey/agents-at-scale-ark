@@ -144,4 +144,10 @@ export const teamsService = {
     const name = String(id);
     return teamsService.delete(name);
   },
+
+  async getRawResource(name: string): Promise<Record<string, unknown>> {
+    return apiClient.get<Record<string, unknown>>(
+      `/api/v1/resources/apis/ark.mckinsey.com/v1alpha1/Team/${name}`,
+    );
+  },
 };
