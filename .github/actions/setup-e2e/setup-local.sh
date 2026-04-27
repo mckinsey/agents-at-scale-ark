@@ -123,11 +123,14 @@ if [ "${PREFETCH_TEST_IMAGES}" = "true" ]; then
     ghcr.io/orange-opensource/hurl:6.1.1 \
     docker.io/python:3.12-bookworm \
     ghcr.io/dwmkerr/mock-llm:0.1.28 \
-    ghcr.io/dwmkerr/mock-llm:latest \
-    "${REGISTRY}/ark-mcp:${ARK_IMAGE_TAG}"; do
+    ghcr.io/dwmkerr/mock-llm:latest; do
     sudo k3s ctr images pull "$img" &
     IMAGE_PULL_PIDS+=($!)
   done
+  if [ -n "${ARK_IMAGE_TAG}" ]; then
+    sudo k3s ctr images pull --user "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" "${REGISTRY}/ark-mcp:${ARK_IMAGE_TAG}" &
+    IMAGE_PULL_PIDS+=($!)
+  fi
   echo "Image pulls started (PIDs: ${IMAGE_PULL_PIDS[*]})"
 fi
 
