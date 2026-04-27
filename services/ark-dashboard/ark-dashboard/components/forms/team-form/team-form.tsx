@@ -1,7 +1,7 @@
 'use client';
 
 import { ArrowLeft, Code, Save, Settings, Trash2 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { NamespacedLink } from '@/components/namespaced-link';
@@ -24,6 +24,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import type { Team } from '@/lib/services';
 import { teamsService } from '@/lib/services';
+import { toKubernetesYaml } from '@/lib/utils/kubernetes-yaml';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import {
@@ -84,66 +85,30 @@ export function TeamForm({ mode, teamName, onSuccess }: TeamFormProps) {
   const { setSelectedMembers, setGraphEdges, setUnavailableMembers, onSubmit } =
     actions;
 
-  const teamYaml = useMemo(() => {
-    if (!team) return '';
+  const [teamYaml, setTeamYaml] = useState('');
 
-    const lines: string[] = [
-      'apiVersion: ark.mckinsey.com/v1alpha1',
-      'kind: Team',
-      'metadata:',
-      `  name: ${team.name}`,
-      `  namespace: ${team.namespace}`,
-      'spec:',
-    ];
-
-    if (team.description) {
-      lines.push(`  description: ${team.description}`);
+  const fetchTeamYaml = useCallback(async (name: string) => {
+    try {
+      const raw = await teamsService.getRawResource(name);
+      setTeamYaml(toKubernetesYaml(raw));
+    } catch {
+      setTeamYaml('');
     }
+  }, []);
 
-    if (team.strategy) {
-      lines.push(`  strategy: ${team.strategy}`);
+  useEffect(() => {
+    if (team?.name && showYaml) {
+      fetchTeamYaml(team.name);
     }
+  }, [team?.name, showYaml, fetchTeamYaml]);
 
-    if (team.loops) {
-      lines.push(`  loops: ${team.loops}`);
+  const prevSavingRef = useRef(false);
+  useEffect(() => {
+    if (prevSavingRef.current && !saving && team?.name && showYaml) {
+      fetchTeamYaml(team.name);
     }
-
-    if (team.maxTurns) {
-      lines.push(`  maxTurns: ${team.maxTurns}`);
-    }
-
-    if (team.members && team.members.length > 0) {
-      lines.push('  members:');
-      team.members.forEach(member => {
-        lines.push(`    - name: ${member.name}`);
-        lines.push(`      type: ${member.type}`);
-      });
-    }
-
-    if (team.selector) {
-      lines.push('  selector:');
-      if (team.selector.agent) {
-        lines.push(`    agent: ${team.selector.agent}`);
-      }
-      if (team.selector.selectorPrompt) {
-        lines.push('    selectorPrompt: |');
-        team.selector.selectorPrompt.split('\n').forEach(line => {
-          lines.push(`      ${line}`);
-        });
-      }
-    }
-
-    if (team.graph && team.graph.edges && team.graph.edges.length > 0) {
-      lines.push('  graph:');
-      lines.push('    edges:');
-      team.graph.edges.forEach(edge => {
-        lines.push(`      - from: ${edge.from}`);
-        lines.push(`        to: ${edge.to}`);
-      });
-    }
-
-    return lines.join('\n');
-  }, [team]);
+    prevSavingRef.current = saving;
+  }, [saving, team?.name, showYaml, fetchTeamYaml]);
 
   const handleDelete = async () => {
     if (!team) return;

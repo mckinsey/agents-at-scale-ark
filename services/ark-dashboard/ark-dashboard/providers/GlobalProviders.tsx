@@ -6,7 +6,6 @@ import { Toaster } from 'sonner';
 import { SettingsKeyboardShortcut } from '@/components/settings/settings-keyboard-shortcut';
 import { NavigationTracker } from '@/components/navigation-tracker';
 import { AnalyticsProvider } from '@/lib/analytics/provider';
-import { ChatProvider } from '@/lib/chat-context';
 import { NamespaceProvider } from '@/providers/NamespaceProvider';
 
 import { OpenModeProvider, SSOModeProvider } from './AuthProviders';
@@ -30,7 +29,7 @@ export function GlobalProviders({ children }: PropsWithChildren) {
               }>
               <NamespaceProvider>
                 <AnalyticsProvider>
-                  <ChatProvider>{children}</ChatProvider>
+                  {children}
                 </AnalyticsProvider>
               </NamespaceProvider>
             </Suspense>

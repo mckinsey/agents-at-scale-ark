@@ -8,7 +8,7 @@ import {
   Save,
   Settings,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { NamespacedLink } from '@/components/namespaced-link';
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
@@ -36,6 +36,7 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { type Agent, agentsService } from '@/lib/services';
+import { toKubernetesYaml } from '@/lib/utils/kubernetes-yaml';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import {
@@ -115,72 +116,30 @@ export function AgentForm({
   const isDisabled = form.formState.isSubmitting;
   const hasUnavailableTools = unavailableTools.length > 0;
 
-  const agentYaml = useMemo(() => {
-    if (!agent) return '';
+  const [agentYaml, setAgentYaml] = useState('');
 
-    const allTools = [...availableTools, ...unavailableTools];
-    const selectedToolsList = allTools.filter(t =>
-      state.selectedTools.some(st => st.name === t.name),
-    );
-
-    const lines: string[] = [
-      'apiVersion: ark.mckinsey.com/v1alpha1',
-      'kind: Agent',
-      'metadata:',
-      `  name: ${agent.name}`,
-      `  namespace: ${agent.namespace}`,
-      'spec:',
-    ];
-
-    if (descriptionValue) {
-      lines.push(`  description: ${descriptionValue}`);
+  const fetchAgentYaml = useCallback(async (name: string) => {
+    try {
+      const raw = await agentsService.getRawResource(name);
+      setAgentYaml(toKubernetesYaml(raw));
+    } catch {
+      setAgentYaml('');
     }
+  }, []);
 
-    if (modelNameValue && modelNameValue !== '__none__') {
-      lines.push('  modelRef:');
-      lines.push(`    name: ${modelNameValue}`);
-      if (modelNamespaceValue) {
-        lines.push(`    namespace: ${modelNamespaceValue}`);
-      }
+  useEffect(() => {
+    if (agent?.name && showYaml) {
+      fetchAgentYaml(agent.name);
     }
+  }, [agent?.name, showYaml, fetchAgentYaml]);
 
-    if (promptValue) {
-      lines.push('  prompt: |');
-      promptValue.split('\n').forEach(line => {
-        lines.push(`    ${line}`);
-      });
+  const prevSavingRef = useRef(false);
+  useEffect(() => {
+    if (prevSavingRef.current && !saving && agent?.name && showYaml) {
+      fetchAgentYaml(agent.name);
     }
-
-    if (parameters.length > 0) {
-      lines.push('  parameters:');
-      parameters.forEach(param => {
-        lines.push(`    - name: ${param.name}`);
-        if (param.value) {
-          lines.push(`      value: ${param.value}`);
-        }
-      });
-    }
-
-    if (selectedToolsList.length > 0) {
-      lines.push('  tools:');
-      selectedToolsList.forEach(tool => {
-        lines.push(`    - type: custom`);
-        lines.push(`      name: ${tool.name}`);
-      });
-    }
-
-    return lines.join('\n');
-  }, [
-    agent,
-    descriptionValue,
-    modelNameValue,
-    modelNamespaceValue,
-    promptValue,
-    parameters,
-    availableTools,
-    unavailableTools,
-    state.selectedTools,
-  ]);
+    prevSavingRef.current = saving;
+  }, [saving, agent?.name, showYaml, fetchAgentYaml]);
 
   if (loading) {
     return (
