@@ -64,7 +64,7 @@ const (
 
 // Built-in tool name constants
 const (
-	BuiltinToolNoop                 = "noop"
-	BuiltinToolTerminate            = "terminate"
-	BuiltinToolSelectNextParticipant = "select-next-participant"
+	BuiltinToolNoop              = "noop"
+	BuiltinToolTerminate         = "terminate"
+	BuiltinToolSelectNextSpeaker = "select-next-speaker"
 )

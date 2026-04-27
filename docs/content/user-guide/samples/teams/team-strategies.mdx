@@ -109,7 +109,7 @@ spec:
       Choose the best participant for the next response.
       Available: {{.Participants}}
       History: {{.History}}
-      Use the select-next-participant tool to make your selection.
+      Use the select-next-speaker tool to make your selection.
   members:
   - name: researcher
     type: agent
@@ -120,7 +120,7 @@ spec:
 **Implementation**: `ark/executors/completions/team_selector.go`
 - Uses AI agent to select next participant
 - Template-based prompts with conversation history
-- Uses `select-next-participant` tool with enum-constrained candidates
+- Uses `select-next-speaker` tool with enum-constrained candidates
 - Use terminate tool to end execution early
 
 ### Selector Template Variables

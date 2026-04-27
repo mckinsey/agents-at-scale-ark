@@ -56,11 +56,11 @@ func DefaultTeam(team *arkv1alpha1.Team) {
 
 	case StrategySelector:
 		if team.Spec.Selector != nil && team.Spec.Selector.SelectorPrompt != "" &&
-			!strings.Contains(team.Spec.Selector.SelectorPrompt, "select-next-participant") {
+			!strings.Contains(team.Spec.Selector.SelectorPrompt, "select-next-speaker") {
 			if team.Annotations == nil {
 				team.Annotations = make(map[string]string)
 			}
-			team.Annotations[annotations.MigrationWarningPrefix+"selector-prompt"] = "custom selectorPrompt should instruct the agent to use the select-next-participant tool — add 'Use the select-next-participant tool to make your selection.' to your selectorPrompt"
+			team.Annotations[annotations.MigrationWarningPrefix+"selector-prompt"] = "custom selectorPrompt should instruct the agent to use the select-next-speaker tool — add 'Use the select-next-speaker tool to make your selection.' to your selectorPrompt"
 		}
 
 	case StrategyGraph:

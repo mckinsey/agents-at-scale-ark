@@ -234,7 +234,7 @@ func (tr *ToolRegistry) GetToolType(toolName string) string {
 		return ToolTypeBuiltin
 	case *TerminateExecutor:
 		return ToolTypeBuiltin
-	case *SelectNextParticipantExecutor:
+	case *SelectNextSpeakerExecutor:
 		return ToolTypeBuiltin
 	case *HTTPExecutor:
 		return "custom"
@@ -387,9 +387,9 @@ func GetTerminateTool() ToolDefinition {
 	}
 }
 
-type SelectNextParticipantExecutor struct{}
+type SelectNextSpeakerExecutor struct{}
 
-func (s *SelectNextParticipantExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
+func (s *SelectNextSpeakerExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
 	var arguments map[string]any
 	if err := json.Unmarshal([]byte(call.Function.Arguments), &arguments); err != nil {
 		return ToolResult{ID: call.ID, Name: call.Function.Name}, fmt.Errorf("failed to parse arguments: %w", err)
@@ -405,20 +405,20 @@ func (s *SelectNextParticipantExecutor) Execute(ctx context.Context, call ToolCa
 	return ToolResult{ID: call.ID, Name: call.Function.Name, Content: nameStr}, &SelectionMade{SelectedName: nameStr}
 }
 
-func GetSelectNextParticipantTool(candidates []string) ToolDefinition {
+func GetSelectNextSpeakerTool(candidates []string) ToolDefinition {
 	enumValues := make([]any, len(candidates))
 	for i, c := range candidates {
 		enumValues[i] = c
 	}
 	return ToolDefinition{
-		Name:        BuiltinToolSelectNextParticipant,
-		Description: "Select the next participant to respond in the conversation",
+		Name:        BuiltinToolSelectNextSpeaker,
+		Description: "Select the next speaker to respond in the conversation",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"name": map[string]any{
 					"type":        "string",
-					"description": "The name of the next participant to respond",
+					"description": "The name of the next speaker to respond",
 					"enum":        enumValues,
 				},
 			},

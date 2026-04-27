@@ -574,8 +574,8 @@ func TestTeamToolExecutor_Execute(t *testing.T) {
 	})
 }
 
-func TestSelectNextParticipantExecutor(t *testing.T) {
-	executor := &SelectNextParticipantExecutor{}
+func TestSelectNextSpeakerExecutor(t *testing.T) {
+	executor := &SelectNextSpeakerExecutor{}
 
 	t.Run("valid name returns ToolResult and SelectionMade error", func(t *testing.T) {
 		args := map[string]any{"name": "researcher"}
@@ -584,7 +584,7 @@ func TestSelectNextParticipantExecutor(t *testing.T) {
 		call := ToolCall{
 			ID: "call-1",
 			Function: openai.ChatCompletionMessageToolCallFunction{
-				Name:      BuiltinToolSelectNextParticipant,
+				Name:      BuiltinToolSelectNextSpeaker,
 				Arguments: string(argsJSON),
 			},
 		}
@@ -597,7 +597,7 @@ func TestSelectNextParticipantExecutor(t *testing.T) {
 		require.Equal(t, "researcher", selectionMade.SelectedName)
 		require.Equal(t, "researcher", result.Content)
 		require.Equal(t, "call-1", result.ID)
-		require.Equal(t, BuiltinToolSelectNextParticipant, result.Name)
+		require.Equal(t, BuiltinToolSelectNextSpeaker, result.Name)
 
 		require.False(t, IsTerminateTeam(err))
 	})
@@ -609,7 +609,7 @@ func TestSelectNextParticipantExecutor(t *testing.T) {
 		call := ToolCall{
 			ID: "call-2",
 			Function: openai.ChatCompletionMessageToolCallFunction{
-				Name:      BuiltinToolSelectNextParticipant,
+				Name:      BuiltinToolSelectNextSpeaker,
 				Arguments: string(argsJSON),
 			},
 		}
@@ -628,7 +628,7 @@ func TestSelectNextParticipantExecutor(t *testing.T) {
 		call := ToolCall{
 			ID: "call-3",
 			Function: openai.ChatCompletionMessageToolCallFunction{
-				Name:      BuiltinToolSelectNextParticipant,
+				Name:      BuiltinToolSelectNextSpeaker,
 				Arguments: string(argsJSON),
 			},
 		}
@@ -644,7 +644,7 @@ func TestSelectNextParticipantExecutor(t *testing.T) {
 		call := ToolCall{
 			ID: "call-4",
 			Function: openai.ChatCompletionMessageToolCallFunction{
-				Name:      BuiltinToolSelectNextParticipant,
+				Name:      BuiltinToolSelectNextSpeaker,
 				Arguments: "not-json",
 			},
 		}
@@ -657,13 +657,13 @@ func TestSelectNextParticipantExecutor(t *testing.T) {
 	})
 }
 
-func TestGetSelectNextParticipantTool(t *testing.T) {
+func TestGetSelectNextSpeakerTool(t *testing.T) {
 	t.Run("builds tool definition with correct enum", func(t *testing.T) {
 		candidates := []string{"researcher", "analyst", "reviewer"}
-		tool := GetSelectNextParticipantTool(candidates)
+		tool := GetSelectNextSpeakerTool(candidates)
 
-		require.Equal(t, BuiltinToolSelectNextParticipant, tool.Name)
-		require.Contains(t, tool.Description, "next participant")
+		require.Equal(t, BuiltinToolSelectNextSpeaker, tool.Name)
+		require.Contains(t, tool.Description, "next speaker")
 
 		require.Equal(t, "object", tool.Parameters["type"])
 
@@ -682,7 +682,7 @@ func TestGetSelectNextParticipantTool(t *testing.T) {
 	})
 
 	t.Run("single candidate", func(t *testing.T) {
-		tool := GetSelectNextParticipantTool([]string{"solo"})
+		tool := GetSelectNextSpeakerTool([]string{"solo"})
 
 		props := tool.Parameters["properties"].(map[string]any)
 		nameProp := props["name"].(map[string]any)

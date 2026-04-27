@@ -429,7 +429,7 @@ func TestSetupSelectorTemplate(t *testing.T) {
 		{
 			name:         "uses default prompt when no selector spec",
 			selectorSpec: nil,
-			wantContains: "select-next-participant tool",
+			wantContains: "select-next-speaker tool",
 		},
 		{
 			name: "uses custom prompt when provided",
@@ -597,7 +597,7 @@ func TestHandleMemberSelectionError(t *testing.T) {
 			wantTerminate:       true,
 			wantReturnErr:       false,
 			wantMessagesAdded:   1,
-			wantMessageContains: "select-next-participant",
+			wantMessageContains: "select-next-speaker",
 		},
 		{
 			name:              "regular error returned as-is",
@@ -856,7 +856,7 @@ func TestSelectMember_ReturnsErrorOnNoMessages(t *testing.T) {
 	_, err = team.selectMember(ctx, []Message{}, tmpl, "agent1", "roles", nil)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "selector agent did not use the select-next-participant tool")
+	assert.Contains(t, err.Error(), "selector agent did not use the select-next-speaker tool")
 }
 
 func TestLoadSelectorAgent_WithMock(t *testing.T) {
@@ -968,7 +968,7 @@ func TestSelectMember_SelectorPrompt(t *testing.T) {
 			prompt := mockSelector.capturedHistory[0].OfSystem.Content.OfString.Value
 
 			assert.Contains(t, prompt, tt.wantPromptContains)
-			assert.Contains(t, prompt, "Use the select-next-participant tool to express your next participant selection.")
+			assert.Contains(t, prompt, "Use the select-next-speaker tool to express your next speaker selection.")
 
 			if tt.wantPromptSuffix != "" {
 				assert.True(t, strings.HasSuffix(prompt, tt.wantPromptSuffix),
@@ -1209,10 +1209,10 @@ func TestSelectMember_WithNilToolRegistry(t *testing.T) {
 
 	assert.Nil(t, member)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "select-next-participant tool requires a selector agent with a tool registry")
+	assert.Contains(t, err.Error(), "select-next-speaker tool requires a selector agent with a tool registry")
 }
 
-func TestRegisterSelectNextParticipantTool_WithRealAgent(t *testing.T) {
+func TestRegisterSelectNextSpeakerTool_WithRealAgent(t *testing.T) {
 	telemetryProvider := noop.NewProvider()
 	eventingProvider := eventnoop.NewProvider()
 
@@ -1224,13 +1224,13 @@ func TestRegisterSelectNextParticipantTool_WithRealAgent(t *testing.T) {
 	team := &Team{}
 	ctx := context.Background()
 
-	err := team.registerSelectNextParticipantTool(ctx, agent, []string{"agent-a", "agent-b"})
+	err := team.registerSelectNextSpeakerTool(ctx, agent, []string{"agent-a", "agent-b"})
 	require.NoError(t, err)
 
 	defs := agent.Tools.GetToolDefinitions()
 	require.Len(t, defs, 1)
-	assert.Equal(t, BuiltinToolSelectNextParticipant, defs[0].Name)
+	assert.Equal(t, BuiltinToolSelectNextSpeaker, defs[0].Name)
 
-	toolType := agent.Tools.GetToolType(BuiltinToolSelectNextParticipant)
+	toolType := agent.Tools.GetToolType(BuiltinToolSelectNextSpeaker)
 	assert.Equal(t, ToolTypeBuiltin, toolType)
 }
