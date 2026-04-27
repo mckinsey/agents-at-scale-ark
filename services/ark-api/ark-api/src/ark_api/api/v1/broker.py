@@ -135,7 +135,7 @@ async def get_traces(
     watch: bool = Query(False, description="Stream traces via SSE"),
     memory: str = Query("default", description=DESC_MEMORY),
     limit: int = Query(100, description="Max traces to return"),
-    cursor: Optional[int] = Query(None, description="Cursor for pagination"),
+    cursor: Optional[int] = Query(None, description=DESC_CURSOR),
     session_id: Optional[str] = Query(None, description="Filter by session ID"),
 ):
     """Get or stream OTEL traces from the broker."""
@@ -150,7 +150,7 @@ async def get_trace(
     trace_id: str,
     watch: bool = Query(False, description="Stream trace spans via SSE"),
     from_beginning: bool = Query(False, alias="from-beginning", description="Include existing spans"),
-    cursor: Optional[int] = Query(None, description="Cursor for pagination/streaming"),
+    cursor: Optional[int] = Query(None, description=DESC_CURSOR_STREAM),
     memory: str = Query("default", description=DESC_MEMORY),
 ):
     """Get or stream a specific trace from the broker."""
@@ -165,7 +165,7 @@ async def get_messages(
     watch: bool = Query(False, description="Stream messages via SSE"),
     memory: str = Query("default", description=DESC_MEMORY),
     limit: int = Query(100, description="Max messages to return"),
-    cursor: Optional[int] = Query(None, description="Cursor for pagination"),
+    cursor: Optional[int] = Query(None, description=DESC_CURSOR),
     conversation_id: Optional[str] = Query(None, description="Filter by conversation ID"),
     query_id: Optional[str] = Query(None, description="Filter by query ID"),
 ):
@@ -181,7 +181,7 @@ async def get_events(
     watch: bool = Query(False, description="Stream events via SSE"),
     memory: str = Query("default", description=DESC_MEMORY),
     limit: int = Query(100, description="Max events to return"),
-    cursor: Optional[int] = Query(None, description="Cursor for pagination"),
+    cursor: Optional[int] = Query(None, description=DESC_CURSOR),
     session_id: Optional[str] = Query(None, description="Filter by session ID"),
 ):
     """Get or stream operation events from the broker."""
@@ -196,7 +196,7 @@ async def get_events_by_query(
     query_id: str,
     watch: bool = Query(False, description="Stream events via SSE"),
     from_beginning: bool = Query(False, alias="from-beginning", description="Include existing events"),
-    cursor: Optional[int] = Query(None, description="Cursor for pagination/streaming"),
+    cursor: Optional[int] = Query(None, description=DESC_CURSOR_STREAM),
     memory: str = Query("default", description=DESC_MEMORY),
     limit: int = Query(100, description="Max events to return"),
 ):
@@ -213,7 +213,7 @@ async def get_chunks(
     query_id: Optional[str] = Query(None, alias="query-id", description="Filter by query ID"),
     memory: str = Query("default", description=DESC_MEMORY),
     limit: int = Query(100, description="Max chunks to return"),
-    cursor: Optional[int] = Query(None, description="Cursor for pagination"),
+    cursor: Optional[int] = Query(None, description=DESC_CURSOR),
 ):
     """Get or stream LLM chunks from the broker."""
     if watch and query_id:
@@ -242,12 +242,12 @@ async def get_sessions(
     watch: bool = Query(False, description="Stream sessions via SSE"),
     memory: str = Query("default", description=DESC_MEMORY),
     limit: Optional[int] = Query(None, description="Max sessions to return"),
-    cursor: Optional[int] = Query(None, description="Cursor for pagination"),
+    cursor: Optional[int] = Query(None, description=DESC_CURSOR),
     status: Optional[str] = Query(None, description="Filter by status (active/idle/error)"),
     dateFrom: Optional[str] = Query(None, description="Filter sessions from this date"),
     dateTo: Optional[str] = Query(None, description="Filter sessions to this date"),
     search: Optional[str] = Query(None, description="Search by session ID or participant"),
-    sort: Optional[str] = Query(None, description="Sort field (date/tokens)"),
+    sort: Optional[str] = Query(None, description="Sort field (date)"),
     order: Optional[str] = Query(None, description="Sort order (asc/desc)"),
 ):
     """Get or stream sessions from the broker. Sessions are global broker state, not memory-scoped, but the memory parameter selects which broker service to query."""

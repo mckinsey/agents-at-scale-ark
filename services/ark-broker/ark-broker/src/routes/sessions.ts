@@ -42,7 +42,7 @@ function handlePaginatedSessions(req: Request, res: Response, sessionsBroker: Se
   };
 
   const sort = req.query['sort'] ? {
-    field: req.query['sort'] as 'date' | 'tokens',
+    field: req.query['sort'] as 'date',
     direction: (req.query['order'] || 'desc') as 'asc' | 'desc',
   } : undefined;
 

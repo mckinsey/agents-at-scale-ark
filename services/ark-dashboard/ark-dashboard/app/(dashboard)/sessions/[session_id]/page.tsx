@@ -2,7 +2,7 @@
 
 import { use, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Bot, Coins, MessageSquare, Users, Wrench } from 'lucide-react';
+import { ArrowLeft, Bot, MessageSquare, Users, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -115,7 +115,6 @@ export default function SessionDetailPage({ params }: Props) {
     isActive: false,
   })) || [];
 
-  const totalTokens = session?.totalTokens || 0;
   const conversationCount = session?.conversationCount || 0;
   const errorCount = session?.errorCount || 0;
   const sessionStatus = session?.status || 'active';
@@ -140,11 +139,6 @@ export default function SessionDetailPage({ params }: Props) {
             </div>
             <div className="flex items-center gap-4 text-sm">
               <h1 className="text-xl font-semibold">{session_id}</h1>
-              <div className="flex items-center gap-1">
-                <Coins className="size-4 text-muted-foreground" />
-                <span className="font-medium">{totalTokens.toLocaleString()}</span>
-                <span className="text-muted-foreground">Tokens</span>
-              </div>
               <div className="flex items-center gap-1">
                 <MessageSquare className="size-4 text-muted-foreground" />
                 <span className="font-medium">{conversationCount}</span>

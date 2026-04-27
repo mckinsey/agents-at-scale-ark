@@ -56,7 +56,6 @@ export function ConversationsTab({ sessionId }: Props) {
         participants: parsedData.participants.map(p => p.name),
         messageCount: 0,
         toolCallCount: 0,
-        tokens: 0,
         duration: '0s',
         status: 'active',
         startTime: parsedData.createdAt,

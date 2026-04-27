@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { MessageSquare, Wrench, DollarSign, Clock, Bot, Users, Hammer } from 'lucide-react';
+import { MessageSquare, Wrench, Clock, Bot, Users, Hammer } from 'lucide-react';
 import type { Conversation } from '@/lib/services/conversations';
 import { cn } from '@/lib/utils';
 import { formatAge } from '@/lib/utils/time';
@@ -51,10 +51,6 @@ export function ConversationSidebar({ conversations, selectedId, onSelect }: Pro
             <span className="flex items-center gap-1">
               <Wrench className="size-3" />
               {conv.toolCallCount}
-            </span>
-            <span className="flex items-center gap-1">
-              <DollarSign className="size-3" />
-              {conv.tokens}
             </span>
             <span className="flex items-center gap-1">
               <Clock className="size-3" />

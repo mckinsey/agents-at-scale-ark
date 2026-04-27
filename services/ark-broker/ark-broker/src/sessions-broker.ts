@@ -195,7 +195,7 @@ export class SessionsBroker {
     dateTo?: string;
     search?: string;
   }, sort?: {
-    field: 'date' | 'tokens';
+    field: 'date';
     direction: 'asc' | 'desc';
   }): PaginatedList<SessionEntry> {
     let sessions = Object.values(this.store.sessions);

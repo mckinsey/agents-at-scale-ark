@@ -23,6 +23,16 @@ export function ChatInput({ conversationId, sessionId, conversation }: Props) {
   const participantName = conversation?.participants?.[0] || conversation?.name || FALLBACK_PARTICIPANT_NAME;
   const participantType = conversation?.participantType;
 
+  // Don't render chat input for workflow conversations (multiple different participants)
+  // In workflows, we don't know which agent to target for new messages
+  const participantCount = conversation?.participants?.length || 0;
+  const isWorkflowConversation = participantCount > 1;
+
+  if (isWorkflowConversation) {
+    // Don't render anything - workflows are not conversational
+    return null;
+  }
+
   const handleSend = () => {
     if (!message.trim() || isPending) return;
 

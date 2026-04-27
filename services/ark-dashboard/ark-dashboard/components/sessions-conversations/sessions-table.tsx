@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowUpDown, BarChart3, Coins, Plus, Search } from 'lucide-react';
+import { ArrowUpDown, BarChart3, Plus, Search } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -19,7 +19,7 @@ interface Props {
   readonly onSearchChange: (query: string) => void;
 }
 
-type SortField = 'date' | 'tokens';
+type SortField = 'date';
 type SortDirection = 'asc' | 'desc';
 
 export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery, onSearchChange }: Props) {
@@ -84,7 +84,6 @@ export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery,
   const totalSessions = data?.total || 0;
   const activeSessions = sessions.filter((s) => s.status === 'active').length;
   const errorSessions = sessions.filter((s) => s.errorCount > 0).length;
-  const totalTokens = sessions.reduce((sum, s) => sum + s.totalTokens, 0);
   const hasMore = data?.hasMore || false;
 
   if (isLoading && cursor === 0) {
@@ -103,11 +102,6 @@ export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery,
           <BarChart3 className="size-4 text-muted-foreground" />
           <span className="font-medium text-muted-foreground">{totalSessions}</span>
           <span className="text-muted-foreground">Sessions</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Coins className="size-4 text-muted-foreground" />
-          <span className="font-medium text-muted-foreground">{totalTokens.toLocaleString()}</span>
-          <span className="text-muted-foreground">Tokens</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="size-2 rounded-full bg-blue-500" />
@@ -161,7 +155,7 @@ export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery,
       </div>
 
       <div className="rounded-lg border">
-        <div className="grid grid-cols-[2fr_3fr_1fr_1fr_auto] gap-4 border-b bg-muted/50 px-4 py-3 text-sm font-medium text-muted-foreground">
+        <div className="grid grid-cols-[2fr_3fr_1fr_auto] gap-4 border-b bg-muted/50 px-4 py-3 text-sm font-medium text-muted-foreground">
           <button
             className="flex items-center gap-1 text-left"
             onClick={() => toggleSort('date')}
@@ -171,13 +165,6 @@ export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery,
           </button>
           <div>Participants</div>
           <div>Convos</div>
-          <button
-            className="flex items-center gap-1 text-left"
-            onClick={() => toggleSort('tokens')}
-          >
-            Tokens
-            <ArrowUpDown className="size-3" />
-          </button>
           <div className="w-8" />
         </div>
 

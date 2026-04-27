@@ -19,7 +19,6 @@ export interface BrokerSession {
   errorCount: number;
   participants: Participant[];
   conversationCount: number;
-  totalTokens: number;
   createdAt: string;
   lastActivity: string;
 }
@@ -38,7 +37,7 @@ export interface SessionsListParams {
   dateFrom?: string;
   dateTo?: string;
   search?: string;
-  sort?: 'date' | 'tokens';
+  sort?: 'date';
   order?: 'asc' | 'desc';
 }
 
@@ -116,7 +115,6 @@ function enrichSessionData(session: any): BrokerSession {
     errorCount: errors.length,
     participants,
     conversationCount: conversations.length,
-    totalTokens: 0,
     createdAt: session.createdAt,
     lastActivity: session.lastActivity,
   };

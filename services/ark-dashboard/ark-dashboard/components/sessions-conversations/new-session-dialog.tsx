@@ -14,7 +14,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useQuery } from '@tanstack/react-query';
 import { agentsService } from '@/lib/services/agents';
@@ -47,7 +46,7 @@ function getParticipantIcon(type: ParticipantType) {
 export function NewSessionDialog({ open, onOpenChange }: Props) {
   const router = useRouter();
   const [search, setSearch] = useState('');
-  const [selectedParticipants, setSelectedParticipants] = useState<Set<string>>(new Set());
+  const [selectedParticipant, setSelectedParticipant] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabFilter>('all');
 
   const { data: agents = [], isLoading: loadingAgents } = useQuery({
@@ -118,28 +117,21 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
     return { agentsGroup, teamsGroup, toolsGroup };
   }, [filteredParticipants]);
 
-  const handleToggle = (name: string) => {
-    setSelectedParticipants(prev => {
-      const next = new Set(prev);
-      if (next.has(name)) {
-        next.delete(name);
-      } else {
-        next.add(name);
-      }
-      return next;
-    });
+  const handleSelect = (name: string) => {
+    setSelectedParticipant(name);
   };
 
   const handleCreate = () => {
+    if (!selectedParticipant) return;
+
     const sessionId = generateUUID();
     const conversationId = generateUUID();
-    const participants = Array.from(selectedParticipants).map(name => {
-      const participant = allParticipants.find(p => p.name === name);
-      return {
-        name,
-        type: participant?.type || 'agent',
-      };
-    });
+    const participant = allParticipants.find(p => p.name === selectedParticipant);
+
+    const participants = [{
+      name: selectedParticipant,
+      type: participant?.type || 'agent',
+    }];
 
     localStorage.setItem(`temp-session-${sessionId}`, JSON.stringify({
       sessionId,
@@ -150,41 +142,49 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
 
     router.push(`/sessions/${sessionId}`);
     onOpenChange(false);
-    setSelectedParticipants(new Set());
+    setSelectedParticipant(null);
     setSearch('');
     setActiveTab('all');
   };
 
   const handleClose = () => {
     onOpenChange(false);
-    setSelectedParticipants(new Set());
+    setSelectedParticipant(null);
     setSearch('');
     setActiveTab('all');
   };
 
-  const renderParticipantItem = (participant: UnifiedParticipant) => (
-    <label
-      key={participant.name}
-      className="flex cursor-pointer items-center gap-3 rounded-md border p-3 hover:bg-accent"
-    >
-      <Checkbox
-        checked={selectedParticipants.has(participant.name)}
-        onCheckedChange={() => handleToggle(participant.name)}
-      />
-      {getParticipantIcon(participant.type)}
-      <div className="flex-1 space-y-1">
-        <div className="font-medium">{participant.name}</div>
-        {participant.description && (
-          <div className="line-clamp-1 text-xs text-muted-foreground">
-            {participant.description}
-          </div>
-        )}
-      </div>
-      <Badge variant="outline" className="capitalize">
-        {participant.type}
-      </Badge>
-    </label>
-  );
+  const renderParticipantItem = (participant: UnifiedParticipant) => {
+    const isSelected = selectedParticipant === participant.name;
+
+    return (
+      <label
+        key={participant.name}
+        className={`flex cursor-pointer items-center gap-3 rounded-md border p-3 transition-colors hover:bg-accent ${
+          isSelected ? 'bg-accent border-primary' : ''
+        }`}
+        onClick={() => handleSelect(participant.name)}
+      >
+        <div className={`size-4 rounded-full border-2 flex items-center justify-center ${
+          isSelected ? 'border-primary' : 'border-muted-foreground'
+        }`}>
+          {isSelected && <div className="size-2 rounded-full bg-primary" />}
+        </div>
+        {getParticipantIcon(participant.type)}
+        <div className="flex-1 space-y-1">
+          <div className="font-medium">{participant.name}</div>
+          {participant.description && (
+            <div className="line-clamp-1 text-xs text-muted-foreground">
+              {participant.description}
+            </div>
+          )}
+        </div>
+        <Badge variant="outline" className="capitalize">
+          {participant.type}
+        </Badge>
+      </label>
+    );
+  };
 
   const renderTabContent = () => {
     if (isLoading) {
@@ -247,7 +247,7 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle>Create new session</DialogTitle>
           <DialogDescription>
-            Select one or more participants to start a session
+            Select a participant to start a session (agent, team, or tool)
           </DialogDescription>
         </DialogHeader>
 
@@ -280,7 +280,13 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
         <DialogFooter className="border-t pt-4">
           <div className="flex w-full items-center justify-between">
             <span className="text-sm text-muted-foreground">
-              {selectedParticipants.size} participant{selectedParticipants.size === 1 ? '' : 's'} selected
+              {selectedParticipant ? (
+                <>
+                  Selected: <span className="font-medium">{selectedParticipant}</span>
+                </>
+              ) : (
+                'No participant selected'
+              )}
             </span>
             <div className="flex gap-2">
               <Button variant="ghost" onClick={handleClose}>
@@ -288,7 +294,7 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
               </Button>
               <Button
                 onClick={handleCreate}
-                disabled={selectedParticipants.size === 0}
+                disabled={!selectedParticipant}
               >
                 Create
               </Button>

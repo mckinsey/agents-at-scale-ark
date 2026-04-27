@@ -15,8 +15,8 @@ export const useGetMessages = (sessionId: string | null, conversationId: string 
   return useQuery({
     queryKey: ['messages', sessionId, conversationId],
     queryFn: () =>
-      sessionId && conversationId ? conversationsService.getMessages(sessionId, conversationId) : [],
-    enabled: !!sessionId && !!conversationId,
+      conversationId ? conversationsService.getMessages(conversationId) : [],
+    enabled: !!conversationId,
     refetchInterval: 2000,
   });
 };

@@ -28,7 +28,7 @@ export function SessionTableRow({ session, isSelected, onSelect }: Props) {
   return (
     <div
       className={cn(
-        'grid grid-cols-[2fr_3fr_1fr_1fr_auto] gap-4 border-b px-4 py-3 transition-colors hover:bg-muted/50 cursor-pointer',
+        'grid grid-cols-[2fr_3fr_1fr_auto] gap-4 border-b px-4 py-3 transition-colors hover:bg-muted/50 cursor-pointer',
         isSelected && 'bg-muted'
       )}
       onClick={() => onSelect(session.sessionId)}
@@ -74,10 +74,6 @@ export function SessionTableRow({ session, isSelected, onSelect }: Props) {
 
       <div className="flex items-center text-sm">
         {session.conversationCount}
-      </div>
-
-      <div className="flex items-center text-sm">
-        {session.totalTokens.toLocaleString()}
       </div>
 
       <div className="w-8" />

@@ -10,7 +10,6 @@ export interface Conversation {
   participants: string[];
   messageCount: number;
   toolCallCount: number;
-  tokens: number;
   duration: string;
   status: 'active' | 'completed' | 'error';
   startTime: string;
@@ -40,6 +39,10 @@ export const conversationsService = {
       conversationMap.set(query.conversationId, [...existing, query]);
     });
 
+    // Fetch events for tool call counting
+    const { logsService } = await import('./logs');
+    const events = await logsService.getEvents(sessionId, 1000);
+
     const conversations = Array.from(conversationMap.entries()).map(([convId, queries]): Conversation => {
       const hasError = queries.some(q => q.phase === 'error');
       const isActive = queries.some(q => q.phase === 'running' || q.phase === 'pending');
@@ -48,7 +51,15 @@ export const conversationsService = {
       const participantName = participants[0] || convId;
 
       const messageCount = queries.length;
-      const toolCallCount = 0;
+
+      // Count tool calls from events
+      const queryNames = queries.map((q: any) => q.name);
+      const toolCallCount = events
+        ? events.items.filter(e =>
+            e.reason === 'ToolCallComplete' &&
+            queryNames.includes(e.data.queryName)
+          ).length
+        : 0;
 
       let status: 'active' | 'completed' | 'error';
       if (hasError) {
@@ -65,7 +76,6 @@ export const conversationsService = {
         participants,
         messageCount,
         toolCallCount,
-        tokens: 0,
         duration: calculateDuration(queries.at(0)!.createdAt, queries.at(-1)!.completedAt),
         status,
         startTime: queries.at(0)!.createdAt,
@@ -78,7 +88,7 @@ export const conversationsService = {
   /**
    * Get messages for a conversation from the Memory Broker.
    */
-  async getMessages(sessionId: string, conversationId: string): Promise<ConversationMessage[]> {
+  async getMessages(conversationId: string): Promise<ConversationMessage[]> {
     try {
       const response = await apiClient.get<{ items: ConversationMessage[] }>(
         `/api/v1/broker/messages?conversation_id=${conversationId}`
@@ -123,7 +133,6 @@ export const conversationsService = {
       participants: [participantName],
       messageCount: 0,
       toolCallCount: 0,
-      tokens: 0,
       duration: 'ongoing',
       status: 'active',
       startTime: new Date().toISOString(),
