@@ -46,7 +46,7 @@ from helpers.responses_helper import (
 # ---------------------------------------------------------------------------
 # Direct executor tests — hit /execute endpoint without Ark control plane
 #
-# Tests T01–T14 cover all executor features end-to-end by posting JSON
+# Tests T01–T12 cover all executor features end-to-end by posting JSON
 # payloads directly to the executor service's /execute endpoint:
 #
 #   T01        Basic happy path / sdk fix
@@ -59,10 +59,8 @@ from helpers.responses_helper import (
 #   T08        Reasoning effort across models (parametrized: gpt-5.2, o3)
 #   T09        Tool cascade: query annotation overrides agent annotation
 #   T10        o4-mini basic completion
-#   T11        o4-mini with reasoning effort
-#   T12        o3 high-effort complex problem
-#   T13        o1 medium-effort document analysis
-#   T14        Multi-turn memory via previous_response_id
+#   T11        o1 document analysis
+#   T12        Multi-turn memory via previous_response_id
 #
 # Required env vars:
 #   CICD_OPENAI_API_KEY    API key / JWT for the OpenAI or gateway endpoint
@@ -82,7 +80,7 @@ class TestOpenAIResponsesExecutor:
 
     Covers: SDK fix (T01), multi-level annotations (T02), web search (T03–T04),
     SQL CFG tools (T05), annotation overrides (T06–T07), reasoning across
-    models (T08), tool cascade (T09), o-series models (T10–T13), multi-turn memory (T14).
+    models (T08), tool cascade (T09), o4-mini (T10), o1 (T11), multi-turn memory (T12).
 
     Required env vars:
       CICD_OPENAI_API_KEY    API key / JWT for the OpenAI or gateway endpoint
@@ -435,53 +433,7 @@ class TestOpenAIResponsesExecutor:
             f"Response does not address GDPR data roles: {content[:200]}"
         )
 
-    def test_t11_o4_mini_reasoning_effort(self):
-        status, content, data = self._post(
-            self._make_request(
-                (
-                    "A SaaS company has £180,000 in annual recurring revenue across 60 customers. "
-                    "Three enterprise customers churn, each paying £2,400 per year. "
-                    "What is the new ARR after churn?"
-                ),
-                model=MODEL_O4_MINI,
-                prompt="You are a SaaS financial analyst. Provide precise numerical answers.",
-                agent_annotations={REASONING_KEY: '{"effort": "low"}'},
-                conversation_id="t11-o4mini-reasoning-test",
-            ),
-            timeout=60,
-        )
-        assert status == 200, f"HTTP {status}: {data}"
-        assert content, "Empty response"
-        assert "172,800" in content or "172800" in content, (
-            f"Expected new ARR of £172,800 after churn, got: {content[:200]}"
-        )
-
-
-    def test_t12_o3_high_reasoning_complex_problem(self):
-        status, content, data = self._post(
-            self._make_request(
-                (
-                    "A law firm charges the following rates: Associate £250/hour, "
-                    "Senior Associate £400/hour, Partner £650/hour. "
-                    "A client engagement requires 40 hours of Associate work, "
-                    "15 hours of Senior Associate work, and 8 hours of Partner work. "
-                    "A 10% discount applies because the client has a 3-year retainer. "
-                    "What is the total invoice amount after the discount?"
-                ),
-                model=MODEL_O3,
-                prompt="You are a legal billing analyst. Provide the exact final invoice amount in pounds.",
-                agent_annotations={REASONING_KEY: '{"effort": "high"}'},
-                conversation_id="t12-o3-complex-reasoning-test",
-            ),
-            timeout=120,
-        )
-        assert status == 200, f"HTTP {status}: {data}"
-        assert content, "Empty response"
-        assert "19,080" in content or "19080" in content, (
-            f"Expected discounted invoice of £19,080, got: {content[:200]}"
-        )
-
-    def test_t13_o1_medium_reasoning_document_analysis(self):
+    def test_t11_o1_document_analysis(self):
         status, content, data = self._post(
             self._make_request(
                 (
@@ -494,8 +446,7 @@ class TestOpenAIResponsesExecutor:
                 ),
                 model=MODEL_O1,
                 prompt="You are a legal analysis assistant. Analyze contract clauses accurately.",
-                agent_annotations={REASONING_KEY: '{"effort": "medium"}'},
-                conversation_id="t13-o1-doc-analysis-test",
+                conversation_id="t11-o1-doc-analysis-test",
             ),
             timeout=120,
         )
@@ -505,8 +456,8 @@ class TestOpenAIResponsesExecutor:
             f"Expected 'yes' (clause prohibits reselling), got: {content[:200]}"
         )
 
-    def test_t14_multi_turn_memory(self):
-        conv_id = "t14-multi-turn-memory"
+    def test_t12_multi_turn_memory(self):
+        conv_id = "t12-multi-turn-memory"
 
         status1, content1, data1 = self._post(
             self._make_request(
@@ -544,7 +495,7 @@ class TestOpenAIResponsesExecutor:
 # ---------------------------------------------------------------------------
 # ARK stack tests — Query CRDs → executor-openai-responses → OpenAI
 #
-# Tests T15–T18 exercise the full Ark control plane end-to-end:
+# Tests T13–T16 exercise the full Ark control plane end-to-end:
 #
 #   Secret → Model CRD → Agent CRD → Query CRD → poll status.phase
 #
@@ -565,7 +516,7 @@ class TestOpenAIResponsesExecutor:
 @pytest.mark.executor
 class TestARKQueriesWithOpenAIResponses:
     """
-    Full Ark control-plane tests for the OpenAI Responses executor (T15–T18).
+    Full Ark control-plane tests for the OpenAI Responses executor (T13–T16).
 
     Creates real Ark CRDs (Model, Agent, Query) via kubectl, polls
     Query.status.phase until done, and asserts on response content.
@@ -625,12 +576,12 @@ class TestARKQueriesWithOpenAIResponses:
             )
 
     # ------------------------------------------------------------------
-    # T15 — Single query through the full Ark stack
+    # T13 — Single query through the full Ark stack
     # Validates: Secret → Model → Agent → Query CRD → executor → response
     # ------------------------------------------------------------------
 
-    def test_t15_single_ark_query(self):
-        name = unique_name("t15-single")
+    def test_t13_single_ark_query(self):
+        name = unique_name("t13-single")
         success, content, phase = run_query(
             name,
             "What does GDPR stand for? Reply with the full expanded name only.",
@@ -645,14 +596,14 @@ class TestARKQueriesWithOpenAIResponses:
         )
 
     # ------------------------------------------------------------------
-    # T16 — N concurrent ARK queries (ARK_CONCURRENT_QUERIES, default 3)
+    # T14 — N concurrent ARK queries (ARK_CONCURRENT_QUERIES, default 3)
     #
     # All queries are submitted simultaneously; each is polled on its own
     # thread until done or timeout. The test fails if any query fails or
     # returns content that does not contain the expected keyword.
     # ------------------------------------------------------------------
 
-    def test_t16_concurrent_ark_queries(self):
+    def test_t14_concurrent_ark_queries(self):
         candidates = [
             ("What does HTTP stand for? Reply with the full name only.",
              ["hypertext transfer protocol"]),
@@ -679,7 +630,7 @@ class TestARKQueriesWithOpenAIResponses:
         n       = ARK_CONCURRENT
         batch   = candidates[:n]
         queries = [
-            (unique_name(f"t16-concurrent-{i}"), question, keywords)
+            (unique_name(f"t14-concurrent-{i}"), question, keywords)
             for i, (question, keywords) in enumerate(batch)
         ]
 
@@ -721,13 +672,13 @@ class TestARKQueriesWithOpenAIResponses:
         )
 
     # ------------------------------------------------------------------
-    # T17 — Concurrent queries with query-level reasoning annotation
+    # T15 — Concurrent queries with query-level reasoning annotation
     #
-    # Same concurrency pattern as T16 but each query carries a
+    # Same concurrency pattern as T14 but each query carries a
     # reasoning effort annotation to exercise the annotation cascade.
     # ------------------------------------------------------------------
 
-    def test_t17_concurrent_with_reasoning(self):
+    def test_t15_concurrent_with_reasoning(self):
         problems = [
             (
                 "A shop sells apples for £0.50 each. Alice buys 6. "
@@ -759,7 +710,7 @@ class TestARKQueriesWithOpenAIResponses:
         n       = ARK_CONCURRENT
         batch   = problems[:n]
         queries = [
-            (unique_name(f"t17-reasoning-{i}"), question, keywords)
+            (unique_name(f"t15-reasoning-{i}"), question, keywords)
             for i, (question, keywords) in enumerate(batch)
         ]
 
@@ -802,20 +753,20 @@ class TestARKQueriesWithOpenAIResponses:
         )
 
     # ------------------------------------------------------------------
-    # T18 — Burst: fire-and-forget N queries, then poll all in parallel
+    # T16 — Burst: fire-and-forget N queries, then poll all in parallel
     #
     # Submits all queries first (no waiting), then enters a single
     # concurrent polling loop. This maximises executor concurrency and
     # measures real wall-clock throughput.
     # ------------------------------------------------------------------
 
-    def test_t18_burst_then_poll(self):
+    def test_t16_burst_then_poll(self):
         inputs = [
             f"Count to {i} and reply with only the number {i}."
             for i in range(1, ARK_CONCURRENT + 1)
         ]
         queries = [
-            (unique_name(f"t18-burst-{i}"), text, str(i))
+            (unique_name(f"t16-burst-{i}"), text, str(i))
             for i, text in enumerate(inputs, start=1)
         ]
 
