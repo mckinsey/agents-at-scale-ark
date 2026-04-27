@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
+import { useAtom } from 'jotai';
 import { Plus } from 'lucide-react';
 import { useListConversations } from '@/lib/services/conversations-hooks';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
 import { conversationsService } from '@/lib/services/conversations';
 import type { Conversation } from '@/lib/services/conversations';
 import type { Participant } from '@/lib/services/participants';
+import { sessionPendingMessagesAtom } from '@/atoms/session-pending-messages';
 import { ConversationSidebar } from './conversation-sidebar';
 import { MessageDisplay } from './message-display';
 import { ChatInput } from './chat-input';
@@ -33,8 +35,14 @@ export function ConversationsTab({ sessionId }: Props) {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [temporaryConversations, setTemporaryConversations] = useState<Conversation[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [pendingMessagesMap, setPendingMessagesMap] = useAtom(sessionPendingMessagesAtom);
+  const [processingConversations, setProcessingConversations] = useState<Set<string>>(new Set());
+  const [hasTempSession, setHasTempSession] = useState(() => {
+    if (typeof globalThis.window === 'undefined') return false;
+    return !!localStorage.getItem(`temp-session-${sessionId}`);
+  });
 
-  const { data: backendConversations, isLoading } = useListConversations(sessionId);
+  const { data: backendConversations, isLoading } = useListConversations(sessionId, { enabled: !hasTempSession });
   const { data: session } = useGetSession(sessionId);
 
   useEffect(() => {
@@ -91,18 +99,63 @@ export function ConversationsTab({ sessionId }: Props) {
     setSelectedConversationId(newConversation.conversationId);
   };
 
+  const handleAddPendingMessage = (conversationId: string, content: string) => {
+    const existing = pendingMessagesMap[conversationId] || [];
+    setPendingMessagesMap(conversationId, [
+      ...existing,
+      { role: 'user' as const, content, timestamp: new Date().toISOString() },
+    ]);
+  };
+
+  const handleClearPendingMessages = (conversationId: string) => {
+    setPendingMessagesMap(conversationId, []);
+    setProcessingConversations((prev) => {
+      const newSet = new Set(prev);
+      newSet.delete(conversationId);
+      return newSet;
+    });
+  };
+
+  const handleEnableQueries = () => {
+    if (typeof globalThis.window !== 'undefined') {
+      localStorage.removeItem(`temp-session-${sessionId}`);
+      setHasTempSession(false);
+      setTemporaryConversations(prev =>
+        prev.map(conv => ({ ...conv, isTemporary: false }))
+      );
+    }
+  };
+
+  const handleSetProcessing = (conversationId: string, isProcessing: boolean) => {
+    setProcessingConversations((prev) => {
+      const newSet = new Set(prev);
+      if (isProcessing) {
+        newSet.add(conversationId);
+      } else {
+        newSet.delete(conversationId);
+      }
+      return newSet;
+    });
+  };
+
   if (isLoading) {
-    return <Skeleton className="h-96" />;
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-96" />
+      </div>
+    );
   }
 
   return (
     <div className="space-y-4">
       {allConversations.length === 0 ? (
-        <Empty>
-          <EmptyHeader>
-            <EmptyTitle>No conversations yet</EmptyTitle>
-          </EmptyHeader>
-        </Empty>
+        <div className="flex h-[600px] items-center justify-center">
+          <Empty>
+            <EmptyHeader>
+              <EmptyTitle>No conversations yet</EmptyTitle>
+            </EmptyHeader>
+          </Empty>
+        </div>
       ) : (
         <div className="grid h-[600px] grid-cols-[300px_1fr] gap-4">
           <div className="flex flex-col space-y-2">
@@ -130,11 +183,19 @@ export function ConversationsTab({ sessionId }: Props) {
                 conversationId={selectedConversationId}
                 sessionId={sessionId}
                 conversation={selectedConversation}
+                pendingMessages={pendingMessagesMap[selectedConversationId] || []}
+                onClearPending={() => handleClearPendingMessages(selectedConversationId)}
+                isProcessing={processingConversations.has(selectedConversationId)}
+                hasTempSession={hasTempSession}
               />
               <ChatInput
                 conversationId={selectedConversationId}
                 sessionId={sessionId}
                 conversation={selectedConversation}
+                onAddPendingMessage={handleAddPendingMessage}
+                onSetProcessing={handleSetProcessing}
+                onEnableQueries={handleEnableQueries}
+                hasTempSession={hasTempSession}
               />
             </div>
           ) : (

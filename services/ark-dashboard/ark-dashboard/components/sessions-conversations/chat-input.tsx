@@ -14,9 +14,13 @@ interface Props {
   readonly conversationId: string;
   readonly sessionId: string;
   readonly conversation: Conversation | null;
+  readonly onAddPendingMessage: (conversationId: string, content: string) => void;
+  readonly onSetProcessing: (conversationId: string, isProcessing: boolean) => void;
+  readonly onEnableQueries: () => void;
+  readonly hasTempSession: boolean;
 }
 
-export function ChatInput({ conversationId, sessionId, conversation }: Props) {
+export function ChatInput({ conversationId, sessionId, conversation, onAddPendingMessage, onSetProcessing, onEnableQueries, hasTempSession }: Props) {
   const [message, setMessage] = useState('');
   const { mutate: sendMessage, isPending } = useSendMessage();
 
@@ -36,20 +40,28 @@ export function ChatInput({ conversationId, sessionId, conversation }: Props) {
   const handleSend = () => {
     if (!message.trim() || isPending) return;
 
+    const messageToSend = message.trim();
+
+    onAddPendingMessage(conversationId, messageToSend);
+    setMessage('');
+    onSetProcessing(conversationId, true);
+
     sendMessage(
       {
         conversationId,
         sessionId,
-        message: message.trim(),
+        message: messageToSend,
         agentName: participantName,
         participantType,
       },
       {
         onSuccess: () => {
-          setMessage('');
-          toast.success('Message sent');
+          if (hasTempSession) {
+            onEnableQueries();
+          }
         },
         onError: (error) => {
+          onSetProcessing(conversationId, false);
           toast.error('Failed to send message', {
             description: error instanceof Error ? error.message : 'Unknown error',
           });

@@ -27,62 +27,67 @@ export interface ConversationMessage {
 
 export const conversationsService = {
   async getConversations(sessionId: string): Promise<Conversation[]> {
-    const session = await apiClient.get<any>(`/api/v1/broker/sessions/${sessionId}`);
-    if (!session) return [];
+    try {
+      const session = await apiClient.get<any>(`/api/v1/broker/sessions/${sessionId}`);
+      if (!session) return [];
 
-    const queries = Object.values(session.queries || {});
-    const conversationMap = new Map<string, any[]>();
+      const queries = Object.values(session.queries || {});
+      const conversationMap = new Map<string, any[]>();
 
-    queries.forEach((query: any) => {
-      if (!query.conversationId) return;
-      const existing = conversationMap.get(query.conversationId) || [];
-      conversationMap.set(query.conversationId, [...existing, query]);
-    });
+      queries.forEach((query: any) => {
+        if (!query.conversationId) return;
+        const existing = conversationMap.get(query.conversationId) || [];
+        conversationMap.set(query.conversationId, [...existing, query]);
+      });
 
-    // Fetch events for tool call counting
-    const { logsService } = await import('./logs');
-    const events = await logsService.getEvents(sessionId, 1000);
+      // Fetch events for tool call counting
+      const { logsService } = await import('./logs');
+      const events = await logsService.getEvents(sessionId, 1000);
 
-    const conversations = Array.from(conversationMap.entries()).map(([convId, queries]): Conversation => {
-      const hasError = queries.some(q => q.phase === 'error');
-      const isActive = queries.some(q => q.phase === 'running' || q.phase === 'pending');
+      const conversations = Array.from(conversationMap.entries()).map(([convId, queries]): Conversation => {
+        const hasError = queries.some(q => q.phase === 'error');
+        const isActive = queries.some(q => q.phase === 'running' || q.phase === 'pending');
 
-      const participants = Array.from(new Set(queries.map(q => q.agent || q.team).filter(Boolean))) as string[];
-      const participantName = participants[0] || convId;
+        const participants = Array.from(new Set(queries.map(q => q.agent || q.team).filter(Boolean))) as string[];
+        const participantName = participants[0] || convId;
 
-      const messageCount = queries.length;
+        const messageCount = queries.length;
 
-      // Count tool calls from events
-      const queryNames = queries.map((q: any) => q.name);
-      const toolCallCount = events
-        ? events.items.filter(e =>
-            e.reason === 'ToolCallComplete' &&
-            queryNames.includes(e.data.queryName)
-          ).length
-        : 0;
+        // Count tool calls from events
+        const queryNames = queries.map((q: any) => q.name);
+        const toolCallCount = events
+          ? events.items.filter(e =>
+              e.reason === 'ToolCallComplete' &&
+              queryNames.includes(e.data.queryName)
+            ).length
+          : 0;
 
-      let status: 'active' | 'completed' | 'error';
-      if (hasError) {
-        status = 'error';
-      } else if (isActive) {
-        status = 'active';
-      } else {
-        status = 'completed';
-      }
+        let status: 'active' | 'completed' | 'error';
+        if (hasError) {
+          status = 'error';
+        } else if (isActive) {
+          status = 'active';
+        } else {
+          status = 'completed';
+        }
 
-      return {
-        conversationId: convId,
-        name: participantName,
-        participants,
-        messageCount,
-        toolCallCount,
-        duration: calculateDuration(queries.at(0)!.createdAt, queries.at(-1)!.completedAt),
-        status,
-        startTime: queries.at(0)!.createdAt,
-      };
-    });
+        return {
+          conversationId: convId,
+          name: participantName,
+          participants,
+          messageCount,
+          toolCallCount,
+          duration: calculateDuration(queries.at(0)!.createdAt, queries.at(-1)!.completedAt),
+          status,
+          startTime: queries.at(0)!.createdAt,
+        };
+      });
 
-    return conversations;
+      return conversations;
+    } catch (error) {
+      console.error(`Failed to fetch conversations for session ${sessionId}:`, error);
+      return [];
+    }
   },
 
   /**
