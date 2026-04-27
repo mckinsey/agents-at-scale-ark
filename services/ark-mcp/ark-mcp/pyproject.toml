@@ -80,4 +80,4 @@ testpaths = [
 ]
 
 [tool.uv.sources]
-ark-sdk = { path = "ark_sdk-0.1.59-py3-none-any.whl" }
+ark-sdk = { path = "ark_sdk-0.1.61rc0-py3-none-any.whl" }

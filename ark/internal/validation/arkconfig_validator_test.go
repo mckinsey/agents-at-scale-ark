@@ -26,16 +26,13 @@ func TestValidateArkConfig_AcceptsDefault(t *testing.T) {
 	}
 }
 
-func TestValidateArkConfig_WarnsOnNonDefaultName(t *testing.T) {
+func TestValidateArkConfig_RejectsNonDefaultName(t *testing.T) {
 	cfg := &arkv1alpha1.ArkConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: "other"},
 	}
-	warnings, err := ValidateArkConfig(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(warnings) == 0 {
-		t.Fatalf("expected a warning about non-default name")
+	_, err := ValidateArkConfig(context.Background(), cfg)
+	if err == nil {
+		t.Fatalf("expected error for non-default name")
 	}
 }
 

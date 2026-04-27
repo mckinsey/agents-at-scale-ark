@@ -8,15 +8,14 @@ import (
 )
 
 func ValidateArkConfig(_ context.Context, cfg *arkv1alpha1.ArkConfig) ([]string, error) {
-	var warnings []string
 	if cfg.Name != ArkConfigSingletonName {
-		warnings = append(warnings, fmt.Sprintf(
-			"ArkConfig %q will be ignored — only the singleton named %q is consulted by admission webhooks",
-			cfg.Name, ArkConfigSingletonName,
-		))
+		return nil, fmt.Errorf(
+			"ArkConfig must be named %q; %q would be ignored as only the singleton is consulted by admission webhooks",
+			ArkConfigSingletonName, cfg.Name,
+		)
 	}
 	if cfg.Spec.QueryTTL != nil && cfg.Spec.QueryTTL.Duration <= 0 {
-		return warnings, fmt.Errorf("spec.queryTTL must be a positive duration, got %v", cfg.Spec.QueryTTL.Duration)
+		return nil, fmt.Errorf("spec.queryTTL must be a positive duration, got %v", cfg.Spec.QueryTTL.Duration)
 	}
-	return warnings, nil
+	return nil, nil
 }
