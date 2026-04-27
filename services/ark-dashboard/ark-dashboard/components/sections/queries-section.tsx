@@ -2,6 +2,8 @@
 
 import {
   ArrowUpRightIcon,
+  ChevronDown,
+  ChevronUp,
   FileText,
   Plus,
   RefreshCw,
@@ -38,6 +40,8 @@ type QueryResponse = components['schemas']['QueryResponse'];
 type ListQueriesResult = ReturnType<typeof useListQueries>;
 
 type OutputViewMode = 'content' | 'raw';
+type SortField = 'createdAt' | 'none';
+type SortDirection = 'asc' | 'desc';
 
 interface QueriesSectionProps {
   readonly searchTerm: string;
@@ -50,6 +54,8 @@ export const QueriesSection = forwardRef<
   QueriesSectionProps
 >(function QueriesSection({ searchTerm, onClearSearch, queryResult }, ref) {
   const [outputViewMode, setOutputViewMode] = useState<OutputViewMode>('content');
+  const [sortField, setSortField] = useState<SortField>('createdAt');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const { push } = useNamespacedNavigation();
 
   useImperativeHandle(ref, () => ({
@@ -71,6 +77,24 @@ export const QueriesSection = forwardRef<
 
   const queries = data?.items ?? [];
   const total = data?.total ?? 0;
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+
+  const sortedQueries = [...queries].sort((a, b) => {
+    if (sortField === 'createdAt') {
+      const aTime = a.creationTimestamp ? new Date(a.creationTimestamp).getTime() : 0;
+      const bTime = b.creationTimestamp ? new Date(b.creationTimestamp).getTime() : 0;
+      return sortDirection === 'desc' ? bTime - aTime : aTime - bTime;
+    }
+    return 0;
+  });
 
   const truncate = (text: string | undefined, maxLength: number = 120): string => {
     if (!text) return '-';
@@ -241,7 +265,19 @@ export const QueriesSection = forwardRef<
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-900/50">
                     <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Name</th>
-                    <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Age</th>
+                    <th
+                      className="cursor-pointer px-3 py-2 text-left text-sm font-medium text-gray-900 hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-800"
+                      onClick={() => handleSort('createdAt')}>
+                      <div className="flex items-center">
+                        Age
+                        {sortField === 'createdAt' &&
+                          (sortDirection === 'desc' ? (
+                            <ChevronDown className="ml-1 h-4 w-4" />
+                          ) : (
+                            <ChevronUp className="ml-1 h-4 w-4" />
+                          ))}
+                      </div>
+                    </th>
                     <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Target</th>
                     <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">Input</th>
                     <th className="px-3 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100">
@@ -315,7 +351,7 @@ export const QueriesSection = forwardRef<
                       </td>
                     </tr>
                   ) : (
-                    queries.map(query => {
+                    sortedQueries.map(query => {
                       const target = getTargetDisplay(query);
                       const inputDisplayText = getInputDisplayText(query.input);
                       return (
