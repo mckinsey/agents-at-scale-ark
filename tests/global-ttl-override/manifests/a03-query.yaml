@@ -7,4 +7,4 @@ spec:
   ttl: 5m
   target:
     type: agent
-    name: nonexistent-agent
+    name: placeholder-agent

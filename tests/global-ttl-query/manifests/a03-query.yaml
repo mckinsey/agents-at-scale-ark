@@ -6,4 +6,4 @@ spec:
   input: "test ttl injection"
   target:
     type: agent
-    name: nonexistent-agent
+    name: placeholder-agent

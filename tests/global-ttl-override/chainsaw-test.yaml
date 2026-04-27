@@ -12,7 +12,9 @@ spec:
     - apply:
         file: manifests/a01-arkconfig.yaml
     - apply:
-        file: manifests/a02-query.yaml
+        file: manifests/a02-agent.yaml
+    - apply:
+        file: manifests/a03-query.yaml
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1

@@ -15,7 +15,9 @@ spec:
     - apply:
         file: manifests/a00-rbac.yaml
     - apply:
-        file: manifests/a01-query.yaml
+        file: manifests/a01-agent.yaml
+    - apply:
+        file: manifests/a02-query.yaml
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
