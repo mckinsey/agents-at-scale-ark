@@ -5,7 +5,9 @@ import {
   experimentalFeaturesDialogOpenAtom,
   filesBrowserPrefixAtom,
   lastConversationIdAtom,
+  openChatWindowsAtom,
 } from '@/atoms/internal-states';
+import type { OpenChatWindow } from '@/atoms/internal-states';
 
 describe('Internal States Atoms', () => {
   let store: ReturnType<typeof createStore>;
@@ -99,6 +101,52 @@ describe('Internal States Atoms', () => {
       const newStore = createStore();
       const valueAfterRefresh = newStore.get(lastConversationIdAtom);
       expect(valueAfterRefresh).toBe('conv-456');
+    });
+  });
+
+  describe('openChatWindowsAtom', () => {
+    it('should default to empty array', () => {
+      const value = store.get(openChatWindowsAtom);
+      expect(value).toEqual([]);
+    });
+
+    it('should be updatable with chat windows', () => {
+      const windows: OpenChatWindow[] = [
+        { name: 'agent-1', type: 'agent' },
+        { name: 'team-1', type: 'team', strategy: 'round-robin' },
+      ];
+      store.set(openChatWindowsAtom, windows);
+      expect(store.get(openChatWindowsAtom)).toEqual(windows);
+    });
+
+    it('should be clearable to empty array', () => {
+      store.set(openChatWindowsAtom, [{ name: 'agent-1', type: 'agent' }]);
+      expect(store.get(openChatWindowsAtom)).toHaveLength(1);
+
+      store.set(openChatWindowsAtom, []);
+      expect(store.get(openChatWindowsAtom)).toEqual([]);
+    });
+
+    it('should persist value across store recreations (page refresh)', () => {
+      const windows: OpenChatWindow[] = [{ name: 'model-1', type: 'model' }];
+      store.set(openChatWindowsAtom, windows);
+      expect(store.get(openChatWindowsAtom)).toEqual(windows);
+
+      const newStore = createStore();
+      const valueAfterRefresh = newStore.get(openChatWindowsAtom);
+      expect(valueAfterRefresh).toEqual(windows);
+    });
+
+    it('should return empty array when sessionStorage has invalid JSON', () => {
+      sessionStorage.setItem('open-chat-windows', 'not-valid-json');
+      const value = store.get(openChatWindowsAtom);
+      expect(value).toEqual([]);
+    });
+
+    it('should return empty array when sessionStorage has non-array JSON', () => {
+      sessionStorage.setItem('open-chat-windows', JSON.stringify({ name: 'agent-1' }));
+      const value = store.get(openChatWindowsAtom);
+      expect(value).toEqual([]);
     });
   });
 });
