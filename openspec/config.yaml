@@ -1,20 +1,67 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  Ark is a Kubernetes-native platform for running AI agents at scale.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  Repository layout (monorepo):
+    - ark/                   Kubernetes operator + default completions executor (Go)
+    - lib/ark-sdk/           Python SDK (generated from CRDs + hand-written overlay)
+    - services/ark-api/      REST API gateway (Python / FastAPI, uv)
+    - services/ark-broker/   In-memory event bus (Node.js / Express)
+    - services/ark-dashboard/ Web UI (Next.js 16 / React 19 / TypeScript, vitest)
+    - services/ark-mcp/      MCP host service
+    - tools/ark-cli/         Ark CLI (Node.js / TypeScript)
+    - tools/fark/            Fark CLI (Go) — resource-management optimised
+    - docs/                  Documentation site (Next.js / MDX)
+    - samples/               Example YAML: agents, models, queries, teams
+    - tests/                 Chainsaw e2e, pytest, etc.
+
+  Core CRDs: Agent, Model, Query, Team, MCPServer, ExecutionEngine, A2AServer,
+  Memory. The operator dispatches queries to executors via the A2A protocol.
+
+  Marketplace: add-on components (executors, services, MCP servers, demo bundles)
+  live in a separate repo (mckinsey/agents-at-scale-marketplace) and depend on
+  Ark — never the other way around.
+
+  Observability: OpenTelemetry with W3C TraceContext / Baggage, instrumented in
+  ark/internal/telemetry/ and propagated through ExecutorApp in lib/ark-sdk/.
+
+  Conventions:
+    - Capitalisation: always "Ark" (capital A, lower rk). Never "ARK".
+    - Commits and PR titles MUST use conventional commit format (feat, fix,
+      chore, docs, refactor, etc.) — required for Release Please.
+    - PR descriptions use a "## Summary" bullet list; no "Test plan" section.
+    - File names: kebab-case (especially in the dashboard).
+    - Duration env vars include a unit suffix: *_MS for milliseconds,
+      *_SECONDS for seconds.
+    - Documentation follows the Diataxis framework.
+    - Writing style: concise and direct. No "comprehensive", "advanced",
+      "sophisticated" filler. Short sentences. Active voice.
+
+  Tooling:
+    - Go services: make build / make test / make build-binary
+    - Python services: uv (make init / make dev / make lint / make test)
+    - Dashboard: npm run dev (turbopack), npm run build, npm test (vitest)
+    - Operator: make deploy to a local cluster; devspace dev for full stack
+    - Root-level Makefile includes per-service fragments with STAMP_*
+      stamp files in $(OUT) and .SECONDEXPANSION for cross-service deps.
+
+rules:
+  proposal:
+    - Lead with the user-visible outcome, not the implementation.
+    - State a "Non-goals" section when scope is ambiguous.
+    - Keep under ~500 words; link to deeper docs rather than inlining.
+    - Reference the affected CRDs, services, or packages explicitly.
+  spec:
+    - Describe behaviour, not code structure.
+    - Call out CRD field names, annotations, and env var names exactly as
+      they will appear.
+    - When a change affects generated SDK types, note the regeneration step.
+  tasks:
+    - Split by deployable unit (ark operator, ark-api, ark-dashboard, etc.)
+      so that each chunk can be tested and committed independently.
+    - Max ~2 hours per task; break further if unsure.
+    - Every task names the build / test command that proves it done
+      (e.g. "make -C ark test", "npm test" in the dashboard).
+    - Include a migration note whenever storage shape, CRD schema, or env
+      var names change.
