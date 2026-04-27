@@ -1,7 +1,7 @@
 'use client';
 
 import { Bot, MessageCircle, Pencil, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { AvailabilityStatusBadge } from '@/components/ui/availability-status-badge';
@@ -24,9 +24,10 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 interface AgentRowProps {
   readonly agent: Agent;
   readonly onDelete?: (id: string) => void;
+  readonly leading?: ReactNode;
 }
 
-export function AgentRow({ agent, onDelete }: AgentRowProps) {
+export function AgentRow({ agent, onDelete, leading }: AgentRowProps) {
   const { push } = useNamespacedNavigation();
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(agent.name);
@@ -54,6 +55,8 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
             push(`/agents/${encodeURIComponent(agent.name)}`);
           }
         }}>
+        {leading}
+
         <div className="flex flex-grow items-center gap-3 overflow-hidden">
           <IconComponent className="text-muted-foreground h-5 w-5 flex-shrink-0" />
 

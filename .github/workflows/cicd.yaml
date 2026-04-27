@@ -675,6 +675,17 @@ jobs:
             --wait \
             --timeout=5m
 
+      - name: Deploy ark-broker
+        run: |
+          helm upgrade --install ark-broker services/ark-broker/chart \
+            --namespace default \
+            --create-namespace \
+            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/ark-broker" \
+            --set app.image.tag="${{ github.sha }}" \
+            --set app.image.pullPolicy="Always" \
+            --wait \
+            --timeout=5m
+
       - name: Deploy ark-dashboard
         run: |
           helm upgrade --install ark-dashboard services/ark-dashboard/chart \
@@ -689,6 +700,7 @@ jobs:
       - name: Wait for services to be ready
         run: |
           kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=ark-broker -n default --timeout=120s
           kubectl wait --for=condition=ready pod -l app=ark-dashboard -n default --timeout=120s
 
       - name: Update Argo Workflows dependencies
@@ -1152,18 +1164,27 @@ jobs:
         run: |
           VERSION=$(jq -r '."."' .github/release-please-manifest.json)
 
+          # Extract base version (remove -rc or -rc.* suffix if present)
+          BASE_VERSION="${VERSION%-rc*}"
+
+          echo "Manifest version: $VERSION"
+          echo "Base version: $BASE_VERSION"
+
           # Promotion scenario:
           # 1. Manifest version is stable (no -rc suffix)
-          # 2. RC tags exist for this version (v0.1.58-rc.*)
-          # 3. Stable tag doesn't exist yet (v0.1.58)
-          RC_TAGS=$(git tag --list "v${VERSION}-rc.*" | head -1)
-          STABLE_TAG=$(git tag --list "v${VERSION}" | head -1)
+          # 2. RC tags exist for this version (v0.1.60-rc*)
+          # 3. Stable tag doesn't exist yet (v0.1.60)
+          RC_TAGS=$(git tag --list "v${BASE_VERSION}-rc*" | head -1)
+          STABLE_TAG=$(git tag --list "v${BASE_VERSION}" | head -1)
 
-          if [[ "$VERSION" != *-rc.* && -n "$RC_TAGS" && -z "$STABLE_TAG" ]]; then
+          echo "RC tags for v${BASE_VERSION}: $RC_TAGS"
+          echo "Stable tag v${BASE_VERSION}: $STABLE_TAG"
+
+          if [[ "$VERSION" != *-rc* && -n "$RC_TAGS" && -z "$STABLE_TAG" ]]; then
             echo "config=.github/release-please-config.json" >> $GITHUB_OUTPUT
             echo "type=stable" >> $GITHUB_OUTPUT
-            echo "release_as=${VERSION}" >> $GITHUB_OUTPUT
-            echo "Promotion detected: RC tags exist for v${VERSION}, releasing stable"
+            echo "release_as=${BASE_VERSION}" >> $GITHUB_OUTPUT
+            echo "Promotion detected: RC tags exist for v${BASE_VERSION}, releasing stable"
           else
             echo "config=.github/release-please-config-rc.json" >> $GITHUB_OUTPUT
             echo "type=rc" >> $GITHUB_OUTPUT
@@ -1465,10 +1486,7 @@ jobs:
 
           git checkout -b "$BRANCH"
 
-          jq --arg v "$NEXT" '."." = $v' .github/release-please-manifest.json > tmp.json
-          mv tmp.json .github/release-please-manifest.json
-
-          # Clean up release-as from both configs
+          # Clean up release-as from both configs (don't update manifest - release-please calculates version from tags)
           if jq -e 'has("release-as")' .github/release-please-config.json > /dev/null 2>&1; then
             jq 'del(."release-as")' .github/release-please-config.json > tmp.json
             mv tmp.json .github/release-please-config.json
@@ -1481,7 +1499,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          git commit -m "chore: bootstrap $NEXT RC cycle after v${{ steps.next-version.outputs.current }} stable release"
+          git commit -m "chore: bootstrap v$NEXT RC cycle after v${{ steps.next-version.outputs.current }} stable release"
           git push origin "$BRANCH"
 
           gh pr create \
@@ -1493,11 +1511,10 @@ jobs:
           Bootstraps the next development cycle after stable release v${{ steps.next-version.outputs.current }}.
 
           ### What this PR does
-          - Updates manifest to \`$NEXT\`
           - Cleans up \`release-as\` from config files
 
           ### What happens when merged
-          - First RC release will be v${NEXT}-rc
+          - Release-please will create v${NEXT}-rc from conventional commits
           - Subsequent releases: v${NEXT}-rc.1 → rc.2 → ... → v${NEXT} (stable)
 
           ---

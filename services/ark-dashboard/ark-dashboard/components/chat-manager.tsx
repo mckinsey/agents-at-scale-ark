@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useAtom } from 'jotai';
 
 import type { ChatType } from '@/lib/chat-events';
 import type { GraphEdge } from '@/lib/types/chat-message';
+import { openChatWindowsAtom } from '@/atoms/internal-states';
 
 import FloatingChat from './floating-chat';
 
@@ -17,30 +19,27 @@ interface ChatWindow {
 }
 
 export default function ChatManager() {
-  const [chatWindows, setChatWindows] = useState<ChatWindow[]>([]);
-  const pendingEventsRef = useRef<
-    Array<{ type: 'opened' | 'closed'; name: string }>
-  >([]);
-
-  // Handle pending events after state updates
+  const [openChatWindows, setOpenChatWindows] = useAtom(openChatWindowsAtom);
+  const [chatWindows, setChatWindows] = useState<ChatWindow[]>(() =>
+    openChatWindows.map(({ name, type, strategy, graphEdges }, index) => ({
+      id: `${name}-${Date.now()}-${index}`,
+      name,
+      type,
+      position: index,
+      strategy,
+      graphEdges,
+    })),
+  );
   useEffect(() => {
-    if (pendingEventsRef.current.length > 0) {
-      const events = [...pendingEventsRef.current];
-      pendingEventsRef.current = [];
-
-      events.forEach(event => {
-        if (event.type === 'opened') {
-          window.dispatchEvent(
-            new CustomEvent('chat-opened', { detail: { name: event.name } }),
-          );
-        } else {
-          window.dispatchEvent(
-            new CustomEvent('chat-closed', { detail: { name: event.name } }),
-          );
-        }
-      });
-    }
-  }, [chatWindows]);
+    setOpenChatWindows(
+      chatWindows.map(({ name, type, strategy, graphEdges }) => ({
+        name,
+        type,
+        strategy,
+        graphEdges,
+      })),
+    );
+  }, [chatWindows, setOpenChatWindows]);
 
   useEffect(() => {
     const handleOpenChat = (event: CustomEvent) => {
@@ -48,14 +47,9 @@ export default function ChatManager() {
       const id = `${name}-${Date.now()}`;
 
       setChatWindows(prev => {
-        // Check if a chat with this name already exists
         const existingChat = prev.find(chat => chat.name === name);
         if (existingChat) return prev;
 
-        // Queue event to be dispatched after state update
-        pendingEventsRef.current.push({ type: 'opened', name });
-
-        // Add new chat window
         return [
           ...prev,
           {
@@ -77,20 +71,12 @@ export default function ChatManager() {
         const existingChat = prev.find(chat => chat.name === name);
 
         if (existingChat) {
-          // Queue event to be dispatched after state update
-          pendingEventsRef.current.push({ type: 'closed', name });
-
-          // Close existing chat
           const newWindows = prev.filter(chat => chat.id !== existingChat.id);
           return newWindows.map((chat, index) => ({
             ...chat,
             position: index,
           }));
         } else {
-          // Queue event to be dispatched after state update
-          pendingEventsRef.current.push({ type: 'opened', name });
-
-          // Open new chat
           const id = `${name}-${Date.now()}`;
           return [
             ...prev,
@@ -107,20 +93,20 @@ export default function ChatManager() {
       });
     };
 
-    window.addEventListener(
+    globalThis.addEventListener(
       'open-floating-chat',
       handleOpenChat as EventListener,
     );
-    window.addEventListener(
+    globalThis.addEventListener(
       'toggle-floating-chat',
       handleToggleChat as EventListener,
     );
     return () => {
-      window.removeEventListener(
+      globalThis.removeEventListener(
         'open-floating-chat',
         handleOpenChat as EventListener,
       );
-      window.removeEventListener(
+      globalThis.removeEventListener(
         'toggle-floating-chat',
         handleToggleChat as EventListener,
       );
@@ -129,16 +115,7 @@ export default function ChatManager() {
 
   const handleCloseChat = (id: string) => {
     setChatWindows(prev => {
-      const closingChat = prev.find(chat => chat.id === id);
-      if (closingChat) {
-        // Queue event to be dispatched after state update
-        pendingEventsRef.current.push({
-          type: 'closed',
-          name: closingChat.name,
-        });
-      }
       const newWindows = prev.filter(chat => chat.id !== id);
-      // Recalculate positions
       return newWindows.map((chat, index) => ({
         ...chat,
         position: index,
