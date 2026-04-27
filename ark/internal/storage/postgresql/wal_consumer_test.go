@@ -54,22 +54,9 @@ func makeTuple(values ...string) *pglogrepl.TupleData {
 	}
 }
 
-func TestGenerateSlotName(t *testing.T) {
-	name := generateSlotName()
-	if !strings.HasPrefix(name, walSlotPrefix) {
-		t.Errorf("slot name %q missing prefix %q", name, walSlotPrefix)
-	}
-	if len(name) != len(walSlotPrefix)+8 {
-		t.Errorf("slot name %q has unexpected length %d", name, len(name))
-	}
-
-	names := make(map[string]bool)
-	for i := 0; i < 100; i++ {
-		n := generateSlotName()
-		if names[n] {
-			t.Fatalf("duplicate slot name after %d iterations: %s", i, n)
-		}
-		names[n] = true
+func TestSlotNameIsStable(t *testing.T) {
+	if walSlotName != "ark_cdc" {
+		t.Errorf("slot name changed unexpectedly: got %q want %q (stability matters: existing deployments rely on this name to resume their WAL position across restarts)", walSlotName, "ark_cdc")
 	}
 }
 

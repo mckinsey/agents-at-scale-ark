@@ -37,15 +37,44 @@ var (
 	definitions map[string]openapicommon.OpenAPIDefinition
 )
 
+// canonicalName converts a Go import-path-style type name like
+// "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta" into the JSON-friendly form
+// "io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta" that kube-apiserver and the
+// SSA fieldmanager expect for $ref lookups. Without this conversion, our CRD
+// schemas reference io.k8s... but the apiextensions-apiserver generator returns
+// keys in Go-style — every UPDATE then logs "[SHOULD NOT HAPPEN] failed to update
+// managedFields ... no type found matching: io.k8s..." silently corrupting SSA
+// field-manager attribution.
+func canonicalName(goImportName string) string {
+	parts := strings.Split(goImportName, "/")
+	if len(parts) > 0 && strings.Contains(parts[0], ".") {
+		dotParts := strings.Split(parts[0], ".")
+		// reverse domain segments (k8s.io -> io.k8s)
+		for i, j := 0, len(dotParts)-1; i < j; i, j = i+1, j-1 {
+			dotParts[i], dotParts[j] = dotParts[j], dotParts[i]
+		}
+		parts[0] = strings.Join(dotParts, ".")
+	}
+	return strings.Join(parts, ".")
+}
+
 func loadCRDDefinitions() {
 	definitions = make(map[string]openapicommon.OpenAPIDefinition)
 
+	// Some upstream consumers (kubeopenapi spec builder for /openapi/v2) look up types
+	// by Go-style import-path keys (e.g. k8s.io/apimachinery/pkg/version.Info), while
+	// the SSA fieldmanager looks them up by canonical reverse-domain keys (e.g.
+	// io.k8s.apimachinery.pkg.version.Info). Register both forms with the same
+	// definition so neither path ends up "no type found matching".
 	ref := func(name string) spec.Ref {
 		return spec.MustCreateRef("#/definitions/" + name)
 	}
 	k8sDefs := k8sopenapi.GetOpenAPIDefinitions(ref)
 	for k, v := range k8sDefs {
 		definitions[k] = v
+		if canonical := canonicalName(k); canonical != k {
+			definitions[canonical] = v
+		}
 	}
 
 	objectMetaRef := spec.Schema{
