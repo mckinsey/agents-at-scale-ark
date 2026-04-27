@@ -222,7 +222,11 @@ export function AppSidebar() {
         fromSection: pathname.split('/')[1],
       },
     });
-    router.push(`/${sectionKey}`);
+    // Preserve query parameters (especially namespace) when navigating
+    const currentParams = new URLSearchParams(window.location.search);
+    const queryString = currentParams.toString();
+    const targetUrl = queryString ? `/${sectionKey}?${queryString}` : `/${sectionKey}`;
+    router.push(targetUrl);
   };
 
   const getCurrentSection = () => pathname.split('/')[1];
