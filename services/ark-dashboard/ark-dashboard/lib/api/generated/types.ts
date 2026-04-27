@@ -4953,7 +4953,7 @@ export interface operations {
                 dateTo?: string | null;
                 /** @description Search by session ID or participant */
                 search?: string | null;
-                /** @description Sort field (date/tokens) */
+                /** @description Sort field (date) */
                 sort?: string | null;
                 /** @description Sort order (asc/desc) */
                 order?: string | null;
