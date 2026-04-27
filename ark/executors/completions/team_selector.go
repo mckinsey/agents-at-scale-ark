@@ -17,11 +17,11 @@ import (
 
 const defaultSelectorPrompt = `You are in a role play game. The following roles are available:
 {{.Roles}}.
-Read the following conversation, then use the select-next-conversant tool to select the next role from {{.Participants}} to play.
+Read the following conversation, then use the select-next-participant tool to select the next role from {{.Participants}} to play.
 
 {{.History}}
 
-Read the above conversation, then use the select-next-conversant tool to select the next role from {{.Participants}} to play.`
+Read the above conversation, then use the select-next-participant tool to select the next role from {{.Participants}} to play.`
 
 const defaultTerminatePrompt = `If the most recent user message has been given an adequate response, do not return a role. Instead call the terminate tool.`
 
@@ -121,7 +121,7 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	}
 
 	selectorMessage := buf.String()
-	selectorMessage += "\n\nUse the select-next-conversant tool to express your next conversant selection."
+	selectorMessage += "\n\nUse the select-next-participant tool to express your next participant selection."
 
 	if t.Selector != nil && t.Selector.EnableTerminateTool != nil && *t.Selector.EnableTerminateTool {
 		terminatePrompt := defaultTerminatePrompt
@@ -148,13 +148,13 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	if len(candidateNames) == 0 {
 		return nil, NewTerminateTeamWithReason("no candidates available for selection")
 	}
-	if err := t.registerSelectNextConversantTool(ctx, selectorAgent, candidateNames); err != nil {
+	if err := t.registerSelectNextParticipantTool(ctx, selectorAgent, candidateNames); err != nil {
 		return nil, err
 	}
 
-	userPrompt := "Select the next participant to respond using the select-next-conversant tool."
+	userPrompt := "Select the next participant to respond using the select-next-participant tool."
 	if t.Selector != nil && t.Selector.EnableTerminateTool != nil && *t.Selector.EnableTerminateTool {
-		userPrompt = "Select the next participant to respond using the select-next-conversant tool, or use the terminate tool if you think the user's original question has been answered."
+		userPrompt = "Select the next participant to respond using the select-next-participant tool, or use the terminate tool if you think the user's original question has been answered."
 	}
 
 	result, err := selectorAgent.Execute(ctx, NewUserMessage(userPrompt), []Message{NewSystemMessage(selectorMessage)}, nil, nil)
@@ -269,13 +269,13 @@ func (t *Team) buildLegalTransitionsMap() map[string][]TeamMember {
 	return legalTransitions
 }
 
-func (t *Team) registerSelectNextConversantTool(_ context.Context, selectorAgent SelectorAgentInterface, candidates []string) error {
+func (t *Team) registerSelectNextParticipantTool(_ context.Context, selectorAgent SelectorAgentInterface, candidates []string) error {
 	registry := selectorAgent.GetToolRegistry()
 	if registry == nil {
-		return fmt.Errorf("select-next-conversant tool requires a selector agent with a tool registry")
+		return fmt.Errorf("select-next-participant tool requires a selector agent with a tool registry")
 	}
-	registry.RemoveTool(BuiltinToolSelectNextConversant)
-	registry.RegisterTool(GetSelectNextConversantTool(candidates), &SelectNextConversantExecutor{})
+	registry.RemoveTool(BuiltinToolSelectNextParticipant)
+	registry.RegisterTool(GetSelectNextParticipantTool(candidates), &SelectNextParticipantExecutor{})
 	return nil
 }
 
@@ -303,7 +303,7 @@ func (t *Team) handleMemberSelectionError(ctx context.Context, err error, newMes
 		StreamSystemMessage(ctx, t.eventStream, warningContent)
 		return true, nil
 	case errors.As(err, &toolNotCalledErr):
-		warningContent := "Selector agent did not use the select-next-conversant tool"
+		warningContent := "Selector agent did not use the select-next-participant tool"
 		warningMessage := NewSystemMessage(warningContent)
 		*newMessages = append(*newMessages, warningMessage)
 

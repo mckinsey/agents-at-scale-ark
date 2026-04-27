@@ -138,7 +138,7 @@ func TestDefaultTeam(t *testing.T) {
 		}
 	})
 
-	t.Run("adds migration warning for selector with custom prompt missing select-next-conversant", func(t *testing.T) {
+	t.Run("adds migration warning for selector with custom prompt missing select-next-participant", func(t *testing.T) {
 		team := &arkv1alpha1.Team{
 			ObjectMeta: metav1.ObjectMeta{Name: "t"},
 			Spec: arkv1alpha1.TeamSpec{
@@ -151,7 +151,7 @@ func TestDefaultTeam(t *testing.T) {
 		DefaultTeam(team)
 		key := annotations.MigrationWarningPrefix + "selector-prompt"
 		if team.Annotations[key] == "" {
-			t.Fatal("expected migration warning for selector prompt without select-next-conversant")
+			t.Fatal("expected migration warning for selector prompt without select-next-participant")
 		}
 	})
 

@@ -325,7 +325,7 @@ var _ = Describe("Team Webhook", func() {
 			selectorDefaulter = &validation.WebhookDefaulter{}
 		})
 
-		It("Should warn when custom selectorPrompt does not reference select-next-conversant", func() {
+		It("Should warn when custom selectorPrompt does not reference select-next-participant", func() {
 			maxTurns := 10
 			team := &arkv1alpha1.Team{
 				ObjectMeta: metav1.ObjectMeta{
@@ -352,10 +352,10 @@ var _ = Describe("Team Webhook", func() {
 			warnings, err := validator.ValidateCreate(ctx, team)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(warnings).To(HaveLen(1))
-			Expect(warnings[0]).To(ContainSubstring("select-next-conversant"))
+			Expect(warnings[0]).To(ContainSubstring("select-next-participant"))
 		})
 
-		It("Should not warn when custom selectorPrompt references select-next-conversant", func() {
+		It("Should not warn when custom selectorPrompt references select-next-participant", func() {
 			team := &arkv1alpha1.Team{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-team",
@@ -368,7 +368,7 @@ var _ = Describe("Team Webhook", func() {
 					},
 					Selector: &arkv1alpha1.TeamSelectorSpec{
 						Agent:          "coordinator",
-						SelectorPrompt: "Use the select-next-conversant tool to pick the next participant.",
+						SelectorPrompt: "Use the select-next-participant tool to pick the next participant.",
 					},
 				},
 			}

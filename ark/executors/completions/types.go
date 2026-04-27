@@ -112,7 +112,7 @@ func (e *TerminateTeamWithResponse) Unwrap() error {
 type ToolNotCalledError struct{}
 
 func (e *ToolNotCalledError) Error() string {
-	return "selector agent did not use the select-next-conversant tool"
+	return "selector agent did not use the select-next-participant tool"
 }
 
 type SelectionMade struct {

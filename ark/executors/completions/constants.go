@@ -66,5 +66,5 @@ const (
 const (
 	BuiltinToolNoop                 = "noop"
 	BuiltinToolTerminate            = "terminate"
-	BuiltinToolSelectNextConversant = "select-next-conversant"
+	BuiltinToolSelectNextParticipant = "select-next-participant"
 )

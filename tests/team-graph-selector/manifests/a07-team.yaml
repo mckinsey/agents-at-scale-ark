@@ -25,7 +25,7 @@ spec:
       Roles: {{.Roles}}
       Conversation history: {{.History}}
       
-      Use the select-next-conversant tool to make your selection.
+      Use the select-next-participant tool to make your selection.
 
   graph:
     edges:

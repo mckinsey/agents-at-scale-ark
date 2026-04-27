@@ -123,7 +123,7 @@ func TestTerminateTeamWithResponse(t *testing.T) {
 func TestToolNotCalledError(t *testing.T) {
 	t.Run("error message", func(t *testing.T) {
 		err := &ToolNotCalledError{}
-		expected := "selector agent did not use the select-next-conversant tool"
+		expected := "selector agent did not use the select-next-participant tool"
 		if err.Error() != expected {
 			t.Errorf("Error() = %q, expected %q", err.Error(), expected)
 		}

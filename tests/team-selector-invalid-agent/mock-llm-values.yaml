@@ -42,4 +42,4 @@ config:
   - path: "/v1/chat/completions"
     response:
       status: 200
-      content: '{"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_001","type":"function","function":{"name":"select-next-conversant","arguments":"{\"name\":\"invalid-agent-name\"}"}}]},"finish_reason":"tool_calls"}]}'
+      content: '{"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_001","type":"function","function":{"name":"select-next-participant","arguments":"{\"name\":\"invalid-agent-name\"}"}}]},"finish_reason":"tool_calls"}]}'
