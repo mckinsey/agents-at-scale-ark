@@ -2,6 +2,8 @@ apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   name: global-ttl-query
+  labels:
+    etcd-only: "true"
 spec:
   description: ArkConfig queryTTL is injected into Query resources with no spec.ttl
   steps:

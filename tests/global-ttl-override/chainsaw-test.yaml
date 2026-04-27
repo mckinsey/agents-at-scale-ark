@@ -2,6 +2,8 @@ apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   name: global-ttl-override
+  labels:
+    etcd-only: "true"
 spec:
   description: Explicit spec.ttl on a Query is preserved when ArkConfig also sets queryTTL
   steps:

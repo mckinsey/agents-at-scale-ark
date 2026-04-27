@@ -14,6 +14,7 @@ Tests use labels in `chainsaw-test.yaml` metadata to control when they run.
 | `llm: "true"` | Requires real LLM API keys | `e2e-tests-llm` job only |
 | `multi-provider: "true"` | Runs per-provider via `chainsaw-multi` script | `e2e-tests-llm` job |
 | `postgresql: "true"` | Requires PostgreSQL backend | Excluded from etcd-only runs |
+| `etcd-only: "true"` | Requires etcd backend (e.g., uses cluster-scoped CRDs not served by embedded apiserver) | Excluded from postgresql backend runs |
 | `requires-images: "true"` | Requires built container images | Conditional |
 | `standard: "true"` | Explicit standard marker | Always runs |
 

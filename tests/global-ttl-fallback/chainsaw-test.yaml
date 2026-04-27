@@ -2,6 +2,8 @@ apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   name: global-ttl-fallback
+  labels:
+    etcd-only: "true"
 spec:
   description: When no ArkConfig exists, a Query without spec.ttl falls back to 720h
   steps:
