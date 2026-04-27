@@ -14,6 +14,7 @@ REGISTRY_USERNAME="${DOCKER_CICD_CACHE_REGISTRY_USERNAME:?required}"
 REGISTRY_PASSWORD="${DOCKER_CICD_CACHE_REGISTRY_PASSWORD:?required}"
 ARK_IMAGE_TAG="${ARK_IMAGE_TAG:-local-test}"
 INSTALL_COVERAGE="false"
+INSTALL_BROKER="false"
 STORAGE_BACKEND="etcd"
 PREFETCH_TEST_IMAGES="false"
 
@@ -22,6 +23,10 @@ while [[ $# -gt 0 ]]; do
   case $1 in
     --install-coverage)
       INSTALL_COVERAGE="true"
+      shift
+      ;;
+    --install-broker)
+      INSTALL_BROKER="true"
       shift
       ;;
     --storage-backend)
@@ -33,8 +38,9 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -h|--help)
-      echo "Usage: $0 [--install-coverage] [--storage-backend etcd|postgresql] [--prefetch-test-images]"
+      echo "Usage: $0 [--install-coverage] [--install-broker] [--storage-backend etcd|postgresql] [--prefetch-test-images]"
       echo "  --install-coverage      Install coverage collection components"
+      echo "  --install-broker        Install ark-broker (only needed for tests that use it)"
       echo "  --storage-backend       Storage backend to use (default: etcd)"
       echo "  --prefetch-test-images  Pre-pull chainsaw test images (mock-llm, curl, mockserver, etc.)"
       exit 0
@@ -75,9 +81,10 @@ fi
 echo "=== Installing Gateway API CRDs ==="
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
 
-echo "=== Pre-creating ark-config-broker ConfigMap ==="
-kubectl create namespace default 2>/dev/null || true
-kubectl apply -f - <<'BROKER_CM_EOF'
+if [ "${INSTALL_BROKER}" = "true" ]; then
+  echo "=== Pre-creating ark-config-broker ConfigMap ==="
+  kubectl create namespace default 2>/dev/null || true
+  kubectl apply -f - <<'BROKER_CM_EOF'
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -94,6 +101,7 @@ data:
     name: ark-broker
     port: "http"
 BROKER_CM_EOF
+fi
 
 if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
   echo "=== Installing PostgreSQL (ark-storage-dev) ==="
@@ -262,15 +270,17 @@ PROBE_EOF
   fi
 fi
 
-echo "=== Installing ARK Broker ==="
-helm upgrade --install ark-broker "${REPO_ROOT}/services/ark-broker/chart" \
-  --namespace default \
-  --create-namespace \
-  --set app.image.repository="${REGISTRY}/ark-broker" \
-  --set app.image.tag="${ARK_IMAGE_TAG}" \
-  --set app.image.pullPolicy=IfNotPresent \
-  --set restartController.enabled=false \
-  --wait --timeout=300s
+if [ "${INSTALL_BROKER}" = "true" ]; then
+  echo "=== Installing ARK Broker ==="
+  helm upgrade --install ark-broker "${REPO_ROOT}/services/ark-broker/chart" \
+    --namespace default \
+    --create-namespace \
+    --set app.image.repository="${REGISTRY}/ark-broker" \
+    --set app.image.tag="${ARK_IMAGE_TAG}" \
+    --set app.image.pullPolicy=IfNotPresent \
+    --set restartController.enabled=false \
+    --wait --timeout=300s
+fi
 
 if [ "${#IMAGE_PULL_PIDS[@]}" -gt 0 ]; then
   echo "=== Waiting for image pre-pulls to complete ==="

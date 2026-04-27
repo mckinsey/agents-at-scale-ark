@@ -38,6 +38,10 @@ inputs:
     description: 'Pre-pull chainsaw test images (mock-llm, curl, mockserver, hurl, python)'
     required: false
     default: 'false'
+  install-broker:
+    description: 'Install ark-broker (required for tests that use the event bus)'
+    required: false
+    default: 'false'
 
 runs:
   using: 'composite'
@@ -80,6 +84,7 @@ runs:
       run: |
         ./.github/actions/setup-e2e/setup-local.sh \
           ${{ inputs.install-coverage == 'true' && '--install-coverage' || '' }} \
+          ${{ inputs.install-broker == 'true' && '--install-broker' || '' }} \
           --storage-backend ${{ inputs.storage-backend }} \
           ${{ inputs.prefetch-test-images == 'true' && '--prefetch-test-images' || '' }}
       env:
