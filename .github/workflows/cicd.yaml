@@ -552,6 +552,8 @@ jobs:
           LANGCHAIN_WEATHER_AGENT_IMAGE_TAG: ${{ github.sha }}
           ARK_BROKER_IMAGE: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-broker
           ARK_BROKER_IMAGE_TAG: ${{ github.sha }}
+          ARK_MCP_IMAGE: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-mcp
+          ARK_MCP_IMAGE_TAG: ${{ github.sha }}
         run: |
           cd tests
           mkdir -p /tmp/chainsaw-report

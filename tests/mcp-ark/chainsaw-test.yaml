@@ -13,20 +13,13 @@ spec:
           helm upgrade --install ark-mcp ../../services/ark-mcp/chart \
             --namespace $NAMESPACE \
             --set serviceAccount.name=ark-mcp-sa-$NAMESPACE \
+            ${ARK_MCP_IMAGE:+--set app.image.repository=${ARK_MCP_IMAGE}} \
+            ${ARK_MCP_IMAGE_TAG:+--set app.image.tag=${ARK_MCP_IMAGE_TAG}} \
             --wait --timeout=120s
         env:
         - name: NAMESPACE
           value: ($namespace)
         timeout: 180s
-    - wait:
-        apiVersion: apps/v1
-        kind: Deployment
-        name: ark-mcp
-        timeout: 2m
-        for:
-          condition:
-            name: Available
-            value: 'True'
 
   - name: wait-for-mcpserver-ready
     try:
