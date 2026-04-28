@@ -5,32 +5,30 @@ metadata:
 spec:
   description: Test agent state transitions based on tool availability
   steps:
-  - name: agent-pending-without-tool
+  - name: setup-mock-llm
     try:
     - script:
-        skipLogOutput: true
+        timeout: 180s
         content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
-    - apply:
-        file: manifests/a01-secret.yaml
-    - apply:
-        file: manifests/a02-model.yaml
-    # Skip Tool creation to test for 'Pending' state of Agent as Tool is missing
-    - apply:
-        file: manifests/a04-test-agent.yaml
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: agent-pending-without-tool
+    try:
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Model
         name: test-model
-        timeout: 3m
+        timeout: 90s
         for:
           condition:
             name: ModelAvailable
-            value: 'True' 
+            value: 'True'
+    # Skip Tool creation to test for 'Pending' state of Agent as Tool is missing
+    - apply:
+        file: manifests/a04-test-agent.yaml
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -48,6 +46,7 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Agent
         name: test-agent
+
   - name: agent-ready-with-tool
     try:
     - apply:
@@ -75,3 +74,10 @@ spec:
         kind: Agent
         name: test-agent
 
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
