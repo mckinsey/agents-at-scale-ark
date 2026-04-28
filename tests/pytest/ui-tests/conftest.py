@@ -11,6 +11,8 @@ from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 logger = logging.getLogger(__name__)
 
 REQUIRED_SERVICES = ['ark-dashboard', 'ark-api']
+MOCK_LLM_VALUES = Path(__file__).parent / "mock-llm-values.yaml"
+MOCK_LLM_MODEL_NAME = "test-model-mock"
 
 def pytest_addoption(parser):
     try:
@@ -80,6 +82,61 @@ def install_ark():
     logger.info("ARK installation successful")
 
 
+def _cleanup_orphaned_mock_llm():
+    namespaced = ["deployment", "service", "serviceaccount", "configmap",
+                  "role", "rolebinding", "secret"]
+    for resource_type in namespaced:
+        subprocess.run(
+            ["kubectl", "delete", resource_type, "mock-llm",
+             "-n", "default", "--ignore-not-found"],
+            capture_output=True, timeout=10
+        )
+    for resource_type in ("clusterrole", "clusterrolebinding"):
+        subprocess.run(
+            ["kubectl", "delete", resource_type, "mock-llm", "--ignore-not-found"],
+            capture_output=True, timeout=10
+        )
+
+
+def install_mock_llm():
+    logger.info("Installing mock-llm...")
+    _cleanup_orphaned_mock_llm()
+    result = subprocess.run([
+        "helm", "upgrade", "--install", "mock-llm",
+        "oci://ghcr.io/dwmkerr/charts/mock-llm",
+        "--version", "0.1.28",
+        "--namespace", "default",
+        "--values", str(MOCK_LLM_VALUES),
+        "--wait", "--timeout=120s"
+    ], capture_output=True, text=True, timeout=180)
+    if result.returncode != 0:
+        pytest.exit(f"mock-llm install failed: {result.stderr}", returncode=1)
+    logger.info("mock-llm installed")
+
+
+def wait_for_mock_llm_model():
+    logger.info(f"Waiting for {MOCK_LLM_MODEL_NAME} to be available...")
+    for _ in range(30):
+        result = subprocess.run([
+            "kubectl", "get", "model", MOCK_LLM_MODEL_NAME, "-n", "default",
+            "-o", r'jsonpath={.status.conditions[?(@.type=="ModelAvailable")].status}'
+        ], capture_output=True, text=True, timeout=10)
+        if result.stdout.strip() == "True":
+            logger.info(f"{MOCK_LLM_MODEL_NAME} is available")
+            return
+        time.sleep(3)
+    pytest.exit(f"{MOCK_LLM_MODEL_NAME} did not become available", returncode=1)
+
+
+def uninstall_mock_llm():
+    logger.info("Uninstalling mock-llm...")
+    subprocess.run([
+        "helm", "uninstall", "mock-llm",
+        "--namespace", "default",
+        "--wait", "--timeout=60s"
+    ], capture_output=True, text=True, timeout=120)
+
+
 def wait_for_pods_ready():
     logger.info("Waiting for ARK pods to be ready...")
     
@@ -147,6 +204,8 @@ def ark_setup(request, tmp_path_factory):
             time.sleep(30)
 
         wait_for_pods_ready()
+        install_mock_llm()
+        wait_for_mock_llm_model()
 
         # Only start our own port-forward if one isn't already serving.
         if not _is_port_forwarding_active():
@@ -162,6 +221,7 @@ def ark_setup(request, tmp_path_factory):
         wait_for_dashboard()
         yield
     finally:
+        uninstall_mock_llm()
         if port_forward:
             port_forward.terminate()
             port_forward.wait(timeout=5)
