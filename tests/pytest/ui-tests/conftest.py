@@ -8,11 +8,12 @@ from collections import defaultdict
 from pathlib import Path
 from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 
+from pages.models_page import MOCK_LLM_MODEL_NAME, mock_llm_model  # noqa: F401
+
 logger = logging.getLogger(__name__)
 
 REQUIRED_SERVICES = ['ark-dashboard', 'ark-api']
 MOCK_LLM_VALUES = Path(__file__).parent / "mock-llm-values.yaml"
-MOCK_LLM_MODEL_NAME = "test-model-mock"
 
 def pytest_addoption(parser):
     try:
@@ -114,20 +115,6 @@ def install_mock_llm():
     logger.info("mock-llm installed")
 
 
-def wait_for_mock_llm_model():
-    logger.info(f"Waiting for {MOCK_LLM_MODEL_NAME} to be available...")
-    for _ in range(30):
-        result = subprocess.run([
-            "kubectl", "get", "model", MOCK_LLM_MODEL_NAME, "-n", "default",
-            "-o", r'jsonpath={.status.conditions[?(@.type=="ModelAvailable")].status}'
-        ], capture_output=True, text=True, timeout=10)
-        if result.stdout.strip() == "True":
-            logger.info(f"{MOCK_LLM_MODEL_NAME} is available")
-            return
-        time.sleep(3)
-    pytest.exit(f"{MOCK_LLM_MODEL_NAME} did not become available", returncode=1)
-
-
 def uninstall_mock_llm():
     logger.info("Uninstalling mock-llm...")
     subprocess.run([
@@ -205,7 +192,6 @@ def ark_setup(request, tmp_path_factory):
 
         wait_for_pods_ready()
         install_mock_llm()
-        wait_for_mock_llm_model()
 
         # Only start our own port-forward if one isn't already serving.
         if not _is_port_forwarding_active():

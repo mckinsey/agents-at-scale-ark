@@ -5,6 +5,10 @@ from datetime import datetime
 from playwright.sync_api import Page
 from .base_page import BasePage
 from .dashboard_page import DashboardPage
+from .secrets_page import SecretsPage
+
+MOCK_LLM_MODEL_NAME = "test-model-mock"
+MOCK_LLM_BASE_URL = "http://mock-llm.default.svc.cluster.local:6556/v1"
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +199,26 @@ class ModelsPage(BasePage):
             "deleted_from_table": False
         }
 
+    def create_mock_llm_model(self, secrets_page) -> dict:
+        secrets_page.navigate_to_secrets_tab()
+        secret_result = secrets_page.create_secret_with_verification("mock-llm", "MOCK_API_KEY")
+
+        self.navigate_to_models_tab()
+        self.create_model_with_verification(
+            model_name=MOCK_LLM_MODEL_NAME,
+            model_type="openai",
+            model="gpt-4.1-mini",
+            secret_name=secret_result["name"],
+            base_url=MOCK_LLM_BASE_URL,
+        )
+        return {"secret_name": secret_result["name"]}
+
+    def delete_mock_llm_model(self, secrets_page, secret_name: str) -> None:
+        self.navigate_to_models_tab()
+        self.delete_model_with_verification(MOCK_LLM_MODEL_NAME)
+        secrets_page.navigate_to_secrets_tab()
+        secrets_page.delete_secret_with_verification(secret_name)
+
     def create_model_for_test(self, prefix: str, secret_name: str, secrets_page):
         model_data = self.TEST_DATA["openai"]
         
@@ -215,5 +239,38 @@ class ModelsPage(BasePage):
         )
         
         logger.info(f"Model created and available: {result['name']}")
-        
+
         return result
+
+
+@pytest.fixture(scope="session", autouse=True)
+def mock_llm_model(ark_setup, playwright, request):
+    worker_id = getattr(request.config, "workerinput", {}).get("workerid", "master")
+    if worker_id != "master":
+        yield MOCK_LLM_MODEL_NAME
+        return
+
+    browser = playwright.chromium.launch(headless=True)
+    ctx = browser.new_context(viewport={"width": 1920, "height": 1080}, ignore_https_errors=True)
+    page = ctx.new_page()
+
+    models = ModelsPage(page)
+    secrets = SecretsPage(page)
+    result = models.create_mock_llm_model(secrets)
+    secret_name = result["secret_name"]
+
+    ctx.close()
+    browser.close()
+
+    yield MOCK_LLM_MODEL_NAME
+
+    browser2 = playwright.chromium.launch(headless=True)
+    ctx2 = browser2.new_context(viewport={"width": 1920, "height": 1080}, ignore_https_errors=True)
+    page2 = ctx2.new_page()
+
+    models2 = ModelsPage(page2)
+    secrets2 = SecretsPage(page2)
+    models2.delete_mock_llm_model(secrets2, secret_name)
+
+    ctx2.close()
+    browser2.close()
