@@ -776,16 +776,17 @@ jobs:
 
       - name: Install mock-llm
         run: |
+          for resource in deployment service serviceaccount configmap role rolebinding secret; do
+            kubectl delete $resource mock-llm -n default --ignore-not-found
+          done
+          for resource in clusterrole clusterrolebinding; do
+            kubectl delete $resource mock-llm --ignore-not-found
+          done
           helm upgrade --install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
             --version 0.1.28 \
             --namespace default \
             --values tests/pytest/ui-tests/mock-llm-values.yaml \
             --wait --timeout=120s
-
-      - name: Create mock-llm model
-        run: |
-          kubectl apply -f tests/pytest/ui-tests/mock-llm-model.yaml
-          kubectl wait --for=condition=ModelAvailable model/test-model-mock -n default --timeout=60s
 
       - name: Start port-forwarding
         run: |

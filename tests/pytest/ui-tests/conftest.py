@@ -8,12 +8,13 @@ from collections import defaultdict
 from pathlib import Path
 from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 
-from pages.models_page import MOCK_LLM_MODEL_NAME, mock_llm_model  # noqa: F401
+from pages.models_page import MOCK_LLM_MODEL_NAME
 
 logger = logging.getLogger(__name__)
 
 REQUIRED_SERVICES = ['ark-dashboard', 'ark-api']
 MOCK_LLM_VALUES = Path(__file__).parent / "mock-llm-values.yaml"
+MOCK_LLM_MODEL_YAML = Path(__file__).parent / "mock-llm-model.yaml"
 
 def pytest_addoption(parser):
     try:
@@ -211,6 +212,24 @@ def ark_setup(request, tmp_path_factory):
         if port_forward:
             port_forward.terminate()
             port_forward.wait(timeout=5)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def mock_llm_model(ark_setup):
+    subprocess.run(
+        ["kubectl", "apply", "-f", str(MOCK_LLM_MODEL_YAML)],
+        check=True, capture_output=True
+    )
+    subprocess.run(
+        ["kubectl", "wait", "--for=condition=ModelAvailable",
+         "model/test-model-mock", "-n", "default", "--timeout=60s"],
+        check=True, capture_output=True
+    )
+    yield MOCK_LLM_MODEL_NAME
+    subprocess.run(
+        ["kubectl", "delete", "-f", str(MOCK_LLM_MODEL_YAML), "--ignore-not-found"],
+        capture_output=True
+    )
 
 
 @pytest.fixture(scope="session")
