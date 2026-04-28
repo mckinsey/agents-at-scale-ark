@@ -15,11 +15,11 @@ spec:
             --set serviceAccount.name=ark-mcp-sa-$NAMESPACE \
             ${ARK_MCP_IMAGE:+--set app.image.repository=${ARK_MCP_IMAGE}} \
             ${ARK_MCP_IMAGE_TAG:+--set app.image.tag=${ARK_MCP_IMAGE_TAG}} \
-            --wait --timeout=120s
+            --wait --timeout=360s
         env:
         - name: NAMESPACE
           value: ($namespace)
-        timeout: 180s
+        timeout: 420s
 
   - name: wait-for-mcpserver-ready
     try:
