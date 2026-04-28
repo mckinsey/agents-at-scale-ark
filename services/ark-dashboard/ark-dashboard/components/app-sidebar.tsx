@@ -19,6 +19,7 @@ import {
   MoreHorizontal,
   Server,
   Settings,
+  Sparkles,
   Store,
   Sun,
   Workflow,
@@ -316,6 +317,15 @@ export function AppSidebar() {
                 isActive={getCurrentSection() === 'mcp'}>
                 <Server />
                 <span>MCPs</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={() => navigateToSection('skills')}
+                isActive={getCurrentSection() === 'skills'}>
+                <Sparkles />
+                <span>Skills</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
 

@@ -1,9 +1,10 @@
 'use client';
 
-import { Bot, MessageCircle, Pencil, Trash2 } from 'lucide-react';
+import { Bot, MessageCircle, Pencil, Sparkles, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
+import { ManageAgentSkillsDialog } from '@/components/dialogs/manage-agent-skills-dialog';
 import { AvailabilityStatusBadge } from '@/components/ui/availability-status-badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -31,6 +32,7 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
   const { isOpen } = useChatState();
   const isChatOpen = isOpen(agent.name);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [skillsDialogOpen, setSkillsDialogOpen] = useState(false);
   const { readOnlyMode } = useNamespace();
 
   const modelName = agent.modelRef?.name || 'No model assigned';
@@ -80,6 +82,28 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
         />
 
         <div className="flex flex-shrink-0 items-center gap-1">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  onClick={e => {
+                    e.stopPropagation();
+                    if (!readOnlyMode) setSkillsDialogOpen(true);
+                  }}
+                  disabled={readOnlyMode}
+                  aria-label={`Manage skills for ${agent.name}`}>
+                  <Sparkles className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {readOnlyMode ? 'Read-only mode' : 'Manage skills'}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -167,6 +191,12 @@ export function AgentRow({ agent, onDelete }: AgentRowProps) {
           variant="destructive"
         />
       )}
+
+      <ManageAgentSkillsDialog
+        open={skillsDialogOpen}
+        onOpenChange={setSkillsDialogOpen}
+        agentName={agent.name}
+      />
     </>
   );
 }

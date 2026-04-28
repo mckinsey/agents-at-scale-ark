@@ -15,6 +15,7 @@ import {
   Search,
   Server,
   Settings,
+  Sparkles,
   Users,
   Workflow,
   Wrench,
@@ -130,6 +131,12 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
   },
 
   // Runtime
+  skills: {
+    key: 'skills',
+    title: 'Skills',
+    icon: Sparkles,
+    group: 'runtime',
+  },
   tools: {
     key: 'tools',
     title: 'Tools',
