@@ -45,6 +45,8 @@ export interface SessionEventData {
   queryNamespace?: string;
   conversationId?: string;
   agent?: string;
+  team?: string;
+  targetType?: string;
   error?: string;
   _reason?: string;
 }

@@ -99,18 +99,37 @@ function getSessionStatus(errorCount: number, isActive: boolean): 'error' | 'act
   return 'idle';
 }
 
+function determineParticipantType(queries: any[], participantName: string): 'agent' | 'team' | 'tool' {
+  // Find a query that mentions this participant
+  const relevantQuery = queries.find((q: any) =>
+    q.team === participantName || q.agent === participantName
+  );
+
+  if (!relevantQuery) return 'agent'; // Default fallback
+
+  // If targetType is explicitly set, use it
+  if (relevantQuery.targetType === 'team') return 'team';
+  if (relevantQuery.targetType === 'tool') return 'tool';
+
+  // If team field is set and matches, it's a team
+  if (relevantQuery.team === participantName) return 'team';
+
+  // Otherwise it's an agent
+  return 'agent';
+}
+
 function enrichSessionData(session: any): BrokerSession {
   const queries = Object.values(session.queries || {});
   const errors = queries.filter((q: any) => q.phase === 'error');
   const active = queries.some((q: any) => q.phase === 'running' || q.phase === 'pending');
 
   const participants = Array.from(
-    new Set(queries.map((q: any) => q.agent || q.team).filter(Boolean))
+    new Set(queries.map((q: any) => q.team || q.agent).filter(Boolean))
   ).map((name) => ({
     id: name as string,
     name: name as string,
-    type: 'agent' as const,
-    isActive: queries.some((q: any) => (q.agent || q.team) === name && q.phase === 'running')
+    type: determineParticipantType(queries, name),
+    isActive: queries.some((q: any) => (q.team || q.agent) === name && q.phase === 'running')
   }));
 
   const conversations = Array.from(

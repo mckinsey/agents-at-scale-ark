@@ -14,7 +14,9 @@ export interface QueryEntry {
   conversationId?: string;
   /** Name of the agent handling this query */
   agent?: string;
-  /** CRD target type, currently always 'agent' */
+  /** Name of the team handling this query */
+  team?: string;
+  /** CRD target type (agent, team, model, tool) */
   targetType: string;
   /** Current lifecycle phase derived from incoming events */
   phase: QueryPhase;
@@ -101,15 +103,28 @@ export class SessionsBroker {
     return QueryPhases.Running;
   }
 
-  private updateExistingQuery(existing: QueryEntry, phase: QueryPhase, agent?: string, conversationId?: string, errorMsg?: string): void {
+  private updateExistingQuery(
+    existing: QueryEntry,
+    phase: QueryPhase,
+    eventData: Partial<SessionEventData>,
+    errorMsg?: string
+  ): void {
     const now = new Date().toISOString();
     existing.lastActivity = now;
-    if (conversationId && !existing.conversationId) {
-      existing.conversationId = conversationId;
+
+    if (eventData.conversationId && !existing.conversationId) {
+      existing.conversationId = eventData.conversationId;
     }
-    if (agent && !existing.agent) {
-      existing.agent = agent;
+    if (eventData.agent && !existing.agent) {
+      existing.agent = eventData.agent;
     }
+    if (eventData.team && !existing.team) {
+      existing.team = eventData.team;
+    }
+    if (eventData.targetType && existing.targetType === 'agent') {
+      existing.targetType = eventData.targetType;
+    }
+
     if (phase === QueryPhases.Error) {
       existing.phase = QueryPhases.Error;
       existing.error = errorMsg;
@@ -125,7 +140,7 @@ export class SessionsBroker {
     if (!sessionId || !queryName) return;
 
     const now = new Date().toISOString();
-    const { conversationId, agent, queryNamespace } = eventData;
+    const { queryNamespace } = eventData;
     const reason = eventData._reason || '';
     const errorMsg = eventData.error;
 
@@ -146,14 +161,15 @@ export class SessionsBroker {
 
     const existing = session.queries[queryName];
     if (existing) {
-      this.updateExistingQuery(existing, queryPhase, agent, conversationId, errorMsg);
+      this.updateExistingQuery(existing, queryPhase, eventData, errorMsg);
     } else {
       session.queries[queryName] = {
         name: queryName,
         namespace: queryNamespace,
-        conversationId: conversationId || undefined,
-        agent,
-        targetType: 'agent',
+        conversationId: eventData.conversationId || undefined,
+        agent: eventData.agent,
+        team: eventData.team,
+        targetType: eventData.targetType || 'agent',
         phase: queryPhase,
         error: errorMsg,
         createdAt: now,

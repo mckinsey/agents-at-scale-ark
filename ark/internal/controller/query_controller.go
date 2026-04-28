@@ -265,15 +265,27 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	log.Info("query execution completed", "query", obj.Name, "status", queryStatus, "duration", duration.Duration)
 
-	var operationData map[string]string
+	// Build operation data with target information
+	operationData := make(map[string]string)
+	operationData["targetType"] = target.Type
+
+	// Add team or agent field based on target type
+	if target.Type == targetTypeTeam {
+		operationData["team"] = target.Name
+	} else if target.Type == targetTypeAgent {
+		operationData["agent"] = target.Name
+	}
+
+	// Add truncated input if available
 	if queryInput != "" {
 		const maxDisplayInputLength = 48
 		displayInput := queryInput
 		if len(displayInput) > maxDisplayInputLength {
 			displayInput = displayInput[:maxDisplayInputLength-3] + "..."
 		}
-		operationData = map[string]string{"input": displayInput}
+		operationData["input"] = displayInput
 	}
+
 	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", operationData)
 }
 

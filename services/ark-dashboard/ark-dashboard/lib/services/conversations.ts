@@ -48,7 +48,7 @@ export const conversationsService = {
         const hasError = queries.some(q => q.phase === 'error');
         const isActive = queries.some(q => q.phase === 'running' || q.phase === 'pending');
 
-        const participants = Array.from(new Set(queries.map(q => q.agent || q.team).filter(Boolean))) as string[];
+        const participants = Array.from(new Set(queries.map(q => q.team || q.agent).filter(Boolean))) as string[];
         const participantName = participants[0] || convId;
 
         const messageCount = queries.length;
