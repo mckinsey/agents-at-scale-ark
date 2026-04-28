@@ -33,7 +33,7 @@ function renderMessageContent(
 
   const backendUserMessages = hasBackendMessages
     ? new Set(
-        messages!
+        messages
           .filter((msg: any) => msg.message.role === 'user')
           .map((msg: any) => msg.message.content?.trim())
       )
@@ -61,7 +61,7 @@ function renderMessageContent(
   if (hasBackendMessages || hasPendingMessages) {
     return (
       <>
-        {hasBackendMessages && messages!.map((msg: any) => (
+        {hasBackendMessages && messages.map((msg: any) => (
           <ChatMessage
             key={`${msg.query_id}-${msg.sequence}`}
             role={msg.message.role === 'tool' ? 'system' : msg.message.role}

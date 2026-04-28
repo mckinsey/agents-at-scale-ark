@@ -163,8 +163,15 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
         className={`flex cursor-pointer items-center gap-3 rounded-md border p-3 transition-colors hover:bg-accent ${
           isSelected ? 'bg-accent border-primary' : ''
         }`}
-        onClick={() => handleSelect(participant.name)}
       >
+        <input
+          type="radio"
+          name="participant"
+          value={participant.name}
+          checked={isSelected}
+          onChange={() => handleSelect(participant.name)}
+          className="sr-only"
+        />
         <div className={`size-4 rounded-full border-2 flex items-center justify-center ${
           isSelected ? 'border-primary' : 'border-muted-foreground'
         }`}>

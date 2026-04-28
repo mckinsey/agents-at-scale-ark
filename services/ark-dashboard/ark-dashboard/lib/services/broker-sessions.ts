@@ -61,7 +61,10 @@ export const brokerSessionsService = {
       order: params?.order,
     });
 
-    const url = `/api/v1/broker/sessions${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+    const queryString = queryParams.toString();
+    const url = queryString
+      ? `/api/v1/broker/sessions?${queryString}`
+      : '/api/v1/broker/sessions';
     const response = await apiClient.get<PaginatedSessions>(url);
 
     if (!response || !Array.isArray(response.items)) {
@@ -90,6 +93,12 @@ export const brokerSessionsService = {
   },
 };
 
+function getSessionStatus(errorCount: number, isActive: boolean): 'error' | 'active' | 'idle' {
+  if (errorCount > 0) return 'error';
+  if (isActive) return 'active';
+  return 'idle';
+}
+
 function enrichSessionData(session: any): BrokerSession {
   const queries = Object.values(session.queries || {});
   const errors = queries.filter((q: any) => q.phase === 'error');
@@ -111,7 +120,7 @@ function enrichSessionData(session: any): BrokerSession {
   return {
     sessionId: session.sessionId,
     name: session.name || session.sessionId,
-    status: errors.length > 0 ? 'error' : active ? 'active' : 'idle',
+    status: getSessionStatus(errors.length, active),
     errorCount: errors.length,
     participants,
     conversationCount: conversations.length,

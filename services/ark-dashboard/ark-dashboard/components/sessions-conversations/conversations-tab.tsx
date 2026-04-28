@@ -38,7 +38,7 @@ export function ConversationsTab({ sessionId }: Props) {
   const [pendingMessagesMap, setPendingMessagesMap] = useAtom(sessionPendingMessagesAtom);
   const [processingConversations, setProcessingConversations] = useState<Set<string>>(new Set());
   const [hasTempSession, setHasTempSession] = useState(() => {
-    if (typeof globalThis.window === 'undefined') return false;
+    if (globalThis.window === undefined) return false;
     return !!localStorage.getItem(`temp-session-${sessionId}`);
   });
 
@@ -46,7 +46,7 @@ export function ConversationsTab({ sessionId }: Props) {
   const { data: session } = useGetSession(sessionId);
 
   useEffect(() => {
-    if (typeof globalThis.window === 'undefined') return;
+    if (globalThis.window === undefined) return;
 
     const tempData = localStorage.getItem(`temp-session-${sessionId}`);
     if (!tempData) return;
@@ -117,7 +117,7 @@ export function ConversationsTab({ sessionId }: Props) {
   };
 
   const handleEnableQueries = () => {
-    if (typeof globalThis.window !== 'undefined') {
+    if (globalThis.window !== undefined) {
       localStorage.removeItem(`temp-session-${sessionId}`);
       setHasTempSession(false);
       setTemporaryConversations(prev =>

@@ -160,7 +160,7 @@ function useMessageExpansion(
 // Sub-Components
 // ============================================================================
 
-function ErrorIconButton({ onClick }: { onClick: () => void }) {
+function ErrorIconButton({ onClick }: Readonly<{ onClick: () => void }>) {
   return (
     <button
       onClick={onClick}
@@ -174,10 +174,10 @@ function ErrorIconButton({ onClick }: { onClick: () => void }) {
 function ExpandToggleButton({
   isExpanded,
   onClick
-}: {
+}: Readonly<{
   isExpanded: boolean;
   onClick: () => void;
-}) {
+}>) {
   return (
     <button
       onClick={onClick}
@@ -199,9 +199,9 @@ function ExpandToggleButton({
 
 function TokenUsageDisplay({
   tokenUsage
-}: {
+}: Readonly<{
   tokenUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
-}) {
+}>) {
   return (
     <div className="text-muted-foreground text-xs opacity-60">
       {tokenUsage.total_tokens.toLocaleString()} tokens (
@@ -216,12 +216,12 @@ function MessageContentDisplay({
   displayContent,
   markdownContent,
   contentRef,
-}: {
+}: Readonly<{
   viewMode: 'text' | 'markdown';
   displayContent: string;
   markdownContent: React.ReactNode;
   contentRef: React.RefObject<HTMLDivElement | null>;
-}) {
+}>) {
   return (
     <div ref={contentRef} className="min-w-0 flex-1 overflow-x-auto">
       {viewMode === 'markdown' ? (
@@ -235,7 +235,7 @@ function MessageContentDisplay({
   );
 }
 
-function ToolCallsList({ toolCalls }: { toolCalls: ToolCallData[] }) {
+function ToolCallsList({ toolCalls }: Readonly<{ toolCalls: ToolCallData[] }>) {
   return (
     <div className="flex w-full max-w-[80%] flex-col gap-3">
       {toolCalls.map(toolCall => (
@@ -331,7 +331,7 @@ export function ChatMessage({
                 />
               )}
             </div>
-            {showTokenUsage && <TokenUsageDisplay tokenUsage={tokenUsage!} />}
+            {showTokenUsage && <TokenUsageDisplay tokenUsage={tokenUsage} />}
           </div>
         </div>
       )}

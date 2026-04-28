@@ -6,9 +6,9 @@ import { cn } from '@/lib/utils';
 import type { BrokerSession } from '@/lib/services/broker-sessions';
 
 interface Props {
-  session: BrokerSession;
-  isSelected: boolean;
-  onSelect: (sessionId: string) => void;
+  readonly session: BrokerSession;
+  readonly isSelected: boolean;
+  readonly onSelect: (sessionId: string) => void;
 }
 
 function getParticipantIcon(type: string) {
@@ -26,12 +26,15 @@ export function SessionTableRow({ session, isSelected, onSelect }: Props) {
   });
 
   return (
-    <div
+    <button
+      type="button"
       className={cn(
         'grid grid-cols-[2fr_3fr_1fr_auto] gap-4 border-b px-4 py-3 transition-colors hover:bg-muted/50 cursor-pointer',
+        'w-full text-left',
         isSelected && 'bg-muted'
       )}
       onClick={() => onSelect(session.sessionId)}
+      aria-pressed={isSelected}
     >
       <div className="flex items-center gap-3">
         <span
@@ -77,6 +80,6 @@ export function SessionTableRow({ session, isSelected, onSelect }: Props) {
       </div>
 
       <div className="w-8" />
-    </div>
+    </button>
   );
 }

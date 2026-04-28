@@ -11,6 +11,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useParticipants } from '@/lib/services/participants-hooks';
 import type { Participant } from '@/lib/services/participants';
 import type { Participant as SessionParticipant } from '@/lib/services/broker-sessions';
 import type { Conversation } from '@/lib/services/conversations';
@@ -38,25 +39,28 @@ export function NewConversationDialog({
   onSelectParticipant,
 }: Props) {
   const [search, setSearch] = useState('');
+  const { data: allParticipants = [] } = useParticipants();
 
-  const { inConversation, allParticipants } = useMemo(() => {
-    const conversationParticipants = new Set(selectedConversation?.participants || []);
-
+  const { inSession, filteredAllParticipants } = useMemo(() => {
     const sessionParticipantsList: Participant[] = sessionParticipants.map(p => ({
       name: p.name,
       type: p.type,
       description: null,
     }));
 
-    const filtered = sessionParticipantsList.filter(p =>
+    const filteredSession = sessionParticipantsList.filter(p =>
+      p.name.toLowerCase().includes(search.toLowerCase())
+    );
+
+    const filteredAll = allParticipants.filter(p =>
       p.name.toLowerCase().includes(search.toLowerCase())
     );
 
     return {
-      inConversation: filtered.filter(p => conversationParticipants.has(p.name)),
-      allParticipants: filtered,
+      inSession: filteredSession,
+      filteredAllParticipants: filteredAll,
     };
-  }, [sessionParticipants, selectedConversation, search]);
+  }, [sessionParticipants, allParticipants, search]);
 
   const handleSelect = (participant: Participant) => {
     onSelectParticipant(participant);
@@ -71,7 +75,7 @@ export function NewConversationDialog({
           <DialogTitle>Start New Conversation</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -84,13 +88,13 @@ export function NewConversationDialog({
           </div>
 
           <div className="max-h-[400px] space-y-4 overflow-y-auto">
-            {inConversation.length > 0 && (
+            {inSession.length > 0 && (
               <div className="space-y-2">
                 <h3 className="text-sm font-medium text-muted-foreground">
-                  In this conversation ({inConversation.length})
+                  In this session ({inSession.length})
                 </h3>
                 <div className="space-y-1">
-                  {inConversation.map((participant) => (
+                  {inSession.map((participant) => (
                       <Button
                         key={participant.name}
                         variant="ghost"
@@ -98,15 +102,15 @@ export function NewConversationDialog({
                         className="h-auto w-full justify-start gap-3 p-3 text-left"
                       >
                         {getParticipantIcon(participant.type)}
-                        <div className="flex-1 space-y-1">
+                        <div className="flex-1 min-w-0 overflow-hidden space-y-1">
                           <div className="font-medium">{participant.name}</div>
                           {participant.description && (
-                            <div className="line-clamp-1 text-xs text-muted-foreground">
+                            <div className="w-full truncate text-xs text-muted-foreground">
                               {participant.description}
                             </div>
                           )}
                         </div>
-                        <Badge variant="outline" className="capitalize">
+                        <Badge variant="outline" className="flex-shrink-0 capitalize">
                           {participant.type}
                         </Badge>
                       </Button>
@@ -115,13 +119,13 @@ export function NewConversationDialog({
                 </div>
               )}
 
-              {allParticipants.length > 0 && (
+              {filteredAllParticipants.length > 0 && (
                 <div className="space-y-2">
                   <h3 className="text-sm font-medium text-muted-foreground">
-                    All participants ({allParticipants.length})
+                    All participants ({filteredAllParticipants.length})
                   </h3>
                   <div className="space-y-1">
-                    {allParticipants.map((participant) => (
+                    {filteredAllParticipants.map((participant) => (
                       <Button
                         key={participant.name}
                         variant="ghost"
@@ -129,15 +133,15 @@ export function NewConversationDialog({
                         className="h-auto w-full justify-start gap-3 p-3 text-left"
                       >
                         {getParticipantIcon(participant.type)}
-                        <div className="flex-1 space-y-1">
+                        <div className="flex-1 min-w-0 overflow-hidden space-y-1">
                           <div className="font-medium">{participant.name}</div>
                           {participant.description && (
-                            <div className="line-clamp-1 text-xs text-muted-foreground">
+                            <div className="w-full truncate text-xs text-muted-foreground">
                               {participant.description}
                             </div>
                           )}
                         </div>
-                        <Badge variant="outline" className="capitalize">
+                        <Badge variant="outline" className="flex-shrink-0 capitalize">
                           {participant.type}
                         </Badge>
                       </Button>
@@ -146,7 +150,7 @@ export function NewConversationDialog({
                 </div>
               )}
 
-              {allParticipants.length === 0 && (
+              {filteredAllParticipants.length === 0 && inSession.length === 0 && (
                 <div className="py-8 text-center text-muted-foreground">
                   No participants found
                 </div>

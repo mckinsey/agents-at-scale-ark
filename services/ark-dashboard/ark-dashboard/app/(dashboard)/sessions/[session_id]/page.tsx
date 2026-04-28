@@ -33,7 +33,7 @@ export default function SessionDetailPage({ params }: Props) {
   const { data: session, isLoading, isError } = useGetSession(session_id);
 
   const tempSessionData = useMemo<TempSessionData | null>(() => {
-    if (typeof globalThis.window === 'undefined') return null;
+    if (globalThis.window === undefined) return null;
     const data = localStorage.getItem(`temp-session-${session_id}`);
     if (!data) return null;
     try {
@@ -119,6 +119,12 @@ export default function SessionDetailPage({ params }: Props) {
   const errorCount = session?.errorCount || 0;
   const sessionStatus = session?.status || 'active';
 
+  const getStatusVariant = (status: string) => {
+    if (status === 'error') return 'destructive';
+    if (status === 'active') return 'default';
+    return 'secondary';
+  };
+
   return (
     <div className="flex h-full flex-col space-y-6 p-8">
       <Button variant="ghost" onClick={() => router.push('/session-history')} className="w-fit cursor-pointer">
@@ -171,7 +177,7 @@ export default function SessionDetailPage({ params }: Props) {
             </div>
           </div>
           <Badge
-            variant={sessionStatus === 'error' ? 'destructive' : sessionStatus === 'active' ? 'default' : 'secondary'}
+            variant={getStatusVariant(sessionStatus)}
             className="capitalize"
           >
             {sessionStatus}

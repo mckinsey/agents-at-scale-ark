@@ -54,11 +54,11 @@ export const conversationsService = {
         const messageCount = queries.length;
 
         // Count tool calls from events
-        const queryNames = queries.map((q: any) => q.name);
+        const queryNames = new Set(queries.map((q: any) => q.name));
         const toolCallCount = events
           ? events.items.filter(e =>
               e.reason === 'ToolCallComplete' &&
-              queryNames.includes(e.data.queryName)
+              queryNames.has(e.data.queryName)
             ).length
           : 0;
 

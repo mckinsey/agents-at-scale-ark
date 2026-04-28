@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { useGetEvents } from '@/lib/services/logs-hooks';
 
 interface Props {
-  sessionId: string;
+  readonly sessionId: string;
 }
 
 function getLogLevel(eventType: string): string {
@@ -44,14 +44,14 @@ function getEventSource(event: { reason: string; data: { operation?: string; que
 }
 
 interface LogRowProps {
-  event: {
+  readonly event: {
     timestamp: string;
     eventType: string;
     reason: string;
     message: string;
     data: Record<string, unknown>;
   };
-  index: number;
+  readonly index: number;
 }
 
 function LogRow({ event, index }: LogRowProps) {
