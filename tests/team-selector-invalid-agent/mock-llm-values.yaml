@@ -1,24 +1,6 @@
 ark:
   model:
-    enabled: true
     name: test-model
-    type: completions
-    provider: openai
-    model: gpt-4o-mini
-    pollInterval: 3s
-    apiKey: mock-api-key
-
-resources:
-  limits:
-    cpu: 200m
-    memory: 256Mi
-    ephemeral-storage: 128Mi
-  requests:
-    cpu: 100m
-    memory: 128Mi
-    ephemeral-storage: 128Mi
-
-terminationGracePeriodSeconds: 1
 
 config:
   rules:
@@ -32,9 +14,8 @@ config:
           "object": "list",
           "data": [
             {
-              "id": "gpt-4o-mini",
+              "id": "gpt-4.1-mini",
               "object": "model",
-              "created": 1686935002,
               "owned_by": "openai"
             }
           ]

@@ -6,4 +6,4 @@ spec:
   input: "What is the capital of France? Respond with just the city name."
   target:
     type: model
-    name: test-model
+    name: test-model-mock

@@ -12,7 +12,7 @@ spec:
   forceTerminationGracePeriod: 5s
   timeouts:
     apply: 60s                           # Increased timeout for 'apply' operations
-    assert: 240s                         # Increased timeout for assertion checks (LLM calls can be slow)
+    assert: 90s
     cleanup: 180s                        # Increased timeout for cleanup steps
     delete: 120s                         # Increased timeout for resource deletion
     error: 60s                           # Increased timeout for error handling

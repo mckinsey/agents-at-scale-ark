@@ -3,33 +3,34 @@ kind: Test
 metadata:
   name: weather-chicago
 spec:
-  description: Test weather agent with external API tool integration
+  description: Test weather agent with HTTP tool chaining using mock weather API and mock LLM
   steps:
-  - name: step-1
+  - name: setup-mock-llm
     try:
     - script:
-        skipLogOutput: true
+        timeout: 180s
         content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
-    - apply:
-        file: manifests/a00-mock-server.yaml
-    - apply:
-        file: manifests/a01-secret.yaml
-    - apply:
-        file: manifests/a02-model.yaml
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: wait-for-model-ready
+    try:
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Model
-        name: weather-default-model
-        timeout: 3m
+        name: test-model-mock
+        timeout: 90s
         for:
           condition:
             name: ModelAvailable
-            value: 'True' 
+            value: 'True'
+
+  - name: run-query
+    try:
+    - apply:
+        file: manifests/a00-mock-server.yaml
     - wait:
         apiVersion: apps/v1
         kind: Deployment
@@ -39,18 +40,23 @@ spec:
           condition:
             name: Available
             value: 'True'
-    # Create tools using kubectl with template substitution
     - script:
         content: |
           MOCK_URL="http://mock-weather-api.$NAMESPACE.svc.cluster.local"
-          
-          # Create get-coordinates tool
-          kubectl apply -f - <<EOF
+          kubectl run test-mock-ready --image=curlimages/curl --rm -i --restart=Never -n $NAMESPACE -- \
+            curl -f -s --retry 5 --retry-connrefused --retry-delay 1 "${MOCK_URL}/v1/search?name=Chicago&count=1"
+        timeout: 30s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - script:
+        content: |
+          MOCK_URL="http://mock-weather-api.$NAMESPACE.svc.cluster.local"
+          kubectl apply -f - -n $NAMESPACE <<EOF
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Tool
           metadata:
             name: get-coordinates
-            namespace: $NAMESPACE
           spec:
             type: http
             description: "Returns coordinates for the given city name."
@@ -64,14 +70,11 @@ spec:
             http:
               url: $MOCK_URL/v1/search?name={city}&count=1
           EOF
-          
-          # Create get-forecast tool
-          kubectl apply -f - <<EOF
+          kubectl apply -f - -n $NAMESPACE <<EOF
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Tool
           metadata:
             name: get-forecast
-            namespace: $NAMESPACE
           spec:
             type: http
             description: "Get weather forecast for a specific location and time period"
@@ -80,7 +83,7 @@ spec:
               properties:
                 office:
                   type: string
-                  description: "Weather office identifier (e.g., TOP)"
+                  description: "Weather office identifier (e.g., LOT)"
                 gridX:
                   type: integer
                   description: "Grid X coordinate"
@@ -91,14 +94,15 @@ spec:
             http:
               url: $MOCK_URL/gridpoints/{office}/{gridX},{gridY}/forecast
           EOF
-    # Wait for tools to be created before patching URLs
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
           kind: Tool
           metadata:
             name: get-coordinates
-            namespace: ($namespace)
           status:
             state: Ready
     - assert:
@@ -107,24 +111,8 @@ spec:
           kind: Tool
           metadata:
             name: get-forecast
-            namespace: ($namespace)
           status:
             state: Ready
-    # Wait for service endpoints to be ready
-    - assert:
-        resource:
-          apiVersion: v1
-          kind: Endpoints
-          metadata:
-            name: mock-weather-api
-            namespace: ($namespace)
-    # Test mock server connectivity 
-    - script:
-        content: |
-          MOCK_URL="http://mock-weather-api.$NAMESPACE.svc.cluster.local"
-          kubectl run test-mock-ready --image=curlimages/curl --rm -i --restart=Never -n $NAMESPACE -- \
-            curl -f -s --retry 5 --retry-connrefused --retry-delay 1 "${MOCK_URL}/v1/search?name=Chicago&count=1"
-        timeout: 30s
     - apply:
         file: manifests/a05-weather-agent.yaml
     - apply:
@@ -138,15 +126,36 @@ spec:
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
-        timeout: 5m
         name: chicago-weather-query
+        timeout: 60s
         for:
           condition:
             name: Completed
             value: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: chicago-weather-query
+          status:
+            (response != null): true
+            (response.target.name): 'chicago-weather-agent'
+            (contains(response.content, 'Chicago')): true
+            (contains(response.content, '72')): true
+            (contains(response.content, 'Partly Cloudy')): true
+            (tokenUsage.totalTokens > `50`): true
     catch:
     - events: {}
     - describe:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: chicago-weather-query
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

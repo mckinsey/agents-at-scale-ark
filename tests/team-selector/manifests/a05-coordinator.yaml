@@ -8,7 +8,7 @@ spec:
     You are a project coordinator. Synthesize team input and determine completion.
     Provide final summary when analysis is comprehensive. Keep responses brief.
   modelRef:
-    name: test-model
+    name: test-model-mock
   tools:
     - name: terminate
       type: built-in
