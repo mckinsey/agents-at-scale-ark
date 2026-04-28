@@ -202,6 +202,10 @@ class ModelsPage(BasePage):
 
 @pytest.fixture(scope="session", autouse=True)
 def mock_llm_model(ark_setup, playwright, request):
+    # In CI, mock-llm and the model CR are pre-created by workflow steps in
+    # .github/workflows/cicd.yaml before pytest runs. With xdist (-n 4), all
+    # processes are workers (gw0..gw3) so this branch is always taken there.
+    # The creation block below only runs for local single-process pytest runs.
     worker_id = getattr(request.config, "workerinput", {}).get("workerid", "master")
     if worker_id != "master":
         yield MOCK_LLM_MODEL_NAME
