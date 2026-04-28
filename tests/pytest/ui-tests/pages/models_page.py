@@ -25,27 +25,6 @@ class ModelsPage(BasePage):
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
     CONFIRM_DELETE_BUTTON = "button:has-text('Delete'), button:has-text('Confirm'), button:has-text('Yes')"
     
-    TEST_DATA = {
-        "openai": {
-            "model_type": "openai",
-            "model_name": "gpt-4o-mini",
-            "env_key": "CICD_OPENAI_API_KEY",
-            "base_url_key": "CICD_OPENAI_BASE_URL"
-        },
-        "anthropic": {
-            "model_type": "anthropic",
-            "model_name": "claude-3-haiku-20240307",
-            "env_key": "CICD_ANTHROPIC_API_KEY",
-            "base_url_key": None
-        },
-        "azure": {
-            "model_type": "azure",
-            "model_name": "gpt-35-turbo",
-            "env_key": "CICD_AZURE_API_KEY",
-            "base_url_key": "CICD_AZURE_BASE_URL"
-        }
-    }
-    
     def navigate_to_models_tab(self) -> None:
         dashboard = DashboardPage(self.page)
         self.page.goto(f"{dashboard.base_url}/models")
@@ -201,7 +180,7 @@ class ModelsPage(BasePage):
 
     def create_mock_llm_model(self, secrets_page) -> dict:
         secrets_page.navigate_to_secrets_tab()
-        secret_result = secrets_page.create_secret_with_verification("mock-llm", "MOCK_API_KEY")
+        secret_result = secrets_page.create_secret_with_verification("mock-llm")
 
         self.navigate_to_models_tab()
         self.create_model_with_verification(
@@ -219,28 +198,6 @@ class ModelsPage(BasePage):
         secrets_page.navigate_to_secrets_tab()
         secrets_page.delete_secret_with_verification(secret_name)
 
-    def create_model_for_test(self, prefix: str, secret_name: str, secrets_page):
-        model_data = self.TEST_DATA["openai"]
-        
-        self.navigate_to_models_tab()
-        
-        if not self.is_visible(self.ADD_MODEL_BUTTON):
-            pytest.skip("Add Model button not available")
-        
-        model_display_name = self.generate_model_name(prefix)
-        base_url = secrets_page.get_password_from_env(model_data["base_url_key"])
-        
-        result = self.create_model_with_verification(
-            model_name=model_display_name,
-            model_type=model_data["model_type"],
-            model=model_data["model_name"],
-            secret_name=secret_name,
-            base_url=base_url
-        )
-        
-        logger.info(f"Model created and available: {result['name']}")
-
-        return result
 
 
 @pytest.fixture(scope="session", autouse=True)

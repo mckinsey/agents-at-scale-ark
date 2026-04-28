@@ -1,8 +1,12 @@
+import logging
 import pytest
 from playwright.sync_api import Page
 from pages.agents_page import AgentsPage
 from pages.teams_page import TeamsPage
 from conftest import MOCK_LLM_MODEL_NAME
+
+
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="class")
@@ -43,7 +47,7 @@ class TestArkTeams:
         team_name = teams.generate_team_name("team")
         member_name = agent_result['name']
 
-        print(f"Creating team with newly created agent: {member_name}")
+        logger.info(f"Creating team with newly created agent: {member_name}")
 
         team_result = teams.create_team_with_verification(
             team_name=team_name,
@@ -57,7 +61,7 @@ class TestArkTeams:
         assert team_result["in_table"], "Team should be visible in table"
 
         team_test_resources["teams"][prefix] = team_result['name']
-        print(f"Team created successfully: {team_result['name']}")
+        logger.info(f"Team created successfully: {team_result['name']}")
 
     @pytest.mark.parametrize("prefix", [
         "team",
@@ -74,15 +78,15 @@ class TestArkTeams:
         if not result["delete_available"]:
             pytest.skip("Delete functionality not available")
 
-        print(f"Team deleted: {team_name}")
+        logger.info(f"Team deleted: {team_name}")
         if result["confirm_dialog_visible"]:
-            print("Confirm dialog verified")
+            logger.info("Confirm dialog verified")
         if result["confirm_button_visible"]:
-            print("Confirm button verified")
+            logger.info("Confirm button verified")
 
         agents = AgentsPage(page)
         agents.navigate_to_agents_tab()
         agent_name = team_test_resources["agents"].get(prefix)
         agent_result = agents.delete_agent_with_verification(agent_name)
         if agent_result["delete_available"]:
-            print(f"Agent deleted: {agent_name}")
+            logger.info(f"Agent deleted: {agent_name}")

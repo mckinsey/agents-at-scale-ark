@@ -27,7 +27,7 @@ class TestArkModels:
         if not secrets.is_visible(secrets.ADD_SECRET_BUTTON):
             pytest.skip("Add Secret button not available")
 
-        secret_result = secrets.create_secret_with_verification("model-secret", "DUMMY_API_KEY")
+        secret_result = secrets.create_secret_with_verification("model-secret")
         assert secret_result["popup_visible"], "Secret creation popup should be visible"
         assert secret_result["in_table"], "Secret should be visible in table"
         model_test_resources["secrets"]["model"] = secret_result['name']
