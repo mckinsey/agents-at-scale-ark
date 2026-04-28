@@ -655,7 +655,6 @@ jobs:
   e2e-ui-tests:
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
-    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
     steps:
       - uses: actions/checkout@v6
 
@@ -757,7 +756,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
+          python-version: '3.14'
           cache: 'pip'
           cache-dependency-path: tests/pytest/ui-tests/requirements.txt
 
@@ -774,25 +773,6 @@ jobs:
           pip install -r requirements.txt
           playwright install chromium
           playwright install-deps chromium
-
-      - name: Create test environment
-        env:
-          CICD_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
-          CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL }}
-          CICD_ANTHROPIC_API_KEY: ${{ secrets.CICD_ANTHROPIC_API_KEY }}
-          CICD_ANTHROPIC_BASE_URL: ${{ secrets.CICD_ANTHROPIC_BASE_URL }}
-          CICD_AZURE_API_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
-          CICD_AZURE_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
-        run: |
-          cd tests/pytest/ui-tests
-          cat > .env << EOF
-          CICD_OPENAI_API_KEY=${CICD_OPENAI_API_KEY}
-          CICD_OPENAI_BASE_URL=${CICD_OPENAI_BASE_URL}
-          CICD_ANTHROPIC_API_KEY=${CICD_ANTHROPIC_API_KEY}
-          CICD_ANTHROPIC_BASE_URL=${CICD_ANTHROPIC_BASE_URL}
-          CICD_AZURE_API_KEY=${CICD_AZURE_API_KEY}
-          CICD_AZURE_BASE_URL=${CICD_AZURE_BASE_URL}
-          EOF
 
       - name: Start port-forwarding
         run: |
