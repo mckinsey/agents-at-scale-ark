@@ -153,6 +153,18 @@ func (ot *OperationTracker) Complete(ctx context.Context, operation, message str
 	ot.emitter.EmitStructured(ctx, query, corev1.EventTypeNormal, operation+"Complete", messageWithTimestamp, operationData)
 }
 
+func (ot *OperationTracker) Cancel(ctx context.Context, operation, message string, data map[string]string) {
+	operationData, query := ot.buildOperationData(ctx, data)
+	if query == nil {
+		return
+	}
+
+	ot.addDuration(ctx, operationData)
+	operationData, messageWithTimestamp := ot.addTimestamp(operationData, message)
+
+	ot.emitter.EmitStructured(ctx, query, corev1.EventTypeNormal, operation+"Canceled", messageWithTimestamp, operationData)
+}
+
 func (ot *OperationTracker) Fail(ctx context.Context, operation, message string, err error, data map[string]string) {
 	if data == nil {
 		data = make(map[string]string)

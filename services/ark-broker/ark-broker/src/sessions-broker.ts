@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { EventEmitter } from 'node:events';
 import type { QueryPhase, SessionEventData } from './types.js';
-import { QueryPhases, EventReasons, ERROR_REASON_SUFFIX } from './types.js';
+import { QueryPhases, EventReasons, ERROR_REASON_SUFFIX, CANCELED_REASON_SUFFIX } from './types.js';
 
 export interface QueryEntry {
   /** Query resource name from the Ark CRD */
@@ -94,6 +94,9 @@ export class SessionsBroker {
     if (reason === EventReasons.QueryExecutionComplete) {
       return errorMsg ? QueryPhases.Error : QueryPhases.Done;
     }
+    if (reason.includes(CANCELED_REASON_SUFFIX)) {
+      return QueryPhases.Canceled;
+    }
     if (reason.includes(ERROR_REASON_SUFFIX)) {
       return QueryPhases.Error;
     }
@@ -113,7 +116,10 @@ export class SessionsBroker {
       existing.phase = QueryPhases.Error;
       existing.error = errorMsg;
       existing.completedAt = now;
-    } else if (phase === QueryPhases.Done && existing.phase !== QueryPhases.Error) {
+    } else if (phase === QueryPhases.Canceled && existing.phase !== QueryPhases.Error) {
+      existing.phase = QueryPhases.Canceled;
+      existing.completedAt = now;
+    } else if (phase === QueryPhases.Done && existing.phase !== QueryPhases.Error && existing.phase !== QueryPhases.Canceled) {
       existing.phase = QueryPhases.Done;
       existing.completedAt = now;
     }
