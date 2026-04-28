@@ -59,3 +59,33 @@ subjects:
   - kind: ServiceAccount
     name: {{ .Values.serviceAccountName }}
     namespace: {{ .Release.Namespace }}
+---
+# ConfigMaps + Secrets read access is required cluster-wide because the apiserver
+# resolves Query/Agent/Model parameter references via valueFrom.configMapKeyRef and
+# valueFrom.secretKeyRef at admission time. Without this, parameter resolution
+# blocks on a controller-runtime informer that can't sync, and POSTs time out.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ark-apiserver-parameter-resolution
+  labels:
+    {{- include "ark-apiserver.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ark-apiserver-parameter-resolution
+  labels:
+    {{- include "ark-apiserver.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ark-apiserver-parameter-resolution
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.serviceAccountName }}
+    namespace: {{ .Release.Namespace }}
