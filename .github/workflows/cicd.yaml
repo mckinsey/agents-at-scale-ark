@@ -774,6 +774,19 @@ jobs:
           playwright install chromium
           playwright install-deps chromium
 
+      - name: Install mock-llm
+        run: |
+          helm upgrade --install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.28 \
+            --namespace default \
+            --values tests/pytest/ui-tests/mock-llm-values.yaml \
+            --wait --timeout=120s
+
+      - name: Create mock-llm model
+        run: |
+          kubectl apply -f tests/pytest/ui-tests/mock-llm-model.yaml
+          kubectl wait --for=condition=ModelAvailable model/test-model-mock -n default --timeout=60s
+
       - name: Start port-forwarding
         run: |
           kubectl port-forward svc/ark-dashboard 3274:3000 &
