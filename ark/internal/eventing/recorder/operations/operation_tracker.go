@@ -2,6 +2,7 @@ package operations
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"time"
 
@@ -166,6 +167,10 @@ func (ot *OperationTracker) Cancel(ctx context.Context, operation, message strin
 }
 
 func (ot *OperationTracker) Fail(ctx context.Context, operation, message string, err error, data map[string]string) {
+	if stderrors.Is(err, context.Canceled) {
+		ot.Cancel(ctx, operation, message, data)
+		return
+	}
 	if data == nil {
 		data = make(map[string]string)
 	}
