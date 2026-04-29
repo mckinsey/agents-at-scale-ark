@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from .broker import BrokerClient
+    from .query_status_updater import QueryStatusUpdater
 
 
 logger = logging.getLogger(__name__)
@@ -76,17 +77,22 @@ class BaseExecutor(ABC):
     """Abstract base class for execution engines."""
 
     def __init__(self, engine_name: str):
-        """Initialize the executor with a name."""
         self.engine_name = engine_name
         self._broker_client: Optional["BrokerClient"] = None
+        self._query_status_updater: Optional["QueryStatusUpdater"] = None
         self._streamed: bool = False
         logger.info(f"{engine_name} executor initialized")
 
     async def stream_chunk(self, chunk: str) -> None:
-        """Send a streaming chunk to the broker. No-op if broker not configured."""
         if self._broker_client:
             self._streamed = True
             await self._broker_client.send_chunk(chunk)
+
+    async def update_query_phase(
+        self, phase: str, reason: str, message: str = ""
+    ) -> None:
+        if self._query_status_updater:
+            await self._query_status_updater.update_query_phase(phase, reason, message)
 
     @abstractmethod
     async def execute_agent(self, request: ExecutionEngineRequest) -> list[Message]:

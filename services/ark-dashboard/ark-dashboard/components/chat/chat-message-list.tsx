@@ -21,6 +21,8 @@ interface ChatMessageListProps {
   graphEdges?: GraphEdge[];
   debugMode: boolean;
   isProcessing: boolean;
+  processingPhase?: string;
+  conditionMessage?: string;
   error: string | null;
   viewMode?: 'text' | 'markdown';
   messagesEndRef: RefObject<HTMLDivElement | null>;
@@ -129,6 +131,8 @@ export function ChatMessageList({
   graphEdges,
   debugMode,
   isProcessing,
+  processingPhase,
+  conditionMessage,
   error,
   viewMode = 'markdown',
   messagesEndRef,
@@ -394,14 +398,21 @@ export function ChatMessageList({
       {isProcessing && (
         <div className="flex justify-start">
           <div className="bg-muted max-w-[80%] rounded-lg px-3 py-2">
-            <div className="flex space-x-1">
-              <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400"></div>
-              <div
-                className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
-                style={{ animationDelay: '0.1s' }}></div>
-              <div
-                className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
-                style={{ animationDelay: '0.2s' }}></div>
+            <div className="flex items-center gap-2">
+              <div className="flex space-x-1">
+                <div className={`h-2 w-2 animate-bounce rounded-full ${processingPhase === 'provisioning' ? 'bg-amber-400' : 'bg-gray-400'}`}></div>
+                <div
+                  className={`h-2 w-2 animate-bounce rounded-full ${processingPhase === 'provisioning' ? 'bg-amber-400' : 'bg-gray-400'}`}
+                  style={{ animationDelay: '0.1s' }}></div>
+                <div
+                  className={`h-2 w-2 animate-bounce rounded-full ${processingPhase === 'provisioning' ? 'bg-amber-400' : 'bg-gray-400'}`}
+                  style={{ animationDelay: '0.2s' }}></div>
+              </div>
+              {processingPhase === 'provisioning' && (
+                <span className="text-xs text-amber-600 dark:text-amber-400">
+                  {conditionMessage || 'Provisioning...'}
+                </span>
+              )}
             </div>
           </div>
         </div>

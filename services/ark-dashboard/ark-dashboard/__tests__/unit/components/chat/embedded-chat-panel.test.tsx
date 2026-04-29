@@ -7,10 +7,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { chatHistoryAtom } from '@/atoms/chat-history';
 import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
+import { chatService } from '@/lib/services/chat';
 
 vi.mock('@/lib/services/chat', () => ({
   chatService: {
     streamChatResponse: vi.fn(),
+    startStreamChatResponse: vi.fn(),
+    streamQueryStatus: vi.fn().mockResolvedValue(() => {}),
     submitChatQuery: vi.fn(),
     getQueryResult: vi.fn(),
     getQuery: vi.fn().mockResolvedValue({ status: { conversationId: '' } }),
@@ -78,6 +81,14 @@ beforeEach(() => {
       json: () => Promise.resolve({ items: [], total: 0, hasMore: false }),
     } as Response),
   );
+
+  vi.mocked(chatService.startStreamChatResponse).mockImplementation(
+    async (...args: unknown[]) => ({
+      queryName: 'test-query',
+      chunks: (chatService.streamChatResponse as (...a: unknown[]) => AsyncGenerator<Record<string, unknown>>)(...args),
+    }),
+  );
+  vi.mocked(chatService.streamQueryStatus).mockResolvedValue(() => {});
 });
 
 function renderEmbeddedChatPanel(props: {

@@ -70,8 +70,8 @@ describe('parsePageSize', () => {
     expect(parsePageSize('100')).toBe(100);
   });
 
-  it('has DEFAULT_PAGE_SIZE = 25 and MAX_PAGE_SIZE = 100', () => {
-    expect(DEFAULT_PAGE_SIZE).toBe(25);
+  it('has DEFAULT_PAGE_SIZE = 10 and MAX_PAGE_SIZE = 100', () => {
+    expect(DEFAULT_PAGE_SIZE).toBe(10);
     expect(MAX_PAGE_SIZE).toBe(100);
   });
 });

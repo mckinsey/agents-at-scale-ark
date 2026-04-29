@@ -1,0 +1,44 @@
+name: OpenSpec Flow — Raise Comment
+description: >
+  Posts a starting status comment on an issue or PR. The comment body starts
+  with AGENT_COMMENT_MARKER, includes the message text, and ends with ---
+  followed by REENGAGE_FOOTER. Both env vars must be set in the workflow-level
+  env block.
+
+inputs:
+  gh-token:
+    description: GitHub token with issues write permission
+    required: true
+  repo:
+    description: Repository in owner/name format
+    required: true
+  issue-number:
+    description: Issue or PR number to comment on
+    required: true
+  run-url:
+    description: URL of the current Actions run (for the "View run" link)
+    required: true
+  message:
+    description: Message body line to include in the comment (e.g. "OpenSpec Flow exploring this issue. [View run]($run-url)")
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Post starting comment
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.gh-token }}
+        REPO: ${{ inputs.repo }}
+        ISSUE_NUMBER: ${{ inputs.issue-number }}
+        RUN_URL: ${{ inputs.run-url }}
+        MESSAGE: ${{ inputs.message }}
+      run: |
+        {
+          echo "$AGENT_COMMENT_MARKER"
+          echo "> $MESSAGE"
+          echo ""
+          echo "---"
+          echo "$REENGAGE_FOOTER"
+        } > /tmp/comment.md
+        gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body-file /tmp/comment.md
