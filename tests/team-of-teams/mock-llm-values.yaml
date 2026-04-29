@@ -1,0 +1,46 @@
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "gpt-4.1-mini",
+              "object": "model",
+              "owned_by": "openai"
+            }
+          ]
+        }
+
+  - path: "/v1/chat/completions"
+    response:
+      status: 500
+      content: '"Unrecognised agent"'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'research specialist')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"researcher-output"},"finish_reason":"stop"}]}'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'data analysis expert')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"analyst-output"},"finish_reason":"stop"}]}'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'synthesis specialist')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"synthesizer-output"},"finish_reason":"stop"}]}'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'coordination specialist')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"coordinator-output"},"finish_reason":"stop"}]}'

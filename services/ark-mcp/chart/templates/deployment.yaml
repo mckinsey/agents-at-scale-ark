@@ -37,6 +37,11 @@ spec:
           {{- end }}
           ports:
             - containerPort: {{ .Values.service.targetPort }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.service.targetPort }}
+            initialDelaySeconds: 2
+            periodSeconds: 2
           env:
             # Always set default namespace to the deployment namespace
             - name: ARK_MCP_DEFAULT_NAMESPACE

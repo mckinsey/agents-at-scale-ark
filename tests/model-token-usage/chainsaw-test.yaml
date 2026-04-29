@@ -5,18 +5,15 @@ metadata:
 spec:
   description: Test query token usage tracking for direct model targets
   steps:
-  - name: setup-resources
+  - name: setup-mock-llm
     try:
     - script:
-        skipLogOutput: true
+        timeout: 180s
         content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
-    - apply:
-        file: manifests/*.yaml
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
 
   - name: wait-for-model-ready
     try:
@@ -24,14 +21,16 @@ spec:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Model
         name: model-token-test
-        timeout: 3m
+        timeout: 90s
         for:
           condition:
             name: ModelAvailable
-            value: 'True' 
+            value: 'True'
 
-  - name: wait-for-query-completion
+  - name: run-query
     try:
+    - apply:
+        file: manifests/a03-query.yaml
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
@@ -42,7 +41,7 @@ spec:
             name: Completed
             value: 'True'
 
-  - name: validate-model-response
+  - name: validate-response
     try:
     - assert:
         resource:
@@ -55,9 +54,6 @@ spec:
             (response.target.type): model
             (response.target.name): model-token-test
             (length(response.content) > `100`): true
-
-  - name: validate-model-token-usage
-    try:
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -65,10 +61,20 @@ spec:
           metadata:
             name: model-token-query
           status:
-            (tokenUsage.completionTokens > `50`): true
-            (tokenUsage.promptTokens > `50`): true
-            (tokenUsage.totalTokens > `150`): true
-            (tokenUsage.promptTokens + tokenUsage.completionTokens == to_number(tokenUsage.totalTokens)): true
+            (tokenUsage.promptTokens): 100
+            (tokenUsage.completionTokens): 200
+            (tokenUsage.totalTokens): 300
     catch:
-      - events: {}
+      - events: { }
+      - describe:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          name: model-token-query
 
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
