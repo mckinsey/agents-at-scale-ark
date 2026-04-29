@@ -6,10 +6,16 @@ import type { Conversation } from '@/lib/services/conversations';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { ChatMessage } from '@/components/chat/chat-message';
-import { Bot } from 'lucide-react';
+import { Bot, Users, Hammer } from 'lucide-react';
 
 const FALLBACK_PARTICIPANT_NAME = 'Participant';
 const FALLBACK_PARTICIPANT_TYPE = 'agent';
+
+function getParticipantIcon(participantType?: 'agent' | 'team' | 'tool') {
+  if (participantType === 'team') return <Users className="size-5" />;
+  if (participantType === 'tool') return <Hammer className="size-5" />;
+  return <Bot className="size-5" />;
+}
 
 interface Props {
   readonly conversationId: string;
@@ -162,7 +168,7 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
     <div className="flex flex-1 flex-col">
       <div className="border-b p-4">
         <div className="flex items-center gap-2">
-          <Bot className="size-5" />
+          {getParticipantIcon(participantType)}
           <span className="font-semibold">{participantName}</span>
           <Badge variant="outline" className="capitalize">{participantType}</Badge>
         </div>
