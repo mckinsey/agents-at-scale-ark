@@ -78,6 +78,7 @@ class TestArkAgents:
         chat_input = chat_window.locator("input")
         chat_input.fill(message)
         chat_input.press("Enter")
+        # Use the input placeholder text to determine when the agent response is done processing
         expect(chat_input).to_have_attribute("placeholder", "Processing...", timeout=5000)
         expect(chat_input).not_to_have_attribute("placeholder", "Processing...", timeout=90000)
         assistant_message = chat_window.locator("div.bg-muted").last
