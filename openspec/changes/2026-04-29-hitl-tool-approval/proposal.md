@@ -34,7 +34,7 @@ Industry-standard agentic systems (Claude Code, LangGraph) have established patt
 
 ## Impact
 
-- **CRD**: `AgentTool` and `ToolAnnotations` gain approval fields; Query CRD gains new phase enum; new `ToolApprovalRequest` CRD. Requires `make manifests` and Helm chart sync.
+- **CRD**: `AgentTool` gains `approval` field; Query CRD gains new phase enum; new `ToolApprovalRequest` CRD. Requires `make manifests` and Helm chart sync.
 - **Go operator**: New types in `api/v1alpha1/`, approval policy evaluation in `executors/completions/`, new ToolApprovalRequest controller
 - **API (Python)**: New approval endpoints, updated Query/Agent models
 - **Dashboard (TypeScript)**: Approval notification UI, pending approvals list, approve/reject actions

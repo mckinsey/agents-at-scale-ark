@@ -6,7 +6,7 @@
   - `OnTimeout string` (enum: reject, proceed) with default "reject"
   - `Approvers []ApproverRef` (role or user references)
   - `ReasonRequired bool`
-- [ ] 1.2 Add `ApproverRef` struct with `Role string` and `User string` fields
+- [ ] 1.2 Add `ApproverRef` struct with `Role string`, `User string`, and `Group string` fields
 - [ ] 1.3 Add `Approval *ToolApprovalConfig` field to `AgentTool` struct in `ark/api/v1alpha1/agent_types.go`
 - [ ] 1.4 Add `approval-required` to Query status phase enum in `ark/api/v1alpha1/query_types.go`
 - [ ] 1.5 Create `ark/api/v1alpha1/toolapprovalrequest_types.go` with `ToolApprovalRequest` CRD:
@@ -33,6 +33,7 @@
   - Validate phase transitions (pending → approved/rejected/expired only)
   - Validate required fields
   - Validate observedGeneration for optimistic locking
+  - Validate `executionContext` size does not exceed threshold (prevent etcd 1MB limit issues)
 - [ ] 2.3 Add admission tests for approval config validation to `ark/internal/webhook/v1/agent_webhook_test.go`
 - [ ] 2.4 Add admission tests for ToolApprovalRequest validation
 
@@ -134,6 +135,10 @@
 - [ ] 9.5 Implement A2A approval callback handler in controller:
   - POST to `callbackUrl` with decision
   - Handle callback failures with retry
+  - **Security:** Validate callback URLs against SSRF attacks:
+    - Reject non-HTTPS URLs
+    - Reject URLs pointing to cluster-internal addresses (10.x, 192.168.x, kubernetes.default)
+    - Consider allowlist of registered executor endpoints
 - [ ] 9.6 Document A2A approval protocol for custom executor developers
 - [ ] 9.7 Add chainsaw e2e test for A2A approval flow
 
@@ -156,6 +161,7 @@
 - [ ] 11.6 Create migration guide for adding approval to existing agents
 - [ ] 11.7 Document best practices: which tools should require approval in production vs development
 - [ ] 11.8 Add examples of approval config for common tool types (database, email, deployment)
+- [ ] 11.9 Document `onTimeout: proceed` behavior explicitly — it auto-approves the tool, which may surprise users in production; add warning in docs and samples
 
 ## 12. Testing
 

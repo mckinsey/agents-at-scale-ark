@@ -44,11 +44,12 @@ spec:
       approval:
         required: true
         timeout: 5m
-        onTimeout: reject  # or "proceed"
-        approvers:         # NEW: authorization control
-          - role: admin
-          - user: ops@example.com
-        reasonRequired: false  # NEW: require reason for audit
+        onTimeout: reject  # or "proceed" (WARNING: proceed auto-approves on timeout)
+        approvers:         # Authorization control - at least one must match
+          - role: admin              # User bound to ClusterRole/Role named "admin"
+          - user: ops@example.com    # Specific user identity
+          - group: platform-admins   # User in this group
+        reasonRequired: false  # Require reason for rejections (audit compliance)
 ```
 
 **Alternative considered:** Add `requiresApproval` to `ToolAnnotations`. Rejected because it would apply globally to all agents using that tool.
@@ -115,6 +116,7 @@ spec:
   approvers:
     - role: admin
     - user: ops@example.com
+    - group: platform-admins
   reasonRequired: false
   # Execution context for resume - CRITICAL for stateless executor
   executionContext:
@@ -279,11 +281,14 @@ Authorization: Bearer <token>
 ```
 
 **Authorization checks (in order):**
-1. User must have RBAC permission for ToolApprovalRequest update
+1. User must have Kubernetes RBAC permission for ToolApprovalRequest update in the namespace
 2. If `spec.approvers` is set, user must match at least one:
-   - `role: admin` → user has admin role
-   - `user: ops@example.com` → user identity matches
+   - `role: <name>` → user is bound to a ClusterRole/Role with that name (checked via SubjectAccessReview)
+   - `user: ops@example.com` → user identity from authentication context matches
+   - `group: platform-admins` → user belongs to the specified group
 3. If `spec.reasonRequired: true`, `reason` field must be non-empty for rejections
+
+**Role resolution:** Roles are resolved using Kubernetes RBAC. The API server extracts the authenticated user from the Bearer token (via OIDC, service account, or configured authenticator), then performs a SubjectAccessReview to check if the user has the specified role binding. This integrates with existing Kubernetes identity providers (OIDC, LDAP via Dex, etc.).
 
 Returns HTTP 403 Forbidden if authorization fails.
 
@@ -360,7 +365,11 @@ func (a *Agent) requiresApproval(toolName string) *ToolApprovalConfig {
 
 - **Executor state complexity**: The completions executor is currently stateless. Pause/resume requires persisting conversation state. **Mitigation:** Store full execution context in ToolApprovalRequest CRD (`spec.executionContext`).
 
+- **Conversation history size limit**: The `executionContext.conversationHistory` is stored as base64 in the CRD. etcd has a ~1MB per-object limit. Long-running agents with many tool calls and large context windows could exceed this. **Mitigation:** Implement conversation truncation policy (keep last N messages + system prompt); for very long conversations, store reference to external state (e.g., ConfigMap or dedicated StateStore CRD) instead of inline data. Add validation webhook to reject ToolApprovalRequest if `executionContext` exceeds size threshold.
+
 - **Timeout handling**: Race conditions between timeout and approval. **Mitigation:** Optimistic locking with generation checks; precedence rules favor submitted approvals.
+
+- **A2A callback URL SSRF risk**: The `callbackUrl` in A2A approval requests is provided by external executors. A compromised or malicious executor could provide a callback URL pointing to internal services (SSRF attack). **Mitigation:** Validate callback URLs against allowlist of known executor endpoints; restrict to HTTPS only; reject URLs pointing to cluster-internal addresses (10.x, 192.168.x, kubernetes.default, etc.); consider requiring callback URLs to match the executor's registered address.
 
 - **External executor adoption**: Custom executors must implement approval handling. **Mitigation:** Provide clear A2A callback protocol and SDK hooks in `BaseExecutor`.
 

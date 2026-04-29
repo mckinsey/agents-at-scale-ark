@@ -226,6 +226,12 @@ The system SHALL enforce authorization checks when approval decisions are submit
 - **AND** approval is submitted by ops@example.com
 - **THEN** the approval SHALL be accepted
 
+#### Scenario: Approval by authorized group succeeds
+
+- **WHEN** a ToolApprovalRequest has `spec.approvers: [{group: platform-admins}]`
+- **AND** approval is submitted by a user in the platform-admins group
+- **THEN** the approval SHALL be accepted
+
 #### Scenario: Approval by unauthorized user rejected
 
 - **WHEN** a ToolApprovalRequest has `spec.approvers: [{role: admin}]`
@@ -326,6 +332,24 @@ The A2A protocol SHALL support `tool-approval-required` as a task state for exte
 - **AND** approval is submitted
 - **THEN** the controller SHALL POST the approval decision to the executor's `callbackUrl`
 - **AND** the A2ATask SHALL resume execution
+
+#### Scenario: A2A callback URL validated for SSRF
+
+- **WHEN** an external executor provides a `callbackUrl`
+- **AND** the URL points to a cluster-internal address (10.x, 192.168.x, kubernetes.default)
+- **THEN** the controller SHALL reject the callback URL
+- **AND** the A2ATask SHALL fail with a security error
+
+### Requirement: Execution context size is validated
+
+The system SHALL validate that execution context does not exceed safe storage limits.
+
+#### Scenario: Large execution context rejected
+
+- **WHEN** a ToolApprovalRequest would be created with `executionContext` exceeding size threshold
+- **THEN** the system SHALL implement conversation truncation
+- **OR** the system SHALL store context reference to external storage
+- **AND** the ToolApprovalRequest SHALL not exceed etcd's per-object size limit
 
 ## MODIFIED Requirements
 
