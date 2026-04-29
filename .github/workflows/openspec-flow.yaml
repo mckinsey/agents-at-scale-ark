@@ -93,7 +93,7 @@ env:
   # fresh context.
   SUBAGENT_NAME: ${{ vars.OPENSPEC_FLOW_SUBAGENT_NAME }}
   CLAUDE_CODE_ACTION_REF: "v1.0.79"
-  OPENSPEC_CLI_VERSION: "latest"
+  OPENSPEC_CLI_VERSION: "1.3.1"
   LABEL_START: "openspec:start"
   LABEL_EXPLORING: "openspec:exploring"
   LABEL_SPEC_READY: "openspec:spec-ready"
