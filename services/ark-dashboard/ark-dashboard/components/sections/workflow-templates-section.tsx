@@ -1,10 +1,14 @@
 'use client';
 
-import { ArrowUpRightIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { ArrowUpRightIcon, Plus } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { type Flow, FlowRow } from '@/components/rows/flow-row';
+import {
+  SortableSectionedList,
+  type SortableSectionedListHandle,
+} from '@/components/sortable-sectioned-list';
 import { Button } from '@/components/ui/button';
 import {
   Empty,
@@ -15,7 +19,7 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
-import { useDelayedLoading } from '@/lib/hooks';
+import { useDelayedLoading, useWorkflowsLayout } from '@/lib/hooks';
 import {
   type WorkflowTemplate,
   workflowTemplatesService,
@@ -35,13 +39,17 @@ function mapWorkflowTemplateToFlow(template: WorkflowTemplate): Flow {
   };
 }
 
+const getTemplateKey = (template: WorkflowTemplate) => template.metadata.name;
+
 export function WorkflowTemplatesSection() {
-  const { readOnlyMode } = useNamespace();
+  const { namespace, readOnlyMode } = useNamespace();
   const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const showLoading = useDelayedLoading(loading);
+  const { layout, setLayout } = useWorkflowsLayout(namespace);
+  const listRef = useRef<SortableSectionedListHandle>(null);
 
-  const fetchFlows = async () => {
+  const fetchFlows = useCallback(async () => {
     try {
       setLoading(true);
       const fetchedTemplates = await workflowTemplatesService.list();
@@ -52,49 +60,59 @@ export function WorkflowTemplatesSection() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchFlows();
-  }, []);
+  }, [fetchFlows]);
 
-  const handleRunWorkflow = async (
-    flowId: string,
-    parameters?: Record<string, string>,
-    workflowName?: string,
-  ) => {
-    try {
-      const workflow = await workflowTemplatesService.run(
-        flowId,
-        parameters,
-        workflowName,
-      );
-      showWorkflowStartedToast(workflow.metadata.name);
-    } catch (error) {
-      console.error('Failed to start workflow:', error);
-      toast.error('Failed to start workflow', {
-        description:
-          error instanceof Error ? error.message : 'An unknown error occurred',
-      });
-      throw error;
-    }
-  };
+  const handleRunWorkflow = useCallback(
+    async (
+      flowId: string,
+      parameters?: Record<string, string>,
+      workflowName?: string,
+    ) => {
+      try {
+        const workflow = await workflowTemplatesService.run(
+          flowId,
+          parameters,
+          workflowName,
+        );
+        showWorkflowStartedToast(workflow.metadata.name);
+      } catch (error) {
+        console.error('Failed to start workflow:', error);
+        toast.error('Failed to start workflow', {
+          description:
+            error instanceof Error
+              ? error.message
+              : 'An unknown error occurred',
+        });
+        throw error;
+      }
+    },
+    [],
+  );
 
-  const handleDeleteWorkflow = async (flowId: string) => {
-    try {
-      await workflowTemplatesService.delete(flowId);
-      toast.success('Workflow template deleted', {
-        description: `Deleted workflow template: ${flowId}`,
-      });
-      await fetchFlows();
-    } catch (error) {
-      console.error('Failed to delete workflow template:', error);
-      toast.error('Failed to delete workflow template', {
-        description:
-          error instanceof Error ? error.message : 'An unknown error occurred',
-      });
-    }
-  };
+  const handleDeleteWorkflow = useCallback(
+    async (flowId: string) => {
+      try {
+        await workflowTemplatesService.delete(flowId);
+        toast.success('Workflow template deleted', {
+          description: `Deleted workflow template: ${flowId}`,
+        });
+        await fetchFlows();
+      } catch (error) {
+        console.error('Failed to delete workflow template:', error);
+        toast.error('Failed to delete workflow template', {
+          description:
+            error instanceof Error
+              ? error.message
+              : 'An unknown error occurred',
+        });
+      }
+    },
+    [fetchFlows],
+  );
 
   if (showLoading) {
     return (
@@ -138,21 +156,33 @@ export function WorkflowTemplatesSection() {
   return (
     <div className="flex h-full flex-col">
       <main className="mt-4 flex-1 overflow-auto">
-        <div className="flex flex-col gap-3">
-          {templates.map(template => {
-            const flow = mapWorkflowTemplateToFlow(template);
-            return (
-              <FlowRow
-                key={flow.id}
-                flow={flow}
-                parameters={template.spec?.arguments?.parameters}
-                readOnly={readOnlyMode}
-                onRun={handleRunWorkflow}
-                onDelete={handleDeleteWorkflow}
-              />
-            );
-          })}
+        <div className="mb-4 flex">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => listRef.current?.openCreateGroup()}>
+            <Plus className="mr-1 h-4 w-4" />
+            Create Group
+          </Button>
         </div>
+        <SortableSectionedList
+          ref={listRef}
+          items={templates}
+          getKey={getTemplateKey}
+          layout={layout}
+          setLayout={setLayout}
+          itemNoun={{ singular: 'workflow', plural: 'workflows' }}
+          renderItem={(template, { dragHandle }) => (
+            <FlowRow
+              flow={mapWorkflowTemplateToFlow(template)}
+              parameters={template.spec?.arguments?.parameters}
+              readOnly={readOnlyMode}
+              onRun={handleRunWorkflow}
+              onDelete={handleDeleteWorkflow}
+              leading={dragHandle}
+            />
+          )}
+        />
       </main>
     </div>
   );

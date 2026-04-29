@@ -7,4 +7,4 @@ spec:
   target:
     type: agent
     name: test-math
-  timeout: "1s"
+  timeout: "1ms"

@@ -8,4 +8,4 @@ spec:
     You are a research specialist. Gather relevant information and provide factual insights.
     Keep responses brief and focused. Do not ask questions.
   modelRef:
-    name: test-model
+    name: test-model-mock
