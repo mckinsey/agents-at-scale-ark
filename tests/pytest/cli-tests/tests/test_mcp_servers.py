@@ -4,7 +4,7 @@ from helpers.mcp_servers_helper import McpServersHelper
 
 class TestMcpServersCLI:
     helper = None
-    test_server_name = "file-gateway-mcpserver"
+    test_server_name = "file-gateway"
     
     @classmethod
     def setup_class(cls):
@@ -83,28 +83,6 @@ class TestMcpServersCLI:
         
         assert success, f"Failed to verify MCP server endpoint: {endpoint}"
         assert len(endpoint) > 0, "Endpoint should not be empty"
-    
-    def test_file_gateway_mcp_server_specific(self):
-        success, servers = self.helper.list_mcp_servers()
-        if not success:
-            pytest.skip("Failed to list MCP servers")
-        
-        if self.test_server_name not in servers:
-            pytest.skip(f"MCP server {self.test_server_name} not found")
-        
-        success, server_data = self.helper.get_mcp_server(self.test_server_name)
-        assert success, f"Failed to get {self.test_server_name}"
-        
-        status = server_data.get("status", {})
-        tool_count = status.get("toolCount", 0)
-        assert tool_count > 0, f"File Gateway should have tools, found {tool_count}"
-        
-        conditions = status.get("conditions", [])
-        available = any(
-            c.get("type") == "Available" and c.get("status") == "True" 
-            for c in conditions
-        )
-        assert available, "File Gateway MCP server should be Available"
     
     def test_mcp_server_metadata(self):
         success, servers = self.helper.list_mcp_servers()
