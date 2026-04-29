@@ -40,60 +40,75 @@ runs:
         : "${REPO:=$GITHUB_REPOSITORY}"
         export REPO
         python3 << 'PYEOF'
-        import json, os, re, subprocess, sys
-        repo = os.environ['REPO']
-        issue = os.environ['ISSUE_NUMBER']
-        prefix = os.environ['BRANCH_PREFIX']
-        if prefix not in ('spec', 'impl'):
-            print(f'::error::branch_prefix must be spec or impl, got {prefix!r}')
-            sys.exit(1)
-        session_log = os.path.join(os.environ.get('RUNNER_TEMP', '/tmp'), 'claude-execution-output.json')
-        open_m = '<!-- openspec-flow-usage-table -->'
-        close_m = '<!-- /openspec-flow-usage-table -->'
-        rows, step = [], 1
-        if os.path.exists(session_log):
-            with open(session_log) as f:
-                for line in f:
-                    try:
-                        obj = json.loads(line.strip())
-                    except Exception:
-                        continue
-                    for item in obj.get('message', {}).get('content', []):
-                        if not isinstance(item, dict):
+        import json, os, re, subprocess, sys, traceback
+        try:
+            repo = os.environ['REPO']
+            issue = os.environ['ISSUE_NUMBER']
+            prefix = os.environ['BRANCH_PREFIX']
+            if prefix not in ('spec', 'impl'):
+                print(f'::warning::branch_prefix must be spec or impl, got {prefix!r} — skipping usage table')
+                sys.exit(0)
+            session_log = os.path.join(os.environ.get('RUNNER_TEMP', '/tmp'), 'claude-execution-output.json')
+            open_m = '<!-- openspec-flow-usage-table -->'
+            close_m = '<!-- /openspec-flow-usage-table -->'
+            rows, step = [], 1
+            if os.path.exists(session_log):
+                with open(session_log) as f:
+                    for line in f:
+                        try:
+                            obj = json.loads(line.strip())
+                        except Exception:
                             continue
-                        n, inp = item.get('name', ''), item.get('input') or {}
-                        if n == 'Skill':
-                            skill = inp.get('skill', '?')
-                            detail = (inp.get('args') or '').strip() or 'Invoked'
-                            rows.append(f'| {step} | {skill} | {detail} |')
-                            step += 1
-                        elif n == 'Task':
-                            agent = inp.get('subagent_type') or '(agent)'
-                            desc = (inp.get('description') or '')[:80]
-                            rows.append(f'| {step} | {agent} | {desc} |')
-                            step += 1
-        else:
-            print(f'::warning::No session log at {session_log}')
-        table = '\n'.join(
-            ['| Step | Agent/Skill | Detail |', '|------|-------------|--------|']
-            + (rows or ['| — | — | No sub-agent or skill invocations found |']))
-        block = f'{open_m}\n{table}\n{close_m}'
-        pr_out = subprocess.check_output(
-            ['gh', 'pr', 'list', '--repo', repo, '--state', 'open',
-             '--search', f'head:{prefix}/{issue}-', '--json', 'number',
-             '--jq', '.[0].number // empty'], text=True).strip()
-        if not pr_out:
-            print(f'::warning::No open {prefix} PR for issue #{issue} — skipping usage table')
+                        if not isinstance(obj, dict):
+                            continue
+                        msg = obj.get('message')
+                        if not isinstance(msg, dict):
+                            continue
+                        content = msg.get('content')
+                        if not isinstance(content, list):
+                            continue
+                        for item in content:
+                            if not isinstance(item, dict):
+                                continue
+                            n, inp = item.get('name', ''), item.get('input') or {}
+                            if not isinstance(inp, dict):
+                                inp = {}
+                            if n == 'Skill':
+                                skill = inp.get('skill', '?')
+                                detail = (inp.get('args') or '').strip() or 'Invoked'
+                                rows.append(f'| {step} | {skill} | {detail} |')
+                                step += 1
+                            elif n == 'Task':
+                                agent = inp.get('subagent_type') or '(agent)'
+                                desc = (inp.get('description') or '')[:80]
+                                rows.append(f'| {step} | {agent} | {desc} |')
+                                step += 1
+            else:
+                print(f'::warning::No session log at {session_log}')
+            table = '\n'.join(
+                ['| Step | Agent/Skill | Detail |', '|------|-------------|--------|']
+                + (rows or ['| — | — | No sub-agent or skill invocations found |']))
+            block = f'{open_m}\n{table}\n{close_m}'
+            pr_out = subprocess.check_output(
+                ['gh', 'pr', 'list', '--repo', repo, '--state', 'open',
+                 '--search', f'head:{prefix}/{issue}-', '--json', 'number',
+                 '--jq', '.[0].number // empty'], text=True).strip()
+            if not pr_out:
+                print(f'::warning::No open {prefix} PR for issue #{issue} — skipping usage table')
+                sys.exit(0)
+            body = subprocess.check_output(
+                ['gh', 'pr', 'view', pr_out, '--repo', repo, '--json', 'body', '--jq', '.body'],
+                text=True)
+            if open_m in body:
+                new_body = re.sub(re.escape(open_m) + r'.*?' + re.escape(close_m), block, body, flags=re.DOTALL)
+            else:
+                new_body = body.replace('\n---\n', f'\n{block}\n\n---\n', 1)
+                if new_body == body:
+                    new_body = body.rstrip() + f'\n\n{block}\n'
+            subprocess.run(['gh', 'pr', 'edit', pr_out, '--repo', repo, '--body', new_body], check=True)
+            print(f'Injected usage table into {prefix} PR #{pr_out}')
+        except Exception as e:
+            print(f'::warning::usage-table injection failed ({type(e).__name__}: {e}) — continuing without table')
+            traceback.print_exc()
             sys.exit(0)
-        body = subprocess.check_output(
-            ['gh', 'pr', 'view', pr_out, '--repo', repo, '--json', 'body', '--jq', '.body'],
-            text=True)
-        if open_m in body:
-            new_body = re.sub(re.escape(open_m) + r'.*?' + re.escape(close_m), block, body, flags=re.DOTALL)
-        else:
-            new_body = body.replace('\n---\n', f'\n{block}\n\n---\n', 1)
-            if new_body == body:
-                new_body = body.rstrip() + f'\n\n{block}\n'
-        subprocess.run(['gh', 'pr', 'edit', pr_out, '--repo', repo, '--body', new_body], check=True)
-        print(f'Injected usage table into {prefix} PR #{pr_out}')
         PYEOF
