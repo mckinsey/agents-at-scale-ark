@@ -148,8 +148,8 @@ describe('QueriesPage', () => {
 
     const pagination = screen.getByTestId('pagination');
     expect(pagination).toHaveAttribute('data-current-page', '1');
-    expect(pagination).toHaveAttribute('data-total-pages', '4');
-    expect(pagination).toHaveAttribute('data-items-per-page', '25');
+    expect(pagination).toHaveAttribute('data-total-pages', '10');
+    expect(pagination).toHaveAttribute('data-items-per-page', '10');
   });
 
   it('has Create Query button in header that triggers section ref', async () => {
