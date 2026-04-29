@@ -37,7 +37,7 @@ export interface SessionsListParams {
   dateFrom?: string;
   dateTo?: string;
   search?: string;
-  sort?: 'date';
+  sort?: 'date' | 'name';
   order?: 'asc' | 'desc';
 }
 

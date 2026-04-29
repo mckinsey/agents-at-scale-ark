@@ -211,7 +211,7 @@ export class SessionsBroker {
     dateTo?: string;
     search?: string;
   }, sort?: {
-    field: 'date';
+    field: 'date' | 'name';
     direction: 'asc' | 'desc';
   }): PaginatedList<SessionEntry> {
     let sessions = Object.values(this.store.sessions);
@@ -255,6 +255,8 @@ export class SessionsBroker {
         let comparison = 0;
         if (sort.field === 'date') {
           comparison = new Date(a.lastActivity).getTime() - new Date(b.lastActivity).getTime();
+        } else if (sort.field === 'name') {
+          comparison = a.name.localeCompare(b.name);
         }
         return sort.direction === 'asc' ? comparison : -comparison;
       });

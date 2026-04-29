@@ -19,7 +19,7 @@ interface Props {
   readonly onSearchChange: (query: string) => void;
 }
 
-type SortField = 'date';
+type SortField = 'date' | 'name';
 type SortDirection = 'asc' | 'desc';
 
 export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery, onSearchChange }: Props) {
@@ -158,7 +158,7 @@ export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery,
         <div className="grid grid-cols-[2fr_3fr_1fr_auto] gap-4 border-b bg-muted/50 px-4 py-3 text-sm font-medium text-muted-foreground">
           <button
             className="flex items-center gap-1 text-left"
-            onClick={() => toggleSort('date')}
+            onClick={() => toggleSort('name')}
           >
             Name
             <ArrowUpDown className="size-3" />
