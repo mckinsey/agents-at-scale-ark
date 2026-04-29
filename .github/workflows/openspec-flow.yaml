@@ -432,10 +432,12 @@ jobs:
                - open PR titled
                  `chore: propose specification for #${{ github.event.issue.number }} <short title>`
                - PR body order: `Refs #${{ github.event.issue.number }}`, blank line,
-                 2-4 sentence recap, one line naming the skills used,
-                 `---`, full contents of proposal.md.
+                 2-4 sentence recap, `---`, full contents of proposal.md.
+                 (A usage table of any Skill/Task tool invocations is
+                 appended automatically by the workflow — do not write one
+                 yourself, and do not narrate which skills you used.)
                - Post one comment on the issue with a one-paragraph recap,
-                 a sentence naming the skills, a link to the PR, and ending
+                 a link to the PR, and ending
                  with a `---` rule on its own line followed by:
                  "${{ env.REENGAGE_FOOTER }}"
                  The comment body MUST start with the literal line
@@ -755,11 +757,14 @@ jobs:
                title `feat: implement spec for #${{ steps.check.outputs.issue_number }} <short title>`.
                PR body: `Closes #${{ steps.check.outputs.issue_number }}` on its
                own line (so merging the impl PR auto-closes the issue), then
-               a blank line, 2-4 sentence recap, a sentence naming the skills,
-               `---`, bulleted file-change list.
-               Post one comment on the issue: one-paragraph recap, skills
-               used, link to PR. Comment body MUST start with the literal
-               line `${{ env.AGENT_COMMENT_MARKER }}` and end with `---`
+               a blank line, 2-4 sentence recap, `---`, bulleted file-change
+               list.
+               (A usage table of any Skill/Task tool invocations is appended
+               automatically by the workflow — do not write one yourself,
+               and do not narrate which skills you used.)
+               Post one comment on the issue: one-paragraph recap, link to
+               PR. Comment body MUST start with the literal line
+               `${{ env.AGENT_COMMENT_MARKER }}` and end with `---`
                then `${{ env.REENGAGE_FOOTER }}` on its own line.
 
             CONSTRAINTS

@@ -2,6 +2,7 @@
 package validation
 
 import (
+	"context"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -181,7 +182,7 @@ func TestDefaultQuery(t *testing.T) {
 			},
 		}
 		_ = query.Spec.Input.UnmarshalJSON([]byte(`[{"role":"user","content":"hello world"}]`))
-		DefaultQuery(query)
+		DefaultQuery(context.Background(), query, nil)
 		text, _ := query.Spec.GetInputString()
 		if text != "hello world" {
 			t.Fatalf("expected 'hello world', got '%s'", text)
@@ -200,7 +201,7 @@ func TestDefaultQuery(t *testing.T) {
 			},
 		}
 		_ = query.Spec.Input.UnmarshalJSON([]byte(`"not-an-array"`))
-		DefaultQuery(query)
+		DefaultQuery(context.Background(), query, nil)
 		text, _ := query.Spec.GetInputString()
 		if text != "" {
 			t.Fatalf("expected empty string, got '%s'", text)
@@ -215,13 +216,16 @@ func TestDefaultQuery(t *testing.T) {
 			},
 		}
 		_ = query.Spec.Input.UnmarshalJSON([]byte(`"original"`))
-		DefaultQuery(query)
+		DefaultQuery(context.Background(), query, nil)
 		text, _ := query.Spec.GetInputString()
 		if text != "original" {
 			t.Fatalf("expected 'original', got '%s'", text)
 		}
-		if query.Annotations != nil {
-			t.Fatal("expected no annotations for non-messages type")
+		if _, ok := query.Annotations[annotations.MigrationWarningPrefix+"input-type"]; ok {
+			t.Fatal("expected no migration warning annotation for non-messages type")
+		}
+		if query.Spec.TTL == nil {
+			t.Fatal("expected TTL to be populated from fallback")
 		}
 	})
 }

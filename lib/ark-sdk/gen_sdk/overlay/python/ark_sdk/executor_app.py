@@ -34,6 +34,7 @@ from .extensions.query import (
     extract_query_ref,
     resolve_query,
 )
+from .query_status_updater import QueryStatusUpdater
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +219,7 @@ class A2AExecutorAdapter(AgentExecutor):
         ) if broker_url else None
 
         self.executor._broker_client = broker
+        self.executor._query_status_updater = QueryStatusUpdater(query_ref)
         self.executor._streamed = False
 
         try:
@@ -251,6 +253,7 @@ class A2AExecutorAdapter(AgentExecutor):
             )
         finally:
             self.executor._broker_client = None
+            self.executor._query_status_updater = None
             self.executor._streamed = False
 
     async def cancel(self, context: Any, event_queue: EventQueue) -> None:
