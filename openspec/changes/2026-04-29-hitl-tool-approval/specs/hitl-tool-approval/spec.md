@@ -19,10 +19,25 @@ The `AgentTool` type SHALL support an `approval` block for configuring per-tool 
 - **WHEN** an Agent is created with a tool containing `approval.required: true`, `approval.onTimeout: reject`
 - **THEN** the webhook SHALL accept the resource
 
+#### Scenario: Approval config with approvers accepted
+
+- **WHEN** an Agent is created with a tool containing `approval.approvers: [{role: admin}, {user: ops@example.com}]`
+- **THEN** the webhook SHALL accept the resource
+
+#### Scenario: Approval config with reasonRequired accepted
+
+- **WHEN** an Agent is created with a tool containing `approval.reasonRequired: true`
+- **THEN** the webhook SHALL accept the resource
+
 #### Scenario: Invalid onTimeout value rejected
 
 - **WHEN** an Agent is created with a tool containing `approval.onTimeout: invalid`
 - **THEN** the webhook SHALL reject the resource with error "onTimeout must be 'reject' or 'proceed'"
+
+#### Scenario: Default onTimeout is reject
+
+- **WHEN** an Agent is created with a tool containing `approval.required: true` without `onTimeout`
+- **THEN** the default value SHALL be "reject"
 
 #### Scenario: Agent without approval config accepted (backwards compatibility)
 
@@ -64,11 +79,33 @@ The system SHALL provide a `ToolApprovalRequest` CRD to track pending tool call 
 - **WHEN** a Query triggers a tool call that requires approval
 - **THEN** a ToolApprovalRequest resource SHALL be created with:
   - `spec.queryRef` referencing the Query
-  - `spec.toolCall.id` containing the tool call ID
-  - `spec.toolCall.name` containing the tool name
-  - `spec.toolCall.arguments` containing the serialized arguments
+  - `spec.toolCalls` array containing tool call details
   - `spec.timeout` from the tool's approval config
+  - `spec.approvers` from the tool's approval config
+  - `spec.executionContext` containing serialized conversation state
   - `status.phase` set to `pending`
+  - `status.requestedAt` set to current timestamp
+
+#### Scenario: ToolApprovalRequest contains tool context for informed decisions
+
+- **WHEN** a ToolApprovalRequest is created
+- **THEN** each entry in `spec.toolCalls` SHALL contain:
+  - `id` — the tool call ID
+  - `name` — the tool name
+  - `type` — the tool type (http, mcp, etc.)
+  - `arguments` — serialized arguments
+  - `description` — tool description
+  - `annotations` — tool annotations (destructiveHint, readOnlyHint, etc.)
+  - `agentReasoning` — the model's explanation for the tool call
+
+#### Scenario: ToolApprovalRequest contains execution context for resume
+
+- **WHEN** a ToolApprovalRequest is created
+- **THEN** `spec.executionContext` SHALL contain:
+  - `conversationHistory` — serialized message array
+  - `pendingToolCallIndex` — index of first pending tool
+  - `completedToolResults` — results of already-executed tools
+  - `agentName` and `agentNamespace` — agent identity
 
 #### Scenario: ToolApprovalRequest transitions to approved
 
@@ -77,6 +114,7 @@ The system SHALL provide a `ToolApprovalRequest` CRD to track pending tool call 
 - **THEN** `status.phase` SHALL be set to `approved`
 - **AND** `status.decision.action` SHALL be set to `approved`
 - **AND** `status.decision.decidedAt` SHALL be set to the current timestamp
+- **AND** `status.approvalDuration` SHALL be set to the time since `requestedAt`
 
 #### Scenario: ToolApprovalRequest transitions to rejected
 
@@ -85,7 +123,7 @@ The system SHALL provide a `ToolApprovalRequest` CRD to track pending tool call 
 - **THEN** `status.phase` SHALL be set to `rejected`
 - **AND** `status.decision.action` SHALL be set to `rejected`
 
-#### Scenario: ToolApprovalRequest expires on timeout
+#### Scenario: ToolApprovalRequest expires on timeout with reject policy
 
 - **WHEN** a ToolApprovalRequest is in `pending` phase
 - **AND** `spec.timeout` duration elapses without a decision
@@ -93,7 +131,7 @@ The system SHALL provide a `ToolApprovalRequest` CRD to track pending tool call 
 - **THEN** `status.phase` SHALL be set to `expired`
 - **AND** the Query SHALL transition to `error` phase
 
-#### Scenario: ToolApprovalRequest proceeds on timeout
+#### Scenario: ToolApprovalRequest proceeds on timeout with proceed policy
 
 - **WHEN** a ToolApprovalRequest is in `pending` phase
 - **AND** `spec.timeout` duration elapses without a decision
@@ -107,9 +145,16 @@ The system SHALL provide a `ToolApprovalRequest` CRD to track pending tool call 
 - **AND** ToolApprovalRequest resources exist with that Query as owner
 - **THEN** the ToolApprovalRequest resources SHALL be deleted (via owner reference)
 
-### Requirement: Completions executor checks approval policy
+#### Scenario: Approval submitted during timeout expiration (race condition)
 
-The completions executor SHALL check approval requirements before executing each tool call.
+- **WHEN** a ToolApprovalRequest is in `pending` phase
+- **AND** approval is submitted at the same moment timeout expires
+- **THEN** the approval decision SHALL take precedence
+- **AND** `status.phase` SHALL be set to `approved` (not `expired`)
+
+### Requirement: Completions executor checks approval policy with O(1) lookup
+
+The completions executor SHALL check approval requirements before executing each tool call, using pre-computed lookup for performance.
 
 #### Scenario: Tool without approval config executes immediately
 
@@ -126,7 +171,7 @@ The completions executor SHALL check approval requirements before executing each
 
 - **WHEN** the model returns a tool call for a tool with `approval.required: true`
 - **THEN** the executor SHALL NOT execute the tool
-- **AND** the executor SHALL return an ApprovalRequiredError
+- **AND** the executor SHALL return an ApprovalRequiredError with full execution context
 - **AND** the Query SHALL enter `approval-required` phase
 
 #### Scenario: Multiple tools with mixed approval requirements
@@ -135,6 +180,69 @@ The completions executor SHALL check approval requirements before executing each
 - **AND** some tools require approval and some do not
 - **THEN** the executor SHALL execute tools that do not require approval
 - **AND** the executor SHALL pause for approval on tools that require it
+- **AND** completed tool results SHALL be stored in execution context
+
+#### Scenario: Approval lookup is O(1)
+
+- **WHEN** the Agent is initialized
+- **THEN** approval requirements SHALL be pre-computed into a map
+- **AND** checking approval during tool execution SHALL be O(1) lookup
+
+### Requirement: Batch approval for multiple tool calls
+
+The system SHALL support batching multiple approval-required tool calls into a single ToolApprovalRequest.
+
+#### Scenario: Multiple approval-required tools batched into single request
+
+- **WHEN** the model returns multiple tool calls in one response
+- **AND** multiple tools require approval
+- **THEN** a single ToolApprovalRequest SHALL be created
+- **AND** `spec.toolCalls` SHALL contain all approval-required tools
+
+#### Scenario: Batch approval approves all tools
+
+- **WHEN** a ToolApprovalRequest with multiple `toolCalls` is approved
+- **THEN** all tools in the batch SHALL be executed
+
+#### Scenario: Batch rejection rejects all tools
+
+- **WHEN** a ToolApprovalRequest with multiple `toolCalls` is rejected
+- **THEN** no tools in the batch SHALL be executed
+- **AND** rejection message SHALL be returned for all tools
+
+### Requirement: Authorization controls for approval submission
+
+The system SHALL enforce authorization checks when approval decisions are submitted.
+
+#### Scenario: Approval by authorized role succeeds
+
+- **WHEN** a ToolApprovalRequest has `spec.approvers: [{role: admin}]`
+- **AND** approval is submitted by a user with admin role
+- **THEN** the approval SHALL be accepted
+
+#### Scenario: Approval by authorized user succeeds
+
+- **WHEN** a ToolApprovalRequest has `spec.approvers: [{user: ops@example.com}]`
+- **AND** approval is submitted by ops@example.com
+- **THEN** the approval SHALL be accepted
+
+#### Scenario: Approval by unauthorized user rejected
+
+- **WHEN** a ToolApprovalRequest has `spec.approvers: [{role: admin}]`
+- **AND** approval is submitted by a user WITHOUT admin role
+- **THEN** the API SHALL return HTTP 403 Forbidden
+
+#### Scenario: Approval without approvers list allows any authorized user
+
+- **WHEN** a ToolApprovalRequest has no `spec.approvers` field
+- **AND** approval is submitted by a user with ToolApprovalRequest update permission
+- **THEN** the approval SHALL be accepted
+
+#### Scenario: Rejection without required reason rejected
+
+- **WHEN** a ToolApprovalRequest has `spec.reasonRequired: true`
+- **AND** rejection is submitted without a reason
+- **THEN** the API SHALL return HTTP 400 Bad Request
 
 ### Requirement: Event streaming emits approval events
 
@@ -144,17 +252,17 @@ The system SHALL emit real-time events when approval is required and when decisi
 
 - **WHEN** a Query enters `approval-required` phase
 - **THEN** a `ToolApprovalRequest` event SHALL be streamed to connected clients
-- **AND** the event SHALL contain tool call details (name, arguments, timeout)
+- **AND** the event SHALL contain tool call details (name, arguments, description, annotations, timeout)
 
 #### Scenario: Approval decision event emitted
 
 - **WHEN** a ToolApprovalRequest is approved or rejected
 - **THEN** a `ToolApprovalDecision` event SHALL be streamed to connected clients
-- **AND** the event SHALL contain the decision and reason
+- **AND** the event SHALL contain the decision, reason, and duration
 
-### Requirement: API supports approval submission
+### Requirement: API supports approval submission with optimistic locking
 
-The Ark API SHALL provide endpoints for submitting approval decisions.
+The Ark API SHALL provide endpoints for submitting approval decisions with conflict detection.
 
 #### Scenario: Submit approval via API
 
@@ -164,7 +272,13 @@ The Ark API SHALL provide endpoints for submitting approval decisions.
 - **THEN** the ToolApprovalRequest SHALL be updated with the approval
 - **AND** the response SHALL contain the updated Query status
 
-#### Scenario: Submit rejection via API
+#### Scenario: Submit batch approval via API
+
+- **WHEN** a POST request is made to `/api/v1/namespaces/{ns}/queries/{name}/approval`
+- **AND** the request body contains `{"toolCallIds": ["id1", "id2"], "action": "approve"}`
+- **THEN** all specified tool calls SHALL be approved
+
+#### Scenario: Submit rejection with reason via API
 
 - **WHEN** a POST request is made to `/api/v1/namespaces/{ns}/queries/{name}/approval`
 - **AND** the request body contains `{"toolCallId": "...", "action": "reject", "reason": "..."}`
@@ -184,6 +298,13 @@ The Ark API SHALL provide endpoints for submitting approval decisions.
 - **AND** the `toolCallId` does not match any pending ToolApprovalRequest
 - **THEN** the API SHALL return HTTP 404 Not Found
 
+#### Scenario: Approval with stale generation rejected (optimistic locking)
+
+- **WHEN** a POST request is made to `/api/v1/namespaces/{ns}/queries/{name}/approval`
+- **AND** the ToolApprovalRequest has been modified since the client read it
+- **THEN** the API SHALL return HTTP 409 Conflict
+- **AND** the response SHALL indicate a generation mismatch
+
 ### Requirement: A2A protocol supports tool-approval-required state
 
 The A2A protocol SHALL support `tool-approval-required` as a task state for external executor HITL support.
@@ -194,11 +315,16 @@ The A2A protocol SHALL support `tool-approval-required` as a task state for exte
 - **THEN** the A2ATask status phase SHALL be set to `tool-approval-required`
 - **AND** the parent Query phase SHALL be set to `approval-required`
 
-#### Scenario: A2A task resumes after approval
+#### Scenario: A2A approval request includes callback URL
+
+- **WHEN** an external executor signals `tool-approval-required`
+- **THEN** the A2A message SHALL include a `callbackUrl` for approval delivery
+
+#### Scenario: A2A task resumes after approval via callback
 
 - **WHEN** an A2ATask is in `tool-approval-required` phase
 - **AND** approval is submitted
-- **THEN** the controller SHALL send approval to the external executor
+- **THEN** the controller SHALL POST the approval decision to the executor's `callbackUrl`
 - **AND** the A2ATask SHALL resume execution
 
 ## MODIFIED Requirements
@@ -210,3 +336,24 @@ The Query CRD `status.phase` enum SHALL be extended from `pending|running|error|
 ### Requirement: A2ATask phase enum extended
 
 The A2ATask CRD `status.phase` enum SHALL be extended to include `tool-approval-required` alongside existing `input-required` and `auth-required`.
+
+### Requirement: Audit trail includes timing and client context
+
+The ToolApprovalRequest status SHALL include audit information beyond basic decision data.
+
+#### Scenario: Audit trail includes request timestamp
+
+- **WHEN** a ToolApprovalRequest is created
+- **THEN** `status.requestedAt` SHALL be set to the creation timestamp
+
+#### Scenario: Audit trail includes approval duration
+
+- **WHEN** a ToolApprovalRequest is approved or rejected
+- **THEN** `status.approvalDuration` SHALL be set to the time between `requestedAt` and `decidedAt`
+
+#### Scenario: Audit trail includes client context
+
+- **WHEN** an approval decision is submitted
+- **THEN** `status.decision.clientContext` SHALL include:
+  - `ipAddress` — the client IP address
+  - `userAgent` — the client user agent string

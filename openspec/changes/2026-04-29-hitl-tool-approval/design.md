@@ -32,7 +32,7 @@ Industry patterns researched:
 
 ### 1. Approval configuration location: `AgentTool.approval` block
 
-Add an `approval` block to `AgentTool` (in `agent_types.go`) rather than `ToolAnnotations` (in `tool_types.go`).
+Add an `approval` block to `AgentTool` (in `agent_types.go`). Do NOT add to `ToolAnnotations`.
 
 Rationale: Approval is an operational concern that varies per-agent, not an intrinsic property of the tool. The same MCP tool might require approval in a production agent but not in a development agent. Placing it on `AgentTool` allows per-agent configuration.
 
@@ -45,6 +45,10 @@ spec:
         required: true
         timeout: 5m
         onTimeout: reject  # or "proceed"
+        approvers:         # NEW: authorization control
+          - role: admin
+          - user: ops@example.com
+        reasonRequired: false  # NEW: require reason for audit
 ```
 
 **Alternative considered:** Add `requiresApproval` to `ToolAnnotations`. Rejected because it would apply globally to all agents using that tool.
@@ -55,7 +59,7 @@ Use a ToolApprovalRequest CRD for persistence and audit trail, combined with eve
 
 **CRD layer (persistence):**
 - Query enters `approval-required` phase when tool needs approval
-- ToolApprovalRequest CRD created with pending tool call details
+- ToolApprovalRequest CRD created with pending tool call details AND execution context
 - Controller watches ToolApprovalRequest; when approved, signals executor to continue
 
 **Event layer (real-time):**
@@ -90,107 +94,284 @@ metadata:
   ownerReferences:
     - kind: Query
       name: query-abc123
+  generation: 1  # Used for optimistic locking
 spec:
   queryRef:
     name: query-abc123
     namespace: default
-  toolCall:
-    id: "call_xyz"
-    name: "delete-record"
-    type: "http"
-    arguments: '{"recordId": "123"}'
+  # Support both single tool call and batch
+  toolCalls:
+    - id: "call_xyz"
+      name: "delete-record"
+      type: "http"
+      arguments: '{"recordId": "123"}'
+      description: "Permanently deletes a customer record from the database"
+      annotations:
+        destructiveHint: true
+        readOnlyHint: false
+      agentReasoning: "User requested deletion of record #123"
   timeout: 5m
   onTimeout: reject
+  approvers:
+    - role: admin
+    - user: ops@example.com
+  reasonRequired: false
+  # Execution context for resume - CRITICAL for stateless executor
+  executionContext:
+    conversationHistory: "base64-encoded message array"
+    pendingToolCallIndex: 0
+    completedToolResults: []
+    agentName: "database-assistant"
+    agentNamespace: "default"
 status:
   phase: pending  # pending, approved, rejected, expired
+  # Optimistic locking: observedGeneration must match metadata.generation
+  observedGeneration: 1
+  requestedAt: "2026-04-29T10:25:00Z"
   decision:
     action: approved  # approved, rejected
     decidedBy: "user@example.com"
     decidedAt: "2026-04-29T10:30:00Z"
     reason: "Verified record can be deleted"
+    clientContext:
+      ipAddress: "10.0.0.5"
+      userAgent: "ark-dashboard/1.0"
+  approvalDuration: "5m0s"  # Time between requestedAt and decidedAt
 ```
 
 Owner reference ensures cleanup when Query is deleted.
 
-### 5. Executor integration: Yield pattern
+### 5. Executor integration: Yield pattern with state capture
 
 Modify `executeToolCalls()` in `agent.go` to check approval policy before each tool call:
 
 ```go
-for _, tc := range toolCalls {
+for i, tc := range toolCalls {
     if requiresApproval(tc) {
-        // Create ToolApprovalRequest, emit event, return with pending status
-        return newMessages, &ApprovalRequiredError{ToolCall: tc}
+        // Capture full execution context for resume
+        context := &ExecutionContext{
+            ConversationHistory:   serializeMessages(agentMessages),
+            PendingToolCallIndex:  i,
+            CompletedToolResults:  completedResults,
+            AgentName:             a.Name,
+            AgentNamespace:        a.Namespace,
+        }
+        return newMessages, &ApprovalRequiredError{
+            ToolCalls: toolCalls[i:],  // All remaining approval-required tools
+            Context:   context,
+        }
     }
-    // Execute tool as normal
+    // Execute tool, store result
+    result := executeToolCall(tc)
+    completedResults = append(completedResults, result)
 }
 ```
 
 The executor returns an `ApprovalRequiredError` which signals the handler to:
-1. Create ToolApprovalRequest CRD
+1. Create ToolApprovalRequest CRD with full execution context
 2. Update Query phase to `approval-required`
 3. Emit streaming event
-4. Exit the current execution (state persisted)
-
-When approval is received, the controller triggers re-execution with the saved state.
+4. Exit the current execution (state persisted in CRD)
 
 ### 6. Resume mechanism: Re-dispatch with context
 
 When ToolApprovalRequest is approved, the controller re-dispatches the query to the executor with:
-- Original conversation history
-- Pending tool calls marked as approved
-- Continuation point (which tool call to resume from)
+- Original conversation history (from `executionContext.conversationHistory`)
+- Completed tool results (from `executionContext.completedToolResults`)
+- Continuation point (from `executionContext.pendingToolCallIndex`)
+- Approval decision (which tools were approved)
+
+```go
+func (h *Handler) ResumeFromApproval(ctx context.Context, approval *ToolApprovalRequest) error {
+    // Deserialize saved context
+    context := deserializeContext(approval.Spec.ExecutionContext)
+
+    // Reconstruct agent state
+    messages := context.ConversationHistory
+    for _, result := range context.CompletedToolResults {
+        messages = append(messages, result)
+    }
+
+    // Mark approved tools and continue execution
+    approvedTools := extractApprovedTools(approval.Status.Decision)
+    return h.executeWithApprovals(ctx, messages, approvedTools)
+}
+```
 
 This follows LangGraph's pattern of resuming from checkpointed state.
 
-### 7. Multiple tool calls: Batch approval by default
+### 7. Multiple tool calls: Batch approval with explicit structure
 
 When the model returns multiple tool calls in one response:
-- Default: Batch all approval-required calls into one request (approve/reject all)
-- Future: Individual approval mode via config flag
+- Group all approval-required calls into a single ToolApprovalRequest
+- Use `spec.toolCalls` array (not single `toolCall`)
+- Approval/rejection applies to the entire batch
 
-Batch approval reduces friction for common cases where tools are called together.
+```yaml
+spec:
+  toolCalls:
+    - id: "call_1"
+      name: "delete-record"
+      arguments: '{"id": "123"}'
+    - id: "call_2"
+      name: "send-notification"
+      arguments: '{"to": "admin"}'
+```
 
-### 8. A2A protocol extension: `tool-approval-required` state
+**Future enhancement:** Add `allowPartialApproval: true` to enable per-tool decisions within a batch.
+
+### 8. A2A protocol extension: `tool-approval-required` state with callback
 
 Add `tool-approval-required` to A2A task states alongside existing `input-required`. This enables external executors to signal approval needs using the standard protocol.
 
-The completions executor doesn't use A2A for internal tool calls, but this extension allows custom executors (LangChain, Claude SDK) to participate in the same approval workflow.
+**A2A Approval Request (executor → controller):**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tasks/status",
+  "params": {
+    "taskId": "task-123",
+    "status": {
+      "state": "tool-approval-required",
+      "message": {
+        "role": "agent",
+        "parts": [{
+          "kind": "data",
+          "mimeType": "application/vnd.ark.tool-approval-request+json",
+          "data": {
+            "toolCalls": [...],
+            "timeout": "5m",
+            "callbackUrl": "https://executor/approval-callback"
+          }
+        }]
+      }
+    }
+  }
+}
+```
 
-### 9. API endpoint: REST approval submission
+**A2A Approval Callback (controller → executor):**
+```json
+POST {callbackUrl}
+{
+  "taskId": "task-123",
+  "decision": {
+    "action": "approved",
+    "toolCallIds": ["call_1", "call_2"],
+    "decidedBy": "user@example.com",
+    "reason": "Approved by ops team"
+  }
+}
+```
+
+The executor then resumes execution and sends the next `tasks/status` update.
+
+### 9. API endpoint: REST approval submission with authorization
 
 ```
 POST /api/v1/namespaces/{namespace}/queries/{name}/approval
+Authorization: Bearer <token>
 {
-  "toolCallId": "call_xyz",
+  "toolCallId": "call_xyz",  // or "toolCallIds": ["call_1", "call_2"] for batch
   "action": "approve",  // or "reject"
   "reason": "optional reason"
 }
 ```
 
-Returns updated Query status. Validation ensures the query is in `approval-required` phase and the tool call ID matches.
+**Authorization checks (in order):**
+1. User must have RBAC permission for ToolApprovalRequest update
+2. If `spec.approvers` is set, user must match at least one:
+   - `role: admin` → user has admin role
+   - `user: ops@example.com` → user identity matches
+3. If `spec.reasonRequired: true`, `reason` field must be non-empty for rejections
 
-### 10. Dashboard integration: Approval notification panel
+Returns HTTP 403 Forbidden if authorization fails.
+
+### 10. Timeout handling with optimistic locking
+
+To prevent race conditions between timeout expiration and approval submission:
+
+**Optimistic locking:**
+- ToolApprovalRequest uses `metadata.generation` and `status.observedGeneration`
+- Approval submission checks `observedGeneration == generation` before updating
+- If mismatch, return HTTP 409 Conflict
+
+**Precedence rules:**
+- If approval is submitted BEFORE timeout controller marks expired → approval wins
+- Controller checks `status.phase == pending` before setting `expired`
+- If phase changed (e.g., to `approved`), controller skips timeout action
+
+```go
+func (c *Controller) handleTimeout(ctx context.Context, req *ToolApprovalRequest) error {
+    // Optimistic locking check
+    if req.Status.Phase != "pending" {
+        // Already decided, skip timeout
+        return nil
+    }
+
+    // Use server-side apply with field manager to detect conflicts
+    patch := &ToolApprovalRequest{Status: {Phase: "expired"}}
+    return c.client.Status().Patch(ctx, req, patch, client.FieldOwner("timeout-controller"))
+}
+```
+
+### 11. Performance: Pre-computed approval requirements
+
+To avoid checking approval config on every tool call in the hot path:
+
+**During Agent initialization (in `MakeAgent`):**
+```go
+type Agent struct {
+    // ... existing fields
+    approvalRequiredTools map[string]*ToolApprovalConfig  // Pre-computed
+}
+
+func MakeAgent(...) (*Agent, error) {
+    approvalMap := make(map[string]*ToolApprovalConfig)
+    for _, tool := range crd.Spec.Tools {
+        if tool.Approval != nil && tool.Approval.Required {
+            approvalMap[tool.Name] = tool.Approval
+        }
+    }
+    return &Agent{
+        approvalRequiredTools: approvalMap,
+        // ...
+    }, nil
+}
+```
+
+**During tool execution (O(1) lookup):**
+```go
+func (a *Agent) requiresApproval(toolName string) *ToolApprovalConfig {
+    return a.approvalRequiredTools[toolName]  // nil if not required
+}
+```
+
+### 12. Dashboard integration: Approval notification panel
 
 - Pending approvals shown in session view when query enters `approval-required`
-- Tool call details displayed (name, arguments, annotations)
-- Approve/Reject buttons with optional reason field
+- Tool call details displayed: name, arguments, description, annotations (destructiveHint, etc.)
+- Agent reasoning shown to help approver understand context
+- Timeout countdown displayed
+- Approve/Reject buttons with reason field (required if `reasonRequired: true`)
 - Real-time updates via existing SSE/WebSocket connection to broker
 
 ## Risks / Trade-offs
 
-- **Executor state complexity**: The completions executor is currently stateless. Pause/resume requires persisting conversation state. Mitigate by storing full message history in ToolApprovalRequest or a separate state store.
+- **Executor state complexity**: The completions executor is currently stateless. Pause/resume requires persisting conversation state. **Mitigation:** Store full execution context in ToolApprovalRequest CRD (`spec.executionContext`).
 
-- **Timeout handling**: If approval times out, the query must handle gracefully. `onTimeout: reject` returns error to model; `onTimeout: proceed` skips approval (use with caution).
+- **Timeout handling**: Race conditions between timeout and approval. **Mitigation:** Optimistic locking with generation checks; precedence rules favor submitted approvals.
 
-- **External executor adoption**: Custom executors must implement approval handling. Mitigate by providing clear SDK hooks in `BaseExecutor` and documenting the pattern.
+- **External executor adoption**: Custom executors must implement approval handling. **Mitigation:** Provide clear A2A callback protocol and SDK hooks in `BaseExecutor`.
 
-- **Performance overhead**: Approval checks add latency to every tool call. Mitigate by only checking tools with `approval.required: true`; fast path for tools without approval config.
+- **Performance overhead**: Approval checks add latency. **Mitigation:** Pre-compute approval requirements during Agent initialization; O(1) lookup during execution.
+
+- **Authorization complexity**: Per-tool approver lists add management overhead. **Mitigation:** Start with simple role/user matching; add full RBAC integration later.
 
 ## Open Questions
 
-1. **Approval persistence**: Should approved tool calls be cached to avoid re-approval on retry? Initial implementation: No caching, each execution is independent.
+1. **Approval persistence**: Should approved tool calls be cached to avoid re-approval on retry? Initial implementation: No caching, each execution is independent. Future: Consider caching for idempotent tools.
 
-2. **Multi-tenant approval**: Who can approve? Initial implementation: Any user with Query write access. Future: RBAC-based approver roles.
+2. **Partial batch approval**: Allow approving some tools in a batch while rejecting others? Initial implementation: All-or-nothing. Future: Add `allowPartialApproval` flag.
 
-3. **Partial batch approval**: Allow approving some tools in a batch while rejecting others? Initial implementation: All-or-nothing. Future: Per-tool decisions in batch.
+3. **Escalation**: What happens if no approver responds within timeout? Initial implementation: Follow `onTimeout` policy. Future: Add escalation to backup approvers.

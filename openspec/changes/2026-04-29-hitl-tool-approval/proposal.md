@@ -12,7 +12,7 @@ Industry-standard agentic systems (Claude Code, LangGraph) have established patt
 
 ## What Changes
 
-- Add `approval` configuration to `AgentTool` and `ToolAnnotations` types for per-tool approval requirements
+- Add `approval` configuration to `AgentTool` type for per-tool approval requirements (NOT ToolAnnotations — approval is operational, not intrinsic)
 - Add `approval-required` phase to Query CRD status to represent paused-for-approval state
 - Create `ToolApprovalRequest` CRD to track pending approvals with audit trail
 - Modify the completions executor's `executeToolCalls()` to check approval policy before tool execution
