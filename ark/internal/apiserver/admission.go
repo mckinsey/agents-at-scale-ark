@@ -22,7 +22,7 @@ func NewAdmissionStorage(inner *registry.GenericStorage, validator *validation.V
 }
 
 func (s *AdmissionStorage) Create(ctx context.Context, obj runtime.Object, _ rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
-	validation.ApplyDefaults(obj)
+	validation.ApplyDefaults(ctx, obj, nil)
 	warnings, err := s.validator.Validate(ctx, obj)
 	if err != nil {
 		return nil, err
@@ -35,7 +35,7 @@ func (s *AdmissionStorage) Create(ctx context.Context, obj runtime.Object, _ res
 
 func (s *AdmissionStorage) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, _ rest.ValidateObjectFunc, _ rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	admissionCreate := func(ctx context.Context, obj runtime.Object) error {
-		validation.ApplyDefaults(obj)
+		validation.ApplyDefaults(ctx, obj, nil)
 		warnings, err := s.validator.Validate(ctx, obj)
 		for _, w := range warnings {
 			warning.AddWarning(ctx, "", w)
@@ -43,7 +43,7 @@ func (s *AdmissionStorage) Update(ctx context.Context, name string, objInfo rest
 		return err
 	}
 	admissionUpdate := func(ctx context.Context, obj, _ runtime.Object) error {
-		validation.ApplyDefaults(obj)
+		validation.ApplyDefaults(ctx, obj, nil)
 		warnings, err := s.validator.Validate(ctx, obj)
 		for _, w := range warnings {
 			warning.AddWarning(ctx, "", w)

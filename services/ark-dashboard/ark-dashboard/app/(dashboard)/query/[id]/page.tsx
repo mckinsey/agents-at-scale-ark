@@ -39,6 +39,7 @@ import {
   toolsService,
 } from '@/lib/services';
 import type { Agent } from '@/lib/services/agents';
+import { useArkConfig } from '@/lib/services/arkconfig-hooks';
 import { queriesService } from '@/lib/services/queries';
 import type { ToolDetail } from '@/lib/services/tools';
 import { cn } from '@/lib/utils';
@@ -348,6 +349,9 @@ function QueryDetailContent() {
   const targetTool = searchParams.get('target_tool');
   const isNew = queryId === 'new';
   const mode = isNew ? 'new' : 'view';
+
+  const { data: arkConfig } = useArkConfig();
+  const ttlPlaceholder = `Default: ${arkConfig?.queryTTL || '720h'}`;
 
   const [query, setQuery] = useState<TypedQueryDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -827,7 +831,7 @@ function QueryDetailContent() {
                       setQuery(prev => (prev ? { ...prev, ttl } : null))
                     }
                     label="TTL"
-                    placeholder="Default: 720h"
+                    placeholder={ttlPlaceholder}
                     tooltip="How long the query will remain in the system before it is deleted"
                   />
                   <QueryMemoryField
