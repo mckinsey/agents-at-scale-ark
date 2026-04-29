@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useMemo, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Bot, MessageSquare, Users, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +10,8 @@ import { useGetSession } from '@/lib/services/broker-sessions-hooks';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConversationsTab } from '@/components/sessions-conversations/conversations-tab';
 import { LogsTab } from '@/components/sessions-conversations/logs-tab';
+import type { BrokerSession } from '@/lib/services/broker-sessions';
+import { generateUUID } from '@/lib/utils/uuid';
 
 interface Props {
   readonly params: Promise<{
@@ -17,39 +19,61 @@ interface Props {
   }>;
 }
 
-interface TempSessionData {
-  sessionId: string;
-  conversationId: string;
-  participants: Array<{
-    name: string;
-    type: 'agent' | 'team' | 'tool';
-  }>;
-  createdAt: string;
-}
-
 export default function SessionDetailPage({ params }: Props) {
   const { session_id } = use(params);
   const router = useRouter();
-  const { data: session, isLoading, isError } = useGetSession(session_id);
+  const searchParams = useSearchParams();
 
-  const tempSessionData = useMemo<TempSessionData | null>(() => {
-    if (globalThis.window === undefined) return null;
-    const data = localStorage.getItem(`temp-session-${session_id}`);
-    if (!data) return null;
-    try {
-      return JSON.parse(data);
-    } catch {
+  const initialParticipant = searchParams.get('participant');
+  const initialType = searchParams.get('type') as 'agent' | 'team' | 'tool' | null;
+  const initialConversationId = searchParams.get('conversationId');
+  const isNewSession = searchParams.get('isNew') === 'true';
+
+  // Skip API call for new sessions (avoid 404 errors)
+  const { data: backendSession, isLoading, isError } = useGetSession(session_id, {
+    enabled: !isNewSession,
+  });
+
+  // Create temporary session from query params for new sessions
+  const temporarySession = useMemo((): BrokerSession | null => {
+    if (!isNewSession || !initialParticipant || !initialType) {
       return null;
     }
-  }, [session_id]);
 
-  useEffect(() => {
-    if (session && tempSessionData) {
-      localStorage.removeItem(`temp-session-${session_id}`);
+    return {
+      sessionId: session_id,
+      name: session_id,
+      status: 'active',
+      errorCount: 0,
+      participants: [{
+        id: generateUUID(),
+        name: initialParticipant,
+        type: initialType,
+        isActive: true,
+      }],
+      conversationCount: 0,
+      createdAt: new Date().toISOString(),
+      lastActivity: new Date().toISOString(),
+    };
+  }, [isNewSession, initialParticipant, initialType, session_id]);
+
+  const session = isNewSession ? temporarySession : backendSession;
+
+  const memoizedInitialParticipant = useMemo(() => {
+    if (isNewSession && initialParticipant) {
+      return {
+        name: initialParticipant,
+        type: initialType || 'agent' as const
+      };
     }
-  }, [session, tempSessionData, session_id]);
+    return undefined;
+  }, [isNewSession, initialParticipant, initialType]);
 
-  if (isLoading && !tempSessionData) {
+  const memoizedInitialConversationId = useMemo(() => {
+    return isNewSession ? initialConversationId || undefined : undefined;
+  }, [isNewSession, initialConversationId]);
+
+  if (isLoading) {
     return (
       <div className="flex h-full flex-col space-y-6 p-8">
         <Skeleton className="h-10 w-48" />
@@ -59,7 +83,7 @@ export default function SessionDetailPage({ params }: Props) {
     );
   }
 
-  if (isError && !tempSessionData) {
+  if (isError || !session) {
     return (
       <div className="flex h-full flex-col space-y-6 p-8">
         <Button variant="ghost" onClick={() => router.push('/session-history')}>
@@ -67,32 +91,13 @@ export default function SessionDetailPage({ params }: Props) {
           Back to all sessions
         </Button>
         <div className="flex flex-1 items-center justify-center text-muted-foreground">
-          Failed to load session details
+          {isError ? 'Failed to load session details' : 'Session not found'}
         </div>
       </div>
     );
   }
 
-  const displaySession = session || tempSessionData;
-  const isTemporarySession = !session && !!tempSessionData;
-
-  if (!displaySession) {
-    return (
-      <div className="flex h-full flex-col space-y-6 p-8">
-        <Button variant="ghost" onClick={() => router.push('/session-history')}>
-          <ArrowLeft className="mr-2 size-4" />
-          Back to all sessions
-        </Button>
-        <div className="flex flex-1 items-center justify-center text-muted-foreground">
-          Session not found
-        </div>
-      </div>
-    );
-  }
-
-  const sessionDate = new Date(
-    session?.createdAt || tempSessionData?.createdAt || new Date()
-  ).toLocaleString('en-US', {
+  const sessionDate = new Date(session.createdAt).toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -108,16 +113,10 @@ export default function SessionDetailPage({ params }: Props) {
     return <Bot className="size-4" />;
   }
 
-  const participants = session?.participants || tempSessionData?.participants.map((p, idx) => ({
-    id: `${p.name}-${idx}`,
-    name: p.name,
-    type: p.type,
-    isActive: false,
-  })) || [];
-
-  const conversationCount = session?.conversationCount || 0;
-  const errorCount = session?.errorCount || 0;
-  const sessionStatus = session?.status || 'active';
+  const participants = session.participants || [];
+  const conversationCount = session.conversationCount || 0;
+  const errorCount = session.errorCount || 0;
+  const sessionStatus = session.status;
 
   const getStatusVariant = (status: string) => {
     if (status === 'error') return 'destructive';
@@ -137,11 +136,6 @@ export default function SessionDetailPage({ params }: Props) {
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <div className="text-sm text-muted-foreground">{sessionDate}</div>
-              {isTemporarySession && (
-                <Badge variant="outline" className="text-xs">
-                  New Session
-                </Badge>
-              )}
             </div>
             <div className="flex items-center gap-4 text-sm">
               <h1 className="text-xl font-semibold">{session_id}</h1>
@@ -192,7 +186,11 @@ export default function SessionDetailPage({ params }: Props) {
         </TabsList>
 
         <TabsContent value="history" className="flex-1">
-          <ConversationsTab sessionId={session_id} />
+          <ConversationsTab
+            sessionId={session_id}
+            initialParticipant={memoizedInitialParticipant}
+            initialConversationId={memoizedInitialConversationId}
+          />
         </TabsContent>
 
         <TabsContent value="logs" className="flex-1">

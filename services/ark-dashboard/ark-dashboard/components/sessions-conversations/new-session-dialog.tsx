@@ -124,23 +124,15 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
   const handleCreate = () => {
     if (!selectedParticipant) return;
 
+    const participant = allParticipants.find(p => p.name === selectedParticipant);
+    const participantType = participant?.type || 'agent';
+
     const sessionId = generateUUID();
     const conversationId = generateUUID();
-    const participant = allParticipants.find(p => p.name === selectedParticipant);
 
-    const participants = [{
-      name: selectedParticipant,
-      type: participant?.type || 'agent',
-    }];
-
-    localStorage.setItem(`temp-session-${sessionId}`, JSON.stringify({
-      sessionId,
-      conversationId,
-      participants,
-      createdAt: new Date().toISOString(),
-    }));
-
-    router.push(`/sessions/${sessionId}`);
+    router.push(
+      `/sessions/${sessionId}?participant=${encodeURIComponent(selectedParticipant)}&type=${participantType}&conversationId=${conversationId}&isNew=true`
+    );
     onOpenChange(false);
     setSelectedParticipant(null);
     setSearch('');

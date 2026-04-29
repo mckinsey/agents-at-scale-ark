@@ -7,8 +7,10 @@ export interface PendingMessage {
 }
 
 type PendingMessagesMap = Record<string, PendingMessage[]>;
+type ProcessingStateMap = Record<string, boolean>;
 
 const pendingMessagesBaseAtom = atom<PendingMessagesMap>({});
+const processingStateBaseAtom = atom<ProcessingStateMap>({});
 
 export const sessionPendingMessagesAtom = atom(
   get => get(pendingMessagesBaseAtom),
@@ -17,6 +19,17 @@ export const sessionPendingMessagesAtom = atom(
     set(pendingMessagesBaseAtom, {
       ...current,
       [conversationId]: messages,
+    });
+  }
+);
+
+export const sessionProcessingStateAtom = atom(
+  get => get(processingStateBaseAtom),
+  (get, set, conversationId: string, isProcessing: boolean) => {
+    const current = get(processingStateBaseAtom);
+    set(processingStateBaseAtom, {
+      ...current,
+      [conversationId]: isProcessing,
     });
   }
 );

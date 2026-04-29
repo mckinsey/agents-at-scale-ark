@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
-import { brokerSessionsService, type SessionsListParams } from './broker-sessions';
+import { useQuery, type UseQueryOptions } from '@tanstack/react-query';
+import { brokerSessionsService, type SessionsListParams, type BrokerSession } from './broker-sessions';
 
 export const useListSessions = (params?: SessionsListParams) => {
   return useQuery({
@@ -9,11 +9,15 @@ export const useListSessions = (params?: SessionsListParams) => {
   });
 };
 
-export const useGetSession = (sessionId: string | null) => {
+export const useGetSession = (
+  sessionId: string | null,
+  options?: Partial<UseQueryOptions<BrokerSession | null>>
+) => {
   return useQuery({
     queryKey: ['broker-session', sessionId],
     queryFn: () => sessionId ? brokerSessionsService.getSession(sessionId) : null,
-    enabled: !!sessionId,
+    enabled: options?.enabled !== undefined ? options.enabled && !!sessionId : !!sessionId,
     refetchInterval: 5000,
+    ...options,
   });
 };

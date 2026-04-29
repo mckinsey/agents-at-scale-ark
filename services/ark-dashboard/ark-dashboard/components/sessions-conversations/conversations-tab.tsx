@@ -2,13 +2,13 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useAtom } from 'jotai';
+import { useRouter } from 'next/navigation';
 import { Plus } from 'lucide-react';
 import { useListConversations } from '@/lib/services/conversations-hooks';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
-import { conversationsService } from '@/lib/services/conversations';
 import type { Conversation } from '@/lib/services/conversations';
 import type { Participant } from '@/lib/services/participants';
-import { sessionPendingMessagesAtom } from '@/atoms/session-pending-messages';
+import { sessionPendingMessagesAtom, sessionProcessingStateAtom } from '@/atoms/session-pending-messages';
 import { ConversationSidebar } from './conversation-sidebar';
 import { MessageDisplay } from './message-display';
 import { ChatInput } from './chat-input';
@@ -16,69 +16,68 @@ import { NewConversationDialog } from './new-conversation-dialog';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
+import { generateUUID } from '@/lib/utils/uuid';
 
 interface Props {
   readonly sessionId: string;
-}
-
-interface TempSessionData {
-  sessionId: string;
-  conversationId: string;
-  participants: Array<{
+  readonly initialParticipant?: {
     name: string;
     type: 'agent' | 'team' | 'tool';
-  }>;
-  createdAt: string;
+  };
+  readonly initialConversationId?: string;
 }
 
-export function ConversationsTab({ sessionId }: Props) {
+export function ConversationsTab({ sessionId, initialParticipant, initialConversationId }: Props) {
+  const router = useRouter();
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [temporaryConversations, setTemporaryConversations] = useState<Conversation[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pendingMessagesMap, setPendingMessagesMap] = useAtom(sessionPendingMessagesAtom);
-  const [processingConversations, setProcessingConversations] = useState<Set<string>>(new Set());
-  const [hasTempSession, setHasTempSession] = useState(() => {
-    if (globalThis.window === undefined) return false;
-    return !!localStorage.getItem(`temp-session-${sessionId}`);
+  const [processingStateMap, setProcessingStateMap] = useAtom(sessionProcessingStateAtom);
+  const [hasSentMessage, setHasSentMessage] = useState(false);
+
+  // Skip API call for new sessions before first message is sent
+  const isNewSession = !!initialParticipant && !hasSentMessage;
+  const { data: backendConversations, isLoading } = useListConversations(sessionId, {
+    enabled: !isNewSession,
+  });
+  const { data: session } = useGetSession(sessionId, {
+    enabled: !isNewSession,
   });
 
-  const { data: backendConversations, isLoading } = useListConversations(sessionId, { enabled: !hasTempSession });
-  const { data: session } = useGetSession(sessionId);
-
   useEffect(() => {
-    if (globalThis.window === undefined) return;
-
-    const tempData = localStorage.getItem(`temp-session-${sessionId}`);
-    if (!tempData) return;
-
-    try {
-      const parsedData: TempSessionData = JSON.parse(tempData);
-
-      const participantNames = parsedData.participants.map(p => p.name).join(', ');
-      const firstParticipant = parsedData.participants[0];
-
+    if (initialParticipant && initialConversationId) {
       const tempConversation: Conversation = {
-        conversationId: parsedData.conversationId,
-        name: participantNames,
-        participantType: firstParticipant.type,
-        participants: parsedData.participants.map(p => p.name),
+        conversationId: initialConversationId,
+        name: initialParticipant.name,
+        participants: [initialParticipant.name],
         messageCount: 0,
         toolCallCount: 0,
-        duration: '0s',
+        duration: 'ongoing',
         status: 'active',
-        startTime: parsedData.createdAt,
+        startTime: new Date().toISOString(),
         isTemporary: true,
+        participantType: initialParticipant.type,
       };
-
       setTemporaryConversations([tempConversation]);
-      setSelectedConversationId(parsedData.conversationId);
-    } catch (error) {
-      console.error('Failed to parse temporary session data:', error);
+      setSelectedConversationId(initialConversationId);
     }
-  }, [sessionId]);
+  }, [initialParticipant, initialConversationId]);
 
   const allConversations = useMemo(() => {
-    const backend = backendConversations || [];
+    // If backend data hasn't loaded yet (undefined), keep all temporary conversations
+    // This prevents the array from becoming empty during the initial fetch
+    if (backendConversations === undefined) {
+      return temporaryConversations;
+    }
+
+    // If backend returns empty while we have temporary conversations, keep temporary
+    // This prevents flicker when backend hasn't processed the query yet
+    if (backendConversations.length === 0 && temporaryConversations.length > 0) {
+      return temporaryConversations;
+    }
+
+    const backend = backendConversations;
     const backendIds = new Set(backend.map(c => c.conversationId));
     const uniqueTemporary = temporaryConversations.filter(
       temp => !backendIds.has(temp.conversationId)
@@ -91,12 +90,21 @@ export function ConversationsTab({ sessionId }: Props) {
   }, [allConversations, selectedConversationId]);
 
   const handleSelectParticipant = (participant: Participant) => {
-    const newConversation = conversationsService.createTemporaryConversation(
-      participant.name,
-      participant.type
-    );
+    const conversationId = generateUUID();
+    const newConversation: Conversation = {
+      conversationId,
+      name: participant.name,
+      participants: [participant.name],
+      messageCount: 0,
+      toolCallCount: 0,
+      duration: 'ongoing',
+      status: 'active',
+      startTime: new Date().toISOString(),
+      isTemporary: true,
+      participantType: participant.type,
+    };
     setTemporaryConversations((prev) => [...prev, newConversation]);
-    setSelectedConversationId(newConversation.conversationId);
+    setSelectedConversationId(conversationId);
   };
 
   const handleAddPendingMessage = (conversationId: string, content: string) => {
@@ -109,33 +117,19 @@ export function ConversationsTab({ sessionId }: Props) {
 
   const handleClearPendingMessages = (conversationId: string) => {
     setPendingMessagesMap(conversationId, []);
-    setProcessingConversations((prev) => {
-      const newSet = new Set(prev);
-      newSet.delete(conversationId);
-      return newSet;
-    });
+    setProcessingStateMap(conversationId, false);
   };
 
   const handleEnableQueries = () => {
-    if (globalThis.window !== undefined) {
-      localStorage.removeItem(`temp-session-${sessionId}`);
-      setHasTempSession(false);
-      setTemporaryConversations(prev =>
-        prev.map(conv => ({ ...conv, isTemporary: false }))
-      );
-    }
+    setTemporaryConversations(prev =>
+      prev.map(conv => ({ ...conv, isTemporary: false }))
+    );
+    // Enable API fetching now that first message has been sent
+    setHasSentMessage(true);
   };
 
   const handleSetProcessing = (conversationId: string, isProcessing: boolean) => {
-    setProcessingConversations((prev) => {
-      const newSet = new Set(prev);
-      if (isProcessing) {
-        newSet.add(conversationId);
-      } else {
-        newSet.delete(conversationId);
-      }
-      return newSet;
-    });
+    setProcessingStateMap(conversationId, isProcessing);
   };
 
   if (isLoading) {
@@ -185,8 +179,7 @@ export function ConversationsTab({ sessionId }: Props) {
                 conversation={selectedConversation}
                 pendingMessages={pendingMessagesMap[selectedConversationId] || []}
                 onClearPending={() => handleClearPendingMessages(selectedConversationId)}
-                isProcessing={processingConversations.has(selectedConversationId)}
-                hasTempSession={hasTempSession}
+                isProcessing={processingStateMap[selectedConversationId] || false}
               />
               <ChatInput
                 conversationId={selectedConversationId}
@@ -195,7 +188,6 @@ export function ConversationsTab({ sessionId }: Props) {
                 onAddPendingMessage={handleAddPendingMessage}
                 onSetProcessing={handleSetProcessing}
                 onEnableQueries={handleEnableQueries}
-                hasTempSession={hasTempSession}
               />
             </div>
           ) : (

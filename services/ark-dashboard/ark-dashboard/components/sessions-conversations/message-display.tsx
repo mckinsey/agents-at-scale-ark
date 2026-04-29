@@ -18,7 +18,6 @@ interface Props {
   readonly pendingMessages: Array<{ role: 'user'; content: string; timestamp: string }>;
   readonly onClearPending: () => void;
   readonly isProcessing: boolean;
-  readonly hasTempSession: boolean;
 }
 
 function renderMessageContent(
@@ -110,10 +109,9 @@ function renderMessageContent(
   );
 }
 
-export function MessageDisplay({ conversationId, sessionId, conversation, pendingMessages, onClearPending, isProcessing, hasTempSession }: Props) {
-  const { data: messages, isLoading } = useGetMessages(sessionId, conversationId, { enabled: !hasTempSession });
+export function MessageDisplay({ conversationId, sessionId, conversation, pendingMessages, onClearPending, isProcessing }: Props) {
+  const { data: messages, isLoading } = useGetMessages(sessionId, conversationId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const previousMessageCountRef = useRef(0);
 
   const participantName = conversation?.name || FALLBACK_PARTICIPANT_NAME;
   const participantType = conversation?.participantType || FALLBACK_PARTICIPANT_TYPE;
@@ -124,16 +122,37 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
   }, [messages, pendingMessages]);
 
   useEffect(() => {
-    if (messages && messages.length > previousMessageCountRef.current && isProcessing) {
-      const hasAgentResponse = messages.some((msg: any) =>
-        msg.message.role === 'assistant' || msg.message.role === 'tool'
-      );
-      if (hasAgentResponse) {
-        onClearPending();
-      }
+    // Clear processing only when agent response appears after pending user message
+    if (!isProcessing || !messages || messages.length === 0 || pendingMessages.length === 0) {
+      return;
     }
-    previousMessageCountRef.current = messages?.length || 0;
-  }, [messages, isProcessing, onClearPending]);
+
+    // Find the user message in backend that matches the last pending message
+    const lastPendingContent = pendingMessages[pendingMessages.length - 1]?.content.trim();
+    if (!lastPendingContent) {
+      return;
+    }
+
+    // Find the backend user message with matching content
+    const userMessageInBackend = messages
+      .filter((msg: any) => msg.message.role === 'user')
+      .find((msg: any) => msg.message.content?.trim() === lastPendingContent);
+
+    if (!userMessageInBackend) {
+      return;
+    }
+
+    // Check if there's an assistant message with a higher sequence number
+    const assistantMessages = messages.filter((msg: any) => {
+      const isAssistant = msg.message.role === 'assistant' || msg.message.role === 'agent';
+      const isAfterUser = msg.sequence > userMessageInBackend.sequence;
+      return isAssistant && isAfterUser;
+    });
+
+    if (assistantMessages.length > 0) {
+      onClearPending();
+    }
+  }, [messages, pendingMessages, isProcessing, onClearPending]);
 
   if (isLoading && pendingMessages.length === 0) {
     return <Skeleton className="flex-1" />;

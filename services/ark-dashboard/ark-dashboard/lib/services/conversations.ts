@@ -1,6 +1,5 @@
 import { apiClient } from '@/lib/api/client';
 import type { ChatMessage } from '@/lib/types/chat-message';
-import { generateUUID } from '@/lib/utils/uuid';
 
 export type ParticipantType = 'agent' | 'team' | 'tool';
 
@@ -51,6 +50,15 @@ export const conversationsService = {
         const participants = Array.from(new Set(queries.map(q => q.team || q.agent).filter(Boolean))) as string[];
         const participantName = participants[0] || convId;
 
+        // Determine participant type from queries
+        const firstQuery = queries[0];
+        let participantType: ParticipantType = 'agent';
+        if (firstQuery.team) {
+          participantType = 'team';
+        } else if (firstQuery.tool) {
+          participantType = 'tool';
+        }
+
         const messageCount = queries.length;
 
         // Count tool calls from events
@@ -80,6 +88,7 @@ export const conversationsService = {
           duration: calculateDuration(queries.at(0)!.createdAt, queries.at(-1)!.completedAt),
           status,
           startTime: queries.at(0)!.createdAt,
+          participantType,
         };
       });
 
@@ -128,23 +137,6 @@ export const conversationsService = {
     );
   },
 
-  createTemporaryConversation(
-    participantName: string,
-    participantType: ParticipantType
-  ): Conversation {
-    return {
-      conversationId: generateUUID(),
-      name: participantName,
-      participants: [participantName],
-      messageCount: 0,
-      toolCallCount: 0,
-      duration: 'ongoing',
-      status: 'active',
-      startTime: new Date().toISOString(),
-      isTemporary: true,
-      participantType,
-    };
-  },
 };
 
 function calculateDuration(start: string, end?: string): string {

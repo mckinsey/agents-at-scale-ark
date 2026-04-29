@@ -17,10 +17,9 @@ interface Props {
   readonly onAddPendingMessage: (conversationId: string, content: string) => void;
   readonly onSetProcessing: (conversationId: string, isProcessing: boolean) => void;
   readonly onEnableQueries: () => void;
-  readonly hasTempSession: boolean;
 }
 
-export function ChatInput({ conversationId, sessionId, conversation, onAddPendingMessage, onSetProcessing, onEnableQueries, hasTempSession }: Props) {
+export function ChatInput({ conversationId, sessionId, conversation, onAddPendingMessage, onSetProcessing, onEnableQueries }: Props) {
   const [message, setMessage] = useState('');
   const { mutate: sendMessage, isPending } = useSendMessage();
 
@@ -56,9 +55,7 @@ export function ChatInput({ conversationId, sessionId, conversation, onAddPendin
       },
       {
         onSuccess: () => {
-          if (hasTempSession) {
-            onEnableQueries();
-          }
+          onEnableQueries();
         },
         onError: (error) => {
           onSetProcessing(conversationId, false);
