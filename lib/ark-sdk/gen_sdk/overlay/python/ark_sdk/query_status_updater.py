@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 
 from kubernetes_asyncio import client
@@ -38,7 +39,7 @@ class QueryStatusUpdater:
                         "status": "False",
                         "reason": reason,
                         "message": message,
-                        "lastTransitionTime": None,
+                        "lastTransitionTime": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                     }
                 ],
             }
@@ -54,6 +55,7 @@ class QueryStatusUpdater:
                     plural=QUERY_PLURAL,
                     name=self._query_ref.name,
                     body=body,
+                    _content_type="application/merge-patch+json",
                 )
                 logger.info(
                     "Updated query %s/%s phase to %s (reason=%s)",

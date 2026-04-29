@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -142,7 +143,7 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 		return ctrl.Result{
 			RequeueAfter: time.Until(expiry),
 		}, nil
-	case statusRunning:
+	case statusProvisioning, statusRunning:
 		return r.handleRunningPhase(ctx, req, obj)
 	default:
 		if err := r.updateStatus(ctx, &obj, statusRunning); err != nil {
@@ -634,32 +635,53 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 	if ctx.Err() != nil {
 		return nil
 	}
-	query.Status.Phase = status
-	switch status {
-	case statusRunning:
-		r.setConditionCompleted(query, metav1.ConditionFalse, "QueryRunning", "Query is running")
-	case statusDone:
-		r.setConditionCompleted(query, metav1.ConditionTrue, "QuerySucceeded", "Query completed successfully")
-	case statusError:
-		errorMsg := "Query completed with error"
-		if query.Status.Response != nil && query.Status.Response.Phase == statusError && query.Status.Response.Content != "" {
-			errorMsg = query.Status.Response.Content
-		}
-		r.setConditionCompleted(query, metav1.ConditionTrue, "QueryErrored", errorMsg)
-	case statusCanceled:
-		r.setConditionCompleted(query, metav1.ConditionTrue, "QueryCanceled", "Query canceled")
-	}
-	if duration != nil {
-		query.Status.Duration = duration
-	}
-	err := r.Status().Update(ctx, query)
-	if err != nil {
-		if errors.IsNotFound(err) {
+	// Preserve response and token usage from the caller — must survive re-fetches
+	response := query.Status.Response
+	tokenUsage := query.Status.TokenUsage
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		if ctx.Err() != nil {
 			return nil
 		}
-		logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
-	}
-	return err
+		// Re-fetch the latest version to pick up any interim status changes (e.g., executor provisioning patches)
+		if err := r.Get(ctx, types.NamespacedName{Name: query.Name, Namespace: query.Namespace}, query); err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+		query.Status.Phase = status
+		if response != nil {
+			query.Status.Response = response
+		}
+		query.Status.TokenUsage = tokenUsage
+		switch status {
+		case statusRunning:
+			r.setConditionCompleted(query, metav1.ConditionFalse, "QueryRunning", "Query is running")
+		case statusDone:
+			r.setConditionCompleted(query, metav1.ConditionTrue, "QuerySucceeded", "Query completed successfully")
+		case statusError:
+			errorMsg := "Query completed with error"
+			if query.Status.Response != nil && query.Status.Response.Phase == statusError && query.Status.Response.Content != "" {
+				errorMsg = query.Status.Response.Content
+			}
+			r.setConditionCompleted(query, metav1.ConditionTrue, "QueryErrored", errorMsg)
+		case statusCanceled:
+			r.setConditionCompleted(query, metav1.ConditionTrue, "QueryCanceled", "Query canceled")
+		}
+		if duration != nil {
+			query.Status.Duration = duration
+		}
+		err := r.Status().Update(ctx, query)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			if !errors.IsConflict(err) {
+				logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
+			}
+		}
+		return err
+	})
 }
 
 func createErrorResponse(target arkv1alpha1.QueryTarget, err error) *arkv1alpha1.Response {
