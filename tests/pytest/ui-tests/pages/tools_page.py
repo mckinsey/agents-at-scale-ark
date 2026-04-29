@@ -68,6 +68,8 @@ class ToolsPage(BasePage):
         add_button.click()
         self.wait_for_navigation_complete()
         self.wait_for_form_ready()
+        dialog = self.page.locator("[role='dialog']").first
+        self.wait_for_animations_complete(dialog)
         
         name_input = self.page.locator(self.TOOL_NAME_INPUT).first
 
@@ -85,13 +87,20 @@ class ToolsPage(BasePage):
 
         type_trigger = self.page.locator("button#type, button[name='type'], [role='combobox']:has-text('Select'), [data-slot='trigger']").first
         type_trigger.wait_for(state="visible", timeout=15000)
+        logger.info("Clicking type trigger to open dropdown")
         type_trigger.click()
 
         listbox = self.page.locator("[role='listbox'][data-side][data-state='open']")
+        logger.info("Waiting for listbox to be visible (with data-side set by Floating UI)")
         listbox.wait_for(state="visible", timeout=15000)
+        logger.info("Listbox visible, waiting for animations to settle")
         self.wait_for_animations_complete(listbox)
-        logger.info("Listbox animations complete, clicking HTTP option")
+        listbox_open = self.page.locator("[role='listbox'][data-state='open']").is_visible()
+        logger.info(f"Listbox still open after animation wait: {listbox_open}")
         http_option = self.page.locator("[role='option']:has-text('HTTP')").first
+        logger.info("Waiting for HTTP option to be visible")
+        http_option.wait_for(state="visible", timeout=10000)
+        logger.info("HTTP option visible, clicking")
         http_option.click()
 
         description_input = self.page.locator("input#description, input[name='description'], [role='dialog'] input:nth-of-type(2)").first

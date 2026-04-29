@@ -1,7 +1,7 @@
 'use client';
 
 import { ExternalLink, Play, Trash2, Workflow } from 'lucide-react';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 
 import { NamespacedLink } from '@/components/namespaced-link';
 import { DeleteWorkflowTemplateDialog } from '@/components/dialogs/delete-workflow-template-dialog';
@@ -37,6 +37,7 @@ interface FlowRowProps {
     workflowName?: string,
   ) => Promise<void>;
   readonly onDelete?: (flowId: string) => Promise<void>;
+  readonly leading?: ReactNode;
 }
 
 export function FlowRow({
@@ -45,6 +46,7 @@ export function FlowRow({
   readOnly,
   onRun,
   onDelete,
+  leading,
 }: FlowRowProps) {
   const { namespace } = useNamespace();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -74,6 +76,12 @@ export function FlowRow({
         href={`/workflow-templates/${flow.id}`}
         className="absolute inset-0 z-0"
       />
+
+      {leading && (
+        <div className="pointer-events-auto relative z-10 flex-shrink-0">
+          {leading}
+        </div>
+      )}
 
       <div className="pointer-events-none relative z-10 flex flex-grow items-center gap-3 overflow-hidden">
         <div className="flex-shrink-0">
