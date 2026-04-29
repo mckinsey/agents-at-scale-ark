@@ -7,6 +7,7 @@ export const useListConversations = (sessionId: string | null, options?: { enabl
     queryFn: () =>
       sessionId ? conversationsService.getConversations(sessionId) : [],
     enabled: options?.enabled !== false && !!sessionId,
+    refetchInterval: 5000,
     placeholderData: (previousData) => previousData,
     retry: false,
   });
