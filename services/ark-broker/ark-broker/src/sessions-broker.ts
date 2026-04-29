@@ -16,6 +16,8 @@ export interface QueryEntry {
   agent?: string;
   /** Name of the team handling this query */
   team?: string;
+  /** Name of the tool handling this query */
+  tool?: string;
   /** CRD target type (agent, team, model, tool) */
   targetType: string;
   /** Current lifecycle phase derived from incoming events */
@@ -121,6 +123,9 @@ export class SessionsBroker {
     if (eventData.team && !existing.team) {
       existing.team = eventData.team;
     }
+    if (eventData.tool && !existing.tool) {
+      existing.tool = eventData.tool;
+    }
     if (eventData.targetType && existing.targetType === 'agent') {
       existing.targetType = eventData.targetType;
     }
@@ -144,6 +149,12 @@ export class SessionsBroker {
     const reason = eventData._reason || '';
     const errorMsg = eventData.error;
 
+    // Map toolName to tool for backward compatibility with completions executor
+    const normalizedEventData = {
+      ...eventData,
+      tool: eventData.tool || (eventData as any).toolName,
+    };
+
     if (!this.store.sessions[sessionId]) {
       this.store.sessions[sessionId] = {
         sessionId,
@@ -161,15 +172,16 @@ export class SessionsBroker {
 
     const existing = session.queries[queryName];
     if (existing) {
-      this.updateExistingQuery(existing, queryPhase, eventData, errorMsg);
+      this.updateExistingQuery(existing, queryPhase, normalizedEventData, errorMsg);
     } else {
       session.queries[queryName] = {
         name: queryName,
         namespace: queryNamespace,
-        conversationId: eventData.conversationId || undefined,
-        agent: eventData.agent,
-        team: eventData.team,
-        targetType: eventData.targetType || 'agent',
+        conversationId: normalizedEventData.conversationId || undefined,
+        agent: normalizedEventData.agent,
+        team: normalizedEventData.team,
+        tool: normalizedEventData.tool,
+        targetType: normalizedEventData.targetType || 'agent',
         phase: queryPhase,
         error: errorMsg,
         createdAt: now,
@@ -211,7 +223,7 @@ export class SessionsBroker {
     dateTo?: string;
     search?: string;
   }, sort?: {
-    field: 'date' | 'name';
+    field: 'date' | 'name' | 'conversations';
     direction: 'asc' | 'desc';
   }): PaginatedList<SessionEntry> {
     let sessions = Object.values(this.store.sessions);
@@ -245,7 +257,9 @@ export class SessionsBroker {
         s.sessionId.toLowerCase().includes(search) ||
         s.name.toLowerCase().includes(search) ||
         Object.values(s.queries).some(q =>
-          (q.agent?.toLowerCase() || '').includes(search)
+          (q.agent?.toLowerCase() || '').includes(search) ||
+          (q.team?.toLowerCase() || '').includes(search) ||
+          (q.tool?.toLowerCase() || '').includes(search)
         )
       );
     }
@@ -257,6 +271,10 @@ export class SessionsBroker {
           comparison = new Date(a.lastActivity).getTime() - new Date(b.lastActivity).getTime();
         } else if (sort.field === 'name') {
           comparison = a.name.localeCompare(b.name);
+        } else if (sort.field === 'conversations') {
+          const firstSessionConversationCount = new Set(Object.values(a.queries).map(q => q.conversationId).filter(Boolean)).size;
+          const secondSessionConversationCount = new Set(Object.values(b.queries).map(q => q.conversationId).filter(Boolean)).size;
+          comparison = firstSessionConversationCount - secondSessionConversationCount;
         }
         return sort.direction === 'asc' ? comparison : -comparison;
       });

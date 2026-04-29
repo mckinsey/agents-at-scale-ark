@@ -19,7 +19,7 @@ interface Props {
   readonly onSearchChange: (query: string) => void;
 }
 
-type SortField = 'date' | 'name';
+type SortField = 'date' | 'name' | 'conversations';
 type SortDirection = 'asc' | 'desc';
 
 export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery, onSearchChange }: Props) {
@@ -115,7 +115,7 @@ export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery,
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-end gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -126,28 +126,34 @@ export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery,
             className="pl-10"
           />
         </div>
-        <Select value={dateFilter} onValueChange={(value: typeof dateFilter) => setDateFilter(value)}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Date range" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Choose option</SelectItem>
-            <SelectItem value="24h">Last 24h</SelectItem>
-            <SelectItem value="7d">Last 7 days</SelectItem>
-            <SelectItem value="30d">Last 30 days</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={statusFilter} onValueChange={(value: typeof statusFilter) => setStatusFilter(value)}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="idle">Idle</SelectItem>
-            <SelectItem value="error">Error</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm text-muted-foreground">Date range</label>
+          <Select value={dateFilter} onValueChange={(value: typeof dateFilter) => setDateFilter(value)}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Date range" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Choose option</SelectItem>
+              <SelectItem value="24h">Last 24h</SelectItem>
+              <SelectItem value="7d">Last 7 days</SelectItem>
+              <SelectItem value="30d">Last 30 days</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm text-muted-foreground">Status</label>
+          <Select value={statusFilter} onValueChange={(value: typeof statusFilter) => setStatusFilter(value)}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="idle">Idle</SelectItem>
+              <SelectItem value="error">Error</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <Button onClick={() => setDialogOpen(true)}>
           <Plus className="mr-2 size-4" />
           New session
@@ -164,7 +170,13 @@ export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery,
             <ArrowUpDown className="size-3" />
           </button>
           <div>Participants</div>
-          <div>Convos</div>
+          <button
+            className="flex items-center gap-1 text-left"
+            onClick={() => toggleSort('conversations')}
+          >
+            Convos
+            <ArrowUpDown className="size-3" />
+          </button>
           <div className="w-8" />
         </div>
 

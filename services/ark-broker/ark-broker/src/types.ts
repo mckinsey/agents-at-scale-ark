@@ -46,6 +46,7 @@ export interface SessionEventData {
   conversationId?: string;
   agent?: string;
   team?: string;
+  tool?: string;
   targetType?: string;
   error?: string;
   _reason?: string;

@@ -247,7 +247,7 @@ async def get_sessions(
     date_from: Optional[str] = Query(None, description="Filter sessions from this date"),
     date_to: Optional[str] = Query(None, description="Filter sessions to this date"),
     search: Optional[str] = Query(None, description="Search by session ID or participant"),
-    sort: Optional[str] = Query(None, description="Sort field (date)"),
+    sort: Optional[str] = Query(None, description="Sort field (date, name, conversations)"),
     order: Optional[str] = Query(None, description="Sort order (asc/desc)"),
 ):
     """Get or stream sessions from the broker. Sessions are global broker state, not memory-scoped, but the memory parameter selects which broker service to query."""
