@@ -28,4 +28,8 @@ parent-team (sequential)
 chainsaw test
 ```
 
-Validates hierarchical team coordination for complex multi-level workflow orchestration and organizational team structures.
+## How the mock LLM validates the chain
+
+Each agent has a unique phrase in its system prompt. The mock LLM matches on that phrase and returns a distinct response (`researcher-output`, `analyst-output`, etc.), with a 500 fallback for any unrecognised agent. The test asserts `response.content == 'coordinator-output'`, which proves coordinator (the last member of the last sub-team) was reached. Any earlier failure in the chain would either error the query (via the 500 fallback) or produce a different final response.
+
+Validates hierarchical team coordination across two levels of nesting.

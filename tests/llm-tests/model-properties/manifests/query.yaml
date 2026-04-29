@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: model-properties-query
+spec:
+  input: "Generate exactly 3 creative words."
+  target:
+    type: agent
+    name: properties-test-agent

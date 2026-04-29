@@ -18,7 +18,10 @@ class AgentsPage(BasePage):
     SAVE_BUTTON = "button:has-text('Create Agent'), button:has-text('Save Changes'), button:has-text('Add Agent'), button:has-text('Create'), button:has-text('Save'), button[type='submit']"
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
     CONFIRM_DELETE_BUTTON = "button:has-text('Delete'), button:has-text('Confirm'), button:has-text('Yes')"
-    
+    CHAT_BUTTON = "button:has(svg.lucide-message-circle)"
+    CHAT_WINDOW = "div[data-slot='card']"
+    CLOSE_CHAT_BUTTON = "button[aria-label='Close chat']"
+
     TEST_DATA = {
         "default": {
             "description": "handle queries",
@@ -55,6 +58,21 @@ class AgentsPage(BasePage):
                     self.wait_for_navigation_complete()
                     self.wait_for_element(self.ADD_AGENT_BUTTON, timeout=10000)
         return False
+
+    def open_agent_chat(self, agent_name: str):
+        if self.page.locator(self.CHAT_WINDOW).is_visible(timeout=100):
+            logger.error("Chat already open")
+            return
+        row = self.page.locator(f"[role='link']:has(p.truncate.text-sm.font-medium:has-text('{agent_name}'))").first
+        row.locator(self.CHAT_BUTTON).click()
+        self.wait_for_element(self.CHAT_WINDOW)
+
+    def close_agent_chat(self):
+        if not self.page.locator(self.CHAT_WINDOW).is_visible(timeout=1000):
+            logger.error("Chat not open")
+            return
+        self.page.locator(self.CLOSE_CHAT_BUTTON).first.click()
+        self.wait_for_element_hidden(self.CHAT_WINDOW, timeout=5000)
     
     def check_for_error_banner(self) -> dict:
         logger.info("Checking for error banners...")
@@ -202,36 +220,32 @@ class AgentsPage(BasePage):
             logger.warning("Could not open model dropdown")
         
         model_selected = False
-        for attempt in range(3):
+        for attempt in range(5):
             model_option = self.page.get_by_role("option", name=model_name, exact=True)
             if model_option.count() > 0:
                 logger.info(f"Found exact match for model: {model_name}")
                 model_option.first.click(force=True)
                 model_selected = True
                 break
-            
+
             model_option_alt = self.page.locator(f"[role='option']:has-text('{model_name}')").first
             if model_option_alt.count() > 0:
                 logger.info(f"Found partial match for model: {model_name}")
                 model_option_alt.click(force=True)
                 model_selected = True
                 break
-            
-            if attempt < 2:
-                logger.info(f"Model {model_name} not in dropdown yet, retrying ({attempt + 1}/3)...")
+
+            if attempt < 4:
+                logger.info(f"Model {model_name} not in dropdown yet, retrying ({attempt + 1}/5)...")
                 self.page.keyboard.press("Escape")
                 self.wait_for_element_hidden("[role='option']", timeout=3000)
+                self.page.wait_for_timeout(3000)
                 model_trigger.click(force=True)
-                self.page.locator("[role='option']").first.wait_for(state="visible", timeout=3000)
-        
+                self.page.locator("[role='option']").first.wait_for(state="visible", timeout=5000)
+
         if not model_selected:
-            first_option = self.page.locator("[role='option']").first
-            if first_option.count() > 0:
-                logger.warning(f"Could not find model {model_name}, selecting first available")
-                first_option.click(force=True)
-            else:
-                logger.warning(f"No model options available")
-        
+            raise Exception(f"Could not find model '{model_name}' in dropdown after 5 attempts")
+
         logger.info(f"Model {model_name} selected")
         
         if tools:

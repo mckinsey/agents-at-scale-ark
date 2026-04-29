@@ -7,4 +7,4 @@ spec:
     You are an agent for testing event recording.
     Respond briefly with "Event test completed."
   modelRef:
-    name: test-model
+    name: test-model-mock
