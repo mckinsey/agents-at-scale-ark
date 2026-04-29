@@ -631,18 +631,33 @@ func (r *QueryReconciler) updateStatus(ctx context.Context, query *arkv1alpha1.Q
 	return r.updateStatusWithDuration(ctx, query, status, nil)
 }
 
+func (r *QueryReconciler) setConditionForPhase(query *arkv1alpha1.Query, status string) {
+	switch status {
+	case statusRunning:
+		r.setConditionCompleted(query, metav1.ConditionFalse, "QueryRunning", "Query is running")
+	case statusDone:
+		r.setConditionCompleted(query, metav1.ConditionTrue, "QuerySucceeded", "Query completed successfully")
+	case statusError:
+		errorMsg := "Query completed with error"
+		if query.Status.Response != nil && query.Status.Response.Phase == statusError && query.Status.Response.Content != "" {
+			errorMsg = query.Status.Response.Content
+		}
+		r.setConditionCompleted(query, metav1.ConditionTrue, "QueryErrored", errorMsg)
+	case statusCanceled:
+		r.setConditionCompleted(query, metav1.ConditionTrue, "QueryCanceled", "Query canceled")
+	}
+}
+
 func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *arkv1alpha1.Query, status string, duration *metav1.Duration) error {
 	if ctx.Err() != nil {
 		return nil
 	}
-	// Preserve response and token usage from the caller — must survive re-fetches
 	response := query.Status.Response
 	tokenUsage := query.Status.TokenUsage
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		if ctx.Err() != nil {
 			return nil
 		}
-		// Re-fetch the latest version to pick up any interim status changes (e.g., executor provisioning patches)
 		if err := r.Get(ctx, types.NamespacedName{Name: query.Name, Namespace: query.Namespace}, query); err != nil {
 			if errors.IsNotFound(err) {
 				return nil
@@ -654,20 +669,7 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 			query.Status.Response = response
 		}
 		query.Status.TokenUsage = tokenUsage
-		switch status {
-		case statusRunning:
-			r.setConditionCompleted(query, metav1.ConditionFalse, "QueryRunning", "Query is running")
-		case statusDone:
-			r.setConditionCompleted(query, metav1.ConditionTrue, "QuerySucceeded", "Query completed successfully")
-		case statusError:
-			errorMsg := "Query completed with error"
-			if query.Status.Response != nil && query.Status.Response.Phase == statusError && query.Status.Response.Content != "" {
-				errorMsg = query.Status.Response.Content
-			}
-			r.setConditionCompleted(query, metav1.ConditionTrue, "QueryErrored", errorMsg)
-		case statusCanceled:
-			r.setConditionCompleted(query, metav1.ConditionTrue, "QueryCanceled", "Query canceled")
-		}
+		r.setConditionForPhase(query, status)
 		if duration != nil {
 			query.Status.Duration = duration
 		}
