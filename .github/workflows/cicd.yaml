@@ -10,7 +10,7 @@ on:
       - 'examples/**'
       - 'samples/**'
       - 'openspec/**'
-      - '*.md'
+      - '**.md'
   workflow_dispatch:
 
 # Release please will create pull requests, update the changelog, and cicd will
