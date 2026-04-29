@@ -1,7 +1,6 @@
 terminationGracePeriodSeconds: 3
 ark:
   model:
-    enabled: true
     name: test-model-overrides
     labels:
       environment: test
@@ -15,7 +14,7 @@ ark:
 
 config:
   rules:
-  - path: "^/v1/models$"
+  - path: "/v1/models"
     method: "GET"
     response:
       status: 200
@@ -24,27 +23,8 @@ config:
           "object": "list",
           "data": [
             {
-              "id": "gpt-4",
+              "id": "gpt-4.1-mini",
               "object": "model",
-              "created": 1687882411,
-              "owned_by": "openai"
-            },
-            {
-              "id": "gpt-4o-mini",
-              "object": "model",
-              "created": 1687882411,
-              "owned_by": "openai"
-            },
-            {
-              "id": "gpt-4.1",
-              "object": "model",
-              "created": 1687882411,
-              "owned_by": "openai"
-            },
-            {
-              "id": "gpt-5",
-              "object": "model",
-              "created": 1687882411,
               "owned_by": "openai"
             }
           ]

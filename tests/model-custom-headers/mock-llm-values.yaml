@@ -3,12 +3,7 @@
 terminationGracePeriodSeconds: 3
 ark:
   model:
-    enabled: true
     name: test-model-custom-headers
-    type: completions
-    provider: openai
-    model: gpt-5
-    apiKey: mock-api-key
     headers:
     - name: X-Consumer-Application
       value:
@@ -37,27 +32,8 @@ config:
           "object": "list",
           "data": [
             {
-              "id": "gpt-4",
+              "id": "gpt-4.1-mini",
               "object": "model",
-              "created": 1687882411,
-              "owned_by": "openai"
-            },
-            {
-              "id": "gpt-4o-mini",
-              "object": "model",
-              "created": 1687882411,
-              "owned_by": "openai"
-            },
-            {
-              "id": "gpt-4.1",
-              "object": "model",
-              "created": 1687882411,
-              "owned_by": "openai"
-            },
-            {
-              "id": "gpt-5",
-              "object": "model",
-              "created": 1687882411,
               "owned_by": "openai"
             }
           ]
