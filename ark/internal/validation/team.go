@@ -80,7 +80,7 @@ func (v *Validator) validateStrategy(ctx context.Context, team *arkv1alpha1.Team
 	case StrategyRoundRobin:
 		return nil
 	case StrategySelector:
-		if team.Spec.Loops {
+		if team.Spec.Loops != nil && *team.Spec.Loops {
 			return fmt.Errorf("loops can only be used with the 'sequential' strategy")
 		}
 		if err := v.validateSelectorAgent(ctx, team); err != nil {
@@ -99,10 +99,11 @@ func (v *Validator) validateStrategy(ctx context.Context, team *arkv1alpha1.Team
 }
 
 func validateSequentialStrategy(team *arkv1alpha1.Team) error {
-	if team.Spec.Loops && team.Spec.MaxTurns == nil {
+	loopsEnabled := team.Spec.Loops != nil && *team.Spec.Loops
+	if loopsEnabled && team.Spec.MaxTurns == nil {
 		return fmt.Errorf("maxTurns is required when loops is enabled")
 	}
-	if !team.Spec.Loops && team.Spec.MaxTurns != nil {
+	if !loopsEnabled && team.Spec.MaxTurns != nil {
 		return fmt.Errorf("maxTurns can only be set when loops is enabled")
 	}
 	return nil
