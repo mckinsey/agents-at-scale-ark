@@ -87,7 +87,7 @@ class BasePage:
     def wait_for_animations_complete(self, locator, timeout: int = 5000) -> None:
         try:
             locator.evaluate(
-                "el => Promise.all(el.getAnimations({subtree: true}).map(a => a.finished))",
+                "el => Promise.allSettled(el.getAnimations({subtree: true}).map(a => a.finished))",
                 timeout=timeout
             )
         except Exception as e:

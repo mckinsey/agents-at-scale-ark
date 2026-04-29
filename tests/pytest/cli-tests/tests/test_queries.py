@@ -1,7 +1,11 @@
-import pytest
-import sys
+import base64
+import json
 import os
 import subprocess
+import sys
+import time
+
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
@@ -57,8 +61,6 @@ class TestQueriesCLI:
         )
     
     def test_setup_prerequisites(self):
-        import base64
-        
         if not self.provider_config:
             pytest.skip("No model provider credentials configured")
         
@@ -160,27 +162,27 @@ spec:
         )
         
         assert result.returncode == 0 or "already exists" in result.stderr.lower(), f"Failed to create model: {result.stderr}"
-        
-        import time
-        time.sleep(2)
-        
-        result = subprocess.run(
-            ["kubectl", "get", "model", self.model_name, "-n", "default", "-o", "json"],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        
-        if result.returncode == 0:
-            import json
-            model_data = json.loads(result.stdout)
-            conditions = model_data.get("status", {}).get("conditions", [])
-            available = any(
-                c.get("type") == "ModelAvailable" and c.get("status") == "True"
-                for c in conditions
+
+        deadline = time.time() + 30
+        available = False
+        while time.time() < deadline:
+            result = subprocess.run(
+                ["kubectl", "get", "model", self.model_name, "-n", "default", "-o", "json"],
+                capture_output=True,
+                text=True,
+                timeout=10
             )
-            if not available:
-                pytest.skip("Model not available yet")
+            if result.returncode == 0:
+                model_data = json.loads(result.stdout)
+                conditions = model_data.get("status", {}).get("conditions", [])
+                available = any(
+                    c.get("type") == "ModelAvailable" and c.get("status") == "True"
+                    for c in conditions
+                )
+                if available:
+                    break
+            time.sleep(2)
+        assert available, f"Model {self.model_name} did not become available within 30s"
         
         agent_yaml = f"""apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent
