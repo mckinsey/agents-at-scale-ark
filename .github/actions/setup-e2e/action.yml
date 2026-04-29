@@ -34,6 +34,14 @@ inputs:
     description: 'Storage backend to use (etcd or postgresql)'
     required: false
     default: 'etcd'
+  prefetch-test-images:
+    description: 'Pre-pull chainsaw test images (mock-llm, curl, mockserver, hurl, python)'
+    required: false
+    default: 'false'
+  install-broker:
+    description: 'Install ark-broker (required for tests that use the event bus)'
+    required: false
+    default: 'false'
 
 runs:
   using: 'composite'
@@ -76,7 +84,9 @@ runs:
       run: |
         ./.github/actions/setup-e2e/setup-local.sh \
           ${{ inputs.install-coverage == 'true' && '--install-coverage' || '' }} \
-          --storage-backend ${{ inputs.storage-backend }}
+          ${{ inputs.install-broker == 'true' && '--install-broker' || '' }} \
+          --storage-backend ${{ inputs.storage-backend }} \
+          ${{ inputs.prefetch-test-images == 'true' && '--prefetch-test-images' || '' }}
       env:
         DOCKER_CICD_CACHE_REGISTRY: ${{ inputs.ci-cache-registry || format('ghcr.io/{0}', github.repository_owner) }}
         DOCKER_CICD_CACHE_REGISTRY_USERNAME: ${{ inputs.ci-cache-registry-username || github.actor }}
