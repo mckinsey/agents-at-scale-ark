@@ -465,6 +465,7 @@ spec:
                 default: pending
                 enum:
                 - pending
+                - provisioning
                 - running
                 - error
                 - done

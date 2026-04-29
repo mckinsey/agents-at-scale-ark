@@ -517,7 +517,6 @@ jobs:
   e2e-tests-standard:
     name: E2E Standard (${{ matrix.storage-backend }})
     needs: [setup-container-cache-registry, build-containers]
-    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }} # Remove skipping these tests once chainsaw can be run with mock-llm
     runs-on: ubuntu-24.04
     continue-on-error: ${{ matrix.storage-backend == 'postgresql' }}
     strategy:
@@ -531,7 +530,9 @@ jobs:
         with:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "true"
+          install-broker: "true"
           storage-backend: ${{ matrix.storage-backend }}
+          prefetch-test-images: "true"
           ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
@@ -551,6 +552,8 @@ jobs:
           LANGCHAIN_WEATHER_AGENT_IMAGE_TAG: ${{ github.sha }}
           ARK_BROKER_IMAGE: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-broker
           ARK_BROKER_IMAGE_TAG: ${{ github.sha }}
+          ARK_MCP_IMAGE: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-mcp
+          ARK_MCP_IMAGE_TAG: ${{ github.sha }}
         run: |
           cd tests
           mkdir -p /tmp/chainsaw-report
@@ -594,6 +597,7 @@ jobs:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "true"
           storage-backend: ${{ matrix.storage-backend }}
+          prefetch-test-images: "true"
           ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
@@ -659,7 +663,7 @@ jobs:
         with:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "false"
-
+          install-broker: "true"
           ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
@@ -670,17 +674,6 @@ jobs:
             --namespace default \
             --create-namespace \
             --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/ark-api" \
-            --set app.image.tag="${{ github.sha }}" \
-            --set app.image.pullPolicy="Always" \
-            --wait \
-            --timeout=5m
-
-      - name: Deploy ark-broker
-        run: |
-          helm upgrade --install ark-broker services/ark-broker/chart \
-            --namespace default \
-            --create-namespace \
-            --set app.image.repository="${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/ark-broker" \
             --set app.image.tag="${{ github.sha }}" \
             --set app.image.pullPolicy="Always" \
             --wait \
@@ -700,8 +693,8 @@ jobs:
       - name: Wait for services to be ready
         run: |
           kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=ark-broker -n default --timeout=120s
           kubectl wait --for=condition=ready pod -l app=ark-dashboard -n default --timeout=120s
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=ark-broker -n default --timeout=120s
 
       - name: Update Argo Workflows dependencies
         run: |

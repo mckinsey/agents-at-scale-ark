@@ -7,6 +7,8 @@ spec:
   prompt: |
     You are a test agent. Use the test-json-api tool to get data and respond with the results verbatim, as is
     without any remarks and pre-amble.
+  modelRef:
+    name: test-model-mock
   tools:
   - type: http
     name: test-json-api

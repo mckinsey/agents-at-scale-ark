@@ -1,0 +1,37 @@
+name: OpenSpec Flow — Flip Label
+description: >
+  Removes one label from an issue and adds another in a single gh issue edit
+  call. If the remove-label is not present, the call fails silently and the
+  add-label is still applied.
+
+inputs:
+  gh-token:
+    description: GitHub token with issues write permission
+    required: true
+  repo:
+    description: Repository in owner/name format
+    required: true
+  issue-number:
+    description: Issue number to edit labels on
+    required: true
+  remove-label:
+    description: Label to remove from the issue
+    required: true
+  add-label:
+    description: Label to add to the issue
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Flip label
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.gh-token }}
+        REPO: ${{ inputs.repo }}
+        ISSUE_NUMBER: ${{ inputs.issue-number }}
+        REMOVE_LABEL: ${{ inputs.remove-label }}
+        ADD_LABEL: ${{ inputs.add-label }}
+      run: |
+        gh issue edit "$ISSUE_NUMBER" --repo "$REPO" \
+          --remove-label "$REMOVE_LABEL" --add-label "$ADD_LABEL"

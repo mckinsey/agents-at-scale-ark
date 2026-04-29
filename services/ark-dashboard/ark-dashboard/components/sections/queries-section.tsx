@@ -234,14 +234,22 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(
       );
     };
 
-    const getStatusBadge = (status: string | undefined, queryName: string) => {
+    const getConditionMessage = (query: QueryResponse): string | undefined => {
+      const conditions = (query.status as { conditions?: Array<{ type?: string; message?: string }> })?.conditions;
+      if (!conditions) return undefined;
+      const completed = conditions.find(c => c.type === 'Completed');
+      return completed?.message || undefined;
+    };
+
+    const getStatusBadge = (status: string | undefined, queryName: string, query: QueryResponse) => {
       const normalizedStatus = status as
         | 'done'
         | 'error'
         | 'running'
+        | 'provisioning'
         | 'canceled'
         | 'default';
-      const variant = ['done', 'error', 'running', 'canceled'].includes(
+      const variant = ['done', 'error', 'running', 'provisioning', 'canceled'].includes(
         status || '',
       )
         ? normalizedStatus
@@ -253,6 +261,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(
           onCancel={
             status === 'running' ? () => handleCancel(queryName) : undefined
           }
+          conditionMessage={status === 'provisioning' ? getConditionMessage(query) : undefined}
         />
       );
     };
@@ -488,7 +497,7 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(
                                 {formatTokenUsage(query)}
                               </td>
                               <td className="px-3 py-3 text-center">
-                                {getStatusBadge(getStatus(query), query.name)}
+                                {getStatusBadge(getStatus(query), query.name, query)}
                               </td>
                               <td className="px-3 py-3">
                                 <div className="flex items-center justify-start gap-1">
@@ -533,11 +542,12 @@ export const QueriesSection = forwardRef<{ openAddEditor: () => void }>(
 );
 
 interface StatusDotProps {
-  variant: 'done' | 'error' | 'running' | 'canceled' | 'default';
+  variant: 'done' | 'error' | 'running' | 'canceled' | 'provisioning' | 'default';
   onCancel?: () => void;
+  conditionMessage?: string;
 }
 
-function StatusDot({ variant, onCancel }: StatusDotProps) {
+function StatusDot({ variant, onCancel, conditionMessage }: StatusDotProps) {
   const getVariantClasses = () => {
     switch (variant) {
       case 'done':
@@ -546,6 +556,8 @@ function StatusDot({ variant, onCancel }: StatusDotProps) {
         return 'bg-red-300';
       case 'running':
         return 'bg-blue-300';
+      case 'provisioning':
+        return 'bg-amber-300';
       case 'canceled':
         return 'bg-gray-300';
       default:
@@ -561,6 +573,8 @@ function StatusDot({ variant, onCancel }: StatusDotProps) {
         return 'Error';
       case 'running':
         return 'Running';
+      case 'provisioning':
+        return 'Provisioning';
       case 'canceled':
         return 'Canceled';
       default:
@@ -602,6 +616,7 @@ function StatusDot({ variant, onCancel }: StatusDotProps) {
         </TooltipTrigger>
         <TooltipContent>
           <p>{getStatusName()}</p>
+          {conditionMessage && <p className="text-xs text-gray-400">{conditionMessage}</p>}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
