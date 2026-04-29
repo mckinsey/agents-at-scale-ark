@@ -1,5 +1,7 @@
 # Ark Kubernetes Operator
 
+# Minor change in a .md file to see if this triggers the cicd pipeline
+
 Kubernetes operator managing AI resources. Built with controller-runtime. The controller is the orchestration layer — it reconciles CRDs and dispatches query execution to executors via A2A.
 
 ## Build Commands
