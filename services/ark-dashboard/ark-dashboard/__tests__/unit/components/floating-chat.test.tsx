@@ -30,6 +30,8 @@ Element.prototype.scrollIntoView = vi.fn();
 vi.mock('@/lib/services', () => ({
   chatService: {
     streamChatResponse: vi.fn(),
+    startStreamChatResponse: vi.fn(),
+    streamQueryStatus: vi.fn().mockResolvedValue(() => {}),
     submitChatQuery: vi.fn(),
     getQueryResult: vi.fn(),
     getQuery: vi.fn().mockResolvedValue({ status: { conversationId: '' } }),
@@ -82,6 +84,14 @@ describe('FloatingChat', () => {
     vi.clearAllMocks();
     sessionStorage.clear();
     localStorage.clear();
+
+    vi.mocked(chatService.startStreamChatResponse).mockImplementation(
+      async (...args: unknown[]) => ({
+        queryName: 'test-query',
+        chunks: (chatService.streamChatResponse as (...a: unknown[]) => AsyncGenerator<Record<string, unknown>>)(...args),
+      }),
+    );
+    vi.mocked(chatService.streamQueryStatus).mockResolvedValue(() => {});
   });
 
   describe('streaming enabled', () => {
