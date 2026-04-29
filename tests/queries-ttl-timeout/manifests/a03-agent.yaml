@@ -4,5 +4,5 @@ metadata:
   name: test-math
 spec:
   modelRef:
-    name: test-model-openai
+    name: test-model-mock
   prompt: You're a test agent helping with calculations.
