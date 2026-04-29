@@ -141,9 +141,9 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
   }
 
   return (
-    <div className="space-y-4">
+    <div className="min-h-0 flex flex-1 flex-col space-y-4">
       {allConversations.length === 0 ? (
-        <div className="flex h-[600px] items-center justify-center">
+        <div className="flex flex-1 items-center justify-center">
           <Empty>
             <EmptyHeader>
               <EmptyTitle>No conversations yet</EmptyTitle>
@@ -151,8 +151,8 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
           </Empty>
         </div>
       ) : (
-        <div className="grid h-[600px] grid-cols-[300px_1fr] gap-4">
-          <div className="flex flex-col space-y-2">
+        <div className="grid min-h-0 flex-1 grid-cols-[300px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] gap-4 overflow-hidden">
+          <div className="flex h-full flex-col space-y-2 overflow-hidden">
             <div className="flex items-center justify-between px-2">
               <h3 className="text-sm font-medium">Conversations</h3>
               <Button
@@ -164,15 +164,17 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
                 <Plus className="size-4" />
               </Button>
             </div>
-            <ConversationSidebar
-              conversations={allConversations}
-              selectedId={selectedConversationId}
-              onSelect={setSelectedConversationId}
-            />
+            <div className="min-h-0 flex-1 flex flex-col">
+              <ConversationSidebar
+                conversations={allConversations}
+                selectedId={selectedConversationId}
+                onSelect={setSelectedConversationId}
+              />
+            </div>
           </div>
 
           {selectedConversationId ? (
-            <div className="flex flex-col rounded-lg border">
+            <div className="flex h-full flex-col rounded-lg border overflow-hidden">
               <MessageDisplay
                 conversationId={selectedConversationId}
                 sessionId={sessionId}

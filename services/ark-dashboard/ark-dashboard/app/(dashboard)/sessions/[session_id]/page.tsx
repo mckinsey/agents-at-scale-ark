@@ -126,7 +126,7 @@ export default function SessionDetailPage({ params }: Props) {
   };
 
   return (
-    <div className="flex h-full flex-col space-y-6 p-8">
+    <div className="flex h-full flex-col space-y-6 overflow-hidden p-8">
       <Button variant="ghost" onClick={() => router.push('/session-history')} className="w-fit cursor-pointer">
         <ArrowLeft className="mr-2 size-4" />
         Back to all sessions
@@ -180,13 +180,13 @@ export default function SessionDetailPage({ params }: Props) {
         </div>
       </div>
 
-      <Tabs defaultValue="history" className="flex-1">
+      <Tabs defaultValue="history" className="min-h-0 flex-1">
         <TabsList>
           <TabsTrigger value="history">History</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="history" className="flex-1">
+        <TabsContent value="history" className="min-h-0 flex flex-1 flex-col">
           <ConversationsTab
             sessionId={session_id}
             initialParticipant={memoizedInitialParticipant}
@@ -194,7 +194,7 @@ export default function SessionDetailPage({ params }: Props) {
           />
         </TabsContent>
 
-        <TabsContent value="logs" className="flex-1">
+        <TabsContent value="logs" className="min-h-0 flex flex-1 flex-col">
           <LogsTab sessionId={session_id} />
         </TabsContent>
       </Tabs>

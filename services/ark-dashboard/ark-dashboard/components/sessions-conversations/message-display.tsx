@@ -166,7 +166,7 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
   }
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="min-h-0 flex flex-1 flex-col">
       <div className="border-b p-4">
         <div className="flex items-center gap-2">
           {getParticipantIcon(participantType)}

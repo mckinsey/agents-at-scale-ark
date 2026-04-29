@@ -25,7 +25,7 @@ function getParticipantIcon(participantType?: 'agent' | 'team' | 'tool', name?: 
 
 export function ConversationSidebar({ conversations, selectedId, onSelect }: Props) {
   return (
-    <div className="space-y-2 overflow-y-auto">
+    <div className="min-h-0 flex flex-col flex-1 space-y-2 overflow-y-auto">
       {conversations.map(conv => (
         <Button
           key={conv.conversationId}
