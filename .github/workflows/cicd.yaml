@@ -565,7 +565,7 @@ jobs:
           if [ "${{ matrix.storage-backend }}" = "etcd" ]; then
             chainsaw test --config .chainsaw.yaml --selector '!llm,!postgresql'
           else
-            chainsaw test --config .chainsaw.yaml --selector '!llm'
+            chainsaw test --config .chainsaw.yaml --selector '!llm,!etcd-only'
           fi
 
       - name: Collect cluster logs
@@ -1079,7 +1079,7 @@ jobs:
           done
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           directory: ./coverage-artifacts
