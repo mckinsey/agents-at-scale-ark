@@ -53,20 +53,11 @@ runs:
             close_m = '<!-- /openspec-flow-usage-table -->'
             rows, step = [], 1
             if os.path.exists(session_log):
-                # claude-code-action writes a single pretty-printed JSON
-                # array of SDKMessage objects, not JSONL. Parse the whole
-                # file once and iterate items.
-                # See: anthropics/claude-code-action base-action/src/run-claude-sdk.ts
-                # `await writeFile(EXECUTION_FILE, JSON.stringify(messages, null, 2))`
+                # Session log is a JSON array of SDKMessage objects.
                 with open(session_log) as f:
-                    raw = f.read()
-                try:
-                    messages = json.loads(raw)
-                except Exception as e:
-                    print(f'::warning::Could not parse session log as JSON ({e}) — table will be empty')
-                    messages = []
+                    messages = json.load(f)
                 if not isinstance(messages, list):
-                    print(f'::warning::Session log root is {type(messages).__name__}, expected list — table will be empty')
+                    print(f'::warning::Session log root is {type(messages).__name__}, expected list')
                     messages = []
                 for obj in messages:
                     if not isinstance(obj, dict):
