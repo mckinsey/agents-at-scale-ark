@@ -218,14 +218,8 @@ class A2AExecutorAdapter(AgentExecutor):
             agent_name=request.agent.name,
         ) if broker_url else None
 
-        try:
-            status_updater = QueryStatusUpdater(query_ref)
-        except Exception:
-            logger.warning("Failed to create QueryStatusUpdater, using no-op")
-            status_updater = QueryStatusUpdater(None)
-
         self.executor._broker_client = broker
-        self.executor._query_status_updater = status_updater
+        self.executor._query_status_updater = QueryStatusUpdater(query_ref)
         self.executor._streamed = False
 
         try:
