@@ -648,13 +648,31 @@ func (r *QueryReconciler) setConditionForPhase(query *arkv1alpha1.Query, status 
 	}
 }
 
+type savedQueryStatus struct {
+	response       *arkv1alpha1.Response
+	tokenUsage     arkv1alpha1.TokenUsage
+	conversationId string
+}
+
+func (s *savedQueryStatus) restoreOnto(query *arkv1alpha1.Query) {
+	if s.response != nil {
+		query.Status.Response = s.response
+	}
+	query.Status.TokenUsage = s.tokenUsage
+	if s.conversationId != "" {
+		query.Status.ConversationId = s.conversationId
+	}
+}
+
 func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *arkv1alpha1.Query, status string, duration *metav1.Duration) error {
 	if ctx.Err() != nil {
 		return nil
 	}
-	response := query.Status.Response
-	tokenUsage := query.Status.TokenUsage
-	conversationId := query.Status.ConversationId
+	saved := savedQueryStatus{
+		response:       query.Status.Response,
+		tokenUsage:     query.Status.TokenUsage,
+		conversationId: query.Status.ConversationId,
+	}
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		if ctx.Err() != nil {
 			return nil
@@ -666,13 +684,7 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 			return err
 		}
 		query.Status.Phase = status
-		if response != nil {
-			query.Status.Response = response
-		}
-		query.Status.TokenUsage = tokenUsage
-		if conversationId != "" {
-			query.Status.ConversationId = conversationId
-		}
+		saved.restoreOnto(query)
 		r.setConditionForPhase(query, status)
 		if duration != nil {
 			query.Status.Duration = duration
