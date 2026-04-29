@@ -654,6 +654,7 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 	}
 	response := query.Status.Response
 	tokenUsage := query.Status.TokenUsage
+	conversationId := query.Status.ConversationId
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		if ctx.Err() != nil {
 			return nil
@@ -669,6 +670,9 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 			query.Status.Response = response
 		}
 		query.Status.TokenUsage = tokenUsage
+		if conversationId != "" {
+			query.Status.ConversationId = conversationId
+		}
 		r.setConditionForPhase(query, status)
 		if duration != nil {
 			query.Status.Duration = duration
