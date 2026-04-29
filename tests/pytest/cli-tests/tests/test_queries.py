@@ -1,7 +1,11 @@
-import pytest
-import sys
+import base64
+import json
 import os
 import subprocess
+import sys
+import time
+
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
@@ -18,22 +22,25 @@ class TestQueriesCLI:
     
     @classmethod
     def setup_class(cls):
-        import json
-        import os
         cls.helper = QueriesHelper()
-        
-        script_path = os.path.join(os.path.dirname(__file__), "../../../scripts/setup-model-provider.sh")
-        result = subprocess.run(
-            ["bash", script_path, "auto"],
-            capture_output=True,
-            text=True
-        )
-        
-        if result.returncode == 0:
-            try:
-                cls.provider_config = json.loads(result.stdout.strip())
-            except:
-                cls.provider_config = None
+
+        if os.environ.get("CICD_AZURE_API_KEY") and os.environ.get("CICD_AZURE_BASE_URL"):
+            cls.provider_config = {
+                "type": "azure",
+                "model": "gpt-4.1-mini",
+                "token": os.environ["CICD_AZURE_API_KEY"],
+                "url": os.environ["CICD_AZURE_BASE_URL"],
+                "apiVersion": os.environ.get("CICD_AZURE_API_VERSION", "2024-12-01-preview"),
+            }
+        elif os.environ.get("CICD_OPENAI_API_KEY") and os.environ.get("CICD_OPENAI_BASE_URL"):
+            cls.provider_config = {
+                "type": "openai",
+                "model": os.environ.get("CICD_OPENAI_MODEL", "gpt-4o-mini"),
+                "token": os.environ["CICD_OPENAI_API_KEY"],
+                "url": os.environ["CICD_OPENAI_BASE_URL"],
+            }
+        else:
+            cls.provider_config = None
     
     @classmethod
     def teardown_class(cls):
@@ -54,8 +61,6 @@ class TestQueriesCLI:
         )
     
     def test_setup_prerequisites(self):
-        import base64
-        
         if not self.provider_config:
             pytest.skip("No model provider credentials configured")
         
@@ -157,27 +162,27 @@ spec:
         )
         
         assert result.returncode == 0 or "already exists" in result.stderr.lower(), f"Failed to create model: {result.stderr}"
-        
-        import time
-        time.sleep(2)
-        
-        result = subprocess.run(
-            ["kubectl", "get", "model", self.model_name, "-n", "default", "-o", "json"],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        
-        if result.returncode == 0:
-            import json
-            model_data = json.loads(result.stdout)
-            conditions = model_data.get("status", {}).get("conditions", [])
-            available = any(
-                c.get("type") == "ModelAvailable" and c.get("status") == "True"
-                for c in conditions
+
+        deadline = time.time() + 30
+        available = False
+        while time.time() < deadline:
+            result = subprocess.run(
+                ["kubectl", "get", "model", self.model_name, "-n", "default", "-o", "json"],
+                capture_output=True,
+                text=True,
+                timeout=10
             )
-            if not available:
-                pytest.skip("Model not available yet")
+            if result.returncode == 0:
+                model_data = json.loads(result.stdout)
+                conditions = model_data.get("status", {}).get("conditions", [])
+                available = any(
+                    c.get("type") == "ModelAvailable" and c.get("status") == "True"
+                    for c in conditions
+                )
+                if available:
+                    break
+            time.sleep(2)
+        assert available, f"Model {self.model_name} did not become available within 30s"
         
         agent_yaml = f"""apiVersion: ark.mckinsey.com/v1alpha1
 kind: Agent

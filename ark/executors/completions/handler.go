@@ -64,6 +64,7 @@ func (s *executionState) finalizeStream(ctx context.Context, responseMessages []
 	completedQuery := s.query.DeepCopy()
 	completedQuery.Status.Phase = "done"
 	completedQuery.Status.TokenUsage = tokenUsage
+	completedQuery.Status.ConversationId = s.conversationId
 	if len(responseMessages) > 0 {
 		rawJSON := serializeResponseMessages(responseMessages)
 		completedQuery.Status.Response = &arkv1alpha1.Response{

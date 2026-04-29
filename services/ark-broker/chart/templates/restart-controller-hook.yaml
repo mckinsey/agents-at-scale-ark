@@ -46,7 +46,7 @@ spec:
             exit 1
           fi
 
-          echo "ark-broker is ready. Restarting ark-controller to pick up broker OTEL configuration..."
+          echo "ark-broker is ready. Restarting ark-controller and ark-completions to pick up broker configuration..."
 
           # Check if ark-controller-devspace exists first (DevSpace deployment)
           if kubectl get deployment ark-controller-devspace -n {{ .Values.restartController.namespace }} >/dev/null 2>&1; then
@@ -60,10 +60,17 @@ spec:
             kubectl rollout status deployment/ark-controller -n {{ .Values.restartController.namespace }} --timeout=120s
           else
             echo "Warning: No ark-controller deployment found in {{ .Values.restartController.namespace }} namespace"
-            exit 0
           fi
 
-          echo "Successfully restarted ark-controller"
+          if kubectl get deployment ark-completions -n {{ .Values.restartController.namespace }} >/dev/null 2>&1; then
+            echo "Found ark-completions, restarting..."
+            kubectl rollout restart deployment/ark-completions -n {{ .Values.restartController.namespace }}
+            kubectl rollout status deployment/ark-completions -n {{ .Values.restartController.namespace }} --timeout=120s
+          else
+            echo "Warning: No ark-completions deployment found in {{ .Values.restartController.namespace }} namespace"
+          fi
+
+          echo "Successfully restarted ark services"
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true

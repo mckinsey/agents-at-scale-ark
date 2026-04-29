@@ -5,36 +5,37 @@ metadata:
 spec:
   description: Test query with user input type
   steps:
-  - name: test-query-converstation-input-default
+  - name: setup-mock-llm
     try:
     - script:
-        skipLogOutput: true
+        timeout: 180s
         content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
-    - apply:
-        file: manifests/a01-secret.yaml
-    - apply:
-        file: manifests/a02-model.yaml
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: wait-for-model-ready
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-mock
+        timeout: 90s
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+
+  - name: setup-agent
+    try:
     - apply:
         file: manifests/a03-agent.yaml
+
+  - name: test-default-input
+    try:
     - apply:
         file: manifests/query-input-type-default.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          metadata:
-            name: test-model
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Agent
-          metadata:
-            name: test-agent
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
@@ -53,51 +54,17 @@ spec:
           status:
             (response != null): true
             (response.target.name): 'test-agent'
-            (length(response.content) > `10`): true
     catch:
     - events: {}
     - describe:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: test-query-input-default
----
-apiVersion: chainsaw.kyverno.io/v1alpha1
-kind: Test
-metadata:
-  name: query-input-types
-spec:
-  description: Test query with user input type
-  steps:
-  - name: test-query-converstation-input-type-user
+
+  - name: test-user-input
     try:
-    - script:
-        skipLogOutput: true
-        content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
-    - apply:
-        file: manifests/a01-secret.yaml
-    - apply:
-        file: manifests/a02-model.yaml
-    - apply:
-        file: manifests/a03-agent.yaml
     - apply:
         file: manifests/query-input-type-user.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          metadata:
-            name: test-model
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Agent
-          metadata:
-            name: test-agent
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
@@ -116,51 +83,26 @@ spec:
           status:
             (response != null): true
             (response.target.name): 'test-agent'
-            (length(response.content) > `10`): true
     catch:
     - events: {}
     - describe:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: test-query-input-type-user
----
-apiVersion: chainsaw.kyverno.io/v1alpha1
-kind: Test
-metadata:
-  name: query-input-types
-spec:
-  description: Test query with user input type
-  steps:
-  - name: test-query-input-type-default-invalid-input
+
+  - name: test-default-invalid-input
     try:
-    - script:
-        skipLogOutput: true
-        content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
-    - apply:
-        file: manifests/a01-secret.yaml
-    - apply:
-        file: manifests/a02-model.yaml
-    - apply:
-        file: manifests/a03-agent.yaml
     - apply:
         file: manifests/query-input-type-default-invalid-input.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          metadata:
-            name: test-model
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Agent
-          metadata:
-            name: test-agent
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-default-invalid-input
+        timeout: 2m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -169,59 +111,27 @@ spec:
             name: test-query-default-invalid-input
           status:
             phase: error
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: test-query-default-invalid-input
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
+            (contains(response.content, 'failed to get input string')): true
     catch:
     - events: {}
     - describe:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: test-query-default-invalid-input
----
-apiVersion: chainsaw.kyverno.io/v1alpha1
-kind: Test
-metadata:
-  name: query-input-types
-spec:
-  description: Test query with user input type
-  steps:
-  - name: test-query-input-type-user-invalid-input
+
+  - name: test-user-invalid-input
     try:
-    - script:
-        skipLogOutput: true
-        content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
-    - apply:
-        file: manifests/a01-secret.yaml
-    - apply:
-        file: manifests/a02-model.yaml
-    - apply:
-        file: manifests/a03-agent.yaml
     - apply:
         file: manifests/query-input-type-user-invalid-input.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          metadata:
-            name: test-model
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Agent
-          metadata:
-            name: test-agent
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: test-query-input-type-user-invalid-input
+        timeout: 2m
+        for:
+          condition:
+            name: Completed
+            value: 'True'
     - assert:
         resource:
           apiVersion: ark.mckinsey.com/v1alpha1
@@ -230,18 +140,18 @@ spec:
             name: test-query-input-type-user-invalid-input
           status:
             phase: error
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Query
-          metadata:
-            name: test-query-input-type-user-invalid-input
-          status:
-            (conditions[?type == 'Completed']):
-            - status: 'True'
+            (contains(response.content, 'failed to get input string')): true
     catch:
     - events: {}
     - describe:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
         name: test-query-input-type-user-invalid-input
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
