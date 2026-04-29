@@ -5,6 +5,7 @@ import { MessageSquare, Wrench, Clock, Bot, Users, Hammer } from 'lucide-react';
 import type { Conversation } from '@/lib/services/conversations';
 import { cn } from '@/lib/utils';
 import { formatAge } from '@/lib/utils/time';
+import { stripNamespace } from '@/lib/utils/participant';
 
 interface Props {
   readonly conversations: Conversation[];
@@ -37,7 +38,7 @@ export function ConversationSidebar({ conversations, selectedId, onSelect }: Pro
         >
           <div className="flex w-full items-center gap-2">
             {getParticipantIcon(conv.participantType, conv.name)}
-            <span className="flex-1 truncate font-medium">{conv.name}</span>
+            <span className="flex-1 truncate font-medium">{stripNamespace(conv.name)}</span>
             <span className="text-xs text-muted-foreground">
               {formatAge(conv.startTime)}
             </span>

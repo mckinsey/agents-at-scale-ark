@@ -3,6 +3,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Bot, Users, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { stripNamespace } from '@/lib/utils/participant';
 import type { BrokerSession } from '@/lib/services/broker-sessions';
 
 interface Props {
@@ -65,7 +66,7 @@ export function SessionTableRow({ session, isSelected, onSelect }: Props) {
             className="flex items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-xs"
           >
             {getParticipantIcon(p.type)}
-            <span>{p.name}</span>
+            <span>{stripNamespace(p.name)}</span>
           </div>
         ))}
         {session.participants.length > 3 && (

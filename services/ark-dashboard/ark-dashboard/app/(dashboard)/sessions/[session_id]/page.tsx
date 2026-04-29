@@ -12,6 +12,7 @@ import { ConversationsTab } from '@/components/sessions-conversations/conversati
 import { LogsTab } from '@/components/sessions-conversations/logs-tab';
 import type { BrokerSession } from '@/lib/services/broker-sessions';
 import { generateUUID } from '@/lib/utils/uuid';
+import { stripNamespace } from '@/lib/utils/participant';
 
 interface Props {
   readonly params: Promise<{
@@ -162,7 +163,7 @@ export default function SessionDetailPage({ params }: Props) {
                   className="flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm"
                 >
                   {getParticipantIcon(p.type)}
-                  <span>{p.name}</span>
+                  <span>{stripNamespace(p.name)}</span>
                   {p.isActive && (
                     <span className="size-2 rounded-full bg-blue-500" />
                   )}

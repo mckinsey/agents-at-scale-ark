@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { ChatMessage } from '@/components/chat/chat-message';
 import { Bot, Users, Hammer } from 'lucide-react';
+import { stripNamespace } from '@/lib/utils/participant';
 
 const FALLBACK_PARTICIPANT_NAME = 'Participant';
 const FALLBACK_PARTICIPANT_TYPE = 'agent';
@@ -169,7 +170,7 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
       <div className="border-b p-4">
         <div className="flex items-center gap-2">
           {getParticipantIcon(participantType)}
-          <span className="font-semibold">{participantName}</span>
+          <span className="font-semibold">{stripNamespace(participantName)}</span>
           <Badge variant="outline" className="capitalize">{participantType}</Badge>
         </div>
       </div>
