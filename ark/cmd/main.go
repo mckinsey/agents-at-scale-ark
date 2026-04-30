@@ -291,6 +291,11 @@ func setupControllers(mgr ctrl.Manager, telemetryProvider *telemetryconfig.Provi
 			Scheme:   mgr.GetScheme(),
 			Eventing: eventingProvider,
 		}},
+		{"ToolApprovalRequest", &controller.ToolApprovalRequestReconciler{
+			Client:   mgr.GetClient(),
+			Scheme:   mgr.GetScheme(),
+			Eventing: eventingProvider,
+		}},
 	}
 
 	for _, reconciler := range controllers {

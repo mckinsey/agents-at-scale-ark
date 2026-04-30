@@ -1,0 +1,25 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: file-manager
+spec:
+  description: Agent that manages files with human approval for destructive operations
+  prompt: |
+    You are a file management assistant. You can read, create, update, and delete files.
+
+    Be careful with destructive operations like delete - these require human approval.
+  tools:
+    - type: http
+      name: read-file
+    - type: http
+      name: create-file
+    - type: http
+      name: delete-file
+      approval:
+        required: true
+        timeout: 5m
+        onTimeout: reject
+        reasonRequired: true
+        approvers:
+          - role: admin
+          - user: operations-lead

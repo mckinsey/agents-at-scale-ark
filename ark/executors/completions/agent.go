@@ -20,20 +20,21 @@ import (
 )
 
 type Agent struct {
-	Name              string
-	Namespace         string
-	Prompt            string
-	Description       string
-	Parameters        []arkv1alpha1.Parameter
-	Model             *Model
-	Tools             *ToolRegistry
-	telemetryRecorder telemetry.AgentRecorder
-	eventingRecorder  eventing.AgentRecorder
-	eventing          eventing.Provider
-	ExecutionEngine   *arkv1alpha1.ExecutionEngineRef
-	Annotations       map[string]string
-	OutputSchema      *runtime.RawExtension
-	client            client.Client
+	Name                  string
+	Namespace             string
+	Prompt                string
+	Description           string
+	Parameters            []arkv1alpha1.Parameter
+	Model                 *Model
+	Tools                 *ToolRegistry
+	telemetryRecorder     telemetry.AgentRecorder
+	eventingRecorder      eventing.AgentRecorder
+	eventing              eventing.Provider
+	ExecutionEngine       *arkv1alpha1.ExecutionEngineRef
+	Annotations           map[string]string
+	OutputSchema          *runtime.RawExtension
+	client                client.Client
+	approvalRequiredTools map[string]*ApprovalConfig
 }
 
 // FullName returns the namespace/name format for the agent
@@ -144,14 +145,40 @@ func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatComplet
 }
 
 func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCompletionMessageToolCall, agentMessages, newMessages *[]Message) error {
-	for _, tc := range toolCalls {
+	pendingApprovalCalls := []openai.ChatCompletionMessageToolCall{}
+	completedResults := []string{}
+
+	for i, tc := range toolCalls {
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+
+		if config := a.RequiresApproval(tc.Function.Name); config != nil {
+			pendingApprovalCalls = append(pendingApprovalCalls, tc)
+			for j := i + 1; j < len(toolCalls); j++ {
+				if cfg := a.RequiresApproval(toolCalls[j].Function.Name); cfg != nil {
+					pendingApprovalCalls = append(pendingApprovalCalls, toolCalls[j])
+				}
+			}
+
+			execCtx, err := BuildExecutionContext(*agentMessages, i, completedResults, a.Name, a.Namespace)
+			if err != nil {
+				return fmt.Errorf("failed to build execution context: %w", err)
+			}
+
+			return &ApprovalRequiredError{
+				ToolCalls: pendingApprovalCalls,
+				Context:   execCtx,
+			}
 		}
 
 		toolMessage, err := a.executeToolCall(ctx, tc)
 		*agentMessages = append(*agentMessages, toolMessage)
 		*newMessages = append(*newMessages, toolMessage)
+
+		if m := toolMessage.OfTool; m != nil {
+			completedResults = append(completedResults, m.Content.Value)
+		}
 
 		if err != nil {
 			return err
@@ -358,20 +385,23 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 		return nil, err
 	}
 
+	approvalMap := BuildApprovalConfigMap(crd.Spec.Tools)
+
 	return &Agent{
-		Name:              crd.Name,
-		Namespace:         crd.Namespace,
-		Prompt:            crd.Spec.Prompt,
-		Description:       crd.Spec.Description,
-		Parameters:        crd.Spec.Parameters,
-		Model:             resolvedModel,
-		Tools:             tools,
-		telemetryRecorder: telemetryProvider.AgentRecorder(),
-		eventingRecorder:  eventingProvider.AgentRecorder(),
-		eventing:          eventingProvider,
-		ExecutionEngine:   crd.Spec.ExecutionEngine,
-		Annotations:       crd.Annotations,
-		OutputSchema:      crd.Spec.OutputSchema,
-		client:            k8sClient,
+		Name:                  crd.Name,
+		Namespace:             crd.Namespace,
+		Prompt:                crd.Spec.Prompt,
+		Description:           crd.Spec.Description,
+		Parameters:            crd.Spec.Parameters,
+		Model:                 resolvedModel,
+		Tools:                 tools,
+		telemetryRecorder:     telemetryProvider.AgentRecorder(),
+		eventingRecorder:      eventingProvider.AgentRecorder(),
+		eventing:              eventingProvider,
+		ExecutionEngine:       crd.Spec.ExecutionEngine,
+		Annotations:           crd.Annotations,
+		OutputSchema:          crd.Spec.OutputSchema,
+		client:                k8sClient,
+		approvalRequiredTools: approvalMap,
 	}, nil
 }

@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: file-deletion-query
+spec:
+  type: user
+  input: "Please delete the file at /data/old-report.txt"
+  target:
+    type: agent
+    name: file-manager

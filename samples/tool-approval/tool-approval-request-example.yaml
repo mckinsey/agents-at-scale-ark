@@ -1,0 +1,31 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: ToolApprovalRequest
+metadata:
+  name: tar-query-12345-delete-file
+  namespace: default
+spec:
+  queryRef:
+    name: query-12345
+    namespace: default
+  toolCalls:
+    - id: call_abc123
+      name: delete-file
+      type: http
+      arguments: '{"path": "/data/important-file.txt"}'
+      description: Delete a file from the filesystem
+      annotations:
+        destructiveHint: true
+        readOnlyHint: false
+        idempotentHint: true
+  timeout: 5m
+  onTimeout: reject
+  approvers:
+    - role: admin
+    - user: operations-lead
+  reasonRequired: true
+  executionContext:
+    conversationHistory: "base64-encoded-message-history"
+    pendingToolCallIndex: 0
+    completedToolResults: []
+    agentName: file-manager
+    agentNamespace: default

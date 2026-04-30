@@ -12,15 +12,16 @@ import (
 )
 
 const (
-	PhasePending       = "pending"
-	PhaseAssigned      = "assigned"
-	PhaseRunning       = "running"
-	PhaseInputRequired = "input-required"
-	PhaseAuthRequired  = "auth-required"
-	PhaseCompleted     = "completed"
-	PhaseFailed        = "failed"
-	PhaseCancelled     = "cancelled"
-	PhaseUnknown       = "unknown"
+	PhasePending              = "pending"
+	PhaseAssigned             = "assigned"
+	PhaseRunning              = "running"
+	PhaseInputRequired        = "input-required"
+	PhaseToolApprovalRequired = "tool-approval-required"
+	PhaseAuthRequired         = "auth-required"
+	PhaseCompleted            = "completed"
+	PhaseFailed               = "failed"
+	PhaseCancelled            = "cancelled"
+	PhaseUnknown              = "unknown"
 )
 
 const (
@@ -37,6 +38,8 @@ func ConvertA2AStateToPhase(state string) string {
 		return PhaseRunning
 	case "input-required":
 		return PhaseInputRequired
+	case "tool-approval-required":
+		return PhaseToolApprovalRequired
 	case "auth-required":
 		return PhaseAuthRequired
 	case "completed":

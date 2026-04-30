@@ -154,10 +154,10 @@ type A2ATaskSpec struct {
 // Combines Kubernetes lifecycle tracking with A2A protocol task data.
 type A2ATaskStatus struct {
 	// Phase indicates the current Kubernetes lifecycle stage of the task.
-	// Possible values: pending, assigned, running, input-required, auth-required, completed, failed, cancelled, unknown.
+	// Possible values: pending, assigned, running, input-required, tool-approval-required, auth-required, completed, failed, cancelled, unknown.
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default="pending"
-	// +kubebuilder:validation:Enum=pending;assigned;running;input-required;auth-required;completed;failed;cancelled;unknown
+	// +kubebuilder:validation:Enum=pending;assigned;running;input-required;tool-approval-required;auth-required;completed;failed;cancelled;unknown
 	Phase string `json:"phase,omitempty"`
 	// Conditions represent the latest available observations of the task's state.
 	// The Completed condition indicates whether the task is no longer running.
@@ -175,9 +175,9 @@ type A2ATaskStatus struct {
 
 	// A2A Protocol fields (flattened from protocol.Task)
 	// ProtocolState indicates the current state in the A2A protocol.
-	// Possible values: submitted, working, input-required, completed, canceled, failed, rejected, auth-required, unknown.
+	// Possible values: submitted, working, input-required, tool-approval-required, completed, canceled, failed, rejected, auth-required, unknown.
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Enum=submitted;working;input-required;completed;canceled;failed;rejected;auth-required;unknown
+	// +kubebuilder:validation:Enum=submitted;working;input-required;tool-approval-required;completed;canceled;failed;rejected;auth-required;unknown
 	ProtocolState string `json:"protocolState,omitempty"`
 	// ContextID links this task to a specific A2A conversation context.
 	// +kubebuilder:validation:Optional

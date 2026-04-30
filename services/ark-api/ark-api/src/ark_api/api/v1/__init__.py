@@ -18,6 +18,7 @@ from .ark_services import router as ark_services_router
 from .events import router as events_router
 from .api_keys import router as api_keys_router
 from .a2a_tasks import router as a2a_tasks_router
+from .tool_approvals import router as tool_approvals_router
 from .resources import router as resources_router
 from .broker import router as broker_router
 from .proxy import proxy_router
@@ -38,6 +39,7 @@ router.include_router(mcp_servers_router)
 router.include_router(a2a_servers_router)
 router.include_router(proxy_router)
 router.include_router(a2a_tasks_router)
+router.include_router(tool_approvals_router)
 router.include_router(memories_router)
 router.include_router(memory_messages_router)
 router.include_router(conversations_router)

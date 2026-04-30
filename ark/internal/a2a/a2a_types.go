@@ -9,14 +9,15 @@ import (
 const ExecutionEngineA2A = "a2a"
 
 const (
-	TaskStateSubmitted     = "submitted"
-	TaskStateWorking       = "working"
-	TaskStateInputRequired = "input-required"
-	TaskStateCompleted     = "completed"
-	TaskStateCanceled      = "canceled"
-	TaskStateFailed        = "failed"
-	TaskStateRejected      = "rejected"
-	TaskStateAuthRequired  = "auth-required"
+	TaskStateSubmitted            = "submitted"
+	TaskStateWorking              = "working"
+	TaskStateInputRequired        = "input-required"
+	TaskStateToolApprovalRequired = "tool-approval-required"
+	TaskStateCompleted            = "completed"
+	TaskStateCanceled             = "canceled"
+	TaskStateFailed               = "failed"
+	TaskStateRejected             = "rejected"
+	TaskStateAuthRequired         = "auth-required"
 )
 
 type (

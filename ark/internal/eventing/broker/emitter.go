@@ -65,14 +65,19 @@ func (e *BrokerEventEmitter) EmitWarning(ctx context.Context, obj runtime.Object
 }
 
 func (e *BrokerEventEmitter) EmitStructured(ctx context.Context, obj runtime.Object, eventType, reason, message string, data any) {
-	query, ok := obj.(*arkv1alpha1.Query)
-	if !ok {
+	var namespace string
+	switch o := obj.(type) {
+	case *arkv1alpha1.Query:
+		namespace = o.Namespace
+	case *arkv1alpha1.ToolApprovalRequest:
+		namespace = o.Namespace
+	default:
 		return
 	}
 
-	endpoint := e.getEndpointForNamespace(query.Namespace)
+	endpoint := e.getEndpointForNamespace(namespace)
 	if endpoint == "" {
-		log.V(1).Info("no broker endpoint for namespace, dropping event", "namespace", query.Namespace, "reason", reason)
+		log.V(1).Info("no broker endpoint for namespace, dropping event", "namespace", namespace, "reason", reason)
 		return
 	}
 

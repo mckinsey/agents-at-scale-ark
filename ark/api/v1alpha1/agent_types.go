@@ -27,6 +27,40 @@ type ToolPartial struct {
 	Parameters []ToolFunction `json:"parameters,omitempty"`
 }
 
+// ApproverRef specifies who can approve tool calls. At least one field must be set.
+type ApproverRef struct {
+	// +kubebuilder:validation:Optional
+	// Role name - user must be bound to a ClusterRole/Role with this name
+	Role string `json:"role,omitempty"`
+	// +kubebuilder:validation:Optional
+	// User identity - must match the authenticated user's identity
+	User string `json:"user,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Group name - user must belong to this group
+	Group string `json:"group,omitempty"`
+}
+
+// ToolApprovalConfig configures human-in-the-loop approval for a tool.
+type ToolApprovalConfig struct {
+	// +kubebuilder:validation:Required
+	// Required indicates whether this tool requires human approval before execution
+	Required bool `json:"required"`
+	// +kubebuilder:validation:Optional
+	// Timeout is the maximum duration to wait for approval before taking the onTimeout action
+	Timeout *metav1.Duration `json:"timeout,omitempty"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Enum=reject;proceed
+	// +kubebuilder:default=reject
+	// OnTimeout specifies what to do when approval times out: "reject" (default) fails the tool call, "proceed" auto-approves
+	OnTimeout string `json:"onTimeout,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Approvers specifies who can approve this tool. If empty, any user with ToolApprovalRequest update permission can approve.
+	Approvers []ApproverRef `json:"approvers,omitempty"`
+	// +kubebuilder:validation:Optional
+	// ReasonRequired specifies whether a reason must be provided when rejecting the tool call
+	ReasonRequired bool `json:"reasonRequired,omitempty"`
+}
+
 type AgentTool struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=built-in;custom;mcp;http;agent;team;builtin
@@ -44,6 +78,9 @@ type AgentTool struct {
 	// from the agent. Parameters defined here are injected at runtime and are not visible or
 	// editable by the agent itself.
 	Partial *ToolPartial `json:"partial,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Approval configures human-in-the-loop approval for this tool
+	Approval *ToolApprovalConfig `json:"approval,omitempty"`
 }
 
 // GetToolCRDName returns the actual Tool CRD name to lookup in Kubernetes.
