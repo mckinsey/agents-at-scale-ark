@@ -79,6 +79,12 @@ runs:
         traefik-enabled: false
         k3s-channel: stable
 
+    - name: Cache Helm charts
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/helm
+        key: helm-${{ runner.os }}-${{ hashFiles('.github/helm-versions.env') }}
+
     - name: Run setup-e2e script
       shell: bash
       run: |

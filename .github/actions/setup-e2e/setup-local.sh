@@ -66,11 +66,14 @@ kubectl get nodes
 echo
 
 
+source "${REPO_ROOT}/.github/helm-versions.env"
+
 # Install cert-manager if not present
 echo "=== Installing cert-manager ==="
 if ! helm list -n cert-manager | grep -q cert-manager; then
   helm repo add jetstack https://charts.jetstack.io --force-update
   helm upgrade --install cert-manager jetstack/cert-manager \
+    --version "${CERT_MANAGER_VERSION}" \
     --namespace cert-manager \
     --create-namespace \
     --set crds.enabled=true
@@ -122,7 +125,7 @@ if [ "${PREFETCH_TEST_IMAGES}" = "true" ]; then
     docker.io/mockserver/mockserver:5.15.0 \
     ghcr.io/orange-opensource/hurl:6.1.1 \
     docker.io/python:3.12-bookworm \
-    ghcr.io/dwmkerr/mock-llm:0.1.28 \
+    "ghcr.io/dwmkerr/mock-llm:${MOCK_LLM_VERSION}" \
     ghcr.io/dwmkerr/mock-llm:latest; do
     sudo k3s ctr images pull "$img" &
     IMAGE_PULL_PIDS+=($!)

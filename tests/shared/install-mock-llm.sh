@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -e
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/../../.github/helm-versions.env"
 helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
-  --version 0.1.28 \
+  --version "${MOCK_LLM_VERSION}" \
   --namespace "$NAMESPACE" \
   --values ../mock-llm-values.yaml \
   --values mock-llm-values.yaml \
