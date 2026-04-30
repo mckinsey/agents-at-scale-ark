@@ -103,6 +103,11 @@ class ToolsPage(BasePage):
         http_option.wait_for(state="visible", timeout=10000)
         logger.info("HTTP option visible, clicking")
         http_option.click()
+        name_value_after_type = name_input.input_value()
+        logger.info(f"Name input value after type selection: '{name_value_after_type}'")
+        if not name_value_after_type:
+            logger.info("Name was cleared by type selection re-render, re-filling")
+            name_input.fill(tool_name)
 
         description_input = self.page.locator("input#description, input[name='description'], [role='dialog'] input:nth-of-type(2)").first
         description_input.wait_for(state="visible", timeout=15000)
