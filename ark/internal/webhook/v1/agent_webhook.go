@@ -12,9 +12,10 @@ import (
 // +kubebuilder:webhook:path=/validate-ark-mckinsey-com-v1alpha1-agent,mutating=false,failurePolicy=fail,sideEffects=None,groups=ark.mckinsey.com,resources=agents,verbs=create;update,versions=v1alpha1,name=vagent-v1.kb.io,admissionReviewVersions=v1
 
 func SetupAgentWebhookWithManager(mgr ctrl.Manager) error {
-	v := validation.NewValidator(&validation.WebhookLookup{Client: mgr.GetClient()})
+	lookup := &validation.WebhookLookup{Client: mgr.GetClient()}
+	v := validation.NewValidator(lookup)
 	return ctrl.NewWebhookManagedBy(mgr).For(&arkv1alpha1.Agent{}).
-		WithDefaulter(&validation.WebhookDefaulter{}).
+		WithDefaulter(&validation.WebhookDefaulter{Lookup: lookup}).
 		WithValidator(&validation.WebhookValidator{V: v}).
 		Complete()
 }

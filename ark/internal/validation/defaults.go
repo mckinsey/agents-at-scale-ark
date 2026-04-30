@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -66,23 +67,26 @@ func DefaultTeam(team *arkv1alpha1.Team) {
 	}
 }
 
-func DefaultQuery(query *arkv1alpha1.Query) {
-	if query.Spec.Type != "messages" {
-		return
+func DefaultQuery(ctx context.Context, query *arkv1alpha1.Query, lookup ArkConfigLookup) {
+	if query.Spec.Type == "messages" {
+		userText, err := resolution.ExtractFirstUserText(json.RawMessage(query.Spec.Input.Raw))
+		if err != nil {
+			userText = ""
+		}
+
+		query.Spec.Type = arkv1alpha1.QueryTypeUser
+		_ = query.Spec.SetInputString(userText)
+
+		if query.Annotations == nil {
+			query.Annotations = make(map[string]string)
+		}
+		query.Annotations[annotations.MigrationWarningPrefix+"input-type"] = "spec.type 'messages' is deprecated - migrated to 'user' with extracted text. Use conversationId for multi-turn conversations"
 	}
 
-	userText, err := resolution.ExtractFirstUserText(json.RawMessage(query.Spec.Input.Raw))
-	if err != nil {
-		userText = ""
+	if query.Spec.TTL == nil {
+		ttl := ResolveQueryTTL(ctx, lookup)
+		query.Spec.TTL = &ttl
 	}
-
-	query.Spec.Type = arkv1alpha1.QueryTypeUser
-	_ = query.Spec.SetInputString(userText)
-
-	if query.Annotations == nil {
-		query.Annotations = make(map[string]string)
-	}
-	query.Annotations[annotations.MigrationWarningPrefix+"input-type"] = "spec.type 'messages' is deprecated - migrated to 'user' with extracted text. Use conversationId for multi-turn conversations"
 }
 
 func DefaultModel(model *arkv1alpha1.Model) {
