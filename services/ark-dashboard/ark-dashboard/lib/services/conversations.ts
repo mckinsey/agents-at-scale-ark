@@ -14,6 +14,7 @@ export interface Conversation {
   startTime: string;
   isTemporary?: boolean;
   participantType?: ParticipantType;
+  errorCount: number;
 }
 
 export interface ConversationMessage {
@@ -44,8 +45,15 @@ export const conversationsService = {
       const events = await logsService.getEvents(sessionId, 1000);
 
       const conversations = Array.from(conversationMap.entries()).map(([convId, queries]): Conversation => {
-        const hasError = queries.some(q => q.phase === 'error');
-        const isActive = queries.some(q => q.phase === 'running' || q.phase === 'pending');
+        // Sort queries by lastActivity to find the most recent one
+        const sortedQueries = [...queries].sort((a, b) =>
+          new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
+        );
+        const lastQuery = sortedQueries[0];
+
+        // Determine status from the last query only
+        const hasError = lastQuery?.phase === 'error';
+        const isActive = lastQuery?.phase === 'running' || lastQuery?.phase === 'pending';
 
         const participants = Array.from(new Set(queries.map(q => q.team || q.agent || q.tool).filter(Boolean))) as string[];
         const participantName = participants[0] || convId;
@@ -70,6 +78,9 @@ export const conversationsService = {
             ).length
           : 0;
 
+        // Count errors from queries
+        const errorCount = queries.filter((q: any) => q.phase === 'error').length;
+
         let status: 'active' | 'completed' | 'error';
         if (hasError) {
           status = 'error';
@@ -89,6 +100,7 @@ export const conversationsService = {
           status,
           startTime: queries.at(0)!.createdAt,
           participantType,
+          errorCount,
         };
       });
 

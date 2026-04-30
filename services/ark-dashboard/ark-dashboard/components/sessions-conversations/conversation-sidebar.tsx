@@ -52,7 +52,6 @@ export function ConversationSidebar({ conversations, selectedId, onSelect }: Pro
       {conversations.map(conv => {
         const hasError = conv.status === 'error';
         const isActive = conv.status === 'active';
-        const errorCount = hasError ? 2 : 0; // Placeholder - should come from data
 
         return (
           <button
@@ -87,16 +86,13 @@ export function ConversationSidebar({ conversations, selectedId, onSelect }: Pro
               </span>
             </div>
 
-            <div className="flex w-full items-center gap-2">
-              <Badge variant="outline" className="rounded-md border-border text-xs px-2 py-0.5">
-                {formatDurationPill(conv.duration)}
-              </Badge>
-              {hasError && errorCount > 0 && (
-                <Badge variant="destructive" className="rounded-full text-xs size-5 flex items-center justify-center p-0">
-                  {errorCount}
+            {conv.errorCount > 0 && (
+              <div className="flex w-full">
+                <Badge variant="outline" className="rounded border-red-500 text-white text-xs px-1.5 py-0.5">
+                  {conv.errorCount}
                 </Badge>
-              )}
-            </div>
+              </div>
+            )}
           </button>
         );
       })}

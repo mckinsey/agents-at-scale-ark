@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useAtom } from 'jotai';
 import { useRouter } from 'next/navigation';
-import { Plus } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useListConversations } from '@/lib/services/conversations-hooks';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
 import type { Conversation } from '@/lib/services/conversations';
@@ -15,7 +15,7 @@ import { ChatInput } from './chat-input';
 import { NewConversationDialog } from './new-conversation-dialog';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
+import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
 import { generateUUID } from '@/lib/utils/uuid';
 
 interface Props {
@@ -35,6 +35,7 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
   const [pendingMessagesMap, setPendingMessagesMap] = useAtom(sessionPendingMessagesAtom);
   const [processingStateMap, setProcessingStateMap] = useAtom(sessionProcessingStateAtom);
   const [hasSentMessage, setHasSentMessage] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Skip API call for new sessions before first message is sent
   const isNewSession = !!initialParticipant && !hasSentMessage;
@@ -58,6 +59,7 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
         startTime: new Date().toISOString(),
         isTemporary: true,
         participantType: initialParticipant.type,
+        errorCount: 0,
       };
       setTemporaryConversations([tempConversation]);
       setSelectedConversationId(initialConversationId);
@@ -102,6 +104,7 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
       startTime: new Date().toISOString(),
       isTemporary: true,
       participantType: participant.type,
+      errorCount: 0,
     };
     setTemporaryConversations((prev) => [...prev, newConversation]);
     setSelectedConversationId(conversationId);
@@ -151,26 +154,44 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
           </Empty>
         </div>
       ) : (
-        <div className="grid min-h-0 flex-1 grid-cols-[300px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] overflow-hidden">
+        <div
+          className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] overflow-hidden transition-all duration-300"
+          style={{ gridTemplateColumns: isSidebarCollapsed ? '48px minmax(0, 1fr)' : '300px minmax(0, 1fr)' }}
+        >
           <div className="flex h-full flex-col overflow-hidden">
             <div className="flex items-center justify-between border-r border-border bg-muted p-4">
-              <h3 className="text-sm font-medium">Conversations</h3>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setDialogOpen(true)}
-                className="size-6"
-              >
-                <Plus className="size-4" />
-              </Button>
+              {!isSidebarCollapsed && <h3 className="text-sm font-medium">Conversations</h3>}
+              <div className="flex items-center gap-1">
+                {!isSidebarCollapsed && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setDialogOpen(true)}
+                    className="size-6"
+                  >
+                    <Plus className="size-4" />
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                  className="size-6"
+                  title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                >
+                  {isSidebarCollapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
+                </Button>
+              </div>
             </div>
-            <div className="min-h-0 flex-1 flex flex-col">
-              <ConversationSidebar
-                conversations={allConversations}
-                selectedId={selectedConversationId}
-                onSelect={setSelectedConversationId}
-              />
-            </div>
+            {!isSidebarCollapsed && (
+              <div className="min-h-0 flex-1 flex flex-col">
+                <ConversationSidebar
+                  conversations={allConversations}
+                  selectedId={selectedConversationId}
+                  onSelect={setSelectedConversationId}
+                />
+              </div>
+            )}
           </div>
 
           {selectedConversationId ? (
@@ -193,9 +214,16 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
               />
             </div>
           ) : (
-            <Empty>
-              <EmptyTitle>Select a conversation</EmptyTitle>
-            </Empty>
+            <div className="flex h-full flex-col">
+              <div className="flex items-center justify-between bg-muted p-4">
+                <h3 className="text-sm font-medium">No participant selected</h3>
+              </div>
+              <div className="flex items-center justify-center p-4">
+                <span className="rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground">
+                  Create a conversation to start
+                </span>
+              </div>
+            </div>
           )}
         </div>
       )}

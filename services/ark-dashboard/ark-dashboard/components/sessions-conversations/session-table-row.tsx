@@ -30,7 +30,7 @@ export function SessionTableRow({ session, isSelected, onSelect }: Props) {
     <button
       type="button"
       className={cn(
-        'grid grid-cols-[2fr_3fr_1fr_auto] gap-4 border-b px-4 py-3 transition-colors hover:bg-muted/50 cursor-pointer',
+        'grid grid-cols-[2fr_3fr_1fr_auto] gap-4 border-b border-border/50 px-4 py-3 transition-colors hover:bg-muted/50 cursor-pointer',
         'w-full text-left',
         isSelected && 'bg-muted'
       )}
@@ -47,10 +47,10 @@ export function SessionTableRow({ session, isSelected, onSelect }: Props) {
           )}
         />
         <div>
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-base">{session.sessionId}</span>
+          <div className="text-base font-semibold">
+            {session.sessionId}
             {session.errorCount > 0 && (
-              <span className="flex h-5 items-center rounded border border-red-500 px-1.5 text-xs text-white">
+              <span className="ml-2 inline-flex h-5 items-center rounded border border-red-500 px-1.5 text-xs text-white align-middle">
                 {session.errorCount}
               </span>
             )}

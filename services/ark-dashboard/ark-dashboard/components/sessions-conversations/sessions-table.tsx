@@ -161,8 +161,8 @@ export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery,
         </Button>
       </div>
 
-      <div className="rounded-lg border">
-        <div className="grid grid-cols-[2fr_3fr_1fr_auto] gap-4 border-b bg-muted/50 px-4 py-3 text-sm font-medium text-muted-foreground">
+      <div className="rounded-lg">
+        <div className="grid grid-cols-[2fr_3fr_1fr_auto] gap-4 border-b border-border/50 px-4 py-3 text-sm font-medium text-muted-foreground">
           <button
             className="flex items-center gap-1 text-left"
             onClick={() => toggleSort('name')}

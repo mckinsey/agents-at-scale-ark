@@ -124,7 +124,48 @@ function determineParticipantType(queries: any[], participantName: string): 'age
 function enrichSessionData(session: any): BrokerSession {
   const queries = Object.values(session.queries || {});
   const errors = queries.filter((q: any) => q.phase === 'error');
-  const active = queries.some((q: any) => q.phase === 'running' || q.phase === 'pending');
+
+  // Group queries by conversationId
+  const conversationMap = new Map<string, any[]>();
+  queries.forEach((q: any) => {
+    if (q.conversationId) {
+      const existing = conversationMap.get(q.conversationId) || [];
+      conversationMap.set(q.conversationId, [...existing, q]);
+    }
+  });
+
+  // Determine status from the last conversation's last query
+  let hasErrorInLastConversation = false;
+  let active = false;
+
+  if (conversationMap.size > 0) {
+    // Find the conversation with the most recent activity
+    let lastConversationQueries: any[] = [];
+    let latestActivity = 0;
+
+    conversationMap.forEach((convQueries) => {
+      const convLatestActivity = Math.max(
+        ...convQueries.map((q) => new Date(q.lastActivity).getTime())
+      );
+      if (convLatestActivity > latestActivity) {
+        latestActivity = convLatestActivity;
+        lastConversationQueries = convQueries;
+      }
+    });
+
+    // Check the last query in the last conversation
+    if (lastConversationQueries.length > 0) {
+      const sortedQueries = [...lastConversationQueries].sort(
+        (a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
+      );
+      const lastQuery = sortedQueries[0];
+      hasErrorInLastConversation = lastQuery.phase === 'error';
+      active = lastQuery.phase === 'running' || lastQuery.phase === 'pending';
+    }
+  } else {
+    // Fallback: if no conversations, check all queries (original behavior)
+    active = queries.some((q: any) => q.phase === 'running' || q.phase === 'pending');
+  }
 
   const participants = Array.from(
     new Set(queries.map((q: any) => q.team || q.agent || q.tool).filter(Boolean))
@@ -142,7 +183,7 @@ function enrichSessionData(session: any): BrokerSession {
   return {
     sessionId: session.sessionId,
     name: session.name || session.sessionId,
-    status: getSessionStatus(errors.length, active),
+    status: getSessionStatus(hasErrorInLastConversation ? 1 : 0, active),
     errorCount: errors.length,
     participants,
     conversationCount: conversations.length,
