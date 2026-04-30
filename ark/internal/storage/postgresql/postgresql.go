@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
@@ -286,6 +286,9 @@ func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name st
 		RETURNING resource_version, generation, created_at
 	`, kind, namespace, name, resource.Metadata.UID, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON).Scan(&rv, &generation, &createdAt)
 	if err != nil {
+		if pgErr, ok := err.(*pq.Error); ok && pgErr.Code == "23505" {
+			return storage.ErrAlreadyExists
+		}
 		return fmt.Errorf("failed to insert resource: %w", err)
 	}
 
