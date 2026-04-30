@@ -19,7 +19,7 @@ if (typeof window !== 'undefined') {
   });
 }
 
-export const useMarkdownProcessor = (content: string) => {
+export const renderMarkdown = (content: string) => {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
