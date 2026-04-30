@@ -175,6 +175,10 @@ export function MultiTabPreviewDialog({
                 <JsonTree data={activeTab.jsonData} />
               ) : activeTab.isMarkdown && activeViewMode === 'rendered' ? (
                 <div className="px-4">{renderMarkdown(activeTab.content)}</div>
+              ) : activeTab.isMarkdown ? (
+                <pre className="overflow-x-auto px-4 font-mono text-sm whitespace-pre">
+                  {activeTab.content}
+                </pre>
               ) : activeTab.language ? (
                 <div className="overflow-hidden rounded-md">
                   <SyntaxHighlighter

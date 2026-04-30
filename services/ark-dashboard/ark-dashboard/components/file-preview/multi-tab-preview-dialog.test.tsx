@@ -99,6 +99,29 @@ describe('MultiTabPreviewDialog', () => {
     expect(sourceToggle.getAttribute('aria-checked')).toBe('true');
   });
 
+  it('renders markdown source as plain pre to avoid Tailwind class collisions with Prism markdown grammar', async () => {
+    const user = userEvent.setup();
+    const tableMarkdown = '| A | B |\n|---|---|\n| 1 | 2 |';
+
+    renderDialog(
+      makeTab({
+        content: tableMarkdown,
+        isMarkdown: true,
+        language: 'markdown',
+      }),
+    );
+
+    await user.click(screen.getByRole('radio', { name: 'Source view' }));
+
+    const pre = document.querySelector(
+      '[role="dialog"] pre',
+    ) as HTMLPreElement | null;
+    expect(pre).not.toBeNull();
+    expect(pre!.textContent).toBe(tableMarkdown);
+    expect(pre!.querySelector('span.token.table')).toBeNull();
+    expect(pre!.className).toMatch(/whitespace-pre(\s|$)/);
+  });
+
   it('does not render the toggle for non-markdown files (mdx regression)', () => {
     renderDialog(
       makeTab({
