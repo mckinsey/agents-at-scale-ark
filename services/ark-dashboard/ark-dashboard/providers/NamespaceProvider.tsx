@@ -46,9 +46,11 @@ function NamespaceProvider({ children }: PropsWithChildren) {
   const [isNamespaceResolved, setIsNamespaceResolved] = useState(false);
   const [readOnlyMode, setReadOnlyMode] = useState(true);
 
-  apiClient.setDefaultParam('namespace', namespaceFromQueryParams);
+  const { data, isPending, error } = useGetContext(namespaceFromQueryParams);
 
-  const { data, isPending, error } = useGetContext();
+  useEffect(() => {
+    apiClient.setDefaultParam('namespace', namespaceFromQueryParams);
+  }, [namespaceFromQueryParams]);
 
   const createQueryString = useCallback(
     (name: string, value: string) => {
@@ -100,16 +102,12 @@ function NamespaceProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (data) {
-      if (data.namespace !== namespaceFromQueryParams) {
-        setNamespace(data.namespace);
-      } else {
-        setIsNamespaceResolved(true);
-      }
+      setIsNamespaceResolved(true);
       const newReadOnlyMode = data.read_only_mode ?? false;
       setReadOnlyMode(newReadOnlyMode);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, namespaceFromQueryParams]);
+  }, [data]);
 
   const context = useMemo<NamespaceContext>(
     () => ({
