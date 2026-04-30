@@ -54,6 +54,30 @@ func makeTuple(values ...string) *pglogrepl.TupleData {
 	}
 }
 
+func TestPostgresWatcher_FirstSeenUID(t *testing.T) {
+	t.Parallel()
+	w := &postgresWatcher{seenRVs: make(map[string]int64)}
+
+	if w.hasSeenUID("uid-A") {
+		t.Error("hasSeenUID should return false for unseen UID")
+	}
+	if w.markSeen("uid-A", 100) {
+		t.Error("markSeen should return false (not skip) for new uid/rv")
+	}
+	if !w.hasSeenUID("uid-A") {
+		t.Error("hasSeenUID should return true after markSeen recorded the uid")
+	}
+	if w.hasSeenUID("uid-B") {
+		t.Error("hasSeenUID should return false for a different unseen UID")
+	}
+	if !w.markSeen("uid-A", 100) {
+		t.Error("markSeen should return true (skip) for already-emitted (uid, rv)")
+	}
+	if w.markSeen("uid-A", 101) {
+		t.Error("markSeen should return false (not skip) for higher rv on same uid")
+	}
+}
+
 func TestSlotNameIsStable(t *testing.T) {
 	if walSlotName != "ark_cdc" {
 		t.Errorf("slot name changed unexpectedly: got %q want %q (stability matters: existing deployments rely on this name to resume their WAL position across restarts)", walSlotName, "ark_cdc")
