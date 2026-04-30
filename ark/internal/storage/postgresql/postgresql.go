@@ -836,6 +836,13 @@ func (w *postgresWatcher) markSeen(uid string, rv int64) bool {
 	return false
 }
 
+func (w *postgresWatcher) hasSeenUID(uid string) bool {
+	w.seenMu.Lock()
+	defer w.seenMu.Unlock()
+	_, ok := w.seenRVs[uid]
+	return ok
+}
+
 // pruneSeen drops seenRVs entries far below the current cursor, bounding memory.
 func (w *postgresWatcher) pruneSeen() {
 	pruneFloor := w.lastSeenRV.Load() - 5000
@@ -883,6 +890,7 @@ func (w *postgresWatcher) buildRelistQuery() (string, []interface{}) {
 // emitRow sends a single relist row downstream. Returns false if the watcher
 // should stop iterating (done/cancelled).
 func (w *postgresWatcher) emitRow(rv, generation int64, ns, name, uid string, spec, status, labels, annotations, finalizers, ownerRefs []byte, createdAt time.Time, deletedAt sql.NullTime) bool {
+	uidNew := !w.hasSeenUID(uid)
 	if w.markSeen(uid, rv) {
 		return true
 	}
@@ -894,7 +902,7 @@ func (w *postgresWatcher) emitRow(rv, generation int64, ns, name, uid string, sp
 	switch {
 	case deletedAt.Valid:
 		eventType = watch.Deleted
-	case w.initialList:
+	case uidNew:
 		eventType = watch.Added
 	default:
 		eventType = watch.Modified
