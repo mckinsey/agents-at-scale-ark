@@ -208,13 +208,13 @@ async def proxy_server(
     else:
         if namespace is None:
             namespace = get_context()["namespace"]
-        resource_url = f"http://{server_name}.{namespace}.svc.cluster.local"
+        resource_url = f"http://{server_name}.{namespace}.svc.cluster.local"  # NOSONAR - in-cluster traffic
         additional_headers = {}
 
     logger.info(f"Forwarding at {request.method} {resource_url}")
     return await _proxy_request(resource_url, request, additional_headers)
-        
-    
+
+
     # Construct the target path
     #target_path = f"/{path}" if path else "/"
 
@@ -234,7 +234,7 @@ async def proxy_server_path(resource: Resource,
     else:
         if namespace is None:
             namespace = get_context()["namespace"]
-        resource_url = f"http://{server_name}.{namespace}.svc.cluster.local"
+        resource_url = f"http://{server_name}.{namespace}.svc.cluster.local"  # NOSONAR - in-cluster traffic
         additional_headers = {}
 
     resource_url = f"{resource_url}/{path}" if resource_url[-1]!= "/" \
