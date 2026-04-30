@@ -48,7 +48,7 @@ export function SessionTableRow({ session, isSelected, onSelect }: Props) {
         />
         <div>
           <div className="flex items-center gap-2">
-            <span className="font-medium">{session.sessionId}</span>
+            <span className="font-semibold text-base">{session.sessionId}</span>
             {session.errorCount > 0 && (
               <span className="flex h-5 items-center rounded border border-red-500 px-1.5 text-xs text-white">
                 {session.errorCount}
@@ -63,7 +63,7 @@ export function SessionTableRow({ session, isSelected, onSelect }: Props) {
         {session.participants.slice(0, 3).map((p) => (
           <div
             key={p.id}
-            className="flex items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-xs"
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs"
           >
             {getParticipantIcon(p.type)}
             <span>{stripNamespace(p.name)}</span>

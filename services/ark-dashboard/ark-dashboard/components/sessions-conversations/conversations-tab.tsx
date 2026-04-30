@@ -151,9 +151,9 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
           </Empty>
         </div>
       ) : (
-        <div className="grid min-h-0 flex-1 grid-cols-[300px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] gap-4 overflow-hidden">
-          <div className="flex h-full flex-col space-y-2 overflow-hidden">
-            <div className="flex items-center justify-between px-2">
+        <div className="grid min-h-0 flex-1 grid-cols-[300px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] overflow-hidden">
+          <div className="flex h-full flex-col overflow-hidden">
+            <div className="flex items-center justify-between border-r border-border bg-muted p-4">
               <h3 className="text-sm font-medium">Conversations</h3>
               <Button
                 variant="ghost"
@@ -174,7 +174,7 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
           </div>
 
           {selectedConversationId ? (
-            <div className="flex h-full flex-col rounded-lg border overflow-hidden">
+            <div className="flex h-full flex-col overflow-hidden">
               <MessageDisplay
                 conversationId={selectedConversationId}
                 sessionId={sessionId}

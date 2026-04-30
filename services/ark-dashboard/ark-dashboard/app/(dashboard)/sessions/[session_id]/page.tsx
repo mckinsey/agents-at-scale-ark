@@ -2,8 +2,7 @@
 
 import { use, useMemo, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Bot, MessageSquare, Users, Wrench } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { ChevronLeft, Bot, MessageSquare, Users, Wrench } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
@@ -13,6 +12,7 @@ import { LogsTab } from '@/components/sessions-conversations/logs-tab';
 import type { BrokerSession } from '@/lib/services/broker-sessions';
 import { generateUUID } from '@/lib/utils/uuid';
 import { stripNamespace } from '@/lib/utils/participant';
+import { cn } from '@/lib/utils';
 
 interface Props {
   readonly params: Promise<{
@@ -87,10 +87,13 @@ export default function SessionDetailPage({ params }: Props) {
   if (isError || !session) {
     return (
       <div className="flex h-full flex-col space-y-6 p-8">
-        <Button variant="ghost" onClick={() => router.push('/session-history')}>
-          <ArrowLeft className="mr-2 size-4" />
+        <button
+          onClick={() => router.push('/session-history')}
+          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+        >
+          <ChevronLeft className="size-4" />
           Back to all sessions
-        </Button>
+        </button>
         <div className="flex flex-1 items-center justify-center text-muted-foreground">
           {isError ? 'Failed to load session details' : 'Session not found'}
         </div>
@@ -119,22 +122,29 @@ export default function SessionDetailPage({ params }: Props) {
   const errorCount = session.errorCount || 0;
   const sessionStatus = session.status;
 
-  const getStatusVariant = (status: string) => {
-    if (status === 'error') return 'destructive';
-    if (status === 'active') return 'default';
-    return 'secondary';
+  const getStatusVariant = (): 'outline' => {
+    return 'outline';
+  };
+
+  const getStatusClassName = (status: string) => {
+    if (status === 'error') return 'border-red-500 text-red-500';
+    if (status === 'active') return 'border-blue-500 text-blue-500';
+    return 'border-border text-muted-foreground'; // idle
   };
 
   return (
     <div className="flex h-full flex-col space-y-6 overflow-hidden p-8">
-      <Button variant="ghost" onClick={() => router.push('/session-history')} className="w-fit cursor-pointer">
-        <ArrowLeft className="mr-2 size-4" />
+      <button
+        onClick={() => router.push('/session-history')}
+        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+      >
+        <ChevronLeft className="size-4" />
         Back to all sessions
-      </Button>
+      </button>
 
-      <div className="space-y-4 rounded-lg border p-6">
+      <div className="space-y-4 rounded-lg border bg-muted p-6">
         <div className="flex items-start justify-between">
-          <div className="space-y-3">
+          <div className="space-y-5">
             <div className="flex items-center gap-2">
               <div className="text-sm text-muted-foreground">{sessionDate}</div>
             </div>
@@ -150,6 +160,7 @@ export default function SessionDetailPage({ params }: Props) {
                 <span className="font-medium">{participants.length}</span>
                 <span className="text-muted-foreground">Participants</span>
               </div>
+              <div className="h-4 w-px bg-border" />
               <div className="flex items-center gap-1">
                 <span className="size-2 rounded-full bg-red-500" />
                 <span className="font-medium">{errorCount}</span>
@@ -160,7 +171,7 @@ export default function SessionDetailPage({ params }: Props) {
               {participants.map(p => (
                 <div
                   key={p.id}
-                  className="flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm"
+                  className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm"
                 >
                   {getParticipantIcon(p.type)}
                   <span>{stripNamespace(p.name)}</span>
@@ -172,8 +183,8 @@ export default function SessionDetailPage({ params }: Props) {
             </div>
           </div>
           <Badge
-            variant={getStatusVariant(sessionStatus)}
-            className="capitalize"
+            variant={getStatusVariant()}
+            className={cn('capitalize rounded-full', getStatusClassName(sessionStatus))}
           >
             {sessionStatus}
           </Badge>
@@ -181,9 +192,19 @@ export default function SessionDetailPage({ params }: Props) {
       </div>
 
       <Tabs defaultValue="history" className="min-h-0 flex-1">
-        <TabsList>
-          <TabsTrigger value="history">History</TabsTrigger>
-          <TabsTrigger value="logs">Logs</TabsTrigger>
+        <TabsList className="w-full justify-start rounded-none border-b border-border bg-transparent p-0 h-auto gap-4">
+          <TabsTrigger
+            value="history"
+            className="flex-none rounded-none border-0 border-b-2 border-b-transparent bg-transparent px-6 pb-3 pt-0 text-muted-foreground shadow-none outline-none data-[state=active]:border-b-white data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-none dark:data-[state=active]:bg-transparent dark:data-[state=active]:border-b-white dark:bg-transparent focus-visible:outline-none focus-visible:ring-0"
+          >
+            History
+          </TabsTrigger>
+          <TabsTrigger
+            value="logs"
+            className="flex-none rounded-none border-0 border-b-2 border-b-transparent bg-transparent px-6 pb-3 pt-0 text-muted-foreground shadow-none outline-none data-[state=active]:border-b-white data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-none dark:data-[state=active]:bg-transparent dark:data-[state=active]:border-b-white dark:bg-transparent focus-visible:outline-none focus-visible:ring-0"
+          >
+            Logs
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="history" className="min-h-0 flex flex-1 flex-col">

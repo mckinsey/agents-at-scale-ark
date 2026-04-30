@@ -75,6 +75,7 @@ function renderMessageContent(
             queryName={msg.query_id}
             toolCalls={msg.message.tool_calls}
             sender={msg.message.name}
+            timestamp={msg.created_at || msg.timestamp}
           />
         ))}
         {hasPendingMessages && uniquePendingMessages.map((msg, idx) => (
@@ -167,7 +168,7 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
 
   return (
     <div className="min-h-0 flex flex-1 flex-col">
-      <div className="border-b p-4">
+      <div className="bg-muted p-4">
         <div className="flex items-center gap-2">
           {getParticipantIcon(participantType)}
           <span className="font-semibold">{stripNamespace(participantName)}</span>

@@ -15,6 +15,7 @@ interface ChatMessageProps {
   viewMode?: 'text' | 'markdown';
   toolCalls?: ToolCallData[];
   sender?: string;
+  timestamp?: string;
   tokenUsage?: {
     prompt_tokens: number;
     completion_tokens: number;
@@ -258,6 +259,7 @@ export function ChatMessage({
   queryName,
   toolCalls,
   sender,
+  timestamp,
   tokenUsage,
 }: Readonly<ChatMessageProps>) {
   const isUser = role === 'user';
@@ -308,8 +310,18 @@ export function ChatMessage({
           style={bubbleStyle}>
           <div className="flex flex-col gap-2">
             {sender && !isUser && (
-              <div className="text-muted-foreground text-xs font-medium">
-                {sender}
+              <div className="text-muted-foreground flex items-center gap-2 text-xs font-medium">
+                <span>{sender}</span>
+                {timestamp && (
+                  <span className="opacity-70">
+                    {new Date(timestamp).toLocaleTimeString('en-US', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                      hour12: false
+                    })}
+                  </span>
+                )}
               </div>
             )}
             <div className="flex flex-col gap-2">

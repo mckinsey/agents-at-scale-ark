@@ -97,18 +97,19 @@ export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery,
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-6 rounded-lg border p-4 text-sm">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center gap-6 rounded-lg border bg-muted p-6 text-sm">
+        <div className="flex items-center gap-1">
           <BarChart3 className="size-4 text-muted-foreground" />
           <span className="font-medium text-muted-foreground">{totalSessions}</span>
           <span className="text-muted-foreground">Sessions</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="h-4 w-px bg-border" />
+        <div className="flex items-center gap-1">
           <span className="size-2 rounded-full bg-blue-500" />
           <span className="font-medium text-muted-foreground">{activeSessions}</span>
           <span className="text-muted-foreground">active</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <span className="size-2 rounded-full bg-red-500" />
           <span className="font-medium text-muted-foreground">{errorSessions}</span>
           <span className="text-muted-foreground">errors</span>

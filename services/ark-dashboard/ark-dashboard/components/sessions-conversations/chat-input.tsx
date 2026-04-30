@@ -75,7 +75,7 @@ export function ChatInput({ conversationId, sessionId, conversation, onAddPendin
   };
 
   return (
-    <div className="border-t p-4">
+    <div className="border-t border-border p-4">
       <div className="flex gap-2">
         <Textarea
           value={message}
