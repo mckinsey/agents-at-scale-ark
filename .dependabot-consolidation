@@ -1,0 +1,4 @@
+# Dependabot Consolidation Branch
+
+This branch consolidates multiple Dependabot PRs. Individual dependency updates will be merged into this branch before being merged to main.
+
