@@ -148,6 +148,19 @@ type QueryStatus struct {
 	ConversationId string `json:"conversationId,omitempty"`
 	// +kubebuilder:validation:Optional
 	Duration *metav1.Duration `json:"duration,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Error contains error message when phase is "error"
+	Error string `json:"error,omitempty"`
+	// +kubebuilder:validation:Optional
+	// ApprovalRef references the ToolApprovalRequest when phase is "approval-required"
+	ApprovalRef *ToolApprovalRef `json:"approvalRef,omitempty"`
+}
+
+type ToolApprovalRef struct {
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+	// +kubebuilder:validation:Optional
+	Namespace string `json:"namespace,omitempty"`
 }
 
 // +kubebuilder:object:root=true

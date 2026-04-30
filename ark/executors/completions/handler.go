@@ -93,6 +93,10 @@ func (h *Handler) ProcessMessage(
 	options taskmanager.ProcessOptions,
 	handler taskmanager.TaskHandler,
 ) (*taskmanager.MessageProcessingResult, error) {
+	if resumptionRef := extractResumptionMetadata(message); resumptionRef != nil {
+		return h.processResumption(ctx, message, resumptionRef)
+	}
+
 	query, target, err := h.resolveQueryAndTarget(ctx, message)
 	if err != nil {
 		return nil, err
@@ -117,6 +121,70 @@ func (h *Handler) ProcessMessage(
 	}
 
 	return h.buildA2AResponse(ctx, state, responseMessages, execResult), nil
+}
+
+type resumptionRef struct {
+	ToolApprovalRequest string
+	Namespace           string
+}
+
+func extractResumptionMetadata(message protocol.Message) *resumptionRef {
+	if message.Metadata == nil {
+		return nil
+	}
+	resumptionData, ok := message.Metadata["ark.resumption"]
+	if !ok {
+		return nil
+	}
+	resumptionMap, ok := resumptionData.(map[string]any)
+	if !ok {
+		return nil
+	}
+	tarName, _ := resumptionMap["toolApprovalRequest"].(string)
+	namespace, _ := resumptionMap["namespace"].(string)
+	if tarName == "" {
+		return nil
+	}
+	return &resumptionRef{
+		ToolApprovalRequest: tarName,
+		Namespace:           namespace,
+	}
+}
+
+func (h *Handler) processResumption(ctx context.Context, message protocol.Message, ref *resumptionRef) (*taskmanager.MessageProcessingResult, error) {
+	meta, err := extractArkMetadata(message)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract ark metadata for resumption: %w", err)
+	}
+
+	namespace := ref.Namespace
+	if namespace == "" {
+		namespace = meta.Query.Namespace
+	}
+
+	var tar arkv1alpha1.ToolApprovalRequest
+	if err := h.k8sClient.Get(ctx, types.NamespacedName{Name: ref.ToolApprovalRequest, Namespace: namespace}, &tar); err != nil {
+		return nil, fmt.Errorf("failed to get ToolApprovalRequest %s/%s: %w", namespace, ref.ToolApprovalRequest, err)
+	}
+
+	execResult, err := h.ResumeFromApproval(ctx, &tar)
+	if err != nil {
+		return nil, fmt.Errorf("resumption failed: %w", err)
+	}
+
+	responseContent := ""
+	if execResult != nil && len(execResult.Messages) > 0 {
+		responseContent = extractAssistantText(execResult.Messages)
+	}
+
+	responseMessage := protocol.NewMessage(
+		protocol.MessageRoleAgent,
+		[]protocol.Part{protocol.NewTextPart(responseContent)},
+	)
+
+	return &taskmanager.MessageProcessingResult{
+		Result: &responseMessage,
+	}, nil
 }
 
 func (h *Handler) resolveQueryAndTarget(ctx context.Context, message protocol.Message) (*arkv1alpha1.Query, *arkv1alpha1.QueryTarget, error) {
@@ -566,4 +634,126 @@ func serializeResponseMessages(messages []Message) string {
 		return "[]"
 	}
 	return string(data)
+}
+
+func (h *Handler) ResumeFromApproval(ctx context.Context, tar *arkv1alpha1.ToolApprovalRequest) (*ExecutionResult, error) {
+	execCtx := tar.Spec.ExecutionContext
+
+	messages, err := DeserializeMessages(execCtx.ConversationHistory)
+	if err != nil {
+		return nil, fmt.Errorf("failed to deserialize conversation history: %w", err)
+	}
+
+	var query arkv1alpha1.Query
+	if err := h.k8sClient.Get(ctx, types.NamespacedName{
+		Name:      tar.Spec.QueryRef.Name,
+		Namespace: tar.Spec.QueryRef.Namespace,
+	}, &query); err != nil {
+		return nil, fmt.Errorf("failed to get query: %w", err)
+	}
+
+	var agentCRD arkv1alpha1.Agent
+	if err := h.k8sClient.Get(ctx, types.NamespacedName{
+		Name:      execCtx.AgentName,
+		Namespace: execCtx.AgentNamespace,
+	}, &agentCRD); err != nil {
+		return nil, fmt.Errorf("failed to get agent %s/%s: %w", execCtx.AgentNamespace, execCtx.AgentName, err)
+	}
+
+	ctx = context.WithValue(ctx, QueryContextKey, &query)
+	agent, err := MakeAgent(ctx, h.k8sClient, &agentCRD, h.telemetry, h.eventing)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make agent: %w", err)
+	}
+
+	approvedToolIDs := make(map[string]bool)
+	if tar.Status.Decision != nil && tar.Status.Decision.Action == "approved" {
+		for _, tc := range tar.Spec.ToolCalls {
+			approvedToolIDs[tc.ID] = true
+		}
+	}
+
+	sessionId := query.Spec.SessionId
+	if sessionId == "" {
+		sessionId = string(query.UID)
+	}
+	eventStream, err := NewEventStreamForQuery(ctx, h.k8sClient, query.Namespace, sessionId, query.Name)
+	if err != nil {
+		log.Error(err, "failed to create event stream for resumption")
+	}
+
+	return h.executeApprovedToolsAndContinue(ctx, agent, messages, approvedToolIDs, eventStream)
+}
+
+func (h *Handler) executeApprovedToolsAndContinue(
+	ctx context.Context,
+	agent *Agent,
+	messages []Message,
+	approvedToolIDs map[string]bool,
+	eventStream EventStreamInterface,
+) (*ExecutionResult, error) {
+	var tools []openai.ChatCompletionToolParam
+	if agent.Tools != nil {
+		tools = agent.Tools.ToOpenAITools()
+	}
+
+	newMessages := []Message{}
+
+	lastMsg := messages[len(messages)-1]
+	if lastMsg.OfAssistant != nil && lastMsg.OfAssistant.ToolCalls != nil {
+		for _, tc := range lastMsg.OfAssistant.ToolCalls {
+			if !approvedToolIDs[tc.ID] {
+				toolMessage := ToolMessage("Tool call was not approved", tc.ID)
+				messages = append(messages, toolMessage)
+				newMessages = append(newMessages, toolMessage)
+				continue
+			}
+
+			result, err := agent.Tools.ExecuteTool(ctx, ToolCall{
+				ID:       tc.ID,
+				Type:     string(tc.Type),
+				Function: tc.Function,
+			})
+			toolMessage := ToolMessage(result.Content, result.ID)
+			messages = append(messages, toolMessage)
+			newMessages = append(newMessages, toolMessage)
+
+			if err != nil {
+				if IsTerminateTeam(err) {
+					return &ExecutionResult{Messages: newMessages}, err
+				}
+				return nil, fmt.Errorf("approved tool execution failed: %w", err)
+			}
+		}
+	}
+
+	for {
+		if ctx.Err() != nil {
+			return &ExecutionResult{Messages: newMessages}, ctx.Err()
+		}
+
+		response, err := agent.executeModelCall(ctx, messages, tools, eventStream)
+		if err != nil {
+			return nil, err
+		}
+
+		choice := response.Choices[0]
+		assistantMessage := agent.processAssistantMessage(choice)
+		messages = append(messages, assistantMessage)
+		newMessages = append(newMessages, assistantMessage)
+
+		if len(choice.Message.ToolCalls) == 0 {
+			return &ExecutionResult{Messages: newMessages}, nil
+		}
+
+		if err := agent.executeToolCalls(ctx, choice.Message.ToolCalls, &messages, &newMessages); err != nil {
+			if IsApprovalRequired(err) {
+				return &ExecutionResult{Messages: newMessages}, err
+			}
+			if IsTerminateTeam(err) {
+				return &ExecutionResult{Messages: newMessages}, err
+			}
+			return nil, err
+		}
+	}
 }

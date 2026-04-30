@@ -165,7 +165,11 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 	opCtx, cancel := context.WithCancel(ctx)
 	r.operations.Store(req.NamespacedName, cancel)
 
-	go r.executeQueryAsync(opCtx, obj, req.NamespacedName)
+	if obj.Status.ApprovalRef != nil {
+		go r.resumeFromApprovalAsync(opCtx, obj, req.NamespacedName)
+	} else {
+		go r.executeQueryAsync(opCtx, obj, req.NamespacedName)
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -275,6 +279,109 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		operationData = map[string]string{"input": displayInput}
 	}
 	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", operationData)
+}
+
+func (r *QueryReconciler) resumeFromApprovalAsync(opCtx context.Context, obj arkv1alpha1.Query, namespacedName types.NamespacedName) {
+	log := logf.FromContext(opCtx)
+	startTime := time.Now()
+
+	defer func() {
+		if rec := recover(); rec != nil {
+			log.Error(fmt.Errorf("approval resumption goroutine panic: %v", rec), "Approval resumption goroutine panicked")
+		}
+		r.operations.Delete(namespacedName)
+	}()
+
+	approvalRef := obj.Status.ApprovalRef
+	if approvalRef == nil {
+		log.Error(fmt.Errorf("no approval ref"), "Missing approval reference for resumption")
+		_ = r.updateStatus(opCtx, &obj, statusError)
+		return
+	}
+
+	tarNamespace := approvalRef.Namespace
+	if tarNamespace == "" {
+		tarNamespace = obj.Namespace
+	}
+
+	var tar arkv1alpha1.ToolApprovalRequest
+	if err := r.Get(opCtx, types.NamespacedName{Name: approvalRef.Name, Namespace: tarNamespace}, &tar); err != nil {
+		log.Error(err, "Failed to get ToolApprovalRequest for resumption")
+		_ = r.updateStatus(opCtx, &obj, statusError)
+		return
+	}
+
+	if tar.Status.Phase != "approved" {
+		log.Error(fmt.Errorf("TAR not approved"), "Cannot resume: ToolApprovalRequest not in approved phase", "phase", tar.Status.Phase)
+		_ = r.updateStatus(opCtx, &obj, statusError)
+		return
+	}
+
+	response, err := r.sendResumptionA2A(opCtx, &obj, &tar)
+	if err != nil {
+		log.Error(err, "Failed to resume from approval")
+		r.Eventing.QueryRecorder().Fail(opCtx, "ApprovalResumption", fmt.Sprintf("Resumption failed: %v", err), err, nil)
+		obj.Status.Response = createErrorResponse(*obj.Spec.Target, err)
+		_ = r.updateStatus(opCtx, &obj, statusError)
+		return
+	}
+
+	obj.Status.Response = response
+	obj.Status.ApprovalRef = nil
+
+	queryStatus := r.determineQueryStatus(response)
+	duration := &metav1.Duration{Duration: time.Since(startTime)}
+	_ = r.updateStatusWithDuration(opCtx, &obj, queryStatus, duration)
+
+	log.Info("Approval resumption completed", "query", obj.Name, "status", queryStatus)
+	r.Eventing.QueryRecorder().Complete(opCtx, "ApprovalResumption", "Resumption completed after approval", nil)
+}
+
+func (r *QueryReconciler) sendResumptionA2A(ctx context.Context, query *arkv1alpha1.Query, tar *arkv1alpha1.ToolApprovalRequest) (*arkv1alpha1.Response, error) {
+	metadata := map[string]any{
+		arka2a.QueryExtensionMetadataKey: map[string]string{
+			"name":      query.Name,
+			"namespace": query.Namespace,
+		},
+		"ark.resumption": map[string]string{
+			"toolApprovalRequest": tar.Name,
+			"namespace":           tar.Namespace,
+		},
+	}
+
+	message := protocol.NewMessage(
+		protocol.MessageRoleUser,
+		[]protocol.Part{protocol.NewTextPart("resume from approval")},
+	)
+	message.Metadata = metadata
+
+	a2aClient, err := arka2a.CreateA2AClient(ctx, r.CompletionsAddr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create A2A client: %w", err)
+	}
+
+	task, err := a2aClient.SendMessage(ctx, message, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send resumption message: %w", err)
+	}
+
+	if task.Status.State == protocol.TaskStateFailed {
+		errMsg := "unknown error"
+		if task.Status.Message != nil && len(task.Status.Message.Parts) > 0 {
+			if textPart, ok := task.Status.Message.Parts[0].(*protocol.TextPart); ok {
+				errMsg = textPart.Text
+			}
+		}
+		return nil, fmt.Errorf("resumption failed: %s", errMsg)
+	}
+
+	content := extractA2AResponseContent(task)
+
+	return &arkv1alpha1.Response{
+		Target:  *query.Spec.Target,
+		Content: content,
+		Phase:   "done",
+	}, nil
 }
 
 func (r *QueryReconciler) resolveDispatchAddress(ctx context.Context, target arkv1alpha1.QueryTarget, namespace string) (string, error) {
@@ -439,6 +546,22 @@ func extractA2AResponseText(result *protocol.MessageResult) (string, error) {
 	default:
 		return "", fmt.Errorf("unexpected A2A result type: %T", result.Result)
 	}
+}
+
+func extractA2AResponseContent(task *protocol.Task) string {
+	if task == nil {
+		return ""
+	}
+	if task.Status.Message != nil {
+		return arka2a.ExtractTextFromParts(task.Status.Message.Parts)
+	}
+	for _, artifact := range task.Artifacts {
+		text := arka2a.ExtractTextFromParts(artifact.Parts)
+		if text != "" {
+			return text
+		}
+	}
+	return ""
 }
 
 type engineResponseMeta struct {

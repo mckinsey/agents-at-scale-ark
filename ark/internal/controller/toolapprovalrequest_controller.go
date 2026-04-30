@@ -236,11 +236,16 @@ func (r *ToolApprovalRequestReconciler) resumeQuery(ctx context.Context, tar *ar
 
 	if tar.Status.Phase == ApprovalPhaseApproved {
 		query.Status.Phase = "running"
+		query.Status.ApprovalRef = &arkv1alpha1.ToolApprovalRef{
+			Name:      tar.Name,
+			Namespace: tar.Namespace,
+		}
 	} else {
 		query.Status.Phase = "error"
 		query.Status.Error = fmt.Sprintf("Tool approval %s: %s",
 			tar.Status.Decision.Action,
 			tar.Status.Decision.Reason)
+		query.Status.ApprovalRef = nil
 	}
 
 	if err := r.Status().Update(ctx, query); err != nil {
