@@ -313,6 +313,7 @@ func setupWebhooks(mgr ctrl.Manager) {
 		{"Team", webhookv1.SetupTeamWebhookWithManager},
 		{"Agent", webhookv1.SetupAgentWebhookWithManager},
 		{"Query", webhookv1.SetupQueryWebhookWithManager},
+		{"ArkConfig", webhookv1.SetupArkConfigWebhookWithManager},
 		{"Tool", webhookv1.SetupToolWebhookWithManager},
 		{"Model", webhookv1.SetupModelWebhookWithManager},
 		{"MCPServer", webhookv1.SetupMCPServerWebhookWithManager},

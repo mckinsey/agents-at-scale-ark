@@ -13,6 +13,10 @@ app:
     nodeEnv: "production"
     port: "3000"
     hostname: "0.0.0.0"
+    arkApiService:
+      host: "ark-api"
+      port: "80"
+      protocol: "http"
 
   resources:
     requests:

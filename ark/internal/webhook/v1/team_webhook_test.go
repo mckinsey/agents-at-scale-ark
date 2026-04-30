@@ -189,8 +189,9 @@ var _ = Describe("Team Webhook", func() {
 	Context("Sequential strategy with loops", func() {
 		It("Should accept sequential with loops and maxTurns", func() {
 			maxTurns := 5
+			loopsTrue := true
 			obj.Spec.Strategy = validation.StrategySequential
-			obj.Spec.Loops = true
+			obj.Spec.Loops = &loopsTrue
 			obj.Spec.MaxTurns = &maxTurns
 			obj.Spec.Members = []arkv1alpha1.TeamMember{
 				{Name: "researcher", Type: "agent"},
@@ -201,8 +202,9 @@ var _ = Describe("Team Webhook", func() {
 		})
 
 		It("Should reject sequential with loops but no maxTurns", func() {
+			loopsTrue := true
 			obj.Spec.Strategy = validation.StrategySequential
-			obj.Spec.Loops = true
+			obj.Spec.Loops = &loopsTrue
 			obj.Spec.Members = []arkv1alpha1.TeamMember{
 				{Name: "researcher", Type: "agent"},
 			}
@@ -226,8 +228,9 @@ var _ = Describe("Team Webhook", func() {
 		})
 
 		It("Should reject loops on selector strategy", func() {
+			loopsTrue := true
 			obj.Spec.Strategy = "selector"
-			obj.Spec.Loops = true
+			obj.Spec.Loops = &loopsTrue
 			obj.Spec.Members = []arkv1alpha1.TeamMember{
 				{Name: "researcher", Type: "agent"},
 			}
@@ -265,7 +268,8 @@ var _ = Describe("Team Webhook", func() {
 			err := defaulter.Default(ctx, team)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(team.Spec.Strategy).To(Equal("sequential"))
-			Expect(team.Spec.Loops).To(BeTrue())
+			Expect(team.Spec.Loops).ToNot(BeNil())
+			Expect(*team.Spec.Loops).To(BeTrue())
 			Expect(team.Spec.MaxTurns).ToNot(BeNil())
 			Expect(*team.Spec.MaxTurns).To(Equal(5))
 			Expect(team.Annotations).To(HaveKey(ContainSubstring("migration-warning-round-robin")))
@@ -288,7 +292,8 @@ var _ = Describe("Team Webhook", func() {
 			err := defaulter.Default(ctx, team)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(team.Spec.Strategy).To(Equal("sequential"))
-			Expect(team.Spec.Loops).To(BeFalse())
+			Expect(team.Spec.Loops).ToNot(BeNil())
+			Expect(*team.Spec.Loops).To(BeFalse())
 			Expect(team.Spec.MaxTurns).To(BeNil())
 			Expect(team.Annotations).To(HaveKey(ContainSubstring("migration-warning-round-robin")))
 		})

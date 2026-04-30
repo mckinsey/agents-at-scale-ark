@@ -643,9 +643,10 @@ func TestFinalizeStream(t *testing.T) {
 	t.Run("streams final chunk with response when messages present", func(t *testing.T) {
 		stream := &mockEventStream{}
 		state := &executionState{
-			query:       arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q1"}},
-			target:      target,
-			eventStream: stream,
+			query:          arkv1alpha1.Query{ObjectMeta: metav1.ObjectMeta{Name: "q1"}},
+			target:         target,
+			conversationId: "conv-123",
+			eventStream:    stream,
 		}
 		state.finalizeStream(context.Background(), []Message{NewAssistantMessage("hello")}, arkv1alpha1.TokenUsage{})
 
@@ -655,6 +656,7 @@ func TestFinalizeStream(t *testing.T) {
 		assert.Equal(t, "chatcmpl-final", chunk.ID)
 		require.NotNil(t, chunk.Ark.CompletedQuery.Status.Response)
 		assert.Equal(t, "done", chunk.Ark.CompletedQuery.Status.Phase)
+		assert.Equal(t, "conv-123", chunk.Ark.CompletedQuery.Status.ConversationId)
 		assert.Equal(t, "hello", chunk.Ark.CompletedQuery.Status.Response.Content)
 		assert.Equal(t, "agent", chunk.Ark.CompletedQuery.Status.Response.Target.Type)
 		assert.Equal(t, "my-agent", chunk.Ark.CompletedQuery.Status.Response.Target.Name)

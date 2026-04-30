@@ -12,7 +12,7 @@ spec:
     
     Be concise and direct. Provide temperature, conditions, and any relevant weather details.
   modelRef:
-    name: weather-default-model
+    name: test-model-mock
   tools:
     - type: http
       name: get-coordinates
