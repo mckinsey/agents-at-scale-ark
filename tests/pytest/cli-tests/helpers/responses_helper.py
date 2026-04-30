@@ -30,9 +30,7 @@ SCHEMA_KEY    = "executor-openai-responses.ark.mckinsey.com/output-schema"
 
 MODEL_NON_GPT5 = "gpt-4o"
 MODEL_GPT5     = "gpt-5.2-2025-12-11"
-MODEL_O1       = "o1"
 MODEL_O3       = "o3"
-MODEL_O4_MINI  = "o4-mini"
 
 
 # ---------------------------------------------------------------------------
@@ -192,18 +190,30 @@ def clear_sessions() -> None:
 # Kubernetes helpers
 # ---------------------------------------------------------------------------
 
-def kubectl_run(cmd: list, data: str = None, timeout: int = 30) -> tuple:
+def kubectl_run(cmd: list, stdin_text: str = None, timeout: int = 30) -> tuple:
     try:
         r = subprocess.run(
-            cmd, input=data, capture_output=True, text=True, timeout=timeout,
+            cmd,
+            input=stdin_text,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
         )
         return r.returncode == 0, r.stdout, r.stderr
-    except Exception as e:
+    except subprocess.TimeoutExpired as e:
+        return False, "", str(e)
+    except OSError as e:
         return False, "", str(e)
 
 
 def patch_webhooks(policy: str) -> bool:
-    """Set failurePolicy on all Ark webhooks to avoid timing-related failures during CRD setup."""
+    """
+    Temporarily set failurePolicy on Ark mutating/validating webhooks (e.g. Ignore).
+
+    Avoids flaky kubectl apply failures when the webhook endpoint is unreachable
+    during executor test setup (pod restarts, cold clusters). Restored to Fail in
+    teardown_class.
+    """
     patched = False
     for kind, resource in [
         ("mutatingwebhookconfiguration",  "ark-mutating-webhook-configuration"),
@@ -248,14 +258,17 @@ def wait_for_webhook_ready(namespace: str = "ark-system",
             except json.JSONDecodeError:
                 continue
         time.sleep(delay)
-    pytest.skip(f"ark-webhook-service not ready after {retries} retries")
+    pytest.fail(
+        f"ark-webhook-service endpoints not ready after {retries} retries "
+        f"({retries * delay:.0f}s); fix the cluster or ark-webhook-service before CRD tests."
+    )
 
 
 def kubectl_apply(yaml_str: str, namespace: str = "default",
                   retries: int = 3, timeout: int = 120) -> None:
     for attempt in range(retries):
         ok, _, err = kubectl_run(
-            ["kubectl", "apply", "-f", "-"], data=yaml_str, timeout=timeout,
+            ["kubectl", "apply", "-f", "-"], stdin_text=yaml_str, timeout=timeout,
         )
         if ok:
             return
@@ -347,7 +360,7 @@ def build_query_manifest(name: str, namespace: str, agent_name: str,
             for k, v in annotations.items()
         )
         ann_block = f"  annotations:\n{lines}\n"
-    safe_input = input_text.replace('"', '\\"')
+    input_yaml = json.dumps(input_text)
     return f"""apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
@@ -357,7 +370,7 @@ metadata:
   target:
     type: agent
     name: {agent_name}
-  input: "{safe_input}"
+  input: {input_yaml}
   type: user
   timeout: 5m
   ttl: 1h
@@ -373,7 +386,9 @@ def submit_query(name: str, input_text: str, agent_name: str,
                  annotations: Optional[dict] = None) -> bool:
     ok, _, _ = kubectl_run(
         ["kubectl", "apply", "-f", "-"],
-        data=build_query_manifest(name, namespace, agent_name, input_text, annotations),
+        stdin_text=build_query_manifest(
+            name, namespace, agent_name, input_text, annotations
+        ),
         timeout=120,
     )
     if ok:
@@ -395,9 +410,15 @@ def poll_query(name: str, namespace: str,
                 phase  = status.get("phase", "")
 
                 if phase == "done":
-                    content = status.get("response", {}).get("content", "")
-                    if not content:
-                        return False, None, "empty_response"
+                    content = status.get("response", {}).get("content", "") or ""
+                    if not content.strip():
+                        conv = status.get("conversationId") or ""
+                        detail = (
+                            f"empty_response conversationId={conv!r}"
+                            if conv
+                            else "empty_response"
+                        )
+                        return False, None, detail
                     return True, content, phase
 
                 if phase in ("error", "submit_failed"):

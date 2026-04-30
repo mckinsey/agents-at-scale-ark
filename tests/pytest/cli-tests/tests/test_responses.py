@@ -15,9 +15,7 @@ from helpers.responses_helper import (
     SCHEMA_KEY,
     MODEL_NON_GPT5,
     MODEL_GPT5,
-    MODEL_O1,
     MODEL_O3,
-    MODEL_O4_MINI,
     WEB_SEARCH_TOOL,
     COMPANY_LOOKUP_SCHEMA,
     SQL_CFG_TOOL,
@@ -46,8 +44,8 @@ from helpers.responses_helper import (
 # ---------------------------------------------------------------------------
 # Direct executor tests — hit /execute endpoint without Ark control plane
 #
-# Tests T01–T12 cover all executor features end-to-end by posting JSON
-# payloads directly to the executor service's /execute endpoint:
+# Tests T01–T10 cover executor behavior by posting JSON payloads to /execute
+# (not open-ended “does the LLM know X” checks):
 #
 #   T01        Basic happy path / sdk fix
 #   T02        Multi-level annotations accepted without error
@@ -56,11 +54,9 @@ from helpers.responses_helper import (
 #   T05        SQL grammar (CFG custom tool)
 #   T06        Query-level reasoning annotation
 #   T07        Tools annotation forwarded to model
-#   T08        Reasoning effort across models (parametrized: gpt-5.2, o3)
+#   T08        Reasoning + numeric check (parametrized: gpt-5.2, o3)
 #   T09        Tool cascade: query annotation overrides agent annotation
-#   T10        o4-mini basic completion
-#   T11        o1 document analysis
-#   T12        Multi-turn memory via previous_response_id
+#   T10        Multi-turn memory via previous_response_id
 #
 # Required env vars:
 #   CICD_OPENAI_API_KEY    API key / JWT for the OpenAI or gateway endpoint
@@ -76,11 +72,11 @@ from helpers.responses_helper import (
 @pytest.mark.executor
 class TestOpenAIResponsesExecutor:
     """
-    Live E2E tests for executor-openai-responses (T01–T14).
+    Live E2E tests for executor-openai-responses (T01–T10).
 
     Covers: SDK fix (T01), multi-level annotations (T02), web search (T03–T04),
     SQL CFG tools (T05), annotation overrides (T06–T07), reasoning across
-    models (T08), tool cascade (T09), o4-mini (T10), o1 (T11), multi-turn memory (T12).
+    models (T08), tool cascade (T09), multi-turn memory (T10).
 
     Required env vars:
       CICD_OPENAI_API_KEY    API key / JWT for the OpenAI or gateway endpoint
@@ -167,7 +163,11 @@ class TestOpenAIResponsesExecutor:
                 resp = requests.post(self.executor_url, json=payload, timeout=timeout)
                 data = resp.json()
                 messages = data.get("messages", [])
-                content = messages[0]["content"] if messages else ""
+                if messages:
+                    raw = messages[0].get("content")
+                    content = raw if isinstance(raw, str) else ""
+                else:
+                    content = ""
                 return resp.status_code, content, data
             except requests.exceptions.ConnectionError:
                 if attempt < 2:
@@ -416,48 +416,8 @@ class TestOpenAIResponsesExecutor:
             f"Got: {content[:300]}"
         )
 
-    def test_t10_o4_mini_basic_completion(self):
-        status, content, data = self._post(
-            self._make_request(
-                "What is the legal definition of a data processor under GDPR, and how does it differ from a data controller?",
-                model=MODEL_O4_MINI,
-                prompt="You are a legal and compliance assistant. Answer questions about data protection law accurately and concisely.",
-                conversation_id="t10-o4mini-basic-test",
-            ),
-            timeout=60,
-        )
-        assert status == 200, f"HTTP {status}: {data}"
-        assert content, "Empty response"
-        assert len(content) > 50, f"Unexpectedly short response: {repr(content)}"
-        assert any(w in content.lower() for w in ["processor", "controller", "gdpr", "personal data"]), (
-            f"Response does not address GDPR data roles: {content[:200]}"
-        )
-
-    def test_t11_o1_document_analysis(self):
-        status, content, data = self._post(
-            self._make_request(
-                (
-                    "```\n"
-                    "Contract clause: The licensee may not sublicense, sell, resell, "
-                    "transfer, assign, or otherwise commercially exploit or make available "
-                    "to any third party the Service or the Content.\n"
-                    "```\n"
-                    "Does this clause prohibit SaaS reselling? Answer yes or no with one reason."
-                ),
-                model=MODEL_O1,
-                prompt="You are a legal analysis assistant. Analyze contract clauses accurately.",
-                conversation_id="t11-o1-doc-analysis-test",
-            ),
-            timeout=120,
-        )
-        assert status == 200, f"HTTP {status}: {data}"
-        assert content, "Empty response"
-        assert "yes" in content.lower(), (
-            f"Expected 'yes' (clause prohibits reselling), got: {content[:200]}"
-        )
-
-    def test_t12_multi_turn_memory(self):
-        conv_id = "t12-multi-turn-memory"
+    def test_t10_multi_turn_memory(self):
+        conv_id = "t10-multi-turn-memory"
 
         status1, content1, data1 = self._post(
             self._make_request(
@@ -494,6 +454,9 @@ class TestOpenAIResponsesExecutor:
 
 # ---------------------------------------------------------------------------
 # ARK stack tests — Query CRDs → executor-openai-responses → OpenAI
+#
+# Test IDs jump from T10 (above) to T13 here so numbering stays aligned with older
+# test plans that reserved T11–T12; only T13–T16 exist in this file.
 #
 # Tests T13–T16 exercise the full Ark control plane end-to-end:
 #
