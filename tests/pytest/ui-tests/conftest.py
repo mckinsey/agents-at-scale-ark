@@ -84,25 +84,31 @@ def install_ark():
     logger.info("ARK installation successful")
 
 
-def _cleanup_orphaned_mock_llm():
-    namespaced = ["deployment", "service", "serviceaccount", "configmap",
-                  "role", "rolebinding", "secret"]
-    for resource_type in namespaced:
-        subprocess.run(
-            ["kubectl", "delete", resource_type, "mock-llm",
-             "-n", "default", "--ignore-not-found"],
-            capture_output=True, timeout=10
-        )
-    for resource_type in ("clusterrole", "clusterrolebinding"):
-        subprocess.run(
-            ["kubectl", "delete", resource_type, "mock-llm", "--ignore-not-found"],
-            capture_output=True, timeout=10
-        )
+def _ensure_mock_llm_for_worker():
+    """Ensure mock-llm is installed without destructive cleanup.
+    Safe to call concurrently from multiple xdist workers."""
+    status = subprocess.run(
+        ["helm", "status", "mock-llm", "--namespace", "default"],
+        capture_output=True
+    )
+    if status.returncode == 0:
+        logger.info("mock-llm already installed, skipping worker install")
+        return
+    logger.info("mock-llm not found, installing for worker...")
+    result = subprocess.run([
+        "helm", "upgrade", "--install", "mock-llm",
+        "oci://ghcr.io/dwmkerr/charts/mock-llm",
+        "--version", "0.1.28",
+        "--namespace", "default",
+        "--values", str(MOCK_LLM_VALUES),
+        "--wait", "--timeout=120s"
+    ], capture_output=True, text=True, timeout=180)
+    if result.returncode != 0:
+        logger.warning(f"mock-llm worker install failed (may be a concurrent install): {result.stderr[:200]}")
 
 
 def install_mock_llm():
     logger.info("Installing mock-llm...")
-    _cleanup_orphaned_mock_llm()
     result = subprocess.run([
         "helm", "upgrade", "--install", "mock-llm",
         "oci://ghcr.io/dwmkerr/charts/mock-llm",
@@ -181,7 +187,9 @@ def ark_setup(request, tmp_path_factory):
 
     # xdist workers: the CI already deployed ark and port-forwarded.
     # Workers must NOT touch the port-forward — doing so kills it for siblings.
+    # But they do need mock-llm running — CI pre-installs it, local runs may not.
     if worker_id != "master":
+        _ensure_mock_llm_for_worker()
         yield
         return
 
