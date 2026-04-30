@@ -7,4 +7,4 @@ spec:
     You are a synthesis specialist who combines different perspectives.
     Create unified conclusions from multiple inputs. Keep responses brief.
   modelRef:
-    name: test-model
+    name: test-model-mock

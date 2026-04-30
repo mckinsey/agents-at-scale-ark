@@ -1,0 +1,52 @@
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "gpt-4.1-mini",
+              "object": "model",
+              "owned_by": "openai"
+            }
+          ]
+        }
+
+  - path: "/v1/chat/completions"
+    response:
+      status: 500
+      content: '"Unrecognised agent"'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'You are the coordinator')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","tool_calls":[{"id":"call_terminate","type":"function","function":{"name":"terminate","arguments":"{\"response\": \"COORDINATION COMPLETE: The team has produced a satisfactory report.\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120}}'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[-1].content || '', 'Select the next participant')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"researcher"},"finish_reason":"stop"}],"usage":{"prompt_tokens":60,"completion_tokens":1,"total_tokens":61}}'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'research specialist')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"RESEARCH: Key findings on renewable energy trends compiled."},"finish_reason":"stop"}],"usage":{"prompt_tokens":70,"completion_tokens":12,"total_tokens":82}}'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'data analyst')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"ANALYSIS: Three key patterns identified in the renewable energy research."},"finish_reason":"stop"}],"usage":{"prompt_tokens":90,"completion_tokens":14,"total_tokens":104}}'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'technical writer')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"REPORT: Final summary of renewable energy trends based on research and analysis."},"finish_reason":"stop"}],"usage":{"prompt_tokens":110,"completion_tokens":16,"total_tokens":126}}'

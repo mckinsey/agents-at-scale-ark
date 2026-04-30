@@ -73,6 +73,7 @@ import {
   type DashboardSection,
   MONITORING_SECTIONS,
 } from '@/lib/constants/dashboard-icons';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { proxyService } from '@/lib/services/proxy';
 import { useNamespace } from '@/providers/NamespaceProvider';
 import { useUser } from '@/providers/UserProvider';
@@ -149,7 +150,7 @@ function CollapsibleSection({
 }
 
 export function AppSidebar() {
-  const router = useRouter();
+  const { push: navigateTo } = useNamespacedNavigation();
   const pathname = usePathname();
   const { user } = useUser();
   const { state: sidebarState, setOpen: setSidebarOpen } = useSidebar();
@@ -226,7 +227,7 @@ export function AppSidebar() {
     const currentParams = new URLSearchParams(window.location.search);
     const queryString = currentParams.toString();
     const targetUrl = queryString ? `/${sectionKey}?${queryString}` : `/${sectionKey}`;
-    router.push(targetUrl);
+    navigateTo(targetUrl);
   };
 
   const getCurrentSection = () => pathname.split('/')[1];

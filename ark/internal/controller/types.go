@@ -5,8 +5,9 @@ package controller
 import "mckinsey.com/ark/internal/annotations"
 
 const (
-	statusPending  = "pending"
-	statusRunning  = "running"
+	statusPending      = "pending"
+	statusProvisioning = "provisioning"
+	statusRunning      = "running"
 	statusDone     = "done"
 	statusError    = "error"
 	statusCanceled = "canceled"

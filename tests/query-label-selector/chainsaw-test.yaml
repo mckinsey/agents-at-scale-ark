@@ -5,42 +5,32 @@ metadata:
 spec:
   description: Test query with label selector to target agents
   steps:
-  - name: step-1
+  - name: setup-mock-llm
     try:
     - script:
-        skipLogOutput: true
+        timeout: 180s
         content: |
-          set -u
-          echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-        outputs:
-        - name: azure
-          value: (json_parse($stdout))
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: wait-for-model-ready
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-mock
+        timeout: 90s
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+
+  - name: run-query
+    try:
     - apply:
         file: manifests/*.yaml
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Model
-          metadata:
-            name: test-model
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Agent
-          metadata:
-            name: test-agent-weather
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Agent
-          metadata:
-            name: test-agent-math
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1alpha1
-          kind: Agent
-          metadata:
-            name: test-agent-general
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Query
@@ -60,7 +50,6 @@ spec:
             (response != null): true
             (response.target.name == 'test-agent-math' || response.target.name == 'test-agent-weather'): true
             (response.target.name != 'test-agent-general'): true
-            (length(response.content) > `50`): true
     catch:
     - events: {}
     - describe:
@@ -68,3 +57,10 @@ spec:
         kind: Query
         name: test-query-label-selector
 
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

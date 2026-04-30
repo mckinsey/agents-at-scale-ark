@@ -50,6 +50,9 @@ func (e *BrokerEventEmitter) getEndpointForNamespace(namespace string) string {
 	if endpoint, ok := e.endpoints[namespace]; ok {
 		return endpoint
 	}
+	for _, endpoint := range e.endpoints {
+		return endpoint
+	}
 	return ""
 }
 
@@ -69,6 +72,7 @@ func (e *BrokerEventEmitter) EmitStructured(ctx context.Context, obj runtime.Obj
 
 	endpoint := e.getEndpointForNamespace(query.Namespace)
 	if endpoint == "" {
+		log.V(1).Info("no broker endpoint for namespace, dropping event", "namespace", query.Namespace, "reason", reason)
 		return
 	}
 

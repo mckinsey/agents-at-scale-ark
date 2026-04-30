@@ -9,7 +9,10 @@ RUN npm ci
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
+COPY package.json package-lock.json ./
 COPY app ./app
+COPY lib ./lib
+COPY auth.ts middleware.ts ./
 COPY next.config.js tsconfig.json postcss.config.js tailwind.config.js ./
 ARG NEXT_PUBLIC_ARK_DASHBOARD_URL
 RUN echo "Building with NEXT_PUBLIC_ARK_DASHBOARD_URL=${NEXT_PUBLIC_ARK_DASHBOARD_URL}" && \
@@ -23,7 +26,6 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-COPY --from=builder --chown=root:root --chmod=755 /app/public ./public
 COPY --from=builder --chown=root:root --chmod=755 /app/.next/standalone ./
 COPY --from=builder --chown=root:root --chmod=755 /app/.next/static ./.next/static
 

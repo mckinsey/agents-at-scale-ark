@@ -61,6 +61,7 @@ describe('middleware default export', () => {
         search: '',
         protocol: 'https:',
         origin: url.origin,
+        href: url.toString(),
       },
       url: url.toString(),
       headers,
@@ -80,7 +81,7 @@ describe('middleware default export', () => {
 
       expect(NextResponse.redirect).toHaveBeenCalledWith(
         new URL(
-          '/api/auth/signin?callbackUrl=https%3A%2F%2Fexample.com',
+          '/api/auth/signin?callbackUrl=https%3A%2F%2Fexample.com%2Fdashboard',
           'https://example.com',
         ),
       );
