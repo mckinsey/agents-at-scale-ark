@@ -11,11 +11,13 @@ metadata:
     {{- end }}
 spec:
   address:
-    valueFrom: 
+    valueFrom:
       serviceRef:
         name: {{ .Values.service.name }}
         port: "http"
+        path: /mcp
         namespace: {{ .Release.Namespace }}
   timeout: "60s"
+  pollInterval: 10s
   transport: http
   description: "MCP server for Ark resources - provides tools to list agents and query agents directly"

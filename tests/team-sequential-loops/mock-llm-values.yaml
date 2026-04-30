@@ -1,0 +1,40 @@
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "gpt-4.1-mini",
+              "object": "model",
+              "owned_by": "openai"
+            }
+          ]
+        }
+
+  - path: "/v1/chat/completions"
+    response:
+      status: 500
+      content: '"Unrecognised agent"'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'creative brainstormer')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"IDEA: Use automated testing to improve software quality."},"finish_reason":"stop"}],"usage":{"prompt_tokens":50,"completion_tokens":10,"total_tokens":60}}'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'constructive critic')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"CRITIQUE: The idea is valid but needs a concrete implementation plan."},"finish_reason":"stop"}],"usage":{"prompt_tokens":60,"completion_tokens":12,"total_tokens":72}}'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'meeting coordinator')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","tool_calls":[{"id":"call_terminate","type":"function","function":{"name":"terminate","arguments":"{\"response\": \"COORDINATION: The team has completed one round of brainstorming and critique. Terminating discussion.\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":70,"completion_tokens":15,"total_tokens":85}}'

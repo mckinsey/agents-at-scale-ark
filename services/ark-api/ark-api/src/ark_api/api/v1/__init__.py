@@ -23,6 +23,7 @@ from .broker import router as broker_router
 from .proxy import proxy_router
 from .export import router as export_router
 from .file_preview import router as file_preview_router
+from .arkconfig import router as arkconfig_router
 
 router = APIRouter(prefix="/v1", tags=["v1"])
 
@@ -50,3 +51,4 @@ router.include_router(broker_router)
 router.include_router(proxy_router)
 router.include_router(export_router)
 router.include_router(file_preview_router)
+router.include_router(arkconfig_router)

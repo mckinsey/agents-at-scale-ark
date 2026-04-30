@@ -8,4 +8,4 @@ spec:
     You are a strategic analyst. Analyze information and provide strategic insights.
     Keep responses brief and actionable. Do not ask questions.
   modelRef:
-    name: test-model
+    name: test-model-mock
