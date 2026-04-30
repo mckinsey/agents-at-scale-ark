@@ -1164,22 +1164,6 @@ jobs:
           target-branch: main
           release-as: ${{ steps.release-type.outputs.release_as || '' }}
 
-  release-docs:
-    needs: [check-release]
-    runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' && needs.check-release.outputs.release_type == 'stable' }}
-    concurrency:
-      group: "pages"
-      cancel-in-progress: true
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        if: ${{ !env.ACT }}
-        id: deployment
-        uses: actions/deploy-pages@v5
-
   release-libs:
     needs: [check-release]
     runs-on: ubuntu-24.04
