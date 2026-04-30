@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { ToolCall, type ToolCallData } from '@/components/chat/tool-call';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
-import { useMarkdownProcessor } from '@/lib/hooks/use-markdown-processor';
+import { renderMarkdown } from '@/lib/hooks/render-markdown';
 import { getResourceEventsUrl } from '@/lib/utils/events';
 
 interface ChatMessageProps {
@@ -273,7 +273,7 @@ export function ChatMessage({
     ? getTruncatedContent(content)
     : content;
 
-  const markdownContent = useMarkdownProcessor(displayContent);
+  const markdownContent = renderMarkdown(content);
   const { needsExpansion, expandedWidth } = useMessageExpansion(contentRef, content, markdownContent);
 
   const handleErrorIconClick = () => {

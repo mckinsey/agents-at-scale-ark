@@ -4,8 +4,13 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: ["main"]
     types: [opened, synchronize, reopened]
+    paths-ignore:
+      - 'docs/**'
+      - 'examples/**'
+      - 'samples/**'
+      - 'openspec/**'
+      - '**.md'
   workflow_dispatch:
 
 # Release please will create pull requests, update the changelog, and cicd will
@@ -962,39 +967,6 @@ jobs:
           path: ${{ matrix.chart.path }}/${{ matrix.chart.name }}-*.tgz
           retention-days: 30
 
-  build-docs:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: "22.x"
-
-      - name: Build Docs
-        run: |
-          cd docs
-          npm ci
-          npm i pagefind @pagefind/linux-x64 && npm run build
-        env:
-          # Set basePath for GitHub Pages deployment using configurable variable
-          NEXT_PUBLIC_BASE_PATH: ${{ vars.DOCS_SITE_BASE_PATH || '' }}
-
-      - name: Validate Internal Documentation Links
-        run: |
-          # Rebuild docs without base path for link checking
-          echo "Rebuilding docs without base path for link validation..."
-          npm run build
-          echo "Checking for broken links..."
-          npm run check-links
-        working-directory: docs
-
-      - name: Upload Site Artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: docs/out
-
   build-ark-cli:
     runs-on: ubuntu-24.04
     steps:
@@ -1055,7 +1027,6 @@ jobs:
         e2e-cli-tests,
         build-and-test-ark,
         build-and-test-services,
-        build-docs,
         build-charts,
         build-ark-cli,
       ]
@@ -1131,7 +1102,6 @@ jobs:
         xray-container-scan,
         build-and-test-ark,
         build-and-test-services,
-        build-docs,
         build-charts,
         build-ark-cli,
       ]
@@ -1193,22 +1163,6 @@ jobs:
           config-file: ${{ steps.release-type.outputs.config || '.github/release-please-config-rc.json' }}
           target-branch: main
           release-as: ${{ steps.release-type.outputs.release_as || '' }}
-
-  release-docs:
-    needs: [check-release]
-    runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' && needs.check-release.outputs.release_type == 'stable' }}
-    concurrency:
-      group: "pages"
-      cancel-in-progress: true
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        if: ${{ !env.ACT }}
-        id: deployment
-        uses: actions/deploy-pages@v5
 
   release-libs:
     needs: [check-release]

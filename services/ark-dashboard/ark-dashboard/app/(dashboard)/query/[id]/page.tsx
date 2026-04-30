@@ -30,7 +30,7 @@ import type { components } from '@/lib/api/generated/types';
 import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
-import { useMarkdownProcessor } from '@/lib/hooks/use-markdown-processor';
+import { renderMarkdown } from '@/lib/hooks/render-markdown';
 import {
   agentsService,
   memoriesService,
@@ -62,7 +62,7 @@ function ResponseContent({
   viewMode: 'content' | 'text' | 'markdown' | 'raw';
   rawJson?: unknown;
 }) {
-  const markdownContent = useMarkdownProcessor(content);
+  const markdownContent = renderMarkdown(content);
 
   if (viewMode === 'raw') {
     const getJsonDisplay = () => {

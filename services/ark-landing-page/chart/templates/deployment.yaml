@@ -16,7 +16,7 @@ spec:
         app: {{ .Values.app.name }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
-      automountServiceAccountToken: false
+      automountServiceAccountToken: true
       securityContext:
         {{- toYaml .Values.app.podSecurityContext | nindent 8 }}
       containers:
@@ -34,6 +34,12 @@ spec:
           value: {{ .Values.app.config.port | quote }}
         - name: HOSTNAME
           value: {{ .Values.app.config.hostname }}
+        - name: ARK_API_SERVICE_HOST
+          value: {{ .Values.app.config.arkApiService.host | quote }}
+        - name: ARK_API_SERVICE_PORT
+          value: {{ .Values.app.config.arkApiService.port | quote }}
+        - name: ARK_API_SERVICE_PROTOCOL
+          value: {{ .Values.app.config.arkApiService.protocol | quote }}
         {{- if .Values.app.env }}
         {{- range .Values.app.env }}
         - name: {{ .name }}
