@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
@@ -9,12 +10,20 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { useMarkdownProcessor } from '@/lib/hooks/use-markdown-processor';
 
 import { JsonTree } from './json-tree';
 import { SpreadsheetViewer } from './spreadsheet-viewer';
 import type { SpreadsheetData } from './spreadsheet-viewer';
 import { ZipTree } from './zip-tree';
 import type { ZipEntry } from './zip-tree';
+
+type ViewMode = 'rendered' | 'source';
+
+function MarkdownPreview({ content }: { content: string }) {
+  return useMarkdownProcessor(content);
+}
 
 interface FilePreviewDialogProps {
   open: boolean;
@@ -29,6 +38,7 @@ interface FilePreviewDialogProps {
   zipEntries?: ZipEntry[];
   isSpreadsheet?: boolean;
   spreadsheetData?: SpreadsheetData | null;
+  isMarkdown: boolean;
   language?: string | null;
   content: string;
 }
@@ -46,9 +56,21 @@ export function FilePreviewDialog({
   zipEntries,
   isSpreadsheet,
   spreadsheetData,
+  isMarkdown,
   language,
   content,
 }: FilePreviewDialogProps) {
+  const [viewMode, setViewMode] = useState<ViewMode>('rendered');
+
+  useEffect(() => {
+    setViewMode('rendered');
+  }, [fileName]);
+
+  const handleViewModeChange = (value: string) => {
+    if (value !== 'rendered' && value !== 'source') return;
+    setViewMode(value);
+  };
+
   const handleOpenChange = (isOpen: boolean) => {
     onOpenChange(isOpen);
     if (!isOpen && imageUrl) {
@@ -59,8 +81,26 @@ export function FilePreviewDialog({
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent side="right" className="flex w-full flex-col sm:max-w-2xl">
-        <SheetHeader>
-          <SheetTitle>{fileName || 'Preview'}</SheetTitle>
+        <SheetHeader className="flex flex-row items-center justify-between gap-2 pr-10">
+          <SheetTitle className="min-w-0 truncate">
+            {fileName || 'Preview'}
+          </SheetTitle>
+          {isMarkdown && (
+            <ToggleGroup
+              type="single"
+              size="sm"
+              variant="outline"
+              value={viewMode}
+              onValueChange={handleViewModeChange}
+              className="flex-shrink-0">
+              <ToggleGroupItem value="rendered" aria-label="Rendered view">
+                Rendered
+              </ToggleGroupItem>
+              <ToggleGroupItem value="source" aria-label="Source view">
+                Source
+              </ToggleGroupItem>
+            </ToggleGroup>
+          )}
         </SheetHeader>
         <div className="mt-4 flex-1 overflow-y-auto">
           {loading ? (
@@ -81,6 +121,10 @@ export function FilePreviewDialog({
             <ZipTree entries={zipEntries} />
           ) : isJson && jsonData !== null ? (
             <JsonTree data={jsonData} />
+          ) : isMarkdown && viewMode === 'rendered' ? (
+            <div className="px-4">
+              <MarkdownPreview content={content} />
+            </div>
           ) : language ? (
             <div className="overflow-hidden rounded-md">
               <SyntaxHighlighter

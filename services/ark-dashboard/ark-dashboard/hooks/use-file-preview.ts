@@ -11,6 +11,7 @@ import {
   isJsonFile,
   isZipFile,
   isSpreadsheetFile,
+  isMarkdownFile,
 } from '@/lib/utils/file-preview';
 import type { ZipEntry } from '@/components/file-preview/zip-tree';
 import type { SpreadsheetData } from '@/components/file-preview/spreadsheet-viewer';
@@ -29,6 +30,7 @@ export function useFilePreview() {
   const [previewIsZip, setPreviewIsZip] = useState(false);
   const [previewSpreadsheetData, setPreviewSpreadsheetData] = useState<SpreadsheetData | null>(null);
   const [previewIsSpreadsheet, setPreviewIsSpreadsheet] = useState(false);
+  const [previewIsMarkdown, setPreviewIsMarkdown] = useState(false);
 
   const handlePreview = useCallback(async (key: string) => {
     setPreviewKey(key);
@@ -44,6 +46,7 @@ export function useFilePreview() {
     setPreviewIsZip(false);
     setPreviewSpreadsheetData(null);
     setPreviewIsSpreadsheet(false);
+    setPreviewIsMarkdown(false);
 
     try {
       const url = `${FILES_API_BASE_URL}/files/${encodeURIComponent(key)}/download`;
@@ -159,6 +162,7 @@ export function useFilePreview() {
         setPreviewContent(text);
         setPreviewIsImage(false);
         setPreviewLanguage(language);
+        setPreviewIsMarkdown(isMarkdownFile(fileExtension));
 
         if (isJson) {
           try {
@@ -206,6 +210,7 @@ export function useFilePreview() {
     previewIsZip,
     previewSpreadsheetData,
     previewIsSpreadsheet,
+    previewIsMarkdown,
     previewLoading,
     handlePreview,
     closePreview,
