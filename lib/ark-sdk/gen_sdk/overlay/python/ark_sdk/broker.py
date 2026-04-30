@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 _STREAM_TIMEOUT = httpx.Timeout(connect=5.0, read=None, write=None, pool=5.0)
 _COMPLETE_TIMEOUT = httpx.Timeout(10.0)
+_MESSAGES_TIMEOUT = httpx.Timeout(10.0)
 
 _cached_broker_url: Optional[str] = None
 _broker_url_cached = False
@@ -108,3 +109,18 @@ class BrokerClient:
                     logger.warning(f"Broker complete returned {resp.status_code} for query {self.query_name}")
         except Exception as e:
             logger.warning(f"Failed to notify broker completion for query {self.query_name}: {e}")
+
+    async def send_messages(self, conversation_id: str, messages: list[dict]) -> None:
+        url = f"{self.base_url}/messages"
+        payload = {
+            "conversation_id": conversation_id,
+            "query_id": self.query_name,
+            "messages": messages,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=_MESSAGES_TIMEOUT) as http:
+                resp = await http.post(url, json=payload)
+                if resp.status_code not in (200, 202):
+                    logger.warning(f"Broker /messages returned {resp.status_code} for query {self.query_name}")
+        except Exception as e:
+            logger.warning(f"Failed to send messages to broker for query {self.query_name}: {e}")

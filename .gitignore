@@ -163,6 +163,7 @@ services/ark-dashboard/ark-dashboard/lib/api/generated/openapi.json
 
 # Personal/local artifacts and experimental files
 vibe_artifacts/
+vibe_docs/
 
 # Playwright MCP screenshots
 .playwright-mcp/
