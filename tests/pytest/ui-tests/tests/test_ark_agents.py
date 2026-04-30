@@ -1,6 +1,6 @@
 import logging
 import pytest
-from playwright.sync_api import Page
+from playwright.sync_api import Page, expect
 from pages.secrets_page import SecretsPage
 from pages.models_page import ModelsPage
 from pages.agents_page import AgentsPage
@@ -101,8 +101,11 @@ class TestArkAgents:
         chat_input = chat_window.locator("input")
         chat_input.fill(message)
         chat_input.press("Enter")
-        # Wait for a reply - wait for a div to appear containing the agent name (and the agent's message as well, presumably)
-        assistant_message = agents.wait_for_element(f"div.bg-muted:has-text('{agent_name}')", timeout=60000)
+        # Use the input placeholder text to determine when the agent response is done processing
+        expect(chat_input).to_have_attribute("placeholder", "Processing...", timeout=5000)
+        expect(chat_input).not_to_have_attribute("placeholder", "Processing...", timeout=90000)
+        assistant_message = chat_window.locator("div.bg-muted").last
+        expect(assistant_message).to_contain_text(agent_name, timeout=5000)
         assistant_text = assistant_message.inner_text()
 
         page.reload()
@@ -112,7 +115,8 @@ class TestArkAgents:
         assert new_chat_window.is_visible(), "Chat window should still be open after reload"
         assert new_chat_window.locator(f"text={message}").first.is_visible(), \
             "User message should be visible in chat history after reload"
-        new_assistant_message = agents.wait_for_element(f"div.bg-muted:has-text('{agent_name}')")
+        new_assistant_message = new_chat_window.locator("div.bg-muted").last
+        new_assistant_message.wait_for(state="visible", timeout=15000)
         assert new_assistant_message.inner_text() == assistant_text, "Assistant messages should be visible in chat after reload"
         agents.close_agent_chat()
 

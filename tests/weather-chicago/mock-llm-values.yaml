@@ -1,0 +1,40 @@
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "gpt-4.1-mini",
+              "object": "model",
+              "owned_by": "openai"
+            }
+          ]
+        }
+
+  - path: "/v1/chat/completions"
+    response:
+      status: 500
+      content: '"Unrecognised state"'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'weather assistant')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","tool_calls":[{"id":"call_get_coords","type":"function","function":{"name":"get-coordinates","arguments":"{\"city\":\"Chicago\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":50,"completion_tokens":10,"total_tokens":60}}'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[-1].content || '', 'latitude')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","tool_calls":[{"id":"call_get_forecast","type":"function","function":{"name":"get-forecast","arguments":"{\"office\":\"LOT\",\"gridX\":31,\"gridY\":78}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":80,"completion_tokens":15,"total_tokens":95}}'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[-1].content || '', 'temperature')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"The current weather forecast for Chicago: Today is Partly Cloudy with a high of 72°F and west winds around 10 mph. Tonight will be Mostly Clear with a low of 58°F."},"finish_reason":"stop"}],"usage":{"prompt_tokens":120,"completion_tokens":30,"total_tokens":150}}'

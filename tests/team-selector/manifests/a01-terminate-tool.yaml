@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: terminate
+spec:
+  type: builtin
+  description: Terminates the team conversation with a final response
+  builtin:
+    name: terminate

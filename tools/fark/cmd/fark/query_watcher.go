@@ -163,11 +163,11 @@ func (qw *QueryWatcher) processQueryEvent(event watch.Event) *QueryResult {
 		Done:  query.Status.Phase == "done" || query.Status.Phase == "error",
 	}
 
-	// Send spinner stop command if query is done or errored
 	if result.Done {
 		result.SpinnerCommand = "stop"
 	} else if result.Phase == "running" && !result.IsEvent {
-		// Start spinner when query is running and it's not just an event update
+		result.SpinnerCommand = "start"
+	} else if result.Phase == "provisioning" {
 		result.SpinnerCommand = "start"
 	}
 
