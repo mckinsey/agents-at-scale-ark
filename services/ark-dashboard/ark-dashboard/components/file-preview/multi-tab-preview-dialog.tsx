@@ -11,7 +11,7 @@ import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import type { PreviewTab } from '@/hooks/use-multi-file-preview';
-import { useMarkdownProcessor } from '@/lib/hooks/use-markdown-processor';
+import { renderMarkdown } from '@/lib/hooks/render-markdown';
 import { cn } from '@/lib/utils';
 
 import { JsonTree } from './json-tree';
@@ -19,10 +19,6 @@ import { SpreadsheetViewer } from './spreadsheet-viewer';
 import { ZipTree } from './zip-tree';
 
 type ViewMode = 'rendered' | 'source';
-
-function MarkdownPreview({ content }: { content: string }) {
-  return useMarkdownProcessor(content);
-}
 
 interface MultiTabPreviewDialogProps {
   open: boolean;
@@ -178,9 +174,7 @@ export function MultiTabPreviewDialog({
               ) : activeTab.isJson && activeTab.jsonData !== null ? (
                 <JsonTree data={activeTab.jsonData} />
               ) : activeTab.isMarkdown && activeViewMode === 'rendered' ? (
-                <div className="px-4">
-                  <MarkdownPreview content={activeTab.content} />
-                </div>
+                <div className="px-4">{renderMarkdown(activeTab.content)}</div>
               ) : activeTab.language ? (
                 <div className="overflow-hidden rounded-md">
                   <SyntaxHighlighter
