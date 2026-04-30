@@ -5090,12 +5090,12 @@ export interface operations {
                 /** @description Filter by status (active/idle/error) */
                 status?: string | null;
                 /** @description Filter sessions from this date */
-                dateFrom?: string | null;
+                date_from?: string | null;
                 /** @description Filter sessions to this date */
-                dateTo?: string | null;
+                date_to?: string | null;
                 /** @description Search by session ID or participant */
                 search?: string | null;
-                /** @description Sort field (date) */
+                /** @description Sort field (date, name, conversations) */
                 sort?: string | null;
                 /** @description Sort order (asc/desc) */
                 order?: string | null;

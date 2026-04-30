@@ -272,9 +272,10 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 	operationData["targetType"] = target.Type
 
 	// Add team or agent field based on target type
-	if target.Type == targetTypeTeam {
+	switch target.Type {
+	case targetTypeTeam:
 		operationData["team"] = target.Name
-	} else if target.Type == targetTypeAgent {
+	case targetTypeAgent:
 		operationData["agent"] = target.Name
 	}
 
