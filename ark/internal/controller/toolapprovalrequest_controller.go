@@ -41,8 +41,6 @@ type ToolApprovalRequestReconciler struct {
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=queries,verbs=get;list;watch;update;patch
 
 func (r *ToolApprovalRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := logf.FromContext(ctx)
-
 	tar := &arkv1alpha1.ToolApprovalRequest{}
 	if err := r.Get(ctx, req.NamespacedName, tar); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -266,18 +264,8 @@ func isTerminalPhase(phase string) bool {
 }
 
 func (r *ToolApprovalRequestReconciler) emitEvent(ctx context.Context, tar *arkv1alpha1.ToolApprovalRequest, eventType, reason, message string) {
-	if r.Eventing == nil {
-		return
-	}
-	emitter := r.Eventing.EventEmitter()
-	if emitter == nil {
-		return
-	}
-	if eventType == corev1.EventTypeNormal {
-		emitter.EmitNormal(ctx, tar, reason, message)
-	} else {
-		emitter.EmitWarning(ctx, tar, reason, message)
-	}
+	log := logf.FromContext(ctx)
+	log.Info("ToolApprovalRequest event", "type", eventType, "reason", reason, "message", message, "tar", tar.Name)
 }
 
 func (r *ToolApprovalRequestReconciler) SetupWithManager(mgr ctrl.Manager) error {

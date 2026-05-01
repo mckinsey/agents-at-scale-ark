@@ -710,9 +710,12 @@ func (h *Handler) executeApprovedToolsAndContinue(
 			}
 
 			result, err := agent.Tools.ExecuteTool(ctx, ToolCall{
-				ID:       tc.ID,
-				Type:     string(tc.Type),
-				Function: tc.Function,
+				ID:   tc.ID,
+				Type: "function",
+				Function: openai.ChatCompletionMessageToolCallFunction{
+					Name:      tc.Function.Name,
+					Arguments: tc.Function.Arguments,
+				},
 			})
 			toolMessage := ToolMessage(result.Content, result.ID)
 			messages = append(messages, toolMessage)

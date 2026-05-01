@@ -40,6 +40,7 @@ rules:
   - models
   - queries
   - teams
+  - toolapprovalrequests
   verbs:
   - create
   - delete
@@ -60,6 +61,7 @@ rules:
   - models/finalizers
   - queries/finalizers
   - teams/finalizers
+  - toolapprovalrequests/finalizers
   - tools/finalizers
   verbs:
   - update
@@ -75,6 +77,7 @@ rules:
   - models/status
   - queries/status
   - teams/status
+  - toolapprovalrequests/status
   - tools/status
   verbs:
   - get

@@ -321,6 +321,56 @@ spec:
               tools:
                 items:
                   properties:
+                    approval:
+                      description: Approval configures human-in-the-loop approval
+                        for this tool
+                      properties:
+                        approvers:
+                          description: Approvers specifies who can approve this tool.
+                            If empty, any user with ToolApprovalRequest update permission
+                            can approve.
+                          items:
+                            description: ApproverRef specifies who can approve tool
+                              calls. At least one field must be set.
+                            properties:
+                              group:
+                                description: Group name - user must belong to this
+                                  group
+                                type: string
+                              role:
+                                description: Role name - user must be bound to a ClusterRole/Role
+                                  with this name
+                                type: string
+                              user:
+                                description: User identity - must match the authenticated
+                                  user's identity
+                                type: string
+                            type: object
+                          type: array
+                        onTimeout:
+                          default: reject
+                          description: 'OnTimeout specifies what to do when approval
+                            times out: "reject" (default) fails the tool call, "proceed"
+                            auto-approves'
+                          enum:
+                          - reject
+                          - proceed
+                          type: string
+                        reasonRequired:
+                          description: ReasonRequired specifies whether a reason must
+                            be provided when rejecting the tool call
+                          type: boolean
+                        required:
+                          description: Required indicates whether this tool requires
+                            human approval before execution
+                          type: boolean
+                        timeout:
+                          description: Timeout is the maximum duration to wait for
+                            approval before taking the onTimeout action
+                          type: string
+                      required:
+                      - required
+                      type: object
                     description:
                       description: Description of the tool as exposed to the agent
                       type: string

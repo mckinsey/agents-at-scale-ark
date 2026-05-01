@@ -355,31 +355,33 @@ func (r *QueryReconciler) sendResumptionA2A(ctx context.Context, query *arkv1alp
 	)
 	message.Metadata = metadata
 
-	a2aClient, err := arka2a.CreateA2AClient(ctx, r.CompletionsAddr)
+	a2aClient, err := arka2a.CreateA2AClient(ctx, r.Client, r.CompletionsAddr, nil, query.Namespace, query.Name, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create A2A client: %w", err)
 	}
 
-	task, err := a2aClient.SendMessage(ctx, message, nil)
+	blocking := true
+	params := protocol.SendMessageParams{
+		RPCID:   protocol.GenerateRPCID(),
+		Message: message,
+		Configuration: &protocol.SendMessageConfiguration{
+			Blocking: &blocking,
+		},
+	}
+
+	result, err := a2aClient.SendMessage(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send resumption message: %w", err)
 	}
 
-	if task.Status.State == protocol.TaskStateFailed {
-		errMsg := "unknown error"
-		if task.Status.Message != nil && len(task.Status.Message.Parts) > 0 {
-			if textPart, ok := task.Status.Message.Parts[0].(*protocol.TextPart); ok {
-				errMsg = textPart.Text
-			}
-		}
-		return nil, fmt.Errorf("resumption failed: %s", errMsg)
+	responseText, err := extractA2AResponseText(result)
+	if err != nil {
+		return nil, fmt.Errorf("resumption failed: %w", err)
 	}
-
-	content := extractA2AResponseContent(task)
 
 	return &arkv1alpha1.Response{
 		Target:  *query.Spec.Target,
-		Content: content,
+		Content: responseText,
 		Phase:   "done",
 	}, nil
 }
@@ -546,22 +548,6 @@ func extractA2AResponseText(result *protocol.MessageResult) (string, error) {
 	default:
 		return "", fmt.Errorf("unexpected A2A result type: %T", result.Result)
 	}
-}
-
-func extractA2AResponseContent(task *protocol.Task) string {
-	if task == nil {
-		return ""
-	}
-	if task.Status.Message != nil {
-		return arka2a.ExtractTextFromParts(task.Status.Message.Parts)
-	}
-	for _, artifact := range task.Artifacts {
-		text := arka2a.ExtractTextFromParts(artifact.Parts)
-		if text != "" {
-			return text
-		}
-	}
-	return ""
 }
 
 type engineResponseMeta struct {

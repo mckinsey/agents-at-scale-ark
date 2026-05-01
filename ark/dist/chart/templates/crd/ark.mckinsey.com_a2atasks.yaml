@@ -442,12 +442,13 @@ spec:
                 default: pending
                 description: |-
                   Phase indicates the current Kubernetes lifecycle stage of the task.
-                  Possible values: pending, assigned, running, input-required, auth-required, completed, failed, cancelled, unknown.
+                  Possible values: pending, assigned, running, input-required, tool-approval-required, auth-required, completed, failed, cancelled, unknown.
                 enum:
                 - pending
                 - assigned
                 - running
                 - input-required
+                - tool-approval-required
                 - auth-required
                 - completed
                 - failed
@@ -464,11 +465,12 @@ spec:
                 description: |-
                   A2A Protocol fields (flattened from protocol.Task)
                   ProtocolState indicates the current state in the A2A protocol.
-                  Possible values: submitted, working, input-required, completed, canceled, failed, rejected, auth-required, unknown.
+                  Possible values: submitted, working, input-required, tool-approval-required, completed, canceled, failed, rejected, auth-required, unknown.
                 enum:
                 - submitted
                 - working
                 - input-required
+                - tool-approval-required
                 - completed
                 - canceled
                 - failed

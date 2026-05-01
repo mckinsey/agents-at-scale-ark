@@ -396,6 +396,17 @@ spec:
             type: object
           status:
             properties:
+              approvalRef:
+                description: ApprovalRef references the ToolApprovalRequest when phase
+                  is "approval-required"
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                required:
+                - name
+                type: object
               conditions:
                 description: Conditions represent the latest available observations
                   of a query's state
@@ -459,11 +470,15 @@ spec:
                 type: string
               duration:
                 type: string
+              error:
+                description: Error contains error message when phase is "error"
+                type: string
               phase:
                 default: pending
                 enum:
                 - pending
                 - running
+                - approval-required
                 - error
                 - done
                 - canceled

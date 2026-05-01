@@ -177,7 +177,7 @@ func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCom
 		*newMessages = append(*newMessages, toolMessage)
 
 		if m := toolMessage.OfTool; m != nil {
-			completedResults = append(completedResults, m.Content.Value)
+			completedResults = append(completedResults, m.Content.OfString.Value)
 		}
 
 		if err != nil {
