@@ -146,6 +146,9 @@ dev:
         uploadExcludeFile: .dockerignore
         onUpload:
           restartContainer: true
+    persistPaths:
+      - path: /go/pkg/mod
+      - path: /root/.cache/go-build
     ssh:
       enabled: true
   ark-completions:
@@ -165,6 +168,9 @@ dev:
         uploadExcludeFile: .dockerignore
         onUpload:
           restartContainer: true
+    persistPaths:
+      - path: /go/pkg/mod
+      - path: /root/.cache/go-build
     ssh:
       enabled: true
 
