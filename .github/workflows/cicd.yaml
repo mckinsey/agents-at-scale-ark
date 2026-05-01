@@ -4,8 +4,13 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: ["main"]
     types: [opened, synchronize, reopened]
+    paths-ignore:
+      - 'docs/**'
+      - 'examples/**'
+      - 'samples/**'
+      - 'openspec/**'
+      - '**.md'
   workflow_dispatch:
 
 # Release please will create pull requests, update the changelog, and cicd will
@@ -560,7 +565,7 @@ jobs:
           if [ "${{ matrix.storage-backend }}" = "etcd" ]; then
             chainsaw test --config .chainsaw.yaml --selector '!llm,!postgresql'
           else
-            chainsaw test --config .chainsaw.yaml --selector '!llm'
+            chainsaw test --config .chainsaw.yaml --selector '!llm,!etcd-only'
           fi
 
       - name: Collect cluster logs
@@ -824,7 +829,6 @@ jobs:
   e2e-cli-tests:
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
-    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
     steps:
       - uses: actions/checkout@v6
 
@@ -877,6 +881,20 @@ jobs:
           kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
           kubectl wait --for=condition=ready pod -l app=ark-mcp -n default --timeout=120s
 
+      - name: Install mock-llm
+        run: |
+          for resource in deployment service serviceaccount configmap role rolebinding secret; do
+            kubectl delete $resource mock-llm -n default --ignore-not-found
+          done
+          for resource in clusterrole clusterrolebinding; do
+            kubectl delete $resource mock-llm --ignore-not-found
+          done
+          helm upgrade --install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.28 \
+            --namespace default \
+            --values tests/pytest/cli-tests/mock-llm-values.yaml \
+            --wait --timeout=120s
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -889,12 +907,6 @@ jobs:
       - name: Run CLI tests
         env:
           PYTHONPATH: ${{ github.workspace }}/tests/pytest/cli-tests
-          CICD_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
-          CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
-          CICD_ANTHROPIC_API_KEY: ${{ secrets.CICD_ANTHROPIC_API_KEY }}
-          CICD_ANTHROPIC_BASE_URL: ${{ secrets.CICD_ANTHROPIC_BASE_URL }}
-          CICD_AZURE_API_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
-          CICD_AZURE_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
         run: |
           cd tests/pytest/cli-tests/tests
           pytest . -n 3 --dist loadscope -v --tb=short --log-cli-level=INFO
@@ -956,39 +968,6 @@ jobs:
           path: ${{ matrix.chart.path }}/${{ matrix.chart.name }}-*.tgz
           retention-days: 30
 
-  build-docs:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: "22.x"
-
-      - name: Build Docs
-        run: |
-          cd docs
-          npm ci
-          npm i pagefind @pagefind/linux-x64 && npm run build
-        env:
-          # Set basePath for GitHub Pages deployment using configurable variable
-          NEXT_PUBLIC_BASE_PATH: ${{ vars.DOCS_SITE_BASE_PATH || '' }}
-
-      - name: Validate Internal Documentation Links
-        run: |
-          # Rebuild docs without base path for link checking
-          echo "Rebuilding docs without base path for link validation..."
-          npm run build
-          echo "Checking for broken links..."
-          npm run check-links
-        working-directory: docs
-
-      - name: Upload Site Artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: docs/out
-
   build-ark-cli:
     runs-on: ubuntu-24.04
     steps:
@@ -1049,7 +1028,6 @@ jobs:
         e2e-cli-tests,
         build-and-test-ark,
         build-and-test-services,
-        build-docs,
         build-charts,
         build-ark-cli,
       ]
@@ -1102,7 +1080,7 @@ jobs:
           done
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           directory: ./coverage-artifacts
@@ -1125,7 +1103,6 @@ jobs:
         xray-container-scan,
         build-and-test-ark,
         build-and-test-services,
-        build-docs,
         build-charts,
         build-ark-cli,
       ]
@@ -1187,22 +1164,6 @@ jobs:
           config-file: ${{ steps.release-type.outputs.config || '.github/release-please-config-rc.json' }}
           target-branch: main
           release-as: ${{ steps.release-type.outputs.release_as || '' }}
-
-  release-docs:
-    needs: [check-release]
-    runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' && needs.check-release.outputs.release_type == 'stable' }}
-    concurrency:
-      group: "pages"
-      cancel-in-progress: true
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        if: ${{ !env.ACT }}
-        id: deployment
-        uses: actions/deploy-pages@v5
 
   release-libs:
     needs: [check-release]

@@ -8,6 +8,7 @@ export type SettingPage =
   | 'manage-marketplace'
   | 'service-api-keys'
   | 'secrets'
-  | 'experimental-features';
+  | 'experimental-features'
+  | 'queries';
 
 export const activeSettingPageAtom = atom<SettingPage>('a2a-servers');

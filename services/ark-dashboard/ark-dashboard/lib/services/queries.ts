@@ -7,9 +7,22 @@ type QueryDetailResponse = components['schemas']['QueryDetailResponse'];
 type QueryCreateRequest = components['schemas']['QueryCreateRequest'];
 type QueryUpdateRequest = components['schemas']['QueryUpdateRequest'];
 
+export interface ListQueriesParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+}
+
 export const queriesService = {
-  async list(): Promise<QueryListResponse> {
-    const response = await apiClient.get<QueryListResponse>(`/api/v1/queries`);
+  async list(params: ListQueriesParams = {}): Promise<QueryListResponse> {
+    const search = new URLSearchParams();
+    if (params.page !== undefined) search.set('page', String(params.page));
+    if (params.pageSize !== undefined) search.set('page_size', String(params.pageSize));
+    if (params.search) search.set('search', params.search);
+    const qs = search.toString();
+    const response = await apiClient.get<QueryListResponse>(
+      `/api/v1/queries${qs ? `?${qs}` : ''}`,
+    );
     return response;
   },
 
