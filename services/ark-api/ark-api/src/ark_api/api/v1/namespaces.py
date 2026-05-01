@@ -114,11 +114,11 @@ async def get_context_endpoint(namespace: str = None) -> ContextResponse:
                     "default_namespace": default_namespace
                 }
             )
-        logger.warning(f"Could not check namespace labels for {target_namespace}: {e}")
+        logger.warning("Could not check namespace labels: %s", e)
         # Fall back to environment variable for other errors
         read_only_mode = os.getenv("READ_ONLY_MODE", "false").lower() == "true"
     except Exception as e:
-        logger.warning(f"Could not check namespace labels for {target_namespace}: {e}")
+        logger.warning("Could not check namespace labels: %s", e)
         # Fall back to environment variable if we can't check the namespace
         read_only_mode = os.getenv("READ_ONLY_MODE", "false").lower() == "true"
 
