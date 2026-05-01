@@ -2,9 +2,9 @@ apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   name: ark-mcp-integration
+  labels:
+    requires-images: "true"
 spec:
-  # Skip test due to Gateway API CRD dependency issues in test environment
-  skip: true
   steps:
   - name: deploy-ark-mcp-server
     try:
@@ -12,17 +12,26 @@ spec:
         content: |
           helm upgrade --install ark-mcp ../../services/ark-mcp/chart \
             --namespace $NAMESPACE \
-            --set app.image.tag=latest \
-            --set service.targetPort=2627 \
-            --set gateway.enabled=false \
+            --set serviceAccount.name=ark-mcp-sa-$NAMESPACE \
+            ${ARK_MCP_IMAGE:+--set app.image.repository=${ARK_MCP_IMAGE}} \
+            ${ARK_MCP_IMAGE_TAG:+--set app.image.tag=${ARK_MCP_IMAGE_TAG}} \
             --wait --timeout=120s
         env:
         - name: NAMESPACE
           value: ($namespace)
         timeout: 180s
+
+  - name: wait-for-mcpserver-ready
+    try:
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: MCPServer
+          metadata:
+            name: ark-mcp
     - wait:
-        apiVersion: apps/v1
-        kind: Deployment
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: MCPServer
         name: ark-mcp
         timeout: 2m
         for:
@@ -30,43 +39,51 @@ spec:
             name: Available
             value: 'True'
 
-  - name: test-mcp-namespace-listing
+  - name: validate-tool-discovery
     try:
-    - script:
-        content: |
-          # Wait for service to be ready
-          kubectl wait --for=condition=ready pod -l app=ark-mcp --timeout=60s
-          
-          # Get the service port forward
-          kubectl port-forward service/ark-mcp 3000:80 &
-          PORT_FORWARD_PID=$!
-          
-          # Wait a moment for port forward to establish
-          sleep 5
-          
-          # Test the namespace listing via MCP resource
-          RESPONSE=$(curl -s http://localhost:3000/resources/ark://namespaces || echo '{"error": "connection failed"}')
-          
-          # Kill port forward
-          kill $PORT_FORWARD_PID 2>/dev/null || true
-          
-          # Validate response structure
-          echo "$RESPONSE" | jq -e '.namespaces | type == "array"' > /dev/null
-          if [ $? -eq 0 ]; then
-            echo "✓ namespace listing via MCP successful"
-            echo "Response: $RESPONSE"
-          else
-            echo "✗ namespace listing via MCP failed"
-            echo "Response: $RESPONSE"
-            exit 1
-          fi
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: MCPServer
+          metadata:
+            name: ark-mcp
+          status:
+            (contains(conditions[?type == 'Discovering'].reason || `[]`, 'DiscoveryComplete')): true
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: ark-mcp-list-agents
+            ownerReferences:
+            - apiVersion: ark.mckinsey.com/v1alpha1
+              kind: MCPServer
+              name: ark-mcp
+          status:
+            state: Ready
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: ark-mcp-query-agent
+            ownerReferences:
+            - apiVersion: ark.mckinsey.com/v1alpha1
+              kind: MCPServer
+              name: ark-mcp
+          status:
+            state: Ready
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: MCPServer
+        name: ark-mcp
 
-  - name: cleanup
-    try:
+    cleanup:
     - script:
         content: |
-          helm uninstall ark-mcp --namespace $NAMESPACE --ignore-not-found=true
+          helm uninstall ark-mcp --namespace $NAMESPACE --wait --timeout=180s || true
         env:
         - name: NAMESPACE
           value: ($namespace)
-

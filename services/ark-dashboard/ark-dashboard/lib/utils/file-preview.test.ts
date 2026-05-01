@@ -4,6 +4,7 @@ import {
   getLanguageFromExtension,
   isImageFile,
   isJsonFile,
+  isMarkdownFile,
   isSpreadsheetFile,
   isSvgFile,
   isZipFile,
@@ -88,6 +89,19 @@ describe('file-preview utils', () => {
       expect(isSpreadsheetFile('txt')).toBe(false);
       expect(isSpreadsheetFile('pdf')).toBe(false);
       expect(isSpreadsheetFile(undefined)).toBe(false);
+    });
+  });
+
+  describe('isMarkdownFile', () => {
+    it('should return true only for md', () => {
+      expect(isMarkdownFile('md')).toBe(true);
+      expect(isMarkdownFile('MD')).toBe(true);
+    });
+
+    it('should return false for mdx and other extensions', () => {
+      expect(isMarkdownFile('mdx')).toBe(false);
+      expect(isMarkdownFile('txt')).toBe(false);
+      expect(isMarkdownFile(undefined)).toBe(false);
     });
   });
 });
