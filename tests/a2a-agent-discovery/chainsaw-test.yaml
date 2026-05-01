@@ -9,11 +9,9 @@ spec:
     try:
     # Install mock-llm with A2A agents enabled
     - script:
+        timeout: 180s
         content: |
-          helm install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
-            --version 0.1.28 \
-            --namespace $NAMESPACE \
-            --values mock-llm-values.yaml
+          bash ../shared/install-mock-llm.sh
         env:
         - name: NAMESPACE
           value: ($namespace)
@@ -30,23 +28,24 @@ spec:
           kind: A2AServer
           metadata:
             name: mock-llm-countdown
-    # Wait for both A2AServers to be Ready
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1prealpha1
-          kind: A2AServer
-          metadata:
-            name: mock-llm-echo
-          status:
-            (contains(conditions[?type == 'Ready'].status || `[]`, 'True')): true
-    - assert:
-        resource:
-          apiVersion: ark.mckinsey.com/v1prealpha1
-          kind: A2AServer
-          metadata:
-            name: mock-llm-countdown
-          status:
-            (contains(conditions[?type == 'Ready'].status || `[]`, 'True')): true
+    - wait:
+        apiVersion: ark.mckinsey.com/v1prealpha1
+        kind: A2AServer
+        name: mock-llm-echo
+        timeout: 2m
+        for:
+          condition:
+            name: Ready
+            value: 'True'
+    - wait:
+        apiVersion: ark.mckinsey.com/v1prealpha1
+        kind: A2AServer
+        name: mock-llm-countdown
+        timeout: 2m
+        for:
+          condition:
+            name: Ready
+            value: 'True'
     # Verify agent addresses are resolved
     - assert:
         resource:

@@ -33,3 +33,7 @@ func (t *mcpServerRecorder) ToolListingFailed(ctx context.Context, obj runtime.O
 func (t *mcpServerRecorder) ToolCreationFailed(ctx context.Context, obj runtime.Object, reason string) {
 	t.emitter.EmitWarning(ctx, obj, "ToolCreationFailed", reason)
 }
+
+func (t *mcpServerRecorder) AuthorizationRequired(ctx context.Context, obj runtime.Object, reason string) {
+	t.emitter.EmitWarning(ctx, obj, "AuthorizationRequired", reason)
+}

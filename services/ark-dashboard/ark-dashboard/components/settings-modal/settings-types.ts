@@ -1,4 +1,4 @@
-import { Database, Key, Lock, Server, Store, Zap } from 'lucide-react';
+import { Database, Key, Lock, Search, Server, Store, Zap } from 'lucide-react';
 
 import type { SettingPage } from '@/atoms/settings-modal';
 
@@ -27,11 +27,6 @@ export const settingsSections: SettingsSection[] = [
         icon: Server,
       },
       {
-        key: 'ark-services',
-        label: 'Ark Services',
-        icon: Server,
-      },
-      {
         key: 'memory',
         label: 'Memory',
         icon: Database,
@@ -40,6 +35,11 @@ export const settingsSections: SettingsSection[] = [
         key: 'manage-marketplace',
         label: 'Manage marketplace',
         icon: Store,
+      },
+      {
+        key: 'queries',
+        label: 'Queries',
+        icon: Search,
       },
       {
         key: 'experimental-features',

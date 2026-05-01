@@ -11,6 +11,7 @@ import {
   isJsonFile,
   isZipFile,
   isSpreadsheetFile,
+  isMarkdownFile,
 } from '@/lib/utils/file-preview';
 import type { ZipEntry } from '@/components/file-preview/zip-tree';
 import type { SpreadsheetData } from '@/components/file-preview/spreadsheet-viewer';
@@ -28,6 +29,7 @@ export interface PreviewTab {
   isZip: boolean;
   spreadsheetData: SpreadsheetData | null;
   isSpreadsheet: boolean;
+  isMarkdown: boolean;
   loading: boolean;
 }
 
@@ -62,6 +64,7 @@ export function useMultiFilePreview() {
       isZip: false,
       spreadsheetData: null,
       isSpreadsheet: false,
+      isMarkdown: false,
       loading: true,
     };
 
@@ -185,6 +188,7 @@ export function useMultiFilePreview() {
         updatedTab.content = text;
         updatedTab.isImage = false;
         updatedTab.language = language;
+        updatedTab.isMarkdown = isMarkdownFile(fileExtension);
 
         if (isJson) {
           try {

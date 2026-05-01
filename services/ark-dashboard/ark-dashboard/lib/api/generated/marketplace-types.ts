@@ -20,6 +20,7 @@ export interface MarketplaceItem {
   screenshots?: string[];
   createdAt: string;
   updatedAt: string;
+  uis?: { url: string; label: string }[];
 }
 
 export type MarketplaceCategory =
@@ -36,7 +37,8 @@ export type MarketplaceItemType =
   | 'component'
   | 'template'
   | 'plugin'
-  | 'demo';
+  | 'demo'
+  | 'executor';
 
 export type MarketplaceItemStatus =
   | 'available'

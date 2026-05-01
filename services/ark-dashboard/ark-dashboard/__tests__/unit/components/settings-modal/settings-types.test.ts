@@ -14,9 +14,9 @@ describe('settingsSections', () => {
     expect(general!.items).toHaveLength(5);
     expect(general!.items.map(i => i.key)).toEqual([
       'a2a-servers',
-      'ark-services',
       'memory',
       'manage-marketplace',
+      'queries',
       'experimental-features',
     ]);
   });

@@ -22,12 +22,16 @@ vi.mock('@/lib/analytics/utils', () => ({
 }));
 
 const mockStreamChatResponse = vi.fn();
+const mockStartStreamChatResponse = vi.fn();
+const mockStreamQueryStatus = vi.fn();
 const mockSubmitChatQuery = vi.fn();
 const mockGetQueryResult = vi.fn();
 
 vi.mock('@/lib/services', () => ({
   chatService: {
     streamChatResponse: (...args: unknown[]) => mockStreamChatResponse(...args),
+    startStreamChatResponse: (...args: unknown[]) => mockStartStreamChatResponse(...args),
+    streamQueryStatus: (...args: unknown[]) => mockStreamQueryStatus(...args),
     submitChatQuery: (...args: unknown[]) => mockSubmitChatQuery(...args),
     getQueryResult: (...args: unknown[]) => mockGetQueryResult(...args),
   },
@@ -90,6 +94,12 @@ describe('useChatSession', () => {
     store.set(lastConversationIdAtom, null);
     sessionStorage.clear();
     vi.clearAllMocks();
+
+    mockStartStreamChatResponse.mockImplementation((...args: unknown[]) => {
+      const chunks = mockStreamChatResponse(...args);
+      return Promise.resolve({ queryName: 'test-query', chunks });
+    });
+    mockStreamQueryStatus.mockResolvedValue(() => {});
   });
 
   afterEach(() => {
@@ -97,17 +107,33 @@ describe('useChatSession', () => {
   });
 
   describe('initial state', () => {
-    it('should return empty messages and a session ID', () => {
+    it('should return empty messages and a chat-<name>-<shortsha> session ID', () => {
       const { result } = renderHook(
         () => useChatSession({ name: 'test-agent', type: 'agent' }),
         { wrapper },
       );
       expect(result.current.messages).toEqual([]);
-      expect(result.current.sessionId).toMatch(/^session-/);
+      expect(result.current.sessionId).toMatch(/^chat-test-agent-[0-9a-f]{7}$/);
       expect(result.current.isProcessing).toBe(false);
       expect(result.current.error).toBeNull();
       expect(result.current.tokenUsage).toBeUndefined();
       expect(result.current.messageTokenUsage).toBeUndefined();
+    });
+
+    it('should give distinct chats distinct session ids even when one chat has already opened', () => {
+      const first = renderHook(
+        () => useChatSession({ name: 'coding-team', type: 'team' }),
+        { wrapper },
+      );
+      const second = renderHook(
+        () => useChatSession({ name: 'code-reviewer', type: 'agent' }),
+        { wrapper },
+      );
+      expect(first.result.current.sessionId).toMatch(/^chat-coding-team-/);
+      expect(second.result.current.sessionId).toMatch(/^chat-code-reviewer-/);
+      expect(first.result.current.sessionId).not.toEqual(
+        second.result.current.sessionId,
+      );
     });
   });
 

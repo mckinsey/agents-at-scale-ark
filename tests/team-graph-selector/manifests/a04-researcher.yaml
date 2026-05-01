@@ -4,6 +4,6 @@ metadata:
   name: researcher
 spec:
   modelRef:
-    name: test-model
+    name: test-model-mock
   prompt: "You are a research specialist. Gather and compile relevant information on the given topic."
 

@@ -38,7 +38,6 @@ describe('SettingsSidebar', () => {
   it('should render all menu items', () => {
     renderWithStore();
     expect(screen.getByText('A2A Servers')).toBeInTheDocument();
-    expect(screen.getByText('Ark Services')).toBeInTheDocument();
     expect(screen.getByText('Memory')).toBeInTheDocument();
     expect(screen.getByText('Experimental Features')).toBeInTheDocument();
     expect(screen.getByText('Service API Keys')).toBeInTheDocument();

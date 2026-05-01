@@ -65,6 +65,15 @@ func handleQueryCompletion(result *QueryResult, id *ResourceIdentifier, opts *Ou
 	return nil
 }
 
+func getConditionMessage(query *arkv1alpha1.Query) string {
+	for _, c := range query.Status.Conditions {
+		if c.Type == string(arkv1alpha1.QueryCompleted) {
+			return c.Message
+		}
+	}
+	return ""
+}
+
 func waitForQueryCompletion(ctx context.Context, id *ResourceIdentifier, opts *OutputOptions) error {
 	spinner := NewSpinner()
 	defer spinner.Stop()
@@ -82,7 +91,6 @@ func waitForQueryCompletion(ctx context.Context, id *ResourceIdentifier, opts *O
 		select {
 		case result, ok := <-resultChan:
 			if !ok {
-				// Channel closed - grace period expired, we can exit now
 				if queryCompletionResult != nil {
 					return handleQueryCompletion(queryCompletionResult, id, opts)
 				}
@@ -90,6 +98,17 @@ func waitForQueryCompletion(ctx context.Context, id *ResourceIdentifier, opts *O
 			}
 
 			handleSpinnerCommands(spinner, result.SpinnerCommand)
+
+			if result.Query != nil && result.Phase == "provisioning" {
+				msg := getConditionMessage(result.Query)
+				if msg != "" {
+					spinner.SetText(fmt.Sprintf("Provisioning: %s", msg))
+				} else {
+					spinner.SetText("Provisioning...")
+				}
+			} else if result.Query != nil && result.Phase == "running" {
+				spinner.SetText("")
+			}
 
 			if result.Error != nil {
 				return handleResultError(&result, id)
@@ -102,7 +121,6 @@ func waitForQueryCompletion(ctx context.Context, id *ResourceIdentifier, opts *O
 
 			isQueryCompleted := result.Query != nil && result.Done
 			if isQueryCompleted && queryCompletionResult == nil {
-				// Store the completion result but continue processing events
 				queryCompletionResult = &result
 				continue
 			}

@@ -1,6 +1,6 @@
 import logging
 import pytest
-from playwright.sync_api import Page
+from playwright.sync_api import Page, expect
 from pages.secrets_page import SecretsPage
 from pages.models_page import ModelsPage
 from pages.agents_page import AgentsPage
@@ -59,7 +59,82 @@ class TestArkAgents:
             logger.info(f"Model '{model_result['name']}' not visible in agent row (may be truncated or displayed differently)")
         
         agent_test_resources["agents"][prefix] = agent_result['name']
-    
+
+    def test_chat_window_opens_from_agent_row(self, page: Page, agent_test_resources: dict):
+        agent_name = agent_test_resources["agents"].get("agent")
+        if not agent_name:
+            pytest.skip("Agent was not created, skipping chat test")
+        agents = AgentsPage(page)
+        agents.navigate_to_agents_tab()
+        agents.open_agent_chat(agent_name)
+
+        assert page.locator(agents.CHAT_WINDOW).first.is_visible(), \
+            "Floating chat window should be open"
+        agents.close_agent_chat()
+
+    def test_empty_chat_window_persists_after_page_reload(self, page: Page, agent_test_resources: dict):
+        agent_name = agent_test_resources["agents"].get("agent")
+        if not agent_name:
+            pytest.skip("Agent was not created, skipping chat test")
+        agents = AgentsPage(page)
+        agents.navigate_to_agents_tab()
+        agents.open_agent_chat(agent_name)
+
+        page.reload()
+        agents.wait_for_navigation_complete()
+        agents.wait_for_element(agents.CHAT_WINDOW, timeout=10000)
+        assert page.locator(agents.CHAT_WINDOW).first.is_visible(), \
+            "Floating chat window should still be visible after page reload"
+        agents.close_agent_chat()
+
+    def test_chat_history_persists_after_page_reload(self, page: Page, agent_test_resources: dict):
+        message = "Hello from persistence test"
+
+        agent_name = agent_test_resources["agents"].get("agent")
+        if not agent_name:
+            pytest.skip("Agent was not created, skipping chat test")
+        agents = AgentsPage(page)
+        agents.navigate_to_agents_tab()
+        agents.open_agent_chat(agent_name)
+
+        chat_window = page.locator(agents.CHAT_WINDOW)
+        chat_input = chat_window.locator("input")
+        chat_input.fill(message)
+        chat_input.press("Enter")
+        # Use the input placeholder text to determine when the agent response is done processing
+        expect(chat_input).to_have_attribute("placeholder", "Processing...", timeout=5000)
+        expect(chat_input).not_to_have_attribute("placeholder", "Processing...", timeout=90000)
+        assistant_message = chat_window.locator("div.bg-muted").last
+        expect(assistant_message).to_contain_text(agent_name, timeout=5000)
+        assistant_text = assistant_message.inner_text()
+
+        page.reload()
+        agents.wait_for_navigation_complete()
+        agents.wait_for_element(agents.CHAT_WINDOW, timeout=10000)
+        new_chat_window = page.locator(agents.CHAT_WINDOW)
+        assert new_chat_window.is_visible(), "Chat window should still be open after reload"
+        assert new_chat_window.locator(f"text={message}").first.is_visible(), \
+            "User message should be visible in chat history after reload"
+        new_assistant_message = new_chat_window.locator("div.bg-muted").last
+        new_assistant_message.wait_for(state="visible", timeout=15000)
+        assert new_assistant_message.inner_text() == assistant_text, "Assistant messages should be visible in chat after reload"
+        agents.close_agent_chat()
+
+    def test_chat_window_closed_does_not_reopen_after_reload(self, page: Page, agent_test_resources: dict):
+        agent_name = agent_test_resources["agents"].get("agent")
+        if not agent_name:
+            pytest.skip("Agent was not created, skipping chat test")
+        agents = AgentsPage(page)
+        agents.navigate_to_agents_tab()
+        agents.wait_for_element(f"p.truncate.text-sm.font-medium:has-text('{agent_name}')", timeout=15000)
+        agents.open_agent_chat(agent_name)
+        agents.close_agent_chat()
+
+        page.reload()
+        agents.wait_for_navigation_complete()
+        assert not agents.is_visible(agents.CHAT_WINDOW, timeout=3000), \
+            "Chat window should not reopen after being closed and page reloaded"
+
     @pytest.mark.parametrize("prefix", [
         "agent",
     ])

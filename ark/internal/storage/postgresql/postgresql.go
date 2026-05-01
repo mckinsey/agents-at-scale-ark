@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lib/pq"
+	_ "github.com/lib/pq"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
@@ -123,7 +123,7 @@ func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error
 	}
 
 	backend.warmPool()
-	go backend.listenForNotifications()
+	go backend.startWALConsumer()
 	go backend.refreshBookmarkLoop()
 	go backend.cleanupLoop()
 
@@ -178,82 +178,20 @@ func (p *PostgreSQLBackend) initSchema() error {
 	CREATE INDEX IF NOT EXISTS idx_resources_lookup ON resources(kind, namespace, name, resource_version);
 	CREATE INDEX IF NOT EXISTS idx_resources_deleted ON resources(deleted_at) WHERE deleted_at IS NOT NULL;
 
-	CREATE OR REPLACE FUNCTION notify_resource_change()
-	RETURNS TRIGGER AS $$
-	BEGIN
-		PERFORM pg_notify('ark_resources', json_build_object(
-			'kind', NEW.kind,
-			'namespace', NEW.namespace,
-			'name', NEW.name,
-			'resource_version', NEW.resource_version
-		)::text);
-		RETURN NEW;
-	END;
-	$$ LANGUAGE plpgsql;
-
 	DROP TRIGGER IF EXISTS resource_change_trigger ON resources;
-	CREATE TRIGGER resource_change_trigger
-	AFTER INSERT OR UPDATE ON resources
-	FOR EACH ROW EXECUTE FUNCTION notify_resource_change();
+	DROP FUNCTION IF EXISTS notify_resource_change();
+
+	DO $$ BEGIN
+		IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'ark_cdc') THEN
+			CREATE PUBLICATION ark_cdc FOR TABLE resources;
+		END IF;
+	END $$;
 	`
 	_, err := p.db.Exec(schema)
 	return err
 }
 
-func (p *PostgreSQLBackend) listenForNotifications() {
-	backoff := time.Second
-	maxBackoff := 30 * time.Second
-
-	for {
-		select {
-		case <-p.ctx.Done():
-			return
-		default:
-		}
-
-		listener := pq.NewListener(p.connStr, 10*time.Second, time.Minute, func(ev pq.ListenerEventType, err error) {
-			if err != nil {
-				klog.Errorf("PostgreSQL listener error: %v", err)
-			}
-		})
-
-		if err := listener.Listen("ark_resources"); err != nil {
-			_ = listener.Close()
-			klog.Errorf("Failed to listen for notifications, retrying in %v: %v", backoff, err)
-			select {
-			case <-p.ctx.Done():
-				return
-			case <-time.After(backoff):
-			}
-			backoff = min(backoff*2, maxBackoff)
-			continue
-		}
-
-		backoff = time.Second
-		p.runListener(listener)
-		_ = listener.Close()
-	}
-}
-
-func (p *PostgreSQLBackend) runListener(listener *pq.Listener) {
-	for {
-		select {
-		case <-p.ctx.Done():
-			return
-		case n := <-listener.Notify:
-			if n == nil {
-				klog.Warning("PostgreSQL listener connection lost, reconnecting")
-				return
-			}
-			p.nudgeWatchers(n.Extra)
-		case <-time.After(90 * time.Second):
-			if err := listener.Ping(); err != nil {
-				klog.Warningf("Failed to ping listener, reconnecting: %v", err)
-				return
-			}
-		}
-	}
-}
+// startWALConsumer and runWALConsumer are in wal_consumer.go
 
 func (p *PostgreSQLBackend) refreshBookmarkLoop() {
 	ticker := time.NewTicker(10 * time.Second)
@@ -716,22 +654,14 @@ func (p *PostgreSQLBackend) reconstructObject(kind, namespace, name string, rv, 
 	return p.converter.Decode(kind, data)
 }
 
-func (p *PostgreSQLBackend) nudgeWatchers(payload string) {
-	var notification struct {
-		Kind      string `json:"kind"`
-		Namespace string `json:"namespace"`
-	}
-	if err := json.Unmarshal([]byte(payload), &notification); err != nil {
-		return
-	}
-
-	key := fmt.Sprintf("%s/%s", notification.Kind, notification.Namespace)
-	allKey := fmt.Sprintf("%s/", notification.Kind)
+func (p *PostgreSQLBackend) nudgeWatchersByKindNamespace(kind, namespace string) {
+	key := fmt.Sprintf("%s/%s", kind, namespace)
+	allKey := fmt.Sprintf("%s/", kind)
 
 	p.mu.RLock()
 	watchers := make([]*postgresWatcher, 0, len(p.watchers[key])+len(p.watchers[allKey]))
 	watchers = append(watchers, p.watchers[key]...)
-	if notification.Namespace != "" {
+	if namespace != "" {
 		watchers = append(watchers, p.watchers[allKey]...)
 	}
 	p.mu.RUnlock()
@@ -740,6 +670,19 @@ func (p *PostgreSQLBackend) nudgeWatchers(payload string) {
 		select {
 		case w.nudgeCh <- struct{}{}:
 		default:
+		}
+	}
+}
+
+func (p *PostgreSQLBackend) nudgeAllWatchers() {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	for _, watchers := range p.watchers {
+		for _, w := range watchers {
+			select {
+			case w.nudgeCh <- struct{}{}:
+			default:
+			}
 		}
 	}
 }

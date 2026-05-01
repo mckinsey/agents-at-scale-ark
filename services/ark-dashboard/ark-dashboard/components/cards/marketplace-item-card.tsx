@@ -212,41 +212,63 @@ export function MarketplaceItemCard({
       </CardContent>
 
       <CardFooter className="flex-none pt-4">
-        <div className="flex w-full items-center justify-between">
-          <div className="text-xs text-muted-foreground">v{item.version}</div>
-
-          {item.type === 'demo' ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8"
-              onClick={() => item.repository && window.open(item.repository, '_blank')}
-              disabled={!item.repository}>
-              View
-              <ExternalLink className="ml-1 h-3 w-3" />
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8"
-              onClick={handleInstall}
-              disabled={isInstalling || localStatus === 'installed'}>
-              {localStatus === 'installed' && (
-                <>
-                  Installed
-                  <Check className="ml-1 h-3 w-3" />
-                </>
-              )}
-              {isInstalling && localStatus !== 'installed' && (
-                <>
-                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                  Loading...
-                </>
-              )}
-              {!isInstalling && localStatus !== 'installed' && 'Get'}
-            </Button>
+        <div className="flex w-full flex-col gap-3">
+          {/* UI URLs */}
+          {localStatus === 'installed' && item.uis && item.uis.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {item.uis.map((ui) => (
+                <Button
+                  key={ui.url}
+                  variant="secondary"
+                  size="sm"
+                  className="h-8"
+                  onClick={() => window.open(ui.url, '_blank')}>
+                  {ui.label}
+                  <ExternalLink className="ml-1 h-3 w-3" />
+                </Button>
+              ))}
+            </div>
           )}
+
+          {/* Version and Install/View Button */}
+          <div className="flex w-full items-center justify-between">
+            <div className="text-xs text-muted-foreground">v{item.version}</div>
+
+            {item.type === 'demo' ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={() =>
+                  item.repository && window.open(item.repository, '_blank')
+                }
+                disabled={!item.repository}>
+                View
+                <ExternalLink className="ml-1 h-3 w-3" />
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={handleInstall}
+                disabled={isInstalling || localStatus === 'installed'}>
+                {localStatus === 'installed' && (
+                  <>
+                    Installed
+                    <Check className="ml-1 h-3 w-3" />
+                  </>
+                )}
+                {isInstalling && localStatus !== 'installed' && (
+                  <>
+                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                    Loading...
+                  </>
+                )}
+                {!isInstalling && localStatus !== 'installed' && 'Get'}
+              </Button>
+            )}
+          </div>
         </div>
       </CardFooter>
 

@@ -22,6 +22,9 @@ app:
       memory: "1024Mi"
       cpu: "1000m"
 
+server:
+  requestTimeout: 0
+
 replicaCount: 1
 
 service:
@@ -74,6 +77,8 @@ persistence:
   traceFileName: oteltraces.json
   # Filename for the event data
   eventFileName: events.json
+  # Filename for the sessions data
+  sessionsFileName: sessions.json
   # Use existing PVC instead of creating a new one
   existingClaim: ""
 

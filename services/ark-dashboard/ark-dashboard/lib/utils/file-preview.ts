@@ -158,3 +158,8 @@ export function isSpreadsheetFile(extension: string | undefined): boolean {
     extension.toLowerCase(),
   );
 }
+
+export function isMarkdownFile(extension: string | undefined): boolean {
+  if (!extension) return false;
+  return extension.toLowerCase() === 'md';
+}

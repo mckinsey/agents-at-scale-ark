@@ -14,7 +14,9 @@ REGISTRY_USERNAME="${DOCKER_CICD_CACHE_REGISTRY_USERNAME:?required}"
 REGISTRY_PASSWORD="${DOCKER_CICD_CACHE_REGISTRY_PASSWORD:?required}"
 ARK_IMAGE_TAG="${ARK_IMAGE_TAG:-local-test}"
 INSTALL_COVERAGE="false"
+INSTALL_BROKER="false"
 STORAGE_BACKEND="etcd"
+PREFETCH_TEST_IMAGES="false"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -23,14 +25,24 @@ while [[ $# -gt 0 ]]; do
       INSTALL_COVERAGE="true"
       shift
       ;;
+    --install-broker)
+      INSTALL_BROKER="true"
+      shift
+      ;;
     --storage-backend)
       STORAGE_BACKEND="$2"
       shift 2
       ;;
+    --prefetch-test-images)
+      PREFETCH_TEST_IMAGES="true"
+      shift
+      ;;
     -h|--help)
-      echo "Usage: $0 [--install-coverage] [--storage-backend etcd|postgresql]"
-      echo "  --install-coverage   Install coverage collection components"
-      echo "  --storage-backend    Storage backend to use (default: etcd)"
+      echo "Usage: $0 [--install-coverage] [--install-broker] [--storage-backend etcd|postgresql] [--prefetch-test-images]"
+      echo "  --install-coverage      Install coverage collection components"
+      echo "  --install-broker        Install ark-broker (only needed for tests that use it)"
+      echo "  --storage-backend       Storage backend to use (default: etcd)"
+      echo "  --prefetch-test-images  Pre-pull chainsaw test images (mock-llm, curl, mockserver, etc.)"
       exit 0
       ;;
     *)
@@ -69,6 +81,28 @@ fi
 echo "=== Installing Gateway API CRDs ==="
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
 
+if [ "${INSTALL_BROKER}" = "true" ]; then
+  echo "=== Pre-creating ark-config-broker ConfigMap ==="
+  kubectl create namespace default 2>/dev/null || true
+  kubectl apply -f - <<'BROKER_CM_EOF'
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ark-config-broker
+  namespace: default
+  labels:
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    meta.helm.sh/release-name: ark-broker
+    meta.helm.sh/release-namespace: default
+data:
+  enabled: "true"
+  serviceRef: |
+    name: ark-broker
+    port: "http"
+BROKER_CM_EOF
+fi
+
 if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
   echo "=== Installing PostgreSQL (ark-storage-dev) ==="
   helm upgrade --install ark-storage-dev "${REPO_ROOT}/charts/ark-storage-dev" \
@@ -78,6 +112,26 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
 
   echo "=== Waiting for PostgreSQL Pod Readiness ==="
   kubectl -n ark-system wait --for=condition=ready pod -l app=ark-storage-dev --timeout=120s
+fi
+
+IMAGE_PULL_PIDS=()
+if [ "${PREFETCH_TEST_IMAGES}" = "true" ]; then
+  echo "=== Pre-pulling test images (background) ==="
+  for img in \
+    docker.io/curlimages/curl:latest \
+    docker.io/mockserver/mockserver:5.15.0 \
+    ghcr.io/orange-opensource/hurl:6.1.1 \
+    docker.io/python:3.12-bookworm \
+    ghcr.io/dwmkerr/mock-llm:0.1.28 \
+    ghcr.io/dwmkerr/mock-llm:latest; do
+    sudo k3s ctr images pull "$img" &
+    IMAGE_PULL_PIDS+=($!)
+  done
+  if [ -n "${ARK_IMAGE_TAG}" ]; then
+    sudo k3s ctr images pull --user "${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}" "${REGISTRY}/ark-mcp:${ARK_IMAGE_TAG}" &
+    IMAGE_PULL_PIDS+=($!)
+  fi
+  echo "Image pulls started (PIDs: ${IMAGE_PULL_PIDS[*]})"
 fi
 
 echo "=== Installing ARK Controller ==="
@@ -105,6 +159,19 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
   )
 fi
 
+if [ "${INSTALL_COVERAGE}" = "true" ]; then
+  echo "=== Including coverage collection in Helm install ==="
+  kubectl create namespace ark-system 2>/dev/null || true
+  kubectl -n ark-system apply -f "${SCRIPT_DIR}/coverage-pvc.yaml" || echo "Coverage PVC may already exist"
+  HELM_ARGS+=(
+    --set controllerManager.container.env.GOCOVERDIR=/workspace/coverage
+    --set 'controllerManager.extraVolumeMounts[0].name=coverage-volume'
+    --set 'controllerManager.extraVolumeMounts[0].mountPath=/workspace/coverage'
+    --set 'controllerManager.extraVolumes[0].name=coverage-volume'
+    --set 'controllerManager.extraVolumes[0].persistentVolumeClaim.claimName=coverage-data'
+  )
+fi
+
 helm upgrade --install ark-controller ./dist/chart "${HELM_ARGS[@]}"
 
 helm upgrade --install ark-completions ./executors/completions/chart \
@@ -113,15 +180,6 @@ helm upgrade --install ark-completions ./executors/completions/chart \
   --set image.repository="${REGISTRY}/ark-completions" \
   --set image.tag="${ARK_IMAGE_TAG}" \
   --set image.pullPolicy=IfNotPresent
-
-# Apply coverage configuration if requested
-if [ "${INSTALL_COVERAGE}" = "true" ]; then
-  echo "=== Setting up Coverage Collection ==="
-  kubectl -n ark-system apply -f "${SCRIPT_DIR}/coverage-pvc.yaml" || echo "Coverage PVC may already exist"
-  kubectl -n ark-system patch deployment ark-controller --patch-file "${SCRIPT_DIR}/coverage-patch.yaml"
-  # Restart deployment to apply coverage configuration
-  kubectl -n ark-system rollout restart deployment/ark-controller
-fi
 
 # Wait for ARK deployment to be ready
 echo "=== Waiting for ARK Deployment ==="
@@ -176,6 +234,64 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
     exit 1
   fi
   echo "PostgreSQL backend verified (no CRDs present, API served via aggregated API server)"
+
+  echo "=== Verifying controllers are reconciling ==="
+  PROBE_NS="ark-readiness-probe"
+  kubectl create namespace "${PROBE_NS}" 2>/dev/null || true
+  kubectl apply -f - <<'PROBE_EOF'
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: readiness-probe
+  namespace: ark-readiness-probe
+spec:
+  type: openai
+  model:
+    value: gpt-4.1-mini
+  config:
+    openai:
+      baseUrl:
+        value: "https://localhost:1/v1"
+      apiKey:
+        value: "probe"
+PROBE_EOF
+  PROBE_OK=false
+  for i in $(seq 1 60); do
+    CONDITIONS=$(kubectl get model readiness-probe -n "${PROBE_NS}" -o jsonpath='{.status.conditions}' 2>/dev/null)
+    if [ -n "${CONDITIONS}" ] && [ "${CONDITIONS}" != "null" ] && [ "${CONDITIONS}" != "[]" ]; then
+      echo "Controllers are reconciling (Model got status conditions after ${i}s)"
+      PROBE_OK=true
+      break
+    fi
+    sleep 1
+  done
+  kubectl delete namespace "${PROBE_NS}" --wait=false 2>/dev/null || true
+  if [ "${PROBE_OK}" != "true" ]; then
+    echo "ERROR: Controllers not reconciling after 60s — Model readiness-probe never got status conditions"
+    echo "Controller logs:"
+    kubectl -n ark-system logs deployment/ark-controller --tail=30
+    exit 1
+  fi
+fi
+
+if [ "${INSTALL_BROKER}" = "true" ]; then
+  echo "=== Installing ARK Broker ==="
+  helm upgrade --install ark-broker "${REPO_ROOT}/services/ark-broker/chart" \
+    --namespace default \
+    --create-namespace \
+    --set app.image.repository="${REGISTRY}/ark-broker" \
+    --set app.image.tag="${ARK_IMAGE_TAG}" \
+    --set app.image.pullPolicy=IfNotPresent \
+    --set restartController.enabled=false \
+    --wait --timeout=300s
+fi
+
+if [ "${#IMAGE_PULL_PIDS[@]}" -gt 0 ]; then
+  echo "=== Waiting for image pre-pulls to complete ==="
+  for pid in "${IMAGE_PULL_PIDS[@]}"; do
+    wait "$pid" || echo "Warning: image pull PID $pid failed"
+  done
+  echo "Image pre-pulls done"
 fi
 
 echo

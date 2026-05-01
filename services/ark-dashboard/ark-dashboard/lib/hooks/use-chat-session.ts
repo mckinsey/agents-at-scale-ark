@@ -32,6 +32,8 @@ interface UseChatSessionReturn {
   messages: ExtendedChatMessage[];
   sessionId: string;
   isProcessing: boolean;
+  processingPhase?: string;
+  conditionMessage?: string;
   error: string | null;
   sendMessage: (message: string) => Promise<void>;
   clearChat: () => void;
@@ -50,17 +52,18 @@ export function useChatSession({
   );
   const chatKey = `${type}-${name}`;
 
-  const initSessionIdRef = useRef<string>(
-    lastConversationId || createNewSessionId(),
-  );
+  const pendingSessionIdRef = useRef<string | null>(null);
 
   const chatSession = useMemo(() => {
     const existing = chatHistory?.[chatKey];
     if (existing?.messages !== undefined && existing?.sessionId) {
       return existing;
     }
-    return { messages: [], sessionId: initSessionIdRef.current };
-  }, [chatHistory, chatKey]);
+    if (!pendingSessionIdRef.current) {
+      pendingSessionIdRef.current = createNewSessionId(name);
+    }
+    return { messages: [], sessionId: pendingSessionIdRef.current };
+  }, [chatHistory, chatKey, name]);
 
   const chatMessages = chatSession.messages;
   const sessionId = chatSession.sessionId;
@@ -68,14 +71,15 @@ export function useChatSession({
 
   useEffect(() => {
     if (!chatHistory?.[chatKey]) {
-      const sessionIdToUse = initSessionIdRef.current;
+      const sessionIdToUse = pendingSessionIdRef.current ?? createNewSessionId(name);
+      pendingSessionIdRef.current = sessionIdToUse;
       setLastConversationId(sessionIdToUse);
       setChatHistory(prev => ({
         ...(prev || {}),
         [chatKey]: { messages: [], sessionId: sessionIdToUse },
       }));
     }
-  }, [chatKey, chatHistory, setChatHistory, setLastConversationId]);
+  }, [chatKey, chatHistory, name, setChatHistory, setLastConversationId]);
 
   const updateChatMessages = useCallback(
     (
@@ -143,6 +147,8 @@ export function useChatSession({
   );
 
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingPhase, setProcessingPhase] = useState<string | undefined>();
+  const [conditionMessage, setConditionMessage] = useState<string | undefined>();
   const [error, setError] = useState<string | null>(null);
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
   const queryTimeout = useAtomValue(queryTimeoutSettingAtom);
@@ -247,14 +253,34 @@ export function useChatSession({
         currentMessageIndex += systemMsgCount + 1;
       };
 
-      for await (const chunk of chatService.streamChatResponse(
-        userMessage,
-        type,
-        name,
-        sessionId,
-        conversationId,
-        queryTimeout,
-      )) {
+      const { queryName: streamQueryName, chunks } =
+        await chatService.startStreamChatResponse(
+          userMessage,
+          type,
+          name,
+          sessionId,
+          conversationId,
+          queryTimeout,
+        );
+
+      const stopPhasePolling = await chatService.streamQueryStatus(
+        streamQueryName,
+        (status) => {
+          if (status && typeof status === 'object' && 'phase' in status) {
+            const phase = (status as { phase?: string }).phase;
+            setProcessingPhase(phase);
+            if (phase === 'provisioning') {
+              const conditions = (status as { conditions?: Array<{ type?: string; message?: string }> }).conditions;
+              const msg = conditions?.find(c => c.type === 'Completed')?.message;
+              setConditionMessage(msg);
+            } else {
+              setConditionMessage(undefined);
+            }
+          }
+        },
+      );
+
+      for await (const chunk of chunks) {
         const typedChunk = chunk as unknown as ArkExtendedChunk;
 
         if (typedChunk.error) {
@@ -402,6 +428,7 @@ export function useChatSession({
         }
       }
 
+      stopPhasePolling();
       finalizeCurrentMessage();
 
       if (messageTokenUsage) {
@@ -543,6 +570,13 @@ export function useChatSession({
       while (!pollingStopped) {
         try {
           const result = await chatService.getQueryResult(query.name);
+
+          setProcessingPhase(result.status);
+          if (result.status === 'provisioning') {
+            setConditionMessage(result.conditionMessage);
+          } else {
+            setConditionMessage(undefined);
+          }
 
           if (result.terminal) {
             const fullQuery = await chatService.getQuery(query.name);
@@ -732,6 +766,8 @@ export function useChatSession({
         setError(errMsg);
       } finally {
         setIsProcessing(false);
+        setProcessingPhase(undefined);
+        setConditionMessage(undefined);
       }
     },
     [
@@ -745,8 +781,8 @@ export function useChatSession({
   );
 
   const clearChat = useCallback(() => {
-    const newSessionId = createNewSessionId();
-    initSessionIdRef.current = newSessionId;
+    const newSessionId = createNewSessionId(name);
+    pendingSessionIdRef.current = newSessionId;
     setLastConversationId(newSessionId);
     setChatHistory(prev => ({
       ...(prev || {}),
@@ -758,12 +794,14 @@ export function useChatSession({
       },
     }));
     setError(null);
-  }, [chatKey, setChatHistory, setLastConversationId]);
+  }, [chatKey, name, setChatHistory, setLastConversationId]);
 
   return {
     messages: chatMessages,
     sessionId,
     isProcessing,
+    processingPhase,
+    conditionMessage,
     error,
     sendMessage,
     clearChat,

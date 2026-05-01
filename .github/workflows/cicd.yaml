@@ -2,10 +2,15 @@ name: CI/CD
 
 on:
   push:
-    branches: [main, release]
+    branches: [main]
   pull_request:
-    branches: ["main", "release"]
     types: [opened, synchronize, reopened]
+    paths-ignore:
+      - 'docs/**'
+      - 'examples/**'
+      - 'samples/**'
+      - 'openspec/**'
+      - '**.md'
   workflow_dispatch:
 
 # Release please will create pull requests, update the changelog, and cicd will
@@ -29,7 +34,7 @@ permissions:
 # have the full pipeline run on.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/release' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   # Setup job to determine container cache registry
@@ -150,7 +155,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.1"
+          go-version: "1.26.2"
           cache: true
           cache-dependency-path: |
             ark/go.sum
@@ -192,7 +197,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.1"
+          go-version: "1.26.2"
           cache: true
           cache-dependency-path: |
             ark/go.sum
@@ -517,7 +522,6 @@ jobs:
   e2e-tests-standard:
     name: E2E Standard (${{ matrix.storage-backend }})
     needs: [setup-container-cache-registry, build-containers]
-    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }} # Remove skipping these tests once chainsaw can be run with mock-llm
     runs-on: ubuntu-24.04
     continue-on-error: ${{ matrix.storage-backend == 'postgresql' }}
     strategy:
@@ -531,7 +535,9 @@ jobs:
         with:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "true"
+          install-broker: "true"
           storage-backend: ${{ matrix.storage-backend }}
+          prefetch-test-images: "true"
           ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
@@ -551,13 +557,15 @@ jobs:
           LANGCHAIN_WEATHER_AGENT_IMAGE_TAG: ${{ github.sha }}
           ARK_BROKER_IMAGE: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-broker
           ARK_BROKER_IMAGE_TAG: ${{ github.sha }}
+          ARK_MCP_IMAGE: ${{ vars.DOCKER_CICD_CACHE_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}/ark-mcp
+          ARK_MCP_IMAGE_TAG: ${{ github.sha }}
         run: |
           cd tests
           mkdir -p /tmp/chainsaw-report
           if [ "${{ matrix.storage-backend }}" = "etcd" ]; then
             chainsaw test --config .chainsaw.yaml --selector '!llm,!postgresql'
           else
-            chainsaw test --config .chainsaw.yaml --selector '!llm'
+            chainsaw test --config .chainsaw.yaml --selector '!llm,!etcd-only'
           fi
 
       - name: Collect cluster logs
@@ -594,6 +602,7 @@ jobs:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "true"
           storage-backend: ${{ matrix.storage-backend }}
+          prefetch-test-images: "true"
           ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
@@ -659,7 +668,7 @@ jobs:
         with:
           ark-image-tag: ${{ github.sha }}
           install-coverage: "false"
-
+          install-broker: "true"
           ci-cache-registry: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}
           ci-cache-registry-username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           ci-cache-registry-password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
@@ -690,6 +699,7 @@ jobs:
         run: |
           kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
           kubectl wait --for=condition=ready pod -l app=ark-dashboard -n default --timeout=120s
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=ark-broker -n default --timeout=120s
 
       - name: Update Argo Workflows dependencies
         run: |
@@ -774,11 +784,19 @@ jobs:
         env:
           CICD_OPENAI_API_KEY: ${{ secrets.CICD_OPENAI_API_KEY }}
           CICD_OPENAI_BASE_URL: ${{ secrets.CICD_OPENAI_BASE_URL }}
+          CICD_ANTHROPIC_API_KEY: ${{ secrets.CICD_ANTHROPIC_API_KEY }}
+          CICD_ANTHROPIC_BASE_URL: ${{ secrets.CICD_ANTHROPIC_BASE_URL }}
+          CICD_AZURE_API_KEY: ${{ secrets.CICD_AZURE_OPENAI_KEY }}
+          CICD_AZURE_BASE_URL: ${{ secrets.CICD_AZURE_OPENAI_BASE_URL }}
         run: |
           cd tests/pytest/ui-tests
           cat > .env << EOF
           CICD_OPENAI_API_KEY=${CICD_OPENAI_API_KEY}
           CICD_OPENAI_BASE_URL=${CICD_OPENAI_BASE_URL}
+          CICD_ANTHROPIC_API_KEY=${CICD_ANTHROPIC_API_KEY}
+          CICD_ANTHROPIC_BASE_URL=${CICD_ANTHROPIC_BASE_URL}
+          CICD_AZURE_API_KEY=${CICD_AZURE_API_KEY}
+          CICD_AZURE_BASE_URL=${CICD_AZURE_BASE_URL}
           EOF
 
       - name: Start port-forwarding
@@ -817,7 +835,6 @@ jobs:
   e2e-cli-tests:
     needs: [setup-container-cache-registry, build-containers]
     runs-on: ubuntu-24.04
-    if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
     steps:
       - uses: actions/checkout@v6
 
@@ -869,6 +886,20 @@ jobs:
           kubectl wait --for=condition=available -n ark-system --timeout=300s deployment/ark-controller
           kubectl wait --for=condition=ready pod -l app=ark-api -n default --timeout=120s
           kubectl wait --for=condition=ready pod -l app=ark-mcp -n default --timeout=120s
+
+      - name: Install mock-llm
+        run: |
+          for resource in deployment service serviceaccount configmap role rolebinding secret; do
+            kubectl delete $resource mock-llm -n default --ignore-not-found
+          done
+          for resource in clusterrole clusterrolebinding; do
+            kubectl delete $resource mock-llm --ignore-not-found
+          done
+          helm upgrade --install mock-llm oci://ghcr.io/dwmkerr/charts/mock-llm \
+            --version 0.1.28 \
+            --namespace default \
+            --values tests/pytest/cli-tests/mock-llm-values.yaml \
+            --wait --timeout=120s
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -943,39 +974,6 @@ jobs:
           path: ${{ matrix.chart.path }}/${{ matrix.chart.name }}-*.tgz
           retention-days: 30
 
-  build-docs:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: "22.x"
-
-      - name: Build Docs
-        run: |
-          cd docs
-          npm ci
-          npm i pagefind @pagefind/linux-x64 && npm run build
-        env:
-          # Set basePath for GitHub Pages deployment using configurable variable
-          NEXT_PUBLIC_BASE_PATH: ${{ vars.DOCS_SITE_BASE_PATH || '' }}
-
-      - name: Validate Internal Documentation Links
-        run: |
-          # Rebuild docs without base path for link checking
-          echo "Rebuilding docs without base path for link validation..."
-          npm run build
-          echo "Checking for broken links..."
-          npm run check-links
-        working-directory: docs
-
-      - name: Upload Site Artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: docs/out
-
   build-ark-cli:
     runs-on: ubuntu-24.04
     steps:
@@ -1036,7 +1034,6 @@ jobs:
         e2e-cli-tests,
         build-and-test-ark,
         build-and-test-services,
-        build-docs,
         build-charts,
         build-ark-cli,
       ]
@@ -1047,7 +1044,7 @@ jobs:
       - name: Setup Go for coverage tools
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26.1"
+          go-version: "1.26.2"
 
       - name: Install Python coverage tools
         run: |
@@ -1089,7 +1086,7 @@ jobs:
           done
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           directory: ./coverage-artifacts
@@ -1112,7 +1109,6 @@ jobs:
         xray-container-scan,
         build-and-test-ark,
         build-and-test-services,
-        build-docs,
         build-charts,
         build-ark-cli,
       ]
@@ -1120,41 +1116,65 @@ jobs:
     outputs:
       released: ${{ steps.release-please.outputs.release_created }}
       tag: ${{ steps.release-please.outputs.tag_name }}
+      release_type: ${{ steps.release-type.outputs.type }}
     steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-tags: true
+
       - name: Skip Release (Running Locally)
         if: ${{ env.ACT }}
         run: |
           echo "ℹ️  Skipping release when running locally with 'act'"
           echo "   Release creation requires GitHub tokens that are not available locally"
+
+      - name: Determine release type
+        id: release-type
+        if: ${{ !env.ACT && github.ref == 'refs/heads/main' }}
+        run: |
+          VERSION=$(jq -r '."."' .github/release-please-manifest.json)
+
+          # Extract base version (remove -rc or -rc.* suffix if present)
+          BASE_VERSION="${VERSION%-rc*}"
+
+          echo "Manifest version: $VERSION"
+          echo "Base version: $BASE_VERSION"
+
+          # Promotion scenario:
+          # 1. Manifest version is stable (no -rc suffix)
+          # 2. RC tags exist for this version (v0.1.60-rc*)
+          # 3. Stable tag doesn't exist yet (v0.1.60)
+          RC_TAGS=$(git tag --list "v${BASE_VERSION}-rc*" | head -1)
+          STABLE_TAG=$(git tag --list "v${BASE_VERSION}" | head -1)
+
+          echo "RC tags for v${BASE_VERSION}: $RC_TAGS"
+          echo "Stable tag v${BASE_VERSION}: $STABLE_TAG"
+
+          if [[ "$VERSION" != *-rc* && -n "$RC_TAGS" && -z "$STABLE_TAG" ]]; then
+            echo "config=.github/release-please-config.json" >> $GITHUB_OUTPUT
+            echo "type=stable" >> $GITHUB_OUTPUT
+            echo "release_as=${BASE_VERSION}" >> $GITHUB_OUTPUT
+            echo "Promotion detected: RC tags exist for v${BASE_VERSION}, releasing stable"
+          else
+            echo "config=.github/release-please-config-rc.json" >> $GITHUB_OUTPUT
+            echo "type=rc" >> $GITHUB_OUTPUT
+            echo "Normal development flow, using RC config"
+          fi
+
       - name: Create Release
-        if: ${{ !env.ACT && github.ref == 'refs/heads/release' }}
+        if: ${{ !env.ACT && github.ref == 'refs/heads/main' }}
         uses: googleapis/release-please-action@v4
         id: release-please
         with:
           manifest-file: .github/release-please-manifest.json
-          config-file: .github/release-please-config.json
-          target-branch: release
-
-  release-docs:
-    needs: [check-release]
-    runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
-    concurrency:
-      group: "pages"
-      cancel-in-progress: true
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        if: ${{ !env.ACT }}
-        id: deployment
-        uses: actions/deploy-pages@v5
+          config-file: ${{ steps.release-type.outputs.config || '.github/release-please-config-rc.json' }}
+          target-branch: main
+          release-as: ${{ steps.release-type.outputs.release_as || '' }}
 
   release-libs:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@v6
       
@@ -1188,7 +1208,7 @@ jobs:
   release-charts:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     strategy:
       matrix:
         chart:
@@ -1220,7 +1240,7 @@ jobs:
   release-ark-cli:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@v6
 
@@ -1254,7 +1274,7 @@ jobs:
   release-fark:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -1263,7 +1283,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26.1'
+          go-version: '1.26.2'
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
@@ -1297,35 +1317,41 @@ jobs:
   run-deploy-workflow:
     needs: [check-release]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@v6
       
       - name: Trigger Deploy workflow for release
         run: |
+          if [[ "${{ needs.check-release.outputs.release_type }}" == "stable" ]]; then
+            IS_STABLE=true
+          else
+            IS_STABLE=false
+          fi
+
           gh workflow run deploy.yml \
             --field ark_version="${{ needs.check-release.outputs.tag }}" \
             --field deploy_containers=true \
-            --field deploy_containers_to_latest=true \
-            --field deploy_to_pages=true \
-            --field deploy_to_npm=true \
+            --field deploy_containers_to_latest=${IS_STABLE} \
+            --field deploy_to_pages=${IS_STABLE} \
+            --field deploy_to_npm=${IS_STABLE} \
             --field deploy_helm_chart=true \
-            --field deploy_to_pypi=true
+            --field deploy_to_pypi=${IS_STABLE}
         env:
           GH_TOKEN: ${{ github.token }}
 
   verify-ark-installation:
     needs: [check-release, release-charts, release-ark-cli]
     runs-on: ubuntu-24.04
-    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/release' }}
+    if: ${{ needs.check-release.outputs.released && github.ref == 'refs/heads/main' && needs.check-release.outputs.release_type == 'stable' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-k3s
         with:
           metrics-enabled: false
           traefik-enabled: false
-          k3s-channel: latest
+          k3s-channel: stable
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -1362,3 +1388,91 @@ jobs:
           name: ark-installation-verification-logs-${{ github.sha }}
           path: tests/pytest/*.log
           retention-days: 7
+
+  bootstrap-next-rc-cycle:
+    needs: [check-release]
+    runs-on: ubuntu-24.04
+    if: ${{ needs.check-release.outputs.released && needs.check-release.outputs.release_type == 'stable' && github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Calculate next version
+        id: next-version
+        run: |
+          TAG="${{ needs.check-release.outputs.tag }}"
+          VERSION="${TAG#v}"
+
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          NEXT_PATCH=$((PATCH + 1))
+          NEXT_VERSION="${MAJOR}.${MINOR}.${NEXT_PATCH}"
+
+          echo "current=$VERSION" >> $GITHUB_OUTPUT
+          echo "next=$NEXT_VERSION" >> $GITHUB_OUTPUT
+          echo "Stable release: $VERSION → Next version: $NEXT_VERSION"
+
+      - name: Check for existing bootstrap PR
+        id: check-pr
+        run: |
+          BRANCH="bootstrap/${{ steps.next-version.outputs.next }}"
+          EXISTING_PR=$(gh pr list --base main --head "$BRANCH" --json number --jq '.[0].number')
+          if [ -n "$EXISTING_PR" ]; then
+            echo "Bootstrap PR #${EXISTING_PR} already exists"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+          if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
+            echo "Deleting orphaned branch $BRANCH"
+            git push origin --delete "$BRANCH" || true
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create bootstrap branch and PR
+        if: ${{ steps.check-pr.outputs.exists == 'false' }}
+        run: |
+          NEXT="${{ steps.next-version.outputs.next }}"
+          BRANCH="bootstrap/${NEXT}"
+
+          git checkout -b "$BRANCH"
+
+          # Clean up release-as from both configs (don't update manifest - release-please calculates version from tags)
+          if jq -e 'has("release-as")' .github/release-please-config.json > /dev/null 2>&1; then
+            jq 'del(."release-as")' .github/release-please-config.json > tmp.json
+            mv tmp.json .github/release-please-config.json
+          fi
+          if jq -e 'has("release-as")' .github/release-please-config-rc.json > /dev/null 2>&1; then
+            jq 'del(."release-as")' .github/release-please-config-rc.json > tmp.json
+            mv tmp.json .github/release-please-config-rc.json
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "chore: bootstrap v$NEXT RC cycle after v${{ steps.next-version.outputs.current }} stable release"
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore: bootstrap v$NEXT development cycle" \
+            --body "## Summary
+
+          Bootstraps the next development cycle after stable release v${{ steps.next-version.outputs.current }}.
+
+          ### What this PR does
+          - Cleans up \`release-as\` from config files
+
+          ### What happens when merged
+          - Release-please will create v${NEXT}-rc from conventional commits
+          - Subsequent releases: v${NEXT}-rc.1 → rc.2 → ... → v${NEXT} (stable)
+
+          ---
+          **Previous Stable:** v${{ steps.next-version.outputs.current }}
+          **Next Version:** $NEXT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

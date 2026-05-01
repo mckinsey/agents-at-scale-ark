@@ -98,7 +98,6 @@ describe('Dashboard Sections - enabledWhen', () => {
       expect(runtimeKeys).toContain('tools');
       expect(runtimeKeys).toContain('mcp');
       expect(runtimeKeys).toContain('a2a');
-      expect(runtimeKeys).toContain('services');
     });
   });
 
