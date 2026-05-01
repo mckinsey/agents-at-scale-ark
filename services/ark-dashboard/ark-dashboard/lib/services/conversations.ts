@@ -63,6 +63,8 @@ export const conversationsService = {
         let participantType: ParticipantType = 'agent';
         if (firstQuery.team) {
           participantType = 'team';
+        } else if (firstQuery.agent) {
+          participantType = 'agent';
         } else if (firstQuery.tool) {
           participantType = 'tool';
         }

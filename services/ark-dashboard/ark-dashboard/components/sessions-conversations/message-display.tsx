@@ -27,6 +27,37 @@ interface Props {
   readonly isProcessing: boolean;
 }
 
+function enhanceMessagesWithToolResults(messages: any[]): any[] {
+  // Build a map of tool_call_id -> tool result content
+  const toolResults = new Map<string, string>();
+  messages.forEach(msg => {
+    if (msg.message?.role === 'tool' && msg.message?.tool_call_id) {
+      toolResults.set(msg.message.tool_call_id, msg.message.content);
+    }
+  });
+
+  // Filter out tool messages and enhance tool_calls with results
+  return messages
+    .filter(msg => msg.message?.role !== 'tool')  // Skip tool response messages
+    .map(msg => {
+      // If message has tool_calls, add results to them
+      if (msg.message?.tool_calls && Array.isArray(msg.message.tool_calls)) {
+        const enhancedToolCalls = msg.message.tool_calls.map((tc: any) => ({
+          ...tc,
+          result: toolResults.get(tc.id) || tc.result  // Use existing result if no match
+        }));
+        return {
+          ...msg,
+          message: {
+            ...msg.message,
+            tool_calls: enhancedToolCalls
+          }
+        };
+      }
+      return msg;
+    });
+}
+
 function renderMessageContent(
   isTemporary: boolean,
   messages: unknown[] | undefined,
@@ -35,11 +66,16 @@ function renderMessageContent(
   messagesEndRef: React.RefObject<HTMLDivElement | null>,
   isProcessing: boolean
 ) {
-  const hasBackendMessages = messages && messages.length > 0;
+  // Process messages to enhance tool calls with results and filter out tool response messages
+  const processedMessages = messages && messages.length > 0
+    ? enhanceMessagesWithToolResults(messages as any[])
+    : [];
+
+  const hasBackendMessages = processedMessages.length > 0;
 
   const backendUserMessages = hasBackendMessages
     ? new Set(
-        messages
+        processedMessages
           .filter((msg: any) => msg.message.role === 'user')
           .map((msg: any) => msg.message.content?.trim())
       )
@@ -67,10 +103,10 @@ function renderMessageContent(
   if (hasBackendMessages || hasPendingMessages) {
     return (
       <>
-        {hasBackendMessages && messages.map((msg: any) => (
+        {hasBackendMessages && processedMessages.map((msg: any) => (
           <SessionMessage
             key={`${msg.query_id}-${msg.sequence}`}
-            role={msg.message.role === 'tool' ? 'system' : msg.message.role}
+            role={msg.message.role}
             content={msg.message.content || ''}
             toolCalls={msg.message.tool_calls}
             sender={msg.message.name}

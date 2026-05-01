@@ -127,7 +127,7 @@ export default function SessionDetailPage({ params }: Props) {
   };
 
   const getStatusClassName = (status: string) => {
-    if (status === 'error') return 'border-red-500 text-red-500';
+    if (status === 'error') return 'border-red-500 text-white';
     if (status === 'active') return 'border-blue-500 text-blue-500';
     return 'border-border text-muted-foreground'; // idle
   };
