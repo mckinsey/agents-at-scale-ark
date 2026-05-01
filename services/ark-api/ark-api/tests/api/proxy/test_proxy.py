@@ -34,6 +34,79 @@ class TestInternalProxy(unittest.TestCase):
         self.assertEqual(result_url, "http://test-server:8080")
         self.assertEqual(headers, {})
 
+
+class TestProxyRequestFunction(unittest.TestCase):
+    """Test cases for _proxy_request function."""
+
+    @patch("ark_api.api.v1.proxy.proxy.httpx.AsyncClient")
+    async def test_proxy_request_with_body_and_params(self, mock_httpx_client):
+        """Test _proxy_request with request body and query params."""
+        from ark_api.api.v1.proxy.proxy import _proxy_request
+        from fastapi import Request
+
+        mock_request = AsyncMock(spec=Request)
+        mock_request.method = "POST"
+        mock_request.headers = {"content-type": "application/json", "user-agent": "test"}
+        mock_request.query_params = {"key": "value", "foo": "bar"}
+        mock_request.body = AsyncMock(return_value=b'{"data": "test"}')
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.content = b'{"result": "success"}'
+        mock_response.headers = {"content-type": "application/json"}
+
+        mock_http_client = AsyncMock()
+        mock_http_client.__aenter__.return_value = mock_http_client
+        mock_http_client.__aexit__.return_value = None
+        mock_http_client.request = AsyncMock(return_value=mock_response)
+        mock_httpx_client.return_value = mock_http_client
+
+        result = await _proxy_request("http://test-service:8080/api", mock_request, {"X-Custom": "header"})
+
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.body, b'{"result": "success"}')
+
+        mock_http_client.request.assert_called_once()
+        call_args = mock_http_client.request.call_args
+        self.assertEqual(call_args.kwargs["method"], "POST")
+        self.assertEqual(call_args.kwargs["url"], "http://test-service:8080/api")
+        self.assertIn("X-Custom", call_args.kwargs["headers"])
+        self.assertEqual(call_args.kwargs["headers"]["X-Custom"], "header")
+        self.assertEqual(call_args.kwargs["content"], b'{"data": "test"}')
+        self.assertEqual(call_args.kwargs["params"], {"key": "value", "foo": "bar"})
+
+    @patch("ark_api.api.v1.proxy.proxy.httpx.AsyncClient")
+    async def test_proxy_request_without_body(self, mock_httpx_client):
+        """Test _proxy_request without request body."""
+        from ark_api.api.v1.proxy.proxy import _proxy_request
+        from fastapi import Request
+
+        mock_request = AsyncMock(spec=Request)
+        mock_request.method = "GET"
+        mock_request.headers = {"accept": "application/json"}
+        mock_request.query_params = {}
+        mock_request.body = AsyncMock(return_value=b'')
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.content = b'{"status": "ok"}'
+        mock_response.headers = {"content-type": "application/json"}
+
+        mock_http_client = AsyncMock()
+        mock_http_client.__aenter__.return_value = mock_http_client
+        mock_http_client.__aexit__.return_value = None
+        mock_http_client.request = AsyncMock(return_value=mock_response)
+        mock_httpx_client.return_value = mock_http_client
+
+        result = await _proxy_request("http://test-service:8080", mock_request)
+
+        self.assertEqual(result.status_code, 200)
+
+        mock_http_client.request.assert_called_once()
+        call_args = mock_http_client.request.call_args
+        self.assertEqual(call_args.kwargs["method"], "GET")
+        self.assertIsNone(call_args.kwargs["content"])
+
 class TestA2AProxyEndpoint(unittest.TestCase):
     """Test cases for the /proxy/a2a endpoint."""
 
