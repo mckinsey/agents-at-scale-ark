@@ -5,7 +5,7 @@ import { useGetMessages } from '@/lib/services/conversations-hooks';
 import type { Conversation } from '@/lib/services/conversations';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { ChatMessage } from '@/components/chat/chat-message';
+import { SessionMessage } from './session-message';
 import { Bot, Users, Hammer } from 'lucide-react';
 import { stripNamespace } from '@/lib/utils/participant';
 
@@ -68,18 +68,17 @@ function renderMessageContent(
     return (
       <>
         {hasBackendMessages && messages.map((msg: any) => (
-          <ChatMessage
+          <SessionMessage
             key={`${msg.query_id}-${msg.sequence}`}
             role={msg.message.role === 'tool' ? 'system' : msg.message.role}
             content={msg.message.content || ''}
-            queryName={msg.query_id}
             toolCalls={msg.message.tool_calls}
             sender={msg.message.name}
             timestamp={msg.created_at || msg.timestamp}
           />
         ))}
         {hasPendingMessages && uniquePendingMessages.map((msg, idx) => (
-          <ChatMessage
+          <SessionMessage
             key={`pending-${msg.timestamp}-${idx}`}
             role="user"
             content={msg.content}
@@ -168,11 +167,11 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
 
   return (
     <div className="min-h-0 flex flex-1 flex-col">
-      <div className="bg-muted p-4">
+      <div className="border-b border-border bg-muted p-4">
         <div className="flex items-center gap-2">
           {getParticipantIcon(participantType)}
           <span className="font-semibold">{stripNamespace(participantName)}</span>
-          <Badge variant="outline" className="capitalize">{participantType}</Badge>
+          <Badge className="border-0 bg-muted/50 capitalize text-muted-foreground">{participantType}</Badge>
         </div>
       </div>
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
