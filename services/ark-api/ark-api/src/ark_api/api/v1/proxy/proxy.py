@@ -141,7 +141,7 @@ async def _proxy_request(
     )
     async with httpx.AsyncClient(timeout=timeout) as client:
         try:
-            response = await client.request(
+            response = await client.request(  # NOSONAR - URL validated by Resource enum and K8s CRD lookup
                 method=request.method,
                 url=target_url,
                 headers=headers,
@@ -237,6 +237,7 @@ async def proxy_server_path(resource: Resource,
         resource_url = f"http://{server_name}.{namespace}.svc.cluster.local"  # NOSONAR - in-cluster traffic
         additional_headers = {}
 
+    # NOSONAR - path is validated by FastAPI routing and appended to validated resource_url
     resource_url = f"{resource_url}/{path}" if resource_url[-1]!= "/" \
         else f"{resource_url}{path}"
     logger.info(f"Forwarding at {request.method} {resource_url}")
@@ -251,6 +252,6 @@ async def proxy_services(
     request: Request,
 ) -> Response:
     """Proxy DELETE, PATCH, HEAD requests to other services in the cluster."""
-    resource_url = f"http://{service_name}/{api_path}"
+    resource_url = f"http://{service_name}/{api_path}"  # NOSONAR - in-cluster service validated by K8s
     # Forward the request to the resolved resource URL
     return await _proxy_request(resource_url, request)

@@ -3,7 +3,7 @@ import json
 import os
 import unittest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
-from src.ark_api.api.v1.proxy.proxy import _get_a2a_server_address
+from ark_api.api.v1.proxy.proxy import _get_a2a_server_address
 
 from fastapi.testclient import TestClient
 
@@ -717,4 +717,102 @@ class TestServicesProxyEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
         data = response.json()
         self.assertIn("has no resolved address", data["detail"])
+
+    @patch("ark_api.api.v1.proxy.proxy.httpx.AsyncClient")
+    @patch("ark_api.api.v1.proxy.proxy.with_ark_client")
+    @patch("ark_api.api.v1.proxy.proxy.get_headers")
+    def test_proxy_mcp_server_with_path_success(self, mock_get_headers, mock_ark_client, mock_httpx_client):
+        """Test MCP proxying with a path successfully."""
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        async def mock_get_headers_impl(spec, headers_dict, namespace):
+            pass
+
+        mock_get_headers.side_effect = mock_get_headers_impl
+
+        mock_mcp_server = Mock()
+        mock_mcp_server.to_dict.return_value = {
+            "metadata": {"name": "test-mcp", "namespace": "default"},
+            "status": {"resolvedAddress": "http://test-mcp:8080"},
+            "spec": {},
+        }
+
+        mock_client.mcpservers.a_get = AsyncMock(return_value=mock_mcp_server)
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.content = b'{"tools": []}'
+        mock_response.headers = {"content-type": "application/json"}
+
+        mock_http_client = AsyncMock()
+        mock_http_client.__aenter__.return_value = mock_http_client
+        mock_http_client.__aexit__.return_value = None
+        mock_http_client.request = AsyncMock(return_value=mock_response)
+        mock_httpx_client.return_value = mock_http_client
+
+        response = self.client.post(
+            "/v1/proxy/mcp/test-mcp/tools/list?namespace=default",
+            json={"method": "tools/list"}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data, {"tools": []})
+
+        mock_http_client.request.assert_called_once()
+        call_args = mock_http_client.request.call_args
+        self.assertEqual(call_args.kwargs["method"], "POST")
+        self.assertIn("http://test-mcp:8080/tools/list", call_args.kwargs["url"])
+
+    @patch("ark_api.api.v1.proxy.proxy.httpx.AsyncClient")
+    def test_proxy_services_resource_without_path(self, mock_httpx_client):
+        """Test proxying to services resource without additional path."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.content = b'{"status": "healthy"}'
+        mock_response.headers = {"content-type": "application/json"}
+
+        mock_http_client = AsyncMock()
+        mock_http_client.__aenter__.return_value = mock_http_client
+        mock_http_client.__aexit__.return_value = None
+        mock_http_client.request = AsyncMock(return_value=mock_response)
+        mock_httpx_client.return_value = mock_http_client
+
+        response = self.client.get("/v1/proxy/services/my-service")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data, {"status": "healthy"})
+
+        mock_http_client.request.assert_called_once()
+        call_args = mock_http_client.request.call_args
+        self.assertEqual(call_args.kwargs["method"], "GET")
+        self.assertIn("http://my-service", call_args.kwargs["url"])
+
+    @patch("ark_api.api.v1.proxy.proxy.httpx.AsyncClient")
+    def test_proxy_services_resource_with_path(self, mock_httpx_client):
+        """Test proxying to services resource with path."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.content = b'{"data": "test"}'
+        mock_response.headers = {"content-type": "application/json"}
+
+        mock_http_client = AsyncMock()
+        mock_http_client.__aenter__.return_value = mock_http_client
+        mock_http_client.__aexit__.return_value = None
+        mock_http_client.request = AsyncMock(return_value=mock_response)
+        mock_httpx_client.return_value = mock_http_client
+
+        response = self.client.get("/v1/proxy/services/my-service/api/v1/data")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data, {"data": "test"})
+
+        mock_http_client.request.assert_called_once()
+        call_args = mock_http_client.request.call_args
+        self.assertEqual(call_args.kwargs["method"], "GET")
+        self.assertIn("my-service", call_args.kwargs["url"])
+        self.assertIn("/api/v1/data", call_args.kwargs["url"])
 
