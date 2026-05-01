@@ -500,11 +500,9 @@ class TestServicesProxyEndpoint(unittest.TestCase):
         if "content-length" in response_headers:
             self.assertNotIn("transfer-encoding", response_headers)
 
-    @patch('ark_api.api.v1.proxy.proxy.get_context')
     @patch('httpx.AsyncClient.request')
-    def test_proxy_delete_request_success(self, mock_request, mock_get_context):
+    def test_proxy_delete_request_success(self, mock_request):
         """Test DELETE request proxying to a service."""
-        mock_get_context.return_value = {"namespace": "default"}
         mock_response = AsyncMock()
         mock_response.status_code = 200
         mock_response.headers = {"content-type": "application/json"}
@@ -517,13 +515,11 @@ class TestServicesProxyEndpoint(unittest.TestCase):
         mock_request.assert_called_once()
         call_args = mock_request.call_args
         self.assertEqual(call_args.kwargs["method"], "DELETE")
-        self.assertIn("http://file-gateway.default.svc.cluster.local/files/test.txt", call_args.kwargs["url"]) 
+        self.assertIn("http://file-gateway/files/test.txt", call_args.kwargs["url"]) 
 
-    @patch('ark_api.api.v1.proxy.proxy.get_context')
     @patch('httpx.AsyncClient.request')
-    def test_proxy_patch_request_success(self, mock_request, mock_get_context):
+    def test_proxy_patch_request_success(self, mock_request):
         """Test PATCH request proxying to a service."""
-        mock_get_context.return_value = {"namespace": "default"}
         mock_response = AsyncMock()
         mock_response.status_code = 200
         mock_response.headers = {"content-type": "application/json"}
@@ -536,13 +532,11 @@ class TestServicesProxyEndpoint(unittest.TestCase):
         mock_request.assert_called_once()
         call_args = mock_request.call_args
         self.assertEqual(call_args.kwargs["method"], "PATCH")
-        self.assertIn("http://file-gateway.default.svc.cluster.local/files/test.txt", call_args.kwargs["url"]) 
+        self.assertIn("http://file-gateway/files/test.txt", call_args.kwargs["url"]) 
 
-    @patch('ark_api.api.v1.proxy.proxy.get_context')
     @patch('httpx.AsyncClient.request')
-    def test_proxy_head_request_success(self, mock_request, mock_get_context):
+    def test_proxy_head_request_success(self, mock_request):
         """Test HEAD request proxying to a service."""
-        mock_get_context.return_value = {"namespace": "default"}
         mock_response = AsyncMock()
         mock_response.status_code = 200
         mock_response.headers = {"content-type": "application/json"}
@@ -555,7 +549,7 @@ class TestServicesProxyEndpoint(unittest.TestCase):
         mock_request.assert_called_once()
         call_args = mock_request.call_args
         self.assertEqual(call_args.kwargs["method"], "HEAD")
-        self.assertIn("http://file-gateway.default.svc.cluster.local/files/test.txt", call_args.kwargs["url"]) 
+        self.assertIn("http://file-gateway/files/test.txt", call_args.kwargs["url"]) 
 
     def test_invalid_resource_returns_422(self):
         """Requests to invalid resource types should return 422 from FastAPI."""
@@ -765,9 +759,11 @@ class TestServicesProxyEndpoint(unittest.TestCase):
         self.assertEqual(call_args.kwargs["method"], "POST")
         self.assertIn("http://test-mcp:8080/tools/list", call_args.kwargs["url"])
 
+    @patch('ark_api.api.v1.proxy.proxy.get_context')
     @patch("ark_api.api.v1.proxy.proxy.httpx.AsyncClient")
-    def test_proxy_services_resource_without_path(self, mock_httpx_client):
+    def test_proxy_services_resource_without_path(self, mock_httpx_client, mock_get_context):
         """Test proxying to services resource without additional path."""
+        mock_get_context.return_value = {"namespace": "default"}
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.content = b'{"status": "healthy"}'
@@ -790,9 +786,11 @@ class TestServicesProxyEndpoint(unittest.TestCase):
         self.assertEqual(call_args.kwargs["method"], "GET")
         self.assertIn("http://my-service", call_args.kwargs["url"])
 
+    @patch('ark_api.api.v1.proxy.proxy.get_context')
     @patch("ark_api.api.v1.proxy.proxy.httpx.AsyncClient")
-    def test_proxy_services_resource_with_path(self, mock_httpx_client):
+    def test_proxy_services_resource_with_path(self, mock_httpx_client, mock_get_context):
         """Test proxying to services resource with path."""
+        mock_get_context.return_value = {"namespace": "default"}
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.content = b'{"data": "test"}'
