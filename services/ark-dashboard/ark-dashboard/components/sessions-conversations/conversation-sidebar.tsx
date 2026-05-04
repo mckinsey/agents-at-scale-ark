@@ -66,7 +66,7 @@ export function ConversationSidebar({ conversations, selectedId, onSelect }: Pro
 
             {conv.errorCount > 0 && (
               <div className="flex w-full">
-                <Badge variant="outline" className="rounded border-red-500 text-white text-xs px-1.5 py-0.5">
+                <Badge variant="destructive" className="rounded text-xs px-1.5 py-0.5">
                   {conv.errorCount}
                 </Badge>
               </div>

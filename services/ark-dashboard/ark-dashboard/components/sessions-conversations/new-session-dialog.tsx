@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -145,35 +146,15 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
     return (
       <label
         key={participant.name}
-        className={`flex cursor-pointer items-center gap-3 rounded-md border p-3 transition-colors hover:bg-accent ${
-          isSelected ? 'bg-accent border-primary' : ''
-        }`}
+        className="flex cursor-pointer items-center gap-3 rounded px-2 py-1"
       >
         <input
-          type="radio"
-          name="participant"
-          value={participant.name}
+          type="checkbox"
           checked={isSelected}
           onChange={() => handleSelect(participant.name)}
-          className="sr-only"
+          className="size-4 rounded border-2 border-muted-foreground"
         />
-        <div className={`size-4 rounded-full border-2 flex items-center justify-center ${
-          isSelected ? 'border-primary' : 'border-muted-foreground'
-        }`}>
-          {isSelected && <div className="size-2 rounded-full bg-primary" />}
-        </div>
-        {getParticipantIcon(participant.type)}
-        <div className="flex-1 space-y-1">
-          <div className="font-medium">{participant.name}</div>
-          {participant.description && (
-            <div className="line-clamp-1 text-xs text-muted-foreground">
-              {participant.description}
-            </div>
-          )}
-        </div>
-        <Badge variant="outline" className="capitalize">
-          {participant.type}
-        </Badge>
+        <span className="text-sm">{participant.name}</span>
       </label>
     );
   };
@@ -199,10 +180,10 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
       <div className="max-h-[400px] space-y-4 overflow-y-auto">
         {groupedParticipants.agentsGroup.length > 0 && (
           <div className="space-y-2">
-            <h3 className="text-sm font-medium text-muted-foreground">
+            <h3 className="text-sm font-medium text-foreground">
               Agents ({groupedParticipants.agentsGroup.length})
             </h3>
-            <div className="space-y-1">
+            <div className="space-y-1 rounded-lg bg-white/5 p-3">
               {groupedParticipants.agentsGroup.map(renderParticipantItem)}
             </div>
           </div>
@@ -210,10 +191,10 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
 
         {groupedParticipants.teamsGroup.length > 0 && (
           <div className="space-y-2">
-            <h3 className="text-sm font-medium text-muted-foreground">
+            <h3 className="text-sm font-medium text-foreground">
               Teams ({groupedParticipants.teamsGroup.length})
             </h3>
-            <div className="space-y-1">
+            <div className="space-y-1 rounded-lg bg-white/5 p-3">
               {groupedParticipants.teamsGroup.map(renderParticipantItem)}
             </div>
           </div>
@@ -221,10 +202,10 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
 
         {groupedParticipants.toolsGroup.length > 0 && (
           <div className="space-y-2">
-            <h3 className="text-sm font-medium text-muted-foreground">
+            <h3 className="text-sm font-medium text-foreground">
               Tools ({groupedParticipants.toolsGroup.length})
             </h3>
-            <div className="space-y-1">
+            <div className="space-y-1 rounded-lg bg-white/5 p-3">
               {groupedParticipants.toolsGroup.map(renderParticipantItem)}
             </div>
           </div>
@@ -235,22 +216,30 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-3xl" showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>Create new session</DialogTitle>
-          <DialogDescription>
-            Select a participant to start a session (agent, team, or tool)
-          </DialogDescription>
+          <div className="flex items-start justify-between">
+            <div className="flex flex-col gap-2">
+              <DialogTitle>Create new session</DialogTitle>
+              <DialogDescription>
+                Select one participant to start a session
+              </DialogDescription>
+            </div>
+            <DialogClose className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
+              <X className="size-4" />
+              <span className="sr-only">Close</span>
+            </DialogClose>
+          </div>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <div className="relative border-b border-border pb-2">
+            <Search className="absolute left-2 top-[12px] size-3.5 text-muted-foreground" />
             <Input
-              placeholder="Search participants..."
+              placeholder="Search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
+              className="pl-9 !h-9 !border-0 !bg-transparent !shadow-none focus-visible:!ring-0 focus-visible:!ring-offset-0"
               autoFocus
             />
           </div>
@@ -272,21 +261,16 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
         <DialogFooter className="border-t pt-4">
           <div className="flex w-full items-center justify-between">
             <span className="text-sm text-muted-foreground">
-              {selectedParticipant ? (
-                <>
-                  Selected: <span className="font-medium">{selectedParticipant}</span>
-                </>
-              ) : (
-                'No participant selected'
-              )}
+              {selectedParticipant ? '1 participant selected' : '0 participants selected'}
             </span>
             <div className="flex gap-2">
-              <Button variant="ghost" onClick={handleClose}>
+              <Button variant="outline" onClick={handleClose} className="!border-white/30 !bg-black/10">
                 Cancel
               </Button>
               <Button
                 onClick={handleCreate}
                 disabled={!selectedParticipant}
+                className="disabled:!bg-white/5 disabled:!text-white/40 disabled:!opacity-100"
               >
                 Create
               </Button>

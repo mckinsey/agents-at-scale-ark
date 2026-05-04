@@ -19,6 +19,7 @@ interface Props {
   readonly pendingMessages: Array<{ role: 'user'; content: string; timestamp: string }>;
   readonly onClearPending: () => void;
   readonly isProcessing: boolean;
+  readonly showToolCalls: boolean;
 }
 
 function enhanceMessagesWithToolResults(messages: any[]): any[] {
@@ -58,7 +59,8 @@ function renderMessageContent(
   pendingMessages: Array<{ role: 'user'; content: string; timestamp: string }>,
   participantName: string,
   messagesEndRef: React.RefObject<HTMLDivElement | null>,
-  isProcessing: boolean
+  isProcessing: boolean,
+  showToolCalls: boolean
 ) {
   // Process messages to enhance tool calls with results and filter out tool response messages
   const processedMessages = messages && messages.length > 0
@@ -105,6 +107,7 @@ function renderMessageContent(
             toolCalls={msg.message.tool_calls}
             sender={msg.message.name}
             timestamp={msg.created_at || msg.timestamp}
+            showToolCalls={showToolCalls}
           />
         ))}
         {hasPendingMessages && uniquePendingMessages.map((msg, idx) => (
@@ -146,7 +149,7 @@ function renderMessageContent(
   );
 }
 
-export function MessageDisplay({ conversationId, sessionId, conversation, pendingMessages, onClearPending, isProcessing }: Props) {
+export function MessageDisplay({ conversationId, sessionId, conversation, pendingMessages, onClearPending, isProcessing, showToolCalls }: Props) {
   const { data: messages, isLoading } = useGetMessages(sessionId, conversationId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -199,13 +202,13 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
     <div className="min-h-0 flex flex-1 flex-col">
       <div className="border-b border-border bg-muted p-4">
         <div className="flex items-center gap-2">
-          {getParticipantIcon(participantType, { size: '5' })}
+          {getParticipantIcon(participantType, { size: '4' })}
           <span className="font-semibold">{stripNamespace(participantName)}</span>
           <Badge className="border-0 bg-muted/50 capitalize text-muted-foreground">{participantType}</Badge>
         </div>
       </div>
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
-        {renderMessageContent(isTemporary, messages, pendingMessages, participantName, messagesEndRef, isProcessing)}
+        {renderMessageContent(isTemporary, messages, pendingMessages, participantName, messagesEndRef, isProcessing, showToolCalls)}
       </div>
     </div>
   );

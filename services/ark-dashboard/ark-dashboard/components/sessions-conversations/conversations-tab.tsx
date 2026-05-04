@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useAtom } from 'jotai';
 import { useRouter } from 'next/navigation';
-import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, Send } from 'lucide-react';
 import { useListConversations } from '@/lib/services/conversations-hooks';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
 import type { Conversation } from '@/lib/services/conversations';
@@ -36,6 +36,7 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
   const [processingStateMap, setProcessingStateMap] = useAtom(sessionProcessingStateAtom);
   const [hasSentMessage, setHasSentMessage] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [showToolCalls, setShowToolCalls] = useState(false);
 
   // Skip API call for new sessions before first message is sent
   const isNewSession = !!initialParticipant && !hasSentMessage;
@@ -195,7 +196,7 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
           </div>
 
           {selectedConversationId ? (
-            <div className="flex h-full flex-col overflow-hidden">
+            <div className="flex h-full flex-col overflow-hidden border-r border-border">
               <MessageDisplay
                 conversationId={selectedConversationId}
                 sessionId={sessionId}
@@ -203,6 +204,7 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
                 pendingMessages={pendingMessagesMap[selectedConversationId] || []}
                 onClearPending={() => handleClearPendingMessages(selectedConversationId)}
                 isProcessing={processingStateMap[selectedConversationId] || false}
+                showToolCalls={showToolCalls}
               />
               <ChatInput
                 conversationId={selectedConversationId}
@@ -211,17 +213,34 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
                 onAddPendingMessage={handleAddPendingMessage}
                 onSetProcessing={handleSetProcessing}
                 onEnableQueries={handleEnableQueries}
+                showToolCalls={showToolCalls}
+                onShowToolCallsChange={setShowToolCalls}
               />
             </div>
           ) : (
-            <div className="flex h-full flex-col">
-              <div className="flex items-center justify-between bg-muted p-4">
+            <div className="flex h-full flex-col overflow-hidden border-r border-border">
+              <div className="flex items-center justify-between border-b border-border bg-muted p-4">
                 <h3 className="text-sm font-medium">No participant selected</h3>
               </div>
-              <div className="flex items-center justify-center p-4">
+              <div className="flex flex-1 items-center justify-center p-4">
                 <span className="rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground">
                   Create a conversation to start
                 </span>
+              </div>
+              <div className="border-b border-r border-t border-border">
+                <div className="relative flex items-center gap-2 py-6 pl-6 pr-8 opacity-50 pointer-events-none">
+                  <div className="flex-1 min-h-[48px] resize-none border-0 bg-transparent pt-6 pb-3 pr-16 text-sm text-muted-foreground">
+                    Select a conversation to start messaging
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    disabled
+                    className="absolute right-10 h-9 w-9"
+                  >
+                    <Send className="size-4" />
+                  </Button>
+                </div>
               </div>
             </div>
           )}

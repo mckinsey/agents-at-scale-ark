@@ -103,14 +103,18 @@ export default function SessionDetailPage({ params }: Props) {
     );
   }
 
-  const sessionDate = new Date(session.createdAt).toLocaleString('en-US', {
+  const date = new Date(session.createdAt);
+  const dateStr = date.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
+  });
+  const timeStr = date.toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
     hour12: true,
   });
+  const sessionDate = `${dateStr} ${timeStr}`;
 
   const participants = session.participants || [];
   const conversationCount = session.conversationCount || 0;

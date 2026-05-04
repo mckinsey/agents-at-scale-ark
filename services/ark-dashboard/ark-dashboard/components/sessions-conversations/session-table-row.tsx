@@ -44,9 +44,9 @@ export function SessionTableRow({ session, isSelected, onSelect }: Props) {
           <div className="text-base font-semibold">
             {session.sessionId}
             {session.errorCount > 0 && (
-              <span className="ml-2 inline-flex h-5 items-center rounded border border-red-500 px-1.5 text-xs text-white align-middle">
+              <Badge variant="destructive" className="ml-2 inline-flex h-5 items-center rounded px-1.5 text-xs align-middle">
                 {session.errorCount}
-              </span>
+              </Badge>
             )}
           </div>
           <div className="text-xs text-muted-foreground">{sessionTime}</div>
@@ -64,7 +64,7 @@ export function SessionTableRow({ session, isSelected, onSelect }: Props) {
           </div>
         ))}
         {session.participants.length > 3 && (
-          <span className="flex size-6 items-center justify-center rounded-full bg-white text-xs font-medium text-black">
+          <span className="flex size-6 items-center justify-center rounded-full bg-muted text-xs font-medium text-foreground">
             {session.participants.length - 3}
           </span>
         )}

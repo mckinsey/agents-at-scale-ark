@@ -10,6 +10,7 @@ interface SessionMessageProps {
   sender?: string;
   timestamp?: string;
   className?: string;
+  showToolCalls?: boolean;
 }
 
 export function SessionMessage({
@@ -19,12 +20,18 @@ export function SessionMessage({
   sender,
   timestamp,
   className,
+  showToolCalls = false,
 }: Readonly<SessionMessageProps>) {
   const isUser = role === 'user';
   const isAssistantWithoutName = role === 'assistant' && !sender;
 
   const hasContent = content && content.trim().length > 0;
   const hasToolCalls = toolCalls && toolCalls.length > 0;
+
+  // Hide messages that only have tool calls when showToolCalls is false
+  if (!hasContent && hasToolCalls && !showToolCalls) {
+    return null;
+  }
 
   const containerClasses = `flex flex-col gap-2 ${isUser ? 'items-end' : 'items-start'} ${className || ''}`;
 
@@ -48,7 +55,7 @@ export function SessionMessage({
       );
     }
     // Assistant without name and no content - show bare tool calls if any
-    if (hasToolCalls) {
+    if (hasToolCalls && showToolCalls) {
       return (
         <div className={containerClasses}>
           <div className="flex w-full max-w-[80%] flex-col gap-3">
@@ -89,7 +96,7 @@ export function SessionMessage({
               </pre>
             </div>
           )}
-          {hasToolCalls && (
+          {hasToolCalls && showToolCalls && (
             <div className="flex w-full flex-col gap-3">
               {toolCalls.map(toolCall => (
                 <ToolCall key={toolCall.id} toolCall={toolCall} variant="tree" />
