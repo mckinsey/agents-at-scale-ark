@@ -2,7 +2,7 @@
 
 import { use, useMemo, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ChevronLeft, Bot, MessageSquare, Users, Wrench } from 'lucide-react';
+import { ChevronLeft, MessageSquare, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
@@ -12,7 +12,9 @@ import { LogsTab } from '@/components/sessions-conversations/logs-tab';
 import type { BrokerSession } from '@/lib/services/broker-sessions';
 import { generateUUID } from '@/lib/utils/uuid';
 import { stripNamespace } from '@/lib/utils/participant';
+import { getParticipantIcon } from '@/lib/utils/participant-icon';
 import { cn } from '@/lib/utils';
+import type { ParticipantType } from '@/lib/services/conversations';
 
 interface Props {
   readonly params: Promise<{
@@ -110,13 +112,6 @@ export default function SessionDetailPage({ params }: Props) {
     hour12: true,
   });
 
-  function getParticipantIcon(type: string) {
-    if (type === 'agent') return <Bot className="size-4" />;
-    if (type === 'team') return <Users className="size-4" />;
-    if (type === 'tool') return <Wrench className="size-4" />;
-    return <Bot className="size-4" />;
-  }
-
   const participants = session.participants || [];
   const conversationCount = session.conversationCount || 0;
   const errorCount = session.errorCount || 0;
@@ -173,7 +168,7 @@ export default function SessionDetailPage({ params }: Props) {
                   key={p.id}
                   className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm"
                 >
-                  {getParticipantIcon(p.type)}
+                  {getParticipantIcon(p.type as ParticipantType)}
                   <span>{stripNamespace(p.name)}</span>
                   {p.isActive && (
                     <span className="size-2 rounded-full bg-blue-500" />

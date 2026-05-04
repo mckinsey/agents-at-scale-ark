@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, Bot, Users, Wrench } from 'lucide-react';
+import { Search } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useParticipants } from '@/lib/services/participants-hooks';
+import { getParticipantIcon } from '@/lib/utils/participant-icon';
 import type { Participant } from '@/lib/services/participants';
 import type { Participant as SessionParticipant } from '@/lib/services/broker-sessions';
 import type { Conversation } from '@/lib/services/conversations';
@@ -22,13 +23,6 @@ interface Props {
   readonly sessionParticipants: SessionParticipant[];
   readonly selectedConversation: Conversation | null;
   readonly onSelectParticipant: (participant: Participant) => void;
-}
-
-function getParticipantIcon(type: 'agent' | 'team' | 'tool') {
-  if (type === 'agent') return <Bot className="size-4" />;
-  if (type === 'team') return <Users className="size-4" />;
-  if (type === 'tool') return <Wrench className="size-4" />;
-  return <Bot className="size-4" />;
 }
 
 export function NewConversationDialog({

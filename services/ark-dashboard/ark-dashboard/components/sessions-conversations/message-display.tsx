@@ -6,17 +6,11 @@ import type { Conversation } from '@/lib/services/conversations';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { SessionMessage } from './session-message';
-import { Bot, Users, Hammer } from 'lucide-react';
 import { stripNamespace } from '@/lib/utils/participant';
+import { getParticipantIcon } from '@/lib/utils/participant-icon';
 
 const FALLBACK_PARTICIPANT_NAME = 'Participant';
 const FALLBACK_PARTICIPANT_TYPE = 'agent';
-
-function getParticipantIcon(participantType?: 'agent' | 'team' | 'tool') {
-  if (participantType === 'team') return <Users className="size-5" />;
-  if (participantType === 'tool') return <Hammer className="size-5" />;
-  return <Bot className="size-5" />;
-}
 
 interface Props {
   readonly conversationId: string;
@@ -205,7 +199,7 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
     <div className="min-h-0 flex flex-1 flex-col">
       <div className="border-b border-border bg-muted p-4">
         <div className="flex items-center gap-2">
-          {getParticipantIcon(participantType)}
+          {getParticipantIcon(participantType, { size: '5' })}
           <span className="font-semibold">{stripNamespace(participantName)}</span>
           <Badge className="border-0 bg-muted/50 capitalize text-muted-foreground">{participantType}</Badge>
         </div>

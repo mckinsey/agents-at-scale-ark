@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, Bot, Users, Wrench } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   Dialog,
@@ -20,13 +20,13 @@ import { agentsService } from '@/lib/services/agents';
 import { teamsService } from '@/lib/services/teams';
 import { toolsService } from '@/lib/services/tools';
 import { generateUUID } from '@/lib/utils/uuid';
+import { getParticipantIcon } from '@/lib/utils/participant-icon';
+import type { ParticipantType } from '@/lib/services/conversations';
 
 interface Props {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
 }
-
-type ParticipantType = 'agent' | 'team' | 'tool';
 
 interface UnifiedParticipant {
   name: string;
@@ -35,13 +35,6 @@ interface UnifiedParticipant {
 }
 
 type TabFilter = 'all' | 'agents' | 'teams' | 'tools';
-
-function getParticipantIcon(type: ParticipantType) {
-  if (type === 'agent') return <Bot className="size-4" />;
-  if (type === 'team') return <Users className="size-4" />;
-  if (type === 'tool') return <Wrench className="size-4" />;
-  return <Bot className="size-4" />;
-}
 
 export function NewSessionDialog({ open, onOpenChange }: Props) {
   const router = useRouter();

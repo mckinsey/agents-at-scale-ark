@@ -1,7 +1,7 @@
 'use client';
 
 import { Bot, AlertCircle } from 'lucide-react';
-import { SessionToolCall, type ToolCallData } from './session-tool-call';
+import { ToolCall, type ToolCallData } from '@/components/chat/tool-call';
 
 interface SessionMessageProps {
   role: 'user' | 'assistant' | 'system';
@@ -53,7 +53,7 @@ export function SessionMessage({
         <div className={containerClasses}>
           <div className="flex w-full max-w-[80%] flex-col gap-3">
             {toolCalls.map(toolCall => (
-              <SessionToolCall key={toolCall.id} toolCall={toolCall} />
+              <ToolCall key={toolCall.id} toolCall={toolCall} variant="tree" />
             ))}
           </div>
         </div>
@@ -92,7 +92,7 @@ export function SessionMessage({
           {hasToolCalls && (
             <div className="flex w-full flex-col gap-3">
               {toolCalls.map(toolCall => (
-                <SessionToolCall key={toolCall.id} toolCall={toolCall} />
+                <ToolCall key={toolCall.id} toolCall={toolCall} variant="tree" />
               ))}
             </div>
           )}

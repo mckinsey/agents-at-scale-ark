@@ -1,22 +1,16 @@
 'use client';
 
 import { Badge } from '@/components/ui/badge';
-import { Bot, Users, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { stripNamespace } from '@/lib/utils/participant';
+import { getParticipantIcon } from '@/lib/utils/participant-icon';
 import type { BrokerSession } from '@/lib/services/broker-sessions';
+import type { ParticipantType } from '@/lib/services/conversations';
 
 interface Props {
   readonly session: BrokerSession;
   readonly isSelected: boolean;
   readonly onSelect: (sessionId: string) => void;
-}
-
-function getParticipantIcon(type: string) {
-  if (type === 'agent') return <Bot className="size-4" />;
-  if (type === 'team') return <Users className="size-4" />;
-  if (type === 'tool') return <Wrench className="size-4" />;
-  return <Bot className="size-4" />;
 }
 
 export function SessionTableRow({ session, isSelected, onSelect }: Props) {
@@ -65,7 +59,7 @@ export function SessionTableRow({ session, isSelected, onSelect }: Props) {
             key={p.id}
             className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs"
           >
-            {getParticipantIcon(p.type)}
+            {getParticipantIcon(p.type as ParticipantType)}
             <span>{stripNamespace(p.name)}</span>
           </div>
         ))}

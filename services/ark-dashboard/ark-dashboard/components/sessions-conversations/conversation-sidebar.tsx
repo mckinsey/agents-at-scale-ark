@@ -2,25 +2,16 @@
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { MessageSquare, Wrench, Clock, Bot, Users, Hammer } from 'lucide-react';
+import { MessageSquare, Wrench, Clock } from 'lucide-react';
 import type { Conversation } from '@/lib/services/conversations';
 import { cn } from '@/lib/utils';
 import { stripNamespace } from '@/lib/utils/participant';
+import { getParticipantIcon } from '@/lib/utils/participant-icon';
 
 interface Props {
   readonly conversations: Conversation[];
   readonly selectedId: string | null;
   readonly onSelect: (id: string) => void;
-}
-
-function getParticipantIcon(participantType?: 'agent' | 'team' | 'tool', name?: string) {
-  if (participantType === 'team') return <Users className="size-4" />;
-  if (participantType === 'tool') return <Hammer className="size-4" />;
-  if (participantType === 'agent') return <Bot className="size-4" />;
-
-  if (name?.includes('team')) return <Users className="size-4" />;
-  if (name?.includes('tool')) return <Hammer className="size-4" />;
-  return <Bot className="size-4" />;
 }
 
 function formatAbsoluteTime(timestamp: string): string {
@@ -31,19 +22,6 @@ function formatAbsoluteTime(timestamp: string): string {
     second: '2-digit',
     hour12: false
   });
-}
-
-function formatDurationPill(duration: string): string {
-  // Convert duration formats to simple minute format
-  if (duration === 'ongoing') return '0min';
-
-  // If already in format like "2 min" or "12min", return as is with normalization
-  if (duration.includes('min')) {
-    return duration.replace(' min', 'min');
-  }
-
-  // Otherwise return as is
-  return duration;
 }
 
 export function ConversationSidebar({ conversations, selectedId, onSelect }: Props) {
@@ -68,7 +46,7 @@ export function ConversationSidebar({ conversations, selectedId, onSelect }: Pro
             onClick={() => onSelect(conv.conversationId)}
           >
             <div className="flex w-full items-center gap-2">
-              {getParticipantIcon(conv.participantType, conv.name)}
+              {getParticipantIcon(conv.participantType, { name: conv.name })}
               <span className="flex-1 truncate text-base font-medium">{stripNamespace(conv.name)}</span>
               <span className="text-sm text-muted-foreground">
                 {formatAbsoluteTime(conv.startTime)}
