@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ark-apiserver
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ark-apiserver.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      {{- include "ark-apiserver.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ark-apiserver.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      containers:
+        - name: manager
+          image: {{ include "ark-apiserver.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --role=apiserver
+            - --leader-elect
+            - --metrics-bind-address=0
+            - --health-probe-bind-address=:8081
+          env:
+            - name: ENABLE_WEBHOOKS
+              value: "false"
+            - name: ARK_STORAGE_BACKEND
+              value: postgresql
+            - name: ARK_APISERVER_PORT
+              value: {{ .Values.apiserver.port | quote }}
+            - name: ARK_POSTGRES_HOST
+              value: {{ .Values.postgresql.host | quote }}
+            - name: ARK_POSTGRES_PORT
+              value: {{ .Values.postgresql.port | quote }}
+            - name: ARK_POSTGRES_DATABASE
+              value: {{ .Values.postgresql.database | quote }}
+            - name: ARK_POSTGRES_USER
+              value: {{ .Values.postgresql.user | quote }}
+            - name: ARK_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresql.passwordSecretName }}
+                  key: {{ .Values.postgresql.passwordSecretKey }}
+            - name: ARK_POSTGRES_SSL_MODE
+              value: {{ .Values.postgresql.sslMode | quote }}
+            {{- range $key, $value := .Values.extraEnv }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          ports:
+            - name: https
+              containerPort: {{ .Values.apiserver.port }}
+              protocol: TCP
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
