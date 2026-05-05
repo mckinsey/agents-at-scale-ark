@@ -87,32 +87,35 @@ describe('brokerSessionsService', () => {
       expect(apiClient.get).toHaveBeenCalledWith('/api/v1/broker/sessions?limit=10');
     });
 
-    it('should enrich session data with status from queries', async () => {
+    it('should handle session data from backend', async () => {
       const mockResponse = {
         items: [
           {
             sessionId: 'session-1',
             name: 'Test Session',
+            status: 'active',
+            errorCount: 0,
+            participants: [
+              {
+                id: 'p1',
+                name: 'test-agent',
+                type: 'agent',
+              },
+            ],
+            conversations: [
+              {
+                conversationId: 'conv-1',
+                name: 'test-agent',
+                participants: ['test-agent'],
+                messageCount: 2,
+                duration: '1m',
+                startTime: '2024-01-01T00:00:00Z',
+                participantType: 'agent',
+                errorCount: 0,
+              },
+            ],
             createdAt: '2024-01-01T00:00:00Z',
             lastActivity: '2024-01-01T01:00:00Z',
-            queries: {
-              'query-1': {
-                name: 'query-1',
-                agent: 'test-agent',
-                phase: 'done',
-                conversationId: 'conv-1',
-                createdAt: '2024-01-01T00:00:00Z',
-                lastActivity: '2024-01-01T00:30:00Z',
-              },
-              'query-2': {
-                name: 'query-2',
-                agent: 'test-agent',
-                phase: 'running',
-                conversationId: 'conv-1',
-                createdAt: '2024-01-01T00:30:00Z',
-                lastActivity: '2024-01-01T01:00:00Z',
-              },
-            },
           },
         ],
         total: 1,
@@ -132,32 +135,18 @@ describe('brokerSessionsService', () => {
       });
     });
 
-    it('should determine error status from last conversation', async () => {
+    it('should handle error status from backend', async () => {
       const mockResponse = {
         items: [
           {
             sessionId: 'session-1',
             name: 'Test Session',
+            status: 'error',
+            errorCount: 1,
+            participants: [],
+            conversations: [],
             createdAt: '2024-01-01T00:00:00Z',
             lastActivity: '2024-01-01T01:00:00Z',
-            queries: {
-              'query-1': {
-                name: 'query-1',
-                agent: 'test-agent',
-                phase: 'done',
-                conversationId: 'conv-1',
-                createdAt: '2024-01-01T00:00:00Z',
-                lastActivity: '2024-01-01T00:30:00Z',
-              },
-              'query-2': {
-                name: 'query-2',
-                agent: 'test-agent',
-                phase: 'error',
-                conversationId: 'conv-1',
-                createdAt: '2024-01-01T00:30:00Z',
-                lastActivity: '2024-01-01T01:00:00Z',
-              },
-            },
           },
         ],
         total: 1,
@@ -169,6 +158,7 @@ describe('brokerSessionsService', () => {
       const result = await brokerSessionsService.getSessions();
 
       expect(result.items[0].status).toBe('error');
+      expect(result.items[0].errorCount).toBe(1);
     });
 
     it('should handle empty response', async () => {
@@ -197,34 +187,29 @@ describe('brokerSessionsService', () => {
       });
     });
 
-    it('should determine participant types correctly', async () => {
+    it('should handle participant types from backend', async () => {
       const mockResponse = {
         items: [
           {
             sessionId: 'session-1',
             name: 'Test Session',
+            status: 'idle',
+            errorCount: 0,
+            participants: [
+              {
+                id: 'p1',
+                name: 'test-team',
+                type: 'team',
+              },
+              {
+                id: 'p2',
+                name: 'test-tool',
+                type: 'tool',
+              },
+            ],
+            conversations: [],
             createdAt: '2024-01-01T00:00:00Z',
             lastActivity: '2024-01-01T01:00:00Z',
-            queries: {
-              'query-1': {
-                name: 'query-1',
-                team: 'test-team',
-                targetType: 'team',
-                phase: 'done',
-                conversationId: 'conv-1',
-                createdAt: '2024-01-01T00:00:00Z',
-                lastActivity: '2024-01-01T00:30:00Z',
-              },
-              'query-2': {
-                name: 'query-2',
-                tool: 'test-tool',
-                targetType: 'tool',
-                phase: 'done',
-                conversationId: 'conv-2',
-                createdAt: '2024-01-01T00:30:00Z',
-                lastActivity: '2024-01-01T01:00:00Z',
-              },
-            },
           },
         ],
         total: 1,
@@ -281,63 +266,37 @@ describe('brokerSessionsService', () => {
       expect(result).toBeNull();
     });
 
-    it('should mark participant as active when query is running', async () => {
+    it('should calculate conversation count from conversations array', async () => {
       const mockSession = {
         sessionId: 'session-1',
         name: 'Test Session',
-        createdAt: '2024-01-01T00:00:00Z',
-        lastActivity: '2024-01-01T01:00:00Z',
-        queries: {
-          'query-1': {
-            name: 'query-1',
-            agent: 'test-agent',
-            phase: 'running',
+        status: 'idle',
+        errorCount: 0,
+        participants: [],
+        conversations: [
+          {
             conversationId: 'conv-1',
-            createdAt: '2024-01-01T00:00:00Z',
-            lastActivity: '2024-01-01T00:30:00Z',
+            name: 'test-agent',
+            participants: ['test-agent'],
+            messageCount: 2,
+            duration: '1m',
+            startTime: '2024-01-01T00:00:00Z',
+            participantType: 'agent',
+            errorCount: 0,
           },
-        },
-      };
-
-      vi.mocked(apiClient.get).mockResolvedValueOnce(mockSession);
-
-      const result = await brokerSessionsService.getSession('session-1');
-
-      expect(result?.participants[0].isActive).toBe(true);
-    });
-
-    it('should count conversations correctly', async () => {
-      const mockSession = {
-        sessionId: 'session-1',
-        name: 'Test Session',
-        createdAt: '2024-01-01T00:00:00Z',
-        lastActivity: '2024-01-01T01:00:00Z',
-        queries: {
-          'query-1': {
-            name: 'query-1',
-            agent: 'test-agent',
-            phase: 'done',
-            conversationId: 'conv-1',
-            createdAt: '2024-01-01T00:00:00Z',
-            lastActivity: '2024-01-01T00:30:00Z',
-          },
-          'query-2': {
-            name: 'query-2',
-            agent: 'test-agent',
-            phase: 'done',
+          {
             conversationId: 'conv-2',
-            createdAt: '2024-01-01T00:30:00Z',
-            lastActivity: '2024-01-01T01:00:00Z',
+            name: 'test-agent',
+            participants: ['test-agent'],
+            messageCount: 1,
+            duration: '30s',
+            startTime: '2024-01-01T00:30:00Z',
+            participantType: 'agent',
+            errorCount: 0,
           },
-          'query-3': {
-            name: 'query-3',
-            agent: 'test-agent',
-            phase: 'done',
-            conversationId: 'conv-1',
-            createdAt: '2024-01-01T00:30:00Z',
-            lastActivity: '2024-01-01T01:00:00Z',
-          },
-        },
+        ],
+        createdAt: '2024-01-01T00:00:00Z',
+        lastActivity: '2024-01-01T01:00:00Z',
       };
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockSession);
@@ -347,38 +306,16 @@ describe('brokerSessionsService', () => {
       expect(result?.conversationCount).toBe(2);
     });
 
-    it('should count errors correctly', async () => {
+    it('should handle error count from backend', async () => {
       const mockSession = {
         sessionId: 'session-1',
         name: 'Test Session',
+        status: 'error',
+        errorCount: 2,
+        participants: [],
+        conversations: [],
         createdAt: '2024-01-01T00:00:00Z',
         lastActivity: '2024-01-01T01:00:00Z',
-        queries: {
-          'query-1': {
-            name: 'query-1',
-            agent: 'test-agent',
-            phase: 'error',
-            conversationId: 'conv-1',
-            createdAt: '2024-01-01T00:00:00Z',
-            lastActivity: '2024-01-01T00:30:00Z',
-          },
-          'query-2': {
-            name: 'query-2',
-            agent: 'test-agent',
-            phase: 'error',
-            conversationId: 'conv-1',
-            createdAt: '2024-01-01T00:30:00Z',
-            lastActivity: '2024-01-01T01:00:00Z',
-          },
-          'query-3': {
-            name: 'query-3',
-            agent: 'test-agent',
-            phase: 'done',
-            conversationId: 'conv-1',
-            createdAt: '2024-01-01T01:00:00Z',
-            lastActivity: '2024-01-01T01:30:00Z',
-          },
-        },
       };
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockSession);

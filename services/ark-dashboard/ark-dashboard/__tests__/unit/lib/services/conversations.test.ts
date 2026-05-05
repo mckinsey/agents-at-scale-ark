@@ -30,25 +30,39 @@ describe('conversationsService', () => {
   });
 
   describe('getConversations', () => {
-    it('should fetch conversations from session queries', async () => {
+    it('should fetch conversations from backend', async () => {
       const mockSession = {
         sessionId: 'session-1',
+        conversations: [
+          {
+            conversationId: 'conv-1',
+            name: 'test-agent',
+            participants: ['test-agent'],
+            messageCount: 1,
+            duration: '30s',
+            startTime: '2024-01-01T00:00:00Z',
+            participantType: 'agent',
+            errorCount: 0,
+          },
+          {
+            conversationId: 'conv-2',
+            name: 'test-agent',
+            participants: ['test-agent'],
+            messageCount: 1,
+            duration: '30s',
+            startTime: '2024-01-01T00:30:00Z',
+            participantType: 'agent',
+            errorCount: 0,
+          },
+        ],
         queries: {
           'query-1': {
             name: 'query-1',
-            agent: 'test-agent',
-            phase: 'done',
             conversationId: 'conv-1',
-            createdAt: '2024-01-01T00:00:00Z',
-            lastActivity: '2024-01-01T00:30:00Z',
           },
           'query-2': {
             name: 'query-2',
-            agent: 'test-agent',
-            phase: 'done',
             conversationId: 'conv-2',
-            createdAt: '2024-01-01T00:30:00Z',
-            lastActivity: '2024-01-01T01:00:00Z',
           },
         },
       };
@@ -75,25 +89,29 @@ describe('conversationsService', () => {
       expect(result[1].conversationId).toBe('conv-2');
     });
 
-    it('should group queries by conversationId', async () => {
+    it('should return conversations with message counts from backend', async () => {
       const mockSession = {
         sessionId: 'session-1',
+        conversations: [
+          {
+            conversationId: 'conv-1',
+            name: 'test-agent',
+            participants: ['test-agent'],
+            messageCount: 2,
+            duration: '1m',
+            startTime: '2024-01-01T00:00:00Z',
+            participantType: 'agent',
+            errorCount: 0,
+          },
+        ],
         queries: {
           'query-1': {
             name: 'query-1',
-            agent: 'test-agent',
-            phase: 'done',
             conversationId: 'conv-1',
-            createdAt: '2024-01-01T00:00:00Z',
-            lastActivity: '2024-01-01T00:30:00Z',
           },
           'query-2': {
             name: 'query-2',
-            agent: 'test-agent',
-            phase: 'done',
             conversationId: 'conv-1',
-            createdAt: '2024-01-01T00:30:00Z',
-            lastActivity: '2024-01-01T01:00:00Z',
           },
         },
       };
@@ -109,83 +127,25 @@ describe('conversationsService', () => {
       expect(result[0].messageCount).toBe(2);
     });
 
-    it('should determine status from last query only', async () => {
+    it('should determine participant type from backend', async () => {
       const mockSession = {
         sessionId: 'session-1',
+        conversations: [
+          {
+            conversationId: 'conv-1',
+            name: 'test-team',
+            participants: ['test-team'],
+            messageCount: 1,
+            duration: '30s',
+            startTime: '2024-01-01T00:00:00Z',
+            participantType: 'team',
+            errorCount: 0,
+          },
+        ],
         queries: {
           'query-1': {
             name: 'query-1',
-            agent: 'test-agent',
-            phase: 'done',
             conversationId: 'conv-1',
-            createdAt: '2024-01-01T00:00:00Z',
-            lastActivity: '2024-01-01T00:30:00Z',
-          },
-          'query-2': {
-            name: 'query-2',
-            agent: 'test-agent',
-            phase: 'error',
-            conversationId: 'conv-1',
-            createdAt: '2024-01-01T00:30:00Z',
-            lastActivity: '2024-01-01T01:00:00Z',
-          },
-        },
-      };
-
-      vi.mocked(apiClient.get).mockResolvedValueOnce(mockSession);
-
-      const { logsService } = await import('@/lib/services/logs');
-      vi.mocked(logsService.getEvents).mockResolvedValueOnce({ items: [] } as any);
-
-      const result = await conversationsService.getConversations('session-1');
-
-      expect(result[0].status).toBe('error');
-    });
-
-    it('should mark conversation as active when last query is running', async () => {
-      const mockSession = {
-        sessionId: 'session-1',
-        queries: {
-          'query-1': {
-            name: 'query-1',
-            agent: 'test-agent',
-            phase: 'running',
-            conversationId: 'conv-1',
-            createdAt: '2024-01-01T00:00:00Z',
-            lastActivity: '2024-01-01T00:30:00Z',
-          },
-        },
-      };
-
-      vi.mocked(apiClient.get).mockResolvedValueOnce(mockSession);
-
-      const { logsService } = await import('@/lib/services/logs');
-      vi.mocked(logsService.getEvents).mockResolvedValueOnce({ items: [] } as any);
-
-      const result = await conversationsService.getConversations('session-1');
-
-      expect(result[0].status).toBe('active');
-    });
-
-    it('should determine participant type from query fields', async () => {
-      const mockSession = {
-        sessionId: 'session-1',
-        queries: {
-          'query-1': {
-            name: 'query-1',
-            team: 'test-team',
-            phase: 'done',
-            conversationId: 'conv-1',
-            createdAt: '2024-01-01T00:00:00Z',
-            lastActivity: '2024-01-01T00:30:00Z',
-          },
-          'query-2': {
-            name: 'query-2',
-            tool: 'test-tool',
-            phase: 'done',
-            conversationId: 'conv-2',
-            createdAt: '2024-01-01T00:30:00Z',
-            lastActivity: '2024-01-01T01:00:00Z',
           },
         },
       };
@@ -198,20 +158,27 @@ describe('conversationsService', () => {
       const result = await conversationsService.getConversations('session-1');
 
       expect(result[0].participantType).toBe('team');
-      expect(result[1].participantType).toBe('tool');
     });
 
     it('should count tool calls from events', async () => {
       const mockSession = {
         sessionId: 'session-1',
+        conversations: [
+          {
+            conversationId: 'conv-1',
+            name: 'test-agent',
+            participants: ['test-agent'],
+            messageCount: 1,
+            duration: '30s',
+            startTime: '2024-01-01T00:00:00Z',
+            participantType: 'agent',
+            errorCount: 0,
+          },
+        ],
         queries: {
           'query-1': {
             name: 'query-1',
-            agent: 'test-agent',
-            phase: 'done',
             conversationId: 'conv-1',
-            createdAt: '2024-01-01T00:00:00Z',
-            lastActivity: '2024-01-01T00:30:00Z',
           },
         },
       };
@@ -243,18 +210,25 @@ describe('conversationsService', () => {
       expect(result[0].toolCallCount).toBe(2);
     });
 
-    it('should calculate duration for completed conversations', async () => {
+    it('should handle duration from backend', async () => {
       const mockSession = {
         sessionId: 'session-1',
+        conversations: [
+          {
+            conversationId: 'conv-1',
+            name: 'test-agent',
+            participants: ['test-agent'],
+            messageCount: 1,
+            duration: '1m 30s',
+            startTime: '2024-01-01T00:00:00Z',
+            participantType: 'agent',
+            errorCount: 0,
+          },
+        ],
         queries: {
           'query-1': {
             name: 'query-1',
-            agent: 'test-agent',
-            phase: 'done',
             conversationId: 'conv-1',
-            createdAt: '2024-01-01T00:00:00Z',
-            lastActivity: '2024-01-01T00:01:30Z',
-            completedAt: '2024-01-01T00:01:30Z',
           },
         },
       };
@@ -269,17 +243,25 @@ describe('conversationsService', () => {
       expect(result[0].duration).toBe('1m 30s');
     });
 
-    it('should show ongoing for active conversations', async () => {
+    it('should handle ongoing duration from backend', async () => {
       const mockSession = {
         sessionId: 'session-1',
+        conversations: [
+          {
+            conversationId: 'conv-1',
+            name: 'test-agent',
+            participants: ['test-agent'],
+            messageCount: 1,
+            duration: 'ongoing',
+            startTime: '2024-01-01T00:00:00Z',
+            participantType: 'agent',
+            errorCount: 0,
+          },
+        ],
         queries: {
           'query-1': {
             name: 'query-1',
-            agent: 'test-agent',
-            phase: 'running',
             conversationId: 'conv-1',
-            createdAt: '2024-01-01T00:00:00Z',
-            lastActivity: '2024-01-01T00:01:30Z',
           },
         },
       };
@@ -294,25 +276,29 @@ describe('conversationsService', () => {
       expect(result[0].duration).toBe('ongoing');
     });
 
-    it('should count errors correctly', async () => {
+    it('should handle error count from backend', async () => {
       const mockSession = {
         sessionId: 'session-1',
+        conversations: [
+          {
+            conversationId: 'conv-1',
+            name: 'test-agent',
+            participants: ['test-agent'],
+            messageCount: 2,
+            duration: '1m',
+            startTime: '2024-01-01T00:00:00Z',
+            participantType: 'agent',
+            errorCount: 2,
+          },
+        ],
         queries: {
           'query-1': {
             name: 'query-1',
-            agent: 'test-agent',
-            phase: 'error',
             conversationId: 'conv-1',
-            createdAt: '2024-01-01T00:00:00Z',
-            lastActivity: '2024-01-01T00:30:00Z',
           },
           'query-2': {
             name: 'query-2',
-            agent: 'test-agent',
-            phase: 'error',
             conversationId: 'conv-1',
-            createdAt: '2024-01-01T00:30:00Z',
-            lastActivity: '2024-01-01T01:00:00Z',
           },
         },
       };
@@ -343,18 +329,11 @@ describe('conversationsService', () => {
       expect(result).toEqual([]);
     });
 
-    it('should ignore queries without conversationId', async () => {
+    it('should handle empty conversations array from backend', async () => {
       const mockSession = {
         sessionId: 'session-1',
-        queries: {
-          'query-1': {
-            name: 'query-1',
-            agent: 'test-agent',
-            phase: 'done',
-            createdAt: '2024-01-01T00:00:00Z',
-            lastActivity: '2024-01-01T00:30:00Z',
-          },
-        },
+        conversations: [],
+        queries: {},
       };
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockSession);
