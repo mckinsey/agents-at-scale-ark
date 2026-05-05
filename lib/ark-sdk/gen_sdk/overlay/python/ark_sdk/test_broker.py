@@ -96,6 +96,64 @@ class TestBrokerClientSendChunk:
             assert any("500" in r.message for r in caplog.records)
 
 
+class TestBrokerClientSendMessages:
+    @pytest.mark.anyio
+    async def test_posts_to_messages_url_with_payload(self):
+        client = BrokerClient("http://broker:3000", "my-query", "conv-1", "agent")
+        with patch("httpx.AsyncClient") as mock_client_cls:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_http = AsyncMock()
+            mock_http.post = AsyncMock(return_value=mock_resp)
+            mock_http.__aenter__ = AsyncMock(return_value=mock_http)
+            mock_http.__aexit__ = AsyncMock(return_value=False)
+            mock_client_cls.return_value = mock_http
+
+            messages = [
+                {"role": "user", "content": "hi"},
+                {"role": "assistant", "content": "hello"},
+            ]
+            await client.send_messages("conv-1", messages)
+
+            mock_http.post.assert_called_once()
+            url = mock_http.post.call_args[0][0]
+            assert url == "http://broker:3000/messages"
+            payload = mock_http.post.call_args[1]["json"]
+            assert payload["conversation_id"] == "conv-1"
+            assert payload["query_id"] == "my-query"
+            assert payload["messages"] == messages
+
+    @pytest.mark.anyio
+    async def test_swallows_http_error(self):
+        client = BrokerClient("http://broker", "q", "", "a")
+        with patch("httpx.AsyncClient") as mock_client_cls:
+            mock_http = AsyncMock()
+            mock_http.post = AsyncMock(side_effect=httpx.ConnectError("unreachable"))
+            mock_http.__aenter__ = AsyncMock(return_value=mock_http)
+            mock_http.__aexit__ = AsyncMock(return_value=False)
+            mock_client_cls.return_value = mock_http
+
+            await client.send_messages("conv", [{"role": "user", "content": "x"}])
+
+    @pytest.mark.anyio
+    async def test_logs_non_2xx_status(self, caplog):
+        import logging
+        client = BrokerClient("http://broker", "q", "", "a")
+        with patch("httpx.AsyncClient") as mock_client_cls:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 500
+            mock_http = AsyncMock()
+            mock_http.post = AsyncMock(return_value=mock_resp)
+            mock_http.__aenter__ = AsyncMock(return_value=mock_http)
+            mock_http.__aexit__ = AsyncMock(return_value=False)
+            mock_client_cls.return_value = mock_http
+
+            with caplog.at_level(logging.WARNING):
+                await client.send_messages("conv", [{"role": "user", "content": "x"}])
+
+            assert any("500" in r.message for r in caplog.records)
+
+
 class TestBrokerClientComplete:
     @pytest.mark.anyio
     async def test_posts_to_complete_url(self):

@@ -7,12 +7,14 @@ import (
 	"errors"
 	"testing"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/storage"
 )
 
 func TestNewGenericStorage(t *testing.T) {
@@ -90,6 +92,24 @@ func TestGenericStorage_Create_WithValidation(t *testing.T) {
 	_, err := gs.Create(ctx, agent, validator, &metav1.CreateOptions{})
 	if err != validationErr {
 		t.Errorf("expected validation error, got %v", err)
+	}
+}
+
+func TestGenericStorage_Create_AlreadyExists(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	backend.err = storage.ErrAlreadyExists
+	ctx := contextWithNamespace(testNS())
+
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+
+	_, err := gs.Create(ctx, agent, nil, &metav1.CreateOptions{})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !apierrors.IsAlreadyExists(err) {
+		t.Errorf("expected apierrors.IsAlreadyExists, got %T: %v", err, err)
 	}
 }
 

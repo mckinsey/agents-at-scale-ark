@@ -19,6 +19,7 @@ export interface ArkService {
   k8sPortForwardLocalPort?: number;
   k8sDeploymentName?: string;
   k8sDevDeploymentName?: string;
+  requiresBackend?: 'etcd' | 'postgresql';
 }
 
 export interface ServiceCollection {

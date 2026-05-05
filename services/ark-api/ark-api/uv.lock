@@ -246,11 +246,11 @@ requires-dist = [
     { name = "kubernetes-asyncio", specifier = ">=33.3.0" },
     { name = "openai", specifier = ">=1.100.2" },
     { name = "openpyxl", specifier = ">=3.1.0" },
-    { name = "opentelemetry-api", specifier = ">=1.20.0" },
-    { name = "opentelemetry-exporter-otlp", specifier = ">=1.20.0" },
-    { name = "opentelemetry-instrumentation-fastapi", specifier = ">=0.41b0" },
-    { name = "opentelemetry-instrumentation-httpx", specifier = ">=0.41b0" },
-    { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
+    { name = "opentelemetry-api", specifier = ">=1.38.0" },
+    { name = "opentelemetry-exporter-otlp", specifier = ">=1.38.0" },
+    { name = "opentelemetry-instrumentation-fastapi", specifier = ">=0.59b0" },
+    { name = "opentelemetry-instrumentation-httpx", specifier = ">=0.59b0" },
+    { name = "opentelemetry-sdk", specifier = ">=1.38.0" },
     { name = "pandas", specifier = ">=2.2.0" },
     { name = "protobuf", specifier = ">=6.33.4" },
     { name = "pyhelm3", specifier = ">=0.4.0" },
@@ -284,7 +284,7 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 wheels = [
-    { filename = "ark_sdk-0.1.61rc2-py3-none-any.whl", hash = "sha256:1606ed64a1253c8a7ea8857d2a13ce876365089245659ca7320d3161bae851b7" },
+    { filename = "ark_sdk-0.1.61rc2-py3-none-any.whl", hash = "sha256:b8d60a3abf0174c713da72772f6fac93a18e18f31058f2a81adff646cdcde60c" },
 ]
 
 [package.metadata]
