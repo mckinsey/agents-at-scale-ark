@@ -6,7 +6,7 @@ import type { NextRequestWithAuth } from './auth';
 import { auth } from './auth';
 import { COOKIE_SESSION_TOKEN, SIGNIN_PATH } from './lib/constants/auth';
 
-async function middleware(request: NextRequest) {
+async function proxy(request: NextRequest) {
   // Get the base path from environment (no default)
   const basePath = process.env.ARK_DASHBOARD_BASE_PATH || '';
 
@@ -95,7 +95,7 @@ export default auth(async (req: NextRequestWithAuth) => {
     return NextResponse.next();
   }
 
-  return middleware(req);
+  return proxy(req);
 });
 
 export const config = {
