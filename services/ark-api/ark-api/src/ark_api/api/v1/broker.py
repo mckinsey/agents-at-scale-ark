@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from ark_sdk.client import with_ark_client
 
 from ...utils.memory_client import get_memory_service_address, get_all_memory_resources
+from ...utils.url_validation import validate_path_segment, build_safe_url
 
 logger = logging.getLogger(__name__)
 
@@ -95,11 +96,20 @@ async def proxy_broker_request(
             status_code=503,
         )
 
+    # Validate path to prevent path traversal attacks
+    if path:
+        path_segments = [seg for seg in path.split('/') if seg]
+        for segment in path_segments:
+            validate_path_segment(segment, "path")
+        safe_url = build_safe_url(broker_url, *path_segments)
+    else:
+        safe_url = broker_url
+
     query_params = {k: v for k, v in (params or {}).items() if v is not None}
 
     if watch:
         query_params["watch"] = "true"
-        url = f"{broker_url}{path}"
+        url = safe_url
         if query_params:
             url += f"?{urlencode(query_params)}"
         logger.info(f"Proxying SSE stream from {url}")
@@ -111,7 +121,7 @@ async def proxy_broker_request(
 
     try:
         async with httpx.AsyncClient() as client:
-            url = f"{broker_url}{path}"
+            url = safe_url
             if query_params:
                 url += f"?{urlencode(query_params)}"
             response = await client.get(url)
@@ -223,7 +233,9 @@ async def get_chunks(
                 content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
                 status_code=503,
             )
-        url = f"{broker_url}/stream/{query_id}?from-beginning=true"
+        # Validate query_id to prevent path traversal
+        validate_path_segment(query_id, "query_id")
+        url = build_safe_url(broker_url, "stream", query_id) + "?from-beginning=true"
         logger.info(f"Proxying chunks SSE stream from {url}")
         return StreamingResponse(
             proxy_sse_stream(url),

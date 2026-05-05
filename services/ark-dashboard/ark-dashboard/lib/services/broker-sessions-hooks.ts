@@ -16,7 +16,7 @@ export const useGetSession = (
   return useQuery({
     queryKey: ['broker-session', sessionId],
     queryFn: () => sessionId ? brokerSessionsService.getSession(sessionId) : null,
-    enabled: options?.enabled !== undefined ? options.enabled && !!sessionId : !!sessionId,
+    enabled: (options?.enabled ?? true) && !!sessionId,
     refetchInterval: 5000,
     ...options,
   });

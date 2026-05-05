@@ -168,7 +168,7 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
     }
 
     // Find the user message in backend that matches the last pending message
-    const lastPendingContent = pendingMessages[pendingMessages.length - 1]?.content.trim();
+    const lastPendingContent = pendingMessages.at(-1)?.content.trim();
     if (!lastPendingContent) {
       return;
     }

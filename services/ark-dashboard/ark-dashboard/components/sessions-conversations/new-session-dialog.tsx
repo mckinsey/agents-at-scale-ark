@@ -13,7 +13,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useQuery } from '@tanstack/react-query';
@@ -21,7 +20,6 @@ import { agentsService } from '@/lib/services/agents';
 import { teamsService } from '@/lib/services/teams';
 import { toolsService } from '@/lib/services/tools';
 import { generateUUID } from '@/lib/utils/uuid';
-import { getParticipantIcon } from '@/lib/utils/participant-icon';
 import type { ParticipantType } from '@/lib/services/conversations';
 
 interface Props {

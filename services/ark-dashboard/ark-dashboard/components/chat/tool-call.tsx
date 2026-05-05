@@ -19,111 +19,129 @@ interface ToolCallProps {
   className?: string;
 }
 
-export function ToolCall({ toolCall, variant = 'card', className }: Readonly<ToolCallProps>) {
+interface ExpandableSectionProps {
+  label: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+  hasError: boolean;
+  rawContent: string;
+  parsedContent: Record<string, unknown> | null;
+  additionalClasses?: string;
+}
+
+function ExpandableSection({
+  label,
+  isExpanded,
+  onToggle,
+  hasError,
+  rawContent,
+  parsedContent,
+  additionalClasses = '',
+}: ExpandableSectionProps) {
+  return (
+    <>
+      <button
+        onClick={onToggle}
+        className={`hover:bg-muted/50 flex w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors ${additionalClasses}`}>
+        {isExpanded ? (
+          <ChevronDown className="h-3 w-3 flex-shrink-0" />
+        ) : (
+          <ChevronRight className="h-3 w-3 flex-shrink-0" />
+        )}
+        <span className="text-muted-foreground text-xs font-medium">
+          {label}
+        </span>
+      </button>
+      {isExpanded && (
+        <div className="mt-1 pl-5">
+          {hasError ? (
+            <pre className="overflow-x-auto p-2 text-xs">{rawContent}</pre>
+          ) : (
+            <pre className="overflow-x-auto p-2 text-xs">
+              {JSON.stringify(parsedContent, null, 2)}
+            </pre>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+interface VariantProps {
+  toolCall: ToolCallData;
+  className?: string;
+  parsedArgs: Record<string, unknown> | null;
+  parsedResult: Record<string, unknown> | null;
+  parseArgsError: boolean;
+  parseResultError: boolean;
+}
+
+function TreeVariant({
+  toolCall,
+  className,
+  parsedArgs,
+  parsedResult,
+  parseArgsError,
+  parseResultError,
+}: VariantProps) {
   const [isInputExpanded, setIsInputExpanded] = useState(false);
   const [isOutputExpanded, setIsOutputExpanded] = useState(false);
 
-  let parsedArgs: Record<string, unknown> | null = null;
-  let parseArgsError = false;
+  return (
+    <div className={`relative pl-6 text-sm ${className || ''}`}>
+      <div className="absolute left-0 top-0 h-[18px] w-[2px] bg-border/50"></div>
+      <div className="absolute left-0 top-[18px] w-4 h-[2px] bg-border/50"></div>
+      <div className="flex items-center gap-2 py-1.5 pl-2">
+        <Wrench className="text-muted-foreground h-4 w-4 flex-shrink-0" />
+        <span className="font-semibold">{toolCall.function.name}</span>
+      </div>
 
-  try {
-    parsedArgs = JSON.parse(toolCall.function.arguments) as Record<
-      string,
-      unknown
-    >;
-  } catch {
-    parseArgsError = true;
-  }
-
-  let parsedResult: Record<string, unknown> | null = null;
-  let parseResultError = false;
-
-  if (toolCall.result) {
-    try {
-      parsedResult = JSON.parse(toolCall.result) as Record<string, unknown>;
-    } catch {
-      parseResultError = true;
-    }
-  }
-
-  if (variant === 'tree') {
-    return (
-      <div className={`relative pl-6 text-sm ${className || ''}`}>
-        <div className="absolute left-0 top-0 h-[18px] w-[2px] bg-border/50"></div>
-        <div className="absolute left-0 top-[18px] w-4 h-[2px] bg-border/50"></div>
-        <div className="flex items-center gap-2 py-1.5 pl-2">
-          <Wrench className="text-muted-foreground h-4 w-4 flex-shrink-0" />
-          <span className="font-semibold">{toolCall.function.name}</span>
+      <div className="mt-1 space-y-1 pl-2">
+        <div className="relative">
+          <div className="absolute left-0 top-0 h-[14px] w-[2px] bg-border/50"></div>
+          <div className="absolute left-0 top-[14px] w-3 h-[2px] bg-border/50"></div>
+          <ExpandableSection
+            label="Input"
+            isExpanded={isInputExpanded}
+            onToggle={() => setIsInputExpanded(!isInputExpanded)}
+            hasError={parseArgsError}
+            rawContent={toolCall.function.arguments}
+            parsedContent={parsedArgs}
+            additionalClasses="pl-4"
+          />
         </div>
 
-        <div className="mt-1 space-y-1 pl-2">
+        {toolCall.result && (
           <div className="relative">
             <div className="absolute left-0 top-0 h-[14px] w-[2px] bg-border/50"></div>
             <div className="absolute left-0 top-[14px] w-3 h-[2px] bg-border/50"></div>
-            <button
-              onClick={() => setIsInputExpanded(!isInputExpanded)}
-              className="hover:bg-muted/50 flex w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors pl-4">
-              {isInputExpanded ? (
-                <ChevronDown className="h-3 w-3 flex-shrink-0" />
-              ) : (
-                <ChevronRight className="h-3 w-3 flex-shrink-0" />
-              )}
-              <span className="text-muted-foreground text-xs font-medium">
-                Input
-              </span>
-            </button>
-            {isInputExpanded && (
-              <div className="mt-1 pl-5">
-                {parseArgsError ? (
-                  <pre className="overflow-x-auto p-2 text-xs">
-                    {toolCall.function.arguments}
-                  </pre>
-                ) : (
-                  <pre className="overflow-x-auto p-2 text-xs">
-                    {JSON.stringify(parsedArgs, null, 2)}
-                  </pre>
-                )}
-              </div>
-            )}
+            <ExpandableSection
+              label="Output"
+              isExpanded={isOutputExpanded}
+              onToggle={() => setIsOutputExpanded(!isOutputExpanded)}
+              hasError={parseResultError}
+              rawContent={toolCall.result}
+              parsedContent={parsedResult}
+              additionalClasses="pl-4"
+            />
           </div>
-
-          {toolCall.result && (
-            <div className="relative">
-              <div className="absolute left-0 top-0 h-[14px] w-[2px] bg-border/50"></div>
-              <div className="absolute left-0 top-[14px] w-3 h-[2px] bg-border/50"></div>
-              <button
-                onClick={() => setIsOutputExpanded(!isOutputExpanded)}
-                className="hover:bg-muted/50 flex w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors pl-4">
-                {isOutputExpanded ? (
-                  <ChevronDown className="h-3 w-3 flex-shrink-0" />
-                ) : (
-                  <ChevronRight className="h-3 w-3 flex-shrink-0" />
-                )}
-                <span className="text-muted-foreground text-xs font-medium">
-                  Output
-                </span>
-              </button>
-              {isOutputExpanded && (
-                <div className="mt-1 pl-5">
-                  {parseResultError ? (
-                    <pre className="overflow-x-auto p-2 text-xs">
-                      {toolCall.result}
-                    </pre>
-                  ) : (
-                    <pre className="overflow-x-auto p-2 text-xs">
-                      {JSON.stringify(parsedResult, null, 2)}
-                    </pre>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        )}
       </div>
-    );
-  }
+    </div>
+  );
+}
 
-  // Default 'card' variant
+function CardVariant({
+  toolCall,
+  className,
+  parsedArgs,
+  parsedResult,
+  parseArgsError,
+  parseResultError,
+}: VariantProps) {
+  const [isInputExpanded, setIsInputExpanded] = useState(false);
+  const [isOutputExpanded, setIsOutputExpanded] = useState(false);
+
   return (
     <div
       className={`bg-card border-border rounded-lg border p-3 text-sm shadow-sm ${className || ''}`}>
@@ -193,4 +211,44 @@ export function ToolCall({ toolCall, variant = 'card', className }: Readonly<Too
       </div>
     </div>
   );
+}
+
+export function ToolCall({ toolCall, variant = 'card', className }: Readonly<ToolCallProps>) {
+  let parsedArgs: Record<string, unknown> | null = null;
+  let parseArgsError = false;
+
+  try {
+    parsedArgs = JSON.parse(toolCall.function.arguments) as Record<
+      string,
+      unknown
+    >;
+  } catch {
+    parseArgsError = true;
+  }
+
+  let parsedResult: Record<string, unknown> | null = null;
+  let parseResultError = false;
+
+  if (toolCall.result) {
+    try {
+      parsedResult = JSON.parse(toolCall.result) as Record<string, unknown>;
+    } catch {
+      parseResultError = true;
+    }
+  }
+
+  const variantProps: VariantProps = {
+    toolCall,
+    className,
+    parsedArgs,
+    parsedResult,
+    parseArgsError,
+    parseResultError,
+  };
+
+  if (variant === 'tree') {
+    return <TreeVariant {...variantProps} />;
+  }
+
+  return <CardVariant {...variantProps} />;
 }

@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useAtom } from 'jotai';
-import { useRouter } from 'next/navigation';
 import { Plus, ChevronLeft, ChevronRight, Send } from 'lucide-react';
 import { useListConversations } from '@/lib/services/conversations-hooks';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
@@ -15,7 +14,7 @@ import { ChatInput } from './chat-input';
 import { NewConversationDialog } from './new-conversation-dialog';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
+import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import { generateUUID } from '@/lib/utils/uuid';
 
 interface Props {
@@ -30,7 +29,6 @@ interface Props {
 }
 
 export function ConversationsTab({ sessionId, initialParticipant, initialConversationId, hasSentMessage, onMessageSent }: Props) {
-  const router = useRouter();
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [temporaryConversations, setTemporaryConversations] = useState<Conversation[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);

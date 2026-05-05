@@ -267,11 +267,14 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	log.Info("query execution completed", "query", obj.Name, "status", queryStatus, "duration", duration.Duration)
 
-	// Build operation data with target information
+	operationData := buildOperationData(target, queryInput)
+	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", operationData)
+}
+
+func buildOperationData(target *arkv1alpha1.QueryTarget, queryInput string) map[string]string {
 	operationData := make(map[string]string)
 	operationData["targetType"] = target.Type
 
-	// Add team or agent field based on target type
 	switch target.Type {
 	case targetTypeTeam:
 		operationData["team"] = target.Name
@@ -279,7 +282,6 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		operationData["agent"] = target.Name
 	}
 
-	// Add truncated input if available
 	if queryInput != "" {
 		const maxDisplayInputLength = 48
 		displayInput := queryInput
@@ -289,7 +291,7 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		operationData["input"] = displayInput
 	}
 
-	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", operationData)
+	return operationData
 }
 
 func (r *QueryReconciler) resolveDispatchAddress(ctx context.Context, target arkv1alpha1.QueryTarget, namespace string) (string, error) {

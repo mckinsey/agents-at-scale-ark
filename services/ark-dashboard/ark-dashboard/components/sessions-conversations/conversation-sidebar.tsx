@@ -1,8 +1,7 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { MessageSquare, Wrench, Clock } from 'lucide-react';
+import { MessageSquare, Wrench } from 'lucide-react';
 import type { Conversation } from '@/lib/services/conversations';
 import { cn } from '@/lib/utils';
 import { stripNamespace } from '@/lib/utils/participant';

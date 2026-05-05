@@ -28,7 +28,7 @@ export const conversationsService = {
   async getConversations(sessionId: string): Promise<Conversation[]> {
     try {
       const session = await apiClient.get<any>(`/api/v1/broker/sessions/${sessionId}`);
-      if (!session || !session.conversations) return [];
+      if (!session?.conversations) return [];
 
       const { logsService } = await import('./logs');
       const events = await logsService.getEvents(sessionId, 1000);

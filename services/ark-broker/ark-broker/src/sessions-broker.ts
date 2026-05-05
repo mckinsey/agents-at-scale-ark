@@ -5,6 +5,8 @@ import type { QueryPhase, SessionEventData } from './types.js';
 import { QueryPhases, EventReasons, ERROR_REASON_SUFFIX } from './types.js';
 import type { PaginationParams, PaginatedList } from './pagination.js';
 
+export type ParticipantType = 'agent' | 'team' | 'tool';
+
 export interface QueryEntry {
   /** Query resource name from the Ark CRD */
   name: string;
@@ -35,7 +37,7 @@ export interface QueryEntry {
 export interface Participant {
   id: string;
   name: string;
-  type: 'agent' | 'team' | 'tool';
+  type: ParticipantType;
 }
 
 export interface ConversationSummary {
@@ -45,7 +47,7 @@ export interface ConversationSummary {
   messageCount: number;
   duration: string;
   startTime: string;
-  participantType: 'agent' | 'team' | 'tool';
+  participantType: ParticipantType;
   errorCount: number;
 }
 
@@ -131,7 +133,7 @@ export class SessionsBroker {
     return QueryPhases.Running;
   }
 
-  private determineParticipantType(queries: QueryEntry[], participantName: string): 'agent' | 'team' | 'tool' {
+  private determineParticipantType(queries: QueryEntry[], participantName: string): ParticipantType {
     const relevantQuery = queries.find(q =>
       q.team === participantName || q.agent === participantName || q.tool === participantName
     );
@@ -196,16 +198,14 @@ export class SessionsBroker {
 
     session.conversations = Array.from(conversationMap.entries()).map(([convId, convQueries]) => {
       const participants = Array.from(
-        new Set(convQueries.map(q => q.team || q.agent || q.tool).filter((name): name is string => Boolean(name)))
-      );
+        new Set(convQueries.map(q => q.team || q.agent || q.tool).filter(Boolean))
+      ) as string[];
       const participantName = participants[0] || convId;
 
       const firstQuery = convQueries[0];
-      let participantType: 'agent' | 'team' | 'tool' = 'agent';
+      let participantType: ParticipantType = 'agent';
       if (firstQuery.team) {
         participantType = 'team';
-      } else if (firstQuery.agent) {
-        participantType = 'agent';
       } else if (firstQuery.tool) {
         participantType = 'tool';
       }
@@ -218,7 +218,7 @@ export class SessionsBroker {
         name: participantName,
         participants,
         messageCount,
-        duration: this.calculateDuration(convQueries[0].createdAt, convQueries[convQueries.length - 1].completedAt),
+        duration: this.calculateDuration(convQueries[0].createdAt, convQueries.at(-1)?.completedAt),
         startTime: convQueries[0].createdAt,
         participantType,
         errorCount,
@@ -247,8 +247,10 @@ export class SessionsBroker {
     if (hasActive) {
       session.status = 'active';
     } else {
-      const latestQuery = queries.reduce((latest, q) =>
-        new Date(q.lastActivity) > new Date(latest.lastActivity) ? q : latest
+      const latestQuery = queries.reduce(
+        (latest, q) =>
+          new Date(q.lastActivity) > new Date(latest.lastActivity) ? q : latest,
+        queries[0]
       );
 
       if (latestQuery.phase === 'error') {
