@@ -16,10 +16,13 @@ def mock_llm_model():
         ["kubectl", "delete", "-f", str(MOCK_LLM_MODEL_YAML), "--ignore-not-found"],
         capture_output=True
     )
-    subprocess.run(
+    result = subprocess.run(
         ["kubectl", "apply", "-f", str(MOCK_LLM_MODEL_YAML)],
-        capture_output=True, text=True, check=True
+        capture_output=True, text=True
     )
+    if result.returncode != 0:
+        logger.warning("kubectl apply mock-llm-model failed (rc=%d): %s %s",
+                       result.returncode, result.stdout.strip(), result.stderr.strip())
     subprocess.run(
         ["kubectl", "wait", "--for=condition=ModelAvailable",
          f"model/{MOCK_LLM_MODEL_NAME}", "-n", "default", "--timeout=120s"],
