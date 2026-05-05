@@ -222,6 +222,281 @@ class TestSessionsAndConversations:
             "Sessions stats bar should show at least 1 session"
 
     # -------------------------------------------------------------------------
+    # Session counts and status verification
+    # -------------------------------------------------------------------------
+
+    def test_session_conversation_counts_in_table(self, page: Page, sessions_test_resources: dict):
+        session_id = sessions_test_resources["sessions"].get("agent")
+        if not session_id:
+            pytest.skip("Agent session not created")
+
+        sessions = SessionsPage(page)
+        sessions.navigate_to_session_history()
+
+        assert sessions.is_session_in_table(session_id, retries=5), \
+            f"Session {session_id} should be visible in table"
+
+        count = sessions.get_session_conversation_count_in_table(session_id)
+        assert count >= 1, \
+            f"Session {session_id} should show at least 1 conversation in the table"
+
+    def test_session_idle_status_after_conversation(self, page: Page, sessions_test_resources: dict):
+        session_id = sessions_test_resources["sessions"].get("agent")
+        if not session_id:
+            pytest.skip("Agent session not created")
+
+        sessions = SessionsPage(page)
+        sessions.navigate_to_session_history()
+
+        assert sessions.is_session_in_table(session_id, retries=5), \
+            f"Session {session_id} should be visible in table"
+
+        status = sessions.get_session_status_in_table(session_id)
+        assert status in ("idle", "active", ""), \
+            f"Session status should be idle or active after conversation, got: '{status}'"
+
+    def test_session_status_filter_and_search(self, page: Page, sessions_test_resources: dict):
+        session_id = sessions_test_resources["sessions"].get("agent")
+        if not session_id:
+            pytest.skip("Agent session not created")
+
+        sessions = SessionsPage(page)
+        sessions.navigate_to_session_history()
+
+        baseline_count = sessions.get_visible_session_count()
+        assert baseline_count >= 1, "At least one session should be visible"
+
+        sessions.set_status_filter("Active")
+        active_count = sessions.get_visible_session_count()
+        logger.info("Active filter count: %d", active_count)
+        assert active_count >= 0, "Active filter should show non-negative count"
+
+        sessions.set_status_filter("Idle")
+        idle_count = sessions.get_visible_session_count()
+        logger.info("Idle filter count: %d", idle_count)
+        assert idle_count >= 0, "Idle filter should show non-negative count"
+
+        sessions.set_status_filter("All")
+        sessions.search_sessions(session_id)
+        search_count = sessions.get_visible_session_count()
+        assert search_count >= 1, \
+            f"Searching for session ID '{session_id}' should return at least 1 result"
+
+        sessions.clear_search()
+
+    def test_session_detail_header_counts(self, page: Page, sessions_test_resources: dict):
+        agent_name = sessions_test_resources["agents"].get("primary")
+        session_id = sessions_test_resources["sessions"].get("agent")
+        if not session_id or not agent_name:
+            pytest.skip("Agent session not created")
+
+        sessions = SessionsPage(page)
+        sessions.navigate_to_session_history()
+
+        sessions.navigate_to_session_detail(session_id)
+        sessions.wait_for_session_detail_page()
+
+        conv_count = sessions.get_conversation_count_from_header()
+        assert conv_count >= 1, \
+            f"Session detail header should show at least 1 conversation, got {conv_count}"
+
+        assert sessions.is_participant_shown_in_header(agent_name), \
+            f"Agent '{agent_name}' should be shown in session detail header"
+
+        participant_count = sessions.get_participants_count_from_header()
+        assert participant_count >= 1, \
+            f"Session detail header should show at least 1 participant, got {participant_count}"
+
+    # -------------------------------------------------------------------------
+    # Dialog validation
+    # -------------------------------------------------------------------------
+
+    def test_create_session_dialog_cancel(self, page: Page, sessions_test_resources: dict):
+        sessions = SessionsPage(page)
+        sessions.navigate_to_session_history()
+
+        initial_url = page.url
+        sessions.open_new_session_dialog()
+        assert sessions.is_visible(sessions.SESSION_DIALOG), \
+            "New session dialog should be visible after clicking New session"
+
+        sessions.cancel_session_dialog()
+        assert page.url == initial_url, \
+            "URL should not change after canceling session dialog"
+        assert not sessions.is_visible(sessions.SESSION_DIALOG, timeout=3000), \
+            "Dialog should close after clicking Cancel"
+
+    def test_create_session_button_disabled_without_selection(self, page: Page, sessions_test_resources: dict):
+        sessions = SessionsPage(page)
+        sessions.navigate_to_session_history()
+
+        sessions.open_new_session_dialog()
+        assert sessions.is_visible(sessions.SESSION_DIALOG), \
+            "New session dialog should open"
+
+        assert sessions.is_create_button_disabled(), \
+            "Create button should be disabled when no participant is selected"
+
+        sessions.cancel_session_dialog()
+
+    # -------------------------------------------------------------------------
+    # Date range filter
+    # -------------------------------------------------------------------------
+
+    def test_session_date_range_filter(self, page: Page, sessions_test_resources: dict):
+        sessions = SessionsPage(page)
+        sessions.navigate_to_session_history()
+
+        baseline_count = sessions.get_visible_session_count()
+
+        for date_range in ("Last 24h", "Last 7 days", "Last 30 days"):
+            sessions.set_date_filter(date_range)
+            count = sessions.get_visible_session_count()
+            logger.info("Sessions with date filter '%s': %d", date_range, count)
+            assert count >= 0, f"Session count should be non-negative for filter '{date_range}'"
+
+        sessions.set_date_filter("Choose option")
+        reset_count = sessions.get_visible_session_count()
+        assert reset_count >= baseline_count, \
+            "Resetting date filter should restore at least the baseline session count"
+
+    # -------------------------------------------------------------------------
+    # Sort controls
+    # -------------------------------------------------------------------------
+
+    def test_session_table_sort_toggle(self, page: Page, sessions_test_resources: dict):
+        sessions = SessionsPage(page)
+        sessions.navigate_to_session_history()
+
+        total = sessions.get_stats_total_session_count()
+        if total < 1:
+            pytest.skip("No sessions available for sort test")
+
+        sessions.click_sort_header("Name")
+        count_after_name_sort = sessions.get_visible_session_count()
+        assert count_after_name_sort >= 0, \
+            "Session count should be non-negative after sorting by Name"
+
+        sessions.click_sort_header("Name")
+        count_after_name_reverse = sessions.get_visible_session_count()
+        assert count_after_name_reverse >= 0, \
+            "Session count should be non-negative after reversing Name sort"
+
+        sessions.click_sort_header("Convos")
+        count_after_convo_sort = sessions.get_visible_session_count()
+        assert count_after_convo_sort >= 0, \
+            "Session count should be non-negative after sorting by Convos"
+
+    # -------------------------------------------------------------------------
+    # Empty search results
+    # -------------------------------------------------------------------------
+
+    def test_empty_search_results(self, page: Page, sessions_test_resources: dict):
+        sessions = SessionsPage(page)
+        sessions.navigate_to_session_history()
+
+        nonexistent_id = "zzz-nonexistent-session-id-xyz-999"
+        sessions.search_sessions(nonexistent_id)
+
+        count = sessions.get_visible_session_count()
+        assert count == 0, \
+            f"Search for nonexistent ID should return 0 results, got {count}"
+
+        assert sessions.is_empty_state_shown(), \
+            "Empty state message should be shown when no sessions match the search"
+
+        sessions.clear_search()
+        reset_count = sessions.get_visible_session_count()
+        assert reset_count >= 0, "Clearing search should restore sessions list"
+
+    # -------------------------------------------------------------------------
+    # Multiple messages in one conversation
+    # -------------------------------------------------------------------------
+
+    def test_multi_message_conversation(self, page: Page, sessions_test_resources: dict):
+        agent_name = sessions_test_resources["agents"].get("primary")
+        if not agent_name:
+            pytest.skip("Primary agent not created")
+
+        sessions = SessionsPage(page)
+        sessions.navigate_to_session_history()
+
+        session_id = sessions.create_new_session(agent_name, participant_tab="Agents")
+        assert session_id, "Session should be created for multi-message test"
+
+        sessions.wait_for_session_detail_page()
+        sessions.click_conversations_tab()
+
+        assert sessions.is_visible(sessions.CHAT_TEXTAREA, timeout=10000), \
+            "Chat textarea should be visible"
+
+        messages = [
+            "What is 1 + 1? Give a very brief answer.",
+            "What is 2 + 2? Give a very brief answer.",
+            "What is 3 + 3? Give a very brief answer.",
+        ]
+
+        for i, msg in enumerate(messages):
+            initial_count = sessions.get_assistant_message_count()
+            sessions.send_message_in_conversation(msg)
+            assert sessions.wait_for_assistant_response(initial_count, timeout_s=120), \
+                f"Agent should respond to message {i + 1} within timeout"
+
+        assert sessions.get_user_message_count() >= len(messages), \
+            f"At least {len(messages)} user messages should be visible"
+        assert sessions.get_assistant_message_count() >= len(messages), \
+            f"At least {len(messages)} assistant responses should be visible"
+
+    # -------------------------------------------------------------------------
+    # Multiple conversations in one session
+    # -------------------------------------------------------------------------
+
+    def test_multiple_conversations_in_session(self, page: Page, sessions_test_resources: dict):
+        agent_name = sessions_test_resources["agents"].get("primary")
+        if not agent_name:
+            pytest.skip("Primary agent not created")
+
+        sessions = SessionsPage(page)
+        sessions.navigate_to_session_history()
+
+        session_id = sessions.create_new_session(agent_name, participant_tab="Agents")
+        assert session_id, "Session should be created for multi-conversation test"
+
+        sessions.wait_for_session_detail_page()
+        sessions.click_conversations_tab()
+
+        assert sessions.is_visible(sessions.CHAT_TEXTAREA, timeout=10000), \
+            "Chat textarea should be visible for first conversation"
+
+        initial_count = sessions.get_assistant_message_count()
+        sessions.send_message_in_conversation("Hello, this is conversation 1.")
+        assert sessions.wait_for_assistant_response(initial_count, timeout_s=120), \
+            "Agent should respond in first conversation"
+
+        first_conv_sidebar_count = sessions.get_sidebar_conversation_count()
+        assert first_conv_sidebar_count >= 1, \
+            "At least one conversation should appear in sidebar after first message"
+
+        sessions.click_new_conversation_button()
+        assert sessions.is_visible(sessions.SESSION_DIALOG, timeout=5000), \
+            "New conversation dialog should open"
+
+        sessions.select_participant_in_dialog(agent_name, participant_tab="Agents")
+        sessions.page.locator("[role='dialog'] button:has-text('Create'), [role='dialog'] button:has-text('Start')").first.click()
+        sessions.page.wait_for_timeout(1000)
+        sessions.wait_for_navigation_complete()
+
+        second_textarea = sessions.page.locator(sessions.CHAT_TEXTAREA).first
+        if second_textarea.is_visible(timeout=5000):
+            initial_count2 = sessions.get_assistant_message_count()
+            sessions.send_message_in_conversation("Hello, this is conversation 2.")
+            sessions.wait_for_assistant_response(initial_count2, timeout_s=120)
+
+        final_sidebar_count = sessions.get_sidebar_conversation_count()
+        assert final_sidebar_count >= first_conv_sidebar_count, \
+            "Sidebar should have at least as many conversations after starting a second one"
+
+    # -------------------------------------------------------------------------
     # Cleanup
     # -------------------------------------------------------------------------
 

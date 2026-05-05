@@ -232,3 +232,179 @@ class SessionsPage(BasePage):
             self.wait_for_element(self.CONVERSATION_SIDEBAR, timeout=timeout)
         except Exception:
             logger.debug("Conversation sidebar not found")
+
+    def set_status_filter(self, status: str) -> None:
+        try:
+            trigger = self.page.locator(
+                "label:has-text('Status') + div [role='combobox'], "
+                "div:has(> label:has-text('Status')) [role='combobox']"
+            ).first
+            if not trigger.is_visible(timeout=3000):
+                trigger = self.page.locator("[role='combobox']").filter(
+                    has_text=re.compile(r"All|Active|Idle|Error", re.IGNORECASE)
+                ).last
+            trigger.click()
+            self.page.wait_for_timeout(400)
+            option = self.page.locator(f"[role='option']:has-text('{status}')").first
+            option.wait_for(state="visible", timeout=5000)
+            option.click()
+            self.page.wait_for_timeout(500)
+        except Exception as e:
+            logger.debug("Could not set status filter to %s: %s", status, e)
+
+    def get_visible_session_count(self) -> int:
+        try:
+            rows = self.page.locator(
+                "div.rounded-lg.border button[type='button'][aria-pressed]"
+            )
+            count = rows.count()
+            if count > 0:
+                return count
+            rows = self.page.locator(
+                "div.rounded-lg.border > button"
+            )
+            return rows.count()
+        except Exception as e:
+            logger.debug("Could not get visible session count: %s", e)
+        return 0
+
+    def search_sessions(self, query: str) -> None:
+        try:
+            search = self.page.locator(
+                "input[type='search'][placeholder='Search'], input[placeholder='Search']"
+            ).first
+            search.wait_for(state="visible", timeout=5000)
+            search.fill(query)
+            self.page.wait_for_timeout(600)
+        except Exception as e:
+            logger.debug("Could not search sessions: %s", e)
+
+    def clear_search(self) -> None:
+        try:
+            search = self.page.locator(
+                "input[type='search'][placeholder='Search'], input[placeholder='Search']"
+            ).first
+            if search.is_visible(timeout=3000):
+                search.fill("")
+                self.page.wait_for_timeout(400)
+        except Exception as e:
+            logger.debug("Could not clear search: %s", e)
+
+    def navigate_to_session_detail(self, session_id: str) -> None:
+        try:
+            row = self.page.locator(
+                f"button[aria-pressed]:has-text('{session_id}'), "
+                f"button[type='button']:has-text('{session_id}')"
+            ).first
+            row.wait_for(state="visible", timeout=5000)
+            row.click()
+            self.wait_for_navigation_complete()
+            self.wait_for_session_detail_page()
+        except Exception as e:
+            logger.debug("Could not navigate to session detail for %s: %s", session_id, e)
+
+    def get_session_status_in_table(self, session_id: str) -> str:
+        try:
+            row = self.page.locator(
+                f"button[type='button']:has-text('{session_id}')"
+            ).first
+            if row.is_visible(timeout=5000):
+                active_dot = row.locator("span.bg-blue-500")
+                idle_dot = row.locator("span.bg-gray-400")
+                error_dot = row.locator("span.bg-red-500")
+                if active_dot.count() > 0:
+                    return "active"
+                if idle_dot.count() > 0:
+                    return "idle"
+                if error_dot.count() > 0:
+                    return "error"
+        except Exception as e:
+            logger.debug("Could not get session status for %s: %s", session_id, e)
+        return ""
+
+    def get_session_conversation_count_in_table(self, session_id: str) -> int:
+        try:
+            row = self.page.locator(
+                f"button[type='button']:has-text('{session_id}')"
+            ).first
+            if row.is_visible(timeout=5000):
+                cells = row.locator("div.flex.items-center.text-sm")
+                if cells.count() > 0:
+                    text = cells.first.inner_text().strip()
+                    if text.isdigit():
+                        return int(text)
+        except Exception as e:
+            logger.debug("Could not get conversation count for %s: %s", session_id, e)
+        return 0
+
+    def cancel_session_dialog(self) -> None:
+        cancel = self.page.locator("[role='dialog'] button:has-text('Cancel')").first
+        cancel.wait_for(state="visible", timeout=5000)
+        cancel.click()
+        self.wait_for_modal_close()
+
+    def is_create_button_disabled(self) -> bool:
+        try:
+            btn = self.page.locator("[role='dialog'] button:has-text('Create')").first
+            btn.wait_for(state="visible", timeout=5000)
+            return btn.is_disabled()
+        except Exception:
+            return True
+
+    def click_new_conversation_button(self) -> None:
+        btn = self.page.locator(
+            "button:has(svg.lucide-plus), button[class*='size-6']:has(svg)"
+        ).first
+        btn.wait_for(state="visible", timeout=8000)
+        btn.click()
+        self.wait_for_modal_open()
+
+    def set_date_filter(self, value: str) -> None:
+        try:
+            trigger = self.page.locator(
+                "label:has-text('Date range') + div [role='combobox'], "
+                "div:has(> label:has-text('Date range')) [role='combobox']"
+            ).first
+            trigger.click()
+            self.page.wait_for_timeout(400)
+            option = self.page.locator(f"[role='option']:has-text('{value}')").first
+            option.wait_for(state="visible", timeout=5000)
+            option.click()
+            self.page.wait_for_timeout(500)
+        except Exception as e:
+            logger.debug("Could not set date filter to %s: %s", value, e)
+
+    def click_sort_header(self, field: str) -> None:
+        try:
+            header = self.page.locator(
+                f"div.grid button:has-text('{field}')"
+            ).first
+            header.wait_for(state="visible", timeout=5000)
+            header.click()
+            self.page.wait_for_timeout(500)
+        except Exception as e:
+            logger.debug("Could not click sort header %s: %s", field, e)
+
+    def is_empty_state_shown(self) -> bool:
+        try:
+            empty = self.page.locator(
+                "div.py-12.text-center:has-text('No sessions found'), "
+                "div:has-text('No sessions found')"
+            ).first
+            return empty.is_visible(timeout=3000)
+        except Exception:
+            return False
+
+    def get_sidebar_selected_conversation_message_count(self) -> int:
+        try:
+            selected = self.page.locator(
+                "div.space-y-2 button.bg-accent span.flex.items-center.gap-1"
+            ).first
+            if selected.is_visible(timeout=3000):
+                text = selected.inner_text()
+                numbers = re.findall(r"\d+", text)
+                if numbers:
+                    return int(numbers[0])
+        except Exception as e:
+            logger.debug("Could not get selected conversation message count: %s", e)
+        return 0
