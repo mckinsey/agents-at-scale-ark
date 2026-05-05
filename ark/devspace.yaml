@@ -81,6 +81,18 @@ deployments:
                 cpu: "200m"
           securityContext:
             runAsNonRoot: false
+          extraVolumes:
+            - name: go-mod-cache
+              persistentVolumeClaim:
+                claimName: ark-controller-gomod
+            - name: go-build-cache
+              persistentVolumeClaim:
+                claimName: ark-controller-gobuild
+          extraVolumeMounts:
+            - name: go-mod-cache
+              mountPath: /go/pkg/mod
+            - name: go-build-cache
+              mountPath: /root/.cache/go-build
         webhook:
           enable: true
         completions:
@@ -107,6 +119,18 @@ deployments:
             cpu: "200m"
         securityContext:
           runAsNonRoot: false
+        extraVolumes:
+          - name: go-mod-cache
+            persistentVolumeClaim:
+              claimName: ark-completions-gomod
+          - name: go-build-cache
+            persistentVolumeClaim:
+              claimName: ark-completions-gobuild
+        extraVolumeMounts:
+          - name: go-mod-cache
+            mountPath: /go/pkg/mod
+          - name: go-build-cache
+            mountPath: /root/.cache/go-build
   ark-apiserver:
     namespace: ark-system
     helm:
@@ -146,9 +170,6 @@ dev:
         uploadExcludeFile: .dockerignore
         onUpload:
           restartContainer: true
-    persistPaths:
-      - path: /go/pkg/mod
-      - path: /root/.cache/go-build
     ssh:
       enabled: true
   ark-completions:
@@ -168,9 +189,6 @@ dev:
         uploadExcludeFile: .dockerignore
         onUpload:
           restartContainer: true
-    persistPaths:
-      - path: /go/pkg/mod
-      - path: /root/.cache/go-build
     ssh:
       enabled: true
 
