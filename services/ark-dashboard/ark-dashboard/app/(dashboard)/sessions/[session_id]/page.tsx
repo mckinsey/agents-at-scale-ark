@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useMemo, useEffect } from 'react';
+import { use, useMemo, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronLeft, MessageSquare, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -30,7 +30,9 @@ export default function SessionDetailPage({ params }: Props) {
   const initialParticipant = searchParams.get('participant');
   const initialType = searchParams.get('type') as 'agent' | 'team' | 'tool' | null;
   const initialConversationId = searchParams.get('conversationId');
-  const isNewSession = searchParams.get('isNew') === 'true';
+
+  const [hasSentMessage, setHasSentMessage] = useState(() => !initialParticipant);
+  const isNewSession = !hasSentMessage;
 
   // Skip API call for new sessions (avoid 404 errors)
   const { data: backendSession, isLoading, isError } = useGetSession(session_id, {
@@ -39,7 +41,7 @@ export default function SessionDetailPage({ params }: Props) {
 
   // Create temporary session from query params for new sessions
   const temporarySession = useMemo((): BrokerSession | null => {
-    if (!isNewSession || !initialParticipant || !initialType) {
+    if (!initialParticipant || !initialType) {
       return null;
     }
 
@@ -52,15 +54,28 @@ export default function SessionDetailPage({ params }: Props) {
         id: generateUUID(),
         name: initialParticipant,
         type: initialType,
-        isActive: true,
       }],
       conversationCount: 0,
       createdAt: new Date().toISOString(),
       lastActivity: new Date().toISOString(),
     };
-  }, [isNewSession, initialParticipant, initialType, session_id]);
+  }, [initialParticipant, initialType, session_id]);
 
-  const session = isNewSession ? temporarySession : backendSession;
+  const session = useMemo(() => {
+    if (!backendSession) {
+      return temporarySession;
+    }
+
+    // If backend has no participants but temporary session does, use temporary participants
+    if (backendSession.participants.length === 0 && temporarySession?.participants.length) {
+      return {
+        ...backendSession,
+        participants: temporarySession.participants,
+      };
+    }
+
+    return backendSession;
+  }, [backendSession, temporarySession]);
 
   const memoizedInitialParticipant = useMemo(() => {
     if (isNewSession && initialParticipant) {
@@ -76,7 +91,7 @@ export default function SessionDetailPage({ params }: Props) {
     return isNewSession ? initialConversationId || undefined : undefined;
   }, [isNewSession, initialConversationId]);
 
-  if (isLoading) {
+  if (isLoading && !session) {
     return (
       <div className="flex h-full flex-col space-y-6 p-8">
         <Skeleton className="h-10 w-48" />
@@ -174,9 +189,6 @@ export default function SessionDetailPage({ params }: Props) {
                 >
                   {getParticipantIcon(p.type as ParticipantType)}
                   <span>{stripNamespace(p.name)}</span>
-                  {p.isActive && (
-                    <span className="size-2 rounded-full bg-blue-500" />
-                  )}
                 </div>
               ))}
             </div>
@@ -211,6 +223,8 @@ export default function SessionDetailPage({ params }: Props) {
             sessionId={session_id}
             initialParticipant={memoizedInitialParticipant}
             initialConversationId={memoizedInitialConversationId}
+            hasSentMessage={hasSentMessage}
+            onMessageSent={() => setHasSentMessage(true)}
           />
         </TabsContent>
 

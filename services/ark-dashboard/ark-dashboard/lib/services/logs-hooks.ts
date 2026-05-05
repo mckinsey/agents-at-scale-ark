@@ -6,6 +6,5 @@ export const useGetEvents = (sessionId: string | null) => {
     queryKey: ['events', sessionId],
     queryFn: () => (sessionId ? logsService.getEvents(sessionId) : null),
     enabled: !!sessionId,
-    refetchInterval: 5000, // Auto-refresh every 5 seconds
   });
 };

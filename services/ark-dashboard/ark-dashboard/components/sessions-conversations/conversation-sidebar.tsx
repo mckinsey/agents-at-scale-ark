@@ -28,9 +28,6 @@ export function ConversationSidebar({ conversations, selectedId, onSelect }: Pro
   return (
     <div className="min-h-0 flex flex-col flex-1 space-y-3 overflow-y-auto border-r border-border">
       {conversations.map(conv => {
-        const hasError = conv.status === 'error';
-        const isActive = conv.status === 'active';
-
         return (
           <button
             key={conv.conversationId}
@@ -38,10 +35,7 @@ export function ConversationSidebar({ conversations, selectedId, onSelect }: Pro
             className={cn(
               'relative h-auto w-full flex flex-col items-start gap-2 px-4 py-3 text-left cursor-pointer transition-colors hover:bg-muted',
               selectedId === conv.conversationId && 'bg-muted',
-              'border-l-2',
-              hasError && 'border-l-red-500',
-              isActive && !hasError && 'border-l-blue-500',
-              !hasError && !isActive && 'border-l-border'
+              'border-l-2 border-l-border'
             )}
             onClick={() => onSelect(conv.conversationId)}
           >

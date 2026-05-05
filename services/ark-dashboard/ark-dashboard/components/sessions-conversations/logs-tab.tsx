@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { useGetEvents } from '@/lib/services/logs-hooks';
+import { logsService, type LogEvent } from '@/lib/services/logs';
 
 interface Props {
   readonly sessionId: string;
@@ -76,8 +78,8 @@ function LogRow({ event, index }: LogRowProps) {
         <Badge variant={getLogLevelVariant(level)} className="shrink-0">
           {level}
         </Badge>
-        <span className="text-muted-foreground">{source}</span>
-        <span className="flex-1 truncate">{event.message}</span>
+        <span className="max-w-xs truncate text-muted-foreground">{source}</span>
+        <span className="min-w-0 flex-1 truncate">{event.message}</span>
       </button>
       {isExpanded && (
         <div className="ml-6 space-y-2 pb-3 pl-3">
@@ -105,6 +107,34 @@ function LogRow({ event, index }: LogRowProps) {
 
 export function LogsTab({ sessionId }: Props) {
   const { data, isLoading, error } = useGetEvents(sessionId);
+  const [additionalLogs, setAdditionalLogs] = useState<LogEvent[]>([]);
+  const [nextCursor, setNextCursor] = useState<number | undefined>();
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  // Update hasMore and cursor when initial data changes
+  useEffect(() => {
+    if (data) {
+      setHasMore(data.hasMore);
+      setNextCursor(data.nextCursor);
+    }
+  }, [data]);
+
+  const handleLoadMore = async () => {
+    if (!sessionId || isLoadingMore || nextCursor === undefined) return;
+
+    setIsLoadingMore(true);
+    try {
+      const response = await logsService.getEvents(sessionId, 100, nextCursor);
+      setAdditionalLogs(prev => [...prev, ...response.items]);
+      setNextCursor(response.nextCursor);
+      setHasMore(response.hasMore);
+    } catch (err) {
+      console.error('Failed to load more events:', err);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -136,17 +166,30 @@ export function LogsTab({ sessionId }: Props) {
     );
   }
 
+  const allLogs = [...data.items, ...additionalLogs];
+
   return (
-    <Card>
-      <CardContent className="p-6">
-        <div className="font-mono text-sm">
-          {data.items.map((event, index) => (
+    <Card className="flex flex-1 flex-col overflow-hidden">
+      <CardContent className="flex flex-1 flex-col overflow-hidden p-0">
+        <div className="h-full overflow-y-auto overflow-x-auto px-6 py-3 font-mono text-sm">
+          {allLogs.map((event, index) => (
             <LogRow
               key={`${event.timestamp}-${index}`}
               event={event}
               index={index}
             />
           ))}
+          {hasMore && (
+            <div className="flex justify-center py-4">
+              <Button
+                variant="outline"
+                onClick={handleLoadMore}
+                disabled={isLoadingMore}
+              >
+                {isLoadingMore ? 'Loading...' : 'Load more'}
+              </Button>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

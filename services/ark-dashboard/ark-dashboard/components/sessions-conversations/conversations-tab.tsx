@@ -25,21 +25,22 @@ interface Props {
     type: 'agent' | 'team' | 'tool';
   };
   readonly initialConversationId?: string;
+  readonly hasSentMessage?: boolean;
+  readonly onMessageSent?: () => void;
 }
 
-export function ConversationsTab({ sessionId, initialParticipant, initialConversationId }: Props) {
+export function ConversationsTab({ sessionId, initialParticipant, initialConversationId, hasSentMessage, onMessageSent }: Props) {
   const router = useRouter();
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [temporaryConversations, setTemporaryConversations] = useState<Conversation[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pendingMessagesMap, setPendingMessagesMap] = useAtom(sessionPendingMessagesAtom);
   const [processingStateMap, setProcessingStateMap] = useAtom(sessionProcessingStateAtom);
-  const [hasSentMessage, setHasSentMessage] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showToolCalls, setShowToolCalls] = useState(false);
 
   // Skip API call for new sessions before first message is sent
-  const isNewSession = !!initialParticipant && !hasSentMessage;
+  const isNewSession = !!initialParticipant && !(hasSentMessage ?? false);
   const { data: backendConversations, isLoading } = useListConversations(sessionId, {
     enabled: !isNewSession,
   });
@@ -56,7 +57,6 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
         messageCount: 0,
         toolCallCount: 0,
         duration: 'ongoing',
-        status: 'active',
         startTime: new Date().toISOString(),
         isTemporary: true,
         participantType: initialParticipant.type,
@@ -101,7 +101,6 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
       messageCount: 0,
       toolCallCount: 0,
       duration: 'ongoing',
-      status: 'active',
       startTime: new Date().toISOString(),
       isTemporary: true,
       participantType: participant.type,
@@ -129,14 +128,14 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
       prev.map(conv => ({ ...conv, isTemporary: false }))
     );
     // Enable API fetching now that first message has been sent
-    setHasSentMessage(true);
+    onMessageSent?.();
   };
 
   const handleSetProcessing = (conversationId: string, isProcessing: boolean) => {
     setProcessingStateMap(conversationId, isProcessing);
   };
 
-  if (isLoading) {
+  if (isLoading && allConversations.length === 0) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-96" />

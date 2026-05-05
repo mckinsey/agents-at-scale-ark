@@ -26,14 +26,14 @@ export interface LogsResponse {
 }
 
 export const logsService = {
-  async getEvents(sessionId: string, limit = 100): Promise<LogsResponse> {
+  async getEvents(sessionId: string, limit = 100, cursor?: number): Promise<LogsResponse> {
     const response = await apiClient.get<LogsResponse>(
       `/api/v1/broker/events`,
       {
         params: {
           session_id: sessionId,
           limit,
-          offset: 0,
+          ...(cursor !== undefined && { cursor }),
         },
       }
     );

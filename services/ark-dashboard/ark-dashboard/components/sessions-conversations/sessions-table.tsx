@@ -83,7 +83,7 @@ export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery,
   const sessions = data?.items || [];
   const totalSessions = data?.total || 0;
   const activeSessions = sessions.filter((s) => s.status === 'active').length;
-  const errorSessions = sessions.filter((s) => s.errorCount > 0).length;
+  const errorSessions = sessions.filter((s) => s.status === 'error').length;
   const hasMore = data?.hasMore || false;
 
   if (isLoading && cursor === 0) {

@@ -125,7 +125,7 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
     const conversationId = generateUUID();
 
     router.push(
-      `/sessions/${sessionId}?participant=${encodeURIComponent(selectedParticipant)}&type=${participantType}&conversationId=${conversationId}&isNew=true`
+      `/sessions/${sessionId}?participant=${encodeURIComponent(selectedParticipant)}&type=${participantType}&conversationId=${conversationId}`
     );
     onOpenChange(false);
     setSelectedParticipant(null);

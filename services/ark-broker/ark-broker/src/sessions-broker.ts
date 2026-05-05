@@ -32,11 +32,32 @@ export interface QueryEntry {
   lastActivity: string;
 }
 
+export interface Participant {
+  id: string;
+  name: string;
+  type: 'agent' | 'team' | 'tool';
+}
+
+export interface ConversationSummary {
+  conversationId: string;
+  name: string;
+  participants: string[];
+  messageCount: number;
+  duration: string;
+  startTime: string;
+  participantType: 'agent' | 'team' | 'tool';
+  errorCount: number;
+}
+
 /** A single session containing one or more queries grouped by session ID */
 export interface SessionEntry {
   sessionId: string;
   name: string;
   queries: Record<string, QueryEntry>;
+  status?: 'active' | 'idle' | 'error';
+  errorCount?: number;
+  participants?: Participant[];
+  conversations?: ConversationSummary[];
   createdAt: string;
   lastActivity: string;
 }
@@ -70,6 +91,11 @@ export class SessionsBroker {
         const data = JSON.parse(readFileSync(this.path, 'utf-8'));
         if (data?.sessions) {
           this.store = data;
+
+          Object.keys(this.store.sessions).forEach(sessionId => {
+            this.recalculateSessionStatus(sessionId);
+          });
+
           const sessionCount = Object.keys(this.store.sessions).length;
           const queryCount = Object.values(this.store.sessions)
             .reduce((sum, s) => sum + Object.keys(s.queries).length, 0);
@@ -103,6 +129,137 @@ export class SessionsBroker {
       return QueryPhases.Error;
     }
     return QueryPhases.Running;
+  }
+
+  private determineParticipantType(queries: QueryEntry[], participantName: string): 'agent' | 'team' | 'tool' {
+    const relevantQuery = queries.find(q =>
+      q.team === participantName || q.agent === participantName || q.tool === participantName
+    );
+
+    if (!relevantQuery) return 'agent';
+
+    if (relevantQuery.targetType === 'team') return 'team';
+    if (relevantQuery.targetType === 'tool') return 'tool';
+    if (relevantQuery.team === participantName) return 'team';
+    if (relevantQuery.tool === participantName) return 'tool';
+
+    return 'agent';
+  }
+
+  private calculateDuration(start: string, end?: string): string {
+    if (!end) return 'ongoing';
+    const diff = new Date(end).getTime() - new Date(start).getTime();
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    return minutes > 0 ? `${minutes}m ${seconds % 60}s` : `${seconds}s`;
+  }
+
+  private recalculateParticipants(sessionId: string): void {
+    const session = this.store.sessions[sessionId];
+    if (!session) return;
+
+    // Derive participants from conversations instead of queries
+    if (!session.conversations || session.conversations.length === 0) {
+      session.participants = [];
+      return;
+    }
+
+    // Get unique participant names from conversation names
+    const participantNames = Array.from(
+      new Set(session.conversations.map(conv => conv.name))
+    );
+
+    session.participants = participantNames.map(name => {
+      // Find a conversation to get participant type
+      const conv = session.conversations!.find(c => c.name === name);
+
+      return {
+        id: name,
+        name: name,
+        type: conv?.participantType || 'agent',
+      };
+    });
+  }
+
+  private recalculateConversations(sessionId: string): void {
+    const session = this.store.sessions[sessionId];
+    if (!session) return;
+
+    const queries = Object.values(session.queries);
+    const conversationMap = new Map<string, QueryEntry[]>();
+
+    queries.forEach(query => {
+      if (!query.conversationId) return;
+      const existing = conversationMap.get(query.conversationId) || [];
+      conversationMap.set(query.conversationId, [...existing, query]);
+    });
+
+    session.conversations = Array.from(conversationMap.entries()).map(([convId, convQueries]) => {
+      const participants = Array.from(
+        new Set(convQueries.map(q => q.team || q.agent || q.tool).filter((name): name is string => Boolean(name)))
+      );
+      const participantName = participants[0] || convId;
+
+      const firstQuery = convQueries[0];
+      let participantType: 'agent' | 'team' | 'tool' = 'agent';
+      if (firstQuery.team) {
+        participantType = 'team';
+      } else if (firstQuery.agent) {
+        participantType = 'agent';
+      } else if (firstQuery.tool) {
+        participantType = 'tool';
+      }
+
+      const messageCount = convQueries.length;
+      const errorCount = convQueries.filter(q => q.phase === 'error').length;
+
+      return {
+        conversationId: convId,
+        name: participantName,
+        participants,
+        messageCount,
+        duration: this.calculateDuration(convQueries[0].createdAt, convQueries[convQueries.length - 1].completedAt),
+        startTime: convQueries[0].createdAt,
+        participantType,
+        errorCount,
+      };
+    });
+  }
+
+  private recalculateSessionStatus(sessionId: string): void {
+    const session = this.store.sessions[sessionId];
+    if (!session) return;
+
+    const queries = Object.values(session.queries);
+
+    if (queries.length === 0) {
+      session.status = 'idle';
+      session.errorCount = 0;
+      session.participants = [];
+      session.conversations = [];
+      return;
+    }
+
+    session.errorCount = queries.filter(q => q.phase === 'error').length;
+
+    const hasActive = queries.some(q => q.phase === 'running' || q.phase === 'pending');
+
+    if (hasActive) {
+      session.status = 'active';
+    } else {
+      const latestQuery = queries.reduce((latest, q) =>
+        new Date(q.lastActivity) > new Date(latest.lastActivity) ? q : latest
+      );
+
+      if (latestQuery.phase === 'error') {
+        session.status = 'error';
+      } else {
+        session.status = 'idle';
+      }
+    }
+
+    this.recalculateConversations(sessionId);
+    this.recalculateParticipants(sessionId);
   }
 
   private updateExistingQuery(
@@ -142,7 +299,9 @@ export class SessionsBroker {
 
   applyEvent(eventData: Partial<SessionEventData>): void {
     const { sessionId, queryName } = eventData;
-    if (!sessionId || !queryName) return;
+    if (!sessionId || !queryName) {
+      return;
+    }
 
     const now = new Date().toISOString();
     const { queryNamespace } = eventData;
@@ -160,6 +319,8 @@ export class SessionsBroker {
         sessionId,
         name: sessionId.startsWith('session-') ? sessionId.substring(8) : sessionId,
         queries: {},
+        status: 'idle',
+        errorCount: 0,
         createdAt: now,
         lastActivity: now,
       };
@@ -190,6 +351,8 @@ export class SessionsBroker {
       };
     }
 
+    this.recalculateSessionStatus(sessionId);
+
     this.deferredSave();
     this.emitter.emit('upsert', { sessionId, queryName });
   }
@@ -214,7 +377,11 @@ export class SessionsBroker {
   }
 
   getSession(sessionId: string): SessionEntry | undefined {
-    return this.store.sessions[sessionId];
+    const session = this.store.sessions[sessionId];
+    if (session) {
+      this.recalculateSessionStatus(sessionId);
+    }
+    return session;
   }
 
   paginate(params: PaginationParams, filters?: {
@@ -230,14 +397,8 @@ export class SessionsBroker {
 
     if (filters?.status) {
       sessions = sessions.filter(s => {
-        const queries = Object.values(s.queries);
-        const errors = queries.filter(q => q.phase === 'error');
-        const active = queries.some(q => q.phase === 'running' || q.phase === 'pending');
-
-        if (filters.status === 'error') return errors.length > 0;
-        if (filters.status === 'active') return active;
-        if (filters.status === 'idle') return !active && errors.length === 0;
-        return true;
+        const sessionStatus = s.status ?? 'idle';
+        return sessionStatus === filters.status;
       });
     }
 
