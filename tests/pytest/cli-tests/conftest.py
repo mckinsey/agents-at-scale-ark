@@ -23,11 +23,20 @@ def mock_llm_model():
     if result.returncode != 0:
         logger.warning("kubectl apply mock-llm-model failed (rc=%d): %s %s",
                        result.returncode, result.stdout.strip(), result.stderr.strip())
-    subprocess.run(
-        ["kubectl", "wait", "--for=condition=ModelAvailable",
-         f"model/{MOCK_LLM_MODEL_NAME}", "-n", "default", "--timeout=120s"],
-        check=True
-    )
+
+    mock_llm_present = subprocess.run(
+        ["kubectl", "get", "deployment", "mock-llm", "-n", "default"],
+        capture_output=True
+    ).returncode == 0
+
+    if mock_llm_present:
+        subprocess.run(
+            ["kubectl", "wait", "--for=condition=ModelAvailable",
+             f"model/{MOCK_LLM_MODEL_NAME}", "-n", "default", "--timeout=120s"],
+            check=True
+        )
+    else:
+        logger.warning("mock-llm deployment not found — skipping ModelAvailable wait")
 
     yield MOCK_LLM_MODEL_NAME
 
