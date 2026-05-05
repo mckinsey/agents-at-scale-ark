@@ -214,15 +214,45 @@ runs:
     - name: Wait for calico, coredns, metrics server, traefik
       run: |
         echo "::group::Wait for daemonset/calico-node"
-        kubectl rollout status --watch --timeout=5m daemonset/calico-node -n kube-system
+        for attempt in $(seq 1 36); do
+          if kubectl rollout status --timeout=30s daemonset/calico-node -n kube-system 2>/dev/null; then
+            break
+          fi
+          echo "Waiting for calico-node (attempt $attempt/36)..."
+          sleep 5
+          if [ "$attempt" -eq 36 ]; then
+            echo "Timed out waiting for calico-node"
+            kubectl rollout status --timeout=30s daemonset/calico-node -n kube-system
+          fi
+        done
         echo "::endgroup::"
 
         echo "::group::Wait for deployment/calico-kube-controllers"
-        kubectl rollout status --watch --timeout=5m deployment/calico-kube-controllers -n kube-system
+        for attempt in $(seq 1 36); do
+          if kubectl rollout status --timeout=30s deployment/calico-kube-controllers -n kube-system 2>/dev/null; then
+            break
+          fi
+          echo "Waiting for calico-kube-controllers (attempt $attempt/36)..."
+          sleep 5
+          if [ "$attempt" -eq 36 ]; then
+            echo "Timed out waiting for calico-kube-controllers"
+            kubectl rollout status --timeout=30s deployment/calico-kube-controllers -n kube-system
+          fi
+        done
         echo "::endgroup::"
 
         echo "::group::Wait for deployment/coredns"
-        kubectl rollout status --watch --timeout=5m deployment/coredns -n kube-system
+        for attempt in $(seq 1 36); do
+          if kubectl rollout status --timeout=30s deployment/coredns -n kube-system 2>/dev/null; then
+            break
+          fi
+          echo "Waiting for coredns (attempt $attempt/36)..."
+          sleep 5
+          if [ "$attempt" -eq 36 ]; then
+            echo "Timed out waiting for coredns"
+            kubectl rollout status --timeout=30s deployment/coredns -n kube-system
+          fi
+        done
         echo "::endgroup::"
 
         echo "::group::Wait for deployment/metrics-server"
