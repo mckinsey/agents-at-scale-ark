@@ -1,7 +1,7 @@
 'use client';
 
-import { use, useMemo, useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useMemo, useEffect, useState } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ChevronLeft, MessageSquare, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -16,14 +16,9 @@ import { getParticipantIcon } from '@/lib/utils/participant-icon';
 import { cn } from '@/lib/utils';
 import type { ParticipantType } from '@/lib/services/conversations';
 
-interface Props {
-  readonly params: Promise<{
-    session_id: string;
-  }>;
-}
-
-export default function SessionDetailPage({ params }: Props) {
-  const { session_id } = use(params);
+export default function SessionDetailPage() {
+  const params = useParams();
+  const session_id = params.session_id as string;
   const router = useRouter();
   const searchParams = useSearchParams();
 
