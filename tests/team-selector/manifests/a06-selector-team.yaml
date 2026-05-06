@@ -13,6 +13,7 @@ spec:
       type: agent
   selector:
     agent: coordinator
+    enableTerminateTool: true
     selectorPrompt: |
       You are coordinating a team for testing selector functionality. Select the most appropriate team member
       to respond next based on the conversation flow and expertise needed.
