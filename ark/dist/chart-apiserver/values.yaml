@@ -1,0 +1,61 @@
+replicas: 1
+
+image:
+  repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-controller
+  pullPolicy: IfNotPresent
+  # tag defaults to .Chart.AppVersion if not specified
+
+serviceAccountName: ark-apiserver
+
+apiserver:
+  port: 6443
+
+postgresql:
+  host: ""
+  port: 5432
+  database: "ark"
+  user: ""
+  passwordSecretName: ""
+  passwordSecretKey: "password"
+  sslMode: "disable"
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 10m
+    memory: 128Mi
+
+livenessProbe:
+  initialDelaySeconds: 60
+  periodSeconds: 20
+  timeoutSeconds: 10
+  failureThreshold: 3
+  httpGet:
+    path: /healthz
+    port: 8081
+
+readinessProbe:
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 10
+  failureThreshold: 3
+  httpGet:
+    path: /readyz
+    port: 8081
+
+securityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - "ALL"
+
+terminationGracePeriodSeconds: 10
+
+extraEnv: {}

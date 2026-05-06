@@ -57,11 +57,16 @@ def team_to_detail_response(team: dict) -> TeamDetailResponse:
     conditions = status.get("conditions", [])
     availability = extract_availability_from_conditions(conditions, "Available")
 
+    # Convert raw member dicts to TeamMember objects
+    from ...models.teams import TeamMember
+    members_raw = spec.get("members", [])
+    members = [TeamMember(**member) if isinstance(member, dict) else member for member in members_raw]
+
     return TeamDetailResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
         description=spec.get("description"),
-        members=spec.get("members", []),
+        members=members,
         strategy=spec.get("strategy", ""),
         graph=spec.get("graph"),
         loops=spec.get("loops", False),
