@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useListSessions } from '@/lib/services/broker-sessions-hooks';
+import { brokerSessionsService, type BrokerSession } from '@/lib/services/broker-sessions';
 import { useDebounce } from '@/lib/hooks/use-debounce';
 import { SessionTableRow } from './session-table-row';
 import { NewSessionDialog } from './new-session-dialog';
@@ -27,8 +28,11 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
   const [dateFilter, setDateFilter] = useState<'all' | '24h' | '7d' | '30d'>('all');
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  const [cursor, setCursor] = useState<number>(0);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [additionalSessions, setAdditionalSessions] = useState<BrokerSession[]>([]);
+  const [nextCursor, setNextCursor] = useState<number | undefined>();
+  const [hasMoreSessions, setHasMoreSessions] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   const debouncedSearch = useDebounce(searchQuery, 400);
 
@@ -43,7 +47,7 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
 
   const { data, isLoading, isError, error } = useListSessions({
     limit: 20,
-    cursor,
+    cursor: 0,
     status: statusFilter === 'all' ? undefined : statusFilter,
     dateFrom,
     search: debouncedSearch || undefined,
@@ -60,8 +64,17 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
   }, [isError, error]);
 
   useEffect(() => {
-    setCursor(0);
-  }, [debouncedSearch, statusFilter, dateFilter, sortField, sortDirection]);
+    if (data) {
+      setHasMoreSessions(data.hasMore);
+      setNextCursor(data.nextCursor);
+    }
+  }, [data]);
+
+  useEffect(() => {
+    setAdditionalSessions([]);
+    setNextCursor(data?.nextCursor);
+    setHasMoreSessions(data?.hasMore || false);
+  }, [debouncedSearch, statusFilter, dateFilter, sortField, sortDirection, data?.nextCursor, data?.hasMore]);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -72,13 +85,40 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
     }
   };
 
-  const sessions = data?.items || [];
+  const handleLoadMore = async () => {
+    if (isLoadingMore || nextCursor === undefined) return;
+
+    setIsLoadingMore(true);
+    try {
+      const response = await brokerSessionsService.getSessions({
+        limit: 20,
+        cursor: nextCursor,
+        status: statusFilter === 'all' ? undefined : statusFilter,
+        dateFrom,
+        search: debouncedSearch || undefined,
+        sort: sortField,
+        order: sortDirection,
+      });
+      setAdditionalSessions(prev => [...prev, ...response.items]);
+      setNextCursor(response.nextCursor);
+      setHasMoreSessions(response.hasMore);
+    } catch (err) {
+      console.error('Failed to load more sessions:', err);
+      toast.error('Failed to load more sessions', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
+  const sessions = [...(data?.items || []), ...additionalSessions];
   const totalSessions = data?.total || 0;
   const activeSessions = data?.statusCounts?.active ?? 0;
   const errorSessions = data?.statusCounts?.error ?? 0;
-  const hasMore = data?.hasMore || false;
+  const hasMore = hasMoreSessions;
 
-  if (isLoading && cursor === 0) {
+  if (isLoading && sessions.length === 0) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-20" />
@@ -192,10 +232,10 @@ export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
           <div className="flex flex-col items-center gap-2 border-t p-4">
             <Button
               variant="outline"
-              onClick={() => setCursor(data?.nextCursor || 0)}
-              disabled={isLoading}
+              onClick={handleLoadMore}
+              disabled={isLoadingMore}
             >
-              {isLoading ? 'Loading...' : 'Load More'}
+              {isLoadingMore ? 'Loading...' : 'Load More'}
             </Button>
             <div className="text-sm text-muted-foreground">
               Showing {sessions.length} of {totalSessions} sessions
