@@ -1,5 +1,6 @@
 import { apiClient } from '@/lib/api/client';
 import type { ChatMessage } from '@/lib/types/chat-message';
+import type { BrokerSession, ConversationSummary } from './broker-sessions';
 import { logsService } from './logs';
 import { chatService } from './chat';
 
@@ -26,10 +27,19 @@ export interface ConversationMessage {
   sequence: number;
 }
 
+interface SessionQuery {
+  conversationId: string;
+  name: string;
+}
+
+type SessionWithQueries = BrokerSession & {
+  queries?: Record<string, SessionQuery>;
+};
+
 export const conversationsService = {
   async getConversations(sessionId: string): Promise<Conversation[]> {
     const [session, events] = await Promise.all([
-      apiClient.get<any>(`/api/v1/broker/sessions/${sessionId}`),
+      apiClient.get<SessionWithQueries>(`/api/v1/broker/sessions/${sessionId}`),
       logsService.getEvents(sessionId, 1000),
     ]);
 
@@ -37,9 +47,9 @@ export const conversationsService = {
 
     const queries = Object.values(session.queries || {});
 
-    const conversations = session.conversations.map((conv: any): Conversation => {
-      const conversationQueries = queries.filter((q: any) => q.conversationId === conv.conversationId);
-      const queryNames = new Set(conversationQueries.map((q: any) => q.name));
+    const conversations = session.conversations.map((conv: ConversationSummary): Conversation => {
+      const conversationQueries = queries.filter((q: SessionQuery) => q.conversationId === conv.conversationId);
+      const queryNames = new Set(conversationQueries.map((q: SessionQuery) => q.name));
 
       const toolCallCount = events
         ? events.items.filter(e =>
