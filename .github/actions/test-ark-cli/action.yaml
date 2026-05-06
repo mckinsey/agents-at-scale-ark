@@ -161,17 +161,6 @@ runs:
 
         ark status
 
-    - name: Wait for Ark to be fully ready
-      shell: bash
-      run: |
-        echo "Waiting for Ark controller to be ready..."
-
-        # Simple wait for controller to be available (via ark status)
-        # This is sufficient for the validating webhook to work
-        kubectl wait --for=condition=available deployment/ark-controller -n ark-system --timeout=5m
-
-        echo "✓ Ark controller is ready"
-
     - name: Create default model
       shell: bash
       run: |
