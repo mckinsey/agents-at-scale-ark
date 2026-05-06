@@ -171,6 +171,19 @@ jobs:
           auth_client_id: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_ID }}
           auth_client_secret: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_SECRET }}
 
+      - name: Wait for SonarQube server
+        run: |
+          for attempt in 1 2 3; do
+            curl -sf "$SONAR_HOST_URL/api/server/version" && break
+            if [ $attempt -lt 3 ]; then
+              echo "SonarQube not reachable (attempt $attempt), retrying in 30s..."
+              sleep 30
+            else
+              echo "SonarQube unreachable after 3 attempts"
+              exit 1
+            fi
+          done
+
       - name: Run SonarQube Scan (Branch)
         if: github.event_name != 'pull_request'
         run: |
@@ -179,21 +192,15 @@ jobs:
           else
             BRANCH="${GITHUB_REF#refs/heads/}"
           fi
-          for attempt in 1 2 3; do
-            docker run -i --user 1000 --rm \
-              -e SONAR_TOKEN \
-              -e SONAR_HOST_URL \
-              -v $(pwd):/app \
-              -w /app \
-              sonarsource/sonar-scanner-cli:12.0 \
-                -Dsonar.projectKey=$PROJECT_KEY \
-                -Dsonar.branch.name=$BRANCH \
-                -Dsonar.qualitygate.wait=true && break
-            if [ $attempt -lt 3 ]; then
-              echo "Attempt $attempt failed, retrying in 30s..."
-              sleep 30
-            fi
-          done
+          docker run -i --user 1000 --rm \
+            -e SONAR_TOKEN \
+            -e SONAR_HOST_URL \
+            -v $(pwd):/app \
+            -w /app \
+            sonarsource/sonar-scanner-cli:12.0 \
+              -Dsonar.projectKey=$PROJECT_KEY \
+              -Dsonar.branch.name=$BRANCH \
+              -Dsonar.qualitygate.wait=true
 
       - name: Run SonarQube Scan (PR)
         if: github.event_name == 'pull_request'
@@ -202,20 +209,14 @@ jobs:
           PR_BRANCH: ${{ github.head_ref }}
           PR_BASE: ${{ github.base_ref }}
         run: |
-          for attempt in 1 2 3; do
-            docker run -i --user 1000 --rm \
-              -e SONAR_TOKEN \
-              -e SONAR_HOST_URL \
-              -v $(pwd):/app \
-              -w /app \
-              sonarsource/sonar-scanner-cli:12.0 \
-                -Dsonar.projectKey=$PROJECT_KEY \
-                -Dsonar.pullrequest.key=$PR_KEY \
-                -Dsonar.pullrequest.branch=$PR_BRANCH \
-                -Dsonar.pullrequest.base=$PR_BASE \
-                -Dsonar.qualitygate.wait=true && break
-            if [ $attempt -lt 3 ]; then
-              echo "Attempt $attempt failed, retrying in 30s..."
-              sleep 30
-            fi
-          done
+          docker run -i --user 1000 --rm \
+            -e SONAR_TOKEN \
+            -e SONAR_HOST_URL \
+            -v $(pwd):/app \
+            -w /app \
+            sonarsource/sonar-scanner-cli:12.0 \
+              -Dsonar.projectKey=$PROJECT_KEY \
+              -Dsonar.pullrequest.key=$PR_KEY \
+              -Dsonar.pullrequest.branch=$PR_BRANCH \
+              -Dsonar.pullrequest.base=$PR_BASE \
+              -Dsonar.qualitygate.wait=true
