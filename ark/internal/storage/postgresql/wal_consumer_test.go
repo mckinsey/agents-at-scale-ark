@@ -54,22 +54,33 @@ func makeTuple(values ...string) *pglogrepl.TupleData {
 	}
 }
 
-func TestGenerateSlotName(t *testing.T) {
-	name := generateSlotName()
-	if !strings.HasPrefix(name, walSlotPrefix) {
-		t.Errorf("slot name %q missing prefix %q", name, walSlotPrefix)
-	}
-	if len(name) != len(walSlotPrefix)+8 {
-		t.Errorf("slot name %q has unexpected length %d", name, len(name))
-	}
+func TestPostgresWatcher_FirstSeenUID(t *testing.T) {
+	t.Parallel()
+	w := &postgresWatcher{seenRVs: make(map[string]int64)}
 
-	names := make(map[string]bool)
-	for i := 0; i < 100; i++ {
-		n := generateSlotName()
-		if names[n] {
-			t.Fatalf("duplicate slot name after %d iterations: %s", i, n)
-		}
-		names[n] = true
+	if w.hasSeenUID("uid-A") {
+		t.Error("hasSeenUID should return false for unseen UID")
+	}
+	if w.markSeen("uid-A", 100) {
+		t.Error("markSeen should return false (not skip) for new uid/rv")
+	}
+	if !w.hasSeenUID("uid-A") {
+		t.Error("hasSeenUID should return true after markSeen recorded the uid")
+	}
+	if w.hasSeenUID("uid-B") {
+		t.Error("hasSeenUID should return false for a different unseen UID")
+	}
+	if !w.markSeen("uid-A", 100) {
+		t.Error("markSeen should return true (skip) for already-emitted (uid, rv)")
+	}
+	if w.markSeen("uid-A", 101) {
+		t.Error("markSeen should return false (not skip) for higher rv on same uid")
+	}
+}
+
+func TestSlotNameIsStable(t *testing.T) {
+	if walSlotName != "ark_cdc" {
+		t.Errorf("slot name changed unexpectedly: got %q want %q (stability matters: existing deployments rely on this name to resume their WAL position across restarts)", walSlotName, "ark_cdc")
 	}
 }
 
