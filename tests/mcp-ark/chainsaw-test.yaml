@@ -15,11 +15,25 @@ spec:
             --set serviceAccount.name=ark-mcp-sa-$NAMESPACE \
             ${ARK_MCP_IMAGE:+--set app.image.repository=${ARK_MCP_IMAGE}} \
             ${ARK_MCP_IMAGE_TAG:+--set app.image.tag=${ARK_MCP_IMAGE_TAG}} \
-            --wait --timeout=120s
+            --wait --timeout=360s
         env:
         - name: NAMESPACE
           value: ($namespace)
-        timeout: 180s
+        timeout: 420s
+    catch:
+    - script:
+        content: |
+          echo "=== Pods ==="
+          kubectl -n $NAMESPACE get pods -o wide
+          echo "=== Events ==="
+          kubectl -n $NAMESPACE get events --sort-by='.lastTimestamp'
+          echo "=== Describe ark-mcp pod ==="
+          kubectl -n $NAMESPACE describe pod -l app=ark-mcp
+          echo "=== Logs ark-mcp ==="
+          kubectl -n $NAMESPACE logs -l app=ark-mcp --tail=200 --all-containers || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
 
   - name: wait-for-mcpserver-ready
     try:

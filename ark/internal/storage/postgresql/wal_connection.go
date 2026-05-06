@@ -16,7 +16,6 @@ import (
 func (p *PostgreSQLBackend) startWALConsumer() {
 	backoff := time.Second
 	maxBackoff := 30 * time.Second
-	slotName := generateSlotName()
 
 	for {
 		select {
@@ -25,7 +24,7 @@ func (p *PostgreSQLBackend) startWALConsumer() {
 		default:
 		}
 
-		err := p.runWALConsumer(slotName)
+		err := p.runWALConsumer(walSlotName)
 		if p.ctx.Err() != nil {
 			return
 		}
@@ -128,13 +127,56 @@ func (p *PostgreSQLBackend) receiveWALMessage(conn *pgconn.PgConn, state *walStr
 	return nil, fmt.Errorf("receive message: %w", err)
 }
 
+// ensureReplicationSlot guarantees a persistent logical replication slot named slotName
+// exists and returns the LSN to start replication from.
+//
+//   - If the slot doesn't exist: create it (Temporary: false) and return its consistent point.
+//   - If the slot exists and is invalidated (e.g. WAL was truncated past it): drop and recreate.
+//   - If the slot exists and is healthy: return LSN(0), which signals the server to resume
+//     from the slot's confirmed_flush_lsn. This is what makes restarts lossless — every
+//     INSERT/UPDATE that committed while the consumer was down stays in the WAL until the
+//     slot's confirmed position advances past it.
+//
+// If the slot is currently active (held by another session), we return an error so the
+// caller's backoff loop retries; the active holder will eventually drop the connection.
 func (p *PostgreSQLBackend) ensureReplicationSlot(conn *pgconn.PgConn, slotName string) (pglogrepl.LSN, error) {
-	res, err := pglogrepl.CreateReplicationSlot(p.ctx, conn, slotName, "pgoutput",
-		pglogrepl.CreateReplicationSlotOptions{Temporary: true})
-	if err != nil {
-		return 0, err
+	var (
+		exists    bool
+		active    bool
+		walStatus string
+	)
+	err := p.db.QueryRowContext(p.ctx, `
+		SELECT true, active, COALESCE(wal_status, '')
+		FROM pg_replication_slots
+		WHERE slot_name = $1`, slotName).Scan(&exists, &active, &walStatus)
+	if err != nil && err.Error() != "sql: no rows in result set" {
+		return 0, fmt.Errorf("inspect replication slot: %w", err)
 	}
-	klog.Infof("Created replication slot %s at %s", slotName, res.ConsistentPoint)
+
+	// PG <17 reports invalidation via wal_status='lost'. PG17+ adds invalidation_reason
+	// but keeps wal_status, so this check works on both.
+	if exists && walStatus == "lost" {
+		klog.Warningf("Replication slot %s invalidated (wal_status=lost); dropping and recreating", slotName)
+		if _, dropErr := p.db.ExecContext(p.ctx, `SELECT pg_drop_replication_slot($1)`, slotName); dropErr != nil {
+			return 0, fmt.Errorf("drop invalidated slot: %w", dropErr)
+		}
+		exists = false
+	}
+
+	if exists {
+		if active {
+			return 0, fmt.Errorf("replication slot %s is currently active in another session", slotName)
+		}
+		klog.Infof("Reusing existing replication slot %s; resuming from confirmed_flush_lsn", slotName)
+		return pglogrepl.LSN(0), nil
+	}
+
+	res, err := pglogrepl.CreateReplicationSlot(p.ctx, conn, slotName, "pgoutput",
+		pglogrepl.CreateReplicationSlotOptions{Temporary: false})
+	if err != nil {
+		return 0, fmt.Errorf("create replication slot: %w", err)
+	}
+	klog.Infof("Created persistent replication slot %s at %s", slotName, res.ConsistentPoint)
 	lsn, err := pglogrepl.ParseLSN(res.ConsistentPoint)
 	if err != nil {
 		return 0, fmt.Errorf("parse LSN: %w", err)

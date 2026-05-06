@@ -1,4 +1,4 @@
-import { Database, Key, Lock, Server, Store, Zap } from 'lucide-react';
+import { Database, Key, Lock, Search, Server, Store, Zap } from 'lucide-react';
 
 export type SettingPage =
   | 'a2a-servers'
@@ -6,7 +6,8 @@ export type SettingPage =
   | 'manage-marketplace'
   | 'service-api-keys'
   | 'secrets'
-  | 'experimental-features';
+  | 'experimental-features'
+  | 'queries';
 
 export const MANAGE_MARKETPLACE_KEY = 'manage-marketplace' as const;
 
@@ -41,6 +42,11 @@ export const settingsSections: SettingsSection[] = [
         key: 'manage-marketplace',
         label: 'Manage marketplace',
         icon: Store,
+      },
+      {
+        key: 'queries',
+        label: 'Queries',
+        icon: Search,
       },
       {
         key: 'experimental-features',

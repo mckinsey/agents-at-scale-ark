@@ -103,11 +103,11 @@ build-completions: fmt vet ## Build completions engine binary.
 .PHONY: run
 run: manifests generate fmt vet
 	scripts/tls-certs.sh
-	ENABLE_WEBHOOKS=true go run ./cmd/main.go --webhook-cert-path=certs
+	ENABLE_WEBHOOKS=true go run ./cmd/main.go --role=controller --webhook-cert-path=certs
 
 .PHONY: dev
 dev:
-	ENABLE_WEBHOOKS=false go run $(LDFLAGS) ./cmd/main.go
+	ENABLE_WEBHOOKS=false go run $(LDFLAGS) ./cmd/main.go --role=controller
 
 
 ##@ Deployment

@@ -112,7 +112,7 @@ func TestDispatchApplyDefaults(t *testing.T) {
 		agent := &arkv1alpha1.Agent{
 			ObjectMeta: metav1.ObjectMeta{Name: "a"},
 		}
-		ApplyDefaults(agent)
+		ApplyDefaults(context.Background(), agent, nil)
 		if agent.Spec.ModelRef == nil || agent.Spec.ModelRef.Name != "default" {
 			t.Fatal("expected default modelRef")
 		}
@@ -122,7 +122,7 @@ func TestDispatchApplyDefaults(t *testing.T) {
 		model := &arkv1alpha1.Model{
 			Spec: arkv1alpha1.ModelSpec{Type: ProviderAzure},
 		}
-		ApplyDefaults(model)
+		ApplyDefaults(context.Background(), model, nil)
 		if model.Spec.Provider != ProviderAzure {
 			t.Fatalf("expected provider=%s, got %s", ProviderAzure, model.Spec.Provider)
 		}
@@ -139,7 +139,7 @@ func TestDispatchApplyDefaults(t *testing.T) {
 			},
 		}
 		_ = query.Spec.Input.UnmarshalJSON([]byte(`[{"role":"user","content":"hi"}]`))
-		ApplyDefaults(query)
+		ApplyDefaults(context.Background(), query, nil)
 		text, _ := query.Spec.GetInputString()
 		if text != "hi" {
 			t.Fatalf("expected 'hi', got '%s'", text)
@@ -153,13 +153,13 @@ func TestDispatchApplyDefaults(t *testing.T) {
 				Strategy: "round-robin",
 			},
 		}
-		ApplyDefaults(team)
+		ApplyDefaults(context.Background(), team, nil)
 		if team.Spec.Strategy != "sequential" {
 			t.Fatalf("expected 'sequential', got '%s'", team.Spec.Strategy)
 		}
 	})
 
 	t.Run("non-defaultable type is noop", func(t *testing.T) {
-		ApplyDefaults(&corev1.ConfigMap{})
+		ApplyDefaults(context.Background(), &corev1.ConfigMap{}, nil)
 	})
 }
