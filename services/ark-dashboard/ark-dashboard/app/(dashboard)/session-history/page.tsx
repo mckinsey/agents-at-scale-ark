@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Activity } from 'lucide-react';
 import { PageHeader } from '@/components/common/page-header';
@@ -8,7 +7,6 @@ import { SessionsTable } from '@/components/sessions-conversations/sessions-tabl
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
 
 export default function SessionsConversationsPage() {
-  const [searchQuery, setSearchQuery] = useState('');
   const router = useRouter();
 
   return (
@@ -32,8 +30,6 @@ export default function SessionsConversationsPage() {
         <SessionsTable
           onSelectSession={(sessionId) => router.push(`/sessions/${sessionId}`)}
           selectedSessionId={null}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
         />
       </div>
     </div>

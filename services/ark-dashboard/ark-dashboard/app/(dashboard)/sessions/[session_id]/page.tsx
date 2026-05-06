@@ -131,10 +131,6 @@ export default function SessionDetailPage() {
   const errorCount = session.errorCount || 0;
   const sessionStatus = session.status;
 
-  const getStatusVariant = (): 'outline' => {
-    return 'outline';
-  };
-
   const getStatusClassName = (status: string) => {
     if (status === 'error') return 'border-red-500 text-white';
     if (status === 'active') return 'border-blue-500 text-blue-500';
@@ -189,7 +185,7 @@ export default function SessionDetailPage() {
             </div>
           </div>
           <Badge
-            variant={getStatusVariant()}
+            variant="outline"
             className={cn('capitalize rounded-full', getStatusClassName(sessionStatus))}
           >
             {sessionStatus}

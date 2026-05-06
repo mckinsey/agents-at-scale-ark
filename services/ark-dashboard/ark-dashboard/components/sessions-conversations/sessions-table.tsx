@@ -9,27 +9,28 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useListSessions } from '@/lib/services/broker-sessions-hooks';
+import { useDebounce } from '@/lib/hooks/use-debounce';
 import { SessionTableRow } from './session-table-row';
 import { NewSessionDialog } from './new-session-dialog';
 
 interface Props {
   readonly onSelectSession: (sessionId: string) => void;
   readonly selectedSessionId: string | null;
-  readonly searchQuery: string;
-  readonly onSearchChange: (query: string) => void;
 }
 
 type SortField = 'date' | 'name' | 'conversations';
 type SortDirection = 'asc' | 'desc';
 
-export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery, onSearchChange }: Props) {
-  const [search, setSearch] = useState('');
+export function SessionsTable({ onSelectSession, selectedSessionId }: Props) {
+  const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'idle' | 'error'>('all');
   const [dateFilter, setDateFilter] = useState<'all' | '24h' | '7d' | '30d'>('all');
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [cursor, setCursor] = useState<number>(0);
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  const debouncedSearch = useDebounce(searchQuery, 400);
 
   const dateFrom = useMemo(() => {
     if (dateFilter === 'all') return undefined;
@@ -45,7 +46,7 @@ export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery,
     cursor,
     status: statusFilter === 'all' ? undefined : statusFilter,
     dateFrom,
-    search: search || undefined,
+    search: debouncedSearch || undefined,
     sort: sortField,
     order: sortDirection,
   });
@@ -59,17 +60,8 @@ export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery,
   }, [isError, error]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setCursor(0);
-      setSearch(searchQuery);
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  useEffect(() => {
     setCursor(0);
-  }, [statusFilter, dateFilter, sortField, sortDirection]);
+  }, [debouncedSearch, statusFilter, dateFilter, sortField, sortDirection]);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -82,8 +74,8 @@ export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery,
 
   const sessions = data?.items || [];
   const totalSessions = data?.total || 0;
-  const activeSessions = sessions.filter((s) => s.status === 'active').length;
-  const errorSessions = sessions.filter((s) => s.status === 'error').length;
+  const activeSessions = data?.statusCounts?.active ?? 0;
+  const errorSessions = data?.statusCounts?.error ?? 0;
   const hasMore = data?.hasMore || false;
 
   if (isLoading && cursor === 0) {
@@ -123,7 +115,7 @@ export function SessionsTable({ onSelectSession, selectedSessionId, searchQuery,
             type="search"
             placeholder="Search"
             value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
+            onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
           />
         </div>

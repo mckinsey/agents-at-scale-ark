@@ -68,6 +68,16 @@ export interface SessionsStore {
   sessions: Record<string, SessionEntry>;
 }
 
+/** Paginated sessions list with status counts */
+export interface PaginatedSessionsList extends PaginatedList<SessionEntry> {
+  /** Status counts across all filtered results */
+  statusCounts: {
+    active: number;
+    idle: number;
+    error: number;
+  };
+}
+
 /**
  * Live event-sourced materialized index of sessions and queries. Enriched as
  * events and messages flow through the broker. Consumers can subscribe via SSE
@@ -75,6 +85,7 @@ export interface SessionsStore {
  */
 export class SessionsBroker {
   private store: SessionsStore = { sessions: {} };
+  private queryToSession: Map<string, string> = new Map();
   private readonly emitter = new EventEmitter();
   private dirty = false;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -93,14 +104,10 @@ export class SessionsBroker {
         const data = JSON.parse(readFileSync(this.path, 'utf-8'));
         if (data?.sessions) {
           this.store = data;
-
-          Object.keys(this.store.sessions).forEach(sessionId => {
-            this.recalculateSessionStatus(sessionId);
-          });
+          this.rebuildIndex();
 
           const sessionCount = Object.keys(this.store.sessions).length;
-          const queryCount = Object.values(this.store.sessions)
-            .reduce((sum, s) => sum + Object.keys(s.queries).length, 0);
+          const queryCount = this.queryToSession.size;
           console.log(`[Sessions] loaded ${sessionCount} sessions, ${queryCount} queries`);
         }
       } else {
@@ -108,6 +115,18 @@ export class SessionsBroker {
       }
     } catch (e) {
       console.error(`[Sessions] failed to load:`, e);
+    }
+  }
+
+  private rebuildIndex(): void {
+    this.queryToSession.clear();
+
+    for (const [sessionId, session] of Object.entries(this.store.sessions)) {
+      this.recalculateSessionStatus(sessionId);
+
+      for (const queryId of Object.keys(session.queries)) {
+        this.queryToSession.set(queryId, sessionId);
+      }
     }
   }
 
@@ -204,9 +223,9 @@ export class SessionsBroker {
 
       const firstQuery = convQueries[0];
       let participantType: ParticipantType = 'agent';
-      if (firstQuery.team) {
+      if (firstQuery.targetType === 'team') {
         participantType = 'team';
-      } else if (firstQuery.tool) {
+      } else if (firstQuery.targetType === 'tool') {
         participantType = 'tool';
       }
 
@@ -351,6 +370,7 @@ export class SessionsBroker {
         completedAt: queryPhase === QueryPhases.Running ? undefined : now,
         lastActivity: now,
       };
+      this.queryToSession.set(queryName, sessionId);
     }
 
     this.recalculateSessionStatus(sessionId);
@@ -360,18 +380,21 @@ export class SessionsBroker {
   }
 
   applyMessage(conversationId: string, queryId: string): void {
-    for (const session of Object.values(this.store.sessions)) {
-      const query = session.queries[queryId];
-      if (query) {
-        query.lastActivity = new Date().toISOString();
-        if (!query.conversationId) {
-          query.conversationId = conversationId;
-        }
-        session.lastActivity = query.lastActivity;
-        this.deferredSave();
-        return;
-      }
+    const sessionId = this.queryToSession.get(queryId);
+    if (!sessionId) return;
+
+    const session = this.store.sessions[sessionId];
+    if (!session) return;
+
+    const query = session.queries[queryId];
+    if (!query) return;
+
+    query.lastActivity = new Date().toISOString();
+    if (!query.conversationId) {
+      query.conversationId = conversationId;
     }
+    session.lastActivity = query.lastActivity;
+    this.deferredSave();
   }
 
   getAll(): SessionsStore {
@@ -386,6 +409,15 @@ export class SessionsBroker {
     return session;
   }
 
+  /**
+   * Paginate sessions with filtering and sorting.
+   *
+   * NOTE: Uses offset-based pagination (not true cursor pagination).
+   * The cursor is just an array index, which means:
+   * - Results may include duplicates or skip items if sessions are added/deleted between pages
+   * - Changing sort order or filters invalidates previous cursors
+   * - Not suitable for reliable iteration over the full dataset
+   */
   paginate(params: PaginationParams, filters?: {
     status?: 'active' | 'idle' | 'error';
     dateFrom?: string;
@@ -394,7 +426,7 @@ export class SessionsBroker {
   }, sort?: {
     field: 'date' | 'name' | 'conversations';
     direction: 'asc' | 'desc';
-  }): PaginatedList<SessionEntry> {
+  }): PaginatedSessionsList {
     let sessions = Object.values(this.store.sessions);
 
     if (filters?.status) {
@@ -444,10 +476,19 @@ export class SessionsBroker {
     }
 
     const total = sessions.length;
+
+    // Calculate status counts from the filtered result set
+    const statusCounts = {
+      active: sessions.filter(s => s.status === 'active').length,
+      idle: sessions.filter(s => (s.status ?? 'idle') === 'idle').length,
+      error: sessions.filter(s => s.status === 'error').length,
+    };
+
     const startIndex = params.cursor || 0;
     const endIndex = startIndex + params.limit;
     const items = sessions.slice(startIndex, endIndex);
     const hasMore = endIndex < total;
+    // nextCursor is the array offset for the next page (not a stable cursor)
     const nextCursor = hasMore ? endIndex : undefined;
 
     return {
@@ -455,6 +496,7 @@ export class SessionsBroker {
       total,
       hasMore,
       nextCursor,
+      statusCounts,
     };
   }
 

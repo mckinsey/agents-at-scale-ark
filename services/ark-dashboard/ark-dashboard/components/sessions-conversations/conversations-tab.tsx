@@ -166,6 +166,8 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
                     size="icon"
                     onClick={() => setDialogOpen(true)}
                     className="size-6"
+                    aria-label="Create new conversation"
+                    title="Create new conversation"
                   >
                     <Plus className="size-4" />
                   </Button>

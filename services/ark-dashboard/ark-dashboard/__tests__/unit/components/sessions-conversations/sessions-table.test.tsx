@@ -27,7 +27,6 @@ vi.mock('@/components/sessions-conversations/new-session-dialog', () => ({
 
 describe('SessionsTable', () => {
   const mockOnSelectSession = vi.fn();
-  const mockOnSearchChange = vi.fn();
 
   const mockSessionsData: PaginatedSessions = {
     items: [
@@ -82,8 +81,6 @@ describe('SessionsTable', () => {
       <SessionsTable
         onSelectSession={mockOnSelectSession}
         selectedSessionId={null}
-        searchQuery=""
-        onSearchChange={mockOnSearchChange}
       />
     );
 
@@ -97,8 +94,6 @@ describe('SessionsTable', () => {
       <SessionsTable
         onSelectSession={mockOnSelectSession}
         selectedSessionId={null}
-        searchQuery=""
-        onSearchChange={mockOnSearchChange}
       />
     );
 
@@ -119,8 +114,6 @@ describe('SessionsTable', () => {
       <SessionsTable
         onSelectSession={mockOnSelectSession}
         selectedSessionId={null}
-        searchQuery=""
-        onSearchChange={mockOnSearchChange}
       />
     );
 
@@ -140,8 +133,6 @@ describe('SessionsTable', () => {
       <SessionsTable
         onSelectSession={mockOnSelectSession}
         selectedSessionId={null}
-        searchQuery=""
-        onSearchChange={mockOnSearchChange}
       />
     );
 
@@ -155,8 +146,6 @@ describe('SessionsTable', () => {
       <SessionsTable
         onSelectSession={mockOnSelectSession}
         selectedSessionId={null}
-        searchQuery=""
-        onSearchChange={mockOnSearchChange}
       />
     );
 
@@ -169,8 +158,6 @@ describe('SessionsTable', () => {
       <SessionsTable
         onSelectSession={mockOnSelectSession}
         selectedSessionId="session-2"
-        searchQuery=""
-        onSearchChange={mockOnSearchChange}
       />
     );
 
@@ -184,8 +171,6 @@ describe('SessionsTable', () => {
       <SessionsTable
         onSelectSession={mockOnSelectSession}
         selectedSessionId={null}
-        searchQuery=""
-        onSearchChange={mockOnSearchChange}
       />
     );
 
@@ -211,8 +196,6 @@ describe('SessionsTable', () => {
       <SessionsTable
         onSelectSession={mockOnSelectSession}
         selectedSessionId={null}
-        searchQuery=""
-        onSearchChange={mockOnSearchChange}
       />
     );
 
@@ -233,8 +216,6 @@ describe('SessionsTable', () => {
       <SessionsTable
         onSelectSession={mockOnSelectSession}
         selectedSessionId={null}
-        searchQuery=""
-        onSearchChange={mockOnSearchChange}
       />
     );
 
@@ -258,8 +239,6 @@ describe('SessionsTable', () => {
       <SessionsTable
         onSelectSession={mockOnSelectSession}
         selectedSessionId={null}
-        searchQuery=""
-        onSearchChange={mockOnSearchChange}
       />
     );
 
@@ -277,8 +256,6 @@ describe('SessionsTable', () => {
       <SessionsTable
         onSelectSession={mockOnSelectSession}
         selectedSessionId={null}
-        searchQuery=""
-        onSearchChange={mockOnSearchChange}
       />
     );
 
@@ -289,36 +266,26 @@ describe('SessionsTable', () => {
     });
   });
 
-  it('should pass search query to input', () => {
-    render(
-      <SessionsTable
-        onSelectSession={mockOnSelectSession}
-        selectedSessionId={null}
-        searchQuery="test"
-        onSearchChange={mockOnSearchChange}
-      />
-    );
-
-    expect((screen.getByPlaceholderText('Search') as HTMLInputElement).value).toBe('test');
-  });
-
-  it('should call onSearchChange on input', async () => {
+  it('should update search input value on user input', async () => {
     const user = userEvent.setup();
 
     render(
       <SessionsTable
         onSelectSession={mockOnSelectSession}
         selectedSessionId={null}
-        searchQuery=""
-        onSearchChange={mockOnSearchChange}
       />
     );
 
-    await user.type(screen.getByPlaceholderText('Search'), 'a');
+    const searchInput = screen.getByPlaceholderText('Search') as HTMLInputElement;
 
-    await waitFor(() => {
-      expect(mockOnSearchChange).toHaveBeenCalled();
-    });
+    // Initially empty
+    expect(searchInput.value).toBe('');
+
+    // Type search query
+    await user.type(searchInput, 'test');
+
+    // Input should reflect typed value immediately
+    expect(searchInput.value).toBe('test');
   });
 
   it('should call useListSessions with correct params', () => {
@@ -326,8 +293,6 @@ describe('SessionsTable', () => {
       <SessionsTable
         onSelectSession={mockOnSelectSession}
         selectedSessionId={null}
-        searchQuery=""
-        onSearchChange={mockOnSearchChange}
       />
     );
 

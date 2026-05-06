@@ -12,7 +12,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from ark_sdk.client import with_ark_client
 
 from ...utils.memory_client import get_memory_service_address, get_all_memory_resources
-from ...utils.url_validation import validate_path_segment, build_safe_url
+from ...utils.url_validation import validate_path_segment, build_safe_url, validate_and_build_url
 
 logger = logging.getLogger(__name__)
 
@@ -96,14 +96,7 @@ async def proxy_broker_request(
             status_code=503,
         )
 
-    # Validate path to prevent path traversal attacks
-    if path:
-        path_segments = [seg for seg in path.split('/') if seg]
-        for segment in path_segments:
-            validate_path_segment(segment, "path")
-        safe_url = build_safe_url(broker_url, *path_segments)
-    else:
-        safe_url = broker_url
+    safe_url = validate_and_build_url(broker_url, path)
 
     query_params = {k: v for k, v in (params or {}).items() if v is not None}
 
@@ -120,7 +113,8 @@ async def proxy_broker_request(
         )
 
     try:
-        async with httpx.AsyncClient() as client:
+        timeout = httpx.Timeout(BROKER_CONNECT_TIMEOUT)
+        async with httpx.AsyncClient(timeout=timeout) as client:
             url = safe_url
             if query_params:
                 url += f"?{urlencode(query_params)}"
@@ -295,9 +289,12 @@ async def proxy_broker_delete(memory: str, path: str):
             content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
             status_code=503,
         )
+
+    safe_url = validate_and_build_url(broker_url, path)
+
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.delete(f"{broker_url}{path}")
+            response = await client.delete(safe_url)
             return JSONResponse(content=response.json(), status_code=response.status_code)
     except httpx.ConnectError as e:
         logger.error(f"Failed to connect to broker: {e}")

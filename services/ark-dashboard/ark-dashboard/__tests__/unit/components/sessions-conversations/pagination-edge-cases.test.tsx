@@ -25,7 +25,6 @@ vi.mock('@/components/sessions-conversations/new-session-dialog', () => ({
 describe('Pagination Edge Cases', () => {
   describe('SessionsTable', () => {
     const mockOnSelectSession = vi.fn();
-    const mockOnSearchChange = vi.fn();
 
     const mockSessionsData: PaginatedSessions = {
       items: [
@@ -61,8 +60,6 @@ describe('Pagination Edge Cases', () => {
         <SessionsTable
           onSelectSession={mockOnSelectSession}
           selectedSessionId={null}
-          searchQuery=""
-          onSearchChange={mockOnSearchChange}
         />
       );
 
@@ -96,8 +93,6 @@ describe('Pagination Edge Cases', () => {
         <SessionsTable
           onSelectSession={mockOnSelectSession}
           selectedSessionId={null}
-          searchQuery=""
-          onSearchChange={mockOnSearchChange}
         />
       );
 
@@ -127,8 +122,6 @@ describe('Pagination Edge Cases', () => {
         <SessionsTable
           onSelectSession={mockOnSelectSession}
           selectedSessionId={null}
-          searchQuery=""
-          onSearchChange={mockOnSearchChange}
         />
       );
 
@@ -149,8 +142,6 @@ describe('Pagination Edge Cases', () => {
         <SessionsTable
           onSelectSession={mockOnSelectSession}
           selectedSessionId={null}
-          searchQuery=""
-          onSearchChange={mockOnSearchChange}
         />
       );
 
@@ -179,8 +170,6 @@ describe('Pagination Edge Cases', () => {
         <SessionsTable
           onSelectSession={mockOnSelectSession}
           selectedSessionId={null}
-          searchQuery=""
-          onSearchChange={mockOnSearchChange}
         />
       );
 

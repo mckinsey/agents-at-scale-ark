@@ -57,6 +57,11 @@ export interface PaginatedSessions {
   total: number;
   hasMore: boolean;
   nextCursor?: number;
+  statusCounts?: {
+    active: number;
+    idle: number;
+    error: number;
+  };
 }
 
 export const brokerSessionsService = {
@@ -99,6 +104,7 @@ export const brokerSessionsService = {
       total: response.total ?? 0,
       hasMore: response.hasMore ?? false,
       nextCursor: response.nextCursor,
+      statusCounts: response.statusCounts,
     };
   },
 

@@ -321,12 +321,10 @@ describe('conversationsService', () => {
       expect(result).toEqual([]);
     });
 
-    it('should handle errors gracefully', async () => {
+    it('should propagate errors', async () => {
       vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('Network error'));
 
-      const result = await conversationsService.getConversations('session-1');
-
-      expect(result).toEqual([]);
+      await expect(conversationsService.getConversations('session-1')).rejects.toThrow('Network error');
     });
 
     it('should handle empty conversations array from backend', async () => {
@@ -337,9 +335,6 @@ describe('conversationsService', () => {
       };
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockSession);
-
-      const { logsService } = await import('@/lib/services/logs');
-      vi.mocked(logsService.getEvents).mockResolvedValueOnce({ items: [] } as any);
 
       const result = await conversationsService.getConversations('session-1');
 
@@ -382,12 +377,10 @@ describe('conversationsService', () => {
       expect(result).toEqual([]);
     });
 
-    it('should handle errors gracefully', async () => {
+    it('should propagate errors', async () => {
       vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('Network error'));
 
-      const result = await conversationsService.getMessages('conv-1');
-
-      expect(result).toEqual([]);
+      await expect(conversationsService.getMessages('conv-1')).rejects.toThrow('Network error');
     });
   });
 

@@ -280,6 +280,8 @@ func buildOperationData(target *arkv1alpha1.QueryTarget, queryInput string) map[
 		operationData["team"] = target.Name
 	case targetTypeAgent:
 		operationData["agent"] = target.Name
+	case targetTypeTool:
+		operationData["tool"] = target.Name
 	}
 
 	if queryInput != "" {

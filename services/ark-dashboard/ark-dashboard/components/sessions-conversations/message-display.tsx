@@ -2,7 +2,8 @@
 
 import { useEffect, useRef } from 'react';
 import { useGetMessages } from '@/lib/services/conversations-hooks';
-import type { Conversation } from '@/lib/services/conversations';
+import type { Conversation, ConversationMessage } from '@/lib/services/conversations';
+import type { ChatMessage } from '@/lib/types/chat-message';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { SessionMessage } from './session-message';
@@ -11,6 +12,18 @@ import { getParticipantIcon } from '@/lib/utils/participant-icon';
 
 const FALLBACK_PARTICIPANT_NAME = 'Participant';
 const FALLBACK_PARTICIPANT_TYPE = 'agent';
+
+type ToolCall = NonNullable<ChatMessage['tool_calls']>[number];
+type EnhancedToolCall = ToolCall & { result?: string };
+
+interface EnhancedChatMessage extends Omit<ChatMessage, 'tool_calls' | 'role'> {
+  role: 'user' | 'assistant' | 'system';
+  tool_calls?: EnhancedToolCall[];
+}
+
+interface EnhancedConversationMessage extends Omit<ConversationMessage, 'message'> {
+  message: EnhancedChatMessage;
+}
 
 interface Props {
   readonly conversationId: string;
@@ -22,11 +35,11 @@ interface Props {
   readonly showToolCalls: boolean;
 }
 
-function enhanceMessagesWithToolResults(messages: any[]): any[] {
+function enhanceMessagesWithToolResults(messages: ConversationMessage[]): EnhancedConversationMessage[] {
   // Build a map of tool_call_id -> tool result content
   const toolResults = new Map<string, string>();
   messages.forEach(msg => {
-    if (msg.message?.role === 'tool' && msg.message?.tool_call_id) {
+    if (msg.message?.role === 'tool' && msg.message?.tool_call_id && msg.message?.content) {
       toolResults.set(msg.message.tool_call_id, msg.message.content);
     }
   });
@@ -37,25 +50,32 @@ function enhanceMessagesWithToolResults(messages: any[]): any[] {
     .map(msg => {
       // If message has tool_calls, add results to them
       if (msg.message?.tool_calls && Array.isArray(msg.message.tool_calls)) {
-        const enhancedToolCalls = msg.message.tool_calls.map((tc: any) => ({
+        const enhancedToolCalls: EnhancedToolCall[] = msg.message.tool_calls.map(tc => ({
           ...tc,
-          result: toolResults.get(tc.id) || tc.result  // Use existing result if no match
+          result: toolResults.get(tc.id)
         }));
         return {
           ...msg,
           message: {
             ...msg.message,
+            role: msg.message.role as 'user' | 'assistant' | 'system',
             tool_calls: enhancedToolCalls
           }
         };
       }
-      return msg;
+      return {
+        ...msg,
+        message: {
+          ...msg.message,
+          role: msg.message.role as 'user' | 'assistant' | 'system'
+        }
+      };
     });
 }
 
 function renderMessageContent(
   isTemporary: boolean,
-  messages: unknown[] | undefined,
+  messages: ConversationMessage[] | undefined,
   pendingMessages: Array<{ role: 'user'; content: string; timestamp: string }>,
   participantName: string,
   messagesEndRef: React.RefObject<HTMLDivElement | null>,
@@ -64,7 +84,7 @@ function renderMessageContent(
 ) {
   // Process messages to enhance tool calls with results and filter out tool response messages
   const processedMessages = messages && messages.length > 0
-    ? enhanceMessagesWithToolResults(messages as any[])
+    ? enhanceMessagesWithToolResults(messages)
     : [];
 
   const hasBackendMessages = processedMessages.length > 0;
@@ -72,8 +92,8 @@ function renderMessageContent(
   const backendUserMessages = hasBackendMessages
     ? new Set(
         processedMessages
-          .filter((msg: any) => msg.message.role === 'user')
-          .map((msg: any) => msg.message.content?.trim())
+          .filter(msg => msg.message.role === 'user')
+          .map(msg => msg.message.content?.trim())
       )
     : new Set();
 
@@ -99,14 +119,14 @@ function renderMessageContent(
   if (hasBackendMessages || hasPendingMessages) {
     return (
       <>
-        {hasBackendMessages && processedMessages.map((msg: any) => (
+        {hasBackendMessages && processedMessages.map(msg => (
           <SessionMessage
             key={`${msg.query_id}-${msg.sequence}`}
             role={msg.message.role}
             content={msg.message.content || ''}
             toolCalls={msg.message.tool_calls}
             sender={msg.message.name}
-            timestamp={msg.created_at || msg.timestamp}
+            timestamp={msg.timestamp}
             showToolCalls={showToolCalls}
           />
         ))}
@@ -175,16 +195,16 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
 
     // Find the backend user message with matching content
     const userMessageInBackend = messages
-      .filter((msg: any) => msg.message.role === 'user')
-      .find((msg: any) => msg.message.content?.trim() === lastPendingContent);
+      .filter(msg => msg.message.role === 'user')
+      .find(msg => msg.message.content?.trim() === lastPendingContent);
 
     if (!userMessageInBackend) {
       return;
     }
 
     // Check if there's an assistant message with a higher sequence number
-    const assistantMessages = messages.filter((msg: any) => {
-      const isAssistant = msg.message.role === 'assistant' || msg.message.role === 'agent';
+    const assistantMessages = messages.filter(msg => {
+      const isAssistant = msg.message.role === 'assistant';
       const isAfterUser = msg.sequence > userMessageInBackend.sequence;
       return isAssistant && isAfterUser;
     });

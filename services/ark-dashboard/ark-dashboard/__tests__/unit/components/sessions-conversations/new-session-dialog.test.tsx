@@ -154,8 +154,8 @@ describe('NewSessionDialog', () => {
     const createButton = screen.getByRole('button', { name: /create/i });
     expect(createButton).toBeDisabled();
 
-    const checkbox = screen.getAllByRole('checkbox')[0];
-    await user.click(checkbox);
+    const radio = screen.getAllByRole('radio')[0];
+    await user.click(radio);
 
     expect(createButton).not.toBeDisabled();
   });
@@ -171,8 +171,8 @@ describe('NewSessionDialog', () => {
 
     expect(screen.getByText('0 participants selected')).toBeInTheDocument();
 
-    const checkbox = screen.getAllByRole('checkbox')[0];
-    await user.click(checkbox);
+    const radio = screen.getAllByRole('radio')[0];
+    await user.click(radio);
 
     expect(screen.getByText('1 participant selected')).toBeInTheDocument();
   });

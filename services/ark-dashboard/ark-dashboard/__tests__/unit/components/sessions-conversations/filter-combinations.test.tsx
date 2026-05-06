@@ -18,7 +18,6 @@ vi.mock('@/components/sessions-conversations/new-session-dialog', () => ({
 
 describe('Filter Combination Scenarios', () => {
   const mockOnSelectSession = vi.fn();
-  const mockOnSearchChange = vi.fn();
 
   const mockSessionsData: PaginatedSessions = {
     items: [
@@ -53,8 +52,6 @@ describe('Filter Combination Scenarios', () => {
         <SessionsTable
           onSelectSession={mockOnSelectSession}
           selectedSessionId={null}
-          searchQuery=""
-          onSearchChange={mockOnSearchChange}
         />
       );
 
@@ -72,8 +69,6 @@ describe('Filter Combination Scenarios', () => {
         <SessionsTable
           onSelectSession={mockOnSelectSession}
           selectedSessionId={null}
-          searchQuery=""
-          onSearchChange={mockOnSearchChange}
         />
       );
 
@@ -97,8 +92,6 @@ describe('Filter Combination Scenarios', () => {
         <SessionsTable
           onSelectSession={mockOnSelectSession}
           selectedSessionId={null}
-          searchQuery=""
-          onSearchChange={mockOnSearchChange}
         />
       );
 
@@ -122,8 +115,6 @@ describe('Filter Combination Scenarios', () => {
         <SessionsTable
           onSelectSession={mockOnSelectSession}
           selectedSessionId={null}
-          searchQuery=""
-          onSearchChange={mockOnSearchChange}
         />
       );
 
@@ -142,8 +133,6 @@ describe('Filter Combination Scenarios', () => {
         <SessionsTable
           onSelectSession={mockOnSelectSession}
           selectedSessionId={null}
-          searchQuery=""
-          onSearchChange={mockOnSearchChange}
         />
       );
 
@@ -172,8 +161,6 @@ describe('Filter Combination Scenarios', () => {
         <SessionsTable
           onSelectSession={mockOnSelectSession}
           selectedSessionId={null}
-          searchQuery=""
-          onSearchChange={mockOnSearchChange}
         />
       );
 
@@ -201,8 +188,6 @@ describe('Filter Combination Scenarios', () => {
         <SessionsTable
           onSelectSession={mockOnSelectSession}
           selectedSessionId={null}
-          searchQuery=""
-          onSearchChange={mockOnSearchChange}
         />
       );
 
@@ -229,8 +214,6 @@ describe('Filter Combination Scenarios', () => {
         <SessionsTable
           onSelectSession={mockOnSelectSession}
           selectedSessionId={null}
-          searchQuery=""
-          onSearchChange={mockOnSearchChange}
         />
       );
 
@@ -241,20 +224,18 @@ describe('Filter Combination Scenarios', () => {
       );
     });
 
-    it('should pass search value to hook', () => {
+    it('should render search input', () => {
       render(
         <SessionsTable
           onSelectSession={mockOnSelectSession}
           selectedSessionId={null}
-          searchQuery="test-query"
-          onSearchChange={mockOnSearchChange}
         />
       );
 
-      // After debounce completes (400ms), search should be applied
-      // Note: Testing debounce timing is handled by the component's internal logic
-      // Here we verify the prop is correctly passed to the component
-      expect(screen.getByPlaceholderText('Search')).toHaveValue('test-query');
+      // Search input should be present and empty initially
+      const searchInput = screen.getByPlaceholderText('Search');
+      expect(searchInput).toBeInTheDocument();
+      expect(searchInput).toHaveValue('');
     });
   });
 
@@ -266,8 +247,6 @@ describe('Filter Combination Scenarios', () => {
         <SessionsTable
           onSelectSession={mockOnSelectSession}
           selectedSessionId={null}
-          searchQuery=""
-          onSearchChange={mockOnSearchChange}
         />
       );
 
@@ -304,8 +283,6 @@ describe('Filter Combination Scenarios', () => {
         <SessionsTable
           onSelectSession={mockOnSelectSession}
           selectedSessionId={null}
-          searchQuery=""
-          onSearchChange={mockOnSearchChange}
         />
       );
 
@@ -335,8 +312,6 @@ describe('Filter Combination Scenarios', () => {
         <SessionsTable
           onSelectSession={mockOnSelectSession}
           selectedSessionId={null}
-          searchQuery=""
-          onSearchChange={mockOnSearchChange}
         />
       );
 

@@ -10,11 +10,19 @@ export interface Participant {
 
 export const participantsService = {
   async getAll(): Promise<Participant[]> {
-    const [agents, teams, tools] = await Promise.all([
-      agentsService.getAll().catch(() => []),
-      teamsService.getAll().catch(() => []),
-      toolsService.getAll().catch(() => []),
+    const results = await Promise.allSettled([
+      agentsService.getAll(),
+      teamsService.getAll(),
+      toolsService.getAll(),
     ]);
+
+    const agents = results[0].status === 'fulfilled' ? results[0].value : [];
+    const teams = results[1].status === 'fulfilled' ? results[1].value : [];
+    const tools = results[2].status === 'fulfilled' ? results[2].value : [];
+
+    if (results.every(r => r.status === 'rejected')) {
+      throw new Error('Failed to load participants');
+    }
 
     const participants: Participant[] = [
       ...agents.map(agent => ({

@@ -1,5 +1,7 @@
 import { apiClient } from '@/lib/api/client';
 import type { ChatMessage } from '@/lib/types/chat-message';
+import { logsService } from './logs';
+import { chatService } from './chat';
 
 export type ParticipantType = 'agent' | 'team' | 'tool';
 
@@ -26,59 +28,50 @@ export interface ConversationMessage {
 
 export const conversationsService = {
   async getConversations(sessionId: string): Promise<Conversation[]> {
-    try {
-      const session = await apiClient.get<any>(`/api/v1/broker/sessions/${sessionId}`);
-      if (!session?.conversations) return [];
+    const [session, events] = await Promise.all([
+      apiClient.get<any>(`/api/v1/broker/sessions/${sessionId}`),
+      logsService.getEvents(sessionId, 1000),
+    ]);
 
-      const { logsService } = await import('./logs');
-      const events = await logsService.getEvents(sessionId, 1000);
+    if (!session?.conversations) return [];
 
-      const queries = Object.values(session.queries || {});
+    const queries = Object.values(session.queries || {});
 
-      const conversations = session.conversations.map((conv: any): Conversation => {
-        const conversationQueries = queries.filter((q: any) => q.conversationId === conv.conversationId);
-        const queryNames = new Set(conversationQueries.map((q: any) => q.name));
+    const conversations = session.conversations.map((conv: any): Conversation => {
+      const conversationQueries = queries.filter((q: any) => q.conversationId === conv.conversationId);
+      const queryNames = new Set(conversationQueries.map((q: any) => q.name));
 
-        const toolCallCount = events
-          ? events.items.filter(e =>
-              e.reason === 'ToolCallComplete' &&
-              queryNames.has(e.data.queryName)
-            ).length
-          : 0;
+      const toolCallCount = events
+        ? events.items.filter(e =>
+            e.reason === 'ToolCallComplete' &&
+            queryNames.has(e.data.queryName)
+          ).length
+        : 0;
 
-        return {
-          conversationId: conv.conversationId,
-          name: conv.name,
-          participants: conv.participants,
-          messageCount: conv.messageCount,
-          toolCallCount,
-          duration: conv.duration,
-          startTime: conv.startTime,
-          participantType: conv.participantType,
-          errorCount: conv.errorCount,
-        };
-      });
+      return {
+        conversationId: conv.conversationId,
+        name: conv.name,
+        participants: conv.participants,
+        messageCount: conv.messageCount,
+        toolCallCount,
+        duration: conv.duration,
+        startTime: conv.startTime,
+        participantType: conv.participantType,
+        errorCount: conv.errorCount,
+      };
+    });
 
-      return conversations;
-    } catch (error) {
-      console.error(`Failed to fetch conversations for session ${sessionId}:`, error);
-      return [];
-    }
+    return conversations;
   },
 
   /**
    * Get messages for a conversation from the Memory Broker.
    */
   async getMessages(conversationId: string): Promise<ConversationMessage[]> {
-    try {
-      const response = await apiClient.get<{ items: ConversationMessage[] }>(
-        `/api/v1/broker/messages?conversation_id=${conversationId}`
-      );
-      return response.items || [];
-    } catch (error) {
-      console.error(`Failed to fetch messages for conversation ${conversationId}:`, error);
-      return [];
-    }
+    const response = await apiClient.get<{ items: ConversationMessage[] }>(
+      `/api/v1/broker/messages?conversation_id=${conversationId}`
+    );
+    return response.items || [];
   },
 
 
@@ -89,8 +82,6 @@ export const conversationsService = {
     agentName: string;
     participantType?: ParticipantType;
   }): Promise<void> {
-    const { chatService } = await import('./chat');
-
     const targetName = params.agentName.includes('/')
       ? params.agentName.split('/').pop() || params.agentName
       : params.agentName;

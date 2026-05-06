@@ -147,10 +147,12 @@ export function NewSessionDialog({ open, onOpenChange }: Props) {
         className="flex cursor-pointer items-center gap-3 rounded px-2 py-1"
       >
         <input
-          type="checkbox"
+          type="radio"
+          name="participant"
+          value={participant.name}
           checked={isSelected}
           onChange={() => handleSelect(participant.name)}
-          className="size-4 rounded border-2 border-muted-foreground"
+          className="size-4 border-2 border-muted-foreground"
         />
         <span className="text-sm">{participant.name}</span>
       </label>

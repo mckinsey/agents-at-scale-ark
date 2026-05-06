@@ -87,36 +87,35 @@ def build_safe_url(base_url: str, *path_segments: str) -> str:
     return base
 
 
-def build_safe_url_with_validation(base_url: str, *path_segments: tuple[str, str]) -> str:
-    """Build a URL with validation and descriptive error messages.
+def validate_and_build_url(base_url: str, path: str | None) -> str:
+    """Validate path segments and build safe URL.
 
-    This is a stricter version that validates segments before encoding.
+    This is a convenience function that combines path splitting, validation,
+    and URL construction in one call.
 
     Args:
-        base_url: Base URL
-        path_segments: Tuples of (segment_value, param_name) for validation
+        base_url: Base URL (e.g., 'http://broker:8000')
+        path: Path to append (e.g., '/traces' or '/sessions/123'), or None
 
     Returns:
-        Properly constructed and encoded URL
+        Safe URL with validated path segments
+
+    Raises:
+        HTTPException: If path contains invalid segments (path traversal, etc.)
 
     Examples:
-        >>> build_safe_url_with_validation(
-        ...     "http://broker:8000",
-        ...     ("traces", "path"),
-        ...     (trace_id, "trace_id")
-        ... )
+        >>> validate_and_build_url("http://broker:8000", "/traces")
+        'http://broker:8000/traces'
+        >>> validate_and_build_url("http://broker:8000", "/sessions/abc-123")
+        'http://broker:8000/sessions/abc-123'
+        >>> validate_and_build_url("http://broker:8000", None)
+        'http://broker:8000'
+        >>> validate_and_build_url("http://broker:8000", "/../../admin")  # raises
     """
-    base = base_url.rstrip('/')
-
-    validated_segments = []
-    for segment, param_name in path_segments:
-        if segment:  # Skip empty segments
-            # Validate first
-            validated = validate_path_segment(segment, param_name)
-            # Then encode
-            encoded = quote(validated.strip('/'), safe='')
-            validated_segments.append(encoded)
-
-    if validated_segments:
-        return f"{base}/{'/'.join(validated_segments)}"
-    return base
+    if path:
+        path_segments = [seg for seg in path.split('/') if seg]
+        for segment in path_segments:
+            validate_path_segment(segment, "path")
+        return build_safe_url(base_url, *path_segments)
+    else:
+        return base_url
