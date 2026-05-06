@@ -3,10 +3,12 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SessionsTable } from '@/components/sessions-conversations/sessions-table';
 import { useListSessions } from '@/lib/services/broker-sessions-hooks';
+import { brokerSessionsService } from '@/lib/services/broker-sessions';
 import type { PaginatedSessions } from '@/lib/services/broker-sessions';
 import { toast } from 'sonner';
 
 vi.mock('@/lib/services/broker-sessions-hooks');
+vi.mock('@/lib/services/broker-sessions');
 vi.mock('sonner');
 vi.mock('@/components/sessions-conversations/session-table-row', () => ({
   SessionTableRow: ({ session, isSelected, onSelect }: any) => (
@@ -205,12 +207,31 @@ describe('SessionsTable', () => {
   it('should handle load more click', async () => {
     const user = userEvent.setup();
 
+    const mockAdditionalSessions: PaginatedSessions = {
+      items: [
+        {
+          sessionId: 'session-4',
+          name: 'Session 4',
+          status: 'active',
+          errorCount: 0,
+          participants: [],
+          conversationCount: 2,
+          createdAt: '2024-01-04T00:00:00Z',
+          lastActivity: '2024-01-04T01:00:00Z',
+        },
+      ],
+      total: 4,
+      hasMore: false,
+    };
+
     vi.mocked(useListSessions).mockReturnValue({
       data: { ...mockSessionsData, hasMore: true, nextCursor: 20 },
       isLoading: false,
       isError: false,
       error: null,
     } as any);
+
+    vi.mocked(brokerSessionsService.getSessions).mockResolvedValue(mockAdditionalSessions);
 
     render(
       <SessionsTable
@@ -222,8 +243,19 @@ describe('SessionsTable', () => {
     await user.click(screen.getByText('Load More'));
 
     await waitFor(() => {
-      const calls = vi.mocked(useListSessions).mock.calls;
-      expect(calls[calls.length - 1][0].cursor).toBe(20);
+      expect(brokerSessionsService.getSessions).toHaveBeenCalledWith({
+        limit: 20,
+        cursor: 20,
+        status: undefined,
+        dateFrom: undefined,
+        search: undefined,
+        sort: 'date',
+        order: 'desc',
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('session-row-session-4')).toBeInTheDocument();
     });
   });
 
