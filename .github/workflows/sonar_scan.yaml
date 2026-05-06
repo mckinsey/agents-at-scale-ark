@@ -174,7 +174,11 @@ jobs:
       - name: Wait for SonarQube server
         run: |
           for attempt in 1 2 3; do
-            curl -sf "$SONAR_HOST_URL/api/server/version" && break
+            status=$(curl -s -o /dev/null -w "%{http_code}" "$SONAR_HOST_URL/api/server/version" 2>/dev/null || echo "0")
+            if [ "$status" != "0" ]; then
+              echo "SonarQube reachable (HTTP $status)"
+              break
+            fi
             if [ $attempt -lt 3 ]; then
               echo "SonarQube not reachable (attempt $attempt), retrying in 30s..."
               sleep 30
