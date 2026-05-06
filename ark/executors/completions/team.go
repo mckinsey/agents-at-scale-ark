@@ -17,6 +17,7 @@ import (
 // SelectorAgentInterface defines the interface for selector agents (used for testing)
 type SelectorAgentInterface interface {
 	Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error)
+	ExecuteWithOptions(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface, opts ExecuteOptions) (*ExecutionResult, error)
 	FullName() string
 	GetToolRegistry() *ToolRegistry
 }

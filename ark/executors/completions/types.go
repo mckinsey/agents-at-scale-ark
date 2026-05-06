@@ -130,3 +130,16 @@ func IsSelectionMade(err error) bool {
 	var selectionErr *SelectionMade
 	return errors.As(err, &selectionErr)
 }
+
+type ToolChoice string
+
+const (
+	ToolChoiceUnset    ToolChoice = ""
+	ToolChoiceAuto     ToolChoice = "auto"
+	ToolChoiceRequired ToolChoice = "required"
+	ToolChoiceNone     ToolChoice = "none"
+)
+
+type ExecuteOptions struct {
+	ToolChoice ToolChoice
+}

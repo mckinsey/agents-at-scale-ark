@@ -35,7 +35,7 @@ func (op *OpenAIProvider) HealthCheck(ctx context.Context) error {
 		testMessages := []Message{
 			NewUserMessage("test"),
 		}
-		_, err := op.ChatCompletion(ctx, testMessages, 1)
+		_, err := op.ChatCompletion(ctx, testMessages, 1, ToolChoiceUnset)
 		if err != nil {
 			return fmt.Errorf("model %s is not accessible: %w", op.Model, err)
 		}
@@ -51,7 +51,7 @@ func (op *OpenAIProvider) HealthCheck(ctx context.Context) error {
 	return fmt.Errorf("model %s is not available in the provider", op.Model)
 }
 
-func (op *OpenAIProvider) ChatCompletion(ctx context.Context, messages []Message, n int64, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
+func (op *OpenAIProvider) ChatCompletion(ctx context.Context, messages []Message, n int64, toolChoice ToolChoice, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
 	openaiMessages := make([]openai.ChatCompletionMessageParamUnion, len(messages))
 	for i, msg := range messages {
 		openaiMessages[i] = openai.ChatCompletionMessageParamUnion(msg)
@@ -69,7 +69,8 @@ func (op *OpenAIProvider) ChatCompletion(ctx context.Context, messages []Message
 		params.Tools = tools[0]
 	}
 
-	// Apply structured output schema if provided
+	applyToolChoiceToParams(toolChoice, &params)
+
 	applyStructuredOutputToParams(op.outputSchema, op.schemaName, &params)
 
 	client := op.createClient(ctx)
@@ -183,7 +184,7 @@ func (op *OpenAIProvider) processToolCalls(toolCallsMap map[int64]*openai.ChatCo
 }
 
 // prepareStreamParams prepares the parameters for streaming chat completion
-func (op *OpenAIProvider) prepareStreamParams(messages []Message, n int64, tools ...[]openai.ChatCompletionToolParam) openai.ChatCompletionNewParams {
+func (op *OpenAIProvider) prepareStreamParams(messages []Message, n int64, toolChoice ToolChoice, tools ...[]openai.ChatCompletionToolParam) openai.ChatCompletionNewParams {
 	openaiMessages := make([]openai.ChatCompletionMessageParamUnion, len(messages))
 	for i, msg := range messages {
 		openaiMessages[i] = openai.ChatCompletionMessageParamUnion(msg)
@@ -204,16 +205,17 @@ func (op *OpenAIProvider) prepareStreamParams(messages []Message, n int64, tools
 		params.Tools = tools[0]
 	}
 
-	// Apply structured output schema if provided
+	applyToolChoiceToParams(toolChoice, &params)
+
 	applyStructuredOutputToParams(op.outputSchema, op.schemaName, &params)
 
 	return params
 }
 
-func (op *OpenAIProvider) ChatCompletionStream(ctx context.Context, messages []Message, n int64, streamFunc func(*openai.ChatCompletionChunk) error, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
+func (op *OpenAIProvider) ChatCompletionStream(ctx context.Context, messages []Message, n int64, streamFunc func(*openai.ChatCompletionChunk) error, toolChoice ToolChoice, tools ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
 	logf.Log.Info("OpenAIProvider.ChatCompletionStream called", "messageCount", len(messages), "toolCount", len(tools))
 
-	params := op.prepareStreamParams(messages, n, tools...)
+	params := op.prepareStreamParams(messages, n, toolChoice, tools...)
 
 	client := op.createClient(ctx)
 	stream := client.Chat.Completions.NewStreaming(ctx, params)

@@ -14,15 +14,19 @@ import (
 )
 
 type mockChatProvider struct {
-	response *openai.ChatCompletion
-	chunks   []*openai.ChatCompletionChunk
+	response             *openai.ChatCompletion
+	chunks               []*openai.ChatCompletionChunk
+	capturedToolChoice   ToolChoice
+	capturedStreamChoice ToolChoice
 }
 
-func (m *mockChatProvider) ChatCompletion(_ context.Context, _ []Message, _ int64, _ ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
+func (m *mockChatProvider) ChatCompletion(_ context.Context, _ []Message, _ int64, toolChoice ToolChoice, _ ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
+	m.capturedToolChoice = toolChoice
 	return m.response, nil
 }
 
-func (m *mockChatProvider) ChatCompletionStream(_ context.Context, _ []Message, _ int64, streamFunc func(*openai.ChatCompletionChunk) error, _ ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
+func (m *mockChatProvider) ChatCompletionStream(_ context.Context, _ []Message, _ int64, streamFunc func(*openai.ChatCompletionChunk) error, toolChoice ToolChoice, _ ...[]openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
+	m.capturedStreamChoice = toolChoice
 	for _, chunk := range m.chunks {
 		if err := streamFunc(chunk); err != nil {
 			return nil, err
