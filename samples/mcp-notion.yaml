@@ -1,0 +1,29 @@
+# Notion remote MCP server with OAuth authorization.
+#
+# Apply order doesn't matter — controller waits for Secret to be populated.
+# Initial state: Required.  After manual OAuth + Secret population: Authorized.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: notion-oauth
+  namespace: default
+  labels:
+    ark.mckinsey.com/mcpserver: notion
+type: Opaque
+# No data block — controller-owned, populated by CLI (or manual steps below)
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: MCPServer
+metadata:
+  name: notion
+  namespace: default
+spec:
+  address:
+    value: "https://mcp.notion.com/mcp"
+  transport: http
+  timeout: 1m
+  pollInterval: 30s
+  authorization:
+    tokenSecretRef:
+      name: notion-oauth
