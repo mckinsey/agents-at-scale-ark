@@ -10,6 +10,7 @@ export type StatusDotVariant =
   | 'running'
   | 'failed'
   | 'pending'
+  | 'provisioning'
   | 'unknown';
 
 export interface StatusDotProps {
@@ -25,6 +26,8 @@ export function StatusDot({ variant }: StatusDotProps) {
         return 'bg-red-300';
       case 'running':
         return 'bg-blue-300';
+      case 'provisioning':
+        return 'bg-amber-300';
       case 'pending':
         return 'bg-yellow-300';
       case 'unknown':
@@ -41,6 +44,8 @@ export function StatusDot({ variant }: StatusDotProps) {
         return 'Failed';
       case 'running':
         return 'Running';
+      case 'provisioning':
+        return 'Provisioning';
       case 'pending':
         return 'Pending';
       default:

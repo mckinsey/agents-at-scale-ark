@@ -83,12 +83,44 @@ Landing page assumes: `namespace name = hostname`
 
 Dashboard Helm chart follows this convention automatically when you deploy with `httpRoute.enabled=true`.
 
+## Authentication
+
+The landing page supports two authentication modes:
+
+### Open Mode (default)
+
+No authentication required. Users can access the landing page without logging in.
+
+```bash
+AUTH_MODE=open
+```
+
+### SSO Mode
+
+Requires OIDC authentication. Users must log in via your identity provider before accessing the landing page.
+
+```bash
+AUTH_MODE=sso
+OIDC_ISSUER_URL=https://your-identity-provider.com
+OIDC_CLIENT_ID=your-client-id
+OIDC_CLIENT_SECRET=your-client-secret
+OIDC_PROVIDER_NAME="Your Identity Provider"
+OIDC_PROVIDER_ID=your-provider
+AUTH_SECRET=$(openssl rand -base64 32)
+AUTH_URL=https://landing.your-domain.com
+BASE_URL=https://landing.your-domain.com
+```
+
+When `AUTH_MODE=sso`, all routes (except auth endpoints and static files) require authentication. Unauthenticated users are redirected to the sign-in page.
+
 ## Production
 
 ```bash
 helm install ark-landing-page ./chart -n ark-system \
   --set app.env[0].name=NEXT_PUBLIC_BASE_DOMAIN \
-  --set app.env[0].value=demos.your-domain.com
+  --set app.env[0].value=demos.your-domain.com \
+  --set app.env[1].name=AUTH_MODE \
+  --set app.env[1].value=sso
 ```
 
-See `.env.example` for configuration options.
+See `.env.example` for all configuration options.

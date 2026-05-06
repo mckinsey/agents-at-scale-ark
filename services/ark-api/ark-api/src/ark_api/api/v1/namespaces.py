@@ -2,9 +2,10 @@
 import logging
 import os
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from kubernetes_asyncio import client
 from kubernetes_asyncio.client.api_client import ApiClient
+from kubernetes_asyncio.client.exceptions import ApiException
 
 from ark_sdk.models.kubernetes import NamespaceResponse, NamespaceListResponse, NamespaceCreateRequest
 from ...core.namespace import get_current_context
@@ -92,18 +93,32 @@ async def get_context_endpoint(namespace: str = None) -> ContextResponse:
     # Use provided namespace or fall back to current context namespace
     target_namespace = namespace or current_context["namespace"]
     
-    # Check if this specific namespace has demo label
+    # Check if namespace exists and has demo label
     read_only_mode = False
     try:
         async with ApiClient() as api:
             v1 = client.CoreV1Api(api)
             ns = await v1.read_namespace(name=target_namespace)
-            
+
             # Check if namespace has demo label
             if ns.metadata.labels and ns.metadata.labels.get("ark.mckinsey.com/demo") == "true":
                 read_only_mode = True
+    except ApiException as e:
+        if e.status == 404:
+            # Namespace doesn't exist - return 404 with default namespace for redirect
+            default_namespace = current_context["namespace"]
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "message": f"Namespace '{target_namespace}' not found",
+                    "default_namespace": default_namespace
+                }
+            )
+        logger.warning("Could not check namespace labels: %s", e)
+        # Fall back to environment variable for other errors
+        read_only_mode = os.getenv("READ_ONLY_MODE", "false").lower() == "true"
     except Exception as e:
-        logger.warning(f"Could not check namespace labels for {target_namespace}: {e}")
+        logger.warning("Could not check namespace labels: %s", e)
         # Fall back to environment variable if we can't check the namespace
         read_only_mode = os.getenv("READ_ONLY_MODE", "false").lower() == "true"
 
