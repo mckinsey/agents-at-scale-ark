@@ -668,10 +668,13 @@ describe('chatService', () => {
         ok: true,
         body: { getReader: () => mockReader },
       });
+      vi.mocked(apiClient.post).mockResolvedValue({ name: 'test-query-1' });
 
       const chunks: Record<string, unknown>[] = [];
       for await (const chunk of chatService.streamChatResponse(
-        'test-query-1',
+        'test input',
+        'agent',
+        'TestAgent',
       )) {
         chunks.push(chunk);
       }
@@ -703,10 +706,13 @@ describe('chatService', () => {
         ok: true,
         body: { getReader: () => mockReader },
       });
+      vi.mocked(apiClient.post).mockResolvedValue({ name: 'test-query-2' });
 
       const chunks: Record<string, unknown>[] = [];
       for await (const chunk of chatService.streamChatResponse(
-        'test-query-2',
+        'test input',
+        'agent',
+        'TestAgent',
       )) {
         chunks.push(chunk);
       }
@@ -734,10 +740,13 @@ describe('chatService', () => {
         ok: true,
         body: { getReader: () => mockReader },
       });
+      vi.mocked(apiClient.post).mockResolvedValue({ name: 'test-query-3' });
 
       const chunks: Record<string, unknown>[] = [];
       for await (const chunk of chatService.streamChatResponse(
-        'test-query-3',
+        'test input',
+        'agent',
+        'TestAgent',
       )) {
         chunks.push(chunk);
       }
@@ -750,10 +759,13 @@ describe('chatService', () => {
         ok: false,
         statusText: 'Internal Server Error',
       });
+      vi.mocked(apiClient.post).mockResolvedValue({ name: 'test-query-err' });
 
       await expect(async () => {
         for await (const _ of chatService.streamChatResponse(
-          'test-query-err',
+          'test input',
+          'agent',
+          'TestAgent',
         )) {
         }
       }).rejects.toThrow('Failed to connect to stream: Internal Server Error');
@@ -764,10 +776,15 @@ describe('chatService', () => {
         ok: true,
         body: null,
       });
+      vi.mocked(apiClient.post).mockResolvedValue({
+        name: 'test-query-nobody',
+      });
 
       await expect(async () => {
         for await (const _ of chatService.streamChatResponse(
-          'test-query-nobody',
+          'test input',
+          'agent',
+          'TestAgent',
         )) {
         }
       }).rejects.toThrow('No response body available for streaming');
@@ -783,9 +800,12 @@ describe('chatService', () => {
         ok: true,
         body: { getReader: () => mockReader },
       });
+      vi.mocked(apiClient.post).mockResolvedValue({ name: 'test-query-lock' });
 
       for await (const _ of chatService.streamChatResponse(
-        'test-query-lock',
+        'test input',
+        'agent',
+        'TestAgent',
       )) {
       }
 
@@ -802,10 +822,15 @@ describe('chatService', () => {
         ok: true,
         body: { getReader: () => mockReader },
       });
+      vi.mocked(apiClient.post).mockResolvedValue({
+        name: 'test-query-lockerr',
+      });
 
       await expect(async () => {
         for await (const _ of chatService.streamChatResponse(
-          'test-query-lockerr',
+          'test input',
+          'agent',
+          'TestAgent',
         )) {
         }
       }).rejects.toThrow('Read error');
@@ -823,10 +848,18 @@ describe('chatService', () => {
         ok: true,
         body: { getReader: () => mockReader },
       });
+      vi.mocked(apiClient.post).mockResolvedValue({
+        name: 'test-query-abort',
+      });
 
       const controller = new AbortController();
       for await (const _ of chatService.streamChatResponse(
-        'test-query-abort',
+        'test input',
+        'agent',
+        'TestAgent',
+        undefined,
+        undefined,
+        undefined,
         controller.signal,
       )) {
       }
