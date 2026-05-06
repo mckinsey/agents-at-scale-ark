@@ -83,22 +83,27 @@ class ToolsPage(BasePage):
 
         logger.info(f"Tool name should be: {tool_name}")
         name_input.fill(tool_name)
+        name_input.blur()
         logger.info(f"Name in name input is {name_input.input_value()}")
 
-        type_trigger = self.page.locator("button#type, button[name='type'], [role='combobox']:has-text('Select'), [data-slot='trigger']").first
+        type_trigger = self.page.locator("[role='dialog'] [role='combobox']").first
+        type_trigger.scroll_into_view_if_needed()
         type_trigger.wait_for(state="visible", timeout=15000)
-        logger.info("Clicking type trigger to open dropdown")
-        type_trigger.click()
 
-        listbox = self.page.locator("[role='listbox'][data-side][data-state='open']")
-        logger.info("Waiting for listbox to be visible (with data-side set by Floating UI)")
-        listbox.wait_for(state="visible", timeout=15000)
-        logger.info(f"Listbox visible. data-side={listbox.get_attribute('data-side')}, data-state={listbox.get_attribute('data-state')}")
+        listbox = self.page.locator("[role='listbox'][data-state='open']")
+        for attempt in range(3):
+            logger.info(f"Clicking type trigger to open dropdown (attempt {attempt + 1})")
+            type_trigger.click()
+            try:
+                listbox.wait_for(state="visible", timeout=5000)
+                logger.info("Listbox visible")
+                break
+            except Exception:
+                logger.info(f"Listbox not visible on attempt {attempt + 1}, retrying")
+        else:
+            listbox.wait_for(state="visible", timeout=1)
+
         self.wait_for_animations_complete(listbox)
-        listbox_count = self.page.locator("[role='listbox']").count()
-        listbox_open_count = self.page.locator("[role='listbox'][data-state='open']").count()
-        options_in_dom = self.page.locator("[role='option']").all_text_contents()
-        logger.info(f"After animation wait: listbox count={listbox_count}, open count={listbox_open_count}, options={options_in_dom}")
         http_option = self.page.locator("[role='option']:has-text('HTTP')").first
         http_option.wait_for(state="visible", timeout=10000)
         logger.info("HTTP option visible, clicking")
