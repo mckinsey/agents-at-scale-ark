@@ -66,6 +66,27 @@ type config struct {
 	secureMetrics                                    bool
 	enableHTTP2                                      bool
 	completionsAddr                                  string
+	role                                             string
+}
+
+const (
+	RoleAPIServer  = "apiserver"
+	RoleController = "controller"
+)
+
+func validateRole(role string) error {
+	switch role {
+	case RoleAPIServer, RoleController:
+		return nil
+	case "":
+		return fmt.Errorf("--role is required; must be %q or %q", RoleAPIServer, RoleController)
+	default:
+		return fmt.Errorf("--role=%q is invalid; must be %q or %q", role, RoleAPIServer, RoleController)
+	}
+}
+
+func leaderElectionID(role string) string {
+	return "ark-" + role + "-leader"
 }
 
 func main() {
@@ -77,31 +98,38 @@ func main() {
 		os.Exit(0)
 	}
 
-	setupLog.Info("starting ark controller", "version", Version, "commit", GitCommit)
+	if err := validateRole(result.role); err != nil {
+		setupLog.Error(err, "invalid role")
+		os.Exit(1)
+	}
+
+	setupLog.Info("starting ark controller", "version", Version, "commit", GitCommit, "role", result.role)
 
 	mgr, metricsCertWatcher, webhookCertWatcher := setupManager(result.config)
 
-	// Initialize telemetry provider with direct (non-cached) client for broker discovery
-	ctx := context.Background()
-	restConfig := ctrl.GetConfigOrDie()
-	directClient, err := client.New(restConfig, client.Options{Scheme: scheme})
-	if err != nil {
-		setupLog.Error(err, "failed to create direct client for broker discovery")
-		directClient = nil
-	}
-	telemetryProvider := telemetryconfig.NewProvider(ctx, directClient)
-	defer func() {
-		if err := telemetryProvider.Shutdown(); err != nil {
-			setupLog.Error(err, "failed to shutdown telemetry provider")
+	switch result.role {
+	case RoleAPIServer:
+		setupEmbeddedApiserver(mgr)
+	case RoleController:
+		ctx := context.Background()
+		restConfig := ctrl.GetConfigOrDie()
+		directClient, err := client.New(restConfig, client.Options{Scheme: scheme})
+		if err != nil {
+			setupLog.Error(err, "failed to create direct client for broker discovery")
+			directClient = nil
 		}
-	}()
+		telemetryProvider := telemetryconfig.NewProvider(ctx, directClient)
+		defer func() {
+			if err := telemetryProvider.Shutdown(); err != nil {
+				setupLog.Error(err, "failed to shutdown telemetry provider")
+			}
+		}()
+		eventingProvider := eventingconfig.NewProvider(mgr, directClient)
 
-	// Initialize eventing provider with direct client for broker discovery
-	eventingProvider := eventingconfig.NewProvider(mgr, directClient)
+		setupControllers(mgr, telemetryProvider, eventingProvider, result.config)
+		setupWebhooks(mgr)
+	}
 
-	setupControllers(mgr, telemetryProvider, eventingProvider, result.config)
-	setupWebhooks(mgr)
-	setupEmbeddedApiserver(mgr)
 	startManager(mgr, metricsCertWatcher, webhookCertWatcher)
 }
 
@@ -132,6 +160,8 @@ func parseFlags() struct {
 	flag.BoolVar(&showVersion, "version", false, "Show version information and exit")
 	flag.StringVar(&cfg.completionsAddr, "completions-addr", "http://ark-completions.ark-system",
 		"Address of the completions engine for A2A communication")
+	flag.StringVar(&cfg.role, "role", "",
+		"Required: process role — 'apiserver' (runs only the aggregated API server) or 'controller' (runs only reconcilers and webhooks)")
 
 	zapOpts := zap.Options{Development: false}
 	zapOpts.BindFlags(flag.CommandLine)
@@ -155,7 +185,7 @@ func setupManager(cfg config) (ctrl.Manager, *certwatcher.CertWatcher, *certwatc
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: cfg.probeAddr,
 		LeaderElection:         cfg.enableLeaderElection,
-		LeaderElectionID:       "b5df0b4e.mckinsey",
+		LeaderElectionID:       leaderElectionID(cfg.role),
 		EventBroadcaster: record.NewBroadcasterWithCorrelatorOptions(record.CorrelatorOptions{
 			BurstSize: 100,
 			QPS:       100,
@@ -331,8 +361,9 @@ func setupWebhooks(mgr ctrl.Manager) {
 
 func setupEmbeddedApiserver(mgr ctrl.Manager) {
 	backend := os.Getenv("ARK_STORAGE_BACKEND")
-	if backend == "" || backend == "etcd" {
-		return
+	if backend != "postgresql" {
+		setupLog.Error(fmt.Errorf("--role=apiserver requires ARK_STORAGE_BACKEND=postgresql (got %q)", backend), "invalid configuration")
+		os.Exit(1)
 	}
 
 	cfg := apiserver.Config{}
