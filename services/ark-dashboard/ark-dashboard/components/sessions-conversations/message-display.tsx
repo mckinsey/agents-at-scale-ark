@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, memo } from 'react';
 import { useGetMessages } from '@/lib/services/conversations-hooks';
 import type { Conversation, ConversationMessage } from '@/lib/services/conversations';
 import type { ChatMessage } from '@/lib/types/chat-message';
@@ -73,16 +73,29 @@ function enhanceMessagesWithToolResults(messages: ConversationMessage[]): Enhanc
     });
 }
 
-function renderMessageContent(
-  isTemporary: boolean,
-  messages: ConversationMessage[] | undefined,
-  pendingMessages: Array<{ role: 'user'; content: string; timestamp: string }>,
-  participantName: string,
-  messagesEndRef: React.RefObject<HTMLDivElement | null>,
-  isProcessing: boolean,
-  showToolCalls: boolean
-) {
-  // Process messages to enhance tool calls with results and filter out tool response messages
+interface MessageContentProps {
+  readonly isTemporary: boolean;
+  readonly messages: ConversationMessage[] | undefined;
+  readonly pendingMessages: Array<{ role: 'user'; content: string; timestamp: string }>;
+  readonly participantName: string;
+  readonly isProcessing: boolean;
+  readonly showToolCalls: boolean;
+}
+
+const MessageContent = memo(function MessageContent({
+  isTemporary,
+  messages,
+  pendingMessages,
+  participantName,
+  isProcessing,
+  showToolCalls
+}: MessageContentProps) {
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, pendingMessages]);
+
   const processedMessages = messages && messages.length > 0
     ? enhanceMessagesWithToolResults(messages)
     : [];
@@ -167,19 +180,14 @@ function renderMessageContent(
       </div>
     </div>
   );
-}
+});
 
 export function MessageDisplay({ conversationId, sessionId, conversation, pendingMessages, onClearPending, isProcessing, showToolCalls }: Props) {
   const { data: messages, isLoading } = useGetMessages(sessionId, conversationId);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const participantName = conversation?.name || FALLBACK_PARTICIPANT_NAME;
   const participantType = conversation?.participantType || FALLBACK_PARTICIPANT_TYPE;
   const isTemporary = conversation?.isTemporary || false;
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, pendingMessages]);
 
   useEffect(() => {
     // Clear processing only when agent response appears after pending user message
@@ -228,7 +236,14 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
         </div>
       </div>
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
-        {renderMessageContent(isTemporary, messages, pendingMessages, participantName, messagesEndRef, isProcessing, showToolCalls)}
+        <MessageContent
+          isTemporary={isTemporary}
+          messages={messages}
+          pendingMessages={pendingMessages}
+          participantName={participantName}
+          isProcessing={isProcessing}
+          showToolCalls={showToolCalls}
+        />
       </div>
     </div>
   );

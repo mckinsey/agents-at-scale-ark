@@ -96,7 +96,7 @@ export function ChatInput({ conversationId, sessionId, conversation, onAddPendin
           disabled={!message.trim() || isPending}
           variant="secondary"
           size="icon"
-          className="absolute right-10 h-9 w-9 bg-[#3a3d43] text-gray-200 hover:bg-[#454950]"
+          className="absolute right-10 h-9 w-9 bg-field-enabled text-secondary-foreground hover:bg-field-hover"
         >
           <Send className="size-4" />
         </Button>

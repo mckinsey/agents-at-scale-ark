@@ -1,6 +1,6 @@
 import { apiClient } from '@/lib/api/client';
 
-function buildQueryParams<T extends Record<string, any>>(params: T): URLSearchParams {
+function buildQueryParams(params: Partial<SessionsListParams>): URLSearchParams {
   const queryParams = new URLSearchParams();
 
   Object.entries(params).forEach(([key, value]) => {
@@ -84,6 +84,12 @@ export const brokerSessionsService = {
     const response = await apiClient.get<PaginatedSessions>(url);
 
     if (!response || !Array.isArray(response.items)) {
+      console.error('Malformed sessions API response:', {
+        url,
+        hasResponse: !!response,
+        itemsType: response ? typeof response.items : 'no response',
+        response,
+      });
       return {
         items: [],
         total: 0,
@@ -111,6 +117,11 @@ export const brokerSessionsService = {
   async getSession(sessionId: string): Promise<BrokerSession | null> {
     const response = await apiClient.get<BrokerSession>(`/api/v1/broker/sessions/${sessionId}`);
     if (!response) {
+      console.error('Malformed session API response:', {
+        url: `/api/v1/broker/sessions/${sessionId}`,
+        sessionId,
+        response,
+      });
       return null;
     }
     return {

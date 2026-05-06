@@ -402,11 +402,7 @@ export class SessionsBroker {
   }
 
   getSession(sessionId: string): SessionEntry | undefined {
-    const session = this.store.sessions[sessionId];
-    if (session) {
-      this.recalculateSessionStatus(sessionId);
-    }
-    return session;
+    return this.store.sessions[sessionId];
   }
 
   /**

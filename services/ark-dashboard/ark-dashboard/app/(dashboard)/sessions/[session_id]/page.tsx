@@ -16,6 +16,9 @@ import { getParticipantIcon } from '@/lib/utils/participant-icon';
 import { cn } from '@/lib/utils';
 import type { ParticipantType } from '@/lib/services/conversations';
 
+const HISTORY_TAB = 'history';
+const LOGS_TAB = 'logs';
+
 export default function SessionDetailPage() {
   const params = useParams();
   const session_id = params.session_id as string;
@@ -193,23 +196,23 @@ export default function SessionDetailPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="history" className="min-h-0 flex-1">
+      <Tabs defaultValue={HISTORY_TAB} className="min-h-0 flex-1">
         <TabsList className="w-full justify-start rounded-none border-b border-border bg-transparent p-0 h-auto gap-4">
           <TabsTrigger
-            value="history"
+            value={HISTORY_TAB}
             className="flex-none rounded-none border-0 border-b-2 border-b-transparent bg-transparent px-6 pb-3 pt-0 text-muted-foreground shadow-none outline-none data-[state=active]:border-b-white data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-none dark:data-[state=active]:bg-transparent dark:data-[state=active]:border-b-white dark:bg-transparent focus-visible:outline-none focus-visible:ring-0"
           >
             History
           </TabsTrigger>
           <TabsTrigger
-            value="logs"
+            value={LOGS_TAB}
             className="flex-none rounded-none border-0 border-b-2 border-b-transparent bg-transparent px-6 pb-3 pt-0 text-muted-foreground shadow-none outline-none data-[state=active]:border-b-white data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-none dark:data-[state=active]:bg-transparent dark:data-[state=active]:border-b-white dark:bg-transparent focus-visible:outline-none focus-visible:ring-0"
           >
             Logs
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="history" className="min-h-0 flex flex-1 flex-col">
+        <TabsContent value={HISTORY_TAB} className="min-h-0 flex flex-1 flex-col">
           <ConversationsTab
             sessionId={session_id}
             initialParticipant={memoizedInitialParticipant}
@@ -219,7 +222,7 @@ export default function SessionDetailPage() {
           />
         </TabsContent>
 
-        <TabsContent value="logs" className="min-h-0 flex flex-1 flex-col">
+        <TabsContent value={LOGS_TAB} className="min-h-0 flex flex-1 flex-col">
           <LogsTab sessionId={session_id} />
         </TabsContent>
       </Tabs>
