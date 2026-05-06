@@ -171,23 +171,6 @@ jobs:
           auth_client_id: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_ID }}
           auth_client_secret: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_SECRET }}
 
-      - name: Wait for SonarQube server
-        run: |
-          for attempt in 1 2 3; do
-            status=$(curl -s -o /dev/null -w "%{http_code}" "$SONAR_HOST_URL/api/server/version" 2>/dev/null || echo "0")
-            if [ "$status" != "0" ]; then
-              echo "SonarQube reachable (HTTP $status)"
-              break
-            fi
-            if [ $attempt -lt 3 ]; then
-              echo "SonarQube not reachable (attempt $attempt), retrying in 30s..."
-              sleep 30
-            else
-              echo "SonarQube unreachable after 3 attempts"
-              exit 1
-            fi
-          done
-
       - name: Run SonarQube Scan (Branch)
         if: github.event_name != 'pull_request'
         run: |
