@@ -361,6 +361,33 @@ func fakeAuthorizedMCPServer(expectedToken string) *httptest.Server {
 	return httptest.NewServer(mux)
 }
 
+// createEmptyAuthSecretAndMCPServer wires an MCPServer at mcpURL to a Secret
+// with no token data. Used by tests that drive the controller through paths
+// where the Secret exists but carries nothing the controller can use.
+func createEmptyAuthSecretAndMCPServer(ctx context.Context, name, secretName, mcpURL string) {
+	GinkgoHelper()
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: "default"},
+		Data:       map[string][]byte{},
+	}
+	Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+	DeferCleanup(func() { _ = k8sClient.Delete(ctx, secret) })
+
+	mcpServer := &arkv1alpha1.MCPServer{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+		Spec: arkv1alpha1.MCPServerSpec{
+			Address:   arkv1alpha1.ValueSource{Value: mcpURL},
+			Transport: "http",
+			Timeout:   "5s",
+			Authorization: &arkv1alpha1.MCPServerAuthorizationSpec{
+				TokenSecretRef: arkv1alpha1.TokenSecretReference{Name: secretName},
+			},
+		},
+	}
+	Expect(k8sClient.Create(ctx, mcpServer)).To(Succeed())
+	DeferCleanup(func() { _ = k8sClient.Delete(ctx, mcpServer) })
+}
+
 var _ = Describe("MCPServer Controller — Bearer token injection via tokenSecretRef", func() {
 	ctx := context.Background()
 
@@ -585,27 +612,7 @@ var _ = Describe("MCPServer Controller — Bearer token injection via tokenSecre
 
 		const name = "mcp-auth-first-required"
 		const secretName = "mcp-auth-first-required-secret"
-
-		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: "default"},
-			Data:       map[string][]byte{},
-		}
-		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
-		DeferCleanup(func() { _ = k8sClient.Delete(ctx, secret) })
-
-		mcpServer := &arkv1alpha1.MCPServer{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
-			Spec: arkv1alpha1.MCPServerSpec{
-				Address:   arkv1alpha1.ValueSource{Value: srv.URL + "/mcp"},
-				Transport: "http",
-				Timeout:   "5s",
-				Authorization: &arkv1alpha1.MCPServerAuthorizationSpec{
-					TokenSecretRef: arkv1alpha1.TokenSecretReference{Name: secretName},
-				},
-			},
-		}
-		Expect(k8sClient.Create(ctx, mcpServer)).To(Succeed())
-		DeferCleanup(func() { _ = k8sClient.Delete(ctx, mcpServer) })
+		createEmptyAuthSecretAndMCPServer(ctx, name, secretName, srv.URL+"/mcp")
 
 		evtProvider := newMCPEventProvider()
 		r := &MCPServerReconciler{Client: k8sClient, Scheme: k8sClient.Scheme(), Eventing: evtProvider}
@@ -713,27 +720,7 @@ var _ = Describe("MCPServer Controller — Bearer token injection via tokenSecre
 
 		const name = "mcp-auth-shell-silent"
 		const secretName = "mcp-auth-shell-silent-secret"
-
-		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: "default"},
-			Data:       map[string][]byte{},
-		}
-		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
-		DeferCleanup(func() { _ = k8sClient.Delete(ctx, secret) })
-
-		mcpServer := &arkv1alpha1.MCPServer{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
-			Spec: arkv1alpha1.MCPServerSpec{
-				Address:   arkv1alpha1.ValueSource{Value: srv.URL + "/mcp"},
-				Transport: "http",
-				Timeout:   "5s",
-				Authorization: &arkv1alpha1.MCPServerAuthorizationSpec{
-					TokenSecretRef: arkv1alpha1.TokenSecretReference{Name: secretName},
-				},
-			},
-		}
-		Expect(k8sClient.Create(ctx, mcpServer)).To(Succeed())
-		DeferCleanup(func() { _ = k8sClient.Delete(ctx, mcpServer) })
+		createEmptyAuthSecretAndMCPServer(ctx, name, secretName, srv.URL+"/mcp")
 
 		evtProvider := newMCPEventProvider()
 		r := &MCPServerReconciler{Client: k8sClient, Scheme: k8sClient.Scheme(), Eventing: evtProvider}
