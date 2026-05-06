@@ -62,24 +62,8 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 
 	result, err := a.executeAgent(ctx, userInput, history, memory, eventStream)
 	if err != nil {
-		if IsTerminateTeam(err) {
-			if result == nil {
-				result = &ExecutionResult{}
-			}
-			result.Signal = &TerminateSignal{}
-			a.telemetryRecorder.RecordSuccess(span)
-			a.eventingRecorder.Complete(ctx, "AgentExecution", "Agent execution completed with termination", operationData)
-			return result, nil
-		}
-		var selectionMade *SelectionMade
-		if errors.As(err, &selectionMade) {
-			if result == nil {
-				result = &ExecutionResult{}
-			}
-			result.Signal = &SelectionMadeSignal{SelectedName: selectionMade.SelectedName}
-			a.telemetryRecorder.RecordSuccess(span)
-			a.eventingRecorder.Complete(ctx, "AgentExecution", "Agent execution completed with selection", operationData)
-			return result, nil
+		if signalResult, handled := a.handleSignalError(ctx, span, result, err, operationData); handled {
+			return signalResult, nil
 		}
 		a.telemetryRecorder.RecordError(span, err)
 		a.eventingRecorder.Fail(ctx, "AgentExecution", fmt.Sprintf("Agent execution failed: %v", err), err, operationData)
@@ -89,6 +73,26 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 	a.telemetryRecorder.RecordSuccess(span)
 	a.eventingRecorder.Complete(ctx, "AgentExecution", "Agent execution completed successfully", operationData)
 	return result, nil
+}
+
+func (a *Agent) handleSignalError(ctx context.Context, span telemetry.Span, result *ExecutionResult, err error, operationData map[string]string) (*ExecutionResult, bool) {
+	if result == nil {
+		result = &ExecutionResult{}
+	}
+	if IsTerminateTeam(err) {
+		result.Signal = &TerminateSignal{}
+		a.telemetryRecorder.RecordSuccess(span)
+		a.eventingRecorder.Complete(ctx, "AgentExecution", "Agent execution completed with termination", operationData)
+		return result, true
+	}
+	var selectionMade *SelectionMade
+	if errors.As(err, &selectionMade) {
+		result.Signal = &SelectionMadeSignal{SelectedName: selectionMade.SelectedName}
+		a.telemetryRecorder.RecordSuccess(span)
+		a.eventingRecorder.Complete(ctx, "AgentExecution", "Agent execution completed with selection", operationData)
+		return result, true
+	}
+	return nil, false
 }
 
 func (a *Agent) executeAgent(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
