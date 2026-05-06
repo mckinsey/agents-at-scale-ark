@@ -51,6 +51,10 @@ func (a *Agent) Execute(ctx context.Context, userInput Message, history []Messag
 	ctx, span := a.telemetryRecorder.StartAgentExecution(ctx, a.Name, a.Namespace)
 	defer span.End()
 
+	ctx = WithExecutionMetadata(ctx, map[string]interface{}{
+		"agent": a.Name,
+	})
+
 	operationData := map[string]string{
 		"agent": a.FullName(),
 	}
@@ -143,7 +147,7 @@ func (a *Agent) processAssistantMessage(choice openai.ChatCompletionChoice) Mess
 	assistantMessage := Message(choice.Message.ToParam())
 
 	if m := assistantMessage.OfAssistant; m != nil {
-		m.Name = param.Opt[string]{Value: a.Name}
+		m.Name = param.NewOpt(a.Name)
 	}
 
 	return assistantMessage
