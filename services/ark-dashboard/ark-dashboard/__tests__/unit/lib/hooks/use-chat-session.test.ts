@@ -22,6 +22,8 @@ vi.mock('@/lib/analytics/utils', () => ({
 }));
 
 const mockStreamChatResponse = vi.fn();
+const mockStartStreamChatResponse = vi.fn();
+const mockStreamQueryStatus = vi.fn();
 const mockSubmitChatQuery = vi.fn();
 const mockGetQueryResult = vi.fn();
 const mockCancelQuery = vi.fn();
@@ -29,6 +31,8 @@ const mockCancelQuery = vi.fn();
 vi.mock('@/lib/services', () => ({
   chatService: {
     streamChatResponse: (...args: unknown[]) => mockStreamChatResponse(...args),
+    startStreamChatResponse: (...args: unknown[]) => mockStartStreamChatResponse(...args),
+    streamQueryStatus: (...args: unknown[]) => mockStreamQueryStatus(...args),
     submitChatQuery: (...args: unknown[]) => mockSubmitChatQuery(...args),
     getQueryResult: (...args: unknown[]) => mockGetQueryResult(...args),
     cancelQuery: (...args: unknown[]) => mockCancelQuery(...args),
@@ -93,6 +97,12 @@ describe('useChatSession', () => {
     store.set(lastConversationIdAtom, null);
     mockSubmitChatQuery.mockResolvedValue({ name: 'test-query' });
     sessionStorage.clear();
+
+    mockStartStreamChatResponse.mockImplementation((...args: unknown[]) => {
+      const chunks = mockStreamChatResponse(...args);
+      return Promise.resolve({ queryName: 'test-query', chunks });
+    });
+    mockStreamQueryStatus.mockResolvedValue(() => {});
   });
 
   afterEach(() => {

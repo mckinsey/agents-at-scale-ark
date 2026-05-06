@@ -1,0 +1,87 @@
+name: OpenSpec Flow — Postflight
+description: >
+  Asserts that an agent step produced observable output: either new commits
+  were pushed (HEAD differs from base-sha) OR a comment containing
+  AGENT_COMMENT_MARKER was posted on the issue/PR. The marker-comment check
+  retries up to 3 times with a 5-second pause to absorb API lag. Sets a
+  `passed` output. Exits 1 on failure so the calling job's handle-failure
+  step can flip the label to openspec:failed. Does NOT post any comment
+  itself — commenting is the caller's responsibility.
+  AGENT_COMMENT_MARKER must be set in the workflow-level env block.
+
+inputs:
+  gh-token:
+    description: GitHub token with issues read permission
+    required: true
+  repo:
+    description: Repository in owner/name format
+    required: true
+  issue-number:
+    description: Issue or PR number to inspect for marker comments
+    required: true
+  job:
+    description: "Job being asserted: plan | implement | respond"
+    required: true
+  base-sha:
+    description: git rev-parse HEAD captured before the agent step ran
+    required: true
+  run-url:
+    description: URL of the current Actions run (for log messages)
+    required: true
+
+outputs:
+  passed:
+    description: "'true' if the assertion passed, 'false' otherwise"
+    value: ${{ steps.assert.outputs.passed }}
+
+runs:
+  using: composite
+  steps:
+    - name: Assert observable agent output
+      id: assert
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.gh-token }}
+        REPO: ${{ inputs.repo }}
+        ISSUE_NUMBER: ${{ inputs.issue-number }}
+        JOB: ${{ inputs.job }}
+        BASE_SHA: ${{ inputs.base-sha }}
+        RUN_URL: ${{ inputs.run-url }}
+      run: |
+        current_sha=$(git rev-parse HEAD)
+        echo "Base SHA:    $BASE_SHA"
+        echo "Current SHA: $current_sha"
+
+        if [ "$current_sha" != "$BASE_SHA" ]; then
+          new_count=$(git rev-list --count "${BASE_SHA}..HEAD" 2>/dev/null || echo "?")
+          echo "Postflight passed: $new_count new commit(s) since base SHA."
+          echo "passed=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        echo "No new commits. Checking for marker comment (up to 3 attempts)..."
+        found=false
+        for attempt in 1 2 3; do
+          echo "Attempt $attempt/3..."
+          marker_count=$(gh api --paginate "repos/$REPO/issues/$ISSUE_NUMBER/comments" \
+            | jq -r --arg m "$AGENT_COMMENT_MARKER" \
+              '[.[] | select(.body | contains($m))] | length' 2>/dev/null || echo "0")
+          if [ "$marker_count" -gt 0 ]; then
+            found=true
+            echo "Postflight passed: found $marker_count marker comment(s) on #$ISSUE_NUMBER."
+            break
+          fi
+          if [ "$attempt" -lt 3 ]; then
+            echo "No marker comment yet — waiting 5s before retry..."
+            sleep 5
+          fi
+        done
+
+        if [ "$found" = "true" ]; then
+          echo "passed=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        echo "::error::Postflight failed: no new commits and no marker comment found after 3 attempts. Silent no-op detected. Run: $RUN_URL"
+        echo "passed=false" >> "$GITHUB_OUTPUT"
+        exit 1

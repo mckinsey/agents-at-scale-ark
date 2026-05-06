@@ -14,6 +14,11 @@ import {
   waitForServicesReady,
   type WaitProgress,
 } from '../../lib/waitForReady.js';
+import {
+  runReadinessChecks,
+  detectStorageBackend,
+  type ReadinessCheckResult,
+} from '../../lib/readinessChecks.js';
 import {arkServices} from '../../arkServices.js';
 import type {ArkService} from '../../types/arkService.js';
 import output from '../../lib/output.js';
@@ -307,6 +312,7 @@ export async function checkStatus(
 
     if (options?.waitForReady) {
       const timeoutSeconds = parseTimeoutToSeconds(options.waitForReady);
+      const backend = await detectStorageBackend();
 
       let servicesToWait: ArkService[] = [];
       if (serviceNames && serviceNames.length > 0) {
@@ -318,7 +324,8 @@ export async function checkStatus(
             (s): s is ArkService =>
               s !== undefined &&
               s.k8sDeploymentName !== undefined &&
-              s.namespace !== undefined
+              s.namespace !== undefined &&
+              (!s.requiresBackend || s.requiresBackend === backend)
           );
 
         if (servicesToWait.length === 0) {
@@ -333,7 +340,8 @@ export async function checkStatus(
             s.enabled &&
             s.category === 'core' &&
             s.k8sDeploymentName &&
-            s.namespace
+            s.namespace &&
+            (!s.requiresBackend || s.requiresBackend === backend)
         );
       }
 
@@ -365,15 +373,31 @@ export async function checkStatus(
         }
       );
 
-      if (result) {
-        waitSpinner.succeed('All services are ready');
-        process.exit(0);
-      } else {
+      if (!result) {
         waitSpinner.fail(
           `Services did not become ready within ${timeoutSeconds} seconds`
         );
         process.exit(1);
       }
+
+      waitSpinner.succeed('All services are ready');
+
+      const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+      const remainingSeconds = Math.max(1, timeoutSeconds - elapsedSeconds);
+      const deepResults = await runReadinessChecks(
+        remainingSeconds,
+        (r: ReadinessCheckResult) => {
+          const icon = r.passed ? chalk.green('✓') : chalk.red('✗');
+          const dur = `${(r.durationMs / 1000).toFixed(1)}s`;
+          const suffix = r.message ? ` — ${r.message}` : '';
+          console.log(`  ${icon} ${r.name} (${dur})${suffix}`);
+        }
+      );
+
+      if (deepResults.some((r) => !r.passed)) {
+        process.exit(1);
+      }
+      process.exit(0);
     }
 
     process.exit(0);

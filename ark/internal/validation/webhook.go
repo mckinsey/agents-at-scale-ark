@@ -28,11 +28,13 @@ func (wv *WebhookValidator) ValidateDelete(_ context.Context, _ runtime.Object) 
 	return nil, nil
 }
 
-type WebhookDefaulter struct{}
+type WebhookDefaulter struct {
+	Lookup ArkConfigLookup
+}
 
 var _ webhook.CustomDefaulter = &WebhookDefaulter{}
 
-func (d *WebhookDefaulter) Default(_ context.Context, obj runtime.Object) error {
-	ApplyDefaults(obj)
+func (d *WebhookDefaulter) Default(ctx context.Context, obj runtime.Object) error {
+	ApplyDefaults(ctx, obj, d.Lookup)
 	return nil
 }

@@ -31,7 +31,7 @@ export type QueryUpdateRequest = Omit<
 type TerminalQueryStatusPhase = 'done' | 'error' | 'canceled' | 'unknown';
 
 // Define non-terminal status phases
-type NonTerminalQueryStatusPhase = 'pending' | 'running';
+type NonTerminalQueryStatusPhase = 'pending' | 'provisioning' | 'running';
 
 // Combined query status phase type
 type QueryStatusPhase = TerminalQueryStatusPhase | NonTerminalQueryStatusPhase;
@@ -44,7 +44,7 @@ const TERMINAL_QUERY_STATUS_PHASES: readonly TerminalQueryStatusPhase[] = [
   'unknown',
 ] as const;
 const NON_TERMINAL_QUERY_STATUS_PHASES: readonly NonTerminalQueryStatusPhase[] =
-  ['pending', 'running'] as const;
+  ['pending', 'provisioning', 'running'] as const;
 const QUERY_STATUS_PHASES: readonly QueryStatusPhase[] = [
   ...TERMINAL_QUERY_STATUS_PHASES,
   ...NON_TERMINAL_QUERY_STATUS_PHASES,
@@ -56,6 +56,10 @@ type QueryStatusWithPhase = {
     content: string;
     raw?: string;
   };
+  conditions?: Array<{
+    type?: string;
+    message?: string;
+  }>;
 };
 
 // Type guard for checking if a phase is terminal
@@ -74,6 +78,7 @@ export type ChatResponse = {
   status: QueryStatusPhase;
   terminal: boolean;
   response?: string;
+  conditionMessage?: string;
   messages?: Array<{
     role: string;
     content?: string;
@@ -287,10 +292,15 @@ export const chatService = {
           }
         }
 
+        const conditionMessage = statusWithPhase.conditions
+          ?.find(c => c.type === 'Completed')
+          ?.message;
+
         return {
           terminal: isTerminalPhase(validatedPhase),
           status: validatedPhase,
           response: response,
+          conditionMessage,
           messages: messages,
         };
       }
@@ -378,51 +388,96 @@ export const chatService = {
     }
   },
 
-  async *streamChatResponse(
-    queryName: string,
-    abortSignal?: AbortSignal
-  ): AsyncGenerator<Record<string, unknown>, void, unknown> {
-    
-    const response = await fetch(
-      `/api/v1/broker/chunks?watch=true&query-id=${queryName}`,
-      {
-        signal: abortSignal
-      }
+  async startStreamChatResponse(
+    input: string,
+    targetType: string,
+    targetName: string,
+    sessionId?: string,
+    conversationId?: string,
+    timeout?: string,
+    abortSignal?: AbortSignal,
+  ): Promise<{
+    queryName: string;
+    chunks: AsyncGenerator<Record<string, unknown>, void, unknown>;
+  }> {
+    const query = await this.submitChatQuery(
+      input,
+      targetType,
+      targetName,
+      sessionId,
+      conversationId,
+      true,
+      timeout,
     );
 
-    if (!response.ok) {
-      throw new Error(`Failed to connect to stream: ${response.statusText}`);
-    }
+    const queryName = query.name;
+    const self = this;
 
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error('No response body available for streaming');
-    }
+    async function* generateChunks(): AsyncGenerator<Record<string, unknown>, void, unknown> {
+      const response = await fetch(
+        `/api/v1/broker/chunks?watch=true&query-id=${queryName}`,
+        {
+          signal: abortSignal,
+        },
+      );
 
-    const decoder = new TextDecoder();
-    let buffer = '';
+      if (!response.ok) {
+        throw new Error(`Failed to connect to stream: ${response.statusText}`);
+      }
 
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body available for streaming');
+      }
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n\n');
-        buffer = lines.pop() || '';
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-        for (const line of lines) {
-          const chunk = this.parseSSEChunk(line);
-          if (chunk) {
-            yield chunk;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const chunk = self.parseSSEChunk(line);
+            if (chunk) {
+              yield chunk;
+            }
           }
         }
+      } finally {
+        reader.releaseLock();
       }
-    } finally {
-      reader.releaseLock();
     }
+
+    return { queryName, chunks: generateChunks() };
+  },
+
+  async *streamChatResponse(
+    input: string,
+    targetType: string,
+    targetName: string,
+    sessionId?: string,
+    conversationId?: string,
+    timeout?: string,
+    abortSignal?: AbortSignal,
+  ): AsyncGenerator<Record<string, unknown>, void, unknown> {
+    const { chunks } = await this.startStreamChatResponse(
+      input,
+      targetType,
+      targetName,
+      sessionId,
+      conversationId,
+      timeout,
+      abortSignal,
+    );
+    yield* chunks;
   },
 
   async cancelQuery(queryName: string): Promise<QueryDetailResponse> {
