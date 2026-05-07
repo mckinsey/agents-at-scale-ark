@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.1.61-rc.3](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.61-rc.2...v0.1.61-rc.3) (2026-05-07)
+
+
+### Features
+
+* Add AUTH mode for ark-landing-page ([#1534](https://github.com/mckinsey/agents-at-scale-ark/issues/1534)) ([35e4c0e](https://github.com/mckinsey/agents-at-scale-ark/commit/35e4c0e17ea48348b58ce8d4bca5b602ab59cf76))
+* add pagination and search to queries view ([#1915](https://github.com/mckinsey/agents-at-scale-ark/issues/1915)) ([7fe06de](https://github.com/mckinsey/agents-at-scale-ark/commit/7fe06de2e3ef2a6431ca56e4c4ef6cf676f49296))
+* **ark-sdk:** post conversation messages to broker /messages ([#2045](https://github.com/mckinsey/agents-at-scale-ark/issues/2045)) ([251a6ee](https://github.com/mckinsey/agents-at-scale-ark/commit/251a6ee55be69873846c1bb10050d2bce5393dcf))
+* **dashboard:** drag-reorder + groups on workflow templates, agents, and teams ([#1983](https://github.com/mckinsey/agents-at-scale-ark/issues/1983)) ([6e43ec7](https://github.com/mckinsey/agents-at-scale-ark/commit/6e43ec701febd1f3c7195c2b6c32933cf9a19697))
+* manage query TTL globally ([#1936](https://github.com/mckinsey/agents-at-scale-ark/issues/1936)) ([614e68a](https://github.com/mckinsey/agents-at-scale-ark/commit/614e68ab39c716196e3b832d9e3f3e55aa95b323))
+* **mcp-auth:** inject OAuth tokens via tokenSecretRef ([#1957](https://github.com/mckinsey/agents-at-scale-ark/issues/1957)) ([448b3c2](https://github.com/mckinsey/agents-at-scale-ark/commit/448b3c2fb8c75d670a13d04b3da61074d0ab1dcb))
+* **query:** add provisioning phase for executor infrastructure readiness ([#1967](https://github.com/mckinsey/agents-at-scale-ark/issues/1967)) ([74a974b](https://github.com/mckinsey/agents-at-scale-ark/commit/74a974bc757bb007944223b41fbbb4633c201dcb))
+* sessions and conversations view ([#1971](https://github.com/mckinsey/agents-at-scale-ark/issues/1971)) ([61ac9e2](https://github.com/mckinsey/agents-at-scale-ark/commit/61ac9e21fd5b8d8bcf83465a03d6737f3cd08275))
+* split apiserver deployment + postgres watch correctness ([#1958](https://github.com/mckinsey/agents-at-scale-ark/issues/1958)) ([c7081dc](https://github.com/mckinsey/agents-at-scale-ark/commit/c7081dc1a1b5ed2af25e17f5c2c4492f3705fb54))
+
+
+### Bug Fixes
+
+* Agent name should appear during streaming ([#2004](https://github.com/mckinsey/agents-at-scale-ark/issues/2004)) ([fc5746e](https://github.com/mckinsey/agents-at-scale-ark/commit/fc5746e72ac9967c45fa065c68095a229baf3733))
+* **ark-sdk:** support dict messages in extract_query_ref ([#2033](https://github.com/mckinsey/agents-at-scale-ark/issues/2033)) ([78f1dbf](https://github.com/mckinsey/agents-at-scale-ark/commit/78f1dbf91a6bb57a25b49d1ef8cd48c02e7bafe8))
+* CVE-2026-41672, CVE-2026-41673, CVE-2026-41674, CVE-2026-41675, CVE-2026-41907 security fixes ([#1992](https://github.com/mckinsey/agents-at-scale-ark/issues/1992)) ([1e0723e](https://github.com/mckinsey/agents-at-scale-ark/commit/1e0723e975ba12d52f88cb14b0a0ecc7c4414589))
+* CVE-2026-42264 and CVE-2026-6321 in ark-cli dependencies ([#2056](https://github.com/mckinsey/agents-at-scale-ark/issues/2056)) ([a5cef96](https://github.com/mckinsey/agents-at-scale-ark/commit/a5cef96aaeb20634ed05cd0d017783d274f92780))
+* **dashboard:** render markdown tables in .md file preview ([#2041](https://github.com/mckinsey/agents-at-scale-ark/issues/2041)) ([8f813c1](https://github.com/mckinsey/agents-at-scale-ark/commit/8f813c12805730f0ab2b93f57bbcaef9eaf2a840)), closes [#1970](https://github.com/mckinsey/agents-at-scale-ark/issues/1970)
+* **dashboard:** simplify provisioning indicator text ([#2047](https://github.com/mckinsey/agents-at-scale-ark/issues/2047)) ([9b80296](https://github.com/mckinsey/agents-at-scale-ark/commit/9b8029611ed821fd74384a69c4409ce089ba3efc))
+* Make ark-api aware of namespace when proxying ([#1969](https://github.com/mckinsey/agents-at-scale-ark/issues/1969)) ([2085d7e](https://github.com/mckinsey/agents-at-scale-ark/commit/2085d7ee22a70031178aec1dea6fa67bc4af46de))
+* **openspec-flow:** make usage-table injection non-fatal ([#2024](https://github.com/mckinsey/agents-at-scale-ark/issues/2024)) ([1b0fa61](https://github.com/mckinsey/agents-at-scale-ark/commit/1b0fa61ac48748d56be0440111c5d15381c696e8))
+* **openspec-flow:** scraper format + drop skill-naming prompts ([#2026](https://github.com/mckinsey/agents-at-scale-ark/issues/2026)) ([9e15914](https://github.com/mckinsey/agents-at-scale-ark/commit/9e15914dcaef9f2f57fefdc9297f9a2873c9889f))
+* Redirect to default namespace when incorrect namespace provided ([#2050](https://github.com/mckinsey/agents-at-scale-ark/issues/2050)) ([91f02b5](https://github.com/mckinsey/agents-at-scale-ark/commit/91f02b55aad1c49f320189430e80c3b3948c9e72))
+* stop stripping namespace param ([#1997](https://github.com/mckinsey/agents-at-scale-ark/issues/1997)) ([7d0575d](https://github.com/mckinsey/agents-at-scale-ark/commit/7d0575d4be36bbd3c8beb3dfe9051f239ca007c0))
+* update axios to 1.15.1 to resolve CVE-2026-42039 ([#2012](https://github.com/mckinsey/agents-at-scale-ark/issues/2012)) ([5c46797](https://github.com/mckinsey/agents-at-scale-ark/commit/5c46797f9d85b19e05207174b9c2491b31d20663)), closes [#2008](https://github.com/mckinsey/agents-at-scale-ark/issues/2008)
+
 ## [0.1.61-rc.2](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.61-rc.1...v0.1.61-rc.2) (2026-04-24)
 
 
