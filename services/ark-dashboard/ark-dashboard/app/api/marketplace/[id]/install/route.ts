@@ -1,18 +1,88 @@
-import { exec } from 'child_process';
+import { spawn } from 'child_process';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { promisify } from 'util';
+import { z } from 'zod';
 
 import { getRawMarketplaceItemById } from '@/lib/services/marketplace-fetcher';
+import {
+  validateHelmInstallation,
+  helmReleaseNameSchema,
+  helmNamespaceSchema,
+} from '@/lib/utils/helm-validation';
 
-const execAsync = promisify(exec);
+/**
+ * Execute Helm command using spawn (without shell)
+ */
+async function executeHelmCommand(
+  command: string,
+  args: string[],
+  timeoutMs: number = 300000,
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const helmProcess = spawn(command, args, {
+      shell: false, // no shell interpretation
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
 
+    let stdout = '';
+    let stderr = '';
+    let completed = false;
+
+    const timeout = setTimeout(() => {
+      if (!completed) {
+        helmProcess.kill('SIGTERM');
+        reject(new Error(`Helm command timed out after ${timeoutMs}ms`));
+      }
+    }, timeoutMs);
+
+    // Collect stdout
+    helmProcess.stdout?.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    // Collect stderr
+    helmProcess.stderr?.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    // Handle process exit
+    helmProcess.on('close', (code) => {
+      completed = true;
+      clearTimeout(timeout);
+
+      if (code === 0) {
+        resolve({ stdout, stderr });
+      } else {
+        reject(
+          new Error(
+            `Helm command failed with exit code ${code}: ${stderr || stdout}`,
+          ),
+        );
+      }
+    });
+
+    // Handle process errors
+    helmProcess.on('error', (error) => {
+      completed = true;
+      clearTimeout(timeout);
+      reject(new Error(`Failed to execute Helm command: ${error.message}`));
+    });
+  });
+}
+
+/**
+ * Check if Helm is available
+ */
 async function checkHelmAvailable(): Promise<{
   available: boolean;
   error?: string;
 }> {
   try {
-    const { stdout } = await execAsync('helm version --short');
+    const { stdout } = await executeHelmCommand(
+      'helm',
+      ['version', '--short'],
+      10000,
+    );
     console.log('Helm version:', stdout.trim());
     return { available: true };
   } catch (error) {
@@ -66,14 +136,39 @@ export async function POST(
     }
 
     const { ark } = item;
+
+    // Validate inputs
+    try {
+      validateHelmInstallation({
+        helmReleaseName: ark.helmReleaseName,
+        chartPath: ark.chartPath,
+        namespace: ark.namespace,
+        installArgs: ark.installArgs,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return NextResponse.json(
+          { error: `Validation failed: ${error.issues[0].message}` },
+          { status: 400 },
+        );
+      }
+      if (error instanceof Error) {
+        return NextResponse.json(
+          { error: `Validation failed: ${error.message}` },
+          { status: 400 },
+        );
+      }
+      throw error;
+    }
+
     console.log(`Installing ${item.name} from ${ark.chartPath}`);
 
-    // Build helm command
-    const helmArgs = [
+    // Build helm argument array
+    const helmArgs: string[] = [
       'upgrade',
       '--install',
-      ark.helmReleaseName,
-      ark.chartPath,
+      ark.helmReleaseName!,
+      ark.chartPath!,
     ];
 
     // Add namespace if specified
@@ -122,7 +217,7 @@ export async function POST(
         });
       }
 
-      const { stdout, stderr } = await execAsync(helmCommand);
+      const { stdout, stderr } = await executeHelmCommand('helm', helmArgs);
 
       if (stderr && !stderr.includes('WARNING')) {
         console.error('Helm stderr:', stderr);
@@ -183,10 +278,27 @@ export async function DELETE(
     }
 
     const { ark } = item;
+
+    // Validate inputs
+    try {
+      helmReleaseNameSchema.parse(ark.helmReleaseName);
+      if (ark.namespace) {
+        helmNamespaceSchema.parse(ark.namespace);
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return NextResponse.json(
+          { error: `Validation failed: ${error.issues[0].message}` },
+          { status: 400 },
+        );
+      }
+      throw error;
+    }
+
     console.log(`Uninstalling ${item.name}`);
 
-    // Build helm uninstall command
-    const helmArgs = ['uninstall', ark.helmReleaseName];
+    // Build helm argument array
+    const helmArgs: string[] = ['uninstall', ark.helmReleaseName!];
 
     // Add namespace if specified
     if (ark.namespace) {
@@ -198,7 +310,7 @@ export async function DELETE(
 
     // Execute helm command
     try {
-      const { stdout, stderr } = await execAsync(helmCommand);
+      const { stdout, stderr } = await executeHelmCommand('helm', helmArgs);
 
       if (stderr && !stderr.includes('WARNING')) {
         console.error('Helm stderr:', stderr);
