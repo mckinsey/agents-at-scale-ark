@@ -1,4 +1,4 @@
-FROM node:25.9.0-alpine AS builder
+FROM node:26.0.0-alpine AS builder
 
 WORKDIR /workspace
 COPY package.json package-lock.json ./
@@ -9,7 +9,7 @@ COPY proto ./proto
 COPY tsconfig.json ./
 RUN npm run build
 
-FROM node:25.9.0-alpine AS runner
+FROM node:26.0.0-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
