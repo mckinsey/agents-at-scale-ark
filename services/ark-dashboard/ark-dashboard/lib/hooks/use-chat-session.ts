@@ -17,7 +17,7 @@ import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { hashPromptSync } from '@/lib/analytics/utils';
 import type { ChatType } from '@/lib/chat-events';
-import { chatService } from '@/lib/services';
+import { chatService, toolApprovalsService } from '@/lib/services';
 import type {
   ArkExtendedChunk,
   ExtendedChatMessage,
@@ -38,6 +38,7 @@ interface UseChatSessionReturn {
   messagesEndRef: RefObject<HTMLDivElement | null>;
   tokenUsage?: TokenUsage;
   messageTokenUsage?: Record<number, TokenUsage>;
+  onApprovalDecision: (approved: boolean) => void;
 }
 
 export function useChatSession({
@@ -203,13 +204,17 @@ export function useChatSession({
       let hasError = false;
       let errorMessage = '';
       let queryName = '';
+      let streamQueryName = '';
       let currentAgent: string | undefined;
       let turnComplete = false;
+      let receivedFinalChunk = false;
       let completedQueryMessages: Array<{
         role: string;
         content?: string;
         name?: string;
       }> = [];
+      let pendingApproval: { name: string; namespace: string } | null = null;
+      let pendingApprovalQueryName = '';
 
       const finalizeCurrentMessage = () => {
         if (accumulatedContent || accumulatedToolCalls.length > 0) {
@@ -249,24 +254,35 @@ export function useChatSession({
         currentMessageIndex += systemMsgCount + 1;
       };
 
-      for await (const chunk of chatService.streamChatResponse(
-        userMessage,
-        type,
-        name,
-        sessionId,
-        conversationId,
-        queryTimeout,
-      )) {
-        const typedChunk = chunk as unknown as ArkExtendedChunk;
+      try {
+        for await (const chunk of chatService.streamChatResponse(
+          userMessage,
+          type,
+          name,
+          sessionId,
+          conversationId,
+          queryTimeout,
+        )) {
+          const typedChunk = chunk as unknown as ArkExtendedChunk;
 
-        if (typedChunk.error) {
-          hasError = true;
-          errorMessage = typedChunk.error.message || 'An error occurred';
-          queryName = typedChunk.ark?.query || '';
-          break;
-        }
+          if (typedChunk?.id === 'stream-init' && typedChunk.ark?.query) {
+            streamQueryName = typedChunk.ark.query;
+            continue;
+          }
 
-        if (typedChunk?.id === 'chatcmpl-final' && typedChunk.ark) {
+          if (typedChunk.error) {
+            const errorMsg = typedChunk.error.message || '';
+            if (errorMsg.includes('approval required')) {
+              continue;
+            }
+            hasError = true;
+            errorMessage = errorMsg || 'An error occurred';
+            queryName = typedChunk.ark?.query || '';
+            break;
+          }
+
+          if (typedChunk?.id === 'chatcmpl-final' && typedChunk.ark) {
+            receivedFinalChunk = true;
           const arkData = typedChunk.ark;
 
           const returnedConversationId =
@@ -281,6 +297,18 @@ export function useChatSession({
               arkData.completedQuery.status.response?.content || 'Query failed';
             queryName = arkData.completedQuery.metadata?.name || '';
             break;
+          }
+
+          if (arkData.completedQuery?.status?.phase === 'approval-required') {
+            const approvalRef = arkData.completedQuery.status.approvalRef;
+            if (approvalRef?.name) {
+              pendingApproval = {
+                name: approvalRef.name,
+                namespace: approvalRef.namespace || 'default',
+              };
+            } else {
+              pendingApprovalQueryName = arkData.completedQuery.metadata?.name || '';
+            }
           }
           const rawMessages = arkData.completedQuery?.status?.response?.raw;
           if (rawMessages) {
@@ -401,6 +429,87 @@ export function useChatSession({
         const finishReason = typedChunk?.choices?.[0]?.finish_reason;
         if (finishReason === 'stop') {
           turnComplete = true;
+        }
+      }
+      } catch (streamError) {
+        console.error('Stream error, will attempt fallback polling:', streamError);
+      }
+
+      if (pendingApprovalQueryName && !pendingApproval) {
+        for (let i = 0; i < 10; i++) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          const queryResult = await chatService.getQueryResult(pendingApprovalQueryName);
+          if (queryResult.approvalRef?.name) {
+            pendingApproval = {
+              name: queryResult.approvalRef.name,
+              namespace: queryResult.approvalRef.namespace,
+            };
+            break;
+          }
+        }
+      }
+
+      if (!receivedFinalChunk && !hasError && !pendingApproval && streamQueryName) {
+        for (let i = 0; i < 10; i++) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          const queryResult = await chatService.getQueryResult(streamQueryName);
+          if (queryResult.status === 'approval-required' && queryResult.approvalRef?.name) {
+            pendingApproval = {
+              name: queryResult.approvalRef.name,
+              namespace: queryResult.approvalRef.namespace,
+            };
+            break;
+          }
+          if (queryResult.terminal) {
+            break;
+          }
+        }
+      }
+
+      if (pendingApproval) {
+        try {
+          const approvalDetail = await toolApprovalsService.get(
+            pendingApproval.name,
+            pendingApproval.namespace,
+          );
+          const toolCalls = approvalDetail.toolCalls || [];
+          updateChatMessages(prev => {
+            const updated = [...prev];
+            updated[currentMessageIndex] = {
+              role: 'assistant',
+              content: '',
+              approval: {
+                approvalRef: {
+                  name: pendingApproval!.name,
+                  namespace: pendingApproval!.namespace,
+                },
+                toolCalls: toolCalls.map(tc => ({
+                  id: tc.id || '',
+                  name: tc.name || '',
+                  type: tc.type || 'function',
+                  arguments: tc.arguments || '{}',
+                  description: tc.description,
+                  agentReasoning: tc.agentReasoning,
+                })),
+                reasonRequired: approvalDetail.reasonRequired ?? false,
+                status: 'pending',
+              },
+            } as ExtendedChatMessage;
+            return updated;
+          });
+          return;
+        } catch (err) {
+          console.error('Failed to fetch approval details:', err);
+          updateChatMessages(prev => {
+            const updated = [...prev];
+            updated[currentMessageIndex] = {
+              role: 'assistant',
+              content: 'Tool approval is required but failed to load details.',
+              metadata: { status: 'failed' },
+            } as ExtendedChatMessage;
+            return updated;
+          });
+          return;
         }
       }
 
@@ -545,6 +654,51 @@ export function useChatSession({
       while (!pollingStopped) {
         try {
           const result = await chatService.getQueryResult(query.name);
+
+          if (result.status === 'approval-required' && result.approvalRef) {
+            try {
+              const approvalDetail = await toolApprovalsService.get(
+                result.approvalRef.name,
+                result.approvalRef.namespace,
+              );
+              const toolCalls = approvalDetail.toolCalls || [];
+              updateChatMessages(prev => [
+                ...prev,
+                {
+                  role: 'assistant',
+                  content: '',
+                  approval: {
+                    approvalRef: {
+                      name: result.approvalRef!.name,
+                      namespace: result.approvalRef!.namespace,
+                    },
+                    toolCalls: toolCalls.map(tc => ({
+                      id: tc.id || '',
+                      name: tc.name || '',
+                      type: tc.type || 'function',
+                      arguments: tc.arguments || '{}',
+                      description: tc.description,
+                      agentReasoning: tc.agentReasoning,
+                    })),
+                    reasonRequired: approvalDetail.reasonRequired ?? false,
+                    status: 'pending',
+                  },
+                } as ExtendedChatMessage,
+              ]);
+            } catch (err) {
+              console.error('Failed to fetch approval details:', err);
+              updateChatMessages(prev => [
+                ...prev,
+                {
+                  role: 'assistant',
+                  content: 'Tool approval is required but failed to load details.',
+                  metadata: { status: 'failed' },
+                } as ExtendedChatMessage,
+              ]);
+            }
+            pollingStopped = true;
+            break;
+          }
 
           if (result.terminal) {
             const fullQuery = await chatService.getQuery(query.name);
@@ -762,6 +916,36 @@ export function useChatSession({
     setError(null);
   }, [chatKey, name, setChatHistory, setLastConversationId]);
 
+  const onApprovalDecision = useCallback(
+    (approved: boolean) => {
+      updateChatMessages(prev => {
+        const updated = [...prev];
+        for (let i = updated.length - 1; i >= 0; i--) {
+          if (updated[i].approval?.status === 'pending') {
+            updated[i] = {
+              ...updated[i],
+              approval: {
+                ...updated[i].approval!,
+                status: approved ? 'approved' : 'rejected',
+              },
+            };
+            break;
+          }
+        }
+        return [
+          ...updated,
+          {
+            role: 'assistant',
+            content: approved
+              ? 'Tool execution approved. Processing...'
+              : 'Tool execution rejected.',
+          } as ExtendedChatMessage,
+        ];
+      });
+    },
+    [updateChatMessages],
+  );
+
   return {
     messages: chatMessages,
     sessionId,
@@ -772,5 +956,6 @@ export function useChatSession({
     messagesEndRef,
     tokenUsage: chatSession.tokenUsage,
     messageTokenUsage: chatSession.messageTokenUsage,
+    onApprovalDecision,
   };
 }

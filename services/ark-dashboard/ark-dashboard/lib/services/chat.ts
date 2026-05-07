@@ -31,7 +31,7 @@ export type QueryUpdateRequest = Omit<
 type TerminalQueryStatusPhase = 'done' | 'error' | 'canceled' | 'unknown';
 
 // Define non-terminal status phases
-type NonTerminalQueryStatusPhase = 'pending' | 'running';
+type NonTerminalQueryStatusPhase = 'pending' | 'running' | 'approval-required';
 
 // Combined query status phase type
 type QueryStatusPhase = TerminalQueryStatusPhase | NonTerminalQueryStatusPhase;
@@ -44,7 +44,7 @@ const TERMINAL_QUERY_STATUS_PHASES: readonly TerminalQueryStatusPhase[] = [
   'unknown',
 ] as const;
 const NON_TERMINAL_QUERY_STATUS_PHASES: readonly NonTerminalQueryStatusPhase[] =
-  ['pending', 'running'] as const;
+  ['pending', 'running', 'approval-required'] as const;
 const QUERY_STATUS_PHASES: readonly QueryStatusPhase[] = [
   ...TERMINAL_QUERY_STATUS_PHASES,
   ...NON_TERMINAL_QUERY_STATUS_PHASES,
@@ -55,6 +55,10 @@ type QueryStatusWithPhase = {
   response?: {
     content: string;
     raw?: string;
+  };
+  approvalRef?: {
+    name: string;
+    namespace: string;
   };
 };
 
@@ -85,6 +89,10 @@ export type ChatResponse = {
     }>;
     tool_call_id?: string;
   }>;
+  approvalRef?: {
+    name: string;
+    namespace: string;
+  };
 };
 
 export type ChatMessage = {
@@ -292,6 +300,7 @@ export const chatService = {
           status: validatedPhase,
           response: response,
           messages: messages,
+          approvalRef: statusWithPhase.approvalRef,
         };
       }
 
@@ -397,6 +406,12 @@ export const chatService = {
     );
 
     const queryName = query.name;
+
+    yield {
+      id: 'stream-init',
+      ark: { query: queryName },
+    };
+
     const response = await fetch(
       `/api/v1/broker/chunks?watch=true&query-id=${queryName}`,
     );

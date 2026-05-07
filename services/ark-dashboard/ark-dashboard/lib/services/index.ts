@@ -93,3 +93,12 @@ export {
   type MappedStepStatus,
   type MappedWorkflowStepType,
 } from './workflow-mapper';
+export {
+  toolApprovalsService,
+  type ToolApproval,
+  type ToolApprovalDetail,
+  type ToolApprovalListResponse,
+  type ToolCallInfo,
+  type ApprovalDecisionRequest,
+  type ApprovalDecisionResponse,
+} from './tool-approvals';

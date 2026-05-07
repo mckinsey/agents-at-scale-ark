@@ -61,11 +61,13 @@ dev:
     env:
       - name: NODE_ENV
         value: development
+      - name: CI
+        value: "true"
     command:
       [
         "sh",
         "-c",
-        "cd /app/ark-dashboard && npm install -g pnpm && pnpm install && pnpm run dev",
+        "cd /app/ark-dashboard && npm install -g pnpm && pnpm install --ignore-scripts && pnpm run dev",
       ]
     namespace: default
     # Stream logs instead of terminal

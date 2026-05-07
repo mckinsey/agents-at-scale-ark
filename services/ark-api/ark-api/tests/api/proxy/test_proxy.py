@@ -3,7 +3,7 @@ import json
 import os
 import unittest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
-from src.ark_api.api.v1.proxy.proxy import _get_a2a_server_address
+from ark_api.api.v1.proxy.proxy import _get_a2a_server_address
 
 from fastapi.testclient import TestClient
 

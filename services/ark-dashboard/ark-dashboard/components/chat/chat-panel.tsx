@@ -46,6 +46,7 @@ export function ChatPanel({
     messagesEndRef,
     tokenUsage,
     messageTokenUsage,
+    onApprovalDecision,
   } = useChatSession({ name, type });
 
   const [currentMessage, setCurrentMessage] = useState('');
@@ -94,6 +95,7 @@ export function ChatPanel({
             viewMode={viewMode}
             messagesEndRef={messagesEndRef}
             messageTokenUsage={messageTokenUsage}
+            onApprovalDecision={onApprovalDecision}
           />
         </div>
       </div>

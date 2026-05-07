@@ -15,6 +15,10 @@ export interface ArkCompletedQueryData {
         completionTokens?: number;
         totalTokens?: number;
       };
+      approvalRef?: {
+        name?: string;
+        namespace?: string;
+      };
     };
   };
 }
@@ -46,9 +50,27 @@ export interface ChatMessage {
   tool_call_id?: string;
 }
 
+export type ApprovalInfo = {
+  approvalRef: {
+    name: string;
+    namespace: string;
+  };
+  toolCalls: Array<{
+    id: string;
+    name: string;
+    type: string;
+    arguments: string;
+    description?: string;
+    agentReasoning?: string;
+  }>;
+  reasonRequired?: boolean;
+  status: 'pending' | 'approved' | 'rejected';
+};
+
 export type ExtendedChatMessage = ChatMessage & {
   metadata?: {
     status?: 'pending' | 'processing' | 'completed' | 'failed';
     queryName?: string;
   };
+  approval?: ApprovalInfo;
 };

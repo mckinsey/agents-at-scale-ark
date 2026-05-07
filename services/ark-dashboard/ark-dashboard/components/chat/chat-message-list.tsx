@@ -1,5 +1,5 @@
 import { AlertCircle } from 'lucide-react';
-import { useMemo, useEffect } from 'react';
+import { useMemo } from 'react';
 import type { RefObject } from 'react';
 
 import { ChatMessage } from '@/components/chat/chat-message';
@@ -10,6 +10,7 @@ import { SelectorFailureEvent } from '@/components/chat/selector-failure-event';
 import { SelectorTransition } from '@/components/chat/selector-transition';
 import { StrategyIndicator } from '@/components/chat/strategy-indicator';
 import { TerminationEvent } from '@/components/chat/termination-event';
+import { ToolApprovalCard } from '@/components/chat/tool-approval-card';
 import type { TokenUsage } from '@/atoms/chat-history';
 import type { ChatMessage as ChatMessageType, ExtendedChatMessage, GraphEdge } from '@/lib/types/chat-message';
 
@@ -25,6 +26,7 @@ interface ChatMessageListProps {
   viewMode?: 'text' | 'markdown';
   messagesEndRef: RefObject<HTMLDivElement | null>;
   messageTokenUsage?: Record<number, TokenUsage>;
+  onApprovalDecision?: (approved: boolean) => void;
 }
 
 function extractMessageContent(msg: ChatMessageType): string {
@@ -133,6 +135,7 @@ export function ChatMessageList({
   viewMode = 'markdown',
   messagesEndRef,
   messageTokenUsage,
+  onApprovalDecision,
 }: Readonly<ChatMessageListProps>) {
   const transitionMap = useMemo(() => {
     if (!graphEdges || graphEdges.length === 0)
@@ -173,6 +176,7 @@ export function ChatMessageList({
       hasToolCalls: boolean;
       hasContent: boolean;
       hasTermination: boolean;
+      hasApproval: boolean;
     }> = [];
 
     messages.forEach((message, index) => {
@@ -197,12 +201,15 @@ export function ChatMessageList({
         hasTermination,
       } = determineMessageFlags(msg, content, toolCallsWithResults, terminateToolCall, debugMode);
 
+      const hasApproval = !!(message.approval && message.approval.status === 'pending');
+
       if (
         !hasToolCalls &&
         !hasContent &&
         !hasTermination &&
         !isMaxTurnsMessage &&
-        !isSelectorFailureMessage
+        !isSelectorFailureMessage &&
+        !hasApproval
       ) {
         return;
       }
@@ -228,6 +235,7 @@ export function ChatMessageList({
         hasToolCalls,
         hasContent,
         hasTermination,
+        hasApproval,
       });
     });
 
@@ -384,6 +392,19 @@ export function ChatMessageList({
               ))}
             {pm.isSelectorFailureMessage && (
               <SelectorFailureEvent message={pm.content} />
+            )}
+            {pm.hasApproval && pm.message.approval && (
+              <ToolApprovalCard
+                approvalName={pm.message.approval.approvalRef.name}
+                namespace={pm.message.approval.approvalRef.namespace}
+                toolCalls={pm.message.approval.toolCalls}
+                reasonRequired={pm.message.approval.reasonRequired}
+                onDecision={approved => {
+                  if (onApprovalDecision) {
+                    onApprovalDecision(approved);
+                  }
+                }}
+              />
             )}
           </div>
         );

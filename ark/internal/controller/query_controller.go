@@ -142,6 +142,8 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 		return ctrl.Result{
 			RequeueAfter: time.Until(expiry),
 		}, nil
+	case "approval-required":
+		return r.handleApprovalRequiredPhase(ctx, req, obj, expiry)
 	case statusRunning:
 		return r.handleRunningPhase(ctx, req, obj)
 	default:
@@ -151,6 +153,57 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 			}, err
 		}
 		return ctrl.Result{}, nil
+	}
+}
+
+func (r *QueryReconciler) handleApprovalRequiredPhase(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query, expiry time.Time) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+
+	if obj.Status.ApprovalRef == nil {
+		log.Error(nil, "Query in approval-required phase but no ApprovalRef", "query", obj.Name)
+		if err := r.updateStatus(ctx, &obj, statusError); err != nil {
+			return ctrl.Result{RequeueAfter: time.Until(expiry)}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
+	tarNamespace := obj.Status.ApprovalRef.Namespace
+	if tarNamespace == "" {
+		tarNamespace = obj.Namespace
+	}
+
+	var tar arkv1alpha1.ToolApprovalRequest
+	if err := r.Get(ctx, types.NamespacedName{Name: obj.Status.ApprovalRef.Name, Namespace: tarNamespace}, &tar); err != nil {
+		if errors.IsNotFound(err) {
+			log.Error(err, "ToolApprovalRequest not found", "tar", obj.Status.ApprovalRef.Name)
+			if err := r.updateStatus(ctx, &obj, statusError); err != nil {
+				return ctrl.Result{RequeueAfter: time.Until(expiry)}, err
+			}
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{RequeueAfter: time.Until(expiry)}, err
+	}
+
+	switch tar.Status.Phase {
+	case "approved":
+		log.Info("ToolApprovalRequest approved, resuming execution", "query", obj.Name, "tar", tar.Name)
+		if err := r.updateStatus(ctx, &obj, statusRunning); err != nil {
+			return ctrl.Result{RequeueAfter: time.Until(expiry)}, err
+		}
+		return ctrl.Result{}, nil
+	case "rejected":
+		log.Info("ToolApprovalRequest rejected", "query", obj.Name, "tar", tar.Name)
+		obj.Status.Response = &arkv1alpha1.Response{
+			Content: "Tool execution was rejected by approver",
+			Phase:   statusError,
+		}
+		if err := r.updateStatus(ctx, &obj, statusError); err != nil {
+			return ctrl.Result{RequeueAfter: time.Until(expiry)}, err
+		}
+		return ctrl.Result{}, nil
+	default:
+		log.V(1).Info("ToolApprovalRequest still pending", "query", obj.Name, "tar", tar.Name, "phase", tar.Status.Phase)
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 }
 
@@ -250,6 +303,21 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 		_ = r.updateStatus(opCtx, &obj, statusError)
 		return
 	}
+
+	if engineMeta.ApprovalRef != nil {
+		dispatchSpan.SetStatus(telemetry.StatusOk, "approval-required")
+		obj.Status.Response = response
+		obj.Status.ApprovalRef = &arkv1alpha1.ToolApprovalRef{
+			Name:      engineMeta.ApprovalRef.Name,
+			Namespace: engineMeta.ApprovalRef.Namespace,
+		}
+		if err := r.updateStatus(opCtx, &obj, "approval-required"); err != nil {
+			log.Error(err, "Failed to update query status to approval-required", "query", obj.Name)
+		}
+		log.Info("Query requires tool approval", "query", obj.Name, "tar", engineMeta.ApprovalRef.Name)
+		return
+	}
+
 	dispatchSpan.SetStatus(telemetry.StatusOk, "success")
 
 	obj.Status.Response = response
@@ -475,6 +543,19 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 		return nil, engineResponseMeta{}, fmt.Errorf("query execution failed: %w", err)
 	}
 
+	if approvalMeta := extractApprovalMetadata(result); approvalMeta != nil {
+		tar, err := r.createToolApprovalRequest(ctx, &query, approvalMeta)
+		if err != nil {
+			return nil, engineResponseMeta{}, fmt.Errorf("failed to create ToolApprovalRequest: %w", err)
+		}
+		log.Info("ToolApprovalRequest created for query", "tar", tar.Name, "query", query.Name, "toolCalls", len(approvalMeta.ToolCalls))
+		return &arkv1alpha1.Response{
+			Target:  target,
+			Content: "Waiting for tool approval",
+			Phase:   "approval-required",
+		}, engineResponseMeta{ApprovalRef: tar}, nil
+	}
+
 	responseText, err := extractA2AResponseText(result)
 	if err != nil {
 		return nil, engineResponseMeta{}, fmt.Errorf("failed to extract response: %w", err)
@@ -556,6 +637,7 @@ type engineResponseMeta struct {
 	MessagesRaw    string
 	A2AContextID   string
 	A2ATaskID      string
+	ApprovalRef    *arkv1alpha1.ToolApprovalRequest
 }
 
 func extractEngineResponseMeta(result *protocol.MessageResult) engineResponseMeta {
@@ -637,6 +719,111 @@ func extractTokenUsage(arkMap map[string]any, responseMeta *engineResponseMeta) 
 	if usage.TotalTokens > 0 {
 		responseMeta.TokenUsage = usage
 	}
+}
+
+type approvalMetadata struct {
+	ToolCalls        []map[string]any
+	ExecutionContext map[string]any
+}
+
+func extractApprovalMetadata(result *protocol.MessageResult) *approvalMetadata {
+	if result == nil {
+		return nil
+	}
+	msg, ok := result.Result.(*protocol.Message)
+	if !ok || msg == nil || msg.Metadata == nil {
+		return nil
+	}
+	approvalData, ok := msg.Metadata["ark.approval"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	approvalRequired, _ := approvalData["approvalRequired"].(bool)
+	if !approvalRequired {
+		return nil
+	}
+	meta := &approvalMetadata{}
+	if toolCalls, ok := approvalData["toolCalls"].([]any); ok {
+		for _, tc := range toolCalls {
+			if tcMap, ok := tc.(map[string]any); ok {
+				meta.ToolCalls = append(meta.ToolCalls, tcMap)
+			}
+		}
+	}
+	if execCtx, ok := approvalData["executionContext"].(map[string]any); ok {
+		meta.ExecutionContext = execCtx
+	}
+	return meta
+}
+
+func (r *QueryReconciler) createToolApprovalRequest(ctx context.Context, query *arkv1alpha1.Query, approvalMeta *approvalMetadata) (*arkv1alpha1.ToolApprovalRequest, error) {
+	log := logf.FromContext(ctx)
+
+	toolCalls := make([]arkv1alpha1.ToolCallInfo, len(approvalMeta.ToolCalls))
+	for i, tc := range approvalMeta.ToolCalls {
+		toolCalls[i] = arkv1alpha1.ToolCallInfo{
+			ID:        tc["id"].(string),
+			Name:      tc["name"].(string),
+			Type:      tc["type"].(string),
+			Arguments: tc["arguments"].(string),
+		}
+	}
+
+	execCtx := arkv1alpha1.ExecutionContext{}
+	if approvalMeta.ExecutionContext != nil {
+		if name, ok := approvalMeta.ExecutionContext["agentName"].(string); ok {
+			execCtx.AgentName = name
+		}
+		if ns, ok := approvalMeta.ExecutionContext["agentNamespace"].(string); ok {
+			execCtx.AgentNamespace = ns
+		}
+		if history, ok := approvalMeta.ExecutionContext["conversationHistory"].(string); ok {
+			execCtx.ConversationHistory = history
+		}
+		if idx, ok := approvalMeta.ExecutionContext["pendingToolCallIndex"].(float64); ok {
+			execCtx.PendingToolCallIndex = int(idx)
+		}
+		if results, ok := approvalMeta.ExecutionContext["completedToolResults"].([]any); ok {
+			for _, r := range results {
+				if s, ok := r.(string); ok {
+					execCtx.CompletedToolResults = append(execCtx.CompletedToolResults, s)
+				}
+			}
+		}
+	}
+
+	tarName := fmt.Sprintf("tar-%s", query.Name)
+	tar := &arkv1alpha1.ToolApprovalRequest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      tarName,
+			Namespace: query.Namespace,
+		},
+		Spec: arkv1alpha1.ToolApprovalRequestSpec{
+			QueryRef: arkv1alpha1.QueryReference{
+				Name:      query.Name,
+				Namespace: query.Namespace,
+			},
+			ToolCalls:        toolCalls,
+			ExecutionContext: execCtx,
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(query, tar, r.Scheme); err != nil {
+		log.Error(err, "Failed to set controller reference on ToolApprovalRequest")
+	}
+
+	if err := r.Create(ctx, tar); err != nil {
+		if errors.IsAlreadyExists(err) {
+			if err := r.Get(ctx, types.NamespacedName{Name: tarName, Namespace: query.Namespace}, tar); err != nil {
+				return nil, fmt.Errorf("failed to get existing ToolApprovalRequest: %w", err)
+			}
+			return tar, nil
+		}
+		return nil, fmt.Errorf("failed to create ToolApprovalRequest: %w", err)
+	}
+
+	log.Info("Created ToolApprovalRequest", "tar", tarName, "query", query.Name)
+	return tar, nil
 }
 
 func (r *QueryReconciler) resolveTarget(ctx context.Context, query arkv1alpha1.Query, impersonatedClient client.Client) (*arkv1alpha1.QueryTarget, error) {

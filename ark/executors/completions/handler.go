@@ -9,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 	"trpc.group/trpc-go/trpc-a2a-go/taskmanager"
@@ -58,11 +59,19 @@ type executionState struct {
 }
 
 func (s *executionState) finalizeStream(ctx context.Context, responseMessages []Message, tokenUsage arkv1alpha1.TokenUsage) {
+	s.finalizeStreamWithPhase(ctx, responseMessages, tokenUsage, "done")
+}
+
+func (s *executionState) finalizeStreamForApproval(ctx context.Context) {
+	s.finalizeStreamWithPhase(ctx, nil, arkv1alpha1.TokenUsage{}, "approval-required")
+}
+
+func (s *executionState) finalizeStreamWithPhase(ctx context.Context, responseMessages []Message, tokenUsage arkv1alpha1.TokenUsage, phase string) {
 	if s.eventStream == nil {
 		return
 	}
 	completedQuery := s.query.DeepCopy()
-	completedQuery.Status.Phase = "done"
+	completedQuery.Status.Phase = phase
 	completedQuery.Status.TokenUsage = tokenUsage
 	completedQuery.Status.ConversationId = s.conversationId
 	if len(responseMessages) > 0 {
@@ -71,7 +80,7 @@ func (s *executionState) finalizeStream(ctx context.Context, responseMessages []
 			Target:  *s.target,
 			Content: extractAssistantText(responseMessages),
 			Raw:     rawJSON,
-			Phase:   "done",
+			Phase:   phase,
 		}
 	}
 	finalChunk := NewContentChunk("chatcmpl-final", s.query.Name, "")
@@ -116,6 +125,9 @@ func (h *Handler) ProcessMessage(
 
 	execResult, responseMessages, err := h.dispatchTarget(ctx, state)
 	if err != nil {
+		if approvalErr, ok := err.(*ApprovalRequiredError); ok {
+			return h.buildApprovalRequiredResponse(ctx, state, approvalErr), nil
+		}
 		state.finalizeStream(ctx, nil, arkv1alpha1.TokenUsage{})
 		return nil, fmt.Errorf("execution failed: %w", err)
 	}
@@ -353,6 +365,55 @@ func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, r
 	}
 
 	state.finalizeStream(ctx, responseMessages, tokenSummary)
+
+	return &taskmanager.MessageProcessingResult{
+		Result: &responseMessage,
+	}
+}
+
+func (h *Handler) buildApprovalRequiredResponse(ctx context.Context, state *executionState, approvalErr *ApprovalRequiredError) *taskmanager.MessageProcessingResult {
+	log := logf.FromContext(ctx)
+	log.Info("Approval required for tool calls", "query", state.query.Name, "toolCalls", len(approvalErr.ToolCalls))
+
+	toolCallInfos := make([]map[string]any, len(approvalErr.ToolCalls))
+	for i, tc := range approvalErr.ToolCalls {
+		toolCallInfos[i] = map[string]any{
+			"id":        tc.ID,
+			"name":      tc.Function.Name,
+			"type":      string(tc.Type),
+			"arguments": tc.Function.Arguments,
+		}
+	}
+
+	approvalMeta := map[string]any{
+		"approvalRequired": true,
+		"toolCalls":        toolCallInfos,
+	}
+	if approvalErr.Context != nil {
+		approvalMeta["executionContext"] = map[string]any{
+			"conversationHistory":  approvalErr.Context.ConversationHistory,
+			"pendingToolCallIndex": approvalErr.Context.PendingToolCallIndex,
+			"completedToolResults": approvalErr.Context.CompletedToolResults,
+			"agentName":            approvalErr.Context.AgentName,
+			"agentNamespace":       approvalErr.Context.AgentNamespace,
+		}
+	}
+
+	responseMessage := protocol.NewMessage(
+		protocol.MessageRoleAgent,
+		[]protocol.Part{protocol.NewTextPart("Approval required for tool execution")},
+	)
+	responseMessage.Metadata = map[string]any{
+		arka2a.QueryExtensionMetadataKey: map[string]any{
+			"query": map[string]string{
+				"name":      state.query.Name,
+				"namespace": state.query.Namespace,
+			},
+		},
+		"ark.approval": approvalMeta,
+	}
+
+	state.finalizeStreamForApproval(ctx)
 
 	return &taskmanager.MessageProcessingResult{
 		Result: &responseMessage,
