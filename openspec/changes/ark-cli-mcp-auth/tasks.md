@@ -45,6 +45,7 @@
 - [ ] 7.1 PKCE unit tests (`pkce.spec.ts`)
 - [ ] 7.2 End-to-end `runAuth` spec (`auth.spec.ts`) with mock OAuth endpoints + fake `kubectl`; assert patched Secret payload for `ark mcp auth login`
 - [ ] 7.3 Negative paths: state mismatch, callback timeout, missing `tokenEndpoint`, bad `redirect_uris`
+- [ ] 7.4 Namespace resolution unit tests: explicit `--namespace` flag, `kubectl` context fallback, `default` fallback when both absent
 
 ## 8. Auth logout subcommand
 

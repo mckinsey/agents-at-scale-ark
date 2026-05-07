@@ -13,13 +13,13 @@ The CLI is a UX layer over the existing Stage 1 contract. No CRD, controller, or
 - Add `ark mcp auth login <server-name>` to `ark-cli`. Behaviour:
   - Reads the target `MCPServer` via `kubectl`. Refuses to run unless `status.authorization.state == Required`. Override with `--force`.
   - Reads `status.authorization.{registrationEndpoint, authorizationEndpoint, tokenEndpoint, resource, scopesSupported}` populated by detection.
-  - Picks a free loopback port (or `--port <n>`) and starts an `http://127.0.0.1:<port>/callback` listener. Auto-opens the browser unless `--no-open`.
+  - Picks a free loopback port (or `--port <n>`) and starts an `http://127.0.0.1:<port>/callback` listener. Auto-opens the browser unless `--no-open`. The authorization URL is always printed to stdout so headless / SSH operators can paste it manually.
   - Performs RFC 7591 Dynamic Client Registration with `redirect_uris=[<loopback>]`, `grant_types=[authorization_code, refresh_token]`, `response_types=[code]`, `token_endpoint_auth_method=client_secret_basic`. Rejects responses whose `redirect_uris` exclude the loopback URL.
   - Builds the authorization URL with PKCE S256, random `state`, and `resource=<MCP URL>` (RFC 8707). Waits up to `--timeout <ms>` (default 5 minutes).
   - Exchanges the code at `tokenEndpoint` using HTTP Basic with the registered `client_id` / `client_secret` plus the PKCE verifier.
   - Patches the Secret named in `spec.authorization.tokenSecretRef.name` using the configured key names (defaults `access_token`, `refresh_token`, `expires_at`, `client_id`, `client_secret`). Creates the Secret if absent.
-  - Computes `expires_at = now + expires_in - 30s` (RFC 3339 UTC).
-  - Prints the resource URL, `expires_at`, and the expected `Required → Authorized` next transition. Exits non-zero on failure with one `output.error` line.
+  - Computes `expires_at = now + expires_in - 30s` (RFC 3339 UTC) — the 30s margin absorbs clock skew between the CLI host, the IdP, and the controller, plus typical network round-trip on the next reconcile.
+  - Prints the resource URL, `expires_at`, and the expected `Required → Authorized` next transition. Exits non-zero on failure with one `output.error("mcp auth failed:", <message>)` line.
 - Add `ark mcp auth logout <server-name>` to `ark-cli`. Behaviour:
   - Default: kubectl-patches the Secret named in `spec.authorization.tokenSecretRef.name`, setting `access_token`, `refresh_token`, `expires_at`, `client_id`, `client_secret` to empty strings. Honours `*Key` overrides on `tokenSecretRef`.
   - `--keep-client`: only empties `access_token`, `refresh_token`, `expires_at`. Preserves `client_id` / `client_secret` so a subsequent `login` re-uses the registered OAuth client without a fresh DCR.
@@ -38,7 +38,7 @@ The CLI is a UX layer over the existing Stage 1 contract. No CRD, controller, or
 
 ### Modified Capabilities
 
-None. Consumes `mcp-auth-detection` (`status.authorization.*`) and `mcp-auth-token-injection` (`spec.authorization.tokenSecretRef`) unchanged.
+None. Consumes `mcp-auth-detection` (`status.authorization.*`) and `mcp-auth-token-injection` (`spec.authorization.tokenSecretRef`) unchanged (see `openspec/specs/mcp-auth-detection/` and `openspec/specs/mcp-auth-token-injection/`).
 
 ## Impact
 

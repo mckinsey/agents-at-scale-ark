@@ -54,6 +54,12 @@ The CLI SHALL generate a PKCE code verifier of 43-128 unreserved characters and 
 - **WHEN** `generatePkcePair()` is invoked
 - **THEN** the verifier SHALL contain only `[A-Za-z0-9-._~]`, SHALL be 43-128 chars, and the challenge SHALL equal `BASE64URL(SHA-256(verifier))`
 
+#### Scenario: Default lengths balance entropy and compatibility
+
+- **WHEN** `generatePkcePair()` and `generateState()` are invoked with no overrides
+- **THEN** the verifier SHALL be 64 characters from the unreserved set
+- **AND** the `state` SHALL be at least 128 bits (16 bytes) of cryptographically secure random data, base64url-encoded
+
 ### Requirement: Loopback callback listener handles success and error cases
 
 The CLI SHALL start an `http://127.0.0.1:<port>/callback` listener using `--port` if provided, else a free port. The listener SHALL respond 200 to a request with both `code` and `state`, SHALL respond 400 to a request whose query carries `error`, and SHALL respond 400 to a request missing `code` or `state`.
@@ -74,6 +80,13 @@ The CLI SHALL start an `http://127.0.0.1:<port>/callback` listener using `--port
 - **WHEN** no callback is received within 60 seconds
 - **THEN** the CLI SHALL exit non-zero with a timeout message naming the elapsed budget
 
+#### Scenario: User-supplied --port is already bound
+
+- **GIVEN** the user runs `ark mcp auth login <name> --port 8080`
+- **AND** port 8080 is already in use on the loopback interface
+- **THEN** the CLI SHALL exit non-zero with an error message naming the port and suggesting the user omit `--port` to let the OS pick a free port
+- **AND** SHALL NOT silently fall back to auto-selection
+
 ### Requirement: Dynamic Client Registration enforces the loopback redirect URI
 
 The CLI SHALL POST to `status.authorization.registrationEndpoint` with `client_name=ark mcp auth`, `redirect_uris=[<loopback>]`, `grant_types=["authorization_code","refresh_token"]`, `response_types=["code"]`, and `token_endpoint_auth_method=client_secret_basic`. If the registration response includes `redirect_uris` and the loopback URI is absent, the CLI SHALL reject the registration and exit non-zero before continuing.
@@ -82,6 +95,20 @@ The CLI SHALL POST to `status.authorization.registrationEndpoint` with `client_n
 
 - **GIVEN** the registration endpoint returns a `redirect_uris` array that does not include the loopback URL
 - **THEN** the CLI SHALL exit non-zero with an error naming the offending response
+
+#### Scenario: Registration response omits redirect_uris entirely
+
+- **GIVEN** the registration response does not include `redirect_uris` at all
+- **THEN** the CLI SHALL exit non-zero with the same loopback-enforcement error — fail-closed since we cannot confirm the loopback URL was registered
+
+### Requirement: DCR response uses a supported token_endpoint_auth_method
+
+The CLI registers with `token_endpoint_auth_method: client_secret_basic`. If the registration response advertises a different `token_endpoint_auth_method` that is neither `client_secret_basic` nor `none`, the CLI SHALL exit non-zero with an error naming the unsupported method.
+
+#### Scenario: Registration endpoint returns token_endpoint_auth_method=client_secret_post
+
+- **GIVEN** the registration response sets `token_endpoint_auth_method: "client_secret_post"`
+- **THEN** the CLI SHALL exit non-zero with an error naming the unsupported method
 
 ### Requirement: Authorization request includes PKCE S256 and resource indicator
 
@@ -129,6 +156,12 @@ The CLI SHALL write the token endpoint response into the Secret named in `spec.a
 - **GIVEN** `spec.authorization.tokenSecretRef.accessTokenKey = MY_ACCESS_TOKEN`
 - **WHEN** tokens are written
 - **THEN** the patched Secret SHALL store the access token under `MY_ACCESS_TOKEN`
+
+#### Scenario: Token response omits expires_in or sets it ≤ 0
+
+- **GIVEN** the token endpoint returns no `expires_in` (or `expires_in <= 0`)
+- **THEN** the patched Secret SHALL NOT contain an `expires_at` key
+- **AND** the CLI SHALL emit a single warning line indicating the token has no advertised lifetime
 
 ### Requirement: Secrets and tokens never appear in logs
 

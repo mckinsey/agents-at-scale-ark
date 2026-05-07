@@ -28,6 +28,12 @@ When `spec.authorization` is unset, no path SHALL attempt to read any Secret for
 - **WHEN** any in-cluster path constructs the MCP client
 - **THEN** the explicit `spec.headers` value SHALL win and the helper-derived Bearer SHALL NOT overwrite it
 
+#### Scenario: spec.headers carries a malformed Authorization value
+
+- **GIVEN** an MCPServer whose `spec.headers` contains an `Authorization` entry with a non-Bearer or otherwise malformed value
+- **WHEN** any in-cluster path constructs the MCP client
+- **THEN** the value SHALL be passed through unchanged — the CLI / controller does not validate or rewrite explicit `spec.headers` values; this is the user's escape hatch and they accept the consequences
+
 #### Scenario: spec.authorization is unset
 
 - **GIVEN** an MCPServer with `spec.authorization == nil`

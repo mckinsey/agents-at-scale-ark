@@ -33,6 +33,7 @@
 
 - [ ] 7.1 Add `MCPTokenSecretLabel = "ark.mckinsey.com/mcp-token-secret"` constant in `ark/internal/labels/labels.go`, mirroring the existing constant style
 - [ ] 7.2 In `MCPServerReconciler.SetupWithManager`, register a field indexer on `&arkv1alpha1.MCPServer{}` for `spec.authorization.tokenSecretRef.name` (use a package-level constant `mcpTokenSecretRefField` for the field path string). Indexer returns `nil` when `spec.Authorization == nil`, otherwise `[]string{ref.Name}`
+- [ ] 7.2.1 Field indexer is namespace-scoped (not cluster-wide) — controller-runtime's default cache scope; no cross-namespace Secret reverse lookups
 - [ ] 7.3 Extend the controller builder with `Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.findMCPServersForSecret), builder.WithPredicates(predicate.NewPredicateFuncs(hasMCPTokenSecretLabel)))`. The predicate filters at event-handler level only — the cache is left unfiltered so reconciler reads of any token Secret continue to succeed
 - [ ] 7.4 Implement `findMCPServersForSecret` on `*MCPServerReconciler`: list MCPServers via the field index in the Secret's namespace and return one `reconcile.Request` per match. On list error, log and return `nil` so event delivery is not blocked
 - [ ] 7.5 Implement `hasMCPTokenSecretLabel(obj client.Object) bool` returning true when `obj.GetLabels()[labels.MCPTokenSecretLabel] == "true"`
