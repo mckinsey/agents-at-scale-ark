@@ -52,6 +52,7 @@ class Message(BaseModel):
     role: str
     content: str
     name: str = ""
+    file_ids: list[str] = []
 
     class Config:
         extra = "allow"

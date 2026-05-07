@@ -66,6 +66,7 @@ async def resolve_query(
     query_ref: QueryRef,
     user_input: str,
     conversation_id: str = "",
+    file_ids: list[str] | None = None,
 ) -> ExecutionEngineRequest:
     """Resolve a QueryRef into a full ExecutionEngineRequest by fetching CRDs from the cluster.
 
@@ -77,10 +78,10 @@ async def resolve_query(
     await init_k8s()
     async with with_ark_client(query_ref.namespace, V1_ALPHA1) as ark:
         query = await ark.queries.a_get(query_ref.name, query_ref.namespace)
-        return await _resolve_from_query(ark, query, query_ref.namespace, user_input, conversation_id)
+        return await _resolve_from_query(ark, query, query_ref.namespace, user_input, conversation_id, file_ids=file_ids)
 
 
-async def _resolve_from_query(ark: Any, query: Any, namespace: str, user_input: str, conversation_id: str = "") -> ExecutionEngineRequest:
+async def _resolve_from_query(ark: Any, query: Any, namespace: str, user_input: str, conversation_id: str = "", file_ids: list[str] | None = None) -> ExecutionEngineRequest:
     target = query.spec.target
     if not target:
         raise ValueError(f"Query '{query.metadata['name']}' has no target")
@@ -99,7 +100,7 @@ async def _resolve_from_query(ark: Any, query: Any, namespace: str, user_input: 
 
     return ExecutionEngineRequest(
         agent=agent_config,
-        userInput=Message(role="user", content=user_input),
+        userInput=Message(role="user", content=user_input, file_ids=file_ids or []),
         mcpServers=mcp_servers,
         conversationId=conversation_id,
         query_annotations=query_annotations,

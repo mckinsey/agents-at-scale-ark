@@ -207,8 +207,11 @@ class A2AExecutorAdapter(AgentExecutor):
         if hasattr(context.message, "context_id") and context.message.context_id:
             conversation_id = context.message.context_id
 
+        metadata = getattr(context.message, "metadata", None) or {}
+        file_ids = metadata.get("file_ids", [])
+
         query_ref = extract_query_ref(context.message)
-        request = await resolve_query(query_ref, user_text, conversation_id=conversation_id)
+        request = await resolve_query(query_ref, user_text, conversation_id=conversation_id, file_ids=file_ids)
 
         broker_url = await discover_broker_url(query_ref.namespace)
         broker = BrokerClient(
