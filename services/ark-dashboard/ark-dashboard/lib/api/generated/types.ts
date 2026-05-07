@@ -563,6 +563,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/broker/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Session
+         * @description Get a single session by ID from the broker.
+         */
+        get: operations["get_session_v1_broker_sessions__session_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/broker/traces": {
         parameters: {
             query?: never;
@@ -5063,6 +5083,22 @@ export interface operations {
                 watch?: boolean;
                 /** @description Memory resource name */
                 memory?: string;
+                /** @description Max sessions to return */
+                limit?: number | null;
+                /** @description Cursor for pagination */
+                cursor?: number | null;
+                /** @description Filter by status (active/idle/error) */
+                status?: string | null;
+                /** @description Filter sessions from this date */
+                date_from?: string | null;
+                /** @description Filter sessions to this date */
+                date_to?: string | null;
+                /** @description Search by session ID or participant */
+                search?: string | null;
+                /** @description Sort field (date, name, conversations) */
+                sort?: string | null;
+                /** @description Sort order (asc/desc) */
+                order?: string | null;
             };
             header?: never;
             path?: never;
@@ -5098,6 +5134,40 @@ export interface operations {
             };
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_session_v1_broker_sessions__session_id__get: {
+        parameters: {
+            query?: {
+                /** @description Memory resource name */
+                memory?: string;
+            };
+            header?: never;
+            path: {
+                session_id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
