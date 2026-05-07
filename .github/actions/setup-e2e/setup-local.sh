@@ -71,7 +71,14 @@ source "${REPO_ROOT}/.github/helm-versions.env"
 # Install cert-manager if not present
 echo "=== Installing cert-manager ==="
 if ! helm list -n cert-manager | grep -q cert-manager; then
-  helm upgrade --install cert-manager "${HOME}/.cache/helm/charts/cert-manager-${CERT_MANAGER_VERSION}.tgz" \
+  CERT_MANAGER_CHART="${HOME}/.cache/helm/charts/cert-manager-${CERT_MANAGER_VERSION}.tgz"
+  if [ ! -f "${CERT_MANAGER_CHART}" ]; then
+    CERT_MANAGER_CHART="jetstack/cert-manager"
+    helm repo add jetstack https://charts.jetstack.io --force-update
+    helm repo update jetstack
+  fi
+  helm upgrade --install cert-manager "${CERT_MANAGER_CHART}" \
+    --version "${CERT_MANAGER_VERSION}" \
     --namespace cert-manager --create-namespace \
     --set crds.enabled=true
 else
