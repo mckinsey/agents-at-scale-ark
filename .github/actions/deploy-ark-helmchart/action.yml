@@ -111,15 +111,25 @@ runs:
         path: ~/.cache/helm
         key: helm-${{ runner.os }}-${{ hashFiles('.github/helm-versions.env') }}
 
+    - name: Pre-pull Helm charts
+      if: ${{ inputs.install_cert_manager == 'true' && steps.check_release.outputs.release_found == 'false' }}
+      shell: bash
+      run: |
+        source .github/helm-versions.env
+        CHARTS_DIR="${HOME}/.cache/helm/charts"
+        mkdir -p "${CHARTS_DIR}"
+        if [ ! -f "${CHARTS_DIR}/cert-manager-${CERT_MANAGER_VERSION}.tgz" ]; then
+          helm repo add jetstack https://charts.jetstack.io --force-update
+          helm repo update jetstack
+          helm pull jetstack/cert-manager --version "${CERT_MANAGER_VERSION}" --destination "${CHARTS_DIR}"
+        fi
+
     - name: Install cert-manager
       if: ${{ inputs.install_cert_manager == 'true' && steps.check_release.outputs.release_found == 'false' }}
       shell: bash
       run: |
         source .github/helm-versions.env
-        helm repo add jetstack https://charts.jetstack.io --force-update
-        helm repo update
-        helm upgrade --install cert-manager jetstack/cert-manager \
-          --version "${CERT_MANAGER_VERSION}" \
+        helm upgrade --install cert-manager "${HOME}/.cache/helm/charts/cert-manager-${CERT_MANAGER_VERSION}.tgz" \
           --namespace cert-manager --create-namespace \
           --set crds.enabled=true
 

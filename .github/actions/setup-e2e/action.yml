@@ -85,6 +85,21 @@ runs:
         path: ~/.cache/helm
         key: helm-${{ runner.os }}-${{ hashFiles('.github/helm-versions.env') }}
 
+    - name: Pre-pull Helm charts
+      shell: bash
+      run: |
+        source .github/helm-versions.env
+        CHARTS_DIR="${HOME}/.cache/helm/charts"
+        mkdir -p "${CHARTS_DIR}"
+        if [ ! -f "${CHARTS_DIR}/cert-manager-${CERT_MANAGER_VERSION}.tgz" ]; then
+          helm repo add jetstack https://charts.jetstack.io --force-update
+          helm repo update jetstack
+          helm pull jetstack/cert-manager --version "${CERT_MANAGER_VERSION}" --destination "${CHARTS_DIR}"
+        fi
+        if [ ! -f "${CHARTS_DIR}/mock-llm-${MOCK_LLM_VERSION}.tgz" ]; then
+          helm pull oci://ghcr.io/dwmkerr/charts/mock-llm --version "${MOCK_LLM_VERSION}" --destination "${CHARTS_DIR}"
+        fi
+
     - name: Run setup-e2e script
       shell: bash
       run: |

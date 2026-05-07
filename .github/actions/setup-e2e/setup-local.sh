@@ -71,11 +71,8 @@ source "${REPO_ROOT}/.github/helm-versions.env"
 # Install cert-manager if not present
 echo "=== Installing cert-manager ==="
 if ! helm list -n cert-manager | grep -q cert-manager; then
-  helm repo add jetstack https://charts.jetstack.io --force-update
-  helm upgrade --install cert-manager jetstack/cert-manager \
-    --version "${CERT_MANAGER_VERSION}" \
-    --namespace cert-manager \
-    --create-namespace \
+  helm upgrade --install cert-manager "${HOME}/.cache/helm/charts/cert-manager-${CERT_MANAGER_VERSION}.tgz" \
+    --namespace cert-manager --create-namespace \
     --set crds.enabled=true
 else
   echo "cert-manager already installed"
@@ -118,6 +115,16 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
 fi
 
 IMAGE_PULL_PIDS=()
+echo "=== Pre-pulling cert-manager images (background) ==="
+for img in \
+  "quay.io/jetstack/cert-manager-controller:${CERT_MANAGER_VERSION}" \
+  "quay.io/jetstack/cert-manager-webhook:${CERT_MANAGER_VERSION}" \
+  "quay.io/jetstack/cert-manager-cainjector:${CERT_MANAGER_VERSION}" \
+  "quay.io/jetstack/cert-manager-startupapicheck:${CERT_MANAGER_VERSION}"; do
+  sudo k3s ctr images pull "$img" &
+  IMAGE_PULL_PIDS+=($!)
+done
+
 if [ "${PREFETCH_TEST_IMAGES}" = "true" ]; then
   echo "=== Pre-pulling test images (background) ==="
   for img in \
