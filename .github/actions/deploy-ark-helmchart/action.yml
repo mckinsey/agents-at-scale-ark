@@ -127,7 +127,8 @@ runs:
       if: ${{ inputs.install_gateway_api == 'true' && steps.check_release.outputs.release_found == 'false' }}
       shell: bash
       run: |
-        kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
+        source .github/helm-versions.env
+        kubectl apply -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION}/standard-install.yaml"
 
     - name: Deploy ARK-controller chart
       shell: bash

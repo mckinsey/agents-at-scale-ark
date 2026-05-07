@@ -23,8 +23,10 @@ exec 2>&1
 
 echo "=== Starting localhost-gateway installation at $(date) ==="
 
+source "${SCRIPT_DIR}/../../.github/helm-versions.env"
+
 echo "Installing Gateway API CRDs..."
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
+kubectl apply -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION}/standard-install.yaml"
 
 echo "Installing nginx-gateway-fabric CRDs..."
 kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v2.0.2/deploy/crds.yaml

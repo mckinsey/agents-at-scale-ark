@@ -82,7 +82,7 @@ else
 fi
 
 echo "=== Installing Gateway API CRDs ==="
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
+kubectl apply -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION}/standard-install.yaml"
 
 if [ "${INSTALL_BROKER}" = "true" ]; then
   echo "=== Pre-creating ark-config-broker ConfigMap ==="
