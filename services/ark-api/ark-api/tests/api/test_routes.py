@@ -174,17 +174,15 @@ class TestDeleteEndpoints(unittest.TestCase):
     
     @patch('ark_api.api.v1.agents.with_ark_client')
     def test_delete_agent_not_found(self, mock_with_ark_client):
-        """Test agent deletion when agent doesn't exist."""
-        # Setup mock to raise exception
+        """Test agent deletion when agent doesn't exist returns 404."""
+        from kubernetes.client.exceptions import ApiException
         mock_client = AsyncMock()
-        mock_client.agents.a_delete = AsyncMock(side_effect=Exception("Agent not found"))
+        mock_client.agents.a_delete = AsyncMock(side_effect=ApiException(status=404, reason="Not Found"))
         mock_with_ark_client.return_value.__aenter__.return_value = mock_client
-        
-        # Make the request
+
         response = self.client.delete("/v1/agents/nonexistent-agent")
-        
-        # Assert response
-        self.assertEqual(response.status_code, 500)
+
+        self.assertEqual(response.status_code, 404)
     
     @patch('ark_api.api.v1.models.with_ark_client')
     def test_delete_model_success(self, mock_with_ark_client):
