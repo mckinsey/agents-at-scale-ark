@@ -19,8 +19,8 @@ class SessionsPage(BasePage):
     BACK_TO_SESSIONS_BUTTON = "button:has-text('Back to all sessions')"
     HISTORY_TAB = "[role='tab']:has-text('History')"
     LOGS_TAB = "[role='tab']:has-text('Logs')"
-    CONVERSATION_SIDEBAR = "div.space-y-2.overflow-y-auto"
-    CONVERSATION_SIDEBAR_ITEM = "div.space-y-2.overflow-y-auto button"
+    CONVERSATION_SIDEBAR = "div.space-y-3.overflow-y-auto"
+    CONVERSATION_SIDEBAR_ITEM = "div.space-y-3.overflow-y-auto button"
     CHAT_TEXTAREA = "textarea[placeholder*='Message']"
     CHAT_SEND_BUTTON = "button:has(svg.lucide-send-horizontal)"
     USER_MESSAGE = "div.flex-1.space-y-4 div.flex.flex-col.gap-2.items-end"
@@ -42,6 +42,15 @@ class SessionsPage(BasePage):
         self.wait_for_modal_open()
 
     def select_participant_in_dialog(self, participant_name: str, participant_tab: str = "All") -> None:
+        try:
+            self.page.wait_for_selector(
+                "[role='dialog'] div:has-text('Loading participants...')",
+                state="hidden",
+                timeout=10000,
+            )
+        except Exception:
+            pass
+
         if participant_tab != "All":
             try:
                 tab = self.page.locator(f"[role='dialog'] [role='tab']:has-text('{participant_tab}')").first
@@ -62,7 +71,7 @@ class SessionsPage(BasePage):
         participant_item = self.page.locator(
             f"[role='dialog'] label:has(span:has-text('{participant_name}'))"
         ).first
-        if not participant_item.is_visible(timeout=3000):
+        if not participant_item.is_visible(timeout=10000):
             participant_item = self.page.locator(
                 f"[role='dialog'] label:has(div.font-medium:has-text('{participant_name}'))"
             ).first
@@ -122,7 +131,7 @@ class SessionsPage(BasePage):
     def is_participant_shown_in_header(self, participant_name: str) -> bool:
         try:
             badge = self.page.locator(
-                f"div.rounded-md.border.bg-card span:has-text('{participant_name}')"
+                f"div.rounded-lg.bg-card span:has-text('{participant_name}')"
             ).first
             return badge.is_visible(timeout=5000)
         except Exception:
@@ -167,7 +176,7 @@ class SessionsPage(BasePage):
     def is_participant_in_conversation_sidebar(self, participant_name: str) -> bool:
         try:
             item = self.page.locator(
-                f"div.space-y-2 button span.font-medium:has-text('{participant_name}')"
+                f"div.space-y-3 button span.font-medium:has-text('{participant_name}')"
             ).first
             return item.is_visible(timeout=5000)
         except Exception:
@@ -258,6 +267,13 @@ class SessionsPage(BasePage):
 
     def get_visible_session_count(self) -> int:
         try:
+            try:
+                self.page.wait_for_selector(
+                    "div.rounded-lg button[aria-pressed], div.py-12.text-center:has-text('No sessions found')",
+                    timeout=10000,
+                )
+            except Exception:
+                pass
             rows = self.page.locator(
                 "div.rounded-lg button[type='button'][aria-pressed]"
             )
@@ -401,7 +417,7 @@ class SessionsPage(BasePage):
     def get_sidebar_selected_conversation_message_count(self) -> int:
         try:
             selected = self.page.locator(
-                "div.space-y-2 button.bg-accent span.flex.items-center.gap-1"
+                "div.space-y-3 button.bg-muted span.flex.items-center.gap-1"
             ).first
             if selected.is_visible(timeout=3000):
                 text = selected.inner_text()
