@@ -583,6 +583,72 @@ describe('SECURITY: Shell Injection Prevention', () => {
       expect(response.status).toBe(400);
       expect(data.error).toContain('Disallowed install argument');
     });
+
+    it('should reject mixed valid and invalid args', async () => {
+      const malicious = {
+        ...baseItem,
+        ark: {
+          helmReleaseName: 'app',
+          chartPath: 'oci://example.com/chart',
+          installArgs: ['--create-namespace', '--wait', '--post-renderer', '/tmp/evil.sh'],
+        },
+      };
+      mockGetRawMarketplaceItemById.mockResolvedValueOnce(malicious);
+
+      const request = createRequest('http://localhost/api/marketplace/evil/install', {
+        method: 'POST',
+        body: JSON.stringify({ mode: 'command' }),
+      });
+      const response = await POST(request, { params: Promise.resolve({ id: 'evil' }) });
+      const data = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data.error).toContain('Disallowed install argument');
+    });
+
+    it('should accept empty installArgs array', async () => {
+      const valid = {
+        ...baseItem,
+        ark: {
+          helmReleaseName: 'app',
+          chartPath: 'oci://example.com/chart',
+          installArgs: [],
+        },
+      };
+      mockGetRawMarketplaceItemById.mockResolvedValueOnce(valid);
+
+      const request = createRequest('http://localhost/api/marketplace/valid/install', {
+        method: 'POST',
+        body: JSON.stringify({ mode: 'command' }),
+      });
+      const response = await POST(request, { params: Promise.resolve({ id: 'valid' }) });
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.status).toBe('command');
+    });
+
+    it('should accept undefined installArgs', async () => {
+      const valid = {
+        ...baseItem,
+        ark: {
+          helmReleaseName: 'app',
+          chartPath: 'oci://example.com/chart',
+          installArgs: undefined,
+        },
+      };
+      mockGetRawMarketplaceItemById.mockResolvedValueOnce(valid);
+
+      const request = createRequest('http://localhost/api/marketplace/valid/install', {
+        method: 'POST',
+        body: JSON.stringify({ mode: 'command' }),
+      });
+      const response = await POST(request, { params: Promise.resolve({ id: 'valid' }) });
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.status).toBe('command');
+    });
   });
 
   describe('valid inputs should pass', () => {

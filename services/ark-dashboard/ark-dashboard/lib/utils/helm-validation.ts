@@ -47,8 +47,8 @@ export const helmChartPathSchema = z
       if (!path.startsWith('oci://') && !path.startsWith('https://')) {
         return false;
       }
-      // Check for shell metacharacters
-      const dangerousChars = /[;|&$`(){}[\]<>\\'"]/;
+      // Check for shell metacharacters and control characters
+      const dangerousChars = /[;|&$`(){}[\]<>\\'\"\s\x00-\x1f\x7f]/;
       return !dangerousChars.test(path);
     },
     {
@@ -72,43 +72,57 @@ const ALLOWED_HELM_FLAGS = new Set([
 ]);
 
 /**
+ * Validate --timeout flag value format
+ */
+function validateTimeoutArg(args: string[], i: number): void {
+  if (i + 1 >= args.length) {
+    throw new Error('--timeout requires a value');
+  }
+  const timeoutValue = args[i + 1];
+  if (!/^\d+[smh]$/.test(timeoutValue)) {
+    throw new Error('Invalid timeout format (expected: 5m, 300s, 1h)');
+  }
+}
+
+/**
+ * Validate --set or --set-string flag value format
+ */
+function validateSetArg(args: string[], i: number, arg: string): void {
+  if (i + 1 >= args.length) {
+    throw new Error(`${arg} requires a value`);
+  }
+  const setValue = args[i + 1];
+  // Strict validation: key=value, no shell metacharacters, max 500 chars
+  if (!/^[a-zA-Z0-9._-]+=[\w\s.,@:/-]{0,500}$/.test(setValue)) {
+    throw new Error(
+      `Invalid ${arg} value format (no shell metacharacters allowed)`,
+    );
+  }
+}
+
+/**
  * Validate Helm install arguments against allowlist
  * Blocks dangerous flags like --post-renderer, --set-file
  */
 export function validateInstallArgs(args: string[]): void {
-  for (let i = 0; i < args.length; i++) {
+  let i = 0;
+  while (i < args.length) {
     const arg = args[i];
 
     if (ALLOWED_HELM_FLAGS.has(arg)) {
+      i++;
       continue;
     }
 
-    // Value format validation for --timeout (must be \d+[smh])
     if (arg === '--timeout') {
-      if (i + 1 >= args.length) {
-        throw new Error('--timeout requires a value');
-      }
-      const timeoutValue = args[i + 1];
-      if (!/^\d+[smh]$/.test(timeoutValue)) {
-        throw new Error('Invalid timeout format (expected: 5m, 300s, 1h)');
-      }
-      i++;
+      validateTimeoutArg(args, i);
+      i += 2; // Skip flag and value
       continue;
     }
 
-    // Validate flags with custom value formats (--set, --set-string)
     if (arg === '--set' || arg === '--set-string') {
-      if (i + 1 >= args.length) {
-        throw new Error(`${arg} requires a value`);
-      }
-      const setValue = args[i + 1];
-      // Strict validation: key=value, no shell metacharacters
-      if (!/^[a-zA-Z0-9._-]+=[\w\s.,@:/\-]+$/.test(setValue)) {
-        throw new Error(
-          `Invalid ${arg} value format (no shell metacharacters allowed)`,
-        );
-      }
-      i++;
+      validateSetArg(args, i, arg);
+      i += 2; // Skip flag and value
       continue;
     }
 
@@ -124,8 +138,8 @@ export function validateInstallArgs(args: string[]): void {
 export function validateHelmInstallation(input: {
   helmReleaseName: string | undefined;
   chartPath: string | undefined;
-  namespace?: string | undefined;
-  installArgs?: string[] | undefined;
+  namespace?: string;
+  installArgs?: string[];
 }): void {
   if (!input.helmReleaseName) {
     throw new Error('Helm release name is required');
