@@ -78,7 +78,6 @@ export type ChatResponse = {
   status: QueryStatusPhase;
   terminal: boolean;
   response?: string;
-  conditionMessage?: string;
   messages?: Array<{
     role: string;
     content?: string;
@@ -292,15 +291,10 @@ export const chatService = {
           }
         }
 
-        const conditionMessage = statusWithPhase.conditions
-          ?.find(c => c.type === 'Completed')
-          ?.message;
-
         return {
           terminal: isTerminalPhase(validatedPhase),
           status: validatedPhase,
           response: response,
-          conditionMessage,
           messages: messages,
         };
       }

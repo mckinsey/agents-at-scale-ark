@@ -37,3 +37,11 @@ func (t *mcpServerRecorder) ToolCreationFailed(ctx context.Context, obj runtime.
 func (t *mcpServerRecorder) AuthorizationRequired(ctx context.Context, obj runtime.Object, reason string) {
 	t.emitter.EmitWarning(ctx, obj, "AuthorizationRequired", reason)
 }
+
+func (t *mcpServerRecorder) TokenRejected(ctx context.Context, obj runtime.Object, reason string) {
+	t.emitter.EmitWarning(ctx, obj, "TokenRejected", reason)
+}
+
+func (t *mcpServerRecorder) AuthorizationSecretUnresolvable(ctx context.Context, obj runtime.Object, reason string) {
+	t.emitter.EmitWarning(ctx, obj, "AuthorizationSecretUnresolvable", reason)
+}

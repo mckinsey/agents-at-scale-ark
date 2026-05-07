@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from ark_sdk.client import with_ark_client
 
 from ...utils.memory_client import get_memory_service_address, get_all_memory_resources
+from ...utils.url_validation import validate_path_segment, build_safe_url, validate_and_build_url
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,11 @@ router = APIRouter(prefix="/broker", tags=["broker"])
 
 VERSION = "v1alpha1"
 BROKER_CONNECT_TIMEOUT = float(os.getenv('BROKER_CONNECT_TIMEOUT', '10.0'))
+
+# Query parameter descriptions
+DESC_MEMORY = "Memory resource name"
+DESC_CURSOR = "Cursor for pagination"
+DESC_CURSOR_STREAM = "Cursor for pagination/streaming"
 
 sse_headers = {
     "Cache-Control": "no-cache",
@@ -90,11 +96,13 @@ async def proxy_broker_request(
             status_code=503,
         )
 
+    safe_url = validate_and_build_url(broker_url, path)
+
     query_params = {k: v for k, v in (params or {}).items() if v is not None}
 
     if watch:
         query_params["watch"] = "true"
-        url = f"{broker_url}{path}"
+        url = safe_url
         if query_params:
             url += f"?{urlencode(query_params)}"
         logger.info(f"Proxying SSE stream from {url}")
@@ -105,8 +113,9 @@ async def proxy_broker_request(
         )
 
     try:
-        async with httpx.AsyncClient() as client:
-            url = f"{broker_url}{path}"
+        timeout = httpx.Timeout(BROKER_CONNECT_TIMEOUT)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            url = safe_url
             if query_params:
                 url += f"?{urlencode(query_params)}"
             response = await client.get(url)
@@ -128,9 +137,9 @@ async def proxy_broker_request(
 @router.get("/traces")
 async def get_traces(
     watch: bool = Query(False, description="Stream traces via SSE"),
-    memory: str = Query("default", description="Memory resource name"),
+    memory: str = Query("default", description=DESC_MEMORY),
     limit: int = Query(100, description="Max traces to return"),
-    cursor: Optional[int] = Query(None, description="Cursor for pagination"),
+    cursor: Optional[int] = Query(None, description=DESC_CURSOR),
     session_id: Optional[str] = Query(None, description="Filter by session ID"),
 ):
     """Get or stream OTEL traces from the broker."""
@@ -145,8 +154,8 @@ async def get_trace(
     trace_id: str,
     watch: bool = Query(False, description="Stream trace spans via SSE"),
     from_beginning: bool = Query(False, alias="from-beginning", description="Include existing spans"),
-    cursor: Optional[int] = Query(None, description="Cursor for pagination/streaming"),
-    memory: str = Query("default", description="Memory resource name"),
+    cursor: Optional[int] = Query(None, description=DESC_CURSOR_STREAM),
+    memory: str = Query("default", description=DESC_MEMORY),
 ):
     """Get or stream a specific trace from the broker."""
     params = {"cursor": cursor}
@@ -158,9 +167,9 @@ async def get_trace(
 @router.get("/messages")
 async def get_messages(
     watch: bool = Query(False, description="Stream messages via SSE"),
-    memory: str = Query("default", description="Memory resource name"),
+    memory: str = Query("default", description=DESC_MEMORY),
     limit: int = Query(100, description="Max messages to return"),
-    cursor: Optional[int] = Query(None, description="Cursor for pagination"),
+    cursor: Optional[int] = Query(None, description=DESC_CURSOR),
     conversation_id: Optional[str] = Query(None, description="Filter by conversation ID"),
     query_id: Optional[str] = Query(None, description="Filter by query ID"),
 ):
@@ -174,9 +183,9 @@ async def get_messages(
 @router.get("/events")
 async def get_events(
     watch: bool = Query(False, description="Stream events via SSE"),
-    memory: str = Query("default", description="Memory resource name"),
+    memory: str = Query("default", description=DESC_MEMORY),
     limit: int = Query(100, description="Max events to return"),
-    cursor: Optional[int] = Query(None, description="Cursor for pagination"),
+    cursor: Optional[int] = Query(None, description=DESC_CURSOR),
     session_id: Optional[str] = Query(None, description="Filter by session ID"),
 ):
     """Get or stream operation events from the broker."""
@@ -191,8 +200,8 @@ async def get_events_by_query(
     query_id: str,
     watch: bool = Query(False, description="Stream events via SSE"),
     from_beginning: bool = Query(False, alias="from-beginning", description="Include existing events"),
-    cursor: Optional[int] = Query(None, description="Cursor for pagination/streaming"),
-    memory: str = Query("default", description="Memory resource name"),
+    cursor: Optional[int] = Query(None, description=DESC_CURSOR_STREAM),
+    memory: str = Query("default", description=DESC_MEMORY),
     limit: int = Query(100, description="Max events to return"),
 ):
     """Get or stream events for a specific query."""
@@ -206,9 +215,9 @@ async def get_events_by_query(
 async def get_chunks(
     watch: bool = Query(False, description="Stream chunks via SSE"),
     query_id: Optional[str] = Query(None, alias="query-id", description="Filter by query ID"),
-    memory: str = Query("default", description="Memory resource name"),
+    memory: str = Query("default", description=DESC_MEMORY),
     limit: int = Query(100, description="Max chunks to return"),
-    cursor: Optional[int] = Query(None, description="Cursor for pagination"),
+    cursor: Optional[int] = Query(None, description=DESC_CURSOR),
 ):
     """Get or stream LLM chunks from the broker."""
     if watch and query_id:
@@ -218,7 +227,9 @@ async def get_chunks(
                 content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
                 status_code=503,
             )
-        url = f"{broker_url}/stream/{query_id}?from-beginning=true"
+        # Validate query_id to prevent path traversal
+        validate_path_segment(query_id, "query_id")
+        url = build_safe_url(broker_url, "stream", query_id) + "?from-beginning=true"
         logger.info(f"Proxying chunks SSE stream from {url}")
         return StreamingResponse(
             proxy_sse_stream(url),
@@ -235,10 +246,39 @@ async def get_chunks(
 @router.get("/sessions")
 async def get_sessions(
     watch: bool = Query(False, description="Stream sessions via SSE"),
-    memory: str = Query("default", description="Memory resource name"),
+    memory: str = Query("default", description=DESC_MEMORY),
+    limit: Optional[int] = Query(None, description="Max sessions to return"),
+    cursor: Optional[int] = Query(None, description=DESC_CURSOR),
+    status: Optional[str] = Query(None, description="Filter by status (active/idle/error)"),
+    date_from: Optional[str] = Query(None, description="Filter sessions from this date"),
+    date_to: Optional[str] = Query(None, description="Filter sessions to this date"),
+    search: Optional[str] = Query(None, description="Search by session ID or participant"),
+    sort: Optional[str] = Query(None, description="Sort field (date, name, conversations)"),
+    order: Optional[str] = Query(None, description="Sort order (asc/desc)"),
 ):
     """Get or stream sessions from the broker. Sessions are global broker state, not memory-scoped, but the memory parameter selects which broker service to query."""
-    return await proxy_broker_request(memory, "/sessions", watch, {})
+    return await proxy_broker_request(
+        memory, "/sessions", watch,
+        {
+            "limit": limit,
+            "cursor": cursor,
+            "status": status,
+            "dateFrom": date_from,
+            "dateTo": date_to,
+            "search": search,
+            "sort": sort,
+            "order": order,
+        }
+    )
+
+
+@router.get("/sessions/{session_id}")
+async def get_session(
+    session_id: str,
+    memory: str = Query("default", description=DESC_MEMORY),
+):
+    """Get a single session by ID from the broker."""
+    return await proxy_broker_request(memory, f"/sessions/{session_id}", False, {})
 
 
 async def proxy_broker_delete(memory: str, path: str):
@@ -249,9 +289,12 @@ async def proxy_broker_delete(memory: str, path: str):
             content={"error": {"message": f"Memory service '{memory}' not available", "type": "service_unavailable"}},
             status_code=503,
         )
+
+    safe_url = validate_and_build_url(broker_url, path)
+
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.delete(f"{broker_url}{path}")
+            response = await client.delete(safe_url)
             return JSONResponse(content=response.json(), status_code=response.status_code)
     except httpx.ConnectError as e:
         logger.error(f"Failed to connect to broker: {e}")
@@ -268,30 +311,30 @@ async def proxy_broker_delete(memory: str, path: str):
 
 
 @router.delete("/traces")
-async def purge_traces(memory: str = Query("default", description="Memory resource name")):
+async def purge_traces(memory: str = Query("default", description=DESC_MEMORY)):
     """Purge all traces from the broker."""
     return await proxy_broker_delete(memory, "/traces")
 
 
 @router.delete("/events")
-async def purge_events(memory: str = Query("default", description="Memory resource name")):
+async def purge_events(memory: str = Query("default", description=DESC_MEMORY)):
     """Purge all events from the broker."""
     return await proxy_broker_delete(memory, "/events")
 
 
 @router.delete("/messages")
-async def purge_messages(memory: str = Query("default", description="Memory resource name")):
+async def purge_messages(memory: str = Query("default", description=DESC_MEMORY)):
     """Purge all messages from the broker."""
     return await proxy_broker_delete(memory, "/messages")
 
 
 @router.delete("/chunks")
-async def purge_chunks(memory: str = Query("default", description="Memory resource name")):
+async def purge_chunks(memory: str = Query("default", description=DESC_MEMORY)):
     """Purge all chunks from the broker."""
     return await proxy_broker_delete(memory, "/stream")
 
 
 @router.delete("/sessions")
-async def purge_sessions(memory: str = Query("default", description="Memory resource name")):
+async def purge_sessions(memory: str = Query("default", description=DESC_MEMORY)):
     """Purge all sessions from the broker."""
     return await proxy_broker_delete(memory, "/sessions")
