@@ -41,7 +41,9 @@ def extract_query_ref(message: Any) -> QueryRef:
     Raises ValueError if the extension metadata is missing or malformed.
     """
     metadata = {}
-    if hasattr(message, "metadata") and message.metadata:
+    if isinstance(message, dict):
+        metadata = message.get("metadata") or {}
+    elif hasattr(message, "metadata") and message.metadata:
         metadata = message.metadata
 
     ref_data = metadata.get(QUERY_EXTENSION_METADATA_KEY)
