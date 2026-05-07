@@ -4,7 +4,7 @@ metadata:
   name: test-agent
 spec:
   prompt: |
-    You are an agent for testing multi-turn conversations.
-    Respond briefly with "Conversation test completed."
+    You are an agent for testing input types.
+    Respond briefly with "Input type test completed."
   modelRef:
-    name: test-model
+    name: test-model-mock

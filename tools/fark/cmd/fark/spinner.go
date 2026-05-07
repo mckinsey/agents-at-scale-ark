@@ -13,6 +13,8 @@ type Spinner struct {
 	frames   []string
 	interval time.Duration
 	active   bool
+	text     string
+	textChan chan string
 }
 
 var defaultSpinnerFrames = []string{"—", "\\", "|", "/"}
@@ -25,6 +27,7 @@ func NewSpinner() *Spinner {
 		frames:   defaultSpinnerFrames,
 		interval: 100 * time.Millisecond,
 		active:   false,
+		textChan: make(chan string, 1),
 	}
 }
 
@@ -40,13 +43,29 @@ func (s *Spinner) Start() {
 		for i := 0; ; i++ {
 			select {
 			case <-s.stopChan:
-				fmt.Fprint(os.Stderr, "\r ") // Clear the spinner
+				fmt.Fprintf(os.Stderr, "\r\033[K")
 				return
+			case newText := <-s.textChan:
+				s.text = newText
 			case <-time.After(s.interval):
-				fmt.Fprintf(os.Stderr, "\r%s", s.frames[i%len(s.frames)])
+				if s.text != "" {
+					fmt.Fprintf(os.Stderr, "\r\033[K%s %s", s.frames[i%len(s.frames)], s.text)
+				} else {
+					fmt.Fprintf(os.Stderr, "\r%s", s.frames[i%len(s.frames)])
+				}
 			}
 		}
 	}()
+}
+
+func (s *Spinner) SetText(text string) {
+	if !s.active {
+		return
+	}
+	select {
+	case s.textChan <- text:
+	default:
+	}
 }
 
 // Stop halts the spinner animation.
@@ -58,6 +77,8 @@ func (s *Spinner) Stop() {
 	close(s.stopChan)
 	<-s.doneChan // Wait for the spinner goroutine to finish
 	s.active = false
-	s.stopChan = make(chan struct{}) // Reset for next start
-	s.doneChan = make(chan struct{}) // Reset for next start
+	s.text = ""
+	s.stopChan = make(chan struct{})
+	s.doneChan = make(chan struct{})
+	s.textChan = make(chan string, 1)
 }

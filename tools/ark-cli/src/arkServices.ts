@@ -96,6 +96,20 @@ const defaultArkServices: ServiceCollection = {
     k8sDevDeploymentName: 'ark-controller-devspace',
   },
 
+  'ark-apiserver': {
+    name: 'ark-apiserver',
+    helmReleaseName: 'ark-apiserver',
+    description: 'Aggregated API server serving ark.mckinsey.com APIs from PostgreSQL',
+    enabled: true,
+    mandatory: true,
+    category: 'core',
+    namespace: 'ark-system',
+    chartPath: `${REGISTRY_BASE}/ark-apiserver:${CHART_VERSION}`,
+    installArgs: ['--create-namespace'],
+    k8sDeploymentName: 'ark-apiserver',
+    requiresBackend: 'postgresql',
+  },
+
   'ark-completions': {
     name: 'ark-completions',
     helmReleaseName: 'ark-completions',

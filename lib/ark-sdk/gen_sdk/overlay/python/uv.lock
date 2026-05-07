@@ -205,7 +205,7 @@ wheels = [
 
 [[package]]
 name = "ark-sdk"
-version = "0.1.58rc2"
+version = "0.1.61rc0"
 source = { editable = "." }
 dependencies = [
     { name = "a2a-sdk", extra = ["http-server"] },
@@ -234,7 +234,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "a2a-sdk", extras = ["http-server"], specifier = ">=0.3.0" },
+    { name = "a2a-sdk", extras = ["http-server"], specifier = ">=0.3.0,<1.0.0" },
     { name = "build", specifier = ">=1.0.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "httpx", specifier = ">=0.24.0" },
@@ -244,7 +244,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10.0" },
-    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest", specifier = ">=7.2.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.2.1" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "python-dateutil", specifier = ">=2.8.2" },

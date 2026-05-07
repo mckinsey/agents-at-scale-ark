@@ -1,13 +1,23 @@
 'use client';
 
 import { ArrowUpRightIcon, Plus } from 'lucide-react';
-import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 import { toast } from 'sonner';
 
 import { NamespacedLink } from '@/components/namespaced-link';
 import { AgentCard } from '@/components/cards';
 import { AgentsAPIDialog } from '@/components/dialogs/agents-api-dialog';
 import { AgentRow } from '@/components/rows/agent-row';
+import {
+  SortableSectionedList,
+  type SortableSectionedListHandle,
+} from '@/components/sortable-sectioned-list';
 import { Button } from '@/components/ui/button';
 import {
   Empty,
@@ -20,9 +30,11 @@ import {
 import { type ToggleOption, ToggleSwitch } from '@/components/ui/toggle-switch';
 import { TrackedButton } from '@/components/ui/tracked-button';
 import { DASHBOARD_SECTIONS } from '@/lib/constants';
-import { useDelayedLoading } from '@/lib/hooks';
+import { useAgentsLayout, useDelayedLoading } from '@/lib/hooks';
 import { type Agent, agentsService } from '@/lib/services';
 import { useNamespace } from '@/providers/NamespaceProvider';
+
+const getAgentKey = (agent: Agent) => agent.name;
 
 interface AgentsSectionHandle {
   openApiDialog: () => void;
@@ -36,6 +48,8 @@ export const AgentsSection = forwardRef<AgentsSectionHandle, object>(
     const showLoading = useDelayedLoading(loading);
     const [showCompactView, setShowCompactView] = useState(false);
     const { readOnlyMode, namespace } = useNamespace();
+    const { layout, setLayout } = useAgentsLayout(namespace);
+    const listRef = useRef<SortableSectionedListHandle>(null);
 
     const viewOptions: ToggleOption[] = [
       { id: 'compact', label: 'compact view', active: !showCompactView },
@@ -150,7 +164,18 @@ export const AgentsSection = forwardRef<AgentsSectionHandle, object>(
     return (
       <>
         <div className="flex h-full flex-col">
-          <div className="mt-3 flex items-center justify-end">
+          <div className="mt-3 flex items-center justify-between gap-2">
+            {!showCompactView ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => listRef.current?.openCreateGroup()}>
+                <Plus className="mr-1 h-4 w-4" />
+                Create Group
+              </Button>
+            ) : (
+              <div />
+            )}
             <ToggleSwitch
               options={viewOptions}
               onChange={id => setShowCompactView(id === 'card')}
@@ -171,15 +196,21 @@ export const AgentsSection = forwardRef<AgentsSectionHandle, object>(
             )}
 
             {!showCompactView && (
-              <div className="flex flex-col gap-3">
-                {agents.map(agent => (
+              <SortableSectionedList
+                ref={listRef}
+                items={agents}
+                getKey={getAgentKey}
+                layout={layout}
+                setLayout={setLayout}
+                itemNoun={{ singular: 'agent', plural: 'agents' }}
+                renderItem={(agent, { dragHandle }) => (
                   <AgentRow
-                    key={agent.id}
                     agent={agent}
                     onDelete={handleDeleteAgent}
+                    leading={dragHandle}
                   />
-                ))}
-              </div>
+                )}
+              />
             )}
           </main>
         </div>

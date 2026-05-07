@@ -1,41 +1,8 @@
-import os
 import pytest
-from helpers.models_helper import DEFAULT_AZURE_API_VERSION, ModelsHelper
+from helpers.models_helper import ModelsHelper
 
-PREFIX = "cli-model-test"
-
-PROVIDERS = [
-    pytest.param(
-        "openai",
-        {"api_key_env": "CICD_OPENAI_API_KEY", "base_url_env": "CICD_OPENAI_BASE_URL", "model": "gpt-4o-mini"},
-        id="openai",
-    ),
-    pytest.param(
-        "anthropic",
-        {"api_key_env": "CICD_ANTHROPIC_API_KEY", "base_url_env": "CICD_ANTHROPIC_BASE_URL", "model": "claude-3-haiku-20240307"},
-        id="anthropic",
-    ),
-    pytest.param(
-        "azure",
-        {"api_key_env": "CICD_AZURE_API_KEY", "base_url_env": "CICD_AZURE_BASE_URL", "model": "gpt-35-turbo", "api_version": DEFAULT_AZURE_API_VERSION},
-        id="azure",
-    ),
-]
-
-
-def _secret_name(provider: str) -> str:
-    return f"{PREFIX}-{provider}-secret"
-
-
-def _model_name(provider: str) -> str:
-    return f"{PREFIX}-{provider}"
-
-
-def _skip_if_missing(config: dict) -> None:
-    if not os.environ.get(config["api_key_env"]):
-        pytest.skip(f"{config['api_key_env']} not set")
-    if config.get("base_url_env") and not os.environ.get(config["base_url_env"]):
-        pytest.skip(f"{config['base_url_env']} not set")
+SECRET_MODEL_NAME = "cli-model-test-secret"
+SECRET_NAME = "cli-model-test-secret-token"
 
 
 @pytest.fixture(scope="module")
@@ -43,66 +10,86 @@ def helper():
     return ModelsHelper()
 
 
-@pytest.fixture(scope="module", autouse=True)
-def cleanup(helper):
-    yield
-    for p in PROVIDERS:
-        helper.cleanup(_model_name(p.id), _secret_name(p.id))
+@pytest.mark.models
+class TestSecretModel:
+    """Tests secret creation and a model that uses secretKeyRef.
+    The model will not become available (no real LLM behind the URL),
+    but we verify the CRUD operations and spec are correct."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def cleanup(self, helper):
+        yield
+        helper.delete_model(SECRET_MODEL_NAME)
+        helper.delete_secret(SECRET_NAME)
+
+    def test_create_secret(self, helper):
+        success, msg = helper.create_secret(SECRET_NAME, "dummy-token")
+        assert success, f"Failed to create secret: {msg}"
+
+    def test_secret_exists(self, helper):
+        success, _, stderr = helper._run_cmd(
+            ["kubectl", "get", "secret", SECRET_NAME, "-n", helper.NAMESPACE],
+            check=False,
+        )
+        assert success, f"Secret not found: {stderr}"
+
+    def test_create_model(self, helper):
+        success, msg = helper.create_openai_model(
+            SECRET_MODEL_NAME, SECRET_NAME, "gpt-4o-mini",
+            "http://mock-llm.default.svc.cluster.local:6556/v1"
+        )
+        assert success, f"Failed to create model: {msg}"
+
+    def test_model_exists(self, helper):
+        assert helper.model_exists(SECRET_MODEL_NAME), "Model not found in cluster"
+
+    def test_model_provider_spec(self, helper):
+        actual = helper.get_model_provider(SECRET_MODEL_NAME)
+        assert actual == "openai", f"Expected provider 'openai', got '{actual}'"
+
+    def test_model_name_spec(self, helper):
+        actual = helper.get_model_name_value(SECRET_MODEL_NAME)
+        assert actual == "gpt-4o-mini", f"Expected model 'gpt-4o-mini', got '{actual}'"
+
+    def test_delete_model(self, helper):
+        success, msg = helper.delete_model(SECRET_MODEL_NAME)
+        assert success, f"Failed to delete model: {msg}"
+        assert not helper.model_exists(SECRET_MODEL_NAME), "Model still exists after deletion"
+
+    def test_delete_secret(self, helper):
+        success, msg = helper.delete_secret(SECRET_NAME)
+        assert success, f"Failed to delete secret: {msg}"
 
 
 @pytest.mark.models
-@pytest.mark.parametrize("provider,config", PROVIDERS)
-class TestProviderModels:
+class TestMockModel:
+    MODEL_NAME = "cli-model-test-mock"
 
-    def test_create_secret(self, helper, provider, config):
-        _skip_if_missing(config)
-        api_key = os.environ[config["api_key_env"]]
-        success, msg = helper.create_secret(_secret_name(provider), api_key)
-        assert success, f"Failed to create {provider} secret: {msg}"
+    @pytest.fixture(scope="class", autouse=True)
+    def cleanup(self, helper):
+        yield
+        helper.delete_model(self.MODEL_NAME)
 
-    def test_secret_exists(self, helper, provider, config):
-        _skip_if_missing(config)
-        success, _, stderr = helper._run_cmd(
-            ["kubectl", "get", "secret", _secret_name(provider), "-n", helper.NAMESPACE],
-            check=False,
-        )
-        assert success, f"{provider} secret not found: {stderr}"
+    def test_create_model(self, helper):
+        success, msg = helper.create_mock_model(self.MODEL_NAME)
+        assert success, f"Failed to create mock model: {msg}"
 
-    def test_create_model(self, helper, provider, config):
-        _skip_if_missing(config)
-        base_url = os.environ.get(config["base_url_env"], "") if config["base_url_env"] else ""
-        if provider == "openai":
-            success, msg = helper.create_openai_model(_model_name(provider), _secret_name(provider), config["model"], base_url)
-        elif provider == "anthropic":
-            success, msg = helper.create_anthropic_model(_model_name(provider), _secret_name(provider), config["model"], base_url)
-        else:
-            api_version = config.get("api_version", DEFAULT_AZURE_API_VERSION)
-            success, msg = helper.create_azure_model(_model_name(provider), _secret_name(provider), config["model"], base_url, api_version)
-        assert success, f"Failed to create {provider} model: {msg}"
+    def test_model_exists(self, helper):
+        assert helper.model_exists(self.MODEL_NAME), "Mock model not found in cluster"
 
-    def test_model_exists(self, helper, provider, config):
-        _skip_if_missing(config)
-        assert helper.model_exists(_model_name(provider)), f"{provider} model not found in cluster"
+    def test_model_provider_spec(self, helper):
+        actual = helper.get_model_provider(self.MODEL_NAME)
+        assert actual == "openai", f"Expected provider 'openai', got '{actual}'"
 
-    def test_model_provider_spec(self, helper, provider, config):
-        _skip_if_missing(config)
-        actual = helper.get_model_provider(_model_name(provider))
-        assert actual == provider, f"Expected provider '{provider}', got '{actual}'"
+    def test_model_name_spec(self, helper):
+        actual = helper.get_model_name_value(self.MODEL_NAME)
+        assert actual == "gpt-4.1-mini", f"Expected model 'gpt-4.1-mini', got '{actual}'"
 
-    def test_model_name_spec(self, helper, provider, config):
-        _skip_if_missing(config)
-        actual = helper.get_model_name_value(_model_name(provider))
-        assert actual == config["model"], f"Expected model '{config['model']}', got '{actual}'"
+    def test_model_available(self, helper):
+        available, message = helper.wait_for_availability(self.MODEL_NAME)
+        assert available, f"Mock model not available after timeout: {message}"
 
-    def test_model_available(self, helper, provider, config):
-        _skip_if_missing(config)
-        available, message = helper.wait_for_availability(_model_name(provider))
-        if not available and "unknown error" in message:
-            pytest.skip(f"{provider} model unreachable from cluster (network): {message}")
-        assert available, f"{provider} model not available after timeout: {message}"
-
-    def test_delete_model(self, helper, provider, config):
-        _skip_if_missing(config)
-        success, msg = helper.delete_model(_model_name(provider))
-        assert success, f"Failed to delete {provider} model: {msg}"
-        assert not helper.model_exists(_model_name(provider)), f"{provider} model still exists after deletion"
+    def test_delete_model(self, helper):
+        success, msg = helper.delete_model(self.MODEL_NAME)
+        assert success, f"Failed to delete mock model: {msg}"
+        assert not helper.model_exists(self.MODEL_NAME), "Mock model still exists after deletion"

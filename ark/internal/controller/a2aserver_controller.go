@@ -79,7 +79,15 @@ func (r *A2AServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		return ctrl.Result{RequeueAfter: getPollInterval(a2aServer.Spec.PollInterval)}, nil
 	}
-	a2aServer.Status.LastResolvedAddress = resolvedAddress
+	if a2aServer.Status.LastResolvedAddress != resolvedAddress {
+		// Persist the address now. Downstream reconcile paths only persist when conditions
+		// change, so without this an address rebind to a new ConfigMap/Secret value would
+		// be lost when the system stays in steady-state Ready=True.
+		a2aServer.Status.LastResolvedAddress = resolvedAddress
+		if err := r.updateStatusWithConditions(ctx, &a2aServer); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
 
 	return r.processServer(ctx, a2aServer)
 }

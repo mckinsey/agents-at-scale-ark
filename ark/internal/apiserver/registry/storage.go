@@ -169,8 +169,13 @@ func (s *GenericStorage) Create(ctx context.Context, obj runtime.Object, createV
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
 	if err := s.backend.Create(sctx, s.config.Kind, accessor.GetNamespace(), accessor.GetName(), obj); err != nil {
-		metrics.RecordStorageOperation("create", s.config.Kind, "error")
 		metrics.RecordStorageLatency("create", s.config.Kind, start)
+		gr := schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}
+		if errors.Is(err, storage.ErrAlreadyExists) {
+			metrics.RecordStorageOperation("create", s.config.Kind, "already_exists")
+			return nil, apierrors.NewAlreadyExists(gr, accessor.GetName())
+		}
+		metrics.RecordStorageOperation("create", s.config.Kind, "error")
 		return nil, fmt.Errorf("failed to create %s: %w", s.config.SingularName, err)
 	}
 

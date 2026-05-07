@@ -419,6 +419,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/arkconfig": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Arkconfig
+         * @description Return the singleton ArkConfig. If it does not exist, return defaults with exists=false.
+         */
+        get: operations["get_arkconfig_v1_arkconfig_get"];
+        /**
+         * Upsert Arkconfig
+         * @description Create or update the singleton ArkConfig with the supplied defaults.
+         */
+        put: operations["upsert_arkconfig_v1_arkconfig_put"];
+        post?: never;
+        /**
+         * Delete Arkconfig
+         * @description Delete the singleton ArkConfig, restoring hardcoded defaults.
+         */
+        delete: operations["delete_arkconfig_v1_arkconfig_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/broker/chunks": {
         parameters: {
             query?: never;
@@ -530,6 +558,26 @@ export interface paths {
          * @description Purge all sessions from the broker.
          */
         delete: operations["purge_sessions_v1_broker_sessions_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/broker/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Session
+         * @description Get a single session by ID from the broker.
+         */
+        get: operations["get_session_v1_broker_sessions__session_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1237,7 +1285,7 @@ export interface paths {
         };
         /**
          * List Queries
-         * @description List all queries in a namespace.
+         * @description List queries in a namespace with pagination and text search.
          */
         get: operations["list_queries_v1_queries_get"];
         put?: never;
@@ -2419,6 +2467,34 @@ export interface components {
             version?: string | components["schemas"]["ModelValueSource"] | null;
         };
         /**
+         * ArkConfigResponse
+         * @description Cluster-wide Ark defaults. Singleton resource named 'default'.
+         */
+        ArkConfigResponse: {
+            /**
+             * Exists
+             * @description Whether the ArkConfig singleton exists in the cluster.
+             * @default false
+             */
+            exists: boolean;
+            /**
+             * Queryttl
+             * @description Default TTL injected into Query resources that do not specify spec.ttl (e.g. '720h').
+             */
+            queryTTL?: string | null;
+        };
+        /**
+         * ArkConfigUpdateRequest
+         * @description Update payload for the ArkConfig singleton.
+         */
+        ArkConfigUpdateRequest: {
+            /**
+             * Queryttl
+             * @description Default TTL for queries (e.g. '720h'). Pass null to clear.
+             */
+            queryTTL?: string | null;
+        };
+        /**
          * ArkService
          * @description Response model for a single ARK service.
          *
@@ -3596,6 +3672,21 @@ export interface components {
             count: number;
             /** Items */
             items: components["schemas"]["QueryResponse"][];
+            /**
+             * Page
+             * @default 1
+             */
+            page: number;
+            /**
+             * Page Size
+             * @default 25
+             */
+            page_size: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
         };
         /**
          * QueryParameter
@@ -4654,6 +4745,77 @@ export interface operations {
             };
         };
     };
+    get_arkconfig_v1_arkconfig_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArkConfigResponse"];
+                };
+            };
+        };
+    };
+    upsert_arkconfig_v1_arkconfig_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArkConfigUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArkConfigResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_arkconfig_v1_arkconfig_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     get_chunks_v1_broker_chunks_get: {
         parameters: {
             query?: {
@@ -4921,6 +5083,22 @@ export interface operations {
                 watch?: boolean;
                 /** @description Memory resource name */
                 memory?: string;
+                /** @description Max sessions to return */
+                limit?: number | null;
+                /** @description Cursor for pagination */
+                cursor?: number | null;
+                /** @description Filter by status (active/idle/error) */
+                status?: string | null;
+                /** @description Filter sessions from this date */
+                date_from?: string | null;
+                /** @description Filter sessions to this date */
+                date_to?: string | null;
+                /** @description Search by session ID or participant */
+                search?: string | null;
+                /** @description Sort field (date, name, conversations) */
+                sort?: string | null;
+                /** @description Sort order (asc/desc) */
+                order?: string | null;
             };
             header?: never;
             path?: never;
@@ -4956,6 +5134,40 @@ export interface operations {
             };
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_session_v1_broker_sessions__session_id__get: {
+        parameters: {
+            query?: {
+                /** @description Memory resource name */
+                memory?: string;
+            };
+            header?: never;
+            path: {
+                session_id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -6403,6 +6615,12 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Page number (1-indexed) */
+                page?: number;
+                /** @description Items per page */
+                page_size?: number;
+                /** @description Case-insensitive substring match over query input text */
+                search?: string | null;
             };
             header?: never;
             path?: never;

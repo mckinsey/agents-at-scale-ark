@@ -77,4 +77,17 @@ resources:
   kind: Memory
   path: mckinsey.com/ark/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: false
+  controller: false
+  domain: mckinsey
+  group: ark
+  kind: ArkConfig
+  path: mckinsey.com/ark/api/v1alpha1
+  version: v1alpha1
+  webhooks:
+    defaulting: false
+    validation: true
+    webhookVersion: v1
 version: "3"

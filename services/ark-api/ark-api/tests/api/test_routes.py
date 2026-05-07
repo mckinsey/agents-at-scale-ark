@@ -51,9 +51,107 @@ class TestNamespacesEndpoint(unittest.TestCase):
         self.assertEqual(data["items"][1]["name"], "kube-system")
 
 
+class TestContextEndpoint(unittest.TestCase):
+    """Test cases for the /context endpoint."""
+
+    def setUp(self):
+        """Set up test client."""
+        from ark_api.main import app
+        self.client = TestClient(app)
+
+    @patch('ark_api.api.v1.namespaces.get_current_context')
+    @patch('ark_api.api.v1.namespaces.ApiClient')
+    @patch('ark_api.api.v1.namespaces.client.CoreV1Api')
+    def test_get_context_success(self, mock_v1_api, mock_api_client, mock_get_current_context):
+        """Test successful context retrieval."""
+        # Setup mocks
+        mock_get_current_context.return_value = {
+            "namespace": "default",
+            "cluster": "test-cluster"
+        }
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_namespace = Mock()
+        mock_namespace.metadata.labels = None
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespace = AsyncMock(return_value=mock_namespace)
+
+        # Make the request
+        response = self.client.get("/v1/context")
+
+        # Assert response
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["namespace"], "default")
+        self.assertEqual(data["cluster"], "test-cluster")
+        self.assertEqual(data["read_only_mode"], False)
+
+    @patch('ark_api.api.v1.namespaces.get_current_context')
+    @patch('ark_api.api.v1.namespaces.ApiClient')
+    @patch('ark_api.api.v1.namespaces.client.CoreV1Api')
+    def test_get_context_with_valid_namespace(self, mock_v1_api, mock_api_client, mock_get_current_context):
+        """Test context with valid namespace parameter."""
+        mock_get_current_context.return_value = {
+            "namespace": "default",
+            "cluster": "test-cluster"
+        }
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        mock_namespace = Mock()
+        mock_namespace.metadata.labels = {"ark.mckinsey.com/demo": "true"}
+
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespace = AsyncMock(return_value=mock_namespace)
+
+        # Make the request with namespace parameter
+        response = self.client.get("/v1/context?namespace=kyc-demo")
+
+        # Assert response
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["namespace"], "kyc-demo")
+        self.assertEqual(data["read_only_mode"], True)  # Demo namespace has read_only
+
+    @patch('ark_api.api.v1.namespaces.get_current_context')
+    @patch('ark_api.api.v1.namespaces.ApiClient')
+    @patch('ark_api.api.v1.namespaces.client.CoreV1Api')
+    def test_get_context_namespace_not_found(self, mock_v1_api, mock_api_client, mock_get_current_context):
+        """Test context returns 404 with default_namespace when namespace doesn't exist."""
+        from kubernetes_asyncio.client.exceptions import ApiException
+
+        mock_get_current_context.return_value = {
+            "namespace": "kyc-demo",
+            "cluster": "test-cluster"
+        }
+
+        mock_api_client_instance = AsyncMock()
+        mock_api_client.return_value.__aenter__.return_value = mock_api_client_instance
+
+        # Mock 404 error from Kubernetes API
+        mock_api_instance = mock_v1_api.return_value
+        mock_api_instance.read_namespace = AsyncMock(
+            side_effect=ApiException(status=404, reason="Not Found")
+        )
+
+        # Make the request with invalid namespace
+        response = self.client.get("/v1/context?namespace=invalid-ns")
+
+        # Assert 404 response with default_namespace
+        self.assertEqual(response.status_code, 404)
+        data = response.json()
+        self.assertIn("detail", data)
+        self.assertEqual(data["detail"]["message"], "Namespace 'invalid-ns' not found")
+        self.assertEqual(data["detail"]["default_namespace"], "kyc-demo")
+
+
 class TestDeleteEndpoints(unittest.TestCase):
     """Test cases for delete endpoints."""
-    
+
     def setUp(self):
         """Set up test client."""
         from ark_api.main import app

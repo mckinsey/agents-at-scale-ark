@@ -12,8 +12,8 @@ Tests use labels in `chainsaw-test.yaml` metadata to control when they run.
 |---|---|---|
 | *(no label)* | Standard tests, use mock-llm | Always runs (`!llm,!postgresql` or `!llm`) |
 | `llm: "true"` | Requires real LLM API keys | `e2e-tests-llm` job only |
-| `multi-provider: "true"` | Runs per-provider via `chainsaw-multi` script | `e2e-tests-llm` job |
 | `postgresql: "true"` | Requires PostgreSQL backend | Excluded from etcd-only runs |
+| `etcd-only: "true"` | Requires etcd backend (e.g., uses cluster-scoped CRDs not served by embedded apiserver) | Excluded from postgresql backend runs |
 | `requires-images: "true"` | Requires built container images | Conditional |
 | `standard: "true"` | Explicit standard marker | Always runs |
 
@@ -157,6 +157,41 @@ Use `assert:` only for post-completion validation where the query is already kno
         phase: done
 ```
 
+**Never use `contains()` on response fields without a preceding `wait`.**
+
+JMESPath's `contains()` requires a string or array — it throws a hard type error if the value is `nil`. Before the query completes, `response` is `nil`, so any assertion like `(contains(response.content, 'foo')): true` will immediately error rather than retry:
+
+```yaml
+# Bad - crashes on nil if query hasn't completed yet
+- apply:
+    file: manifests/a04-query.yaml
+- assert:
+    resource:
+      ...
+      status:
+        (contains(response.content, 'expected text')): true
+
+# Good - wait for completion first, then assert
+- apply:
+    file: manifests/a04-query.yaml
+- wait:
+    apiVersion: ark.mckinsey.com/v1alpha1
+    kind: Query
+    name: test-query
+    timeout: 2m
+    for:
+      condition:
+        name: Completed
+        value: 'True'
+- assert:
+    resource:
+      ...
+      status:
+        (contains(response.content, 'expected text')): true
+```
+
+This applies to both success and error queries — the `Completed` condition is set to `True` regardless of outcome (`QuerySucceeded`, `QueryErrored`, `QueryCanceled`).
+
 ### Model Assertions
 Models should assert existence and readiness:
 ```yaml
@@ -232,71 +267,94 @@ spec:
       type: specialist
 ```
 
-## Environment Variables
+## Using Mock LLM
 
-### Required Variables
-Tests use these environment variables for Azure OpenAI:
-- `E2E_TEST_AZURE_OPENAI_KEY`
-- `E2E_TEST_AZURE_OPENAI_BASE_URL`
+Standard tests use mock-llm instead of a real LLM. Mock-llm is a configurable HTTP server that intercepts LLM API calls and returns scripted responses, making tests fast, deterministic, and runnable without API keys.
 
-### Script Setup Pattern
+**Only use a real LLM** (with `llm: "true"` label) when the test genuinely requires actual language model reasoning — for example, multi-provider behavioral testing under `tests/llm-tests/`. Everything else should use mock-llm.
+
+### Setup Pattern
+
+Install mock-llm via the shared script, then wait for the Model CR it creates:
+
 ```yaml
-- script:
-    skipLogOutput: true
-    content: |
-      set -u
-      echo "{\"token\": \"$E2E_TEST_AZURE_OPENAI_KEY\", \"url\": \"$E2E_TEST_AZURE_OPENAI_BASE_URL\"}"
-    outputs:
-    - name: azure
-      value: (json_parse($stdout))
+- name: setup-mock-llm
+  try:
+  - script:
+      timeout: 180s
+      content: |
+        bash ../shared/install-mock-llm.sh
+      env:
+      - name: NAMESPACE
+        value: ($namespace)
+
+- name: wait-for-model-ready
+  try:
+  - wait:
+      apiVersion: ark.mckinsey.com/v1alpha1
+      kind: Model
+      name: test-model-mock
+      timeout: 90s
+      for:
+        condition:
+          name: ModelAvailable
+          value: 'True'
 ```
 
-### Secret Template Pattern
+The script installs the `mock-llm` Helm release using `mock-llm-values.yaml` from the test directory (if present) or the shared defaults. It creates a Model CR named `test-model-mock`.
+
+### Configuring Responses
+
+Create a `mock-llm-values.yaml` in the test directory to script the mock's responses. Rules are evaluated in order — **last match wins**, so place the 500 fallback first and specific rules last:
+
 ```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: test-model-token
-type: Opaque
-data:
-  token: (base64_encode($azure.token))
+config:
+  rules:
+  - path: "/v1/chat/completions"
+    response:
+      status: 500
+      content: '"Unrecognised request"'
+
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'my agent')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"Hello from mock"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}'
+```
+
+### Cleanup
+
+Uninstall mock-llm in the last step's `cleanup` block:
+
+```yaml
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
 ```
 
 ## Resource Dependencies
 
 ### Dependency Order
 1. RBAC (Role, RoleBinding)
-2. Secrets and ConfigMaps
-3. Models
-4. Agents (depend on Models)
+2. mock-llm setup (if needed)
+3. Other dependencies (ConfigMaps, Tools, etc.)
+4. Agents (reference `test-model-mock`)
 5. Queries (depend on Agents)
 
 ### Model Reference Pattern
-```yaml
-# Model - CORRECT v1alpha1 format
-metadata:
-  name: test-model
-spec:
-  type: azure
-  model:
-    value: gpt-4.1-mini
-  config:
-    azure:
-      baseUrl:
-        value: ($azure.url)
-      apiKey:
-        valueFrom:
-          secretKeyRef:
-            name: test-model-token
-            key: token
-      apiVersion:
-        value: "2024-12-01-preview"
 
-# Agent references model - use modelRef
+Agents reference the mock model by name:
+
+```yaml
+# Agent references mock model
 spec:
   modelRef:
-    name: test-model
-  
+    name: test-model-mock
+
 # Query references agent
 spec:
   agent: test-agent
@@ -339,47 +397,6 @@ metadata:
 ```
 
 ### Resource Spec Format Errors
-
-#### Secret Template Syntax
-```yaml
-# Wrong - will cause template parse error
-data:
-  token: (($azure.token) | @base64)
-
-# Correct - use chainsaw function
-data:
-  token: (base64_encode($azure.token))
-```
-
-#### Model Spec Format
-```yaml
-# Wrong - old format causes "unknown field" errors
-spec:
-  provider: azure-openai
-  model: gpt-4.1-mini
-  baseURL: ($azure.url)
-  auth:
-    tokenSecret:
-      name: test-model-token
-      key: token
-
-# Correct - current v1alpha1 format
-spec:
-  type: azure
-  model:
-    value: gpt-4.1-mini
-  config:
-    azure:
-      baseUrl:
-        value: ($azure.url)
-      apiKey:
-        valueFrom:
-          secretKeyRef:
-            name: test-model-token
-            key: token
-      apiVersion:
-        value: "2024-12-01-preview"
-```
 
 #### Agent Model Reference
 ```yaml
@@ -933,24 +950,46 @@ chainsaw test tests/ --test-dir tests/queries --pause-on-failure
 
 Two things make Radix UI Select options unstable for Playwright:
 
-1. **Floating UI positioning**: The dropdown portal DOM nodes are replaced when Floating UI calculates position, causing "element was detached from the DOM". Floating UI sets `data-side` once positioning is done.
+1. **React re-render race**: Filling a form field and immediately clicking a Select trigger can race with React Hook Form's blur/validation re-render, causing the trigger to be briefly detached or the select to open and immediately close.
 2. **Open animation**: `data-state="open"` fires at the *start* of the entry animation (zoom-in, slide-in), not the end. Playwright sees the bounding box still changing and reports "element is not stable". The animation must fully complete before options are clickable.
 
-Wait for the listbox to be visible, then wait for all CSS animations to finish before clicking:
+Best practices for reliable Select interaction:
+
+1. Scope the trigger selector to the dialog to avoid matching other comboboxes on the page.
+2. Blur the form input before clicking the trigger, so React re-renders from validation happen before the click.
+3. Retry the click if the listbox doesn't appear (handles transient close).
+4. Do NOT require `[data-side]` in the listbox selector — Radix Popper sets it asynchronously and it may not be present immediately in headless CI.
 
 ```python
-trigger.click()
-listbox = page.locator("[role='listbox'][data-side][data-state='open']")
-listbox.wait_for(state="visible", timeout=15000)
-self.wait_for_animations_complete(listbox)  # BasePage helper
+name_input.fill(tool_name)
+name_input.blur()  # Trigger form validation re-render before clicking select
+
+type_trigger = page.locator("[role='dialog'] [role='combobox']").first
+type_trigger.scroll_into_view_if_needed()
+type_trigger.wait_for(state="visible", timeout=15000)
+
+listbox = page.locator("[role='listbox'][data-state='open']")
+for attempt in range(3):
+    type_trigger.click()
+    try:
+        listbox.wait_for(state="visible", timeout=5000)
+        break
+    except Exception:
+        pass  # retry
+
+self.wait_for_animations_complete(listbox)
 page.locator("[role='option']:has-text('HTTP')").first.click()
 ```
 
 `wait_for_animations_complete` uses the Web Animations API to block until all running animations on the element and its subtree finish:
 
 ```python
-locator.evaluate("el => Promise.all(el.getAnimations({subtree: true}).map(a => a.finished))")
+handle = locator.element_handle(timeout=timeout)
+if handle:
+    page.evaluate("el => Promise.allSettled(el.getAnimations({subtree: true}).map(a => a.finished))", handle)
 ```
+
+Use `page.evaluate(fn, handle)` rather than `locator.evaluate(fn)` — the latter can cause Playwright to refocus the element, which closes Radix dropdowns.
 
 `{subtree: true}` is required — without it, `getAnimations()` only checks the listbox container, not the option elements that are actually animating.
 

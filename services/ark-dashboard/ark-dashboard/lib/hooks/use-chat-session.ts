@@ -32,6 +32,8 @@ interface UseChatSessionReturn {
   messages: ExtendedChatMessage[];
   sessionId: string;
   isProcessing: boolean;
+  processingPhase?: string;
+
   error: string | null;
   sendMessage: (message: string) => Promise<void>;
   clearChat: () => void;
@@ -145,6 +147,8 @@ export function useChatSession({
   );
 
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingPhase, setProcessingPhase] = useState<string | undefined>();
+
   const [error, setError] = useState<string | null>(null);
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
   const queryTimeout = useAtomValue(queryTimeoutSettingAtom);
@@ -249,14 +253,27 @@ export function useChatSession({
         currentMessageIndex += systemMsgCount + 1;
       };
 
-      for await (const chunk of chatService.streamChatResponse(
-        userMessage,
-        type,
-        name,
-        sessionId,
-        conversationId,
-        queryTimeout,
-      )) {
+      const { queryName: streamQueryName, chunks } =
+        await chatService.startStreamChatResponse(
+          userMessage,
+          type,
+          name,
+          sessionId,
+          conversationId,
+          queryTimeout,
+        );
+
+      const stopPhasePolling = await chatService.streamQueryStatus(
+        streamQueryName,
+        (status) => {
+          if (status && typeof status === 'object' && 'phase' in status) {
+            const phase = (status as { phase?: string }).phase;
+            setProcessingPhase(phase);
+          }
+        },
+      );
+
+      for await (const chunk of chunks) {
         const typedChunk = chunk as unknown as ArkExtendedChunk;
 
         if (typedChunk.error) {
@@ -404,6 +421,7 @@ export function useChatSession({
         }
       }
 
+      stopPhasePolling();
       finalizeCurrentMessage();
 
       if (messageTokenUsage) {
@@ -545,6 +563,8 @@ export function useChatSession({
       while (!pollingStopped) {
         try {
           const result = await chatService.getQueryResult(query.name);
+
+          setProcessingPhase(result.status);
 
           if (result.terminal) {
             const fullQuery = await chatService.getQuery(query.name);
@@ -734,6 +754,7 @@ export function useChatSession({
         setError(errMsg);
       } finally {
         setIsProcessing(false);
+        setProcessingPhase(undefined);
       }
     },
     [
@@ -766,6 +787,7 @@ export function useChatSession({
     messages: chatMessages,
     sessionId,
     isProcessing,
+    processingPhase,
     error,
     sendMessage,
     clearChat,

@@ -1,6 +1,6 @@
 {
   "name": "y",
-  "version": "0.1.60-rc",
+  "version": "0.1.61-rc.3",
   "description": "QB Agentic Runtime Docs",
   "main": "index.js",
   "scripts": {
@@ -18,7 +18,7 @@
     "@napi-rs/simple-git": "^0.1.19",
     "@theguild/remark-mermaid": "^0.3.0",
     "cheerio": "^1.2.0",
-    "next": "16.2.3",
+    "next": "16.2.4",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
     "react": "^19.2.4",
@@ -47,7 +47,9 @@
     "rollup": "4.59.0",
     "minimatch": "^10.2.3",
     "picomatch": "^4.0.4",
-    "@xmldom/xmldom": "0.9.9",
+    "@xmldom/xmldom": "0.9.10",
+    "speech-rule-engine": "4.1.4",
+    "uuid": "^14.0.0",
     "lodash-es": "4.18.1",
     "tough-cookie": "^5.0.0",
     "urlobj": "0.0.11"
