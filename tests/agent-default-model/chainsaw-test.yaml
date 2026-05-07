@@ -45,8 +45,13 @@ spec:
 
   - name: setup-mock-service
     try:
-    - apply:
-        file: manifests/a00-mock-openai.yaml
+    - script:
+        content: |
+          source ../../.github/helm-versions.env
+          envsubst < manifests/a00-mock-openai.yaml | kubectl apply -n "$NAMESPACE" -f -
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
     - wait:
         apiVersion: v1
         kind: Pod
