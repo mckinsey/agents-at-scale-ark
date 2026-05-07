@@ -33,7 +33,7 @@ interface UseChatSessionReturn {
   sessionId: string;
   isProcessing: boolean;
   processingPhase?: string;
-  conditionMessage?: string;
+
   error: string | null;
   sendMessage: (message: string) => Promise<void>;
   clearChat: () => void;
@@ -148,7 +148,7 @@ export function useChatSession({
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingPhase, setProcessingPhase] = useState<string | undefined>();
-  const [conditionMessage, setConditionMessage] = useState<string | undefined>();
+
   const [error, setError] = useState<string | null>(null);
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
   const queryTimeout = useAtomValue(queryTimeoutSettingAtom);
@@ -269,13 +269,6 @@ export function useChatSession({
           if (status && typeof status === 'object' && 'phase' in status) {
             const phase = (status as { phase?: string }).phase;
             setProcessingPhase(phase);
-            if (phase === 'provisioning') {
-              const conditions = (status as { conditions?: Array<{ type?: string; message?: string }> }).conditions;
-              const msg = conditions?.find(c => c.type === 'Completed')?.message;
-              setConditionMessage(msg);
-            } else {
-              setConditionMessage(undefined);
-            }
           }
         },
       );
@@ -572,11 +565,6 @@ export function useChatSession({
           const result = await chatService.getQueryResult(query.name);
 
           setProcessingPhase(result.status);
-          if (result.status === 'provisioning') {
-            setConditionMessage(result.conditionMessage);
-          } else {
-            setConditionMessage(undefined);
-          }
 
           if (result.terminal) {
             const fullQuery = await chatService.getQuery(query.name);
@@ -767,7 +755,6 @@ export function useChatSession({
       } finally {
         setIsProcessing(false);
         setProcessingPhase(undefined);
-        setConditionMessage(undefined);
       }
     },
     [
@@ -801,7 +788,6 @@ export function useChatSession({
     sessionId,
     isProcessing,
     processingPhase,
-    conditionMessage,
     error,
     sendMessage,
     clearChat,
