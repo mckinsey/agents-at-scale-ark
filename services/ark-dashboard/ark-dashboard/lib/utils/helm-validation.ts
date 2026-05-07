@@ -48,7 +48,7 @@ export const helmChartPathSchema = z
         return false;
       }
       // Check for shell metacharacters and control characters
-      const dangerousChars = /[;|&$`(){}[\]<>\\'\"\s\x00-\x1f\x7f]/;
+      const dangerousChars = /[;|&$`(){}[\]<>\\'" ]/;
       return !dangerousChars.test(path);
     },
     {
