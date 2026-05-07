@@ -60,9 +60,13 @@ class SessionsPage(BasePage):
             logger.info("Could not fill search input")
 
         participant_item = self.page.locator(
-            f"[role='dialog'] label:has(div.font-medium:has-text('{participant_name}'))"
+            f"[role='dialog'] label:has(span:has-text('{participant_name}'))"
         ).first
         if not participant_item.is_visible(timeout=3000):
+            participant_item = self.page.locator(
+                f"[role='dialog'] label:has(div.font-medium:has-text('{participant_name}'))"
+            ).first
+        if not participant_item.is_visible(timeout=1000):
             participant_item = self.page.locator(
                 f"[role='dialog'] div.font-medium:has-text('{participant_name}')"
             ).first
@@ -255,13 +259,13 @@ class SessionsPage(BasePage):
     def get_visible_session_count(self) -> int:
         try:
             rows = self.page.locator(
-                "div.rounded-lg.border button[type='button'][aria-pressed]"
+                "div.rounded-lg button[type='button'][aria-pressed]"
             )
             count = rows.count()
             if count > 0:
                 return count
             rows = self.page.locator(
-                "div.rounded-lg.border > button"
+                "div.rounded-lg > button[type='button']"
             )
             return rows.count()
         except Exception as e:
@@ -275,7 +279,7 @@ class SessionsPage(BasePage):
             ).first
             search.wait_for(state="visible", timeout=5000)
             search.fill(query)
-            self.page.wait_for_timeout(600)
+            self.page.wait_for_timeout(1200)
         except Exception as e:
             logger.debug("Could not search sessions: %s", e)
 
@@ -388,10 +392,9 @@ class SessionsPage(BasePage):
     def is_empty_state_shown(self) -> bool:
         try:
             empty = self.page.locator(
-                "div.py-12.text-center:has-text('No sessions found'), "
-                "div:has-text('No sessions found')"
+                "div.py-12.text-center:has-text('No sessions found')"
             ).first
-            return empty.is_visible(timeout=3000)
+            return empty.is_visible(timeout=8000)
         except Exception:
             return False
 
