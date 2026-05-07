@@ -11,6 +11,7 @@ import {
   Cog,
   Download,
   File,
+  FileUp,
   HelpCircle,
   Home,
   ListTodo,
@@ -382,6 +383,15 @@ export function AppSidebar() {
                   sideOffset={sidebarState === 'expanded' ? -110 : 8}
                   className="w-56 p-2">
                   <div className="flex flex-col gap-1">
+                    <button
+                      onClick={() => {
+                        navigateToSection('file-assistant');
+                        setMorePopoverOpen(false);
+                      }}
+                      className="hover:bg-accent hover:text-accent-foreground flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm">
+                      <FileUp className="h-4 w-4" />
+                      <span>File Assistant</span>
+                    </button>
                     <button
                       onClick={() => {
                         navigateToSection('files');
