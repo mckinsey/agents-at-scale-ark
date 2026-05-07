@@ -478,7 +478,7 @@ class TestSessionsAndConversations:
             "At least one conversation should appear in sidebar after first message"
 
         sessions.click_new_conversation_button()
-        assert sessions.is_visible(sessions.SESSION_DIALOG, timeout=5000), \
+        assert sessions.is_visible(sessions.NEW_CONVERSATION_DIALOG, timeout=5000), \
             "New conversation dialog should open"
 
         sessions.select_participant_in_dialog(agent_name, participant_tab="Agents")
