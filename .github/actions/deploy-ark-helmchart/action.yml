@@ -80,6 +80,7 @@ runs:
           GH_TOKEN: ${{ github.token }}
 
     - name: Check existing Helm release
+      id: check_release
       shell: bash
       run: |
         if helm status ark-controller -n "${{ inputs.namespace }}" >/dev/null 2>&1; then
@@ -105,11 +106,12 @@ runs:
         }' --dry-run=client -o yaml | kubectl apply -f -
 
     - name: Cache Helm charts
-      if: ${{ inputs.install_cert_manager == 'true' && steps.check_release.outputs.release_found == 'false' }}
       uses: actions/cache@v4
       with:
         path: ~/.cache/helm
         key: helm-${{ runner.os }}-${{ hashFiles('.github/helm-versions.env', '**/Chart.lock') }}
+        restore-keys: |
+          helm-${{ runner.os }}-
 
     - name: Pre-pull Helm charts
       if: ${{ inputs.install_cert_manager == 'true' && steps.check_release.outputs.release_found == 'false' }}
