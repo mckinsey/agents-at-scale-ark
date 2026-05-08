@@ -25,6 +25,7 @@ import {
   type WaitProgress,
 } from '../../lib/waitForReady.js';
 import {parseTimeoutToSeconds} from '../../lib/timeout.js';
+import {detectStorageBackend} from '../../lib/readinessChecks.js';
 
 function isValidVersion(version: string): boolean {
   return /^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$/.test(version);
@@ -229,6 +230,8 @@ export async function installArk(
   output.success(`connected to cluster: ${chalk.bold(clusterInfo.context)}`);
   console.log(); // Add blank line after cluster info
 
+  const backend = await detectStorageBackend();
+
   // If specific services are requested, install only those services
   if (serviceNames.length > 0) {
     for (const serviceName of serviceNames) {
@@ -281,7 +284,7 @@ export async function installArk(
       }
 
       // Core ARK service
-      const services = getInstallableServices();
+      const services = getInstallableServices(backend);
       const service = Object.values(services).find((s) => s.name === serviceName);
 
       if (!service) {
@@ -313,12 +316,15 @@ export async function installArk(
 
   // If not using -y flag, show checklist interface
   if (!options.yes) {
+    const backendMatch = (s: ArkService) =>
+      !s.requiresBackend || s.requiresBackend === backend;
+
     const coreServices = Object.values(arkServices)
-      .filter((s) => s.category === 'core')
+      .filter((s) => s.category === 'core' && backendMatch(s))
       .sort((a, b) => a.name.localeCompare(b.name));
 
     const otherServices = Object.values(arkServices)
-      .filter((s) => s.category === 'service')
+      .filter((s) => s.category === 'service' && backendMatch(s))
       .sort((a, b) => a.name.localeCompare(b.name));
 
     const mandatoryServiceNames = [...coreServices, ...otherServices]
@@ -512,7 +518,7 @@ export async function installArk(
     }
 
     // Install all services
-    const services = getInstallableServices();
+    const services = getInstallableServices(backend);
     for (const service of Object.values(services)) {
       output.info(`installing ${service.name}...`);
 
@@ -549,7 +555,8 @@ export async function installArk(
           s.enabled &&
           s.category === 'core' &&
           s.k8sDeploymentName &&
-          s.namespace
+          s.namespace &&
+          (!s.requiresBackend || s.requiresBackend === backend)
       );
 
       const spinner = ora(
