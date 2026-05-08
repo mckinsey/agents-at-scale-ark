@@ -3,6 +3,13 @@
 ## [0.1.62](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.62...v0.1.62) (2026-05-08)
 
 
+### Bug Fixes
+
+* upgrade Go to 1.26.3 to patch CVE-2026-39820 and CVE-2026-33811 ([#2099](https://github.com/mckinsey/agents-at-scale-ark/issues/2099)) ([bf81f80](https://github.com/mckinsey/agents-at-scale-ark/commit/bf81f800f3700f1e6ad4aff69e79ddd35d4a8b45))
+
+## [0.1.62](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.62...v0.1.62) (2026-05-08)
+
+
 ### Features
 
 * a2a protocol for execution engine, move langchain to marketplace ([#1215](https://github.com/mckinsey/agents-at-scale-ark/issues/1215)) ([b0a3873](https://github.com/mckinsey/agents-at-scale-ark/commit/b0a3873ce4f5f9fa11713f33a10081f2d3a77228))
