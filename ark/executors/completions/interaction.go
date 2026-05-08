@@ -70,53 +70,60 @@ type ConfirmationInteractionConfig struct {
 func BuildInteractionConfigMap(tools []arkv1alpha1.AgentTool) map[string]*InteractionConfig {
 	interactionMap := make(map[string]*InteractionConfig)
 	for _, tool := range tools {
-		if tool.Interaction != nil {
-			config := &InteractionConfig{
-				Type:      tool.Interaction.Type,
-				OnTimeout: tool.Interaction.OnTimeout,
-			}
-			if tool.Interaction.Timeout != nil {
-				config.Timeout = tool.Interaction.Timeout.Duration.String()
-			}
-
-			switch tool.Interaction.Type {
-			case "approval":
-				if tool.Interaction.Approval != nil {
-					config.Approval = &ApprovalInteractionConfig{
-						Approvers:      tool.Interaction.Approval.Approvers,
-						ReasonRequired: tool.Interaction.Approval.ReasonRequired,
-					}
-				}
-			case "input":
-				if tool.Interaction.Input != nil {
-					config.Input = &InputInteractionConfig{
-						Prompt: tool.Interaction.Input.Prompt,
-					}
-					if tool.Interaction.Input.Schema != nil && tool.Interaction.Input.Schema.Raw != nil {
-						config.Input.Schema = string(tool.Interaction.Input.Schema.Raw)
-					}
-				}
-			case "selection":
-				if tool.Interaction.Selection != nil {
-					config.Selection = &SelectionInteractionConfig{
-						Options:     tool.Interaction.Selection.Options,
-						MultiSelect: tool.Interaction.Selection.MultiSelect,
-						Prompt:      tool.Interaction.Selection.Prompt,
-					}
-				}
-			case "confirmation":
-				if tool.Interaction.Confirmation != nil {
-					config.Confirmation = &ConfirmationInteractionConfig{
-						AllowEdit: tool.Interaction.Confirmation.AllowEdit,
-						Message:   tool.Interaction.Confirmation.Message,
-					}
-				}
-			}
-
-			interactionMap[tool.Name] = config
+		if tool.Interaction == nil {
+			continue
 		}
+		config := buildInteractionConfig(tool.Interaction)
+		interactionMap[tool.Name] = config
 	}
 	return interactionMap
+}
+
+func buildInteractionConfig(interaction *arkv1alpha1.ToolInteractionConfig) *InteractionConfig {
+	config := &InteractionConfig{
+		Type:      interaction.Type,
+		OnTimeout: interaction.OnTimeout,
+	}
+	if interaction.Timeout != nil {
+		config.Timeout = interaction.Timeout.Duration.String()
+	}
+
+	populateTypeSpecificConfig(config, interaction)
+	return config
+}
+
+func populateTypeSpecificConfig(config *InteractionConfig, interaction *arkv1alpha1.ToolInteractionConfig) {
+	switch interaction.Type {
+	case "approval":
+		if interaction.Approval != nil {
+			config.Approval = &ApprovalInteractionConfig{
+				Approvers:      interaction.Approval.Approvers,
+				ReasonRequired: interaction.Approval.ReasonRequired,
+			}
+		}
+	case "input":
+		if interaction.Input != nil {
+			config.Input = &InputInteractionConfig{Prompt: interaction.Input.Prompt}
+			if interaction.Input.Schema != nil && interaction.Input.Schema.Raw != nil {
+				config.Input.Schema = string(interaction.Input.Schema.Raw)
+			}
+		}
+	case "selection":
+		if interaction.Selection != nil {
+			config.Selection = &SelectionInteractionConfig{
+				Options:     interaction.Selection.Options,
+				MultiSelect: interaction.Selection.MultiSelect,
+				Prompt:      interaction.Selection.Prompt,
+			}
+		}
+	case "confirmation":
+		if interaction.Confirmation != nil {
+			config.Confirmation = &ConfirmationInteractionConfig{
+				AllowEdit: interaction.Confirmation.AllowEdit,
+				Message:   interaction.Confirmation.Message,
+			}
+		}
+	}
 }
 
 func (a *Agent) RequiresInteraction(toolName string) *InteractionConfig {

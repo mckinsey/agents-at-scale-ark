@@ -778,38 +778,62 @@ func (h *Handler) executeApprovedToolsAndContinue(
 	}
 
 	newMessages := []Message{}
-
-	lastMsg := messages[len(messages)-1]
-	if lastMsg.OfAssistant != nil && lastMsg.OfAssistant.ToolCalls != nil {
-		for _, tc := range lastMsg.OfAssistant.ToolCalls {
-			if !approvedToolIDs[tc.ID] {
-				toolMessage := ToolMessage("Tool call was not approved", tc.ID)
-				messages = append(messages, toolMessage)
-				newMessages = append(newMessages, toolMessage)
-				continue
-			}
-
-			result, err := agent.Tools.ExecuteTool(ctx, ToolCall{
-				ID:   tc.ID,
-				Type: "function",
-				Function: openai.ChatCompletionMessageToolCallFunction{
-					Name:      tc.Function.Name,
-					Arguments: tc.Function.Arguments,
-				},
-			})
-			toolMessage := ToolMessage(result.Content, result.ID)
-			messages = append(messages, toolMessage)
-			newMessages = append(newMessages, toolMessage)
-
-			if err != nil {
-				if IsTerminateTeam(err) {
-					return &ExecutionResult{Messages: newMessages}, err
-				}
-				return nil, fmt.Errorf("approved tool execution failed: %w", err)
-			}
+	messages, newMessages, err := h.processApprovedToolCalls(ctx, agent, messages, newMessages, approvedToolIDs)
+	if err != nil {
+		if IsTerminateTeam(err) {
+			return &ExecutionResult{Messages: newMessages}, err
 		}
+		return nil, err
 	}
 
+	return h.continueLLMLoop(ctx, agent, messages, newMessages, tools, eventStream)
+}
+
+func (h *Handler) processApprovedToolCalls(
+	ctx context.Context,
+	agent *Agent,
+	messages, newMessages []Message,
+	approvedToolIDs map[string]bool,
+) ([]Message, []Message, error) {
+	lastMsg := messages[len(messages)-1]
+	if lastMsg.OfAssistant == nil || lastMsg.OfAssistant.ToolCalls == nil {
+		return messages, newMessages, nil
+	}
+
+	for _, tc := range lastMsg.OfAssistant.ToolCalls {
+		if !approvedToolIDs[tc.ID] {
+			toolMessage := ToolMessage("Tool call was not approved", tc.ID)
+			messages = append(messages, toolMessage)
+			newMessages = append(newMessages, toolMessage)
+			continue
+		}
+
+		result, err := agent.Tools.ExecuteTool(ctx, ToolCall{
+			ID:   tc.ID,
+			Type: "function",
+			Function: openai.ChatCompletionMessageToolCallFunction{
+				Name:      tc.Function.Name,
+				Arguments: tc.Function.Arguments,
+			},
+		})
+		toolMessage := ToolMessage(result.Content, result.ID)
+		messages = append(messages, toolMessage)
+		newMessages = append(newMessages, toolMessage)
+
+		if err != nil {
+			return messages, newMessages, err
+		}
+	}
+	return messages, newMessages, nil
+}
+
+func (h *Handler) continueLLMLoop(
+	ctx context.Context,
+	agent *Agent,
+	messages, newMessages []Message,
+	tools []openai.ChatCompletionToolParam,
+	eventStream EventStreamInterface,
+) (*ExecutionResult, error) {
 	for {
 		if ctx.Err() != nil {
 			return &ExecutionResult{Messages: newMessages}, ctx.Err()
@@ -830,10 +854,7 @@ func (h *Handler) executeApprovedToolsAndContinue(
 		}
 
 		if err := agent.executeToolCalls(ctx, choice.Message.ToolCalls, &messages, &newMessages); err != nil {
-			if IsInteractionRequired(err) {
-				return &ExecutionResult{Messages: newMessages}, err
-			}
-			if IsTerminateTeam(err) {
+			if IsInteractionRequired(err) || IsTerminateTeam(err) {
 				return &ExecutionResult{Messages: newMessages}, err
 			}
 			return nil, err

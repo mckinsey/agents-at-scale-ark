@@ -123,66 +123,15 @@ func (r *ToolInteractionReconciler) handleResponse(ctx context.Context, ti *arkv
 		return ctrl.Result{}, nil
 	}
 
-	response := ti.Status.Response
-	var newPhase string
-	var conditionReason string
-	var conditionMessage string
-
-	switch ti.Spec.Type {
-	case arkv1alpha1.InteractionTypeApproval:
-		if response.Approval != nil {
-			switch response.Approval.Action {
-			case "approved":
-				newPhase = InteractionPhaseCompleted
-				conditionReason = "Approved"
-				conditionMessage = fmt.Sprintf("Tool calls approved by %s", response.RespondedBy)
-			case "rejected":
-				newPhase = InteractionPhaseRejected
-				conditionReason = "Rejected"
-				conditionMessage = fmt.Sprintf("Tool calls rejected by %s", response.RespondedBy)
-				if response.Approval.Reason != "" {
-					conditionMessage = fmt.Sprintf("%s: %s", conditionMessage, response.Approval.Reason)
-				}
-			default:
-				return ctrl.Result{}, fmt.Errorf("unknown approval action: %s", response.Approval.Action)
-			}
-		}
-	case arkv1alpha1.InteractionTypeInput:
-		if response.Input != nil {
-			newPhase = InteractionPhaseCompleted
-			conditionReason = "InputProvided"
-			conditionMessage = fmt.Sprintf("Input provided by %s", response.RespondedBy)
-		}
-	case arkv1alpha1.InteractionTypeSelection:
-		if response.Selection != nil {
-			newPhase = InteractionPhaseCompleted
-			conditionReason = "SelectionMade"
-			conditionMessage = fmt.Sprintf("Selection made by %s: %v", response.RespondedBy, response.Selection.Selected)
-		}
-	case arkv1alpha1.InteractionTypeConfirmation:
-		if response.Confirmation != nil {
-			if response.Confirmation.Confirmed {
-				newPhase = InteractionPhaseCompleted
-				conditionReason = "Confirmed"
-				conditionMessage = fmt.Sprintf("Confirmed by %s", response.RespondedBy)
-			} else {
-				newPhase = InteractionPhaseRejected
-				conditionReason = "NotConfirmed"
-				conditionMessage = fmt.Sprintf("Not confirmed by %s", response.RespondedBy)
-			}
-		}
-	default:
-		return ctrl.Result{}, fmt.Errorf("unknown interaction type: %s", ti.Spec.Type)
-	}
-
-	if newPhase == "" {
-		return ctrl.Result{}, fmt.Errorf("response does not match interaction type %s", ti.Spec.Type)
+	newPhase, conditionReason, conditionMessage, err := determineResponseOutcome(ti)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	ti.Status.Phase = newPhase
 
 	if ti.Status.RequestedAt != nil {
-		duration := response.RespondedAt.Sub(ti.Status.RequestedAt.Time)
+		duration := ti.Status.Response.RespondedAt.Sub(ti.Status.RequestedAt.Time)
 		ti.Status.ResponseDuration = &metav1.Duration{Duration: duration}
 	}
 
@@ -350,6 +299,59 @@ func isInteractionTerminalPhase(phase string) bool {
 	return phase == InteractionPhaseCompleted ||
 		phase == InteractionPhaseRejected ||
 		phase == InteractionPhaseExpired
+}
+
+func determineResponseOutcome(ti *arkv1alpha1.ToolInteraction) (phase, reason, message string, err error) {
+	response := ti.Status.Response
+
+	switch ti.Spec.Type {
+	case arkv1alpha1.InteractionTypeApproval:
+		return determineApprovalOutcome(response)
+	case arkv1alpha1.InteractionTypeInput:
+		if response.Input != nil {
+			return InteractionPhaseCompleted, "InputProvided", fmt.Sprintf("Input provided by %s", response.RespondedBy), nil
+		}
+	case arkv1alpha1.InteractionTypeSelection:
+		if response.Selection != nil {
+			return InteractionPhaseCompleted, "SelectionMade", fmt.Sprintf("Selection made by %s: %v", response.RespondedBy, response.Selection.Selected), nil
+		}
+	case arkv1alpha1.InteractionTypeConfirmation:
+		return determineConfirmationOutcome(response)
+	default:
+		return "", "", "", fmt.Errorf("unknown interaction type: %s", ti.Spec.Type)
+	}
+
+	return "", "", "", fmt.Errorf("response does not match interaction type %s", ti.Spec.Type)
+}
+
+func determineApprovalOutcome(response *arkv1alpha1.InteractionResponse) (phase, reason, message string, err error) {
+	if response.Approval == nil {
+		return "", "", "", fmt.Errorf("response does not match interaction type approval")
+	}
+
+	switch response.Approval.Action {
+	case "approved":
+		return InteractionPhaseCompleted, "Approved", fmt.Sprintf("Tool calls approved by %s", response.RespondedBy), nil
+	case "rejected":
+		msg := fmt.Sprintf("Tool calls rejected by %s", response.RespondedBy)
+		if response.Approval.Reason != "" {
+			msg = fmt.Sprintf("%s: %s", msg, response.Approval.Reason)
+		}
+		return InteractionPhaseRejected, "Rejected", msg, nil
+	default:
+		return "", "", "", fmt.Errorf("unknown approval action: %s", response.Approval.Action)
+	}
+}
+
+func determineConfirmationOutcome(response *arkv1alpha1.InteractionResponse) (phase, reason, message string, err error) {
+	if response.Confirmation == nil {
+		return "", "", "", fmt.Errorf("response does not match interaction type confirmation")
+	}
+
+	if response.Confirmation.Confirmed {
+		return InteractionPhaseCompleted, "Confirmed", fmt.Sprintf("Confirmed by %s", response.RespondedBy), nil
+	}
+	return InteractionPhaseRejected, "NotConfirmed", fmt.Sprintf("Not confirmed by %s", response.RespondedBy), nil
 }
 
 func buildInteractionErrorMessage(ti *arkv1alpha1.ToolInteraction) string {

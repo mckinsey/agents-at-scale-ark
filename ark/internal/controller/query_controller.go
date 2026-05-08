@@ -158,7 +158,7 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 	}
 }
 
-func (r *QueryReconciler) handleInteractionRequiredPhase(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query, expiry time.Time) (ctrl.Result, error) {
+func (r *QueryReconciler) handleInteractionRequiredPhase(ctx context.Context, _ ctrl.Request, obj arkv1alpha1.Query, expiry time.Time) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
 	if obj.Status.InteractionRef == nil {
@@ -778,21 +778,21 @@ func extractInteractionMetadata(result *protocol.MessageResult) *interactionMeta
 	if !interactionRequired {
 		return nil
 	}
-	meta := &interactionMetadata{}
+	intMeta := &interactionMetadata{}
 	if toolCalls, ok := interactionData["toolCalls"].([]any); ok {
 		for _, tc := range toolCalls {
 			if tcMap, ok := tc.(map[string]any); ok {
-				meta.ToolCalls = append(meta.ToolCalls, tcMap)
+				intMeta.ToolCalls = append(intMeta.ToolCalls, tcMap)
 			}
 		}
 	}
 	if execCtx, ok := interactionData["executionContext"].(map[string]any); ok {
-		meta.ExecutionContext = execCtx
+		intMeta.ExecutionContext = execCtx
 	}
 	if interactionType, ok := interactionData["interactionType"].(string); ok {
-		meta.InteractionType = interactionType
+		intMeta.InteractionType = interactionType
 	}
-	return meta
+	return intMeta
 }
 
 func (r *QueryReconciler) createToolInteraction(ctx context.Context, query *arkv1alpha1.Query, interactionMeta *interactionMetadata) (*arkv1alpha1.ToolInteraction, error) {
@@ -808,28 +808,7 @@ func (r *QueryReconciler) createToolInteraction(ctx context.Context, query *arkv
 		}
 	}
 
-	execCtx := arkv1alpha1.ExecutionContext{}
-	if interactionMeta.ExecutionContext != nil {
-		if name, ok := interactionMeta.ExecutionContext["agentName"].(string); ok {
-			execCtx.AgentName = name
-		}
-		if ns, ok := interactionMeta.ExecutionContext["agentNamespace"].(string); ok {
-			execCtx.AgentNamespace = ns
-		}
-		if history, ok := interactionMeta.ExecutionContext["conversationHistory"].(string); ok {
-			execCtx.ConversationHistory = history
-		}
-		if idx, ok := interactionMeta.ExecutionContext["pendingToolCallIndex"].(float64); ok {
-			execCtx.PendingToolCallIndex = int(idx)
-		}
-		if results, ok := interactionMeta.ExecutionContext["completedToolResults"].([]any); ok {
-			for _, r := range results {
-				if s, ok := r.(string); ok {
-					execCtx.CompletedToolResults = append(execCtx.CompletedToolResults, s)
-				}
-			}
-		}
-	}
+	execCtx := parseExecutionContext(interactionMeta.ExecutionContext)
 
 	interactionType := arkv1alpha1.InteractionType(interactionMeta.InteractionType)
 	if interactionType == "" {
@@ -875,6 +854,34 @@ func (r *QueryReconciler) createToolInteraction(ctx context.Context, query *arkv
 
 	log.Info("Created ToolInteraction", "ti", tiName, "query", query.Name)
 	return ti, nil
+}
+
+func parseExecutionContext(execCtxData map[string]any) arkv1alpha1.ExecutionContext {
+	if execCtxData == nil {
+		return arkv1alpha1.ExecutionContext{}
+	}
+
+	execCtx := arkv1alpha1.ExecutionContext{}
+	if name, ok := execCtxData["agentName"].(string); ok {
+		execCtx.AgentName = name
+	}
+	if ns, ok := execCtxData["agentNamespace"].(string); ok {
+		execCtx.AgentNamespace = ns
+	}
+	if history, ok := execCtxData["conversationHistory"].(string); ok {
+		execCtx.ConversationHistory = history
+	}
+	if idx, ok := execCtxData["pendingToolCallIndex"].(float64); ok {
+		execCtx.PendingToolCallIndex = int(idx)
+	}
+	if results, ok := execCtxData["completedToolResults"].([]any); ok {
+		for _, r := range results {
+			if s, ok := r.(string); ok {
+				execCtx.CompletedToolResults = append(execCtx.CompletedToolResults, s)
+			}
+		}
+	}
+	return execCtx
 }
 
 func (r *QueryReconciler) resolveTarget(ctx context.Context, query arkv1alpha1.Query, impersonatedClient client.Client) (*arkv1alpha1.QueryTarget, error) {
