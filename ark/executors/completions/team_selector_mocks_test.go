@@ -6,7 +6,9 @@ import (
 	"github.com/openai/openai-go"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	eventnoop "mckinsey.com/ark/internal/eventing/noop"
 	"mckinsey.com/ark/internal/telemetry"
+	"mckinsey.com/ark/internal/telemetry/noop"
 )
 
 type mockTeamMember struct {
@@ -38,15 +40,23 @@ type mockSelectorAgent struct {
 	returnName              string
 	returnEmpty             bool
 	returnTerminateResponse string
+	returnError             error
 	capturedHistory         []Message
+	tools                   *ToolRegistry
 }
 
 func newMockSelectorAgent() *mockSelectorAgent {
-	return &mockSelectorAgent{returnName: "selected"}
+	return &mockSelectorAgent{
+		returnName: "selected",
+		tools:      NewToolRegistry(nil, noop.NewProvider().ToolRecorder(), eventnoop.NewProvider().ToolRecorder()),
+	}
 }
 
 func (m *mockSelectorAgent) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
 	m.capturedHistory = history
+	if m.returnError != nil {
+		return nil, m.returnError
+	}
 	if m.returnEmpty {
 		return &ExecutionResult{Messages: []Message{}}, nil
 	}
@@ -68,17 +78,39 @@ func (m *mockSelectorAgent) Execute(ctx context.Context, userInput Message, hist
 		toolMsg := ToolMessage(m.returnTerminateResponse, "tool-call-id")
 		return &ExecutionResult{
 			Messages: []Message{assistantMsg, toolMsg},
-		}, &TerminateTeamWithResponse{Response: m.returnTerminateResponse}
+			Signal:   &TerminateSignal{},
+		}, nil
 	}
 	return &ExecutionResult{
 		Messages: []Message{
 			NewAssistantMessage(m.returnName),
 		},
+		Signal: &SelectionMadeSignal{SelectedName: m.returnName},
 	}, nil
 }
 
 func (m *mockSelectorAgent) FullName() string {
 	return "mock-selector"
+}
+
+func (m *mockSelectorAgent) GetToolRegistry() *ToolRegistry {
+	return m.tools
+}
+
+type mockSelectorAgentNoTool struct {
+	tools *ToolRegistry
+}
+
+func (m *mockSelectorAgentNoTool) Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error) {
+	return &ExecutionResult{Messages: []Message{NewAssistantMessage("I pick researcher")}}, nil
+}
+
+func (m *mockSelectorAgentNoTool) FullName() string {
+	return "mock-selector-no-tool"
+}
+
+func (m *mockSelectorAgentNoTool) GetToolRegistry() *ToolRegistry {
+	return m.tools
 }
 
 type mockTelemetrySpan struct {

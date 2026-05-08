@@ -49,7 +49,7 @@ import { AgentFormMode, type AgentFormProps } from './types';
 import { useAgentForm } from './use-agent-form';
 
 const breadcrumbs: BreadcrumbElement[] = [
-  { href: '/', label: 'ARK Dashboard' },
+  { href: '/', label: 'Ark Dashboard' },
   { href: '/agents', label: 'Agents' },
 ];
 

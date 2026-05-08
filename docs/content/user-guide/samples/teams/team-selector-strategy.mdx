@@ -55,7 +55,7 @@ The selector agent will automatically choose which team member should respond ba
 
 1. **Agent Selection**: LLM analyzes conversation history and selects next participant
 2. **Template Processing**: Fills selector prompt with team roles, participants, and history
-3. **Participant Selection**: Agent returns name of selected team member
+3. **Speaker Selection**: Agent uses the `select-next-speaker` tool to pick a team member
 4. **Execution**: Selected member processes messages and adds response
 5. **Loop**: Process repeats until max turns reached or team terminates
 
@@ -68,6 +68,8 @@ The selector prompt supports these template variables:
 - **`{{.History}}`**: Full conversation history
 
 ## Custom Selector Prompts
+
+Custom prompts **must** instruct the agent to use the `select-next-speaker` tool. Without this, the selector agent will not know how to make a structured selection and the team will fail.
 
 You can customize the selection logic by providing your own selector prompt:
 
@@ -82,7 +84,7 @@ spec:
       Conversation: {{.History}}
       Choose from: {{.Participants}}
 
-      Return only the participant name.
+      Use the select-next-speaker tool to choose the next speaker.
 ```
 
 ## Graph-Constrained Selector
@@ -144,6 +146,7 @@ spec:
       Options: {{.Participants}}
 
       Start with researcher, follow with analyst, end with reviewer.
+      Use the select-next-speaker tool to make your selection.
 ```
 
 ### Consulting Team
@@ -163,6 +166,8 @@ spec:
       Available: {{.Roles}}
       Context: {{.History}}
       Select from: {{.Participants}}
+
+      Use the select-next-speaker tool to make your selection.
 ```
 
 ## Agent Descriptions
@@ -186,16 +191,9 @@ spec:
 
 ## Selection Logic
 
-### Exact Match
-Model response must exactly match team member name.
+The selector agent is given a `select-next-speaker` tool whose `name` parameter is an enum of valid candidates. For graph-constrained teams, the enum only includes members reachable from the current node. This ensures the selector can only pick a valid next speaker.
 
-### Fallback Behavior
-If no exact match found:
-- Uses first team member as fallback
-- Logs selection method for debugging
-
-### Duplicate Prevention
-Prevents same member responding consecutively by using first member as fallback.
+If the tool returns a name not in the enum, the team terminates with a warning. If the selector agent does not call the tool at all, the team also terminates with a warning.
 
 ## Default Selector Prompt
 
@@ -204,11 +202,11 @@ When no custom `selectorPrompt` is specified:
 ```
 You are in a role play game. The following roles are available:
 {{.Roles}}.
-Read the following conversation. Then select the next role from {{.Participants}} to play. Only return the role.
+Read the following conversation, then use the select-next-speaker tool to select the next role from {{.Participants}} to play.
 
 {{.History}}
 
-Read the above conversation. Then select the next role from {{.Participants}} to play. Only return the role.
+Read the above conversation, then use the select-next-speaker tool to select the next role from {{.Participants}} to play.
 ```
 
 ## Monitoring
@@ -221,8 +219,7 @@ kubectl get events -o json | jq -r '.items[] | select(.message | contains("resea
 
 Selection events are recorded with:
 - Selected participant name
-- Available participants list  
-- Selection method (exact_match, fallback_no_match)
+- Available participants list
 - Team name and turn number
 
 ## Cleanup

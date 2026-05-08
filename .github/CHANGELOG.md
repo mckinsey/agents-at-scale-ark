@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.62-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.61...v0.1.62-rc) (2026-05-08)
+
+
+### Bug Fixes
+
+* Preserve namespace when viewing sessions ([#2082](https://github.com/mckinsey/agents-at-scale-ark/issues/2082)) ([82fa31c](https://github.com/mckinsey/agents-at-scale-ark/commit/82fa31cfc445022fbb7fc7982459a38ed148b199))
+* propagate ApiException from SDK instead of wrapping in plain Exception ([#2075](https://github.com/mckinsey/agents-at-scale-ark/issues/2075)) ([0baf47b](https://github.com/mckinsey/agents-at-scale-ark/commit/0baf47b6f28c81f07f9023ae2372360775c5c201))
+
 ## [0.1.61](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.61...v0.1.61) (2026-05-07)
 
 

@@ -133,7 +133,7 @@ describe('AppSidebar - A2A Tasks Menu Item', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('ARK Dashboard')).toBeInTheDocument();
+      expect(screen.getByText('Ark Dashboard')).toBeInTheDocument();
     });
   });
 });
