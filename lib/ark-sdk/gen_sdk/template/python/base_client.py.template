@@ -12,7 +12,6 @@ import logging
 import asyncio
 from typing import List, Optional, Dict, Any, TypeVar, Generic, Type
 from kubernetes import client, config
-from kubernetes.client.rest import ApiException
 from ark_sdk.k8s import get_context
 import yaml
 import json
@@ -77,65 +76,54 @@ class ARKResourceClient(Generic[T]):
     def create(self, resource: T, namespace: Optional[str] = None) -> T:
         """Create a new resource"""
         ns = namespace or self.namespace
-        
+
         # Convert the typed model to dict
         body = self._model_to_dict(resource)
-        
+
         # Ensure required fields are set
         body['apiVersion'] = self.api_version
         body['kind'] = self.kind
-        
-        try:
-            result = self.custom_api.create_namespaced_custom_object(
-                group=self.group,
-                version=self.version,
-                namespace=ns,
-                plural=self.plural,
-                body=body
-            )
-            return self._dict_to_model(result)
-        except ApiException as e:
-            raise Exception(f"Failed to create {self.kind}: {e}")
+
+        result = self.custom_api.create_namespaced_custom_object(
+            group=self.group,
+            version=self.version,
+            namespace=ns,
+            plural=self.plural,
+            body=body
+        )
+        return self._dict_to_model(result)
     
     def get(self, name: str, namespace: Optional[str] = None) -> T:
         """Get a resource by name"""
         ns = namespace or self.namespace
-        
-        try:
-            result = self.custom_api.get_namespaced_custom_object(
-                group=self.group,
-                version=self.version,
-                namespace=ns,
-                plural=self.plural,
-                name=name
-            )
-            return self._dict_to_model(result)
-        except ApiException as e:
-            if e.status == 404:
-                raise Exception(f"{self.kind} '{name}' not found in namespace '{ns}'")
-            raise Exception(f"Failed to get {self.kind}: {e}")
+
+        result = self.custom_api.get_namespaced_custom_object(
+            group=self.group,
+            version=self.version,
+            namespace=ns,
+            plural=self.plural,
+            name=name
+        )
+        return self._dict_to_model(result)
     
     def list(self, namespace: Optional[str] = None, label_selector: Optional[str] = None) -> List[T]:
         """List all resources"""
         ns = namespace or self.namespace
-        
-        try:
-            kwargs = {}
-            if label_selector:
-                kwargs['label_selector'] = label_selector
-            
-            result = self.custom_api.list_namespaced_custom_object(
-                group=self.group,
-                version=self.version,
-                namespace=ns,
-                plural=self.plural,
-                **kwargs
-            )
-            
-            items = result.get('items', [])
-            return [self._dict_to_model(item) for item in items]
-        except ApiException as e:
-            raise Exception(f"Failed to list {self.kind}s: {e}")
+
+        kwargs = {}
+        if label_selector:
+            kwargs['label_selector'] = label_selector
+
+        result = self.custom_api.list_namespaced_custom_object(
+            group=self.group,
+            version=self.version,
+            namespace=ns,
+            plural=self.plural,
+            **kwargs
+        )
+
+        items = result.get('items', [])
+        return [self._dict_to_model(item) for item in items]
     
     def update(self, resource: T, namespace: Optional[str] = None) -> T:
         """Update an existing resource"""
@@ -153,52 +141,41 @@ class ARKResourceClient(Generic[T]):
         if not name:
             raise ValueError("Resource must have metadata.name for update")
         
-        try:
-            result = self.custom_api.replace_namespaced_custom_object(
-                group=self.group,
-                version=self.version,
-                namespace=ns,
-                plural=self.plural,
-                name=name,
-                body=body
-            )
-            return self._dict_to_model(result)
-        except ApiException as e:
-            raise Exception(f"Failed to update {self.kind}: {e}")
+        result = self.custom_api.replace_namespaced_custom_object(
+            group=self.group,
+            version=self.version,
+            namespace=ns,
+            plural=self.plural,
+            name=name,
+            body=body
+        )
+        return self._dict_to_model(result)
     
     def patch(self, name: str, patch_data: Dict[str, Any], namespace: Optional[str] = None) -> T:
         """Patch a resource"""
         ns = namespace or self.namespace
-        
-        try:
-            result = self.custom_api.patch_namespaced_custom_object(
-                group=self.group,
-                version=self.version,
-                namespace=ns,
-                plural=self.plural,
-                name=name,
-                body=patch_data
-            )
-            return self._dict_to_model(result)
-        except ApiException as e:
-            raise Exception(f"Failed to patch {self.kind}: {e}")
+
+        result = self.custom_api.patch_namespaced_custom_object(
+            group=self.group,
+            version=self.version,
+            namespace=ns,
+            plural=self.plural,
+            name=name,
+            body=patch_data
+        )
+        return self._dict_to_model(result)
     
     def delete(self, name: str, namespace: Optional[str] = None) -> None:
         """Delete a resource"""
         ns = namespace or self.namespace
-        
-        try:
-            self.custom_api.delete_namespaced_custom_object(
-                group=self.group,
-                version=self.version,
-                namespace=ns,
-                plural=self.plural,
-                name=name
-            )
-        except ApiException as e:
-            if e.status == 404:
-                raise Exception(f"{self.kind} '{name}' not found in namespace '{ns}'")
-            raise Exception(f"Failed to delete {self.kind}: {e}")
+
+        self.custom_api.delete_namespaced_custom_object(
+            group=self.group,
+            version=self.version,
+            namespace=ns,
+            plural=self.plural,
+            name=name
+        )
     
     def _model_to_dict(self, model: T) -> Dict[str, Any]:
         """Convert a typed model to a dictionary"""
