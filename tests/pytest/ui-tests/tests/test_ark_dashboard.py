@@ -1,6 +1,10 @@
+import logging
 import pytest
 from playwright.sync_api import Page
 from pages.dashboard_page import DashboardPage
+
+
+logger = logging.getLogger(__name__)
 
 
 @pytest.mark.dashboard
@@ -42,7 +46,7 @@ class TestArkDashboard:
         add_button = getattr(dashboard, button_selector)
         assert dashboard.is_visible(add_button, timeout=10000), f"Add {tab_name} button should be visible"
         
-        print(f"{tab_name} page loaded successfully")
+        logger.info(f"{tab_name} page loaded successfully")
     
     def test_dashboard_responsive(self, page: Page):
         dashboard = DashboardPage(page)

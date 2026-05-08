@@ -375,18 +375,37 @@ class AgentsPage(BasePage):
         except Exception as e:
             logger.error(f"Error selecting tool {tool_name}: {str(e)}")
     
+    def wait_for_model_in_api(self, model_name: str, timeout: int = 30) -> bool:
+        import time
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                response = self.page.request.get("http://localhost:3274/api/v1/models?namespace=default")
+                if response.ok:
+                    data = response.json()
+                    names = [m["name"] for m in data.get("items", [])]
+                    if model_name in names:
+                        return True
+            except Exception:
+                pass
+            self.page.wait_for_timeout(1000)
+        return False
+
     def create_agent_for_test(self, prefix: str, model_name: str, test_data_key: str = "default", tools: list = None):
-        
+
         agent_data = self.TEST_DATA[test_data_key]
-        
+
         self.navigate_to_agents_tab()
-        
+
         if not self.is_visible(self.ADD_AGENT_BUTTON):
             pytest.skip("Add Agent button not available")
-        
+
         agent_name = self.generate_agent_name(prefix)
         logger.info(f"Generated agent name: {agent_name}")
-        
+
+        if not self.wait_for_model_in_api(model_name):
+            logger.warning(f"Model {model_name} not visible in API after timeout, proceeding anyway")
+
         result = self.create_agent_with_verification(
             agent_name=agent_name,
             description=agent_data["description"],

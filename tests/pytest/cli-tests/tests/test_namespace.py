@@ -93,23 +93,14 @@ class TestNamespaceIsolation:
         assert custom_ns == TEST_NAMESPACE
         assert default_ns == "default"
 
-
-@pytest.mark.cli
-@pytest.mark.namespace
-class TestNamespaceApiErrors:
-    
-
-    @pytest.fixture(scope="class", autouse=True)
-    def api_available(self):
+    def test_get_agent_without_namespace_returns_404_not_500(self, helper):
         assert ensure_port_forward(), (
             "ark-api is not reachable on localhost:8080. "
             "Run: kubectl port-forward svc/ark-api 8080:80 -n default"
         )
-
-    @pytest.mark.skip(reason="Namespace returning incorrect code")
-    def test_get_agent_without_namespace_returns_404_not_500(self, helper):
         name = f"{PREFIX}404-check"
-        helper.custom.create_agent(name, prompt="Issue 1399 test agent.")
+        success, message = helper.custom.create_agent(name, prompt="Issue 1399 test agent.")
+        assert success, f"Failed to create agent: {message}"
         assert helper.custom.verify_agent_exists(name), "Agent must exist in custom namespace"
 
         status, body = get_resource_status("agents", name)
