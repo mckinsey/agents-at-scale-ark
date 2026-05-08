@@ -160,13 +160,16 @@ pipelines:
   dev: |-
 
     if [ "${ENABLE_CERT_MANAGER}" == "true" ]; then
+      echo "Deploying cert-manager..."
       create_deployments cert-manager
+      echo "cert-manager ready."
     fi
 
     if [ "${ENABLE_GATEWAY_API_CRDS}" == "true" ]; then
       create_deployments gateway-api
     fi
 
+    echo "Starting ark-controller..."
     run_dependency_pipelines ark-controller --pipeline=dev
 
     if [ "${ENABLE_ARK_TENANT}" == "true" ]; then
@@ -183,3 +186,15 @@ pipelines:
       run_dependency_pipelines argo-workflows --pipeline=dev
     fi
     run_dependency_pipelines --all --exclude ark-controller --exclude argo-workflows --pipeline=dev
+
+    if [ "${ENABLE_ARK_TENANT}" == "true" ]; then
+      echo "Waiting for Ark API to be available..."
+      if [ "${STORAGE_BACKEND}" == "etcd" ]; then
+        kubectl wait --for=condition=Established crd/tools.ark.mckinsey.com --timeout=60s
+      else
+        kubectl wait --for=condition=Available apiservice/v1alpha1.ark.mckinsey.com --timeout=300s
+      fi
+      create_deployments ark-tenant
+    fi
+
+    echo "Ark devspace successfully deployed in dev mode"
