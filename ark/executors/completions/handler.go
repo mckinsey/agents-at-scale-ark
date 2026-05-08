@@ -726,6 +726,12 @@ func (h *Handler) ResumeFromInteraction(ctx context.Context, ti *arkv1alpha1.Too
 		return nil, fmt.Errorf("failed to get query: %w", err)
 	}
 
+	if query.Spec.Timeout != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, query.Spec.Timeout.Duration)
+		defer cancel()
+	}
+
 	var agentCRD arkv1alpha1.Agent
 	if err := h.k8sClient.Get(ctx, types.NamespacedName{
 		Name:      execCtx.AgentName,

@@ -55,6 +55,10 @@ export type ApprovalInfo = {
     name: string;
     namespace: string;
   };
+  queryRef?: {
+    name: string;
+    namespace: string;
+  };
   toolCalls: Array<{
     id: string;
     name: string;

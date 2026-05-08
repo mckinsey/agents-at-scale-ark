@@ -17,7 +17,7 @@ import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { hashPromptSync } from '@/lib/analytics/utils';
 import type { ChatType } from '@/lib/chat-events';
-import { chatService, toolApprovalsService } from '@/lib/services';
+import { chatService, queriesService, toolApprovalsService } from '@/lib/services';
 import type {
   ArkExtendedChunk,
   ExtendedChatMessage,
@@ -501,6 +501,7 @@ export function useChatSession({
                   name: pendingApproval!.name,
                   namespace: pendingApproval!.namespace,
                 },
+                queryRef: approvalDetail.queryRef,
                 toolCalls: toolCalls.map(tc => ({
                   id: tc.id || '',
                   name: tc.name || '',
@@ -693,6 +694,7 @@ export function useChatSession({
                       name: result.interactionRef!.name,
                       namespace: result.interactionRef!.namespace,
                     },
+                    queryRef: approvalDetail.queryRef,
                     toolCalls: toolCalls.map(tc => ({
                       id: tc.id || '',
                       name: tc.name || '',
@@ -940,10 +942,13 @@ export function useChatSession({
 
   const onApprovalDecision = useCallback(
     (approved: boolean) => {
+      let queryRef: { name: string; namespace: string } | undefined;
+
       updateChatMessages(prev => {
         const updated = [...prev];
         for (let i = updated.length - 1; i >= 0; i--) {
           if (updated[i].approval?.status === 'pending') {
+            queryRef = updated[i].approval?.queryRef;
             updated[i] = {
               ...updated[i],
               approval: {
@@ -964,8 +969,56 @@ export function useChatSession({
           } as ExtendedChatMessage,
         ];
       });
+
+      if (approved && queryRef) {
+        setIsProcessing(true);
+        setProcessingPhase('running');
+
+        queriesService
+          .streamQueryStatus(queryRef.name, (status, query) => {
+            setProcessingPhase(status);
+
+            if (status === 'done' || status === 'error' || status === 'canceled') {
+              setIsProcessing(false);
+              setProcessingPhase(undefined);
+
+              const response = (query?.status as { response?: { content?: string } })?.response;
+              if (response?.content) {
+                updateChatMessages(prev => {
+                  const updated = [...prev];
+                  const lastIndex = updated.length - 1;
+                  if (updated[lastIndex]?.content === 'Tool execution approved. Processing...') {
+                    updated[lastIndex] = {
+                      ...updated[lastIndex],
+                      content: response.content,
+                    } as ExtendedChatMessage;
+                  }
+                  return updated;
+                });
+              } else if (status === 'error') {
+                const errorMsg = (query?.status as { error?: string })?.error || 'Query execution failed';
+                updateChatMessages(prev => {
+                  const updated = [...prev];
+                  const lastIndex = updated.length - 1;
+                  if (updated[lastIndex]?.content === 'Tool execution approved. Processing...') {
+                    updated[lastIndex] = {
+                      ...updated[lastIndex],
+                      content: `Error: ${errorMsg}`,
+                    } as ExtendedChatMessage;
+                  }
+                  return updated;
+                });
+              }
+            }
+          })
+          .catch(err => {
+            console.error('Failed to poll query status after approval:', err);
+            setIsProcessing(false);
+            setProcessingPhase(undefined);
+          });
+      }
     },
-    [updateChatMessages],
+    [updateChatMessages, setIsProcessing, setProcessingPhase],
   );
 
   return {

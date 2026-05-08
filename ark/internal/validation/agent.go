@@ -39,15 +39,48 @@ func validateAgentTool(index int, tool arkv1alpha1.AgentTool) error {
 		if !isValidBuiltInTool(tool.Name) {
 			return fmt.Errorf("tool[%d]: unsupported built-in tool '%s': supported built-in tools are: noop, terminate", index, tool.Name)
 		}
-		return nil
 	case toolTypeCustom, "mcp", "http", "agent", "team", "builtin":
 		if !hasName {
 			return fmt.Errorf("tool[%d]: %s tools must specify a name", index, tool.Type)
 		}
-		return nil
 	default:
 		return fmt.Errorf("tool[%d]: unsupported tool type '%s': supported types are: built-in, mcp, http, agent, team, builtin", index, tool.Type)
 	}
+
+	if tool.Interaction != nil {
+		if err := validateToolInteractionConfig(index, tool.Interaction); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func validateToolInteractionConfig(index int, config *arkv1alpha1.ToolInteractionConfig) error {
+	switch config.Type {
+	case "approval":
+		if config.Input != nil || config.Selection != nil || config.Confirmation != nil {
+			return fmt.Errorf("tool[%d]: interaction type is 'approval' but has non-approval config (input/selection/confirmation)", index)
+		}
+	case "input":
+		if config.Approval != nil || config.Selection != nil || config.Confirmation != nil {
+			return fmt.Errorf("tool[%d]: interaction type is 'input' but has non-input config (approval/selection/confirmation)", index)
+		}
+	case "selection":
+		if config.Approval != nil || config.Input != nil || config.Confirmation != nil {
+			return fmt.Errorf("tool[%d]: interaction type is 'selection' but has non-selection config (approval/input/confirmation)", index)
+		}
+		if config.Selection == nil || len(config.Selection.Options) == 0 {
+			return fmt.Errorf("tool[%d]: interaction type is 'selection' but no options provided", index)
+		}
+	case "confirmation":
+		if config.Approval != nil || config.Input != nil || config.Selection != nil {
+			return fmt.Errorf("tool[%d]: interaction type is 'confirmation' but has non-confirmation config (approval/input/selection)", index)
+		}
+	default:
+		return fmt.Errorf("tool[%d]: invalid interaction type '%s': must be approval, input, selection, or confirmation", index, config.Type)
+	}
+	return nil
 }
 
 func isValidBuiltInTool(name string) bool {

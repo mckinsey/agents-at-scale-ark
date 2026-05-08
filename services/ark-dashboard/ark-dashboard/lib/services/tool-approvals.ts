@@ -16,8 +16,8 @@ export type QueryReference = {
 
 export type ApprovalDecision = {
   action: 'approved' | 'rejected';
-  decidedBy: string;
-  decidedAt: string;
+  respondedBy: string;
+  respondedAt: string;
   reason?: string;
 };
 

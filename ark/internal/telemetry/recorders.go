@@ -181,6 +181,16 @@ const (
 	AttrToolOutput      = "tool.output"
 	AttrToolDescription = "tool.description"
 
+	// Interaction attributes (HITL)
+	AttrInteractionName       = "interaction.name"
+	AttrInteractionNamespace  = "interaction.namespace"
+	AttrInteractionType       = "interaction.type"
+	AttrInteractionQuery      = "interaction.query"
+	AttrInteractionRespondedBy = "interaction.responded_by"
+	AttrInteractionOnTimeout  = "interaction.on_timeout"
+	AttrInteractionPhase      = "interaction.phase"
+	AttrInteractionDuration   = "interaction.duration_ms"
+
 	// Message attributes
 	AttrMessagesInputCount = "messages.input_count"
 	AttrMessagesInput      = "messages.input"

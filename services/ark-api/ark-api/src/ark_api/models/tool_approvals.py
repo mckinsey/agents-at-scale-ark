@@ -47,8 +47,8 @@ class ClientContext(BaseModel):
 
 class ApprovalDecision(BaseModel):
     action: str
-    decidedBy: str
-    decidedAt: str
+    respondedBy: str
+    respondedAt: str
     reason: Optional[str] = None
     clientContext: Optional[ClientContext] = None
 

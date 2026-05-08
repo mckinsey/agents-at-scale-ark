@@ -414,6 +414,13 @@ func (r *QueryReconciler) resumeFromInteractionAsync(opCtx context.Context, obj 
 		return
 	}
 
+	savedInteractionRef := obj.Status.InteractionRef
+	obj.Status.InteractionRef = nil
+	if err := r.Status().Update(opCtx, &obj); err != nil {
+		log.Error(err, "Failed to clear InteractionRef before resumption")
+		obj.Status.InteractionRef = savedInteractionRef
+	}
+
 	response, err := r.sendResumptionA2A(opCtx, &obj, &ti)
 	if err != nil {
 		log.Error(err, "Failed to resume from interaction")
@@ -424,7 +431,6 @@ func (r *QueryReconciler) resumeFromInteractionAsync(opCtx context.Context, obj 
 	}
 
 	obj.Status.Response = response
-	obj.Status.InteractionRef = nil
 
 	queryStatus := r.determineQueryStatus(response)
 	duration := &metav1.Duration{Duration: time.Since(startTime)}
@@ -830,7 +836,19 @@ func (r *QueryReconciler) createToolInteraction(ctx context.Context, query *arkv
 		interactionType = arkv1alpha1.InteractionTypeApproval
 	}
 
-	tiName := fmt.Sprintf("ti-%s", query.Name)
+	if query.Status.InteractionRef != nil {
+		existingTI := &arkv1alpha1.ToolInteraction{}
+		err := r.Get(ctx, types.NamespacedName{
+			Name:      query.Status.InteractionRef.Name,
+			Namespace: query.Namespace,
+		}, existingTI)
+		if err == nil && existingTI.Status.Phase == "pending" {
+			log.Info("Reusing existing pending ToolInteraction", "ti", existingTI.Name, "query", query.Name)
+			return existingTI, nil
+		}
+	}
+
+	tiName := fmt.Sprintf("ti-%s-%d", query.Name, time.Now().UnixMilli())
 	ti := &arkv1alpha1.ToolInteraction{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      tiName,
@@ -852,12 +870,6 @@ func (r *QueryReconciler) createToolInteraction(ctx context.Context, query *arkv
 	}
 
 	if err := r.Create(ctx, ti); err != nil {
-		if errors.IsAlreadyExists(err) {
-			if err := r.Get(ctx, types.NamespacedName{Name: tiName, Namespace: query.Namespace}, ti); err != nil {
-				return nil, fmt.Errorf("failed to get existing ToolInteraction: %w", err)
-			}
-			return ti, nil
-		}
 		return nil, fmt.Errorf("failed to create ToolInteraction: %w", err)
 	}
 
