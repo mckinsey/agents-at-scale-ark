@@ -457,7 +457,7 @@ class TestSessionsAndConversations:
             "New conversation dialog should open"
 
         sessions.select_participant_in_dialog(agent_name, participant_tab="Agents")
-        sessions.page.locator("[role='dialog'] button:has-text('Create'), [role='dialog'] button:has-text('Start')").first.click()
+        sessions.confirm_new_conversation()
         sessions.page.wait_for_timeout(1000)
         sessions.wait_for_navigation_complete()
 

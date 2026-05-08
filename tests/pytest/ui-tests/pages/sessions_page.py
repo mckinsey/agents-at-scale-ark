@@ -383,6 +383,33 @@ class SessionsPage(BasePage):
         btn.click()
         self.wait_for_modal_open()
 
+    def confirm_new_conversation(self) -> None:
+        if not self.is_visible(self.NEW_CONVERSATION_DIALOG, timeout=2000):
+            logger.info("New conversation dialog already closed after participant selection")
+            return
+
+        for selector in [
+            "[role='dialog'] button:has-text('Create')",
+            "[role='dialog'] button:has-text('Start')",
+            "[role='dialog'] button:has-text('Start conversation')",
+            "[role='dialog'] button:has-text('Confirm')",
+            "[role='dialog'] button[type='submit']",
+        ]:
+            try:
+                btn = self.page.locator(selector).last
+                if btn.is_visible(timeout=2000):
+                    btn.click(force=True)
+                    logger.info("Clicked new conversation confirm button: %s", selector)
+                    return
+            except Exception:
+                continue
+
+        logger.warning("Named confirm button not found; clicking last button in dialog")
+        try:
+            self.page.locator("[role='dialog'] button").last.click(force=True)
+        except Exception as e:
+            logger.warning("Could not click any button in new conversation dialog: %s", e)
+
     def set_date_filter(self, value: str) -> None:
         try:
             trigger = self.page.locator(
