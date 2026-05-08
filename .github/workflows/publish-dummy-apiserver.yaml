@@ -1,0 +1,29 @@
+name: Publish Dummy Apiserver Chart
+on: workflow_dispatch
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - name: Create empty chart
+        run: |
+          mkdir -p ark-apiserver-dummy/templates
+          cat > ark-apiserver-dummy/Chart.yaml <<'CHART'
+          apiVersion: v2
+          name: ark-apiserver
+          description: Temporary empty chart
+          type: application
+          version: 0.1.62
+          appVersion: "0.1.62"
+          CHART
+          echo '{}' > ark-apiserver-dummy/values.yaml
+          touch ark-apiserver-dummy/templates/.gitkeep
+
+      - name: Package and push
+        run: |
+          helm package ark-apiserver-dummy
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+          helm push ark-apiserver-0.1.62.tgz oci://ghcr.io/mckinsey/agents-at-scale-ark/charts
