@@ -41,7 +41,7 @@ export default function FloatingChat({
   const [windowState, setWindowState] = useState<WindowState>('default');
   const [viewMode, setViewMode] = useState<'text' | 'markdown'>('markdown');
 
-  const rightPosition = 16 + position * 420;
+  const rightPosition = 16 + position * 620;
 
   // Handle window state styling
   const getCardStyles = () => {
@@ -49,10 +49,10 @@ export default function FloatingChat({
       case 'maximized':
         return 'fixed inset-4 shadow-2xl dark:shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 transition-all duration-300';
       case 'minimized':
-        return 'fixed bottom-4 shadow-2xl dark:shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 w-[400px] h-auto min-h-0 transition-all duration-300';
+        return 'fixed bottom-4 shadow-2xl dark:shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 w-[600px] h-auto min-h-0 transition-all duration-300';
       case 'default':
       default:
-        return 'fixed bottom-4 shadow-2xl dark:shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 w-[400px] h-[500px] transition-all duration-300';
+        return 'fixed bottom-4 shadow-2xl dark:shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 w-[600px] h-[600px] transition-all duration-300';
     }
   };
 
