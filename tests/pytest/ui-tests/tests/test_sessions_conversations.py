@@ -1,11 +1,10 @@
 import logging
 import pytest
 from playwright.sync_api import Page
-from pages.secrets_page import SecretsPage
-from pages.models_page import ModelsPage
 from pages.agents_page import AgentsPage
 from pages.teams_page import TeamsPage
 from pages.sessions_page import SessionsPage
+from conftest import MOCK_LLM_MODEL_NAME
 
 
 logger = logging.getLogger(__name__)
@@ -14,8 +13,6 @@ logger = logging.getLogger(__name__)
 @pytest.fixture(scope="class")
 def sessions_test_resources():
     return {
-        "secrets": {},
-        "models": {},
         "agents": {},
         "teams": {},
         "sessions": {},
@@ -26,48 +23,26 @@ def sessions_test_resources():
 @pytest.mark.xdist_group("ark_sessions")
 class TestSessionsAndConversations:
 
-    def _create_base_resources(self, page: Page, resources: dict, prefix: str) -> dict:
-        secrets = SecretsPage(page)
-        models = ModelsPage(page)
-
-        model_data = models.TEST_DATA["openai"]
-
-        secret_result = secrets.create_secret_for_test("secret", model_data["env_key"])
-        assert secret_result["popup_visible"], "Secret creation popup should be visible"
-        assert secret_result["in_table"], "Secret should be visible in table"
-        resources["secrets"][prefix] = secret_result["name"]
-
-        model_result = models.create_model_for_test("model", secret_result["name"], secrets)
-        assert model_result["popup_visible"], "Model creation popup should be visible"
-        assert model_result["in_table"], "Model should be visible in table"
-        assert model_result["is_available"], "Model should show Available status"
-        resources["models"][prefix] = model_result["name"]
-
-        return {"secret": secret_result, "model": model_result}
-
     # -------------------------------------------------------------------------
     # Resource setup
     # -------------------------------------------------------------------------
 
     def test_setup_agent_resources(self, page: Page, sessions_test_resources: dict):
-        base = self._create_base_resources(page, sessions_test_resources, "agent")
-
         agents = AgentsPage(page)
-        agent_result = agents.create_agent_for_test("session-agent", base["model"]["name"])
+        agent_result = agents.create_agent_for_test("session-agent", MOCK_LLM_MODEL_NAME)
         assert agent_result["popup_visible"], "Agent creation popup should be visible"
         assert agent_result["in_table"], "Agent should be visible in table"
         sessions_test_resources["agents"]["primary"] = agent_result["name"]
         logger.info("Created primary agent: %s", agent_result["name"])
 
     def test_setup_multi_agent_team_resources(self, page: Page, sessions_test_resources: dict):
-        if not sessions_test_resources["models"].get("agent"):
-            pytest.skip("Base model not created, skipping team setup")
+        if not sessions_test_resources["agents"].get("primary"):
+            pytest.skip("Primary agent not created, skipping team setup")
 
-        model_name = sessions_test_resources["models"]["agent"]
         agents = AgentsPage(page)
         teams = TeamsPage(page)
 
-        agent2_result = agents.create_agent_for_test("session-agent2", model_name)
+        agent2_result = agents.create_agent_for_test("session-agent2", MOCK_LLM_MODEL_NAME)
         assert agent2_result["popup_visible"], "Second agent creation popup should be visible"
         assert agent2_result["in_table"], "Second agent should be visible in table"
         sessions_test_resources["agents"]["secondary"] = agent2_result["name"]
@@ -517,19 +492,3 @@ class TestSessionsAndConversations:
                 result = agents.delete_agent_with_verification(agent_name)
                 if result["delete_available"]:
                     logger.info("Deleted agent: %s", agent_name)
-
-        models = ModelsPage(page)
-        models.navigate_to_models_tab()
-        model_name = sessions_test_resources["models"].get("agent")
-        if model_name:
-            result = models.delete_model_with_verification(model_name)
-            if result["delete_available"]:
-                logger.info("Deleted model: %s", model_name)
-
-        secrets = SecretsPage(page)
-        secrets.navigate_to_secrets_tab()
-        secret_name = sessions_test_resources["secrets"].get("agent")
-        if secret_name:
-            result = secrets.delete_secret_with_verification(secret_name)
-            if result["delete_available"]:
-                logger.info("Deleted secret: %s", secret_name)
