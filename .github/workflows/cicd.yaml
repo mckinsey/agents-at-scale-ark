@@ -938,6 +938,7 @@ jobs:
         chart:
           # Package only the essential charts.
           - { name: ark-controller, path: ark/dist/chart }
+          - { name: ark-apiserver, path: ark/dist/chart-apiserver }
           - { name: ark-completions, path: ark/executors/completions/chart }
           - { name: ark-api, path: services/ark-api/chart }
           - { name: ark-dashboard, path: services/ark-dashboard/chart }
@@ -1207,6 +1208,7 @@ jobs:
       matrix:
         chart:
           - ark-controller
+          - ark-apiserver
           - ark-completions
           - ark-api
           - ark-dashboard

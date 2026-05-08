@@ -154,7 +154,7 @@ export function ManageMarketplaceSettings() {
                         </div>
                         <Input
                           value={source.displayName || ''}
-                          placeholder="e.g., ARK marketplace"
+                          placeholder="e.g., Ark marketplace"
                           readOnly
                           className="text-sm bg-muted/50"
                         />
@@ -222,7 +222,7 @@ export function ManageMarketplaceSettings() {
                 onChange={e =>
                   setNewSource({ ...newSource, displayName: e.target.value })
                 }
-                placeholder="e.g., ARK marketplace"
+                placeholder="e.g., Ark marketplace"
                 className="mt-1.5 text-sm"
               />
             </div>

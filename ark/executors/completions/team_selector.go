@@ -17,11 +17,11 @@ import (
 
 const defaultSelectorPrompt = `You are in a role play game. The following roles are available:
 {{.Roles}}.
-Read the following conversation. Then select the next role from {{.Participants}} to play. Only return the role.
+Read the following conversation, then use the select-next-speaker tool to select the next role from {{.Participants}} to play.
 
 {{.History}}
 
-Read the above conversation. Then select the next role from {{.Participants}} to play. Only return the role.`
+Read the above conversation, then use the select-next-speaker tool to select the next role from {{.Participants}} to play.`
 
 const defaultTerminatePrompt = `If the most recent user message has been given an adequate response, do not return a role. Instead call the terminate tool.`
 
@@ -95,11 +95,10 @@ func (t *Team) loadSelectorAgent(ctx context.Context) (SelectorAgentInterface, e
 		return nil, fmt.Errorf("failed to create selector agent: %w", err)
 	}
 
+	agent.Tools.ClearTools()
+
 	if t.Selector.EnableTerminateTool != nil && *t.Selector.EnableTerminateTool {
-		terminateTool := arkv1alpha1.AgentTool{Type: "builtin", Name: BuiltinToolTerminate}
-		if err := agent.Tools.registerTool(ctx, t.Client, terminateTool, t.Namespace, t.telemetry, t.eventing); err != nil {
-			return nil, fmt.Errorf("failed to register selector tool %s: %w", terminateTool.Name, err)
-		}
+		agent.Tools.RegisterTool(GetTerminateTool(), &TerminateExecutor{})
 	}
 
 	t.selectorAgent = agent
@@ -122,6 +121,8 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 	}
 
 	selectorMessage := buf.String()
+	selectorMessage += "\n\nUse the select-next-speaker tool to express your next speaker selection."
+
 	if t.Selector != nil && t.Selector.EnableTerminateTool != nil && *t.Selector.EnableTerminateTool {
 		terminatePrompt := defaultTerminatePrompt
 		if t.Selector.TerminatePrompt != "" {
@@ -135,51 +136,59 @@ func (t *Team) selectMember(ctx context.Context, messages []Message, tmpl *templ
 		return nil, err
 	}
 
-	result, err := selectorAgent.Execute(ctx, NewUserMessage("Select the next participant to respond."), []Message{NewSystemMessage(selectorMessage)}, nil, nil)
-	if err != nil {
-		if IsTerminateTeam(err) {
-			if response := extractTerminateToolResponse(result); response != "" {
-				return nil, &TerminateTeamWithResponse{Response: response, Messages: result.Messages}
-			}
-			return nil, err
-		}
-		return nil, fmt.Errorf("selector agent call failed: %w", err)
-	}
-
-	if len(result.Messages) == 0 {
-		return nil, fmt.Errorf("selector agent returned no messages")
-	}
-
-	var selectedName string
-	lastMsg := result.Messages[len(result.Messages)-1]
-	if lastMsg.OfAssistant != nil && lastMsg.OfAssistant.Content.OfString.Value != "" {
-		selectedName = strings.TrimSpace(lastMsg.OfAssistant.Content.OfString.Value)
-		logger := logf.FromContext(ctx)
-		logger.Info("Selector chose", "selectedName", selectedName)
-	} else {
-		return nil, fmt.Errorf("selector agent returned invalid response")
-	}
-
-	// Use candidateMembers if provided, otherwise use all team members
 	membersToSearch := t.Members
 	if candidateMembers != nil {
 		membersToSearch = candidateMembers
 	}
 
-	// Find selected member
-	for _, member := range membersToSearch {
+	candidateNames := make([]string, len(membersToSearch))
+	for i, m := range membersToSearch {
+		candidateNames[i] = m.GetName()
+	}
+	if len(candidateNames) == 0 {
+		return nil, NewTerminateTeamWithReason("no candidates available for selection")
+	}
+	if err := t.registerSelectNextSpeakerTool(ctx, selectorAgent, candidateNames); err != nil {
+		return nil, err
+	}
+
+	userPrompt := "Select the next speaker to respond using the select-next-speaker tool."
+	if t.Selector != nil && t.Selector.EnableTerminateTool != nil && *t.Selector.EnableTerminateTool {
+		userPrompt = "Select the next speaker to respond using the select-next-speaker tool, or use the terminate tool if you think the user's original question has been answered."
+	}
+
+	result, err := selectorAgent.Execute(ctx, NewUserMessage(userPrompt), []Message{NewSystemMessage(selectorMessage)}, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("selector agent call failed: %w", err)
+	}
+
+	if result.Signal == nil {
+		return nil, &ToolNotCalledError{}
+	}
+
+	if sig, ok := result.Signal.(*SelectionMadeSignal); ok {
+		return t.resolveSelectedMember(ctx, sig.SelectedName, membersToSearch)
+	}
+
+	if _, ok := result.Signal.(*TerminateSignal); ok {
+		if response := extractTerminateToolResponse(result); response != "" {
+			return nil, &TerminateTeamWithResponse{Response: response, Messages: result.Messages}
+		}
+		return nil, NewTerminateTeamWithReason("selector agent terminated")
+	}
+
+	return nil, fmt.Errorf("selector agent returned unexpected signal: %s", result.Signal.SignalType())
+}
+
+func (t *Team) resolveSelectedMember(ctx context.Context, selectedName string, members []TeamMember) (TeamMember, error) {
+	logger := logf.FromContext(ctx)
+	logger.Info("Selector chose", "selectedName", selectedName)
+	for _, member := range members {
 		if member.GetName() == selectedName {
 			return member, nil
 		}
 	}
-
-	if len(membersToSearch) > 0 {
-		// This error will allow us to message to the user that the selector's response doesn't match an agent
-		err := &InvalidAgentError{SelectedName: selectedName}
-		return nil, err
-	}
-
-	return nil, fmt.Errorf("no members available")
+	return nil, &InvalidAgentError{SelectedName: selectedName}
 }
 
 // determineNextMember routes to the appropriate selection logic based on whether graph constraints exist.
@@ -260,6 +269,16 @@ func (t *Team) buildLegalTransitionsMap() map[string][]TeamMember {
 	return legalTransitions
 }
 
+func (t *Team) registerSelectNextSpeakerTool(_ context.Context, selectorAgent SelectorAgentInterface, candidates []string) error {
+	registry := selectorAgent.GetToolRegistry()
+	if registry == nil {
+		return fmt.Errorf("select-next-speaker tool requires a selector agent with a tool registry")
+	}
+	registry.RemoveTool(BuiltinToolSelectNextSpeaker)
+	registry.RegisterTool(GetSelectNextSpeakerTool(candidates), &SelectNextSpeakerExecutor{})
+	return nil
+}
+
 func extractTerminateToolResponse(result *ExecutionResult) string {
 	if result == nil {
 		return ""
@@ -274,13 +293,20 @@ func extractTerminateToolResponse(result *ExecutionResult) string {
 
 func (t *Team) handleMemberSelectionError(ctx context.Context, err error, newMessages *[]Message) (shouldTerminate bool, returnErr error) {
 	var invalidAgentErr *InvalidAgentError
+	var toolNotCalledErr *ToolNotCalledError
 	switch {
 	case errors.As(err, &invalidAgentErr):
 		warningContent := fmt.Sprintf("Selector returned invalid agent name: %s", invalidAgentErr.SelectedName)
 		warningMessage := NewSystemMessage(warningContent)
 		*newMessages = append(*newMessages, warningMessage)
 
-		// Stream the warning message immediately so it appears during execution
+		StreamSystemMessage(ctx, t.eventStream, warningContent)
+		return true, nil
+	case errors.As(err, &toolNotCalledErr):
+		warningContent := "Selector agent did not use the select-next-speaker tool"
+		warningMessage := NewSystemMessage(warningContent)
+		*newMessages = append(*newMessages, warningMessage)
+
 		StreamSystemMessage(ctx, t.eventStream, warningContent)
 		return true, nil
 	case IsTerminateTeam(err):
@@ -330,15 +356,10 @@ func (t *Team) recordTurnOutput(tel turnTelemetry, newMessages []Message) {
 	}
 }
 
-func (t *Team) completeTurnOnError(ctx context.Context, tel turnTelemetry, err error) (shouldTerminate bool, returnErr error) {
+func (t *Team) completeTurnOnError(ctx context.Context, tel turnTelemetry, err error) {
 	t.telemetryRecorder.RecordError(tel.span, err)
 	tel.span.End()
 	t.eventingRecorder.Fail(ctx, "TeamTurn", fmt.Sprintf("Team turn failed: %v", err), err, tel.opData)
-
-	if IsTerminateTeam(err) {
-		return true, nil
-	}
-	return false, err
 }
 
 func (t *Team) completeTurnOnSuccess(ctx context.Context, tel turnTelemetry) {
@@ -383,19 +404,20 @@ func (t *Team) executeSelector(ctx context.Context, userInput Message, history [
 
 		turnCtx, tel := t.startTurnTelemetry(ctx, turn, nextMember.GetName(), nextMember.GetType())
 
-		err = t.executeMemberAndAccumulate(turnCtx, nextMember, userInput, &messages, &newMessages, turn)
+		signal, err := t.executeMemberAndAccumulate(turnCtx, nextMember, userInput, &messages, &newMessages, turn)
 
 		t.recordTurnOutput(tel, newMessages)
 
 		if err != nil {
-			shouldTerminate, returnErr := t.completeTurnOnError(turnCtx, tel, err)
-			if shouldTerminate {
-				return newMessages, nil
-			}
-			return newMessages, returnErr
+			t.completeTurnOnError(turnCtx, tel, err)
+			return newMessages, err
 		}
 
 		t.completeTurnOnSuccess(turnCtx, tel)
+
+		if _, ok := signal.(*TerminateSignal); ok {
+			return newMessages, nil
+		}
 
 		previousMember = nextMember.GetName()
 

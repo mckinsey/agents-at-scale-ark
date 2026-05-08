@@ -111,7 +111,7 @@ func TestExecuteSequentialWithLoops_TerminateTeam(t *testing.T) {
 		&execMockTeamMember{
 			name: "m1",
 			execFunc: func(_ context.Context, _ Message, _ []Message, _ MemoryInterface, _ EventStreamInterface) (*ExecutionResult, error) {
-				return &ExecutionResult{Messages: []Message{NewAssistantMessage("done")}}, &TerminateTeam{}
+				return &ExecutionResult{Messages: []Message{NewAssistantMessage("done")}, Signal: &TerminateSignal{}}, nil
 			},
 		},
 		&execMockTeamMember{

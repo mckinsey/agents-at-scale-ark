@@ -19,6 +19,11 @@ vi.mock('../../lib/cluster.js', () => ({
   getClusterInfo: mockGetClusterInfo,
 }));
 
+const mockDetectStorageBackend = vi.fn().mockResolvedValue('etcd');
+vi.mock('../../lib/readinessChecks.js', () => ({
+  detectStorageBackend: mockDetectStorageBackend,
+}));
+
 const mockGetInstallableServices = vi.fn() as any;
 const mockArkServices = {};
 const mockArkDependencies = {};

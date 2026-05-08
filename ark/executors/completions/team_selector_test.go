@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	eventnoop "mckinsey.com/ark/internal/eventing/noop"
+	"mckinsey.com/ark/internal/telemetry/noop"
 )
 
 func TestBuildLegalTransitions(t *testing.T) {
@@ -427,7 +429,7 @@ func TestSetupSelectorTemplate(t *testing.T) {
 		{
 			name:         "uses default prompt when no selector spec",
 			selectorSpec: nil,
-			wantContains: "role play game",
+			wantContains: "select-next-speaker tool",
 		},
 		{
 			name: "uses custom prompt when provided",
@@ -590,6 +592,14 @@ func TestHandleMemberSelectionError(t *testing.T) {
 			wantMessageContains: "Goodbye!",
 		},
 		{
+			name:                "ToolNotCalledError adds warning and terminates",
+			err:                 &ToolNotCalledError{},
+			wantTerminate:       true,
+			wantReturnErr:       false,
+			wantMessagesAdded:   1,
+			wantMessageContains: "select-next-speaker",
+		},
+		{
 			name:              "regular error returned as-is",
 			err:               errors.New("some error"),
 			wantTerminate:     false,
@@ -631,6 +641,48 @@ func TestInvalidAgentError(t *testing.T) {
 	err := &InvalidAgentError{SelectedName: "invalid-agent"}
 	errMsg := err.Error()
 	assert.Equal(t, errMsg, "Selector returned invalid agent name: invalid-agent", "Wrong error message from InvalidAgent")
+}
+
+func TestSelectMemberToolNotCalled(t *testing.T) {
+	members := []TeamMember{
+		&mockTeamMember{name: "researcher"},
+		&mockTeamMember{name: "analyst"},
+	}
+
+	team := &Team{
+		Members: members,
+	}
+	team.selectorAgent = &mockSelectorAgentNoTool{
+		tools: NewToolRegistry(nil, noop.NewProvider().ToolRecorder(), eventnoop.NewProvider().ToolRecorder()),
+	}
+
+	ctx := context.Background()
+	tmpl, err := template.New("test").Parse("test template")
+	require.NoError(t, err)
+
+	member, err := team.selectMember(ctx, []Message{}, tmpl, "researcher, analyst", "researcher, analyst", nil)
+	require.Error(t, err)
+	assert.Nil(t, member)
+
+	var toolNotCalledErr *ToolNotCalledError
+	assert.True(t, errors.As(err, &toolNotCalledErr))
+}
+
+func TestSelectMemberEmptyCandidates(t *testing.T) {
+	team := &Team{
+		Members: []TeamMember{},
+	}
+	team.selectorAgent = newMockSelectorAgent()
+
+	ctx := context.Background()
+	tmpl, err := template.New("test").Parse("test template")
+	require.NoError(t, err)
+
+	member, err := team.selectMember(ctx, []Message{}, tmpl, "", "", []TeamMember{})
+	require.Error(t, err)
+	assert.Nil(t, member)
+	assert.True(t, IsTerminateTeam(err))
+	assert.Contains(t, err.Error(), "no candidates available for selection")
 }
 
 func TestStartTurnTelemetry(t *testing.T) {
@@ -708,57 +760,27 @@ func TestRecordTurnOutput(t *testing.T) {
 }
 
 func TestCompleteTurnOnError(t *testing.T) {
-	tests := []struct {
-		name          string
-		err           error
-		wantTerminate bool
-		wantReturnErr bool
-	}{
-		{
-			name:          "TerminateTeam error triggers termination",
-			err:           &TerminateTeam{},
-			wantTerminate: true,
-			wantReturnErr: false,
-		},
-		{
-			name:          "regular error returns error",
-			err:           errors.New("execution failed"),
-			wantTerminate: false,
-			wantReturnErr: true,
-		},
+	mockTelemetry := &mockTeamRecorder{}
+	mockEventing := &mockEventingRecorder{}
+	mockSpan := &mockTelemetrySpan{}
+
+	team := &Team{
+		telemetryRecorder: mockTelemetry,
+		eventingRecorder:  mockEventing,
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockTelemetry := &mockTeamRecorder{}
-			mockEventing := &mockEventingRecorder{}
-			mockSpan := &mockTelemetrySpan{}
-
-			team := &Team{
-				telemetryRecorder: mockTelemetry,
-				eventingRecorder:  mockEventing,
-			}
-
-			ctx := context.Background()
-			tel := turnTelemetry{
-				span: mockSpan,
-			}
-
-			shouldTerminate, returnErr := team.completeTurnOnError(ctx, tel, tt.err)
-
-			assert.Equal(t, tt.wantTerminate, shouldTerminate)
-			if tt.wantReturnErr {
-				assert.Error(t, returnErr)
-			} else {
-				assert.NoError(t, returnErr)
-			}
-			assert.True(t, mockTelemetry.recordErrorCalled)
-			assert.True(t, mockSpan.ended)
-			assert.True(t, mockEventing.failCalled)
-			assert.False(t, mockTelemetry.recordSuccessCalled)
-			assert.False(t, mockEventing.completeCalled)
-		})
+	ctx := context.Background()
+	tel := turnTelemetry{
+		span: mockSpan,
 	}
+
+	team.completeTurnOnError(ctx, tel, errors.New("execution failed"))
+
+	assert.True(t, mockTelemetry.recordErrorCalled)
+	assert.True(t, mockSpan.ended)
+	assert.True(t, mockEventing.failCalled)
+	assert.False(t, mockTelemetry.recordSuccessCalled)
+	assert.False(t, mockEventing.completeCalled)
 }
 
 func TestCompleteTurnOnSuccess(t *testing.T) {
@@ -792,7 +814,10 @@ func TestSelectMember_WithInvalidAgent(t *testing.T) {
 		&mockTeamMember{name: "agent2"},
 	}
 
-	mockSelector := &mockSelectorAgent{returnName: "selected"}
+	mockSelector := &mockSelectorAgent{
+		returnName: "selected",
+		tools:      NewToolRegistry(nil, noop.NewProvider().ToolRecorder(), eventnoop.NewProvider().ToolRecorder()),
+	}
 	team := &Team{
 		Members:       members,
 		selectorAgent: mockSelector,
@@ -815,7 +840,10 @@ func TestSelectMember_ReturnsErrorOnNoMessages(t *testing.T) {
 		&mockTeamMember{name: "agent1"},
 	}
 
-	mockSelector := &mockSelectorAgent{returnEmpty: true}
+	mockSelector := &mockSelectorAgent{
+		returnEmpty: true,
+		tools:       NewToolRegistry(nil, noop.NewProvider().ToolRecorder(), eventnoop.NewProvider().ToolRecorder()),
+	}
 	team := &Team{
 		Members:       members,
 		selectorAgent: mockSelector,
@@ -828,7 +856,7 @@ func TestSelectMember_ReturnsErrorOnNoMessages(t *testing.T) {
 	_, err = team.selectMember(ctx, []Message{}, tmpl, "agent1", "roles", nil)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "selector agent returned no messages")
+	assert.Contains(t, err.Error(), "selector agent did not use the select-next-speaker tool")
 }
 
 func TestLoadSelectorAgent_WithMock(t *testing.T) {
@@ -922,7 +950,7 @@ func TestSelectMember_SelectorPrompt(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockSelector := &mockSelectorAgent{returnName: "agent1"}
+			mockSelector := &mockSelectorAgent{returnName: "agent1", tools: NewToolRegistry(nil, noop.NewProvider().ToolRecorder(), eventnoop.NewProvider().ToolRecorder())}
 			team := &Team{
 				Members:       members,
 				Selector:      tt.selector,
@@ -940,6 +968,7 @@ func TestSelectMember_SelectorPrompt(t *testing.T) {
 			prompt := mockSelector.capturedHistory[0].OfSystem.Content.OfString.Value
 
 			assert.Contains(t, prompt, tt.wantPromptContains)
+			assert.Contains(t, prompt, "Use the select-next-speaker tool to express your next speaker selection.")
 
 			if tt.wantPromptSuffix != "" {
 				assert.True(t, strings.HasSuffix(prompt, tt.wantPromptSuffix),
@@ -958,7 +987,10 @@ func TestSelectMember_TerminatePromptFormat(t *testing.T) {
 	enableTerminate := true
 	members := []TeamMember{&mockTeamMember{name: "agent1"}}
 
-	mockSelector := &mockSelectorAgent{returnName: "agent1"}
+	mockSelector := &mockSelectorAgent{
+		returnName: "agent1",
+		tools:      NewToolRegistry(nil, noop.NewProvider().ToolRecorder(), eventnoop.NewProvider().ToolRecorder()),
+	}
 	team := &Team{
 		Members: members,
 		Selector: &arkv1alpha1.TeamSelectorSpec{
@@ -986,7 +1018,10 @@ func TestExecuteSelector_WithInvalidAgentSelection(t *testing.T) {
 	mockMember1 := &mockTeamMember{name: "agent1"}
 	mockMember2 := &mockTeamMember{name: "agent2"}
 
-	mockSelector := &mockSelectorAgent{returnName: "invalid-agent"}
+	mockSelector := &mockSelectorAgent{
+		returnName: "invalid-agent",
+		tools:      NewToolRegistry(nil, noop.NewProvider().ToolRecorder(), eventnoop.NewProvider().ToolRecorder()),
+	}
 	maxTurns := 1
 
 	team := &Team{
@@ -1083,7 +1118,10 @@ func TestExecuteSelector_WithTerminateTool(t *testing.T) {
 	mockMember1 := &mockTeamMember{name: "agent1"}
 	mockMember2 := &mockTeamMember{name: "agent2"}
 
-	mockSelector := &mockSelectorAgent{returnTerminateResponse: "No further responses needed."}
+	mockSelector := &mockSelectorAgent{
+		returnTerminateResponse: "No further responses needed.",
+		tools:                   NewToolRegistry(nil, noop.NewProvider().ToolRecorder(), eventnoop.NewProvider().ToolRecorder()),
+	}
 	stream := &mockEventStream{}
 
 	team := &Team{
@@ -1122,4 +1160,77 @@ func TestExecuteSelector_WithTerminateTool(t *testing.T) {
 	assert.True(t, foundToolCall, "Expected to find terminate tool call in messages")
 
 	require.Len(t, stream.chunks, 1, "Expected terminate response to be streamed")
+}
+
+func TestSelectMember_WithTerminateTeamError(t *testing.T) {
+	members := []TeamMember{
+		&mockTeamMember{name: "agent1"},
+		&mockTeamMember{name: "agent2"},
+	}
+
+	mockSelector := &mockSelectorAgent{
+		returnTerminateResponse: "Done.",
+		tools:                   NewToolRegistry(nil, noop.NewProvider().ToolRecorder(), eventnoop.NewProvider().ToolRecorder()),
+	}
+	team := &Team{
+		Members:       members,
+		selectorAgent: mockSelector,
+	}
+
+	ctx := context.Background()
+	tmpl, err := template.New("test").Parse("test")
+	require.NoError(t, err)
+
+	member, err := team.selectMember(ctx, []Message{}, tmpl, "agent1, agent2", "roles", nil)
+
+	assert.Nil(t, member)
+	require.Error(t, err)
+	var terminateResp *TerminateTeamWithResponse
+	require.True(t, errors.As(err, &terminateResp))
+	assert.Equal(t, "Done.", terminateResp.Response)
+}
+
+func TestSelectMember_WithNilToolRegistry(t *testing.T) {
+	members := []TeamMember{
+		&mockTeamMember{name: "agent1"},
+	}
+
+	mockSelector := &mockSelectorAgent{returnName: "agent1", tools: nil}
+	team := &Team{
+		Members:       members,
+		selectorAgent: mockSelector,
+	}
+
+	ctx := context.Background()
+	tmpl, err := template.New("test").Parse("test")
+	require.NoError(t, err)
+
+	member, err := team.selectMember(ctx, []Message{}, tmpl, "agent1", "roles", nil)
+
+	assert.Nil(t, member)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "select-next-speaker tool requires a selector agent with a tool registry")
+}
+
+func TestRegisterSelectNextSpeakerTool_WithRealAgent(t *testing.T) {
+	telemetryProvider := noop.NewProvider()
+	eventingProvider := eventnoop.NewProvider()
+
+	registry := NewToolRegistry(nil, telemetryProvider.ToolRecorder(), eventingProvider.ToolRecorder())
+	agent := &Agent{
+		Tools: registry,
+	}
+
+	team := &Team{}
+	ctx := context.Background()
+
+	err := team.registerSelectNextSpeakerTool(ctx, agent, []string{"agent-a", "agent-b"})
+	require.NoError(t, err)
+
+	defs := agent.Tools.GetToolDefinitions()
+	require.Len(t, defs, 1)
+	assert.Equal(t, BuiltinToolSelectNextSpeaker, defs[0].Name)
+
+	toolType := agent.Tools.GetToolType(BuiltinToolSelectNextSpeaker)
+	assert.Equal(t, ToolTypeBuiltin, toolType)
 }
