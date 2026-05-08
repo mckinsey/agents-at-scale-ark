@@ -3,7 +3,6 @@ import { dirname } from 'node:path';
 import { EventEmitter } from 'node:events';
 import type { QueryPhase, SessionEventData } from './types.js';
 import { QueryPhases, EventReasons, ERROR_REASON_SUFFIX, CANCELED_REASON_SUFFIX } from './types.js';
-import { QueryPhases, EventReasons, ERROR_REASON_SUFFIX } from './types.js';
 import type { PaginationParams, PaginatedList } from './pagination.js';
 
 export type ParticipantType = 'agent' | 'team' | 'tool';
