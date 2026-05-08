@@ -7,6 +7,15 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname, './'),
   basePath: process.env.ARK_DASHBOARD_BASE_PATH || '',
   assetPrefix: process.env.ARK_DASHBOARD_ASSET_PREFIX || '',
+  async redirects() {
+    return [
+      {
+        source: '/settings',
+        destination: '/settings/a2a-servers',
+        permanent: false,
+      },
+    ];
+  },
   async headers() {
     return [
       {

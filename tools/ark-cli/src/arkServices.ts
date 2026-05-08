@@ -260,15 +260,18 @@ export const arkServices: ServiceCollection =
   applyConfigOverrides(defaultArkServices);
 
 /**
- * Get services that can be installed via Helm charts (only enabled services)
+ * Get services that can be installed via Helm charts (only enabled services).
+ * When a backend is specified, services with a non-matching requiresBackend are excluded.
  */
-export function getInstallableServices(): ServiceCollection {
+export function getInstallableServices(
+  backend: 'etcd' | 'postgresql' = 'etcd'
+): ServiceCollection {
   const installable: ServiceCollection = {};
 
   for (const [key, service] of Object.entries(arkServices)) {
-    if (service.enabled && service.chartPath) {
-      installable[key] = service;
-    }
+    if (!service.enabled || !service.chartPath) continue;
+    if (service.requiresBackend && service.requiresBackend !== backend) continue;
+    installable[key] = service;
   }
 
   return installable;

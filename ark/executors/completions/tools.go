@@ -205,6 +205,16 @@ func (tr *ToolRegistry) RegisterTool(def ToolDefinition, executor ToolExecutor) 
 	tr.executors[def.Name] = executor
 }
 
+func (tr *ToolRegistry) RemoveTool(name string) {
+	delete(tr.tools, name)
+	delete(tr.executors, name)
+}
+
+func (tr *ToolRegistry) ClearTools() {
+	clear(tr.tools)
+	clear(tr.executors)
+}
+
 func (tr *ToolRegistry) GetToolDefinitions() []ToolDefinition {
 	definitions := make([]ToolDefinition, 0, len(tr.tools))
 	for _, def := range tr.tools {
@@ -221,9 +231,11 @@ func (tr *ToolRegistry) GetToolType(toolName string) string {
 
 	switch executor.(type) {
 	case *NoopExecutor:
-		return "builtin"
+		return ToolTypeBuiltin
 	case *TerminateExecutor:
-		return "builtin"
+		return ToolTypeBuiltin
+	case *SelectNextSpeakerExecutor:
+		return ToolTypeBuiltin
 	case *HTTPExecutor:
 		return "custom"
 	case *MCPExecutor:
@@ -260,10 +272,14 @@ func (tr *ToolRegistry) ExecuteTool(ctx context.Context, call ToolCall) (ToolRes
 	result, err := executor.Execute(ctx, call)
 	if err != nil {
 		tr.telemetryRecorder.RecordError(span, err)
-		if IsTerminateTeam(err) {
+		switch {
+		case IsTerminateTeam(err):
 			operationData["terminationMessage"] = "TerminateTeam"
 			tr.eventingRecorder.Complete(ctx, "ToolCall", "Tool execution completed with termination", operationData)
-		} else {
+		case IsSelectionMade(err):
+			operationData["selectionResult"] = "SelectionMade"
+			tr.eventingRecorder.Complete(ctx, "ToolCall", "Tool execution completed with selection", operationData)
+		default:
 			tr.eventingRecorder.Fail(ctx, "ToolCall", fmt.Sprintf("Tool execution failed: %v", err), err, operationData)
 		}
 		return result, err
@@ -367,6 +383,46 @@ func GetTerminateTool() ToolDefinition {
 				},
 			},
 			"required": []string{"response"},
+		},
+	}
+}
+
+type SelectNextSpeakerExecutor struct{}
+
+func (s *SelectNextSpeakerExecutor) Execute(ctx context.Context, call ToolCall) (ToolResult, error) {
+	var arguments map[string]any
+	if err := json.Unmarshal([]byte(call.Function.Arguments), &arguments); err != nil {
+		return ToolResult{ID: call.ID, Name: call.Function.Name}, fmt.Errorf("failed to parse arguments: %w", err)
+	}
+	nameArg, exists := arguments["name"]
+	if !exists {
+		return ToolResult{ID: call.ID, Name: call.Function.Name}, fmt.Errorf("name parameter is required")
+	}
+	nameStr, ok := nameArg.(string)
+	if !ok {
+		return ToolResult{ID: call.ID, Name: call.Function.Name}, fmt.Errorf("name parameter must be a string")
+	}
+	return ToolResult{ID: call.ID, Name: call.Function.Name, Content: nameStr}, &SelectionMade{SelectedName: nameStr}
+}
+
+func GetSelectNextSpeakerTool(candidates []string) ToolDefinition {
+	enumValues := make([]any, len(candidates))
+	for i, c := range candidates {
+		enumValues[i] = c
+	}
+	return ToolDefinition{
+		Name:        BuiltinToolSelectNextSpeaker,
+		Description: "Select the next speaker to respond in the conversation",
+		Parameters: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"name": map[string]any{
+					"type":        "string",
+					"description": "The name of the next speaker to respond",
+					"enum":        enumValues,
+				},
+			},
+			"required": []string{"name"},
 		},
 	}
 }

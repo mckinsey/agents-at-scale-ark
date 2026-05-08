@@ -1,6 +1,13 @@
 import { Database, Key, Lock, Search, Server, Store, Zap } from 'lucide-react';
 
-import type { SettingPage } from '@/atoms/settings-modal';
+export type SettingPage =
+  | 'a2a-servers'
+  | 'memory'
+  | 'manage-marketplace'
+  | 'service-api-keys'
+  | 'secrets'
+  | 'experimental-features'
+  | 'queries';
 
 export const MANAGE_MARKETPLACE_KEY = 'manage-marketplace' as const;
 
