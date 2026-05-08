@@ -11,7 +11,6 @@ import {
   Cog,
   Download,
   File,
-  FileUp,
   HelpCircle,
   Home,
   ListTodo,
@@ -184,8 +183,9 @@ export function AppSidebar() {
   const isAgentBuilderSection = AGENT_BUILDER_SECTIONS.some(
     item => item.key === currentSection,
   );
-  const isMonitoringSection =
-    MONITORING_SECTIONS.some(item => item.key === currentSection);
+  const isMonitoringSection = MONITORING_SECTIONS.some(
+    item => item.key === currentSection,
+  );
 
   const [agentBuilderOpen, setAgentBuilderOpen] = useState(
     isAgentBuilderSection,
@@ -227,7 +227,9 @@ export function AppSidebar() {
     // Preserve query parameters (especially namespace) when navigating
     const currentParams = new URLSearchParams(window.location.search);
     const queryString = currentParams.toString();
-    const targetUrl = queryString ? `/${sectionKey}?${queryString}` : `/${sectionKey}`;
+    const targetUrl = queryString
+      ? `/${sectionKey}?${queryString}`
+      : `/${sectionKey}`;
     navigateTo(targetUrl);
   };
 
@@ -383,15 +385,6 @@ export function AppSidebar() {
                   sideOffset={sidebarState === 'expanded' ? -110 : 8}
                   className="w-56 p-2">
                   <div className="flex flex-col gap-1">
-                    <button
-                      onClick={() => {
-                        navigateToSection('file-assistant');
-                        setMorePopoverOpen(false);
-                      }}
-                      className="hover:bg-accent hover:text-accent-foreground flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm">
-                      <FileUp className="h-4 w-4" />
-                      <span>File Assistant</span>
-                    </button>
                     <button
                       onClick={() => {
                         navigateToSection('files');

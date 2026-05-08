@@ -7,7 +7,6 @@ import {
   Database,
   Download,
   FileText,
-  FileUp,
   Key,
   Lock,
   type LucideIcon,
@@ -129,12 +128,6 @@ export const DASHBOARD_SECTIONS: Record<string, DashboardSection> = {
     icon: FileText,
     group: 'operations',
     enablerFeature: FILES_BROWSER_FEATURE_KEY,
-  },
-  'file-assistant': {
-    key: 'file-assistant',
-    title: 'File Assistant',
-    icon: FileUp,
-    group: 'operations',
   },
   tasks: {
     key: 'tasks',
