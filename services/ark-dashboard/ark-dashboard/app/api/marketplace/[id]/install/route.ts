@@ -41,7 +41,7 @@ async function executeHelmCommand(
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const helmProcess = spawn(command, args, {
-      shell: false, // no shell interpretation
+      shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -56,17 +56,14 @@ async function executeHelmCommand(
       }
     }, timeoutMs);
 
-    // Collect stdout
     helmProcess.stdout?.on('data', (data) => {
       stdout += data.toString();
     });
 
-    // Collect stderr
     helmProcess.stderr?.on('data', (data) => {
       stderr += data.toString();
     });
 
-    // Handle process exit
     helmProcess.on('close', (code) => {
       completed = true;
       clearTimeout(timeout);
@@ -82,7 +79,6 @@ async function executeHelmCommand(
       }
     });
 
-    // Handle process errors
     helmProcess.on('error', (error) => {
       completed = true;
       clearTimeout(timeout);
@@ -118,7 +114,6 @@ async function checkHelmAvailable(): Promise<{
 
 /**
  * Maps source item type to marketplace installation path category.
- * Services and executors have dedicated paths; agents and demos use 'agents'.
  */
 function getMarketplaceCategoryPath(
   itemType?: 'service' | 'agent' | 'demo' | 'executor',
@@ -128,6 +123,78 @@ function getMarketplaceCategoryPath(
   return 'agents';
 }
 
+/**
+ * Validate Helm release name and namespace inputs
+ */
+function validateHelmInputs(
+  releaseName: string,
+  namespace?: string,
+): NextResponse | null {
+  try {
+    helmReleaseNameSchema.parse(releaseName);
+    if (namespace) {
+      helmNamespaceSchema.parse(namespace);
+    }
+    return null;
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: `Validation failed: ${error.issues[0].message}` },
+        { status: 400 },
+      );
+    }
+    throw error;
+  }
+}
+
+/**
+ * Fetch and validate marketplace item exists
+ */
+async function fetchAndValidateMarketplaceItem(id: string) {
+  const item = await getRawMarketplaceItemById(id);
+
+  if (!item) {
+    return {
+      item: null,
+      error: NextResponse.json(
+        { error: 'Marketplace item not found' },
+        { status: 404 },
+      ),
+    };
+  }
+
+  return { item, error: null };
+}
+
+/**
+ * Build command response for installation
+ */
+function buildCommandResponse(
+  item: { name?: string; type?: 'service' | 'agent' | 'demo' | 'executor' },
+  id: string,
+  helmCommand: string,
+  namespace?: string,
+  message: string = 'Run one of these commands in your terminal to install',
+) {
+  return NextResponse.json({
+    status: 'command',
+    name: item.name || id,
+    helmCommand,
+    arkCommand: `ark install marketplace/${getMarketplaceCategoryPath(item.type)}/${id}`,
+    namespace,
+    message,
+  });
+}
+
+/**
+ * Log Helm stderr output if it contains non-WARNING content
+ */
+function logHelmStderr(stderr: string): void {
+  if (stderr && !stderr.includes('WARNING')) {
+    console.error('Helm stderr:', stderr);
+  }
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -135,48 +202,28 @@ export async function POST(
   try {
     const { id } = await params;
 
-    // Check if we should try direct installation or just return the command
     const { mode } = await request.json().catch(() => ({ mode: 'command' }));
 
-    // Fetch the raw marketplace item with Ark configuration
-    const item = await getRawMarketplaceItemById(id);
+    const { item, error } = await fetchAndValidateMarketplaceItem(id);
+    if (error) return error;
 
-    if (!item) {
-      return NextResponse.json(
-        { error: 'Marketplace item not found' },
-        { status: 404 },
-      );
-    }
-
-    // Check if item has Ark configuration
-    if (!item.ark?.chartPath || !item.ark?.helmReleaseName) {
+    if (!item!.ark?.chartPath || !item!.ark?.helmReleaseName) {
       return NextResponse.json(
         { error: 'Item does not have installation configuration' },
         { status: 400 },
       );
     }
 
-    const { ark } = item;
+    const ark = item!.ark;
 
-    // Basic validation for release name and namespace
-    try {
-      helmReleaseNameSchema.parse(ark.helmReleaseName);
-      if (ark.namespace) {
-        helmNamespaceSchema.parse(ark.namespace);
-      }
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return NextResponse.json(
-          { error: `Validation failed: ${error.issues[0].message}` },
-          { status: 400 },
-        );
-      }
-      throw error;
-    }
+    const validationError = validateHelmInputs(
+      ark.helmReleaseName!,
+      ark.namespace,
+    );
+    if (validationError) return validationError;
 
-    console.log(`Installing ${item.name} from ${ark.chartPath}`);
+    console.log(`Installing ${item!.name} from ${ark.chartPath}`);
 
-    // Build helm argument array
     const helmArgs: string[] = [
       'upgrade',
       '--install',
@@ -184,78 +231,54 @@ export async function POST(
       ark.chartPath!,
     ];
 
-    // Add namespace if specified
     if (ark.namespace) {
       helmArgs.push('--namespace', ark.namespace);
     }
 
-    // Add any additional install args
     if (ark.installArgs) {
       helmArgs.push(...ark.installArgs);
     }
 
     const helmCommand = `helm ${helmArgs.join(' ')}`;
 
-    // Return the command for user to run
     if (mode === 'command') {
-      // Generate both helm and ark CLI commands
-      const arkCommand = `ark install marketplace/${getMarketplaceCategoryPath(item.type)}/${id}`;
-
-      return NextResponse.json({
-        status: 'command',
-        name: item.name || id,
-        helmCommand,
-        arkCommand,
-        namespace: ark.namespace,
-        message: 'Run one of these commands in your terminal to install',
-      });
+      return buildCommandResponse(item!, id, helmCommand, ark.namespace);
     }
 
-    // If mode is 'direct', try to execute (this will likely fail in most deployments)
     console.log('Attempting direct execution:', helmCommand);
 
     try {
-      // First check if helm is available
       const helmCheck = await checkHelmAvailable();
       if (!helmCheck.available) {
-        // Return command instead of error
-        return NextResponse.json({
-          status: 'command',
-          name: item.name || id,
+        return buildCommandResponse(
+          item!,
+          id,
           helmCommand,
-          arkCommand: `ark install marketplace/${getMarketplaceCategoryPath(item.type)}/${id}`,
-          namespace: ark.namespace,
-          message:
-            'Direct installation not available. Run this command in your terminal:',
-        });
+          ark.namespace,
+          'Direct installation not available. Run this command in your terminal:',
+        );
       }
 
       const { stdout, stderr } = await executeHelmCommand('helm', helmArgs);
 
-      if (stderr && !stderr.includes('WARNING')) {
-        console.error('Helm stderr:', stderr);
-      }
-
+      logHelmStderr(stderr);
       console.log('Helm stdout:', stdout);
 
       return NextResponse.json({
-        message: `Successfully installed ${item.name}`,
+        message: `Successfully installed ${item!.name}`,
         status: 'installed',
         output: stdout,
       });
     } catch (error) {
       console.error('Direct installation failed, returning command:', error);
 
-      // Return command instead of error
-      return NextResponse.json({
-        status: 'command',
-        name: item.name || id,
+      return buildCommandResponse(
+        item!,
+        id,
         helmCommand,
-        arkCommand: `ark install marketplace/${getMarketplaceCategoryPath(item.type)}/${id}`,
-        namespace: ark.namespace,
-        message:
-          'Direct installation not available. Run this command in your terminal:',
-      });
+        ark.namespace,
+        'Direct installation not available. Run this command in your terminal:',
+      );
     }
   } catch (error) {
     console.error('Error installing marketplace item:', error);
@@ -267,53 +290,34 @@ export async function POST(
 }
 
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params;
 
-    // Fetch the raw marketplace item with Ark configuration
-    const item = await getRawMarketplaceItemById(id);
+    const { item, error } = await fetchAndValidateMarketplaceItem(id);
+    if (error) return error;
 
-    if (!item) {
-      return NextResponse.json(
-        { error: 'Marketplace item not found' },
-        { status: 404 },
-      );
-    }
-
-    if (!item.ark?.helmReleaseName) {
+    if (!item!.ark?.helmReleaseName) {
       return NextResponse.json(
         { error: 'Item does not have uninstallation configuration' },
         { status: 400 },
       );
     }
 
-    const { ark } = item;
+    const ark = item!.ark;
 
-    // Validate inputs
-    try {
-      helmReleaseNameSchema.parse(ark.helmReleaseName);
-      if (ark.namespace) {
-        helmNamespaceSchema.parse(ark.namespace);
-      }
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return NextResponse.json(
-          { error: `Validation failed: ${error.issues[0].message}` },
-          { status: 400 },
-        );
-      }
-      throw error;
-    }
+    const validationError = validateHelmInputs(
+      ark.helmReleaseName!,
+      ark.namespace,
+    );
+    if (validationError) return validationError;
 
-    console.log(`Uninstalling ${item.name}`);
+    console.log(`Uninstalling ${item!.name}`);
 
-    // Build helm argument array
     const helmArgs: string[] = ['uninstall', ark.helmReleaseName!];
 
-    // Add namespace if specified
     if (ark.namespace) {
       helmArgs.push('--namespace', ark.namespace);
     }
@@ -321,18 +325,14 @@ export async function DELETE(
     const helmCommand = `helm ${helmArgs.join(' ')}`;
     console.log('Executing:', helmCommand);
 
-    // Execute helm command
     try {
       const { stdout, stderr } = await executeHelmCommand('helm', helmArgs);
 
-      if (stderr && !stderr.includes('WARNING')) {
-        console.error('Helm stderr:', stderr);
-      }
-
+      logHelmStderr(stderr);
       console.log('Helm stdout:', stdout);
 
       return NextResponse.json({
-        message: `Successfully uninstalled ${item.name}`,
+        message: `Successfully uninstalled ${item!.name}`,
         status: 'uninstalled',
         output: stdout,
       });
