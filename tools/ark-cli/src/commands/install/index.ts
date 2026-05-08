@@ -128,7 +128,8 @@ async function installService(
   service: ArkService,
   verbose: boolean = false,
   arkVersionOverride?: string,
-  marketplaceVersionOverride?: string
+  marketplaceVersionOverride?: string,
+  backend?: 'etcd' | 'postgresql'
 ) {
   await uninstallPrerequisites(service, verbose);
   await checkAndCleanFailedRelease(
@@ -321,7 +322,12 @@ export async function installArk(
 
     const coreServices = Object.values(arkServices)
       .filter((s) => s.category === 'core' && backendMatch(s))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => {
+        // Ensure ark-controller is always first
+        if (a.name === 'ark-controller') return -1;
+        if (b.name === 'ark-controller') return 1;
+        return a.name.localeCompare(b.name);
+      });
 
     const otherServices = Object.values(arkServices)
       .filter((s) => s.category === 'service' && backendMatch(s))
@@ -519,7 +525,13 @@ export async function installArk(
 
     // Install all services
     const services = getInstallableServices(backend);
-    for (const service of Object.values(services)) {
+    const sortedServices = Object.values(services).sort((a, b) => {
+      // Ensure ark-controller is always first
+      if (a.name === 'ark-controller') return -1;
+      if (b.name === 'ark-controller') return 1;
+      return a.name.localeCompare(b.name);
+    });
+    for (const service of sortedServices) {
       output.info(`installing ${service.name}...`);
 
       try {
