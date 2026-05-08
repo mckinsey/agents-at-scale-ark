@@ -28,10 +28,10 @@ config:
       content: '{"choices":[{"message":{"role":"assistant","tool_calls":[{"id":"call_terminate","type":"function","function":{"name":"terminate","arguments":"{\"response\": \"COORDINATION COMPLETE: The team has produced a satisfactory report.\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120}}'
 
   - path: "/v1/chat/completions"
-    match: "contains(body.messages[-1].content || '', 'Select the next participant')"
+    match: "contains(body.messages[-1].content || '', 'Select the next speaker')"
     response:
       status: 200
-      content: '{"choices":[{"message":{"role":"assistant","content":"researcher"},"finish_reason":"stop"}],"usage":{"prompt_tokens":60,"completion_tokens":1,"total_tokens":61}}'
+      content: '{"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_select","type":"function","function":{"name":"select-next-speaker","arguments":"{\"name\":\"researcher\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":60,"completion_tokens":3,"total_tokens":63}}'
 
   - path: "/v1/chat/completions"
     match: "contains(body.messages[0].content || '', 'research specialist')"

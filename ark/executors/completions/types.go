@@ -108,3 +108,25 @@ func (e *TerminateTeamWithResponse) Error() string {
 func (e *TerminateTeamWithResponse) Unwrap() error {
 	return &e.base
 }
+
+type ToolNotCalledError struct{}
+
+func (e *ToolNotCalledError) Error() string {
+	return "selector agent did not use the select-next-speaker tool"
+}
+
+type SelectionMade struct {
+	SelectedName string
+}
+
+func (e *SelectionMade) Error() string {
+	return fmt.Sprintf("selection made: %s", e.SelectedName)
+}
+
+func IsSelectionMade(err error) bool {
+	if err == nil {
+		return false
+	}
+	var selectionErr *SelectionMade
+	return errors.As(err, &selectionErr)
+}

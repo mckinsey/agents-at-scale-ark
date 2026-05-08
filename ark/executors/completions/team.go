@@ -18,6 +18,7 @@ import (
 type SelectorAgentInterface interface {
 	Execute(ctx context.Context, userInput Message, history []Message, memory MemoryInterface, eventStream EventStreamInterface) (*ExecutionResult, error)
 	FullName() string
+	GetToolRegistry() *ToolRegistry
 }
 
 type Team struct {
@@ -96,7 +97,7 @@ func (t *Team) executeSequential(ctx context.Context, userInput Message, history
 		}
 		turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s", i, t.Name), operationData)
 
-		err := t.executeMemberAndAccumulate(turnCtx, member, userInput, &messages, &newMessages, i)
+		signal, err := t.executeMemberAndAccumulate(turnCtx, member, userInput, &messages, &newMessages, i)
 
 		if len(newMessages) > 0 {
 			t.telemetryRecorder.RecordTurnOutput(turnSpan, newMessages, len(newMessages))
@@ -106,15 +107,16 @@ func (t *Team) executeSequential(ctx context.Context, userInput Message, history
 			t.telemetryRecorder.RecordError(turnSpan, err)
 			turnSpan.End()
 			t.eventingRecorder.Fail(turnCtx, "TeamTurn", fmt.Sprintf("Team turn failed: %v", err), err, operationData)
-			if IsTerminateTeam(err) {
-				return newMessages, nil
-			}
 			return newMessages, err
 		}
 
 		t.telemetryRecorder.RecordSuccess(turnSpan)
 		turnSpan.End()
 		t.eventingRecorder.Complete(turnCtx, "TeamTurn", fmt.Sprintf("Team turn %d completed successfully", i), operationData)
+
+		if _, ok := signal.(*TerminateSignal); ok {
+			return newMessages, nil
+		}
 	}
 
 	return newMessages, nil
@@ -149,7 +151,7 @@ func (t *Team) executeSequentialWithLoops(ctx context.Context, userInput Message
 		}
 		turnCtx = t.eventingRecorder.Start(turnCtx, "TeamTurn", fmt.Sprintf("Executing turn %d for team %s", messageCount, t.Name), operationData)
 
-		err := t.executeMemberAndAccumulate(turnCtx, member, userInput, &messages, &newMessages, messageCount)
+		signal, err := t.executeMemberAndAccumulate(turnCtx, member, userInput, &messages, &newMessages, messageCount)
 
 		if len(newMessages) > 0 {
 			t.telemetryRecorder.RecordTurnOutput(turnSpan, newMessages, len(newMessages))
@@ -159,15 +161,16 @@ func (t *Team) executeSequentialWithLoops(ctx context.Context, userInput Message
 			t.telemetryRecorder.RecordError(turnSpan, err)
 			turnSpan.End()
 			t.eventingRecorder.Fail(turnCtx, "TeamTurn", fmt.Sprintf("Team turn failed: %v", err), err, operationData)
-			if IsTerminateTeam(err) {
-				return newMessages, nil
-			}
 			return newMessages, fmt.Errorf("agent %s failed in team %s: %w", member.GetName(), t.FullName(), err)
 		}
 
 		t.telemetryRecorder.RecordSuccess(turnSpan)
 		turnSpan.End()
 		t.eventingRecorder.Complete(turnCtx, "TeamTurn", fmt.Sprintf("Team turn %d completed successfully", messageCount), operationData)
+
+		if _, ok := signal.(*TerminateSignal); ok {
+			return newMessages, nil
+		}
 
 		messageCount++
 		memberIndex = (memberIndex + 1) % len(t.Members)
@@ -261,9 +264,7 @@ func (t *Team) executeWithTracking(execFunc func(context.Context, Message, []Mes
 	return result, err
 }
 
-// executeMemberAndAccumulate executes a member and accumulates new messages
-func (t *Team) executeMemberAndAccumulate(ctx context.Context, member TeamMember, userInput Message, messages, newMessages *[]Message, turn int) error {
-	// Add team and current member to execution metadata for streaming
+func (t *Team) executeMemberAndAccumulate(ctx context.Context, member TeamMember, userInput Message, messages, newMessages *[]Message, turn int) (Signal, error) {
 	ctx = WithExecutionMetadata(ctx, map[string]interface{}{
 		"team":  t.Name,
 		"agent": member.GetName(),
@@ -280,21 +281,20 @@ func (t *Team) executeMemberAndAccumulate(ctx context.Context, member TeamMember
 
 	result, err := member.Execute(ctx, userInput, *messages, t.memory, t.eventStream)
 	if err != nil {
-		// Still accumulate messages even on error if result is not nil
 		if result != nil {
 			messagesWithName := addAgentNameToMessages(result.Messages, member.GetName())
 			*messages = append(*messages, messagesWithName...)
 			*newMessages = append(*newMessages, messagesWithName...)
 		}
 		t.eventingRecorder.Fail(ctx, "TeamMember", fmt.Sprintf("Team member execution failed: %v", err), err, operationData)
-		return err
+		return nil, err
 	}
 
 	messagesWithName := addAgentNameToMessages(result.Messages, member.GetName())
 	*messages = append(*messages, messagesWithName...)
 	*newMessages = append(*newMessages, messagesWithName...)
 	t.eventingRecorder.Complete(ctx, "TeamMember", "Team member execution completed successfully", operationData)
-	return nil
+	return result.Signal, nil
 }
 
 func loadTeamMember(ctx context.Context, k8sClient client.Client, memberSpec arkv1alpha1.TeamMember, namespace, teamName string, telemetryProvider telemetry.Provider, eventingProvider eventing.Provider) (TeamMember, error) {

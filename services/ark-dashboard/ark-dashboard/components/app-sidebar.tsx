@@ -35,7 +35,6 @@ import {
   isFilesBrowserAvailableAtom,
   storedIsExperimentalDarkModeEnabledAtom,
 } from '@/atoms/experimental-features';
-import { settingsModalOpenAtom } from '@/atoms/settings-modal';
 import { NamespaceEditor } from '@/components/editors';
 import {
   Collapsible,
@@ -160,7 +159,6 @@ export function AppSidebar() {
   const isExperimentalExecutionEngineEnabled = useAtomValue(
     isExperimentalExecutionEngineEnabledAtom,
   );
-  const setSettingsModalOpen = useSetAtom(settingsModalOpenAtom);
   const setIsFilesBrowserAvailable = useSetAtom(isFilesBrowserAvailableAtom);
   const setStoredIsExperimentalDarkModeEnabled = useSetAtom(
     storedIsExperimentalDarkModeEnabledAtom,
@@ -260,7 +258,7 @@ export function AppSidebar() {
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="text-sidebar-accent-foreground font-medium">
-                    ARK Dashboard
+                    Ark Dashboard
                   </span>
                   <span className="text-xs">
                     {isPending
@@ -432,7 +430,9 @@ export function AppSidebar() {
             <Separator className="my-2 !w-10" />
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton onClick={() => setSettingsModalOpen(true)}>
+                <SidebarMenuButton
+                  onClick={() => navigateToSection('settings')}
+                  isActive={getCurrentSection() === 'settings'}>
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Settings</span>
                 </SidebarMenuButton>

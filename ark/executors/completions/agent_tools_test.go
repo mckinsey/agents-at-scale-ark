@@ -3,6 +3,7 @@ package completions
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/openai/openai-go"
@@ -571,4 +572,151 @@ func TestTeamToolExecutor_Execute(t *testing.T) {
 		// This is more of an integration test
 		t.Skip("Requires full setup with models and agents - better suited for integration tests")
 	})
+}
+
+func TestSelectNextSpeakerExecutor(t *testing.T) {
+	executor := &SelectNextSpeakerExecutor{}
+
+	t.Run("valid name returns ToolResult and SelectionMade error", func(t *testing.T) {
+		args := map[string]any{"name": "researcher"}
+		argsJSON, _ := json.Marshal(args)
+
+		call := ToolCall{
+			ID: "call-1",
+			Function: openai.ChatCompletionMessageToolCallFunction{
+				Name:      BuiltinToolSelectNextSpeaker,
+				Arguments: string(argsJSON),
+			},
+		}
+
+		result, err := executor.Execute(context.Background(), call)
+
+		require.Error(t, err)
+		var selectionMade *SelectionMade
+		require.True(t, errors.As(err, &selectionMade))
+		require.Equal(t, "researcher", selectionMade.SelectedName)
+		require.Equal(t, "researcher", result.Content)
+		require.Equal(t, "call-1", result.ID)
+		require.Equal(t, BuiltinToolSelectNextSpeaker, result.Name)
+
+		require.False(t, IsTerminateTeam(err))
+	})
+
+	t.Run("missing name parameter returns error", func(t *testing.T) {
+		args := map[string]any{}
+		argsJSON, _ := json.Marshal(args)
+
+		call := ToolCall{
+			ID: "call-2",
+			Function: openai.ChatCompletionMessageToolCallFunction{
+				Name:      BuiltinToolSelectNextSpeaker,
+				Arguments: string(argsJSON),
+			},
+		}
+
+		_, err := executor.Execute(context.Background(), call)
+
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "name parameter is required")
+		require.False(t, IsSelectionMade(err))
+	})
+
+	t.Run("non-string name parameter returns error", func(t *testing.T) {
+		args := map[string]any{"name": 42}
+		argsJSON, _ := json.Marshal(args)
+
+		call := ToolCall{
+			ID: "call-3",
+			Function: openai.ChatCompletionMessageToolCallFunction{
+				Name:      BuiltinToolSelectNextSpeaker,
+				Arguments: string(argsJSON),
+			},
+		}
+
+		_, err := executor.Execute(context.Background(), call)
+
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "name parameter must be a string")
+		require.False(t, IsSelectionMade(err))
+	})
+
+	t.Run("invalid JSON arguments returns error", func(t *testing.T) {
+		call := ToolCall{
+			ID: "call-4",
+			Function: openai.ChatCompletionMessageToolCallFunction{
+				Name:      BuiltinToolSelectNextSpeaker,
+				Arguments: "not-json",
+			},
+		}
+
+		_, err := executor.Execute(context.Background(), call)
+
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to parse arguments")
+		require.False(t, IsSelectionMade(err))
+	})
+}
+
+func TestGetSelectNextSpeakerTool(t *testing.T) {
+	t.Run("builds tool definition with correct enum", func(t *testing.T) {
+		candidates := []string{"researcher", "analyst", "reviewer"}
+		tool := GetSelectNextSpeakerTool(candidates)
+
+		require.Equal(t, BuiltinToolSelectNextSpeaker, tool.Name)
+		require.Contains(t, tool.Description, "next speaker")
+
+		require.Equal(t, "object", tool.Parameters["type"])
+
+		props := tool.Parameters["properties"].(map[string]any)
+		nameProp := props["name"].(map[string]any)
+		require.Equal(t, "string", nameProp["type"])
+
+		enumValues := nameProp["enum"].([]any)
+		require.Len(t, enumValues, 3)
+		require.Equal(t, "researcher", enumValues[0])
+		require.Equal(t, "analyst", enumValues[1])
+		require.Equal(t, "reviewer", enumValues[2])
+
+		required := tool.Parameters["required"].([]string)
+		require.Contains(t, required, "name")
+	})
+
+	t.Run("single candidate", func(t *testing.T) {
+		tool := GetSelectNextSpeakerTool([]string{"solo"})
+
+		props := tool.Parameters["properties"].(map[string]any)
+		nameProp := props["name"].(map[string]any)
+		enumValues := nameProp["enum"].([]any)
+		require.Len(t, enumValues, 1)
+		require.Equal(t, "solo", enumValues[0])
+	})
+}
+
+func TestRemoveTool(t *testing.T) {
+	telemetryProvider := noop.NewProvider()
+	eventingProvider := eventnoop.NewProvider()
+	registry := NewToolRegistry(nil, telemetryProvider.ToolRecorder(), eventingProvider.ToolRecorder())
+
+	registry.RegisterTool(ToolDefinition{Name: "tool-a"}, &NoopExecutor{})
+	registry.RegisterTool(ToolDefinition{Name: "tool-b"}, &NoopExecutor{})
+	require.Len(t, registry.GetToolDefinitions(), 2)
+
+	registry.RemoveTool("tool-a")
+	defs := registry.GetToolDefinitions()
+	require.Len(t, defs, 1)
+	require.Equal(t, "tool-b", defs[0].Name)
+	require.Equal(t, "unknown", registry.GetToolType("tool-a"))
+}
+
+func TestClearTools(t *testing.T) {
+	telemetryProvider := noop.NewProvider()
+	eventingProvider := eventnoop.NewProvider()
+	registry := NewToolRegistry(nil, telemetryProvider.ToolRecorder(), eventingProvider.ToolRecorder())
+
+	registry.RegisterTool(ToolDefinition{Name: "tool-a"}, &NoopExecutor{})
+	registry.RegisterTool(ToolDefinition{Name: "tool-b"}, &NoopExecutor{})
+	require.Len(t, registry.GetToolDefinitions(), 2)
+
+	registry.ClearTools()
+	require.Empty(t, registry.GetToolDefinitions())
 }
