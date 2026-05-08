@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.62-rc.1](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.62-rc...v0.1.62-rc.1) (2026-05-08)
+
+
+### Features
+
+* implement select-next-speaker tool for selector agents ([#1642](https://github.com/mckinsey/agents-at-scale-ark/issues/1642)) ([6c36937](https://github.com/mckinsey/agents-at-scale-ark/commit/6c36937c057763ed39a7fdab27a22b660b8535b5))
+
+
+### Bug Fixes
+
+* **cli:** skip ark-apiserver install when storage backend is etcd ([#2094](https://github.com/mckinsey/agents-at-scale-ark/issues/2094)) ([5a10cc6](https://github.com/mckinsey/agents-at-scale-ark/commit/5a10cc6f4849dd1983aac97917abf3869f5f41e5))
+* convert settings from modal to route-based page at /settings ([#1335](https://github.com/mckinsey/agents-at-scale-ark/issues/1335)) ([e432888](https://github.com/mckinsey/agents-at-scale-ark/commit/e43288862f325612011f8135545fca78122a4c0e))
+* use npm instead of pnpm in ark-dashboard devspace dev command ([#2087](https://github.com/mckinsey/agents-at-scale-ark/issues/2087)) ([f2c90b0](https://github.com/mckinsey/agents-at-scale-ark/commit/f2c90b0f2231c99b163b372703a68240918e2c85))
+
 ## [0.1.62-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.61...v0.1.62-rc) (2026-05-08)
 
 
