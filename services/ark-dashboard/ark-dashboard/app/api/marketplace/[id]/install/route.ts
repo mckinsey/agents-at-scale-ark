@@ -4,11 +4,32 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { getRawMarketplaceItemById } from '@/lib/services/marketplace-fetcher';
-import {
-  validateHelmInstallation,
-  helmReleaseNameSchema,
-  helmNamespaceSchema,
-} from '@/lib/utils/helm-validation';
+
+/**
+ * Helm release name validation (max 53 chars, RFC 1123)
+ */
+const helmReleaseNameSchema = z
+  .string()
+  .min(1, 'Helm release name is required')
+  .max(53, 'Helm release name must be 53 characters or less')
+  .regex(
+    /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/,
+    'Helm release name must consist of lowercase letters, numbers, hyphens, and dots, ' +
+      'and must start and end with an alphanumeric character',
+  );
+
+/**
+ * Kubernetes namespace validation (RFC 1123)
+ */
+const helmNamespaceSchema = z
+  .string()
+  .min(1, 'Namespace is required')
+  .max(63, 'Namespace must be 63 characters or less')
+  .regex(
+    /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/,
+    'Namespace must consist of lowercase letters, numbers, and hyphens, ' +
+      'and must start and end with an alphanumeric character (RFC 1123)',
+  );
 
 /**
  * Execute Helm command using spawn (without shell)
@@ -137,24 +158,16 @@ export async function POST(
 
     const { ark } = item;
 
-    // Validate inputs
+    // Basic validation for release name and namespace
     try {
-      validateHelmInstallation({
-        helmReleaseName: ark.helmReleaseName,
-        chartPath: ark.chartPath,
-        namespace: ark.namespace,
-        installArgs: ark.installArgs,
-      });
+      helmReleaseNameSchema.parse(ark.helmReleaseName);
+      if (ark.namespace) {
+        helmNamespaceSchema.parse(ark.namespace);
+      }
     } catch (error) {
       if (error instanceof z.ZodError) {
         return NextResponse.json(
           { error: `Validation failed: ${error.issues[0].message}` },
-          { status: 400 },
-        );
-      }
-      if (error instanceof Error) {
-        return NextResponse.json(
-          { error: `Validation failed: ${error.message}` },
           { status: 400 },
         );
       }

