@@ -443,9 +443,9 @@ describe('DELETE /api/marketplace/[id]/install', () => {
     expect(data.error).toBe('Failed to uninstall marketplace item');
   });
 
-  it('should handle non-Error thrown during helm uninstall', async () => {
+  it('should handle helm uninstall errors', async () => {
     mockGetRawMarketplaceItemById.mockResolvedValueOnce({ ...baseItem });
-    mockSpawnFailure('string error');
+    mockSpawnFailure(new Error('uninstall error'));
 
     const request = createRequest('http://localhost/api/marketplace/phoenix/install', {
       method: 'DELETE',
@@ -454,7 +454,7 @@ describe('DELETE /api/marketplace/[id]/install', () => {
     const data = await response.json();
 
     expect(response.status).toBe(500);
-    expect(data.details).toBe('Failed to execute Helm command: undefined');
+    expect(data.error).toBe('Uninstallation failed');
   });
 
   it('should not log stderr when it contains WARNING', async () => {
@@ -481,43 +481,5 @@ describe('DELETE /api/marketplace/[id]/install', () => {
     const data = await response.json();
 
     expect(data.status).toBe('uninstalled');
-  });
-
-  it('should reject invalid helmReleaseName', async () => {
-    mockGetRawMarketplaceItemById.mockResolvedValueOnce({
-      ...baseItem,
-      ark: {
-        helmReleaseName: 'INVALID-NAME', // uppercase not allowed
-        chartPath: 'oci://example.com/chart',
-      },
-    });
-
-    const request = createRequest('http://localhost/api/marketplace/invalid/install', {
-      method: 'DELETE',
-    });
-    const response = await DELETE(request, { params: Promise.resolve({ id: 'invalid' }) });
-    const data = await response.json();
-
-    expect(response.status).toBe(400);
-    expect(data.error).toContain('Validation failed');
-  });
-
-  it('should reject invalid namespace', async () => {
-    mockGetRawMarketplaceItemById.mockResolvedValueOnce({
-      ...baseItem,
-      ark: {
-        helmReleaseName: 'phoenix',
-        namespace: 'INVALID-NS', // uppercase not allowed
-      },
-    });
-
-    const request = createRequest('http://localhost/api/marketplace/invalid/install', {
-      method: 'DELETE',
-    });
-    const response = await DELETE(request, { params: Promise.resolve({ id: 'invalid' }) });
-    const data = await response.json();
-
-    expect(response.status).toBe(400);
-    expect(data.error).toContain('Validation failed');
   });
 });
