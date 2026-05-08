@@ -54,9 +54,9 @@ describe('ManageMarketplaceSettings', () => {
     localStorage.setItem('marketplace-sources', JSON.stringify([
       {
         id: 'default',
-        name: 'ARK marketplace',
+        name: 'Ark marketplace',
         url: 'https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json',
-        displayName: 'ARK marketplace',
+        displayName: 'Ark marketplace',
         enabled: true,
       },
     ]));
@@ -66,7 +66,7 @@ describe('ManageMarketplaceSettings', () => {
     renderWithProviders(<ManageMarketplaceSettings />);
 
     expect(screen.getByText('Marketplace Sources')).toBeInTheDocument();
-    expect(screen.getByText('ARK marketplace')).toBeInTheDocument();
+    expect(screen.getByText('Ark marketplace')).toBeInTheDocument();
   });
 
   it('should not render a Save button', () => {
@@ -239,7 +239,7 @@ describe('ManageMarketplaceSettings', () => {
   it('should not show delete button for default marketplace source', () => {
     renderWithProviders(<ManageMarketplaceSettings />);
 
-    const defaultSection = screen.getByText('ARK marketplace').closest('.rounded-lg');
+    const defaultSection = screen.getByText('Ark marketplace').closest('.rounded-lg');
     const deleteButtons = defaultSection?.querySelectorAll('button[class*="hover:text-destructive"]') || [];
 
     expect(deleteButtons.length).toBe(0);
@@ -249,9 +249,9 @@ describe('ManageMarketplaceSettings', () => {
     localStorage.setItem('marketplace-sources', JSON.stringify([
       {
         id: 'default',
-        name: 'ARK marketplace',
+        name: 'Ark marketplace',
         url: 'https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json',
-        displayName: 'ARK marketplace',
+        displayName: 'Ark marketplace',
         enabled: true,
       },
       {
@@ -285,9 +285,9 @@ describe('ManageMarketplaceSettings', () => {
     localStorage.setItem('marketplace-sources', JSON.stringify([
       {
         id: 'default',
-        name: 'ARK marketplace',
+        name: 'Ark marketplace',
         url: 'https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json',
-        displayName: 'ARK marketplace',
+        displayName: 'Ark marketplace',
         enabled: true,
       },
       {
@@ -308,7 +308,7 @@ describe('ManageMarketplaceSettings', () => {
 
     renderWithProviders(<ManageMarketplaceSettings />);
 
-    expect(screen.getByText('ARK marketplace')).toBeInTheDocument();
+    expect(screen.getByText('Ark marketplace')).toBeInTheDocument();
     expect(screen.getByText('Internal Tools')).toBeInTheDocument();
     expect(screen.getByText('Community Marketplace')).toBeInTheDocument();
   });
@@ -349,7 +349,7 @@ describe('ManageMarketplaceSettings', () => {
 
     expect(screen.getByDisplayValue('https://raw.githubusercontent.com/mckinsey/agents-at-scale-marketplace/main/marketplace.json')).toBeInTheDocument();
 
-    const displayNameInputs = screen.getAllByDisplayValue('ARK marketplace');
+    const displayNameInputs = screen.getAllByDisplayValue('Ark marketplace');
     expect(displayNameInputs.length).toBeGreaterThan(0);
   });
 

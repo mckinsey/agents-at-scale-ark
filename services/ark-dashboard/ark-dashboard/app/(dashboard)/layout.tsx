@@ -2,7 +2,6 @@
 
 import { AppSidebar } from '@/components/app-sidebar';
 import ChatManager from '@/components/chat-manager';
-import { SettingsModal } from '@/components/settings-modal';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { Spinner } from '@/components/ui/spinner';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -21,7 +20,7 @@ export default function DashboardLayout({
       <div className="flex h-screen w-screen flex-col items-center justify-center gap-2">
         <Spinner className="mr-2" />
         <div className="muted text-lg font-semibold">
-          Loading ARK Dashboard...
+          Loading Ark Dashboard...
         </div>
       </div>
     );
@@ -40,7 +39,6 @@ export default function DashboardLayout({
           {children}
         </SidebarInset>
       </SidebarProvider>
-      <SettingsModal />
       <ChatManager />
     </>
   );
