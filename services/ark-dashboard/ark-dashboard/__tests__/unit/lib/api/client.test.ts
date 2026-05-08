@@ -292,12 +292,145 @@ describe('APIClient', () => {
   describe('APIError', () => {
     it('should create error with correct properties', () => {
       const error = new APIError('Test error', 404, { code: 'NOT_FOUND' })
-      
+
       expect(error).toBeInstanceOf(Error)
       expect(error.name).toBe('APIError')
       expect(error.message).toBe('Test error')
       expect(error.status).toBe(404)
       expect(error.data).toEqual({ code: 'NOT_FOUND' })
+    })
+  })
+
+  describe('setDefaultParam', () => {
+    it('should set a default parameter', async () => {
+      client.setDefaultParam('namespace', 'test-namespace')
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({}),
+      })
+
+      await client.get('/test')
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `http://localhost:8080/test?namespace=test-namespace&_t=${MOCK_TIMESTAMP}`,
+        expect.anything()
+      )
+    })
+
+    it('should remove a default parameter when set to undefined', async () => {
+      client.setDefaultParam('namespace', 'test-namespace')
+      client.setDefaultParam('namespace', undefined)
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({}),
+      })
+
+      await client.get('/test')
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `http://localhost:8080/test?_t=${MOCK_TIMESTAMP}`,
+        expect.anything()
+      )
+    })
+
+    it('should merge default params with request params', async () => {
+      client.setDefaultParam('namespace', 'test-namespace')
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({}),
+      })
+
+      await client.get('/test', { params: { foo: 'bar' } })
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `http://localhost:8080/test?namespace=test-namespace&foo=bar&_t=${MOCK_TIMESTAMP}`,
+        expect.anything()
+      )
+    })
+
+    it('should allow request params to override default params', async () => {
+      client.setDefaultParam('namespace', 'default-namespace')
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({}),
+      })
+
+      await client.get('/test', { params: { namespace: 'override-namespace' } })
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `http://localhost:8080/test?namespace=override-namespace&_t=${MOCK_TIMESTAMP}`,
+        expect.anything()
+      )
+    })
+  })
+
+  describe('getDefaultParams', () => {
+    it('should return a copy of default params', () => {
+      client.setDefaultParam('namespace', 'test-namespace')
+      client.setDefaultParam('foo', 'bar')
+
+      const params = client.getDefaultParams()
+
+      expect(params).toEqual({ namespace: 'test-namespace', foo: 'bar' })
+    })
+
+    it('should return empty object when no default params set', () => {
+      const params = client.getDefaultParams()
+      expect(params).toEqual({})
+    })
+
+    it('should return a copy, not a reference', () => {
+      client.setDefaultParam('namespace', 'test-namespace')
+
+      const params = client.getDefaultParams()
+      params.namespace = 'modified'
+
+      const paramsAgain = client.getDefaultParams()
+      expect(paramsAgain.namespace).toBe('test-namespace')
+    })
+  })
+
+  describe('buildUrl', () => {
+    it('should build URL with default params', () => {
+      client.setDefaultParam('namespace', 'test-namespace')
+
+      const url = client.buildUrl('files/test.txt/download')
+
+      expect(url).toBe(`http://localhost:8080/files/test.txt/download?namespace=test-namespace&_t=${MOCK_TIMESTAMP}`)
+    })
+
+    it('should build URL with additional params', () => {
+      client.setDefaultParam('namespace', 'test-namespace')
+
+      const url = client.buildUrl('files', { prefix: 'documents/' })
+
+      expect(url).toBe(`http://localhost:8080/files?namespace=test-namespace&prefix=documents%2F&_t=${MOCK_TIMESTAMP}`)
+    })
+
+    it('should build URL without default params when none set', () => {
+      const url = client.buildUrl('files/test.txt/download')
+
+      expect(url).toBe(`http://localhost:8080/files/test.txt/download?_t=${MOCK_TIMESTAMP}`)
+    })
+
+    it('should allow params to override default params', () => {
+      client.setDefaultParam('namespace', 'default-namespace')
+
+      const url = client.buildUrl('files', { namespace: 'override-namespace' })
+
+      expect(url).toBe(`http://localhost:8080/files?namespace=override-namespace&_t=${MOCK_TIMESTAMP}`)
     })
   })
 })

@@ -13,6 +13,7 @@ import {
 import { toast } from 'sonner';
 
 import { apiClient } from '@/lib/api/client';
+import { filesApiClient } from '@/lib/api/files-client';
 import type { Namespace } from '@/lib/services';
 import {
   useCreateNamespace,
@@ -50,6 +51,7 @@ function NamespaceProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     apiClient.setDefaultParam('namespace', namespaceFromQueryParams);
+    filesApiClient.setDefaultParam('namespace', namespaceFromQueryParams);
   }, [namespaceFromQueryParams]);
 
   const createQueryString = useCallback(
