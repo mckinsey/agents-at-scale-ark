@@ -28,6 +28,10 @@ interface UseChatSessionParams {
   type: ChatType;
 }
 
+export interface SendMessageOptions {
+  fileIds?: string[];
+}
+
 interface UseChatSessionReturn {
   messages: ExtendedChatMessage[];
   sessionId: string;
@@ -35,7 +39,7 @@ interface UseChatSessionReturn {
   processingPhase?: string;
 
   error: string | null;
-  sendMessage: (message: string) => Promise<void>;
+  sendMessage: (message: string, options?: SendMessageOptions) => Promise<void>;
   clearChat: () => void;
   messagesEndRef: RefObject<HTMLDivElement | null>;
   tokenUsage?: TokenUsage;
@@ -67,11 +71,13 @@ export function useChatSession({
 
   const chatMessages = chatSession.messages;
   const sessionId = chatSession.sessionId;
-  const conversationId = (chatSession as { conversationId?: string }).conversationId;
+  const conversationId = (chatSession as { conversationId?: string })
+    .conversationId;
 
   useEffect(() => {
     if (!chatHistory?.[chatKey]) {
-      const sessionIdToUse = pendingSessionIdRef.current ?? createNewSessionId(name);
+      const sessionIdToUse =
+        pendingSessionIdRef.current ?? createNewSessionId(name);
       pendingSessionIdRef.current = sessionIdToUse;
       setLastConversationId(sessionIdToUse);
       setChatHistory(prev => ({
@@ -185,7 +191,7 @@ export function useChatSession({
   );
 
   const handleStreamChatResponse = useCallback(
-    async (userMessage: string) => {
+    async (userMessage: string, fileIds?: string[]) => {
       const messageArray = buildChatMessages(chatMessages, userMessage);
       const turnStartIndex = chatMessages.length + 1;
       let currentMessageIndex = turnStartIndex;
@@ -261,11 +267,12 @@ export function useChatSession({
           sessionId,
           conversationId,
           queryTimeout,
+          fileIds,
         );
 
       const stopPhasePolling = await chatService.streamQueryStatus(
         streamQueryName,
-        (status) => {
+        status => {
           if (status && typeof status === 'object' && 'phase' in status) {
             const phase = (status as { phase?: string }).phase;
             setProcessingPhase(phase);
@@ -308,8 +315,7 @@ export function useChatSession({
             }
           }
 
-          const arkTokenUsage =
-            arkData.completedQuery?.status?.tokenUsage;
+          const arkTokenUsage = arkData.completedQuery?.status?.tokenUsage;
           const usage: TokenUsage | null = arkTokenUsage
             ? {
                 prompt_tokens: arkTokenUsage.promptTokens || 0,
@@ -542,7 +548,7 @@ export function useChatSession({
   );
 
   const handlePollChatResponse = useCallback(
-    async (userMessage: string) => {
+    async (userMessage: string, fileIds?: string[]) => {
       const messageArray = buildChatMessages(chatMessages, userMessage);
 
       const query = await chatService.submitChatQuery(
@@ -553,6 +559,7 @@ export function useChatSession({
         conversationId,
         undefined,
         queryTimeout,
+        fileIds,
       );
 
       let pollingStopped = false;
@@ -702,8 +709,10 @@ export function useChatSession({
   );
 
   const sendMessage = useCallback(
-    async (userMessage: string) => {
+    async (userMessage: string, options?: SendMessageOptions) => {
       setError(null);
+
+      const fileIds = options?.fileIds?.length ? options.fileIds : undefined;
 
       trackEvent({
         name: 'chat_message_sent',
@@ -724,9 +733,9 @@ export function useChatSession({
 
       try {
         if (isChatStreamingEnabled) {
-          await handleStreamChatResponse(userMessage);
+          await handleStreamChatResponse(userMessage, fileIds);
         } else {
-          await handlePollChatResponse(userMessage);
+          await handlePollChatResponse(userMessage, fileIds);
         }
       } catch (err) {
         console.error('Error sending message:', err);

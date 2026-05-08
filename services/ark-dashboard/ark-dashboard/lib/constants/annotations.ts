@@ -20,4 +20,7 @@ export const ARK_ANNOTATIONS = {
 
   // Streaming annotations
   STREAMING_ENABLED: `${ARK_PREFIX}streaming-enabled`,
+
+  // Executor: openai-file-inputs (JSON-encoded array of OpenAI file IDs)
+  FILE_INPUTS_FILE_IDS: 'executor-openai-file-inputs.ark.mckinsey.com/file-ids',
 } as const;

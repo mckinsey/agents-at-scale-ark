@@ -81,13 +81,7 @@ export function FileAssistantSection() {
     if (!currentMessage.trim() || isProcessing) return;
     const msg = currentMessage.trim();
     setCurrentMessage('');
-
-    // TODO: pass selectedFileIds through query annotations once ark-sdk supports it
-    const fileContext =
-      selectedFileIds.length > 0
-        ? `\n\n[Attached files: ${selectedFileIds.join(', ')}]`
-        : '';
-    await sendMessage(msg + fileContext);
+    await sendMessage(msg, { fileIds: selectedFileIds });
   };
 
   const handleDrop = (e: React.DragEvent) => {

@@ -200,6 +200,7 @@ export const chatService = {
     conversationId?: string,
     enableStreaming?: boolean,
     timeout?: string,
+    fileIds?: string[],
   ): Promise<QueryDetailResponse> {
     const queryRequest: QueryCreateRequest = {
       name: `chat-query-${generateUUID()}`,
@@ -214,12 +215,16 @@ export const chatService = {
       timeout,
     };
 
+    const annotations: Record<string, string> = {};
     if (enableStreaming) {
-      queryRequest.metadata = {
-        annotations: {
-          [ARK_ANNOTATIONS.STREAMING_ENABLED]: 'true',
-        },
-      };
+      annotations[ARK_ANNOTATIONS.STREAMING_ENABLED] = 'true';
+    }
+    if (fileIds && fileIds.length > 0) {
+      annotations[ARK_ANNOTATIONS.FILE_INPUTS_FILE_IDS] =
+        JSON.stringify(fileIds);
+    }
+    if (Object.keys(annotations).length > 0) {
+      queryRequest.metadata = { annotations };
     }
 
     return await this.createQuery(queryRequest);
@@ -389,6 +394,7 @@ export const chatService = {
     sessionId?: string,
     conversationId?: string,
     timeout?: string,
+    fileIds?: string[],
   ): Promise<{
     queryName: string;
     chunks: AsyncGenerator<Record<string, unknown>, void, unknown>;
@@ -401,12 +407,17 @@ export const chatService = {
       conversationId,
       true,
       timeout,
+      fileIds,
     );
 
     const queryName = query.name;
     const self = this;
 
-    async function* generateChunks(): AsyncGenerator<Record<string, unknown>, void, unknown> {
+    async function* generateChunks(): AsyncGenerator<
+      Record<string, unknown>,
+      void,
+      unknown
+    > {
       const response = await fetch(
         `/api/v1/broker/chunks?watch=true&query-id=${queryName}`,
       );
