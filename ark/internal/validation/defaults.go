@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
@@ -55,6 +56,15 @@ func DefaultTeam(team *arkv1alpha1.Team) {
 			team.Spec.Strategy = StrategySequential
 			team.Spec.Loops = &loopsFalse
 			team.Annotations[annotations.MigrationWarningPrefix+"round-robin"] = "strategy 'round-robin' is deprecated - migrated to 'sequential'. Set loops: true and maxTurns to enable looping. Will be removed in v1.0.0"
+		}
+
+	case StrategySelector:
+		if team.Spec.Selector != nil && team.Spec.Selector.SelectorPrompt != "" &&
+			!strings.Contains(team.Spec.Selector.SelectorPrompt, "select-next-speaker") {
+			if team.Annotations == nil {
+				team.Annotations = make(map[string]string)
+			}
+			team.Annotations[annotations.MigrationWarningPrefix+"selector-prompt"] = "custom selectorPrompt should instruct the agent to use the select-next-speaker tool — add 'Use the select-next-speaker tool to make your selection.' to your selectorPrompt"
 		}
 
 	case StrategyGraph:

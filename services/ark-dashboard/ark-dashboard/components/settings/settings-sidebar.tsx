@@ -1,29 +1,30 @@
 'use client';
 
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { useAtomValue } from 'jotai';
 import { X } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 import { isMarketplaceEnabledAtom } from '@/atoms/experimental-features';
-import {
-  activeSettingPageAtom,
-  settingsModalOpenAtom,
-} from '@/atoms/settings-modal';
-import type { SettingPage } from '@/atoms/settings-modal';
+import { settingsEntryUrlAtom } from '@/atoms/navigation-history';
 import { cn } from '@/lib/utils';
 
-import { MANAGE_MARKETPLACE_KEY, settingsSections } from './settings-types';
+import { MANAGE_MARKETPLACE_KEY, type SettingPage, settingsSections } from './settings-types';
 
-export function SettingsSidebar() {
-  const setActiveSettingPage = useSetAtom(activeSettingPageAtom);
-  const [, setIsModalOpen] = useAtom(settingsModalOpenAtom);
+type SettingsSidebarProps = {
+  activePage: SettingPage;
+};
+
+export function SettingsSidebar({ activePage }: SettingsSidebarProps) {
+  const router = useRouter();
   const isMarketplaceEnabled = useAtomValue(isMarketplaceEnabledAtom);
+  const settingsEntryUrl = useAtomValue(settingsEntryUrlAtom);
 
   const handleSettingClick = (settingKey: SettingPage) => {
-    setActiveSettingPage(settingKey);
+    router.replace(`/settings/${settingKey}`);
   };
 
   const handleClose = () => {
-    setIsModalOpen(false);
+    router.push(settingsEntryUrl ?? '/');
   };
 
   return (
@@ -54,6 +55,8 @@ export function SettingsSidebar() {
                       className={cn(
                         'text-sidebar-foreground flex w-full items-center gap-3 rounded-md px-3 py-1.5 text-sm transition-colors',
                         'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-pointer',
+                        activePage === item.key &&
+                          'bg-sidebar-accent text-sidebar-accent-foreground',
                       )}>
                       <Icon className="h-4 w-4" />
                       <span>{item.label}</span>

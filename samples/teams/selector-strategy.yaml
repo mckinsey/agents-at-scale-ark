@@ -33,6 +33,16 @@ spec:
       type: built-in
 ---
 apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: technical-expert
+spec:
+  description: Technical architecture and engineering expert
+  prompt: |
+    You are a technical expert. Your role is to evaluate technical feasibility,
+    recommend architectures, and assess engineering trade-offs. Be very brief and concise. Do not ask user any questions.
+---
+apiVersion: ark.mckinsey.com/v1alpha1
 kind: Team
 metadata:
   name: consulting-team
@@ -63,7 +73,7 @@ spec:
 
       Always start with research-analyst, and follow by strategy-consultant.
       Select project-manager expert after each turn. Do not select the same participant twice in a row.
-      Return only the exact name of the selected participant.
+      Use the select-next-speaker tool to make your selection.
 ---
 apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
