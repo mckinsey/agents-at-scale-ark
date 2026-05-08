@@ -56,7 +56,7 @@ async function proxy(request: NextRequest) {
       backendHeaders.set('Authorization', `Bearer ${token.access_token}`);
     }
 
-    const fetchOptions: RequestInit = {
+    const fetchOptions: RequestInit & { duplex?: string } = {
       method: request.method,
       headers: backendHeaders,
       signal: request.signal,
@@ -64,6 +64,7 @@ async function proxy(request: NextRequest) {
 
     if (request.body) {
       fetchOptions.body = request.body;
+      fetchOptions.duplex = 'half';
     }
     const backendResponse = await fetch(targetUrl, fetchOptions);
 
