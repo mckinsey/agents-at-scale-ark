@@ -29,6 +29,7 @@ class SessionsPage(BasePage):
     SESSION_STATS_BAR = "div.flex.items-center.gap-6.rounded-lg.border"
     SESSION_DETAIL_HEADER = "div.space-y-4.rounded-lg.border.p-6"
     NEW_SESSION_BADGE = "span:has-text('New Session'), [data-slot='badge']:has-text('New Session')"
+    NEW_CONVERSATION_DIALOG = "[role='dialog']:has-text('Start New Conversation')"
 
     def navigate_to_session_history(self) -> None:
         dashboard = DashboardPage(self.page)
@@ -210,16 +211,19 @@ class SessionsPage(BasePage):
                     self.wait_for_navigation_complete()
         return False
 
-    def get_stats_total_session_count(self) -> int:
-        try:
-            stats = self.page.locator(self.SESSION_STATS_BAR).first
-            if stats.is_visible(timeout=5000):
-                text = stats.inner_text()
-                numbers = re.findall(r"\d+", text)
-                if numbers:
-                    return int(numbers[0])
-        except Exception as e:
-            logger.debug("Could not get stats session count: %s", e)
+    def get_stats_total_session_count(self, retries: int = 8) -> int:
+        for attempt in range(retries):
+            try:
+                stats = self.page.locator(self.SESSION_STATS_BAR).first
+                if stats.is_visible(timeout=5000):
+                    text = stats.inner_text()
+                    numbers = re.findall(r"\d+", text)
+                    if numbers and int(numbers[0]) > 0:
+                        return int(numbers[0])
+            except Exception as e:
+                logger.debug("Could not get stats session count (attempt %d): %s", attempt + 1, e)
+            if attempt < retries - 1:
+                self.page.wait_for_timeout(1500)
         return 0
 
     def create_new_session(self, participant_name: str, participant_tab: str = "All") -> str:
