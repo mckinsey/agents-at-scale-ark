@@ -13,7 +13,7 @@ vi.mock('@/lib/api/files-client', () => ({
     get: vi.fn(),
     delete: vi.fn(),
   },
-  FILES_API_BASE_URL: '/api/v1/proxy/services/file-gateway-api/',
+  FILES_API_BASE_URL: '/api/v1/files/workspace/',
 }));
 
 describe('filesService', () => {
@@ -174,7 +174,7 @@ describe('filesService', () => {
 
       expect(mockXHR.open).toHaveBeenCalledWith(
         'POST',
-        '/api/v1/proxy/services/file-gateway-api/files',
+        '/api/v1/files/workspace/files',
       );
       expect(mockXHR.send).toHaveBeenCalled();
 
@@ -267,7 +267,7 @@ describe('filesService', () => {
       filesService.download('test-file.txt');
 
       expect(windowOpenSpy).toHaveBeenCalledWith(
-        '/api/v1/proxy/services/file-gateway-api/files/test-file.txt/download',
+        '/api/v1/files/workspace/files/test-file.txt/download',
         '_blank',
       );
     });
@@ -276,7 +276,7 @@ describe('filesService', () => {
       filesService.download('folder/file with spaces.txt');
 
       expect(windowOpenSpy).toHaveBeenCalledWith(
-        '/api/v1/proxy/services/file-gateway-api/files/folder%2Ffile%20with%20spaces.txt/download',
+        '/api/v1/files/workspace/files/folder%2Ffile%20with%20spaces.txt/download',
         '_blank',
       );
     });

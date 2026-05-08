@@ -1,6 +1,8 @@
+const PROVIDER = 'openai';
+
 export const MODEL_CONTEXT_FILES_API_BASE_URL =
   process.env.NEXT_PUBLIC_MODEL_CONTEXT_FILES_API_URL ||
-  '/api/v1/proxy/services/executor-openai-file-inputs:8000/';
+  `/api/v1/files/model-context/${PROVIDER}`;
 
 export interface ModelContextFile {
   id: string;
@@ -30,7 +32,7 @@ async function ensureOk(res: Response, fallback: string): Promise<void> {
 
 export const modelContextFilesService = {
   async list(): Promise<ModelContextFile[]> {
-    const res = await fetch(`${MODEL_CONTEXT_FILES_API_BASE_URL}v1/files`);
+    const res = await fetch(MODEL_CONTEXT_FILES_API_BASE_URL);
     await ensureOk(res, 'Failed to list files');
     const data: ListResponse = await res.json();
     return data.data || [];
@@ -43,7 +45,7 @@ export const modelContextFilesService = {
     const fd = new FormData();
     fd.append('file', file);
     fd.append('purpose', purpose);
-    const res = await fetch(`${MODEL_CONTEXT_FILES_API_BASE_URL}v1/files`, {
+    const res = await fetch(MODEL_CONTEXT_FILES_API_BASE_URL, {
       method: 'POST',
       body: fd,
     });
@@ -53,7 +55,7 @@ export const modelContextFilesService = {
 
   async delete(fileId: string): Promise<void> {
     const res = await fetch(
-      `${MODEL_CONTEXT_FILES_API_BASE_URL}v1/files/${encodeURIComponent(fileId)}`,
+      `${MODEL_CONTEXT_FILES_API_BASE_URL}/${encodeURIComponent(fileId)}`,
       { method: 'DELETE' },
     );
     await ensureOk(res, `Failed to delete ${fileId}`);
