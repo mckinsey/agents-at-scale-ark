@@ -5,4 +5,6 @@ package labels
 const (
 	MCPServerLabel = "mcp/server"
 	A2AServerLabel = "a2a/server"
+
+	MCPTokenSecretLabel = "ark.mckinsey.com/mcp-token-secret"
 )

@@ -13,6 +13,7 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/eventing"
 	arkmcp "mckinsey.com/ark/internal/mcp"
+	"mckinsey.com/ark/internal/resolution"
 	"mckinsey.com/ark/internal/telemetry"
 )
 
@@ -144,6 +145,19 @@ func createMCPExecutor(ctx context.Context, k8sClient client.Client, tool *arkv1
 			return nil, fmt.Errorf("failed to resolve header %s: %w", header.Name, err)
 		}
 		headers[header.Name] = value
+	}
+
+	// spec.headers is the user's escape hatch — if they have already set
+	// Authorization explicitly, leave it alone and skip the tokenSecretRef
+	// read entirely.
+	if _, hasExplicit := headers["Authorization"]; !hasExplicit {
+		token, err := resolution.ResolveBearerToken(ctx, k8sClient, &mcpServerCRD)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve authorization token for MCPServer %s: %w", mcpServerCRD.Name, err)
+		}
+		if token != "" {
+			headers["Authorization"] = "Bearer " + token
+		}
 	}
 
 	// Parse timeout from MCPServer spec (default to 30s if not specified)

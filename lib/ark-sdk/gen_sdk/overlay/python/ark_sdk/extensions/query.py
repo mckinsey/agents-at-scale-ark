@@ -299,6 +299,49 @@ def _resolve_parameters(
     return resolved
 
 
+DEFAULT_ACCESS_TOKEN_KEY = "access_token"
+
+
+async def _resolve_bearer_token(spec: Any, namespace: str) -> str:
+    """Read spec.authorization.tokenSecretRef and return the access token.
+
+    Mirrors the Go helper in ark/internal/resolution/mcp_auth.go so the
+    reconciler, the built-in completions executor, and named execution
+    engines all derive the same Bearer header from the same Secret keys.
+    Returns "" when spec.authorization is unset, the Secret is missing,
+    or the configured key has no value — the caller treats this as
+    "no Bearer to inject; let the existing 401 / discovery path run".
+    """
+    auth = getattr(spec, "authorization", None)
+    if auth is None:
+        return ""
+    ref = getattr(auth, "token_secret_ref", None) or getattr(auth, "tokenSecretRef", None)
+    if ref is None:
+        return ""
+    secret_name = _get_attr_or_key(ref, "name")
+    if not secret_name:
+        return ""
+    key = (
+        _get_attr_or_key(ref, "accessTokenKey")
+        or _get_attr_or_key(ref, "access_token_key")
+        or DEFAULT_ACCESS_TOKEN_KEY
+    )
+    try:
+        sc = SecretClient(namespace=namespace)
+        result = await sc.get_secret_value(secret_name, key)
+    except Exception as e:
+        logger.warning(f"Failed to resolve authorization secret {secret_name}/{key}: {e}")
+        return ""
+    raw = result.get("value") if isinstance(result, dict) else None
+    if not raw:
+        return ""
+    try:
+        return base64.b64decode(raw).decode("utf-8")
+    except Exception as e:
+        logger.warning(f"Failed to decode authorization secret {secret_name}/{key}: {e}")
+        return ""
+
+
 async def _resolve_mcp_server(ark: Any, server_name: str, namespace: str) -> Optional[MCPServerConfig]:
     server_namespace = namespace
     try:
@@ -322,6 +365,14 @@ async def _resolve_mcp_server(ark: Any, server_name: str, namespace: str) -> Opt
                 resolved = await _resolve_value_source(header_value_source, server_namespace)
                 if resolved:
                     headers[header_name] = resolved
+
+    # spec.headers is the user's escape hatch; if they have already
+    # set Authorization explicitly, leave it alone and skip the
+    # tokenSecretRef read entirely.
+    if "Authorization" not in headers:
+        token = await _resolve_bearer_token(spec, server_namespace)
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
 
     transport = getattr(spec, "transport", "http") or "http"
     timeout = getattr(spec, "timeout", "30s") or "30s"
