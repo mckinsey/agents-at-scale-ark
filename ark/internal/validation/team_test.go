@@ -180,11 +180,12 @@ func TestValidateTeam(t *testing.T) { //nolint:gocognit
 	})
 
 	t.Run("sequential with loops requires maxTurns", func(t *testing.T) {
+		loopsTrue := true
 		team := &arkv1alpha1.Team{
 			ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default"},
 			Spec: arkv1alpha1.TeamSpec{
 				Strategy: "sequential",
-				Loops:    true,
+				Loops:    &loopsTrue,
 				Members: []arkv1alpha1.TeamMember{
 					{Name: "agent1", Type: "agent"},
 				},
@@ -216,11 +217,12 @@ func TestValidateTeam(t *testing.T) { //nolint:gocognit
 
 	t.Run("valid sequential with loops and maxTurns", func(t *testing.T) {
 		maxTurns := 5
+		loopsTrue := true
 		team := &arkv1alpha1.Team{
 			ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default"},
 			Spec: arkv1alpha1.TeamSpec{
 				Strategy: "sequential",
-				Loops:    true,
+				Loops:    &loopsTrue,
 				MaxTurns: &maxTurns,
 				Members: []arkv1alpha1.TeamMember{
 					{Name: "agent1", Type: "agent"},
@@ -234,11 +236,12 @@ func TestValidateTeam(t *testing.T) { //nolint:gocognit
 	})
 
 	t.Run("loops rejected on non-sequential strategy", func(t *testing.T) {
+		loopsTrue := true
 		team := &arkv1alpha1.Team{
 			ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default"},
 			Spec: arkv1alpha1.TeamSpec{
 				Strategy: "selector",
-				Loops:    true,
+				Loops:    &loopsTrue,
 				Members: []arkv1alpha1.TeamMember{
 					{Name: "agent1", Type: "agent"},
 				},

@@ -32,6 +32,8 @@ interface UseChatSessionReturn {
   messages: ExtendedChatMessage[];
   sessionId: string;
   isProcessing: boolean;
+  processingPhase?: string;
+
   error: string | null;
   sendMessage: (message: string) => Promise<void>;
   clearChat: () => void;
@@ -146,6 +148,8 @@ export function useChatSession({
   );
 
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingPhase, setProcessingPhase] = useState<string | undefined>();
+
   const [error, setError] = useState<string | null>(null);
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
   const queryTimeout = useAtomValue(queryTimeoutSettingAtom);
@@ -254,15 +258,29 @@ export function useChatSession({
         currentMessageIndex += systemMsgCount + 1;
       };
 
-      try {
-        for await (const chunk of chatService.streamChatResponse(
+      const { queryName: initialQueryName, chunks } =
+        await chatService.startStreamChatResponse(
           userMessage,
           type,
           name,
           sessionId,
           conversationId,
           queryTimeout,
-        )) {
+        );
+      streamQueryName = initialQueryName;
+
+      const stopPhasePolling = await chatService.streamQueryStatus(
+        streamQueryName,
+        (status) => {
+          if (status && typeof status === 'object' && 'phase' in status) {
+            const phase = (status as { phase?: string }).phase;
+            setProcessingPhase(phase);
+          }
+        },
+      );
+
+      try {
+        for await (const chunk of chunks) {
           const typedChunk = chunk as unknown as ArkExtendedChunk;
 
           if (typedChunk?.id === 'stream-init' && typedChunk.ark?.query) {
@@ -513,6 +531,7 @@ export function useChatSession({
         }
       }
 
+      stopPhasePolling();
       finalizeCurrentMessage();
 
       if (messageTokenUsage) {
@@ -654,6 +673,8 @@ export function useChatSession({
       while (!pollingStopped) {
         try {
           const result = await chatService.getQueryResult(query.name);
+
+          setProcessingPhase(result.status);
 
           if (result.status === 'approval-required' && result.approvalRef) {
             try {
@@ -888,6 +909,7 @@ export function useChatSession({
         setError(errMsg);
       } finally {
         setIsProcessing(false);
+        setProcessingPhase(undefined);
       }
     },
     [
@@ -950,6 +972,7 @@ export function useChatSession({
     messages: chatMessages,
     sessionId,
     isProcessing,
+    processingPhase,
     error,
     sendMessage,
     clearChat,

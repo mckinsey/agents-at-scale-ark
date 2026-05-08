@@ -128,6 +128,16 @@ func (h *Handler) ProcessMessage(
 		if approvalErr, ok := err.(*ApprovalRequiredError); ok {
 			return h.buildApprovalRequiredResponse(ctx, state, approvalErr), nil
 		}
+		// Save error messages to memory before returning
+		// This ensures failed queries appear in conversation history with error context
+		if state.memory != nil && len(state.inputMessages) > 0 {
+			errorMessage := NewAssistantMessage(fmt.Sprintf("Error: %v", err))
+			errorMessages := PrepareNewMessagesForMemory(state.inputMessages, []Message{errorMessage})
+			if saveErr := state.memory.AddMessages(ctx, state.query.Name, errorMessages); saveErr != nil {
+				log.Error(saveErr, "failed to save error messages to memory")
+			}
+		}
+
 		state.finalizeStream(ctx, nil, arkv1alpha1.TokenUsage{})
 		return nil, fmt.Errorf("execution failed: %w", err)
 	}

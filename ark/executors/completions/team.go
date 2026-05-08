@@ -192,12 +192,13 @@ func MakeTeam(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Tea
 		return nil, err
 	}
 
+	loops := crd.Spec.Loops != nil && *crd.Spec.Loops
 	return &Team{
 		Name:              crd.Name,
 		Members:           members,
 		Strategy:          crd.Spec.Strategy,
 		Description:       crd.Spec.Description,
-		Loops:             crd.Spec.Loops,
+		Loops:             loops,
 		MaxTurns:          crd.Spec.MaxTurns,
 		Selector:          crd.Spec.Selector,
 		Graph:             crd.Spec.Graph,

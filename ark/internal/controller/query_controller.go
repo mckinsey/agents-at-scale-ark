@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -55,6 +56,7 @@ type QueryReconciler struct {
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=agents,verbs=get;list
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=teams,verbs=get;list
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=models,verbs=get;list
+// +kubebuilder:rbac:groups=ark.mckinsey.com,resources=arkconfigs,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;list;watch;patch
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=impersonate
 
@@ -144,7 +146,7 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 		}, nil
 	case "approval-required":
 		return r.handleApprovalRequiredPhase(ctx, req, obj, expiry)
-	case statusRunning:
+	case statusProvisioning, statusRunning:
 		return r.handleRunningPhase(ctx, req, obj)
 	default:
 		if err := r.updateStatus(ctx, &obj, statusRunning); err != nil {
@@ -337,16 +339,33 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	log.Info("query execution completed", "query", obj.Name, "status", queryStatus, "duration", duration.Duration)
 
-	var operationData map[string]string
+	operationData := buildOperationData(target, queryInput)
+	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", operationData)
+}
+
+func buildOperationData(target *arkv1alpha1.QueryTarget, queryInput string) map[string]string {
+	operationData := make(map[string]string)
+	operationData["targetType"] = target.Type
+
+	switch target.Type {
+	case targetTypeTeam:
+		operationData["team"] = target.Name
+	case targetTypeAgent:
+		operationData["agent"] = target.Name
+	case targetTypeTool:
+		operationData["tool"] = target.Name
+	}
+
 	if queryInput != "" {
 		const maxDisplayInputLength = 48
 		displayInput := queryInput
 		if len(displayInput) > maxDisplayInputLength {
 			displayInput = displayInput[:maxDisplayInputLength-3] + "..."
 		}
-		operationData = map[string]string{"input": displayInput}
+		operationData["input"] = displayInput
 	}
-	r.Eventing.QueryRecorder().Complete(opCtx, "QueryExecution", "Query execution completed", operationData)
+
+	return operationData
 }
 
 func (r *QueryReconciler) resumeFromApprovalAsync(opCtx context.Context, obj arkv1alpha1.Query, namespacedName types.NamespacedName) {
@@ -926,11 +945,7 @@ func (r *QueryReconciler) updateStatus(ctx context.Context, query *arkv1alpha1.Q
 	return r.updateStatusWithDuration(ctx, query, status, nil)
 }
 
-func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *arkv1alpha1.Query, status string, duration *metav1.Duration) error {
-	if ctx.Err() != nil {
-		return nil
-	}
-	query.Status.Phase = status
+func (r *QueryReconciler) setConditionForPhase(query *arkv1alpha1.Query, status string) {
 	switch status {
 	case statusRunning:
 		r.setConditionCompleted(query, metav1.ConditionFalse, "QueryRunning", "Query is running")
@@ -945,17 +960,60 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 	case statusCanceled:
 		r.setConditionCompleted(query, metav1.ConditionTrue, "QueryCanceled", "Query canceled")
 	}
-	if duration != nil {
-		query.Status.Duration = duration
+}
+
+type savedQueryStatus struct {
+	response       *arkv1alpha1.Response
+	tokenUsage     arkv1alpha1.TokenUsage
+	conversationId string
+}
+
+func (s *savedQueryStatus) restoreOnto(query *arkv1alpha1.Query) {
+	if s.response != nil {
+		query.Status.Response = s.response
 	}
-	err := r.Status().Update(ctx, query)
-	if err != nil {
-		if errors.IsNotFound(err) {
+	query.Status.TokenUsage = s.tokenUsage
+	if s.conversationId != "" {
+		query.Status.ConversationId = s.conversationId
+	}
+}
+
+func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *arkv1alpha1.Query, status string, duration *metav1.Duration) error {
+	if ctx.Err() != nil {
+		return nil
+	}
+	saved := savedQueryStatus{
+		response:       query.Status.Response,
+		tokenUsage:     query.Status.TokenUsage,
+		conversationId: query.Status.ConversationId,
+	}
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		if ctx.Err() != nil {
 			return nil
 		}
-		logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
-	}
-	return err
+		if err := r.Get(ctx, types.NamespacedName{Name: query.Name, Namespace: query.Namespace}, query); err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+		query.Status.Phase = status
+		saved.restoreOnto(query)
+		r.setConditionForPhase(query, status)
+		if duration != nil {
+			query.Status.Duration = duration
+		}
+		err := r.Status().Update(ctx, query)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			if !errors.IsConflict(err) {
+				logf.FromContext(ctx).Error(err, "failed to update query status", "status", status)
+			}
+		}
+		return err
+	})
 }
 
 func createErrorResponse(target arkv1alpha1.QueryTarget, err error) *arkv1alpha1.Response {

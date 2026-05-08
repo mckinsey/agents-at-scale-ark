@@ -29,9 +29,10 @@ pipelines:
       for svc in v1alpha1.ark.mckinsey.com v1prealpha1.ark.mckinsey.com; do
         if kubectl get apiservice "$svc" --no-headers 2>/dev/null; then
           kubectl label apiservice "$svc" app.kubernetes.io/managed-by=Helm --overwrite 2>/dev/null || true
-          kubectl annotate apiservice "$svc" meta.helm.sh/release-name=ark-controller meta.helm.sh/release-namespace=ark-system --overwrite 2>/dev/null || true
+          kubectl annotate apiservice "$svc" meta.helm.sh/release-name=ark-apiserver meta.helm.sh/release-namespace=ark-system --overwrite 2>/dev/null || true
         fi
       done
+      create_deployments ark-apiserver
     fi
     create_deployments ark-controller
     create_deployments ark-completions
@@ -45,9 +46,10 @@ pipelines:
       for svc in v1alpha1.ark.mckinsey.com v1prealpha1.ark.mckinsey.com; do
         if kubectl get apiservice "$svc" --no-headers 2>/dev/null; then
           kubectl label apiservice "$svc" app.kubernetes.io/managed-by=Helm --overwrite 2>/dev/null || true
-          kubectl annotate apiservice "$svc" meta.helm.sh/release-name=ark-controller meta.helm.sh/release-namespace=ark-system --overwrite 2>/dev/null || true
+          kubectl annotate apiservice "$svc" meta.helm.sh/release-name=ark-apiserver meta.helm.sh/release-namespace=ark-system --overwrite 2>/dev/null || true
         fi
       done
+      create_deployments ark-apiserver
     fi
     create_deployments ark-controller
     create_deployments ark-completions
@@ -105,10 +107,27 @@ deployments:
             cpu: "200m"
         securityContext:
           runAsNonRoot: false
+  ark-apiserver:
+    namespace: ark-system
+    helm:
+      chart:
+        path: ./dist/chart-apiserver
+      values:
+        image:
+          repository: ${runtime.images.ark-controller.image}
+          tag: ${runtime.images.ark-controller.tag}
+        postgresql:
+          host: ark-storage-dev
+          user: postgres
+          passwordSecretName: ark-storage-dev-password
 
 dev:
   ark-controller:
-    imageSelector: ark-controller
+    # On the split branch, ark-apiserver uses the same image as ark-controller, so a
+    # bare imageSelector caught both pods and replaced both with the dev container.
+    # Match the controller's unique label instead.
+    labelSelector:
+      control-plane: ark-controller
     devImage: golang:1.24.13-bookworm
     command:
       - "sh"
@@ -116,7 +135,7 @@ dev:
       - |
         cd /app
         mkdir -p internal/apiserver/crds && cp config/crd/bases/*.yaml internal/apiserver/crds/
-        GOTOOLCHAIN=auto go run cmd/main.go --leader-elect=false --completions-addr=http://ark-completions.ark-system
+        GOTOOLCHAIN=auto go run cmd/main.go --role=controller --leader-elect=false --completions-addr=http://ark-completions.ark-system
     namespace: ark-system
     logs:
       lastLines: 50
@@ -190,4 +209,4 @@ profiles:
             ARK_POSTGRES_PASSWORD=arkdev123 \
             ARK_POSTGRES_SSL_MODE=disable \
             ARK_APISERVER_PORT=6443 \
-            go run cmd/main.go --leader-elect=false --completions-addr=http://ark-completions.ark-system
+            go run cmd/main.go --role=controller --leader-elect=false --completions-addr=http://ark-completions.ark-system

@@ -40,6 +40,7 @@ export function ChatPanel({
   const {
     messages,
     isProcessing,
+    processingPhase,
     error,
     sendMessage,
     clearChat,
@@ -91,6 +92,8 @@ export function ChatPanel({
             graphEdges={graphEdges}
             debugMode={debugMode}
             isProcessing={isProcessing}
+            processingPhase={processingPhase}
+
             error={error}
             viewMode={viewMode}
             messagesEndRef={messagesEndRef}

@@ -4,6 +4,5 @@ pyyaml>=6.0.2
 requests>=2.25.0
 playwright>=1.40.0
 pytest-playwright>=0.4.0
-python-dotenv>=1.0.0
 pytest-xdist>=3.5.0
 
