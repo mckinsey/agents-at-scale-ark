@@ -8,9 +8,13 @@ from collections import defaultdict
 from pathlib import Path
 from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 
+from pages.models_page import MOCK_LLM_MODEL_NAME
+
 logger = logging.getLogger(__name__)
 
 REQUIRED_SERVICES = ['ark-dashboard', 'ark-api']
+MOCK_LLM_VALUES = Path(__file__).parent / "mock-llm-values.yaml"
+MOCK_LLM_MODEL_YAML = Path(__file__).parent / "mock-llm-model.yaml"
 
 def pytest_addoption(parser):
     try:
@@ -80,6 +84,53 @@ def install_ark():
     logger.info("ARK installation successful")
 
 
+def _ensure_mock_llm_for_worker():
+    """Ensure mock-llm is installed without destructive cleanup.
+    Safe to call concurrently from multiple xdist workers."""
+    status = subprocess.run(
+        ["helm", "status", "mock-llm", "--namespace", "default"],
+        capture_output=True
+    )
+    if status.returncode == 0:
+        logger.info("mock-llm already installed, skipping worker install")
+        return
+    logger.info("mock-llm not found, installing for worker...")
+    result = subprocess.run([
+        "helm", "upgrade", "--install", "mock-llm",
+        "oci://ghcr.io/dwmkerr/charts/mock-llm",
+        "--version", "0.1.28",
+        "--namespace", "default",
+        "--values", str(MOCK_LLM_VALUES),
+        "--wait", "--timeout=120s"
+    ], capture_output=True, text=True, timeout=180)
+    if result.returncode != 0:
+        logger.warning(f"mock-llm worker install failed (may be a concurrent install): {result.stderr[:200]}")
+
+
+def install_mock_llm():
+    logger.info("Installing mock-llm...")
+    result = subprocess.run([
+        "helm", "upgrade", "--install", "mock-llm",
+        "oci://ghcr.io/dwmkerr/charts/mock-llm",
+        "--version", "0.1.28",
+        "--namespace", "default",
+        "--values", str(MOCK_LLM_VALUES),
+        "--wait", "--timeout=120s"
+    ], capture_output=True, text=True, timeout=180)
+    if result.returncode != 0:
+        pytest.exit(f"mock-llm install failed: {result.stderr}", returncode=1)
+    logger.info("mock-llm installed")
+
+
+def uninstall_mock_llm():
+    logger.info("Uninstalling mock-llm...")
+    subprocess.run([
+        "helm", "uninstall", "mock-llm",
+        "--namespace", "default",
+        "--wait", "--timeout=60s"
+    ], capture_output=True, text=True, timeout=120)
+
+
 def wait_for_pods_ready():
     logger.info("Waiting for ARK pods to be ready...")
     
@@ -136,7 +187,9 @@ def ark_setup(request, tmp_path_factory):
 
     # xdist workers: the CI already deployed ark and port-forwarded.
     # Workers must NOT touch the port-forward — doing so kills it for siblings.
+    # But they do need mock-llm running — CI pre-installs it, local runs may not.
     if worker_id != "master":
+        _ensure_mock_llm_for_worker()
         yield
         return
 
@@ -147,6 +200,7 @@ def ark_setup(request, tmp_path_factory):
             time.sleep(30)
 
         wait_for_pods_ready()
+        install_mock_llm()
 
         # Only start our own port-forward if one isn't already serving.
         if not _is_port_forwarding_active():
@@ -162,9 +216,31 @@ def ark_setup(request, tmp_path_factory):
         wait_for_dashboard()
         yield
     finally:
+        subprocess.run(
+            ["kubectl", "delete", "-f", str(MOCK_LLM_MODEL_YAML), "--ignore-not-found"],
+            capture_output=True
+        )
+        uninstall_mock_llm()
         if port_forward:
             port_forward.terminate()
             port_forward.wait(timeout=5)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def mock_llm_model(ark_setup):
+    result = subprocess.run(
+        ["kubectl", "apply", "-f", str(MOCK_LLM_MODEL_YAML)],
+        capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        logger.warning("kubectl apply mock-llm-model failed (rc=%d): %s %s",
+                       result.returncode, result.stdout.strip(), result.stderr.strip())
+    subprocess.run(
+        ["kubectl", "wait", "--for=condition=ModelAvailable",
+         "model/test-model-mock", "-n", "default", "--timeout=60s"],
+        check=True
+    )
+    yield MOCK_LLM_MODEL_NAME
 
 
 @pytest.fixture(scope="session")

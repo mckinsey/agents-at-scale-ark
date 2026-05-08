@@ -149,6 +149,41 @@ spec:
                         type: object
                     type: object
                 type: object
+              authorization:
+                description: |-
+                  Authorization configures how the controller obtains and injects
+                  credentials for OAuth-protected MCP servers. When unset, the
+                  controller does not attempt to inject Authorization headers.
+                properties:
+                  tokenSecretRef:
+                    description: |-
+                      TokenSecretRef references the Kubernetes Secret holding OAuth
+                      tokens and client credentials. The Secret MUST exist in the same
+                      namespace as the MCPServer.
+                    properties:
+                      accessTokenKey:
+                        default: access_token
+                        type: string
+                      clientIDKey:
+                        default: client_id
+                        type: string
+                      clientSecretKey:
+                        default: client_secret
+                        type: string
+                      expiresAtKey:
+                        default: expires_at
+                        type: string
+                      name:
+                        type: string
+                      refreshTokenKey:
+                        default: refresh_token
+                        type: string
+                    required:
+                    - name
+                    type: object
+                required:
+                - tokenSecretRef
+                type: object
               description:
                 type: string
               headers:
@@ -268,6 +303,13 @@ spec:
                     items:
                       type: string
                     type: array
+                  expiresAt:
+                    description: |-
+                      ExpiresAt is the absolute time at which the current access_token
+                      expires, published for dashboard / observability consumers that
+                      may have `get` on mcpservers but not on secrets.
+                    format: date-time
+                    type: string
                   grantTypesSupported:
                     description: |-
                       GrantTypesSupported is the set of OAuth grant types the
@@ -317,6 +359,7 @@ spec:
                     enum:
                     - Required
                     - DiscoveryFailed
+                    - Authorized
                     type: string
                   tokenEndpoint:
                     description: |-

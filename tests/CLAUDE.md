@@ -950,24 +950,46 @@ chainsaw test tests/ --test-dir tests/queries --pause-on-failure
 
 Two things make Radix UI Select options unstable for Playwright:
 
-1. **Floating UI positioning**: The dropdown portal DOM nodes are replaced when Floating UI calculates position, causing "element was detached from the DOM". Floating UI sets `data-side` once positioning is done.
+1. **React re-render race**: Filling a form field and immediately clicking a Select trigger can race with React Hook Form's blur/validation re-render, causing the trigger to be briefly detached or the select to open and immediately close.
 2. **Open animation**: `data-state="open"` fires at the *start* of the entry animation (zoom-in, slide-in), not the end. Playwright sees the bounding box still changing and reports "element is not stable". The animation must fully complete before options are clickable.
 
-Wait for the listbox to be visible, then wait for all CSS animations to finish before clicking:
+Best practices for reliable Select interaction:
+
+1. Scope the trigger selector to the dialog to avoid matching other comboboxes on the page.
+2. Blur the form input before clicking the trigger, so React re-renders from validation happen before the click.
+3. Retry the click if the listbox doesn't appear (handles transient close).
+4. Do NOT require `[data-side]` in the listbox selector — Radix Popper sets it asynchronously and it may not be present immediately in headless CI.
 
 ```python
-trigger.click()
-listbox = page.locator("[role='listbox'][data-side][data-state='open']")
-listbox.wait_for(state="visible", timeout=15000)
-self.wait_for_animations_complete(listbox)  # BasePage helper
+name_input.fill(tool_name)
+name_input.blur()  # Trigger form validation re-render before clicking select
+
+type_trigger = page.locator("[role='dialog'] [role='combobox']").first
+type_trigger.scroll_into_view_if_needed()
+type_trigger.wait_for(state="visible", timeout=15000)
+
+listbox = page.locator("[role='listbox'][data-state='open']")
+for attempt in range(3):
+    type_trigger.click()
+    try:
+        listbox.wait_for(state="visible", timeout=5000)
+        break
+    except Exception:
+        pass  # retry
+
+self.wait_for_animations_complete(listbox)
 page.locator("[role='option']:has-text('HTTP')").first.click()
 ```
 
 `wait_for_animations_complete` uses the Web Animations API to block until all running animations on the element and its subtree finish:
 
 ```python
-locator.evaluate("el => Promise.all(el.getAnimations({subtree: true}).map(a => a.finished))")
+handle = locator.element_handle(timeout=timeout)
+if handle:
+    page.evaluate("el => Promise.allSettled(el.getAnimations({subtree: true}).map(a => a.finished))", handle)
 ```
+
+Use `page.evaluate(fn, handle)` rather than `locator.evaluate(fn)` — the latter can cause Playwright to refocus the element, which closes Radix dropdowns.
 
 `{subtree: true}` is required — without it, `getAnimations()` only checks the listbox container, not the option elements that are actually animating.
 
