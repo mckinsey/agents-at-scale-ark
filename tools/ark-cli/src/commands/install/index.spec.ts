@@ -884,6 +884,207 @@ describe('install command', () => {
     });
   });
 
+  describe('controller-first ordering', () => {
+    it('installs ark-controller before ark-apiserver in non-interactive mode', async () => {
+      const mockServices = {
+        'ark-apiserver': {
+          name: 'ark-apiserver',
+          helmReleaseName: 'ark-apiserver',
+          chartPath: './charts/ark-apiserver',
+          namespace: 'ark-system',
+          category: 'core',
+        },
+        'ark-controller': {
+          name: 'ark-controller',
+          helmReleaseName: 'ark-controller',
+          chartPath: './charts/ark-controller',
+          namespace: 'ark-system',
+          category: 'core',
+        },
+        'ark-api': {
+          name: 'ark-api',
+          helmReleaseName: 'ark-api',
+          chartPath: './charts/ark-api',
+          namespace: 'ark-system',
+          category: 'core',
+        },
+      };
+      mockGetInstallableServices.mockReturnValue(mockServices);
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', '-y']);
+
+      const helmInstallCalls = mockExeca.mock.calls.filter(
+        (call: any) => call[0] === 'helm' && call[1][0] === 'upgrade'
+      );
+
+      // ark-controller should be first
+      expect(helmInstallCalls[0][1]).toContain('ark-controller');
+      // ark-api and ark-apiserver should come after (in alphabetical order)
+      expect(helmInstallCalls[1][1]).toContain('ark-api');
+      expect(helmInstallCalls[2][1]).toContain('ark-apiserver');
+    });
+
+    it('installs ark-controller first in interactive mode', async () => {
+      Object.assign(mockArkServices, {
+        'ark-apiserver': {
+          name: 'ark-apiserver',
+          helmReleaseName: 'ark-apiserver',
+          chartPath: './charts/ark-apiserver',
+          namespace: 'ark-system',
+          category: 'core',
+          description: 'API server',
+          enabled: true,
+          mandatory: true,
+        },
+        'ark-controller': {
+          name: 'ark-controller',
+          helmReleaseName: 'ark-controller',
+          chartPath: './charts/ark-controller',
+          namespace: 'ark-system',
+          category: 'core',
+          description: 'Controller',
+          enabled: true,
+          mandatory: true,
+        },
+        'ark-completions': {
+          name: 'ark-completions',
+          helmReleaseName: 'ark-completions',
+          chartPath: './charts/ark-completions',
+          namespace: 'ark-system',
+          category: 'core',
+          description: 'Completions',
+          enabled: true,
+          mandatory: true,
+        },
+      });
+      Object.assign(mockArkDependencies, {
+        'cert-manager-repo': {
+          name: 'cert-manager-repo',
+          command: 'helm',
+          args: ['repo', 'add', 'jetstack', 'https://charts.jetstack.io'],
+          description: 'Add Jetstack Helm repository',
+        },
+        'helm-repo-update': {
+          name: 'helm-repo-update',
+          command: 'helm',
+          args: ['repo', 'update'],
+          description: 'Update Helm repositories',
+        },
+        'cert-manager': {
+          name: 'cert-manager',
+          command: 'helm',
+          args: ['upgrade', '--install', 'cert-manager', 'jetstack/cert-manager'],
+          description: 'Certificate management',
+        },
+        'gateway-api-crds': {
+          name: 'gateway-api-crds',
+          command: 'kubectl',
+          args: ['apply', '-f', 'https://example.com/gateway-api.yaml'],
+          description: 'Gateway API CRDs',
+        },
+      });
+      mockGetInstallableServices.mockReturnValue(mockArkServices);
+      mockPrompt.mockResolvedValue({components: []});
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test']);
+
+      const helmInstallCalls = mockExeca.mock.calls.filter(
+        (call: any) => call[0] === 'helm' && call[1][0] === 'upgrade' && call[1][1] === '--install'
+      );
+
+      // Find the index of controller install
+      const controllerIndex = helmInstallCalls.findIndex((call: any) =>
+        call[1].includes('ark-controller')
+      );
+      const apiserverIndex = helmInstallCalls.findIndex((call: any) =>
+        call[1].includes('ark-apiserver')
+      );
+      const completionsIndex = helmInstallCalls.findIndex((call: any) =>
+        call[1].includes('ark-completions')
+      );
+
+      // ark-controller should be installed before both ark-apiserver and ark-completions
+      expect(controllerIndex).toBeGreaterThanOrEqual(0);
+      expect(apiserverIndex).toBeGreaterThan(controllerIndex);
+      expect(completionsIndex).toBeGreaterThan(controllerIndex);
+    });
+
+    it('handles single service install when ark-controller is the only service', async () => {
+      const mockService = {
+        name: 'ark-controller',
+        helmReleaseName: 'ark-controller',
+        chartPath: './charts/ark-controller',
+        namespace: 'ark-system',
+        category: 'core',
+      };
+      mockGetInstallableServices.mockReturnValue({'ark-controller': mockService});
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'ark-controller']);
+
+      expect(mockExeca).toHaveBeenCalledWith(
+        'helm',
+        expect.arrayContaining(['ark-controller']),
+        expect.any(Object)
+      );
+      expect(mockOutput.success).toHaveBeenCalledWith('ark-controller installed successfully');
+    });
+
+    it('maintains alphabetical order for non-controller services', async () => {
+      const mockServices = {
+        'ark-dashboard': {
+          name: 'ark-dashboard',
+          helmReleaseName: 'ark-dashboard',
+          chartPath: './charts/ark-dashboard',
+          namespace: 'default',
+          category: 'core',
+        },
+        'ark-controller': {
+          name: 'ark-controller',
+          helmReleaseName: 'ark-controller',
+          chartPath: './charts/ark-controller',
+          namespace: 'ark-system',
+          category: 'core',
+        },
+        'ark-broker': {
+          name: 'ark-broker',
+          helmReleaseName: 'ark-broker',
+          chartPath: './charts/ark-broker',
+          namespace: 'default',
+          category: 'core',
+        },
+        'ark-api': {
+          name: 'ark-api',
+          helmReleaseName: 'ark-api',
+          chartPath: './charts/ark-api',
+          namespace: 'default',
+          category: 'core',
+        },
+      };
+      mockGetInstallableServices.mockReturnValue(mockServices);
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', '-y']);
+
+      const helmInstallCalls = mockExeca.mock.calls.filter(
+        (call: any) => call[0] === 'helm' && call[1][0] === 'upgrade'
+      );
+
+      // ark-controller should be first
+      expect(helmInstallCalls[0][1]).toContain('ark-controller');
+      // Others should be alphabetical
+      expect(helmInstallCalls[1][1]).toContain('ark-api');
+      expect(helmInstallCalls[2][1]).toContain('ark-broker');
+      expect(helmInstallCalls[3][1]).toContain('ark-dashboard');
+    });
+  });
+
   describe('version validation', () => {
     it('rejects invalid ARK version format', async () => {
       const command = createInstallCommand(mockConfig);
