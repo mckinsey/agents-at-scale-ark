@@ -1,13 +1,13 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { Activity } from 'lucide-react';
 import { PageHeader } from '@/components/common/page-header';
 import { SessionsTable } from '@/components/sessions-conversations/sessions-table';
 import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 
 export default function SessionsConversationsPage() {
-  const router = useRouter();
+  const { push } = useNamespacedNavigation();
 
   return (
     <div className="flex h-full flex-col space-y-6 p-8">
@@ -28,7 +28,7 @@ export default function SessionsConversationsPage() {
 
       <div className="flex-1">
         <SessionsTable
-          onSelectSession={(sessionId) => router.push(`/sessions/${sessionId}`)}
+          onSelectSession={(sessionId) => push(`/sessions/${sessionId}`)}
           selectedSessionId={null}
         />
       </div>
