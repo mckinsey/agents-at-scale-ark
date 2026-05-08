@@ -1,118 +1,29 @@
-name: Promote to Stable
-
-on:
-  workflow_dispatch:
-
-permissions:
-  contents: write
-  pull-requests: write
+name: Publish Dummy Apiserver Chart
+on: workflow_dispatch
 
 jobs:
-  promote:
-    runs-on: ubuntu-24.04
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
     steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          ref: main
-
-      - name: Get current version
-        id: version
+      - name: Create empty chart
         run: |
-          MANIFEST=".github/release-please-manifest.json"
-          CURRENT=$(jq -r '."."' "$MANIFEST")
-          # Handle both -rc and -rc.N formats
-          STABLE=$(echo "$CURRENT" | sed 's/-rc.*$//')
+          mkdir -p ark-apiserver-dummy/templates
+          cat > ark-apiserver-dummy/Chart.yaml <<'CHART'
+          apiVersion: v2
+          name: ark-apiserver
+          description: Temporary empty chart
+          type: application
+          version: 0.1.62
+          appVersion: "0.1.62"
+          CHART
+          echo '{}' > ark-apiserver-dummy/values.yaml
+          touch ark-apiserver-dummy/templates/.gitkeep
 
-          echo "current=${CURRENT}" >> $GITHUB_OUTPUT
-          echo "stable=${STABLE}" >> $GITHUB_OUTPUT
-
-          if [[ "$CURRENT" != *-rc* ]]; then
-            echo "Error: Current version $CURRENT is not an RC version. Nothing to promote."
-            exit 1
-          fi
-
-          # Handle both -rc and -rc.N tag formats
-          LATEST_RC=$(git tag --list "v${STABLE}-rc*" --sort=-version:refname | head -1)
-          echo "latest_rc=${LATEST_RC:-v${CURRENT}}" >> $GITHUB_OUTPUT
-
-      - name: Check for existing promotion PR
-        id: check-pr
+      - name: Package and push
         run: |
-          BRANCH="promote/${{ steps.version.outputs.stable }}"
-          EXISTING_PR=$(gh pr list --base main --head "$BRANCH" --json number --jq '.[0].number')
-          if [ -n "$EXISTING_PR" ]; then
-            echo "Error: Promotion PR #${EXISTING_PR} already exists for v${{ steps.version.outputs.stable }}"
-            echo "Please merge or close the existing PR first."
-            exit 1
-          fi
-
-          # Clean up orphaned branch from previous failed runs (no PR exists)
-          if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
-            echo "Deleting orphaned branch $BRANCH from previous run"
-            git push origin --delete "$BRANCH" || true
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create promotion branch
-        run: |
-          BRANCH="promote/${{ steps.version.outputs.stable }}"
-          git checkout -b "$BRANCH"
-
-      - name: Graduate version in manifest and add release-as
-        run: |
-          MANIFEST=".github/release-please-manifest.json"
-          CURRENT="${{ steps.version.outputs.current }}"
-          STABLE="${{ steps.version.outputs.stable }}"
-
-          echo "Graduating version: $CURRENT → $STABLE"
-          jq --arg v "$STABLE" '."." = $v' "$MANIFEST" > tmp.json
-          mv tmp.json "$MANIFEST"
-
-          # Add release-as to stable config (required because release-please ignores action input in manifest mode)
-          jq --arg v "$STABLE" '. + {"release-as": $v}' .github/release-please-config.json > tmp.json
-          mv tmp.json .github/release-please-config.json
-          echo "Added release-as: $STABLE to stable config"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "$MANIFEST" .github/release-please-config.json
-          git commit -m "chore: promote ${{ steps.version.outputs.latest_rc }} to v$STABLE"
-
-      - name: Push branch and create PR
-        run: |
-          BRANCH="promote/${{ steps.version.outputs.stable }}"
-          git push origin "$BRANCH"
-
-          gh pr create \
-            --base main \
-            --head "$BRANCH" \
-            --title "chore: promote ${{ steps.version.outputs.latest_rc }} to v${{ steps.version.outputs.stable }}" \
-            --body "## Summary
-
-          Promotes release candidate \`${{ steps.version.outputs.latest_rc }}\` to stable release \`v${{ steps.version.outputs.stable }}\`.
-
-          ### What this PR does
-          - Updates the release-please manifest from \`${{ steps.version.outputs.current }}\` to \`${{ steps.version.outputs.stable }}\`
-          - Adds \`release-as\` to stable config (required because release-please ignores action input in manifest mode)
-
-          ### What happens when merged
-          - CI/CD pipeline runs on main
-          - Release Please creates \`v${{ steps.version.outputs.stable }}\` stable release
-          - Full deployment: containers, Helm charts, npm, PyPI, and docs
-
-          ---
-          **RC Tag:** \`${{ steps.version.outputs.latest_rc }}\`
-          **Stable Version:** \`v${{ steps.version.outputs.stable }}\`"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Summary
-        run: |
-          echo "## Promotion PR Created" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **RC Version:** ${{ steps.version.outputs.latest_rc }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Stable Version:** v${{ steps.version.outputs.stable }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Merge the PR to trigger the stable release." >> $GITHUB_STEP_SUMMARY
+          helm package ark-apiserver-dummy
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+          helm push ark-apiserver-0.1.62.tgz oci://ghcr.io/mckinsey/agents-at-scale-ark/charts
