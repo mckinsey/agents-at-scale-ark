@@ -124,7 +124,7 @@ var _ = Describe("MCPServer Controller — token Secret watch", func() {
 		}
 		Expect(reconciler.SetupWithManager(mgr)).To(Succeed())
 
-		mgrCtx, mgrCancel = context.WithCancel(context.Background())
+		mgrCtx, mgrCancel = context.WithCancel(context.Background()) //nolint:fatcontext // BeforeEach rebinds outer-scope ctx so AfterEach can cancel this spec's manager.
 		go func() {
 			defer GinkgoRecover()
 			Expect(mgr.Start(mgrCtx)).To(Succeed())
