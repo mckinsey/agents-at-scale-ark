@@ -153,8 +153,8 @@ export function ConversationsTab({ sessionId, initialParticipant, initialConvers
         </div>
       ) : (
         <div
-          className="grid h-[700px] grid-rows-[minmax(0,1fr)] overflow-hidden transition-all duration-300"
-          style={{ gridTemplateColumns: isSidebarCollapsed ? '48px 1fr' : 'minmax(250px, 300px) minmax(400px, 1fr)' }}
+          className="grid min-h-[500px] max-h-[calc(100vh-20rem)] grid-rows-[minmax(0,1fr)] overflow-hidden transition-all duration-300"
+          style={{ gridTemplateColumns: isSidebarCollapsed ? '48px 1fr' : 'minmax(250px, 300px) minmax(min(400px, 50vw), 1fr)' }}
         >
           <div className="flex h-full flex-col overflow-hidden">
             <div className="flex items-center justify-between border-r border-border bg-muted p-4">

@@ -52,6 +52,7 @@ export function ChatInput({ conversationId, sessionId, conversation, onAddPendin
                 checked={showToolCalls}
                 onCheckedChange={onShowToolCallsChange}
                 className="scale-75"
+                aria-label="Toggle tool call visibility"
               />
               <span className="text-xs">Show tool calls</span>
             </div>
@@ -138,6 +139,7 @@ export function ChatInput({ conversationId, sessionId, conversation, onAddPendin
               checked={showToolCalls}
               onCheckedChange={onShowToolCallsChange}
               className="scale-75"
+              aria-label="Toggle tool call visibility"
             />
             <span className="text-xs">Show tool calls</span>
           </div>
