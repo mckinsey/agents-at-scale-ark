@@ -31,7 +31,7 @@ export type QueryUpdateRequest = Omit<
 type TerminalQueryStatusPhase = 'done' | 'error' | 'canceled' | 'unknown';
 
 // Define non-terminal status phases
-type NonTerminalQueryStatusPhase = 'pending' | 'provisioning' | 'running' | 'approval-required';
+type NonTerminalQueryStatusPhase = 'pending' | 'provisioning' | 'running' | 'interaction-required';
 
 // Combined query status phase type
 type QueryStatusPhase = TerminalQueryStatusPhase | NonTerminalQueryStatusPhase;
@@ -44,7 +44,7 @@ const TERMINAL_QUERY_STATUS_PHASES: readonly TerminalQueryStatusPhase[] = [
   'unknown',
 ] as const;
 const NON_TERMINAL_QUERY_STATUS_PHASES: readonly NonTerminalQueryStatusPhase[] =
-  ['pending', 'provisioning', 'running', 'approval-required'] as const;
+  ['pending', 'provisioning', 'running', 'interaction-required'] as const;
 const QUERY_STATUS_PHASES: readonly QueryStatusPhase[] = [
   ...TERMINAL_QUERY_STATUS_PHASES,
   ...NON_TERMINAL_QUERY_STATUS_PHASES,
@@ -56,7 +56,7 @@ type QueryStatusWithPhase = {
     content: string;
     raw?: string;
   };
-  approvalRef?: {
+  interactionRef?: {
     name: string;
     namespace: string;
   };
@@ -93,7 +93,7 @@ export type ChatResponse = {
     }>;
     tool_call_id?: string;
   }>;
-  approvalRef?: {
+  interactionRef?: {
     name: string;
     namespace: string;
   };
@@ -304,7 +304,7 @@ export const chatService = {
           status: validatedPhase,
           response: response,
           messages: messages,
-          approvalRef: statusWithPhase.approvalRef,
+          interactionRef: statusWithPhase.interactionRef,
         };
       }
 

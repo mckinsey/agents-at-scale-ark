@@ -1,0 +1,341 @@
+{{- if eq (include "chart.crdEnabled" .) "true" }}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  annotations:
+    {{- if .Values.crd.keep }}
+    "helm.sh/resource-policy": keep
+    {{- end }}
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: toolinteractions.ark.mckinsey.com
+spec:
+  group: ark.mckinsey.com
+  names:
+    kind: ToolInteraction
+    listKind: ToolInteractionList
+    plural: toolinteractions
+    shortNames:
+    - ti
+    singular: toolinteraction
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    - jsonPath: .spec.queryRef.name
+      name: Query
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              approval:
+                properties:
+                  approvers:
+                    items:
+                      description: ApproverRef specifies who can approve tool calls.
+                        At least one field must be set.
+                      properties:
+                        group:
+                          description: Group name - user must belong to this group
+                          type: string
+                        role:
+                          description: Role name - user must be bound to a ClusterRole/Role
+                            with this name
+                          type: string
+                        user:
+                          description: User identity - must match the authenticated
+                            user's identity
+                          type: string
+                      type: object
+                    type: array
+                  reasonRequired:
+                    type: boolean
+                type: object
+              confirmation:
+                properties:
+                  allowEdit:
+                    type: boolean
+                  message:
+                    type: string
+                type: object
+              executionContext:
+                properties:
+                  agentName:
+                    type: string
+                  agentNamespace:
+                    type: string
+                  completedToolResults:
+                    items:
+                      type: string
+                    type: array
+                  conversationHistory:
+                    type: string
+                  pendingToolCallIndex:
+                    type: integer
+                required:
+                - agentName
+                - agentNamespace
+                - conversationHistory
+                - pendingToolCallIndex
+                type: object
+              input:
+                properties:
+                  prompt:
+                    type: string
+                  schema:
+                    x-kubernetes-preserve-unknown-fields: true
+                type: object
+              onTimeout:
+                default: reject
+                enum:
+                - reject
+                - proceed
+                type: string
+              queryRef:
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                required:
+                - name
+                - namespace
+                type: object
+              selection:
+                properties:
+                  multiSelect:
+                    type: boolean
+                  options:
+                    items:
+                      properties:
+                        description:
+                          type: string
+                        label:
+                          type: string
+                        value:
+                          type: string
+                      required:
+                      - label
+                      - value
+                      type: object
+                    minItems: 1
+                    type: array
+                  prompt:
+                    type: string
+                required:
+                - options
+                type: object
+              timeout:
+                type: string
+              toolCalls:
+                items:
+                  properties:
+                    agentReasoning:
+                      type: string
+                    annotations:
+                      properties:
+                        destructiveHint:
+                          type: boolean
+                        idempotentHint:
+                          type: boolean
+                        openWorldHint:
+                          type: boolean
+                        readOnlyHint:
+                          type: boolean
+                      type: object
+                    arguments:
+                      type: string
+                    description:
+                      type: string
+                    id:
+                      type: string
+                    name:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - arguments
+                  - id
+                  - name
+                  - type
+                  type: object
+                minItems: 1
+                type: array
+              type:
+                enum:
+                - approval
+                - input
+                - selection
+                - confirmation
+                type: string
+            required:
+            - executionContext
+            - queryRef
+            - toolCalls
+            - type
+            type: object
+          status:
+            properties:
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                default: pending
+                enum:
+                - pending
+                - completed
+                - rejected
+                - expired
+                type: string
+              requestedAt:
+                format: date-time
+                type: string
+              response:
+                properties:
+                  approval:
+                    properties:
+                      action:
+                        enum:
+                        - approved
+                        - rejected
+                        type: string
+                      reason:
+                        type: string
+                    required:
+                    - action
+                    type: object
+                  clientContext:
+                    properties:
+                      ipAddress:
+                        type: string
+                      userAgent:
+                        type: string
+                    type: object
+                  confirmation:
+                    properties:
+                      confirmed:
+                        type: boolean
+                      modifiedArguments:
+                        type: string
+                    required:
+                    - confirmed
+                    type: object
+                  input:
+                    properties:
+                      data:
+                        x-kubernetes-preserve-unknown-fields: true
+                    type: object
+                  respondedAt:
+                    format: date-time
+                    type: string
+                  respondedBy:
+                    type: string
+                  selection:
+                    properties:
+                      selected:
+                        items:
+                          type: string
+                        minItems: 1
+                        type: array
+                    required:
+                    - selected
+                    type: object
+                required:
+                - respondedAt
+                - respondedBy
+                type: object
+              responseDuration:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+{{- end }}

@@ -202,7 +202,7 @@ wheels = [
 
 [[package]]
 name = "ark-api"
-version = "0.1.61rc3"
+version = "0.1.61"
 source = { editable = "." }
 dependencies = [
     { name = "a2a-sdk", extra = ["http-server"] },
@@ -237,7 +237,7 @@ dependencies = [
 requires-dist = [
     { name = "a2a-sdk", extras = ["http-server"], specifier = ">=0.3.0,<1.0.0" },
     { name = "aiofiles", specifier = ">=24.1.0" },
-    { name = "ark-sdk", path = "out/ark_sdk-0.1.61rc3-py3-none-any.whl" },
+    { name = "ark-sdk", path = "out/ark_sdk-0.1.61-py3-none-any.whl" },
     { name = "bcrypt", specifier = ">=4.0.0" },
     { name = "coverage", specifier = ">=7.10.4" },
     { name = "dpath", specifier = ">=2.2.0" },
@@ -265,8 +265,8 @@ requires-dist = [
 
 [[package]]
 name = "ark-sdk"
-version = "0.1.61rc3"
-source = { path = "out/ark_sdk-0.1.61rc3-py3-none-any.whl" }
+version = "0.1.61"
+source = { path = "out/ark_sdk-0.1.61-py3-none-any.whl" }
 dependencies = [
     { name = "a2a-sdk", extra = ["http-server"] },
     { name = "build" },
@@ -284,7 +284,7 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 wheels = [
-    { filename = "ark_sdk-0.1.61rc3-py3-none-any.whl", hash = "sha256:286ab4b5702723c32e61b92deb919d914adec35295cc8432643d2019dbb003a8" },
+    { filename = "ark_sdk-0.1.61-py3-none-any.whl", hash = "sha256:628b3e5bf5532849db9ced1e3d8fd32cd246f0a13e24469e8c78aaa14a349c8f" },
 ]
 
 [package.metadata]
@@ -934,15 +934,15 @@ wheels = [
 
 [[package]]
 name = "google-auth"
-version = "2.51.0"
+version = "2.52.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
     { name = "pyasn1-modules" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d4/12/25485f2df4797103154e5acc1680da895ceb0423904b3b62d9dfea57aa25/google_auth-2.51.0.tar.gz", hash = "sha256:a8191008d6aaace30f0823daa3f0073c734f8b4da8b8de074b5151aa9aa732c5", size = 334735, upload-time = "2026-05-07T08:03:48.833Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/f8/80d2493cbedece1c623dc3e3cb1883300871af0dcdae254409522985ac23/google_auth-2.52.0.tar.gz", hash = "sha256:01f30e1a9e3638698d89464f5e603ce29d18e1c0e63ec31ac570aba4e164aaf5", size = 335027, upload-time = "2026-05-07T19:45:24.033Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fa/27/49871f7e3f6021fac32faba996a77b2dbaf94c7f164c294035a28f450f1d/google_auth-2.51.0-py3-none-any.whl", hash = "sha256:230bd016f50d4c0b82fda2f50db5d372bc02cfd9bdab4ce5a9ce0d8c0f06bba5", size = 245526, upload-time = "2026-05-07T08:02:15.407Z" },
+    { url = "https://files.pythonhosted.org/packages/ee/fc/2cdc74252746f547f81ff3f02d4d4234a3f411b5de5b61af97e633a060b9/google_auth-2.52.0-py3-none-any.whl", hash = "sha256:aee92803ba0ff93a70a3b8a35c7b4797837751cd6380b63ff38372b98f3ed627", size = 245614, upload-time = "2026-05-07T19:45:21.914Z" },
 ]
 
 [[package]]
@@ -1454,7 +1454,7 @@ wheels = [
 
 [[package]]
 name = "openai"
-version = "2.35.1"
+version = "2.36.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -1466,9 +1466,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a8/33/41d130d33d0ae7d1d8dcd2f61d6ff044e1edcec7246e904f86c684a3dc94/openai-2.35.1.tar.gz", hash = "sha256:ae61ad96c514295476c42fbd61d1f84b2060bc6dd8e4e4a7d85273f089614ce4", size = 752260, upload-time = "2026-05-06T21:38:12.866Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f4/a1/4d5e84cf51720fc1526cc49e10ac1961abcccb55b0efb3d970db1e9a2728/openai-2.36.0.tar.gz", hash = "sha256:139dea0edd2f1b30c33d46ae1a6929e03906254140318e4608e98fe8c566f2e7", size = 753003, upload-time = "2026-05-07T17:33:17.075Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d8/89/7f34d7b4ca3b758181166a67fd6a529d127e0817e103a31a3c8948601ea2/openai-2.35.1-py3-none-any.whl", hash = "sha256:38ff2e0394dbf56c3d39151c2aa05f3264223b6a76be2a499e87b466017a1263", size = 1300374, upload-time = "2026-05-06T21:38:10.834Z" },
+    { url = "https://files.pythonhosted.org/packages/9d/1c/5d43735b2553baae2a5e899dcbcd0670a86930d993184d72ca909bf11c9b/openai-2.36.0-py3-none-any.whl", hash = "sha256:143f6194b548dbc2c921af1f1b03b9f14c85fed8a75b5b516f5bcc11a2a50c63", size = 1302361, upload-time = "2026-05-07T17:33:15.063Z" },
 ]
 
 [[package]]
@@ -2308,11 +2308,11 @@ wheels = [
 
 [[package]]
 name = "urllib3"
-version = "2.6.3"
+version = "2.7.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/c7/24/5f1b3bdffd70275f6661c76461e25f024d5a38a46f04aaca912426a2b1d3/urllib3-2.6.3.tar.gz", hash = "sha256:1b62b6884944a57dbe321509ab94fd4d3b307075e0c2eae991ac71ee15ad38ed", size = 435556, upload-time = "2026-01-07T16:24:43.925Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/53/0c/06f8b233b8fd13b9e5ee11424ef85419ba0d8ba0b3138bf360be2ff56953/urllib3-2.7.0.tar.gz", hash = "sha256:231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c", size = 433602, upload-time = "2026-05-07T16:13:18.596Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/39/08/aaaad47bc4e9dc8c725e68f9d04865dbcb2052843ff09c97b08904852d84/urllib3-2.6.3-py3-none-any.whl", hash = "sha256:bf272323e553dfb2e87d9bfd225ca7b0f467b919d7bbd355436d3fd37cb0acd4", size = 131584, upload-time = "2026-01-07T16:24:42.685Z" },
+    { url = "https://files.pythonhosted.org/packages/7f/3e/5db95bcf282c52709639744ca2a8b149baccf648e39c8cc87553df9eae0c/urllib3-2.7.0-py3-none-any.whl", hash = "sha256:9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897", size = 131087, upload-time = "2026-05-07T16:13:17.151Z" },
 ]
 
 [[package]]

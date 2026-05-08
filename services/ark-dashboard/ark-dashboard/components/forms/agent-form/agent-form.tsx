@@ -93,6 +93,7 @@ export function AgentForm({
     executionEngines,
     availableTools,
     toolsLoading,
+    selectedTools,
     unavailableTools,
     parameters,
     isExperimentalExecutionEngineEnabled,
@@ -341,6 +342,7 @@ export function AgentForm({
                             toolsLoading={toolsLoading}
                             onToolToggle={handleToolToggle}
                             isToolSelected={isToolSelected}
+                            selectedTools={selectedTools}
                             unavailableTools={unavailableTools}
                             onDeleteClick={handleDeleteTool}
                             disabled={isDisabled}
@@ -463,6 +465,7 @@ Environment: {{.environment}}"
                       toolsLoading={toolsLoading}
                       onToolToggle={handleToolToggle}
                       isToolSelected={isToolSelected}
+                      selectedTools={selectedTools}
                       unavailableTools={
                         isEditing ? unavailableTools : undefined
                       }

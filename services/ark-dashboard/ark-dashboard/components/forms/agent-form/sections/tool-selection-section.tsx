@@ -1,8 +1,9 @@
 'use client';
 
-import { ChevronRight, CircleAlert, Trash2, Wrench } from 'lucide-react';
+import { ChevronRight, CircleAlert, Shield, Trash2, Wrench } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -19,7 +20,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import type { Tool } from '@/lib/services';
+import type { AgentTool, Tool } from '@/lib/services';
 import { groupToolsByLabel } from '@/lib/utils/groupToolsByLabels';
 
 import type { ToolSelectionSectionProps } from '../types';
@@ -31,7 +32,15 @@ interface ToolItemProps {
   isUnavailable?: boolean;
   onDeleteClick?: (tool: Tool) => void;
   disabled?: boolean;
+  interactionConfig?: AgentTool['interaction'];
 }
+
+const INTERACTION_TYPE_LABELS: Record<string, string> = {
+  approval: 'Requires Approval',
+  input: 'Requires Input',
+  selection: 'Requires Selection',
+  confirmation: 'Requires Confirmation',
+};
 
 function ToolItem({
   tool,
@@ -40,6 +49,7 @@ function ToolItem({
   isUnavailable = false,
   onDeleteClick,
   disabled = false,
+  interactionConfig,
 }: ToolItemProps) {
   return (
     <div className="flex flex-row items-start justify-between py-1">
@@ -67,7 +77,27 @@ function ToolItem({
         <Label
           htmlFor={`tool-${tool.id || tool.name}`}
           className="flex flex-1 cursor-pointer flex-col items-start gap-0.5 text-sm font-normal">
-          <span className="font-medium">{tool.name}</span>
+          <div className="flex items-center gap-2">
+            <span className="font-medium">{tool.name}</span>
+            {interactionConfig && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="outline" className="h-5 gap-1 px-1.5 py-0 text-xs">
+                      <Shield className="h-3 w-3" />
+                      {interactionConfig.type === 'approval' ? 'HITL' : interactionConfig.type}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{INTERACTION_TYPE_LABELS[interactionConfig.type] || 'Human-in-the-loop'}</p>
+                    {interactionConfig.timeout && (
+                      <p className="text-muted-foreground text-xs">Timeout: {interactionConfig.timeout}</p>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </div>
           {tool.description && (
             <span className="text-muted-foreground text-xs">
               {tool.description}
@@ -96,6 +126,7 @@ interface ToolGroupProps {
   unavailableTools?: Tool[];
   onDeleteClick?: (tool: Tool) => void;
   disabled?: boolean;
+  interactionConfigMap: Map<string, AgentTool['interaction']>;
 }
 
 function ToolGroup({
@@ -105,6 +136,7 @@ function ToolGroup({
   unavailableTools = [],
   onDeleteClick,
   disabled = false,
+  interactionConfigMap,
 }: ToolGroupProps) {
   return (
     <Collapsible defaultOpen className="group/collapsible">
@@ -123,6 +155,7 @@ function ToolGroup({
               isUnavailable={unavailableTools.some(t => t.name === tool.name)}
               onDeleteClick={onDeleteClick}
               disabled={disabled}
+              interactionConfig={interactionConfigMap.get(tool.name)}
             />
           ))}
         </div>
@@ -136,6 +169,7 @@ export function ToolSelectionSection({
   toolsLoading,
   onToolToggle,
   isToolSelected,
+  selectedTools,
   unavailableTools = [],
   onDeleteClick,
   disabled = false,
@@ -152,6 +186,16 @@ export function ToolSelectionSection({
     () => groupToolsByLabel(filteredTools),
     [filteredTools],
   );
+
+  const interactionConfigMap = useMemo(() => {
+    const map = new Map<string, AgentTool['interaction']>();
+    for (const tool of selectedTools) {
+      if (tool.name && tool.interaction) {
+        map.set(tool.name, tool.interaction);
+      }
+    }
+    return map;
+  }, [selectedTools]);
 
   return (
     <div className="space-y-2">
@@ -200,6 +244,7 @@ export function ToolSelectionSection({
                 unavailableTools={unavailableTools}
                 onDeleteClick={onDeleteClick}
                 disabled={disabled}
+                interactionConfigMap={interactionConfigMap}
               />
             )}
             {filteredTools.length === 0 && searchQuery ? (
@@ -216,6 +261,7 @@ export function ToolSelectionSection({
                   unavailableTools={unavailableTools}
                   onDeleteClick={onDeleteClick}
                   disabled={disabled}
+                  interactionConfigMap={interactionConfigMap}
                 />
               ))
             )}

@@ -62,8 +62,8 @@ func (s *executionState) finalizeStream(ctx context.Context, responseMessages []
 	s.finalizeStreamWithPhase(ctx, responseMessages, tokenUsage, "done")
 }
 
-func (s *executionState) finalizeStreamForApproval(ctx context.Context) {
-	s.finalizeStreamWithPhase(ctx, nil, arkv1alpha1.TokenUsage{}, "approval-required")
+func (s *executionState) finalizeStreamForInteraction(ctx context.Context) {
+	s.finalizeStreamWithPhase(ctx, nil, arkv1alpha1.TokenUsage{}, "interaction-required")
 }
 
 func (s *executionState) finalizeStreamWithPhase(ctx context.Context, responseMessages []Message, tokenUsage arkv1alpha1.TokenUsage, phase string) {
@@ -125,8 +125,8 @@ func (h *Handler) ProcessMessage(
 
 	execResult, responseMessages, err := h.dispatchTarget(ctx, state)
 	if err != nil {
-		if approvalErr, ok := err.(*ApprovalRequiredError); ok {
-			return h.buildApprovalRequiredResponse(ctx, state, approvalErr), nil
+		if interactionErr, ok := err.(*InteractionRequiredError); ok {
+			return h.buildInteractionRequiredResponse(ctx, state, interactionErr), nil
 		}
 		// Save error messages to memory before returning
 		// This ensures failed queries appear in conversation history with error context
@@ -146,8 +146,8 @@ func (h *Handler) ProcessMessage(
 }
 
 type resumptionRef struct {
-	ToolApprovalRequest string
-	Namespace           string
+	ToolInteraction string
+	Namespace       string
 }
 
 func extractResumptionMetadata(message protocol.Message) *resumptionRef {
@@ -162,14 +162,14 @@ func extractResumptionMetadata(message protocol.Message) *resumptionRef {
 	if !ok {
 		return nil
 	}
-	tarName, _ := resumptionMap["toolApprovalRequest"].(string)
+	tiName, _ := resumptionMap["toolInteraction"].(string)
 	namespace, _ := resumptionMap["namespace"].(string)
-	if tarName == "" {
+	if tiName == "" {
 		return nil
 	}
 	return &resumptionRef{
-		ToolApprovalRequest: tarName,
-		Namespace:           namespace,
+		ToolInteraction: tiName,
+		Namespace:       namespace,
 	}
 }
 
@@ -184,12 +184,12 @@ func (h *Handler) processResumption(ctx context.Context, message protocol.Messag
 		namespace = meta.Query.Namespace
 	}
 
-	var tar arkv1alpha1.ToolApprovalRequest
-	if err := h.k8sClient.Get(ctx, types.NamespacedName{Name: ref.ToolApprovalRequest, Namespace: namespace}, &tar); err != nil {
-		return nil, fmt.Errorf("failed to get ToolApprovalRequest %s/%s: %w", namespace, ref.ToolApprovalRequest, err)
+	var ti arkv1alpha1.ToolInteraction
+	if err := h.k8sClient.Get(ctx, types.NamespacedName{Name: ref.ToolInteraction, Namespace: namespace}, &ti); err != nil {
+		return nil, fmt.Errorf("failed to get ToolInteraction %s/%s: %w", namespace, ref.ToolInteraction, err)
 	}
 
-	execResult, err := h.ResumeFromApproval(ctx, &tar)
+	execResult, err := h.ResumeFromInteraction(ctx, &ti)
 	if err != nil {
 		return nil, fmt.Errorf("resumption failed: %w", err)
 	}
@@ -381,12 +381,12 @@ func (h *Handler) buildA2AResponse(ctx context.Context, state *executionState, r
 	}
 }
 
-func (h *Handler) buildApprovalRequiredResponse(ctx context.Context, state *executionState, approvalErr *ApprovalRequiredError) *taskmanager.MessageProcessingResult {
+func (h *Handler) buildInteractionRequiredResponse(ctx context.Context, state *executionState, interactionErr *InteractionRequiredError) *taskmanager.MessageProcessingResult {
 	log := logf.FromContext(ctx)
-	log.Info("Approval required for tool calls", "query", state.query.Name, "toolCalls", len(approvalErr.ToolCalls))
+	log.Info("Interaction required for tool calls", "query", state.query.Name, "toolCalls", len(interactionErr.ToolCalls))
 
-	toolCallInfos := make([]map[string]any, len(approvalErr.ToolCalls))
-	for i, tc := range approvalErr.ToolCalls {
+	toolCallInfos := make([]map[string]any, len(interactionErr.ToolCalls))
+	for i, tc := range interactionErr.ToolCalls {
 		toolCallInfos[i] = map[string]any{
 			"id":        tc.ID,
 			"name":      tc.Function.Name,
@@ -395,23 +395,26 @@ func (h *Handler) buildApprovalRequiredResponse(ctx context.Context, state *exec
 		}
 	}
 
-	approvalMeta := map[string]any{
-		"approvalRequired": true,
-		"toolCalls":        toolCallInfos,
+	interactionMeta := map[string]any{
+		"interactionRequired": true,
+		"toolCalls":           toolCallInfos,
 	}
-	if approvalErr.Context != nil {
-		approvalMeta["executionContext"] = map[string]any{
-			"conversationHistory":  approvalErr.Context.ConversationHistory,
-			"pendingToolCallIndex": approvalErr.Context.PendingToolCallIndex,
-			"completedToolResults": approvalErr.Context.CompletedToolResults,
-			"agentName":            approvalErr.Context.AgentName,
-			"agentNamespace":       approvalErr.Context.AgentNamespace,
+	if interactionErr.Interaction != nil {
+		interactionMeta["interactionType"] = interactionErr.Interaction.Type
+	}
+	if interactionErr.Context != nil {
+		interactionMeta["executionContext"] = map[string]any{
+			"conversationHistory":  interactionErr.Context.ConversationHistory,
+			"pendingToolCallIndex": interactionErr.Context.PendingToolCallIndex,
+			"completedToolResults": interactionErr.Context.CompletedToolResults,
+			"agentName":            interactionErr.Context.AgentName,
+			"agentNamespace":       interactionErr.Context.AgentNamespace,
 		}
 	}
 
 	responseMessage := protocol.NewMessage(
 		protocol.MessageRoleAgent,
-		[]protocol.Part{protocol.NewTextPart("Approval required for tool execution")},
+		[]protocol.Part{protocol.NewTextPart("Interaction required for tool execution")},
 	)
 	responseMessage.Metadata = map[string]any{
 		arka2a.QueryExtensionMetadataKey: map[string]any{
@@ -420,10 +423,10 @@ func (h *Handler) buildApprovalRequiredResponse(ctx context.Context, state *exec
 				"namespace": state.query.Namespace,
 			},
 		},
-		"ark.approval": approvalMeta,
+		"ark.interaction": interactionMeta,
 	}
 
-	state.finalizeStreamForApproval(ctx)
+	state.finalizeStreamForInteraction(ctx)
 
 	return &taskmanager.MessageProcessingResult{
 		Result: &responseMessage,
@@ -707,8 +710,8 @@ func serializeResponseMessages(messages []Message) string {
 	return string(data)
 }
 
-func (h *Handler) ResumeFromApproval(ctx context.Context, tar *arkv1alpha1.ToolApprovalRequest) (*ExecutionResult, error) {
-	execCtx := tar.Spec.ExecutionContext
+func (h *Handler) ResumeFromInteraction(ctx context.Context, ti *arkv1alpha1.ToolInteraction) (*ExecutionResult, error) {
+	execCtx := ti.Spec.ExecutionContext
 
 	messages, err := DeserializeMessages(execCtx.ConversationHistory)
 	if err != nil {
@@ -717,8 +720,8 @@ func (h *Handler) ResumeFromApproval(ctx context.Context, tar *arkv1alpha1.ToolA
 
 	var query arkv1alpha1.Query
 	if err := h.k8sClient.Get(ctx, types.NamespacedName{
-		Name:      tar.Spec.QueryRef.Name,
-		Namespace: tar.Spec.QueryRef.Namespace,
+		Name:      ti.Spec.QueryRef.Name,
+		Namespace: ti.Spec.QueryRef.Namespace,
 	}, &query); err != nil {
 		return nil, fmt.Errorf("failed to get query: %w", err)
 	}
@@ -738,8 +741,8 @@ func (h *Handler) ResumeFromApproval(ctx context.Context, tar *arkv1alpha1.ToolA
 	}
 
 	approvedToolIDs := make(map[string]bool)
-	if tar.Status.Decision != nil && tar.Status.Decision.Action == "approved" {
-		for _, tc := range tar.Spec.ToolCalls {
+	if ti.Status.Response != nil && ti.Status.Response.Approval != nil && ti.Status.Response.Approval.Action == "approved" {
+		for _, tc := range ti.Spec.ToolCalls {
 			approvedToolIDs[tc.ID] = true
 		}
 	}
@@ -821,7 +824,7 @@ func (h *Handler) executeApprovedToolsAndContinue(
 		}
 
 		if err := agent.executeToolCalls(ctx, choice.Message.ToolCalls, &messages, &newMessages); err != nil {
-			if IsApprovalRequired(err) {
+			if IsInteractionRequired(err) {
 				return &ExecutionResult{Messages: newMessages}, err
 			}
 			if IsTerminateTeam(err) {

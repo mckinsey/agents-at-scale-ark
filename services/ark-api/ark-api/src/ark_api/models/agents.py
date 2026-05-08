@@ -1,7 +1,7 @@
 """Agent CRD response models."""
 from typing import List, Dict, Optional, Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .common import AvailabilityStatus
 
@@ -73,11 +73,62 @@ class AgentLabelSelector(BaseModel):
     matchExpressions: Optional[List[AgentLabelSelectorRequirement]] = None
 
 
+class ApproverRef(BaseModel):
+    """Reference to an approver for tool interactions."""
+    user: Optional[str] = None
+    role: Optional[str] = None
+    group: Optional[str] = None
+
+
+class ToolInteractionApprovalConfig(BaseModel):
+    """Approval-specific interaction configuration."""
+    approvers: Optional[List[ApproverRef]] = None
+    reasonRequired: Optional[bool] = None
+
+
+class ToolInteractionInputConfig(BaseModel):
+    """Input-specific interaction configuration."""
+    schema_: Optional[Dict[str, Any]] = Field(default=None, alias='schema')
+    prompt: Optional[str] = None
+
+
+class ToolInteractionSelectionOption(BaseModel):
+    """Option for selection-type interactions."""
+    label: str
+    value: str
+    description: Optional[str] = None
+
+
+class ToolInteractionSelectionConfig(BaseModel):
+    """Selection-specific interaction configuration."""
+    options: List[ToolInteractionSelectionOption]
+    multiSelect: Optional[bool] = None
+    prompt: Optional[str] = None
+
+
+class ToolInteractionConfirmationConfig(BaseModel):
+    """Confirmation-specific interaction configuration."""
+    message: Optional[str] = None
+    allowEdit: Optional[bool] = None
+
+
+class ToolInteractionConfig(BaseModel):
+    """Tool interaction configuration for HITL."""
+    type: str  # "approval", "input", "selection", "confirmation"
+    timeout: Optional[str] = None
+    onTimeout: Optional[str] = None
+    approval: Optional[ToolInteractionApprovalConfig] = None
+    input: Optional[ToolInteractionInputConfig] = None
+    selection: Optional[ToolInteractionSelectionConfig] = None
+    confirmation: Optional[ToolInteractionConfirmationConfig] = None
+
+
 class AgentTool(BaseModel):
     """Tool configuration for an agent."""
     type: str  # "built-in", "mcp", "http", "agent", "team", "builtin" (or deprecated "custom")
     name: Optional[str] = None
     labelSelector: Optional[AgentLabelSelector] = None
+    interaction: Optional[ToolInteractionConfig] = None
 
 
 class AgentHeaderValue(BaseModel):

@@ -1,9 +1,10 @@
 apiVersion: ark.mckinsey.com/v1alpha1
-kind: ToolApprovalRequest
+kind: ToolInteraction
 metadata:
-  name: tar-query-12345-delete-file
+  name: ti-query-12345
   namespace: default
 spec:
+  type: approval
   queryRef:
     name: query-12345
     namespace: default
@@ -19,10 +20,11 @@ spec:
         idempotentHint: true
   timeout: 5m
   onTimeout: reject
-  approvers:
-    - role: admin
-    - user: operations-lead
-  reasonRequired: true
+  approval:
+    approvers:
+      - role: admin
+      - user: operations-lead
+    reasonRequired: true
   executionContext:
     conversationHistory: "base64-encoded-message-history"
     pendingToolCallIndex: 0

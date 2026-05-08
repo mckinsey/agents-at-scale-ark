@@ -15,11 +15,12 @@ spec:
       name: create-file
     - type: http
       name: delete-file
-      approval:
-        required: true
+      interaction:
+        type: approval
         timeout: 5m
         onTimeout: reject
-        reasonRequired: true
-        approvers:
-          - role: admin
-          - user: operations-lead
+        approval:
+          reasonRequired: true
+          approvers:
+            - role: admin
+            - user: operations-lead

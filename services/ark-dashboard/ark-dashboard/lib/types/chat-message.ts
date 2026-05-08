@@ -15,7 +15,7 @@ export interface ArkCompletedQueryData {
         completionTokens?: number;
         totalTokens?: number;
       };
-      approvalRef?: {
+      interactionRef?: {
         name?: string;
         namespace?: string;
       };

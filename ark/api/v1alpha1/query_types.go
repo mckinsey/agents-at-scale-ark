@@ -137,7 +137,7 @@ type TokenUsage struct {
 
 type QueryStatus struct {
 	// +kubebuilder:default="pending"
-	// +kubebuilder:validation:Enum=pending;provisioning;running;approval-required;error;done;canceled
+	// +kubebuilder:validation:Enum=pending;provisioning;running;interaction-required;error;done;canceled
 	Phase string `json:"phase,omitempty"`
 	// +kubebuilder:validation:Optional
 	// Conditions represent the latest available observations of a query's state
@@ -153,11 +153,11 @@ type QueryStatus struct {
 	// Error contains error message when phase is "error"
 	Error string `json:"error,omitempty"`
 	// +kubebuilder:validation:Optional
-	// ApprovalRef references the ToolApprovalRequest when phase is "approval-required"
-	ApprovalRef *ToolApprovalRef `json:"approvalRef,omitempty"`
+	// InteractionRef references the ToolInteraction when phase is "interaction-required"
+	InteractionRef *ToolInteractionRef `json:"interactionRef,omitempty"`
 }
 
-type ToolApprovalRef struct {
+type ToolInteractionRef struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 	// +kubebuilder:validation:Optional

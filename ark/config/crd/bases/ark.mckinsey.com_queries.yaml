@@ -398,17 +398,6 @@ spec:
             type: object
           status:
             properties:
-              approvalRef:
-                description: ApprovalRef references the ToolApprovalRequest when phase
-                  is "approval-required"
-                properties:
-                  name:
-                    type: string
-                  namespace:
-                    type: string
-                required:
-                - name
-                type: object
               conditions:
                 description: Conditions represent the latest available observations
                   of a query's state
@@ -475,13 +464,24 @@ spec:
               error:
                 description: Error contains error message when phase is "error"
                 type: string
+              interactionRef:
+                description: InteractionRef references the ToolInteraction when phase
+                  is "interaction-required"
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                required:
+                - name
+                type: object
               phase:
                 default: pending
                 enum:
                 - pending
                 - provisioning
                 - running
-                - approval-required
+                - interaction-required
                 - error
                 - done
                 - canceled

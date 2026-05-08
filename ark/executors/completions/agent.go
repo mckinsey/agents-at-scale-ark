@@ -20,21 +20,21 @@ import (
 )
 
 type Agent struct {
-	Name                  string
-	Namespace             string
-	Prompt                string
-	Description           string
-	Parameters            []arkv1alpha1.Parameter
-	Model                 *Model
-	Tools                 *ToolRegistry
-	telemetryRecorder     telemetry.AgentRecorder
-	eventingRecorder      eventing.AgentRecorder
-	eventing              eventing.Provider
-	ExecutionEngine       *arkv1alpha1.ExecutionEngineRef
-	Annotations           map[string]string
-	OutputSchema          *runtime.RawExtension
-	client                client.Client
-	approvalRequiredTools map[string]*ApprovalConfig
+	Name                     string
+	Namespace                string
+	Prompt                   string
+	Description              string
+	Parameters               []arkv1alpha1.Parameter
+	Model                    *Model
+	Tools                    *ToolRegistry
+	telemetryRecorder        telemetry.AgentRecorder
+	eventingRecorder         eventing.AgentRecorder
+	eventing                 eventing.Provider
+	ExecutionEngine          *arkv1alpha1.ExecutionEngineRef
+	Annotations              map[string]string
+	OutputSchema             *runtime.RawExtension
+	client                   client.Client
+	interactionRequiredTools map[string]*InteractionConfig
 }
 
 // FullName returns the namespace/name format for the agent
@@ -145,7 +145,7 @@ func (a *Agent) executeToolCall(ctx context.Context, toolCall openai.ChatComplet
 }
 
 func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCompletionMessageToolCall, agentMessages, newMessages *[]Message) error {
-	pendingApprovalCalls := []openai.ChatCompletionMessageToolCall{}
+	pendingInteractionCalls := []openai.ChatCompletionMessageToolCall{}
 	completedResults := []string{}
 
 	for i, tc := range toolCalls {
@@ -153,11 +153,11 @@ func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCom
 			return ctx.Err()
 		}
 
-		if config := a.RequiresApproval(tc.Function.Name); config != nil {
-			pendingApprovalCalls = append(pendingApprovalCalls, tc)
+		if config := a.RequiresInteraction(tc.Function.Name); config != nil {
+			pendingInteractionCalls = append(pendingInteractionCalls, tc)
 			for j := i + 1; j < len(toolCalls); j++ {
-				if cfg := a.RequiresApproval(toolCalls[j].Function.Name); cfg != nil {
-					pendingApprovalCalls = append(pendingApprovalCalls, toolCalls[j])
+				if cfg := a.RequiresInteraction(toolCalls[j].Function.Name); cfg != nil {
+					pendingInteractionCalls = append(pendingInteractionCalls, toolCalls[j])
 				}
 			}
 
@@ -166,9 +166,10 @@ func (a *Agent) executeToolCalls(ctx context.Context, toolCalls []openai.ChatCom
 				return fmt.Errorf("failed to build execution context: %w", err)
 			}
 
-			return &ApprovalRequiredError{
-				ToolCalls: pendingApprovalCalls,
-				Context:   execCtx,
+			return &InteractionRequiredError{
+				ToolCalls:   pendingInteractionCalls,
+				Interaction: config,
+				Context:     execCtx,
 			}
 		}
 
@@ -385,23 +386,23 @@ func MakeAgent(ctx context.Context, k8sClient client.Client, crd *arkv1alpha1.Ag
 		return nil, err
 	}
 
-	approvalMap := BuildApprovalConfigMap(crd.Spec.Tools)
+	interactionMap := BuildInteractionConfigMap(crd.Spec.Tools)
 
 	return &Agent{
-		Name:                  crd.Name,
-		Namespace:             crd.Namespace,
-		Prompt:                crd.Spec.Prompt,
-		Description:           crd.Spec.Description,
-		Parameters:            crd.Spec.Parameters,
-		Model:                 resolvedModel,
-		Tools:                 tools,
-		telemetryRecorder:     telemetryProvider.AgentRecorder(),
-		eventingRecorder:      eventingProvider.AgentRecorder(),
-		eventing:              eventingProvider,
-		ExecutionEngine:       crd.Spec.ExecutionEngine,
-		Annotations:           crd.Annotations,
-		OutputSchema:          crd.Spec.OutputSchema,
-		client:                k8sClient,
-		approvalRequiredTools: approvalMap,
+		Name:                     crd.Name,
+		Namespace:                crd.Namespace,
+		Prompt:                   crd.Spec.Prompt,
+		Description:              crd.Spec.Description,
+		Parameters:               crd.Spec.Parameters,
+		Model:                    resolvedModel,
+		Tools:                    tools,
+		telemetryRecorder:        telemetryProvider.AgentRecorder(),
+		eventingRecorder:         eventingProvider.AgentRecorder(),
+		eventing:                 eventingProvider,
+		ExecutionEngine:          crd.Spec.ExecutionEngine,
+		Annotations:              crd.Annotations,
+		OutputSchema:             crd.Spec.OutputSchema,
+		client:                   k8sClient,
+		interactionRequiredTools: interactionMap,
 	}, nil
 }

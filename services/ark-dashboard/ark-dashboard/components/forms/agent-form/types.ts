@@ -65,6 +65,7 @@ export interface ToolSelectionSectionProps {
   toolsLoading: boolean;
   onToolToggle: (tool: Tool, checked: boolean) => void;
   isToolSelected: (toolName: string) => boolean;
+  selectedTools: AgentTool[];
   unavailableTools?: Tool[];
   onDeleteClick?: (tool: Tool) => void;
   disabled?: boolean;

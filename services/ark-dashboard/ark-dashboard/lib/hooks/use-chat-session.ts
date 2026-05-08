@@ -317,12 +317,12 @@ export function useChatSession({
             break;
           }
 
-          if (arkData.completedQuery?.status?.phase === 'approval-required') {
-            const approvalRef = arkData.completedQuery.status.approvalRef;
-            if (approvalRef?.name) {
+          if (arkData.completedQuery?.status?.phase === 'interaction-required') {
+            const interactionRef = arkData.completedQuery.status.interactionRef;
+            if (interactionRef?.name) {
               pendingApproval = {
-                name: approvalRef.name,
-                namespace: approvalRef.namespace || 'default',
+                name: interactionRef.name,
+                namespace: interactionRef.namespace || 'default',
               };
             } else {
               pendingApprovalQueryName = arkData.completedQuery.metadata?.name || '';
@@ -457,10 +457,10 @@ export function useChatSession({
         for (let i = 0; i < 10; i++) {
           await new Promise(resolve => setTimeout(resolve, 500));
           const queryResult = await chatService.getQueryResult(pendingApprovalQueryName);
-          if (queryResult.approvalRef?.name) {
+          if (queryResult.interactionRef?.name) {
             pendingApproval = {
-              name: queryResult.approvalRef.name,
-              namespace: queryResult.approvalRef.namespace,
+              name: queryResult.interactionRef.name,
+              namespace: queryResult.interactionRef.namespace,
             };
             break;
           }
@@ -471,10 +471,10 @@ export function useChatSession({
         for (let i = 0; i < 10; i++) {
           await new Promise(resolve => setTimeout(resolve, 500));
           const queryResult = await chatService.getQueryResult(streamQueryName);
-          if (queryResult.status === 'approval-required' && queryResult.approvalRef?.name) {
+          if (queryResult.status === 'interaction-required' && queryResult.interactionRef?.name) {
             pendingApproval = {
-              name: queryResult.approvalRef.name,
-              namespace: queryResult.approvalRef.namespace,
+              name: queryResult.interactionRef.name,
+              namespace: queryResult.interactionRef.namespace,
             };
             break;
           }
@@ -676,11 +676,11 @@ export function useChatSession({
 
           setProcessingPhase(result.status);
 
-          if (result.status === 'approval-required' && result.approvalRef) {
+          if (result.status === 'interaction-required' && result.interactionRef) {
             try {
               const approvalDetail = await toolApprovalsService.get(
-                result.approvalRef.name,
-                result.approvalRef.namespace,
+                result.interactionRef.name,
+                result.interactionRef.namespace,
               );
               const toolCalls = approvalDetail.toolCalls || [];
               updateChatMessages(prev => [
@@ -690,8 +690,8 @@ export function useChatSession({
                   content: '',
                   approval: {
                     approvalRef: {
-                      name: result.approvalRef!.name,
-                      namespace: result.approvalRef!.namespace,
+                      name: result.interactionRef!.name,
+                      namespace: result.interactionRef!.namespace,
                     },
                     toolCalls: toolCalls.map(tc => ({
                       id: tc.id || '',

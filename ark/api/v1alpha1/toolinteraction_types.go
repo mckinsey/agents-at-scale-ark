@@ -4,9 +4,18 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// ToolCallAnnotations contains tool hints that help inform approval decisions.
+type InteractionType string
+
+const (
+	InteractionTypeApproval     InteractionType = "approval"
+	InteractionTypeInput        InteractionType = "input"
+	InteractionTypeSelection    InteractionType = "selection"
+	InteractionTypeConfirmation InteractionType = "confirmation"
+)
+
 type ToolCallAnnotations struct {
 	// +kubebuilder:validation:Optional
 	DestructiveHint bool `json:"destructiveHint,omitempty"`
@@ -18,51 +27,36 @@ type ToolCallAnnotations struct {
 	OpenWorldHint bool `json:"openWorldHint,omitempty"`
 }
 
-// ToolCallInfo contains information about a tool call pending approval.
 type ToolCallInfo struct {
 	// +kubebuilder:validation:Required
-	// ID is the unique identifier for this tool call
 	ID string `json:"id"`
 	// +kubebuilder:validation:Required
-	// Name is the tool name
 	Name string `json:"name"`
 	// +kubebuilder:validation:Required
-	// Type is the tool type (http, mcp, agent, etc.)
 	Type string `json:"type"`
 	// +kubebuilder:validation:Required
-	// Arguments is the JSON-serialized arguments for the tool call
 	Arguments string `json:"arguments"`
 	// +kubebuilder:validation:Optional
-	// Description is the tool description to help approvers understand what the tool does
 	Description string `json:"description,omitempty"`
 	// +kubebuilder:validation:Optional
-	// Annotations contains tool hints (destructive, read-only, etc.)
 	Annotations *ToolCallAnnotations `json:"annotations,omitempty"`
 	// +kubebuilder:validation:Optional
-	// AgentReasoning is the model's explanation for why it's calling this tool
 	AgentReasoning string `json:"agentReasoning,omitempty"`
 }
 
-// ExecutionContext contains the serialized state needed to resume execution after approval.
 type ExecutionContext struct {
 	// +kubebuilder:validation:Required
-	// ConversationHistory is the base64-encoded message array
 	ConversationHistory string `json:"conversationHistory"`
 	// +kubebuilder:validation:Required
-	// PendingToolCallIndex is the index of the first tool call awaiting approval
 	PendingToolCallIndex int `json:"pendingToolCallIndex"`
 	// +kubebuilder:validation:Optional
-	// CompletedToolResults contains results of tools that executed before the approval pause
 	CompletedToolResults []string `json:"completedToolResults,omitempty"`
 	// +kubebuilder:validation:Required
-	// AgentName is the name of the agent being executed
 	AgentName string `json:"agentName"`
 	// +kubebuilder:validation:Required
-	// AgentNamespace is the namespace of the agent
 	AgentNamespace string `json:"agentNamespace"`
 }
 
-// QueryReference references the Query that triggered this approval request.
 type QueryReference struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
@@ -70,7 +64,6 @@ type QueryReference struct {
 	Namespace string `json:"namespace"`
 }
 
-// ClientContext contains information about the client that submitted the decision.
 type ClientContext struct {
 	// +kubebuilder:validation:Optional
 	IPAddress string `json:"ipAddress,omitempty"`
@@ -78,98 +71,161 @@ type ClientContext struct {
 	UserAgent string `json:"userAgent,omitempty"`
 }
 
-// ApprovalDecision contains information about the approval decision.
-type ApprovalDecision struct {
+type ApprovalConfig struct {
+	// +kubebuilder:validation:Optional
+	Approvers []ApproverRef `json:"approvers,omitempty"`
+	// +kubebuilder:validation:Optional
+	ReasonRequired bool `json:"reasonRequired,omitempty"`
+}
+
+type SelectionOption struct {
+	// +kubebuilder:validation:Required
+	Value string `json:"value"`
+	// +kubebuilder:validation:Required
+	Label string `json:"label"`
+	// +kubebuilder:validation:Optional
+	Description string `json:"description,omitempty"`
+}
+
+type InputConfig struct {
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
+	Schema *runtime.RawExtension `json:"schema,omitempty"`
+	// +kubebuilder:validation:Optional
+	Prompt string `json:"prompt,omitempty"`
+}
+
+type SelectionConfig struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems=1
+	Options []SelectionOption `json:"options"`
+	// +kubebuilder:validation:Optional
+	MultiSelect bool `json:"multiSelect,omitempty"`
+	// +kubebuilder:validation:Optional
+	Prompt string `json:"prompt,omitempty"`
+}
+
+type ConfirmationConfig struct {
+	// +kubebuilder:validation:Optional
+	AllowEdit bool `json:"allowEdit,omitempty"`
+	// +kubebuilder:validation:Optional
+	Message string `json:"message,omitempty"`
+}
+
+type ApprovalResponse struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=approved;rejected
 	Action string `json:"action"`
-	// +kubebuilder:validation:Required
-	DecidedBy string `json:"decidedBy"`
-	// +kubebuilder:validation:Required
-	DecidedAt metav1.Time `json:"decidedAt"`
 	// +kubebuilder:validation:Optional
 	Reason string `json:"reason,omitempty"`
-	// +kubebuilder:validation:Optional
-	ClientContext *ClientContext `json:"clientContext,omitempty"`
 }
 
-// ToolApprovalRequestSpec defines the desired state of ToolApprovalRequest.
-type ToolApprovalRequestSpec struct {
-	// +kubebuilder:validation:Required
-	// QueryRef references the Query that triggered this approval request
-	QueryRef QueryReference `json:"queryRef"`
+type InputResponse struct {
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
+	Data *runtime.RawExtension `json:"data,omitempty"`
+}
+
+type SelectionResponse struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinItems=1
-	// ToolCalls contains the tool calls pending approval
+	Selected []string `json:"selected"`
+}
+
+type ConfirmationResponse struct {
+	// +kubebuilder:validation:Required
+	Confirmed bool `json:"confirmed"`
+	// +kubebuilder:validation:Optional
+	ModifiedArguments string `json:"modifiedArguments,omitempty"`
+}
+
+type InteractionResponse struct {
+	// +kubebuilder:validation:Required
+	RespondedBy string `json:"respondedBy"`
+	// +kubebuilder:validation:Required
+	RespondedAt metav1.Time `json:"respondedAt"`
+	// +kubebuilder:validation:Optional
+	ClientContext *ClientContext `json:"clientContext,omitempty"`
+	// +kubebuilder:validation:Optional
+	Approval *ApprovalResponse `json:"approval,omitempty"`
+	// +kubebuilder:validation:Optional
+	Input *InputResponse `json:"input,omitempty"`
+	// +kubebuilder:validation:Optional
+	Selection *SelectionResponse `json:"selection,omitempty"`
+	// +kubebuilder:validation:Optional
+	Confirmation *ConfirmationResponse `json:"confirmation,omitempty"`
+}
+
+type ToolInteractionSpec struct {
+	// +kubebuilder:validation:Required
+	QueryRef QueryReference `json:"queryRef"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=approval;input;selection;confirmation
+	Type InteractionType `json:"type"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems=1
 	ToolCalls []ToolCallInfo `json:"toolCalls"`
 	// +kubebuilder:validation:Optional
-	// Timeout is the duration to wait for approval before taking the onTimeout action
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Enum=reject;proceed
 	// +kubebuilder:default=reject
-	// OnTimeout specifies what to do when approval times out
 	OnTimeout string `json:"onTimeout,omitempty"`
 	// +kubebuilder:validation:Optional
-	// Approvers specifies who can approve this request
-	Approvers []ApproverRef `json:"approvers,omitempty"`
+	Approval *ApprovalConfig `json:"approval,omitempty"`
 	// +kubebuilder:validation:Optional
-	// ReasonRequired specifies whether a reason must be provided when rejecting
-	ReasonRequired bool `json:"reasonRequired,omitempty"`
+	Input *InputConfig `json:"input,omitempty"`
+	// +kubebuilder:validation:Optional
+	Selection *SelectionConfig `json:"selection,omitempty"`
+	// +kubebuilder:validation:Optional
+	Confirmation *ConfirmationConfig `json:"confirmation,omitempty"`
 	// +kubebuilder:validation:Required
-	// ExecutionContext contains the state needed to resume execution after approval
 	ExecutionContext ExecutionContext `json:"executionContext"`
 }
 
-// ToolApprovalRequestStatus defines the observed state of ToolApprovalRequest.
-type ToolApprovalRequestStatus struct {
+type ToolInteractionStatus struct {
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Enum=pending;approved;rejected;expired
+	// +kubebuilder:validation:Enum=pending;completed;rejected;expired
 	// +kubebuilder:default=pending
 	Phase string `json:"phase,omitempty"`
 	// +kubebuilder:validation:Optional
-	// ObservedGeneration is used for optimistic locking
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 	// +kubebuilder:validation:Optional
-	// RequestedAt is when the approval request was created
 	RequestedAt *metav1.Time `json:"requestedAt,omitempty"`
 	// +kubebuilder:validation:Optional
-	// Decision contains the approval decision details
-	Decision *ApprovalDecision `json:"decision,omitempty"`
+	Response *InteractionResponse `json:"response,omitempty"`
 	// +kubebuilder:validation:Optional
-	// ApprovalDuration is the time between request and decision
-	ApprovalDuration *metav1.Duration `json:"approvalDuration,omitempty"`
+	ResponseDuration *metav1.Duration `json:"responseDuration,omitempty"`
 	// +kubebuilder:validation:Optional
-	// Conditions represent the latest available observations
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Type",type=string,JSONPath=`.spec.type`
 // +kubebuilder:printcolumn:name="Query",type=string,JSONPath=`.spec.queryRef.name`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
-// +kubebuilder:printcolumn:name="Tools",type=integer,JSONPath=`.spec.toolCalls[*].name`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
-// +kubebuilder:resource:shortName=tar
+// +kubebuilder:resource:shortName=ti
 
-// ToolApprovalRequest represents a pending human approval for one or more tool calls.
-type ToolApprovalRequest struct {
+type ToolInteraction struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ToolApprovalRequestSpec   `json:"spec,omitempty"`
-	Status ToolApprovalRequestStatus `json:"status,omitempty"`
+	Spec   ToolInteractionSpec   `json:"spec,omitempty"`
+	Status ToolInteractionStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// ToolApprovalRequestList contains a list of ToolApprovalRequest.
-type ToolApprovalRequestList struct {
+type ToolInteractionList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []ToolApprovalRequest `json:"items"`
+	Items           []ToolInteraction `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&ToolApprovalRequest{}, &ToolApprovalRequestList{})
+	SchemeBuilder.Register(&ToolInteraction{}, &ToolInteractionList{})
 }

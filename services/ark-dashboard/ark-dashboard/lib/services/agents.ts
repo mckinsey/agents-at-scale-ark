@@ -16,6 +16,38 @@ export type AgentListResponse = components['schemas']['AgentListResponse'];
 export type AgentCreateRequest = components['schemas']['AgentCreateRequest'];
 export type AgentUpdateRequest = components['schemas']['AgentUpdateRequest'];
 
+// ToolInteractionConfig for HITL tool interactions
+export interface ToolInteractionConfig {
+  type: string; // "approval", "input", "selection", "confirmation"
+  timeout?: string | null;
+  onTimeout?: string | null;
+  approval?: {
+    approvers?: Array<{
+      user?: string | null;
+      role?: string | null;
+      group?: string | null;
+    }> | null;
+    reasonRequired?: boolean | null;
+  } | null;
+  input?: {
+    schema?: Record<string, unknown> | null;
+    prompt?: string | null;
+  } | null;
+  selection?: {
+    options: Array<{
+      label: string;
+      value: string;
+      description?: string | null;
+    }>;
+    multiSelect?: boolean | null;
+    prompt?: string | null;
+  } | null;
+  confirmation?: {
+    message?: string | null;
+    allowEdit?: boolean | null;
+  } | null;
+}
+
 // AgentTool interface to match the API response structure
 export interface AgentTool {
   type: string;
@@ -28,6 +60,7 @@ export interface AgentTool {
       values?: string[] | null;
     }> | null;
   } | null;
+  interaction?: ToolInteractionConfig | null;
 }
 
 // Interface for skill objects based on a2a-enhanced-agent.yaml

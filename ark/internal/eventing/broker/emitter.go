@@ -69,7 +69,7 @@ func (e *BrokerEventEmitter) EmitStructured(ctx context.Context, obj runtime.Obj
 	switch o := obj.(type) {
 	case *arkv1alpha1.Query:
 		namespace = o.Namespace
-	case *arkv1alpha1.ToolApprovalRequest:
+	case *arkv1alpha1.ToolInteraction:
 		namespace = o.Namespace
 	default:
 		return

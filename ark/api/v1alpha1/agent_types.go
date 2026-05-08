@@ -40,25 +40,87 @@ type ApproverRef struct {
 	Group string `json:"group,omitempty"`
 }
 
-// ToolApprovalConfig configures human-in-the-loop approval for a tool.
-type ToolApprovalConfig struct {
-	// +kubebuilder:validation:Required
-	// Required indicates whether this tool requires human approval before execution
-	Required bool `json:"required"`
+// ToolInteractionApprovalConfig configures approval-type interaction settings.
+type ToolInteractionApprovalConfig struct {
 	// +kubebuilder:validation:Optional
-	// Timeout is the maximum duration to wait for approval before taking the onTimeout action
-	Timeout *metav1.Duration `json:"timeout,omitempty"`
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Enum=reject;proceed
-	// +kubebuilder:default=reject
-	// OnTimeout specifies what to do when approval times out: "reject" (default) fails the tool call, "proceed" auto-approves
-	OnTimeout string `json:"onTimeout,omitempty"`
-	// +kubebuilder:validation:Optional
-	// Approvers specifies who can approve this tool. If empty, any user with ToolApprovalRequest update permission can approve.
+	// Approvers specifies who can approve this tool. If empty, any user with ToolInteraction update permission can approve.
 	Approvers []ApproverRef `json:"approvers,omitempty"`
 	// +kubebuilder:validation:Optional
 	// ReasonRequired specifies whether a reason must be provided when rejecting the tool call
 	ReasonRequired bool `json:"reasonRequired,omitempty"`
+}
+
+// ToolInteractionInputConfig configures input-type interaction settings.
+type ToolInteractionInputConfig struct {
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
+	// Schema is a JSON Schema defining the required input structure
+	Schema *runtime.RawExtension `json:"schema,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Prompt to display to the user when requesting input
+	Prompt string `json:"prompt,omitempty"`
+}
+
+// ToolInteractionSelectionOption represents a selectable option.
+type ToolInteractionSelectionOption struct {
+	// +kubebuilder:validation:Required
+	Value string `json:"value"`
+	// +kubebuilder:validation:Required
+	Label string `json:"label"`
+	// +kubebuilder:validation:Optional
+	Description string `json:"description,omitempty"`
+}
+
+// ToolInteractionSelectionConfig configures selection-type interaction settings.
+type ToolInteractionSelectionConfig struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems=1
+	Options []ToolInteractionSelectionOption `json:"options"`
+	// +kubebuilder:validation:Optional
+	// MultiSelect allows selecting multiple options
+	MultiSelect bool `json:"multiSelect,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Prompt to display to the user when requesting selection
+	Prompt string `json:"prompt,omitempty"`
+}
+
+// ToolInteractionConfirmationConfig configures confirmation-type interaction settings.
+type ToolInteractionConfirmationConfig struct {
+	// +kubebuilder:validation:Optional
+	// AllowEdit permits the user to modify tool arguments before confirming
+	AllowEdit bool `json:"allowEdit,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Message to display to the user when requesting confirmation
+	Message string `json:"message,omitempty"`
+}
+
+// ToolInteractionConfig configures human-in-the-loop interaction for a tool.
+type ToolInteractionConfig struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=approval;input;selection;confirmation
+	// Type specifies the kind of interaction required
+	Type string `json:"type"`
+	// +kubebuilder:validation:Optional
+	// Timeout is the maximum duration to wait for interaction before taking the onTimeout action
+	Timeout *metav1.Duration `json:"timeout,omitempty"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Enum=reject;proceed
+	// +kubebuilder:default=reject
+	// OnTimeout specifies what to do when interaction times out: "reject" (default) fails the tool call, "proceed" auto-accepts
+	OnTimeout string `json:"onTimeout,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Approval contains configuration for approval-type interactions
+	Approval *ToolInteractionApprovalConfig `json:"approval,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Input contains configuration for input-type interactions
+	Input *ToolInteractionInputConfig `json:"input,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Selection contains configuration for selection-type interactions
+	Selection *ToolInteractionSelectionConfig `json:"selection,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Confirmation contains configuration for confirmation-type interactions
+	Confirmation *ToolInteractionConfirmationConfig `json:"confirmation,omitempty"`
 }
 
 type AgentTool struct {
@@ -79,8 +141,8 @@ type AgentTool struct {
 	// editable by the agent itself.
 	Partial *ToolPartial `json:"partial,omitempty"`
 	// +kubebuilder:validation:Optional
-	// Approval configures human-in-the-loop approval for this tool
-	Approval *ToolApprovalConfig `json:"approval,omitempty"`
+	// Interaction configures human-in-the-loop interaction for this tool
+	Interaction *ToolInteractionConfig `json:"interaction,omitempty"`
 }
 
 // GetToolCRDName returns the actual Tool CRD name to lookup in Kubernetes.

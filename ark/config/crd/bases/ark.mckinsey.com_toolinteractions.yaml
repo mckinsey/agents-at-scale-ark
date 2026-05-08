@@ -4,36 +4,34 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: toolapprovalrequests.ark.mckinsey.com
+  name: toolinteractions.ark.mckinsey.com
 spec:
   group: ark.mckinsey.com
   names:
-    kind: ToolApprovalRequest
-    listKind: ToolApprovalRequestList
-    plural: toolapprovalrequests
+    kind: ToolInteraction
+    listKind: ToolInteractionList
+    plural: toolinteractions
     shortNames:
-    - tar
-    singular: toolapprovalrequest
+    - ti
+    singular: toolinteraction
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .spec.type
+      name: Type
+      type: string
     - jsonPath: .spec.queryRef.name
       name: Query
       type: string
     - jsonPath: .status.phase
       name: Phase
       type: string
-    - jsonPath: .spec.toolCalls[*].name
-      name: Tools
-      type: integer
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: ToolApprovalRequest represents a pending human approval for one
-          or more tool calls.
         properties:
           apiVersion:
             description: |-
@@ -53,50 +51,50 @@ spec:
           metadata:
             type: object
           spec:
-            description: ToolApprovalRequestSpec defines the desired state of ToolApprovalRequest.
             properties:
-              approvers:
-                description: Approvers specifies who can approve this request
-                items:
-                  description: ApproverRef specifies who can approve tool calls. At
-                    least one field must be set.
-                  properties:
-                    group:
-                      description: Group name - user must belong to this group
-                      type: string
-                    role:
-                      description: Role name - user must be bound to a ClusterRole/Role
-                        with this name
-                      type: string
-                    user:
-                      description: User identity - must match the authenticated user's
-                        identity
-                      type: string
-                  type: object
-                type: array
+              approval:
+                properties:
+                  approvers:
+                    items:
+                      description: ApproverRef specifies who can approve tool calls.
+                        At least one field must be set.
+                      properties:
+                        group:
+                          description: Group name - user must belong to this group
+                          type: string
+                        role:
+                          description: Role name - user must be bound to a ClusterRole/Role
+                            with this name
+                          type: string
+                        user:
+                          description: User identity - must match the authenticated
+                            user's identity
+                          type: string
+                      type: object
+                    type: array
+                  reasonRequired:
+                    type: boolean
+                type: object
+              confirmation:
+                properties:
+                  allowEdit:
+                    type: boolean
+                  message:
+                    type: string
+                type: object
               executionContext:
-                description: ExecutionContext contains the state needed to resume
-                  execution after approval
                 properties:
                   agentName:
-                    description: AgentName is the name of the agent being executed
                     type: string
                   agentNamespace:
-                    description: AgentNamespace is the namespace of the agent
                     type: string
                   completedToolResults:
-                    description: CompletedToolResults contains results of tools that
-                      executed before the approval pause
                     items:
                       type: string
                     type: array
                   conversationHistory:
-                    description: ConversationHistory is the base64-encoded message
-                      array
                     type: string
                   pendingToolCallIndex:
-                    description: PendingToolCallIndex is the index of the first tool
-                      call awaiting approval
                     type: integer
                 required:
                 - agentName
@@ -104,16 +102,20 @@ spec:
                 - conversationHistory
                 - pendingToolCallIndex
                 type: object
+              input:
+                properties:
+                  prompt:
+                    type: string
+                  schema:
+                    x-kubernetes-preserve-unknown-fields: true
+                type: object
               onTimeout:
                 default: reject
-                description: OnTimeout specifies what to do when approval times out
                 enum:
                 - reject
                 - proceed
                 type: string
               queryRef:
-                description: QueryRef references the Query that triggered this approval
-                  request
                 properties:
                   name:
                     type: string
@@ -123,27 +125,38 @@ spec:
                 - name
                 - namespace
                 type: object
-              reasonRequired:
-                description: ReasonRequired specifies whether a reason must be provided
-                  when rejecting
-                type: boolean
+              selection:
+                properties:
+                  multiSelect:
+                    type: boolean
+                  options:
+                    items:
+                      properties:
+                        description:
+                          type: string
+                        label:
+                          type: string
+                        value:
+                          type: string
+                      required:
+                      - label
+                      - value
+                      type: object
+                    minItems: 1
+                    type: array
+                  prompt:
+                    type: string
+                required:
+                - options
+                type: object
               timeout:
-                description: Timeout is the duration to wait for approval before taking
-                  the onTimeout action
                 type: string
               toolCalls:
-                description: ToolCalls contains the tool calls pending approval
                 items:
-                  description: ToolCallInfo contains information about a tool call
-                    pending approval.
                   properties:
                     agentReasoning:
-                      description: AgentReasoning is the model's explanation for why
-                        it's calling this tool
                       type: string
                     annotations:
-                      description: Annotations contains tool hints (destructive, read-only,
-                        etc.)
                       properties:
                         destructiveHint:
                           type: boolean
@@ -155,21 +168,14 @@ spec:
                           type: boolean
                       type: object
                     arguments:
-                      description: Arguments is the JSON-serialized arguments for
-                        the tool call
                       type: string
                     description:
-                      description: Description is the tool description to help approvers
-                        understand what the tool does
                       type: string
                     id:
-                      description: ID is the unique identifier for this tool call
                       type: string
                     name:
-                      description: Name is the tool name
                       type: string
                     type:
-                      description: Type is the tool type (http, mcp, agent, etc.)
                       type: string
                   required:
                   - arguments
@@ -179,19 +185,22 @@ spec:
                   type: object
                 minItems: 1
                 type: array
+              type:
+                enum:
+                - approval
+                - input
+                - selection
+                - confirmation
+                type: string
             required:
             - executionContext
             - queryRef
             - toolCalls
+            - type
             type: object
           status:
-            description: ToolApprovalRequestStatus defines the observed state of ToolApprovalRequest.
             properties:
-              approvalDuration:
-                description: ApprovalDuration is the time between request and decision
-                type: string
               conditions:
-                description: Conditions represent the latest available observations
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -247,50 +256,75 @@ spec:
                   - type
                   type: object
                 type: array
-              decision:
-                description: Decision contains the approval decision details
-                properties:
-                  action:
-                    enum:
-                    - approved
-                    - rejected
-                    type: string
-                  clientContext:
-                    description: ClientContext contains information about the client
-                      that submitted the decision.
-                    properties:
-                      ipAddress:
-                        type: string
-                      userAgent:
-                        type: string
-                    type: object
-                  decidedAt:
-                    format: date-time
-                    type: string
-                  decidedBy:
-                    type: string
-                  reason:
-                    type: string
-                required:
-                - action
-                - decidedAt
-                - decidedBy
-                type: object
               observedGeneration:
-                description: ObservedGeneration is used for optimistic locking
                 format: int64
                 type: integer
               phase:
                 default: pending
                 enum:
                 - pending
-                - approved
+                - completed
                 - rejected
                 - expired
                 type: string
               requestedAt:
-                description: RequestedAt is when the approval request was created
                 format: date-time
+                type: string
+              response:
+                properties:
+                  approval:
+                    properties:
+                      action:
+                        enum:
+                        - approved
+                        - rejected
+                        type: string
+                      reason:
+                        type: string
+                    required:
+                    - action
+                    type: object
+                  clientContext:
+                    properties:
+                      ipAddress:
+                        type: string
+                      userAgent:
+                        type: string
+                    type: object
+                  confirmation:
+                    properties:
+                      confirmed:
+                        type: boolean
+                      modifiedArguments:
+                        type: string
+                    required:
+                    - confirmed
+                    type: object
+                  input:
+                    properties:
+                      data:
+                        x-kubernetes-preserve-unknown-fields: true
+                    type: object
+                  respondedAt:
+                    format: date-time
+                    type: string
+                  respondedBy:
+                    type: string
+                  selection:
+                    properties:
+                      selected:
+                        items:
+                          type: string
+                        minItems: 1
+                        type: array
+                    required:
+                    - selected
+                    type: object
+                required:
+                - respondedAt
+                - respondedBy
+                type: object
+              responseDuration:
                 type: string
             type: object
         type: object

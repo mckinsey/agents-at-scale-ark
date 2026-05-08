@@ -327,56 +327,6 @@ spec:
               tools:
                 items:
                   properties:
-                    approval:
-                      description: Approval configures human-in-the-loop approval
-                        for this tool
-                      properties:
-                        approvers:
-                          description: Approvers specifies who can approve this tool.
-                            If empty, any user with ToolApprovalRequest update permission
-                            can approve.
-                          items:
-                            description: ApproverRef specifies who can approve tool
-                              calls. At least one field must be set.
-                            properties:
-                              group:
-                                description: Group name - user must belong to this
-                                  group
-                                type: string
-                              role:
-                                description: Role name - user must be bound to a ClusterRole/Role
-                                  with this name
-                                type: string
-                              user:
-                                description: User identity - must match the authenticated
-                                  user's identity
-                                type: string
-                            type: object
-                          type: array
-                        onTimeout:
-                          default: reject
-                          description: 'OnTimeout specifies what to do when approval
-                            times out: "reject" (default) fails the tool call, "proceed"
-                            auto-approves'
-                          enum:
-                          - reject
-                          - proceed
-                          type: string
-                        reasonRequired:
-                          description: ReasonRequired specifies whether a reason must
-                            be provided when rejecting the tool call
-                          type: boolean
-                        required:
-                          description: Required indicates whether this tool requires
-                            human approval before execution
-                          type: boolean
-                        timeout:
-                          description: Timeout is the maximum duration to wait for
-                            approval before taking the onTimeout action
-                          type: string
-                      required:
-                      - required
-                      type: object
                     description:
                       description: Description of the tool as exposed to the agent
                       type: string
@@ -475,6 +425,122 @@ spec:
                         - name
                         type: object
                       type: array
+                    interaction:
+                      description: Interaction configures human-in-the-loop interaction
+                        for this tool
+                      properties:
+                        approval:
+                          description: Approval contains configuration for approval-type
+                            interactions
+                          properties:
+                            approvers:
+                              description: Approvers specifies who can approve this
+                                tool. If empty, any user with ToolInteraction update
+                                permission can approve.
+                              items:
+                                description: ApproverRef specifies who can approve
+                                  tool calls. At least one field must be set.
+                                properties:
+                                  group:
+                                    description: Group name - user must belong to
+                                      this group
+                                    type: string
+                                  role:
+                                    description: Role name - user must be bound to
+                                      a ClusterRole/Role with this name
+                                    type: string
+                                  user:
+                                    description: User identity - must match the authenticated
+                                      user's identity
+                                    type: string
+                                type: object
+                              type: array
+                            reasonRequired:
+                              description: ReasonRequired specifies whether a reason
+                                must be provided when rejecting the tool call
+                              type: boolean
+                          type: object
+                        confirmation:
+                          description: Confirmation contains configuration for confirmation-type
+                            interactions
+                          properties:
+                            allowEdit:
+                              description: AllowEdit permits the user to modify tool
+                                arguments before confirming
+                              type: boolean
+                            message:
+                              description: Message to display to the user when requesting
+                                confirmation
+                              type: string
+                          type: object
+                        input:
+                          description: Input contains configuration for input-type
+                            interactions
+                          properties:
+                            prompt:
+                              description: Prompt to display to the user when requesting
+                                input
+                              type: string
+                            schema:
+                              description: Schema is a JSON Schema defining the required
+                                input structure
+                              x-kubernetes-preserve-unknown-fields: true
+                          type: object
+                        onTimeout:
+                          default: reject
+                          description: 'OnTimeout specifies what to do when interaction
+                            times out: "reject" (default) fails the tool call, "proceed"
+                            auto-accepts'
+                          enum:
+                          - reject
+                          - proceed
+                          type: string
+                        selection:
+                          description: Selection contains configuration for selection-type
+                            interactions
+                          properties:
+                            multiSelect:
+                              description: MultiSelect allows selecting multiple options
+                              type: boolean
+                            options:
+                              items:
+                                description: ToolInteractionSelectionOption represents
+                                  a selectable option.
+                                properties:
+                                  description:
+                                    type: string
+                                  label:
+                                    type: string
+                                  value:
+                                    type: string
+                                required:
+                                - label
+                                - value
+                                type: object
+                              minItems: 1
+                              type: array
+                            prompt:
+                              description: Prompt to display to the user when requesting
+                                selection
+                              type: string
+                          required:
+                          - options
+                          type: object
+                        timeout:
+                          description: Timeout is the maximum duration to wait for
+                            interaction before taking the onTimeout action
+                          type: string
+                        type:
+                          description: Type specifies the kind of interaction required
+                          enum:
+                          - approval
+                          - input
+                          - selection
+                          - confirmation
+                          type: string
+                      required:
+                      - type
+                      type: object
                     name:
                       minLength: 1
                       type: string

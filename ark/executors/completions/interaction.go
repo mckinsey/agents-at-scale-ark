@@ -9,21 +9,22 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
 
-type ApprovalRequiredError struct {
-	ToolCalls []openai.ChatCompletionMessageToolCall
-	Context   *ExecutionContextData
+type InteractionRequiredError struct {
+	ToolCalls   []openai.ChatCompletionMessageToolCall
+	Interaction *InteractionConfig
+	Context     *ExecutionContextData
 }
 
-func (e *ApprovalRequiredError) Error() string {
+func (e *InteractionRequiredError) Error() string {
 	toolNames := make([]string, len(e.ToolCalls))
 	for i, tc := range e.ToolCalls {
 		toolNames[i] = tc.Function.Name
 	}
-	return fmt.Sprintf("approval required for tool calls: %v", toolNames)
+	return fmt.Sprintf("interaction required for tool calls: %v", toolNames)
 }
 
-func IsApprovalRequired(err error) bool {
-	_, ok := err.(*ApprovalRequiredError)
+func IsInteractionRequired(err error) bool {
+	_, ok := err.(*InteractionRequiredError)
 	return ok
 }
 
@@ -35,38 +36,94 @@ type ExecutionContextData struct {
 	AgentNamespace       string   `json:"agentNamespace"`
 }
 
-type ApprovalConfig struct {
-	Required       bool
-	Timeout        string
-	OnTimeout      string
+type InteractionConfig struct {
+	Type         string
+	Timeout      string
+	OnTimeout    string
+	Approval     *ApprovalInteractionConfig
+	Input        *InputInteractionConfig
+	Selection    *SelectionInteractionConfig
+	Confirmation *ConfirmationInteractionConfig
+}
+
+type ApprovalInteractionConfig struct {
 	Approvers      []arkv1alpha1.ApproverRef
 	ReasonRequired bool
 }
 
-func BuildApprovalConfigMap(tools []arkv1alpha1.AgentTool) map[string]*ApprovalConfig {
-	approvalMap := make(map[string]*ApprovalConfig)
-	for _, tool := range tools {
-		if tool.Approval != nil && tool.Approval.Required {
-			config := &ApprovalConfig{
-				Required:       tool.Approval.Required,
-				OnTimeout:      tool.Approval.OnTimeout,
-				Approvers:      tool.Approval.Approvers,
-				ReasonRequired: tool.Approval.ReasonRequired,
-			}
-			if tool.Approval.Timeout != nil {
-				config.Timeout = tool.Approval.Timeout.Duration.String()
-			}
-			approvalMap[tool.Name] = config
-		}
-	}
-	return approvalMap
+type InputInteractionConfig struct {
+	Schema string
+	Prompt string
 }
 
-func (a *Agent) RequiresApproval(toolName string) *ApprovalConfig {
-	if a.approvalRequiredTools == nil {
+type SelectionInteractionConfig struct {
+	Options     []arkv1alpha1.ToolInteractionSelectionOption
+	MultiSelect bool
+	Prompt      string
+}
+
+type ConfirmationInteractionConfig struct {
+	AllowEdit bool
+	Message   string
+}
+
+func BuildInteractionConfigMap(tools []arkv1alpha1.AgentTool) map[string]*InteractionConfig {
+	interactionMap := make(map[string]*InteractionConfig)
+	for _, tool := range tools {
+		if tool.Interaction != nil {
+			config := &InteractionConfig{
+				Type:      tool.Interaction.Type,
+				OnTimeout: tool.Interaction.OnTimeout,
+			}
+			if tool.Interaction.Timeout != nil {
+				config.Timeout = tool.Interaction.Timeout.Duration.String()
+			}
+
+			switch tool.Interaction.Type {
+			case "approval":
+				if tool.Interaction.Approval != nil {
+					config.Approval = &ApprovalInteractionConfig{
+						Approvers:      tool.Interaction.Approval.Approvers,
+						ReasonRequired: tool.Interaction.Approval.ReasonRequired,
+					}
+				}
+			case "input":
+				if tool.Interaction.Input != nil {
+					config.Input = &InputInteractionConfig{
+						Prompt: tool.Interaction.Input.Prompt,
+					}
+					if tool.Interaction.Input.Schema != nil && tool.Interaction.Input.Schema.Raw != nil {
+						config.Input.Schema = string(tool.Interaction.Input.Schema.Raw)
+					}
+				}
+			case "selection":
+				if tool.Interaction.Selection != nil {
+					config.Selection = &SelectionInteractionConfig{
+						Options:     tool.Interaction.Selection.Options,
+						MultiSelect: tool.Interaction.Selection.MultiSelect,
+						Prompt:      tool.Interaction.Selection.Prompt,
+					}
+				}
+			case "confirmation":
+				if tool.Interaction.Confirmation != nil {
+					config.Confirmation = &ConfirmationInteractionConfig{
+						AllowEdit: tool.Interaction.Confirmation.AllowEdit,
+						Message:   tool.Interaction.Confirmation.Message,
+					}
+				}
+			}
+
+			interactionMap[tool.Name] = config
+		}
+	}
+	return interactionMap
+}
+
+func (a *Agent) RequiresInteraction(toolName string) *InteractionConfig {
+	if a.interactionRequiredTools == nil {
 		return nil
 	}
-	return a.approvalRequiredTools[toolName]
+	return a.interactionRequiredTools[toolName]
 }
 
 func SerializeMessages(messages []Message) (string, error) {
