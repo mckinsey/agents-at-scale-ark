@@ -4,6 +4,6 @@ description: >-
   Aggregated API server for Ark — serves ark.mckinsey.com APIs backed by
   PostgreSQL
 type: application
-version: 0.1.62-rc.1
-appVersion: 0.1.62-rc.1
+version: 0.1.62
+appVersion: 0.1.62
 icon: https://example.com/icon.png
