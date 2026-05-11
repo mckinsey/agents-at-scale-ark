@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { settingsSections } from '@/components/settings-modal/settings-types';
+import { settingsSections } from '@/components/settings/settings-types';
 
 describe('settingsSections', () => {
   it('should have two sections', () => {

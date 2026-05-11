@@ -3,6 +3,8 @@ import { Suspense } from 'react';
 import type { PropsWithChildren } from 'react';
 import { Toaster } from 'sonner';
 
+import { SettingsKeyboardShortcut } from '@/components/settings/settings-keyboard-shortcut';
+import { NavigationTracker } from '@/components/navigation-tracker';
 import { AnalyticsProvider } from '@/lib/analytics/provider';
 import { NamespaceProvider } from '@/providers/NamespaceProvider';
 
@@ -33,6 +35,8 @@ export function GlobalProviders({ children }: PropsWithChildren) {
             </Suspense>
           </QueryClientProvider>
         </AuthProvider>
+        <SettingsKeyboardShortcut />
+        <NavigationTracker />
         <Toaster richColors closeButton visibleToasts={5} />
       </ThemeProvider>
     </JotaiProvider>
