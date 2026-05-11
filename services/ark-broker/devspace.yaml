@@ -6,7 +6,6 @@ pipelines:
     build_images --all
     create_deployments --all
   dev: |-
-    build_images --all
     create_deployments --all
 
     echo "Waiting for restart-controller hook job to complete..."
