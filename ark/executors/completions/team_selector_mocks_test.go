@@ -211,6 +211,11 @@ func (m *mockEventingRecorder) Complete(ctx context.Context, operation, message 
 	m.lastMessage = message
 }
 
+func (m *mockEventingRecorder) Cancel(ctx context.Context, operation, message string, data map[string]string) {
+	m.lastOperation = operation
+	m.lastMessage = message
+}
+
 func (m *mockEventingRecorder) Fail(ctx context.Context, operation, message string, err error, data map[string]string) {
 	m.failCalled = true
 	m.lastOperation = operation
