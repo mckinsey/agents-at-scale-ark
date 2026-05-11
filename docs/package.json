@@ -4,8 +4,8 @@
   "description": "QB Agentic Runtime Docs",
   "main": "index.js",
   "scripts": {
-    "dev": "next --turbopack",
-    "build": "next build",
+    "dev": "NODE_OPTIONS=--no-experimental-webstorage next --turbopack",
+    "build": "NODE_OPTIONS=--no-experimental-webstorage next build",
     "postbuild": "pagefind --site .next/server/app --output-path out/_pagefind",
     "start": "next start",
     "check-links": "node scripts/check-links.js",

@@ -31,7 +31,7 @@ server.listen(0, () => {
     setTimeout(() => {
       const args = ['linkinator', `http://localhost:${port}`, '--recurse'];
       if (!includeExternal) {
-        args.push('--skip', '^(?!http://localhost)');
+        args.push('--skip', `^(?!http://localhost:${port})`);
       }
 
       const linkinator = spawn(npxPath, args, {
