@@ -16,6 +16,9 @@ pipelines:
     kubectl rollout status deployment/ark-controller-devspace -n ark-system --timeout=120s 2>/dev/null || \
       kubectl rollout status deployment/ark-controller -n ark-system --timeout=120s 2>/dev/null || true
 
+    kubectl patch deployment ark-broker -n ${DEVSPACE_NAMESPACE:-default} --type=strategic -p \
+      '{"spec":{"template":{"spec":{"volumes":[{"name":"node-modules","persistentVolumeClaim":{"claimName":"ark-broker-node-modules"}}],"containers":[{"name":"ark-broker","volumeMounts":[{"name":"node-modules","mountPath":"/app/node_modules"}]}]}}}}' || true
+
     start_dev --all
 
 images:
@@ -70,6 +73,9 @@ deployments:
           namespaces:
             - ark-system
             - default
+        extraPVCs:
+          - name: ark-broker-node-modules
+            size: 1Gi
 
 dev:
   ark-broker:
@@ -84,5 +90,7 @@ dev:
         startContainer: true
         disableDownload: true
         uploadExcludeFile: .dockerignore
+        excludePaths:
+          - node_modules/
     ssh:
       enabled: true

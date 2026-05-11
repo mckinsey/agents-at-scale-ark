@@ -14,6 +14,10 @@ pipelines:
     create_deployments --all
   dev: |-
     create_deployments --all
+
+    kubectl patch deployment ark-dashboard -n ${DEVSPACE_NAMESPACE:-default} --type=strategic -p \
+      '{"spec":{"template":{"spec":{"volumes":[{"name":"node-modules","persistentVolumeClaim":{"claimName":"ark-dashboard-node-modules"}}],"containers":[{"name":"ark-dashboard","volumeMounts":[{"name":"node-modules","mountPath":"/app/ark-dashboard/node_modules"}]}]}}}}' || true
+
     start_dev --all
 
 deployments:
@@ -53,6 +57,9 @@ deployments:
                 - DAC_OVERRIDE
         httpRoute:
           enabled: true
+        extraPVCs:
+          - name: ark-dashboard-node-modules
+            size: 2Gi
 
 dev:
   ark-dashboard:
@@ -77,6 +84,8 @@ dev:
         startContainer: true
         disableDownload: true
         uploadExcludeFile: .dockerignore
+        excludePaths:
+          - ark-dashboard/node_modules/
     # Enable SSH for IDE integration
     ssh:
       enabled: true
