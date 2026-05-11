@@ -55,12 +55,13 @@ def generate_versioned_client(api_version: str, resources: List[Dict[str, Any]])
             kind="{resource['kind']}",
             plural="{resource['plural']}",
             model_class={to_class(kind)},
-            namespace=namespace
+            namespace=namespace,
+            default_headers=self.default_headers
         )'''
         resource_inits.append(resource_init)
-    
+
     resource_inits_str = '\n\n'.join(resource_inits)
-    
+
     # Generate class
     return f'''
 
@@ -70,9 +71,9 @@ def generate_versioned_client(api_version: str, resources: List[Dict[str, Any]])
 class {class_name}(_ARKClient):
     """ARK client for API version {api_version}"""
 
-    def __init__(self, namespace: Optional[str] = None):
-        super().__init__(namespace)
-        
+    def __init__(self, namespace: Optional[str] = None, default_headers: Optional[Dict[str, str]] = None):
+        super().__init__(namespace, default_headers)
+
 {resource_inits_str}
         
 {generate_secret_client_addition()}

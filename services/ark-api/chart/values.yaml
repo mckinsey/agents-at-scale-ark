@@ -131,6 +131,16 @@ httpRoute:
   hostnames:
     - "ark-api.default.127.0.0.1.nip.io"
 
+# Impersonation configuration
+# When enabled, SSO/JWT-authenticated requests use K8s user impersonation
+# so that RBAC rules apply to the actual user, not the ark-api service account.
+impersonation:
+  enabled: false
+  fallback: false
+  usernameClaim: email
+  groupsClaim: groups
+  prefix: ""
+
 # Service account configuration
 serviceAccount:
   name: ark-api-sa
