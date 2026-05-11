@@ -141,7 +141,7 @@ export default function SessionDetailPage() {
   };
 
   return (
-    <div className="flex h-full flex-col space-y-6 overflow-hidden p-8">
+    <div className="flex h-full flex-col space-y-6 p-8">
       <button
         onClick={() => router.push('/session-history')}
         className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
@@ -188,7 +188,8 @@ export default function SessionDetailPage() {
             </div>
           </div>
           <Badge
-            variant="outline"
+            variant="alternative"
+            outline
             className={cn('capitalize rounded-full', getStatusClassName(sessionStatus))}
           >
             {sessionStatus}

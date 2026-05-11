@@ -19,10 +19,10 @@ function getLogLevel(eventType: string): string {
   return 'INFO';
 }
 
-function getLogLevelVariant(level: string): 'default' | 'destructive' | 'secondary' {
-  if (level === 'ERROR') return 'destructive';
-  if (level === 'DEBUG') return 'secondary';
-  return 'default';
+function getLogLevelVariant(level: string): 'error' | 'alternative' | 'high-emphasis' {
+  if (level === 'ERROR') return 'error';
+  if (level === 'DEBUG') return 'alternative';
+  return 'high-emphasis';
 }
 
 function formatTimestamp(isoString: string): string {
@@ -169,9 +169,9 @@ export function LogsTab({ sessionId }: Props) {
   const allLogs = [...data.items, ...additionalLogs];
 
   return (
-    <Card className="flex flex-1 flex-col overflow-hidden">
-      <CardContent className="flex flex-1 flex-col overflow-hidden p-0">
-        <div className="h-full overflow-y-auto overflow-x-auto px-6 py-3 font-mono text-sm">
+    <Card className="flex flex-1 flex-col">
+      <CardContent className="flex flex-1 flex-col p-0">
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-auto px-6 py-3 font-mono text-sm">
           {allLogs.map((event, index) => (
             <LogRow
               key={`${event.timestamp}-${index}`}

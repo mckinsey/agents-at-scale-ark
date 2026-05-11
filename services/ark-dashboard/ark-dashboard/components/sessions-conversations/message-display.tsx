@@ -235,7 +235,7 @@ export function MessageDisplay({ conversationId, sessionId, conversation, pendin
           <Badge className="border-0 bg-muted/50 capitalize text-muted-foreground">{participantType}</Badge>
         </div>
       </div>
-      <div className="flex-1 space-y-4 overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
         <MessageContent
           isTemporary={isTemporary}
           messages={messages}

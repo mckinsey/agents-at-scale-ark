@@ -42,12 +42,12 @@ export default function AgentsPage() {
                 Create Agent
               </Button>
             ) : (
-              <Button asChild>
-                <NamespacedLink href="/agents/new">
+              <NamespacedLink href="/agents/new">
+                <Button>
                   <Plus className="h-4 w-4" />
                   Create Agent
-                </NamespacedLink>
-              </Button>
+                </Button>
+              </NamespacedLink>
             )}
           </div>
         }

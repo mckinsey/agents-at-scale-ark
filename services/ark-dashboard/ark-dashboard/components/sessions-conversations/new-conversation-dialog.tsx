@@ -104,7 +104,7 @@ export function NewConversationDialog({
                             </div>
                           )}
                         </div>
-                        <Badge variant="outline" className="flex-shrink-0 capitalize">
+                        <Badge variant="alternative" outline className="flex-shrink-0 capitalize">
                           {participant.type}
                         </Badge>
                       </Button>
@@ -135,7 +135,7 @@ export function NewConversationDialog({
                             </div>
                           )}
                         </div>
-                        <Badge variant="outline" className="flex-shrink-0 capitalize">
+                        <Badge variant="alternative" outline className="flex-shrink-0 capitalize">
                           {participant.type}
                         </Badge>
                       </Button>
