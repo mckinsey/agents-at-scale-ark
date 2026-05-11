@@ -15,7 +15,7 @@ The CLI is a UX layer over the existing Stage 1 contract. No CRD, controller, or
   - Reads `status.authorization.{registrationEndpoint, authorizationEndpoint, tokenEndpoint, resource, scopesSupported}` populated by detection.
   - Picks a free loopback port (or `--port <n>`) and starts an `http://127.0.0.1:<port>/callback` listener. Auto-opens the browser unless `--no-open`. The authorization URL is always printed to stdout so headless / SSH operators can paste it manually.
   - Performs RFC 7591 Dynamic Client Registration with `redirect_uris=[<loopback>]`, `grant_types=[authorization_code, refresh_token]`, `response_types=[code]`, `token_endpoint_auth_method=client_secret_basic`. Rejects responses whose `redirect_uris` exclude the loopback URL.
-  - Builds the authorization URL with PKCE S256, random `state`, and `resource=<MCP URL>` (RFC 8707). Waits up to `--timeout <ms>` (default 5 minutes).
+  - Builds the authorization URL with PKCE S256, random `state`, and `resource=<MCP URL>` (RFC 8707). Waits up to `--timeout <duration>` (default 5 minutes).
   - Exchanges the code at `tokenEndpoint` using HTTP Basic with the registered `client_id` / `client_secret` plus the PKCE verifier.
   - Patches the Secret named in `spec.authorization.tokenSecretRef.name` using the configured key names (defaults `access_token`, `refresh_token`, `expires_at`, `client_id`, `client_secret`). Creates the Secret if absent.
   - Computes `expires_at = now + expires_in - 30s` (RFC 3339 UTC) — the 30s margin absorbs clock skew between the CLI host, the IdP, and the controller, plus typical network round-trip on the next reconcile.
@@ -29,6 +29,19 @@ The CLI is a UX layer over the existing Stage 1 contract. No CRD, controller, or
   - On the controller's next reconcile, the empty `access_token` falls through the existing 401 path and `status.authorization.state` collapses to `Required` — ready for `ark mcp auth login`.
 - Wire the commands into `tools/ark-cli/src/index.tsx`.
 - Ship `pkce.ts` (S256 verifier/challenge + state) plus unit tests and an end-to-end `runAuth` test mocking the OAuth endpoints and `kubectl`.
+
+### Headless / SSH operators
+
+OAuth 2.1 loopback redirect (RFC 8252 §7.3) requires `127.0.0.1` / `[::1]` — authorization servers reject other hostnames. For a CLI session on a remote host:
+
+```sh
+# on the laptop
+ssh -L 8080:localhost:8080 jumphost
+# on the jumphost
+ark mcp auth login notion --port 8080 --no-open
+```
+
+The CLI prints the authorization URL with `http://127.0.0.1:8080/callback`. Paste it into the browser on the laptop — SSH forwards the loopback callback back to the jumphost. Loopback stays loopback. The proper headless flow (RFC 8628 device authorization grant) is out of scope; most MCP authorization servers do not support it yet.
 
 ## Capabilities
 

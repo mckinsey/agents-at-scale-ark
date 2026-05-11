@@ -218,7 +218,7 @@ The reconciler and the executor dispatch paths SHALL share the same default acce
 
 ### Requirement: Labelled token Secrets reconcile in real time
 
-Secrets carrying label `ark.mckinsey.com/mcp-token-secret=true` SHALL trigger immediate reconciliation of every MCPServer whose `spec.authorization.tokenSecretRef.name` matches the changed Secret. The `MCPServerReconciler` SHALL register a field indexer on `spec.authorization.tokenSecretRef.name` and SHALL watch labelled Secrets via `builder.WithPredicates` so the reconcile loop fires on Secret events without depending on the resync interval.
+Secrets carrying label `ark.mckinsey.com/mcp-token-secret=true` SHALL trigger immediate reconciliation of every MCPServer whose `spec.authorization.tokenSecretRef.name` matches the changed Secret. The `MCPServerReconciler` SHALL register a field indexer on `spec.authorization.tokenSecretRef.name` and SHALL watch labelled Secrets via `builder.WithPredicates` so the reconcile loop fires on Secret events without depending on the resync interval. The label has no functional authorization behaviour — its absence SHALL NOT prevent authentication, only delay reconciliation until the next `pollInterval` tick. Login (`ark mcp auth login`) stamps the label on Secret create/patch as a real-time-reconcile convenience; charts and manual operators SHOULD also stamp it for the same reason.
 
 #### Scenario: Operator patches a labelled token Secret
 
@@ -234,12 +234,12 @@ Secrets carrying label `ark.mckinsey.com/mcp-token-secret=true` SHALL trigger im
 
 ### Requirement: Unlabelled token Secrets remain functional
 
-When a Secret referenced by `spec.authorization.tokenSecretRef` lacks the `ark.mckinsey.com/mcp-token-secret` label, the controller SHALL still reconcile the MCPServer on its periodic resync interval. The label is a real-time convenience, not a correctness requirement. The cache SHALL NOT be filtered by this label — reconciler reads of any token Secret SHALL succeed regardless.
+When a Secret referenced by `spec.authorization.tokenSecretRef` lacks the `ark.mckinsey.com/mcp-token-secret` label, the controller SHALL still reconcile the MCPServer at the cadence set by `MCPServer.spec.pollInterval` (default `30s`). The label is a real-time convenience, not a correctness requirement. The cache SHALL NOT be filtered by this label — reconciler reads of any token Secret SHALL succeed regardless.
 
 #### Scenario: Operator patches an unlabelled token Secret
 
 - **GIVEN** an MCPServer whose `tokenSecretRef` points at a Secret with no `ark.mckinsey.com/mcp-token-secret` label
 - **WHEN** the operator patches the Secret
 - **THEN** the controller SHALL NOT immediately enqueue a reconcile based on the Secret event
-- **AND** on the next periodic resync the reconciler SHALL read the updated Secret and transition state accordingly
+- **AND** on the next `pollInterval`-driven reconcile (default `30s`) the reconciler SHALL read the updated Secret and transition state accordingly
 

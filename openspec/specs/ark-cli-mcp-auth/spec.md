@@ -3,9 +3,10 @@
 ## Purpose
 TBD - created by archiving change ark-cli-mcp-auth. Update Purpose after archive.
 ## Requirements
+
 ### Requirement: ark-cli exposes `mcp auth login` and `mcp auth logout` subcommands
 
-The Ark CLI SHALL expose `ark mcp auth` as a parent command with two verbs: `login` and `logout`. `ark mcp auth login <server-name>` SHALL drive an end-to-end OAuth 2.1 flow against an `MCPServer`'s discovered authorization endpoints and write the resulting tokens to the Secret named in `spec.authorization.tokenSecretRef`. `ark mcp auth logout <server-name>` SHALL clear (or delete) that same Secret so the controller's next reconcile collapses the server back to `Required`. The `login` subcommand SHALL accept `--namespace`, `--force`, `--port <int>`, `--no-open`, and `--timeout <ms>`; `--port` and `--timeout` SHALL reject non-integer or negative values.
+The Ark CLI SHALL expose `ark mcp auth` as a parent command with two verbs: `login` and `logout`. `ark mcp auth login <server-name>` SHALL drive an end-to-end OAuth 2.1 flow against an `MCPServer`'s discovered authorization endpoints and write the resulting tokens to the Secret named in `spec.authorization.tokenSecretRef`. `ark mcp auth logout <server-name>` SHALL clear (or delete) that same Secret so the controller's next reconcile collapses the server back to `Required`. The `login` subcommand SHALL accept `--namespace`, `--force`, `--port <int>`, `--no-open`, and `--timeout <duration>`. `--port` SHALL reject non-integer or negative values. `--timeout` SHALL be a Go-duration string (e.g. `60s`, `5m`) and SHALL reject non-parseable or non-positive values. The default `--timeout` is `5m`.
 
 #### Scenario: User runs ark mcp auth login against a Required MCPServer
 
@@ -33,6 +34,14 @@ The command SHALL refuse to run unless `status.authorization.state` is `Required
 - **WHEN** the user runs `ark mcp auth login <name> --force`
 - **THEN** the CLI SHALL run the full flow regardless of state
 
+#### Scenario: --force fails mid-flow
+
+- **GIVEN** an MCPServer in state `Authorized` whose Secret carries valid tokens
+- **AND** the user runs `ark mcp auth login <name> --force`
+- **WHEN** any step of the OAuth flow fails (DCR rejected, callback timeout, token exchange 4xx, etc.)
+- **THEN** the CLI SHALL exit non-zero
+- **AND** the existing Secret SHALL be left unchanged — `--force` only bypasses the pre-flight `Required` guard, it never weakens the "Secret untouched on flow failure" invariant
+
 ### Requirement: Namespace resolution prefers explicit flag, then context, then default
 
 The CLI SHALL resolve namespace as: `--namespace` if set, else current `kubectl` context namespace, else `default`.
@@ -40,6 +49,12 @@ The CLI SHALL resolve namespace as: `--namespace` if set, else current `kubectl`
 #### Scenario: User passes --namespace explicitly
 
 - **WHEN** the user runs `ark mcp auth login <name> --namespace tenant-a`
+- **THEN** the CLI SHALL use `tenant-a` for every kubectl call
+
+#### Scenario: --namespace omitted, kubectl context has a namespace
+
+- **GIVEN** the active `kubectl` context has `namespace: tenant-a` configured
+- **WHEN** the user runs `ark mcp auth login <name>` with no `--namespace` flag
 - **THEN** the CLI SHALL use `tenant-a` for every kubectl call
 
 #### Scenario: kubectl context has no namespace
@@ -65,7 +80,7 @@ The CLI SHALL generate a PKCE code verifier of 43-128 unreserved characters and 
 
 ### Requirement: Loopback callback listener handles success and error cases
 
-The CLI SHALL start an `http://127.0.0.1:<port>/callback` listener using `--port` if provided, else a free port. The listener SHALL respond 200 to a request with both `code` and `state`, SHALL respond 400 to a request whose query carries `error`, and SHALL respond 400 to a request missing `code` or `state`.
+The CLI SHALL start an `http://127.0.0.1:<port>/callback` listener using `--port` if provided, else a free port. The listener SHALL respond 200 to a request with both `code` and `state`, SHALL respond 400 to a request whose query carries `error`, and SHALL respond 400 to a request missing `code` or `state`. The listener SHALL bind dual-stack so both `127.0.0.1:<port>` and `[::1]:<port>` accept callbacks. The authorization URL the CLI prints SHALL use `http://127.0.0.1:<port>/callback` (IPv4 form, broader AS compatibility); requests arriving via `[::1]` on the same port SHALL be handled identically.
 
 #### Scenario: Authorization server redirects with code and state
 
@@ -79,7 +94,7 @@ The CLI SHALL start an `http://127.0.0.1:<port>/callback` listener using `--port
 
 #### Scenario: Callback never arrives within --timeout
 
-- **GIVEN** `--timeout 60000`
+- **GIVEN** `--timeout 60s`
 - **WHEN** no callback is received within 60 seconds
 - **THEN** the CLI SHALL exit non-zero with a timeout message naming the elapsed budget
 
@@ -89,6 +104,21 @@ The CLI SHALL start an `http://127.0.0.1:<port>/callback` listener using `--port
 - **AND** port 8080 is already in use on the loopback interface
 - **THEN** the CLI SHALL exit non-zero with an error message naming the port and suggesting the user omit `--port` to let the OS pick a free port
 - **AND** SHALL NOT silently fall back to auto-selection
+
+#### Scenario: --no-open suppresses browser launch
+
+- **GIVEN** the user runs `ark mcp auth login <name> --no-open`
+- **THEN** the CLI SHALL print the full authorization URL to stdout
+- **AND** SHALL NOT spawn a browser process
+- **AND** SHALL continue waiting for the loopback callback in the normal way
+
+Note: this follows the CLI's `--no-X` convention — every boolean flag whose default is "yes, do X" supports a corresponding `--no-X` to opt out.
+
+#### Scenario: Callback arrives via the IPv6 loopback
+
+- **GIVEN** the listener is bound dual-stack
+- **WHEN** the browser is redirected and resolves loopback to `[::1]`
+- **THEN** the listener SHALL respond 200 and surface `(code, state)` to the flow identically to the IPv4 path
 
 ### Requirement: Dynamic Client Registration enforces the loopback redirect URI
 
@@ -142,7 +172,7 @@ The CLI SHALL POST to `status.authorization.tokenEndpoint` with `grant_type=auth
 
 ### Requirement: Tokens are written to the Secret using the configured key names
 
-The CLI SHALL write the token endpoint response into the Secret named in `spec.authorization.tokenSecretRef.name` using the key names from the same `tokenSecretRef` (defaults `access_token`, `refresh_token`, `expires_at`, `client_id`, `client_secret`). When `expires_in` is present the CLI SHALL write `expires_at = now + expires_in - 30s` (RFC 3339 UTC). The CLI SHALL omit any key whose value is empty or absent. Missing Secret → create; existing Secret → patch.
+The CLI SHALL write the token endpoint response into the Secret named in `spec.authorization.tokenSecretRef.name` using the key names from the same `tokenSecretRef` (defaults `access_token`, `refresh_token`, `expires_at`, `client_id`, `client_secret`). When `expires_in` is present the CLI SHALL write `expires_at = now + expires_in - 30s` (RFC 3339 UTC). The CLI SHALL omit any key whose value is empty or absent. Missing Secret → create; existing Secret → patch. When the CLI creates or patches the Secret, it SHALL also set the label `ark.mckinsey.com/mcp-token-secret: "true"` on the Secret. The label enables the controller's real-time Secret watch (see `mcp-auth-token-injection` capability); absence does not affect authentication correctness, only reconcile latency.
 
 #### Scenario: Token response carries access, refresh, and expires_in
 
@@ -165,6 +195,12 @@ The CLI SHALL write the token endpoint response into the Secret named in `spec.a
 - **GIVEN** the token endpoint returns no `expires_in` (or `expires_in <= 0`)
 - **THEN** the patched Secret SHALL NOT contain an `expires_at` key
 - **AND** the CLI SHALL emit a single warning line indicating the token has no advertised lifetime
+
+#### Scenario: Login stamps the mcp-token-secret label
+
+- **WHEN** `ark mcp auth login` writes tokens to the Secret (create or patch path)
+- **THEN** the resulting Secret SHALL carry the label `ark.mckinsey.com/mcp-token-secret: "true"`
+- **AND** removing or omitting the label SHALL NOT break authentication — only delays controller reconcile to the next `pollInterval` tick
 
 ### Requirement: Secrets and tokens never appear in logs
 
@@ -244,4 +280,3 @@ The CLI SHALL never log access tokens, refresh tokens, client secrets, or `Autho
 
 - **WHEN** `ark mcp auth logout <name>` succeeds against a populated Secret
 - **THEN** stdout/stderr SHALL name the cleared keys but SHALL NOT contain any token, refresh-token, or client-secret value
-
