@@ -15,6 +15,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectItemText,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -22,6 +23,11 @@ import type { Agent, TeamMember } from '@/lib/services';
 
 import { DEFAULT_SELECTOR_PROMPT, type TeamFormValues } from '../use-team-form';
 import { WarningsSection } from './warnings-section';
+
+const strategyItems = [
+  { label: 'Sequential', value: 'sequential' },
+  { label: 'Selector', value: 'selector' },
+];
 
 interface StrategySectionProps {
   form: UseFormReturn<TeamFormValues>;
@@ -57,6 +63,7 @@ export function StrategySection({
               Strategy <span className="text-red-500">*</span>
             </FormLabel>
             <Select
+              items={strategyItems}
               onValueChange={value => {
                 field.onChange(value);
                 if (value === 'selector' && !form.getValues('selectorPrompt')) {
@@ -70,12 +77,20 @@ export function StrategySection({
               disabled={disabled}>
               <FormControl>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a strategy" />
+                  <SelectValue placeholder="Select a strategy">
+                    {(value: string) => {
+                      const item = strategyItems.find(i => i.value === value);
+                      return item?.label ?? value;
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
               </FormControl>
               <SelectContent>
-                <SelectItem value="sequential">Sequential</SelectItem>
-                <SelectItem value="selector">Selector</SelectItem>
+                {strategyItems.map(item => (
+                  <SelectItem key={item.value} value={item.value}>
+                    <SelectItemText>{item.label}</SelectItemText>
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <FormMessage />

@@ -39,6 +39,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectItemText,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -61,6 +62,11 @@ type TeamStepType =
   | 'delegation'
   | 'tool-call'
   | 'response';
+
+const sortOrderItems = [
+  { label: 'Newest First', value: 'newest' },
+  { label: 'Oldest First', value: 'oldest' },
+];
 
 interface WorkflowStepDetail {
   image?: string;
@@ -1257,14 +1263,18 @@ export function SessionsSection() {
                 </SelectContent>
               </Select>
               <Select
+                items={sortOrderItems}
                 value={sortOrder}
                 onValueChange={value => setSortOrder(value as SortOrder)}>
                 <SelectTrigger className="h-8 w-full border-2 text-sm shadow-sm sm:w-36 md:w-40">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="newest">Newest First</SelectItem>
-                  <SelectItem value="oldest">Oldest First</SelectItem>
+                  {sortOrderItems.map(item => (
+                    <SelectItem key={item.value} value={item.value}>
+                      <SelectItemText>{item.label}</SelectItemText>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Button

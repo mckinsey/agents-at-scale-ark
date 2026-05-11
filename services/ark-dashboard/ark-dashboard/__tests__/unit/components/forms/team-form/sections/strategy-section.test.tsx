@@ -122,7 +122,7 @@ describe('StrategySection', () => {
     render(<Wrapper />);
 
     await user.click(screen.getByRole('combobox'));
-    await user.click(screen.getByRole('option', { name: 'Sequential' }));
+    await user.click(await screen.findByRole('option', { name: 'Sequential' }));
 
     await waitFor(() => {
       expect(screen.getByRole('combobox')).toHaveTextContent('Sequential');
@@ -134,7 +134,7 @@ describe('StrategySection', () => {
     render(<Wrapper />);
 
     await user.click(screen.getByRole('combobox'));
-    await user.click(screen.getByRole('option', { name: 'Selector' }));
+    await user.click(await screen.findByRole('option', { name: 'Selector' }));
 
     await waitFor(() => {
       expect(screen.getByRole('combobox')).toHaveTextContent('Selector');

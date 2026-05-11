@@ -307,10 +307,10 @@ describe('Pagination Edge Cases', () => {
 
       render(<LogsTab sessionId="session-1" />);
 
-      const loadMoreButton = screen.getByText('Load more');
+      const loadMoreButton = screen.getByRole('button', { name: 'Load more' });
       await user.click(loadMoreButton);
 
-      expect(screen.getByText('Loading...')).toBeDisabled();
+      expect(loadMoreButton).toBeDisabled();
     });
 
     it('should not allow load more when nextCursor is undefined', () => {

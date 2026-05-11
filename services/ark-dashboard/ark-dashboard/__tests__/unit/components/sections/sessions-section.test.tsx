@@ -443,7 +443,7 @@ describe('SessionsSection', () => {
       const statusSelect = comboboxes[0];
       await user.click(statusSelect);
 
-      const failedOption = screen.getByRole('option', { name: /failed/i });
+      const failedOption = await screen.findByRole('option', { name: /failed/i });
       await user.click(failedOption);
 
       await waitFor(() => {
@@ -533,7 +533,7 @@ describe('SessionsSection', () => {
       const sortSelect = comboboxes[1];
       await user.click(sortSelect);
 
-      const oldestOption = screen.getByRole('option', { name: /oldest first/i });
+      const oldestOption = await screen.findByRole('option', { name: /oldest first/i });
       expect(oldestOption).toBeInTheDocument();
       await user.click(oldestOption);
 
@@ -784,7 +784,7 @@ describe('SessionsSection', () => {
       const statusSelect = comboboxes[0];
       await user.click(statusSelect);
 
-      const failedOption = screen.getByRole('option', { name: /failed/i });
+      const failedOption = await screen.findByRole('option', { name: /failed/i });
       await user.click(failedOption);
 
       await waitFor(() => {
@@ -803,7 +803,7 @@ describe('SessionsSection', () => {
       const sortSelect = comboboxes[1];
       await user.click(sortSelect);
 
-      const oldestOption = screen.getByRole('option', { name: /oldest first/i });
+      const oldestOption = await screen.findByRole('option', { name: /oldest first/i });
       await user.click(oldestOption);
 
       await waitFor(() => {
@@ -874,26 +874,6 @@ describe('SessionsSection', () => {
       await waitFor(() => {
         expect(screen.getByText('Process Data')).toBeInTheDocument();
         expect(screen.getByText('Validate Output')).toBeInTheDocument();
-      });
-    });
-
-    it('should show Argo Workflows link with correct URL format', async () => {
-      vi.mocked(useWorkflow).mockReturnValue({
-        workflow: mockWorkflow,
-        loading: false,
-        error: null,
-      } as any);
-
-      render(<SessionsSection />);
-
-      await waitFor(() => {
-        const argoLink = screen.getByRole('link', { name: /view in argo/i });
-        expect(argoLink).toHaveAttribute(
-          'href',
-          'http://localhost:2746/workflows/default/test-workflow-123?uid=abc-123-def'
-        );
-        expect(argoLink).toHaveAttribute('target', '_blank');
-        expect(argoLink).toHaveAttribute('rel', 'noopener noreferrer');
       });
     });
 

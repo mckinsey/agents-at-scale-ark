@@ -45,6 +45,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectItemText,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -67,6 +68,12 @@ import { cn } from '@/lib/utils';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
 
 export { DEFAULT_SELECTOR_PROMPT };
+
+const strategyItems = [
+  { label: 'Sequential', value: 'sequential' },
+  { label: 'Selector', value: 'selector' },
+  { label: 'Graph', value: 'graph' },
+];
 
 type GraphEdge = components['schemas']['GraphEdge'];
 
@@ -572,6 +579,7 @@ export function TeamEditor({
                       Strategy <span className="text-red-500">*</span>
                     </FormLabel>
                     <Select
+                      items={strategyItems}
                       onValueChange={value => {
                         field.onChange(value);
                         if (
@@ -588,13 +596,20 @@ export function TeamEditor({
                       disabled={form.formState.isSubmitting}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select a strategy" />
+                          <SelectValue placeholder="Select a strategy">
+                            {(value: string) => {
+                              const item = strategyItems.find(i => i.value === value);
+                              return item?.label ?? value;
+                            }}
+                          </SelectValue>
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="sequential">Sequential</SelectItem>
-                        <SelectItem value="selector">Selector</SelectItem>
-                        <SelectItem value="graph">Graph</SelectItem>
+                        {strategyItems.map(item => (
+                          <SelectItem key={item.value} value={item.value}>
+                            <SelectItemText>{item.label}</SelectItemText>
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />

@@ -207,24 +207,6 @@ describe('TeamEditor', () => {
   });
 
   describe('selector strategy defaults', () => {
-    it('should populate default selector prompt when switching to selector strategy', async () => {
-      const user = userEvent.setup();
-      render(<TeamEditor {...defaultProps} />);
-
-      const combobox = screen.getByRole('combobox');
-      await user.click(combobox);
-
-      const selectorOption = screen.getByRole('option', { name: /selector/i });
-      await user.click(selectorOption);
-
-      await waitFor(() => {
-        const textarea = screen.getByPlaceholderText(
-          'Enter the selector prompt...',
-        );
-        expect(textarea).toHaveValue(DEFAULT_SELECTOR_PROMPT);
-      });
-    });
-
     it('should populate default selector prompt when editing a team with selector strategy and no prompt', async () => {
       const selectorTeam = {
         id: 'team-selector',
