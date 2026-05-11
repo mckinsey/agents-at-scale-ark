@@ -16,7 +16,7 @@ const AvatarContext = React.createContext<AvatarContextValue>({});
 
 const useAvatarContext = () => React.useContext(AvatarContext);
 
-// Avatar styles based on Figma design
+// Avatar styles based on design spec
 const avatarVariants = cva(
   [
     // Base layout and positioning
