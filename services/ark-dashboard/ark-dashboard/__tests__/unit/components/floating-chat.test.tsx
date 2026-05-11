@@ -85,6 +85,10 @@ describe('FloatingChat', () => {
     sessionStorage.clear();
     localStorage.clear();
 
+    vi.mocked(chatService.submitChatQuery).mockResolvedValue({
+      name: 'test-query',
+    } as Awaited<ReturnType<typeof chatService.submitChatQuery>>);
+
     vi.mocked(chatService.startStreamChatResponse).mockImplementation(
       async (...args: unknown[]) => ({
         queryName: 'test-query',
