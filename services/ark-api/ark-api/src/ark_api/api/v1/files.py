@@ -47,30 +47,25 @@ def _model_context_url(provider: ModelContextProvider, file_id: str = "") -> str
     return f"{base}/{file_id}" if file_id else base
 
 
-@router.api_route(
-    "/workspace/{path:path}",
-    methods=["GET", "POST", "DELETE", "PUT", "PATCH", "HEAD"],
-    name="workspace_path",
-)
+@router.get("/workspace/{path:path}")
+@router.post("/workspace/{path:path}")
+@router.put("/workspace/{path:path}")
+@router.patch("/workspace/{path:path}")
+@router.delete("/workspace/{path:path}")
+@router.head("/workspace/{path:path}")
 async def workspace_path(path: str, request: Request) -> Response:
     return await _proxy_request(_workspace_url(path), request)
 
 
-@router.api_route(
-    "/model-context/{provider}",
-    methods=["GET", "POST"],
-    name="model_context_root",
-)
+@router.get("/model-context/{provider}")
+@router.post("/model-context/{provider}")
 async def model_context_root(provider: str, request: Request) -> Response:
     prov = _resolve_provider(provider)
     return await _proxy_request(_model_context_url(prov), request)
 
 
-@router.api_route(
-    "/model-context/{provider}/{file_id}",
-    methods=["GET", "DELETE"],
-    name="model_context_file",
-)
+@router.get("/model-context/{provider}/{file_id}")
+@router.delete("/model-context/{provider}/{file_id}")
 async def model_context_file(
     provider: str, file_id: str, request: Request
 ) -> Response:
