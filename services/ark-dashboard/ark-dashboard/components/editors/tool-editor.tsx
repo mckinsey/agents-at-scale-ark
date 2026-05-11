@@ -35,6 +35,11 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 
+import {
+  INLINE_LANGUAGES,
+  type InlineToolLanguage,
+} from '@/lib/services/inline-tools-mock';
+
 import { AgentFields } from '../common/agent-fields';
 import { TeamFields } from '../common/team-fields';
 
@@ -47,6 +52,10 @@ interface ToolSpec {
   url?: string;
   agent?: string;
   team?: string;
+  inline?: {
+    source: string;
+    language?: InlineToolLanguage;
+  };
 }
 
 interface ToolEditorProps {
@@ -54,6 +63,55 @@ interface ToolEditorProps {
   onOpenChange: (open: boolean) => void;
   onSave: (tool: ToolSpec) => void;
   namespace: string;
+}
+
+const INLINE_LANGUAGE_AUTO = 'auto' as const;
+type InlineLanguageSelection = typeof INLINE_LANGUAGE_AUTO | InlineToolLanguage;
+
+const INLINE_LANGUAGE_OPTIONS: ReadonlyArray<{
+  value: InlineLanguageSelection;
+  label: string;
+}> = [
+  { value: 'auto', label: 'Auto (detect from shebang)' },
+  { value: 'bash', label: 'Bash' },
+  { value: 'python', label: 'Python' },
+  { value: 'node', label: 'Node' },
+  { value: 'ts', label: 'TypeScript' },
+];
+
+function isInlineToolLanguage(value: string): value is InlineToolLanguage {
+  return (INLINE_LANGUAGES as ReadonlyArray<string>).includes(value);
+}
+
+function inlineSourcePlaceholder(language: string | undefined): string {
+  switch (language) {
+    case 'python':
+      return '#!/usr/bin/env python\nimport sys, json\nargs = json.loads(sys.argv[1])\nprint(args)';
+    case 'node':
+      return "const args = JSON.parse(process.argv[2]);\nprocess.stdout.write(JSON.stringify({ ok: true, args }));";
+    case 'ts':
+      return "const args = JSON.parse(process.argv[2]);\nprocess.stdout.write(JSON.stringify({ ok: true, args }));";
+    case 'bash':
+      return '#!/usr/bin/env bash\nset -euo pipefail\nFIELD=$(jq -r .field <<< "$1")\necho "{\\"field\\":\\"$FIELD\\"}"';
+    default:
+      return '#!/usr/bin/env bash\nset -euo pipefail\necho "args=$1"';
+  }
+}
+
+function inlineSourceHint(language: string | undefined): string {
+  const base =
+    'Arguments arrive as a single JSON string on argv[1]. stdout is the tool result; non-zero exit returns an error with the last 4 KiB of stderr.';
+  switch (language) {
+    case 'python':
+      return `${base} Parse with json.loads(sys.argv[1]).`;
+    case 'node':
+    case 'ts':
+      return `${base} Parse with JSON.parse(process.argv[2]).`;
+    case 'bash':
+      return `${base} Parse with jq -r .field <<< "$1".`;
+    default:
+      return `${base} Language is detected from the shebang.`;
+  }
 }
 
 const formSchema = z
@@ -66,6 +124,8 @@ const formSchema = z
     httpUrl: z.string().optional(),
     selectedAgent: z.string().optional(),
     selectedTeam: z.string().optional(),
+    inlineSource: z.string().optional(),
+    inlineLanguage: z.string().optional(),
   })
   .refine(
     data => {
@@ -102,6 +162,18 @@ const formSchema = z
       message: 'Team selection is required for Team type',
       path: ['selectedTeam'],
     },
+  )
+  .refine(
+    data => {
+      if (data.type === 'inline') {
+        return data.inlineSource && data.inlineSource.trim().length > 0;
+      }
+      return true;
+    },
+    {
+      message: 'Source is required for Inline type',
+      path: ['inlineSource'],
+    },
   );
 
 export function ToolEditor({
@@ -112,12 +184,14 @@ export function ToolEditor({
 }: Readonly<ToolEditorProps>) {
   const [isInputSchemaExpanded, setIsInputSchemaExpanded] = useState(false);
   const [isAnnotationsExpanded, setIsAnnotationsExpanded] = useState(false);
+  const [isInlineSourceExpanded, setIsInlineSourceExpanded] = useState(false);
 
   const typeOptions = [
     { value: 'http', label: 'HTTP' },
     { value: 'mcp', label: 'MCP' },
     { value: 'agent', label: 'Agent' },
     { value: 'team', label: 'Team' },
+    { value: 'inline', label: 'Inline' },
   ];
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -131,16 +205,23 @@ export function ToolEditor({
       httpUrl: '',
       selectedAgent: '',
       selectedTeam: '',
+      inlineSource: '',
+      inlineLanguage: INLINE_LANGUAGE_AUTO,
     },
   });
 
   const selectedType = useWatch({ control: form.control, name: 'type' });
+  const selectedInlineLanguage = useWatch({
+    control: form.control,
+    name: 'inlineLanguage',
+  });
 
   useLayoutEffect(() => {
     if (open) {
       form.reset();
       setIsInputSchemaExpanded(false);
       setIsAnnotationsExpanded(false);
+      setIsInlineSourceExpanded(false);
     }
   }, [open, form]);
 
@@ -168,6 +249,19 @@ export function ToolEditor({
       return;
     }
 
+    const inlineLanguageValue = (values.inlineLanguage ?? '').trim();
+    const inlinePayload =
+      values.type === 'inline'
+        ? {
+            inline: {
+              source: values.inlineSource ?? '',
+              ...(isInlineToolLanguage(inlineLanguageValue)
+                ? { language: inlineLanguageValue }
+                : {}),
+            },
+          }
+        : {};
+
     const toolSpec: ToolSpec = {
       name: values.name.trim(),
       type: values.type.trim(),
@@ -179,6 +273,7 @@ export function ToolEditor({
         ? { agent: values.selectedAgent?.trim() }
         : {}),
       ...(values.type === 'team' ? { team: values.selectedTeam?.trim() } : {}),
+      ...inlinePayload,
     };
 
     onSave(toolSpec);
@@ -457,6 +552,103 @@ export function ToolEditor({
                     </FormItem>
                   )}
                 />
+              )}
+
+              {selectedType === 'inline' && (
+                <>
+                  <FormField
+                    control={form.control}
+                    name="inlineLanguage"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Language</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value}
+                          disabled={form.formState.isSubmitting}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select language..." />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {INLINE_LANGUAGE_OPTIONS.map(opt => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="inlineSource"
+                    render={({ field }) => (
+                      <FormItem>
+                        <div className="flex items-center justify-between">
+                          <FormLabel>
+                            Source <span className="text-red-500">*</span>
+                          </FormLabel>
+                          <div className="flex items-center gap-2">
+                            {field.value && field.value.length > 0 && (
+                              <span className="text-muted-foreground text-xs">
+                                {field.value.length} characters
+                              </span>
+                            )}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                setIsInlineSourceExpanded(
+                                  !isInlineSourceExpanded,
+                                )
+                              }
+                              className="h-8 px-2">
+                              {isInlineSourceExpanded ? (
+                                <>
+                                  <Minimize2 className="mr-1 h-4 w-4" />
+                                  Collapse
+                                </>
+                              ) : (
+                                <>
+                                  <Maximize2 className="mr-1 h-4 w-4" />
+                                  Expand
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                        <FormControl>
+                          <Textarea
+                            placeholder={inlineSourcePlaceholder(
+                              selectedInlineLanguage,
+                            )}
+                            disabled={form.formState.isSubmitting}
+                            className={`font-mono resize-none transition-all duration-200 ${
+                              isInlineSourceExpanded
+                                ? 'max-h-[500px] min-h-[400px] overflow-y-auto'
+                                : 'max-h-[220px] min-h-[160px]'
+                            }`}
+                            style={{
+                              whiteSpace: 'pre',
+                              wordWrap: 'normal',
+                            }}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                        <p className="text-muted-foreground text-xs">
+                          {inlineSourceHint(selectedInlineLanguage)}
+                        </p>
+                      </FormItem>
+                    )}
+                  />
+                </>
               )}
             </div>
 

@@ -17,6 +17,15 @@ import type { Tool } from '@/lib/services/tools';
 import { cn } from '@/lib/utils';
 import { getCustomIcon } from '@/lib/utils/icon-resolver';
 
+function toolTypeBadge(tool: Tool): string | null {
+  if (!tool.type) return null;
+  if (tool.type === 'inline') {
+    const language = tool.inline?.language;
+    return language ? `inline · ${language}` : 'inline';
+  }
+  return tool.type;
+}
+
 type ToolRowProps = {
   readonly tool: Tool;
   readonly onInfo?: (tool: Tool) => void;
@@ -54,9 +63,26 @@ export function ToolRow(props: ToolRowProps) {
         <div className="flex flex-grow items-center gap-3 overflow-hidden">
           <IconComponent className="text-muted-foreground h-5 w-5 flex-shrink-0" />
           <div className="flex max-w-[400px] min-w-0 flex-col gap-1">
-            <p className="truncate text-sm font-medium" title={tool.name}>
-              {tool.name}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="truncate text-sm font-medium" title={tool.name}>
+                {tool.name}
+              </p>
+              {(() => {
+                const badge = toolTypeBadge(tool);
+                if (!badge) return null;
+                return (
+                  <span
+                    className={cn(
+                      'inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide',
+                      tool.type === 'inline'
+                        ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                        : 'border-muted-foreground/30 bg-muted text-muted-foreground',
+                    )}>
+                    {badge}
+                  </span>
+                );
+              })()}
+            </div>
             <p
               className="text-muted-foreground truncate text-xs"
               title={tool.description ?? ''}>
