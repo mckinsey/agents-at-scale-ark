@@ -25,7 +25,6 @@ RUN uv sync --frozen --no-install-project
 
 # Copy source code and install the project
 COPY ark-api/src/ ./src/
-COPY ark-api/tests/ ./tests/
 COPY ark-api/*.py ./
 RUN uv sync --frozen
 

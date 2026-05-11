@@ -12,6 +12,5 @@
 **/dist/
 **/.DS_Store
 **/tests/
-**/README.md
 **/CLAUDE.md
 out/
