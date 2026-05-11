@@ -1,0 +1,14 @@
+{{- range .Values.extraPVCs }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .name }}
+  namespace: {{ $.Release.Namespace }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .size | default "1Gi" }}
+---
+{{- end }}
