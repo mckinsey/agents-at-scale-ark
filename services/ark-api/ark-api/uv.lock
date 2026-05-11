@@ -202,7 +202,7 @@ wheels = [
 
 [[package]]
 name = "ark-api"
-version = "0.1.62rc0"
+version = "0.1.62"
 source = { editable = "." }
 dependencies = [
     { name = "a2a-sdk", extra = ["http-server"] },
@@ -237,7 +237,7 @@ dependencies = [
 requires-dist = [
     { name = "a2a-sdk", extras = ["http-server"], specifier = ">=0.3.0,<1.0.0" },
     { name = "aiofiles", specifier = ">=24.1.0" },
-    { name = "ark-sdk", path = "out/ark_sdk-0.1.62rc0-py3-none-any.whl" },
+    { name = "ark-sdk", path = "out/ark_sdk-0.1.62-py3-none-any.whl" },
     { name = "bcrypt", specifier = ">=4.0.0" },
     { name = "coverage", specifier = ">=7.10.4" },
     { name = "dpath", specifier = ">=2.2.0" },
@@ -265,8 +265,8 @@ requires-dist = [
 
 [[package]]
 name = "ark-sdk"
-version = "0.1.62rc0"
-source = { path = "out/ark_sdk-0.1.62rc0-py3-none-any.whl" }
+version = "0.1.62"
+source = { path = "out/ark_sdk-0.1.62-py3-none-any.whl" }
 dependencies = [
     { name = "a2a-sdk", extra = ["http-server"] },
     { name = "build" },
@@ -284,7 +284,7 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 wheels = [
-    { filename = "ark_sdk-0.1.62rc0-py3-none-any.whl", hash = "sha256:9d894fd74fb07031891391a50a7836fe9da9a4151b3396f0838582f9e67b97b1" },
+    { filename = "ark_sdk-0.1.62-py3-none-any.whl", hash = "sha256:6c6676e34431405d7b419013be290ddbd043bef618ec802e9400e62c2ce693e8" },
 ]
 
 [package.metadata]
