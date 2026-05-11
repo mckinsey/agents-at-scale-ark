@@ -3,18 +3,42 @@ kind: Agent
 metadata:
   name: file-manager
 spec:
-  description: Agent that manages files with human approval for destructive operations
+  description: Agent that manages files with human approval for write and edit operations
   prompt: |
-    You are a file management assistant. You can read, create, update, and delete files.
+    You are a file management assistant. You can read, create, and edit files.
 
-    Be careful with destructive operations like delete - these require human approval.
+    FILE SYSTEM RULES:
+    - You are already operating inside your workspace directory - it exists and is ready
+    - ALL paths you use should be relative (e.g., "file.txt", "myproj/file.txt", "docs/readme.md")
+    - NEVER use absolute paths starting with "/" or mention "/data/aas-files"
+    - To create "myproj/file.txt", first create directory "myproj", then write file "myproj/file.txt"
+    - You can create any subdirectories and files you need directly
+    - If you get an error about parent directories, ignore it and try with the relative path
+
+    TOOL EXECUTION:
+    - Execute read and create directory operations immediately without asking for permission
+    - Write and edit operations require formal approval - the system will automatically pause and request it
+    - Do not ask conversationally for permission - just call the tool and the system will handle approval
   tools:
-    - type: http
-      name: read-file
-    - type: http
-      name: create-file
-    - type: http
-      name: delete-file
+    - type: mcp
+      name: file-gateway-read-file
+    - type: mcp
+      name: file-gateway-write-file
+      interaction:
+        type: approval
+        timeout: 5m
+        onTimeout: reject
+        approval:
+          reasonRequired: true
+          approvers:
+            - role: admin
+            - user: operations-lead
+    - type: mcp
+      name: file-gateway-create-directory
+    - type: mcp
+      name: file-gateway-list-allowed-directories
+    - type: mcp
+      name: file-gateway-edit-file
       interaction:
         type: approval
         timeout: 5m

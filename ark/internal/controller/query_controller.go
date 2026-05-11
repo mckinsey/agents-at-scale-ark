@@ -177,11 +177,8 @@ func (r *QueryReconciler) handleInteractionRequiredPhase(ctx context.Context, _ 
 	var ti arkv1alpha1.ToolInteraction
 	if err := r.Get(ctx, types.NamespacedName{Name: obj.Status.InteractionRef.Name, Namespace: tiNamespace}, &ti); err != nil {
 		if errors.IsNotFound(err) {
-			log.Error(err, "ToolInteraction not found", "ti", obj.Status.InteractionRef.Name)
-			if err := r.updateStatus(ctx, &obj, statusError); err != nil {
-				return ctrl.Result{RequeueAfter: time.Until(expiry)}, err
-			}
-			return ctrl.Result{}, nil
+			log.V(1).Info("ToolInteraction not found yet, requeuing", "ti", obj.Status.InteractionRef.Name)
+			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 		}
 		return ctrl.Result{RequeueAfter: time.Until(expiry)}, err
 	}
@@ -1005,6 +1002,7 @@ type savedQueryStatus struct {
 	response       *arkv1alpha1.Response
 	tokenUsage     arkv1alpha1.TokenUsage
 	conversationId string
+	interactionRef *arkv1alpha1.ToolInteractionRef
 }
 
 func (s *savedQueryStatus) restoreOnto(query *arkv1alpha1.Query) {
@@ -1014,6 +1012,9 @@ func (s *savedQueryStatus) restoreOnto(query *arkv1alpha1.Query) {
 	query.Status.TokenUsage = s.tokenUsage
 	if s.conversationId != "" {
 		query.Status.ConversationId = s.conversationId
+	}
+	if s.interactionRef != nil {
+		query.Status.InteractionRef = s.interactionRef
 	}
 }
 
@@ -1025,6 +1026,7 @@ func (r *QueryReconciler) updateStatusWithDuration(ctx context.Context, query *a
 		response:       query.Status.Response,
 		tokenUsage:     query.Status.TokenUsage,
 		conversationId: query.Status.ConversationId,
+		interactionRef: query.Status.InteractionRef,
 	}
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		if ctx.Err() != nil {

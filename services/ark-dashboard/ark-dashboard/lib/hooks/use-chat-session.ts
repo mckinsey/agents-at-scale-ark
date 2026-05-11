@@ -290,7 +290,7 @@ export function useChatSession({
 
           if (typedChunk.error) {
             const errorMsg = typedChunk.error.message || '';
-            if (errorMsg.includes('approval required')) {
+            if (errorMsg.includes('approval required') || errorMsg.includes('interaction required')) {
               continue;
             }
             hasError = true;

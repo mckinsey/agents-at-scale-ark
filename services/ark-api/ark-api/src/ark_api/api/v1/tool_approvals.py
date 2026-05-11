@@ -1,4 +1,5 @@
 """API routes for ToolInteraction resources (human-in-the-loop)."""
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Optional, List
@@ -109,7 +110,7 @@ def tool_approval_to_detail_response(tar: dict) -> ToolApprovalDetailResponse:
 
     approvers = None
     if spec.get("approvers"):
-        approvers = [ApproverRef(**a) for a in spec["approvers"]]
+        approvers = [ToolApprovalApproverRef(**a) for a in spec["approvers"]]
 
     exec_ctx_data = spec.get("executionContext", {})
     exec_ctx = ExecutionContext(
@@ -270,9 +271,21 @@ async def submit_decision(
         }
 
         status["response"] = new_response
-        ti_dict["status"] = status
+        status["phase"] = "completed"
 
-        await ark_client.toolinteractions.a_update_status(name, ti_dict)
+        # Use kubernetes API to patch the status subresource
+        custom_api = ark_client.toolinteractions.custom_api
+        ti_namespace = ti_dict.get("metadata", {}).get("namespace", namespace or "default")
+
+        await asyncio.to_thread(
+            custom_api.patch_namespaced_custom_object_status,
+            group="ark.mckinsey.com",
+            version="v1alpha1",
+            namespace=ti_namespace,
+            plural="toolinteractions",
+            name=name,
+            body={"status": status}
+        )
 
         return ApprovalDecisionResponse(
             name=name,
