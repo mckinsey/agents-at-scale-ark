@@ -67,11 +67,7 @@ dev:
       [
         "sh",
         "-c",
-<<<<<<< feat/hitl-tool-calls-implmentation
         "cd /app/ark-dashboard && npm install -g pnpm && pnpm install --ignore-scripts && pnpm run dev",
-=======
-        "cd /app/ark-dashboard && npm install && npm run dev",
->>>>>>> main
       ]
     namespace: default
     # Stream logs instead of terminal
