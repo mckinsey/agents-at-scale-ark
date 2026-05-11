@@ -87,37 +87,42 @@ kubectl create secret generic ark-db-password \
   --from-literal=password='<your-password>'
 ```
 
-### 3. Write a values file
+### 3. Configure `.arkrc.yaml`
 
-Create a YAML file (anywhere on your machine) describing the connection:
+The CLI reads the backend choice and connection details from `.arkrc.yaml`. You can place this file in either:
+
+- `~/.arkrc.yaml` (user-level, applies to all projects)
+- `./.arkrc.yaml` (project-level, takes precedence)
 
 ```yaml
-# pg-values.yaml
-postgresql:
-  host: ark-storage.example.com
-  port: 5432
-  database: ark
-  user: ark
-  passwordSecretName: ark-db-password
-  passwordSecretKey: password
-  sslMode: require
+# .arkrc.yaml
+storage:
+  backend: postgresql
+  postgresql:
+    host: ark-storage.example.com
+    port: 5432
+    database: ark
+    user: ark
+    passwordSecretName: ark-db-password
+    passwordSecretKey: password
+    sslMode: require
 ```
 
 `sslMode` accepts the standard libpq values: `disable`, `require`, `verify-ca`, `verify-full`.
 
+The `--backend` CLI flag and `ARK_STORAGE_BACKEND` env var override the config value, useful for testing the same code against a different backend without editing the file.
+
 ### 4. Install via the CLI
 
 ```bash
-ark install \
-  --backend postgresql \
-  --values pg-values.yaml
+ark install
 ```
 
-The CLI installs `ark-controller` with `storage.backend=postgresql` (which disables CRD installation) and `ark-apiserver` with the connection values from your file. cert-manager and Gateway API CRDs are installed as dependencies just as in etcd mode.
+The CLI installs `ark-controller` with `storage.backend=postgresql` (which disables CRD installation) and `ark-apiserver` with the connection values from the config. cert-manager and Gateway API CRDs are installed as dependencies just as in etcd mode.
 
 ### Install via raw Helm
 
-If you prefer to skip the CLI, install the two charts directly:
+If you prefer to skip the CLI, install the two charts directly with `--set` flags from the values you would have put in `.arkrc.yaml`:
 
 ```bash
 helm upgrade --install ark-controller \
@@ -129,7 +134,10 @@ helm upgrade --install ark-controller \
 helm upgrade --install ark-apiserver \
   oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-apiserver \
   --namespace ark-system \
-  --values pg-values.yaml
+  --set postgresql.host=ark-storage.example.com \
+  --set postgresql.user=ark \
+  --set postgresql.passwordSecretName=ark-db-password \
+  --set postgresql.sslMode=require
 ```
 
 The apiserver chart's `postgresql.host`, `postgresql.user`, and `postgresql.passwordSecretName` are **required** values — `helm install` will fail at template time if they are missing.
@@ -205,7 +213,9 @@ The `resources` table itself is yours — drop it manually if you are decommissi
 
 ## Troubleshooting
 
-**`helm install` fails with `postgresql.host is required`.** You ran the apiserver chart without supplying connection details. Use `--values pg-values.yaml` or `--set postgresql.host=… --set postgresql.user=… --set postgresql.passwordSecretName=…`.
+**`helm install` fails with `postgresql.host is required`.** You ran the apiserver chart without supplying connection details. Set `storage.postgresql` in `.arkrc.yaml` (the CLI passes these through) or use `--set postgresql.host=… --set postgresql.user=… --set postgresql.passwordSecretName=…` for raw helm.
+
+**`ark install` fails with `missing 'storage.postgresql' block`.** You set `storage.backend: postgresql` in `.arkrc.yaml` but didn't add the `storage.postgresql` block, or it's missing `host`/`user`/`passwordSecretName`. Fill in the required fields.
 
 **Apiserver pod is `CreateContainerConfigError`.** The pod is referencing a secret that doesn't exist. Confirm the secret named in `postgresql.passwordSecretName` exists in the same namespace as the release.
 

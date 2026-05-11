@@ -2,7 +2,7 @@ import {Command} from 'commander';
 import chalk from 'chalk';
 import {execute} from '../../lib/commands.js';
 import inquirer from 'inquirer';
-import type {ArkConfig} from '../../lib/config.js';
+import type {ArkConfig, PostgresStorageConfig} from '../../lib/config.js';
 import {showNoClusterError} from '../../lib/startup.js';
 import output from '../../lib/output.js';
 import {
@@ -25,32 +25,21 @@ import {
   type WaitProgress,
 } from '../../lib/waitForReady.js';
 import {parseTimeoutToSeconds} from '../../lib/timeout.js';
-import {readFileSync} from 'fs';
-import {parse as parseYaml} from 'yaml';
 
 type Backend = 'etcd' | 'postgresql';
 
-interface PostgresValues {
-  host: string;
-  port?: number | string;
-  database?: string;
-  user: string;
-  passwordSecretName: string;
-  passwordSecretKey?: string;
-  sslMode?: string;
-}
-
-function loadPostgresValues(path: string): PostgresValues {
-  const content = readFileSync(path, 'utf8');
-  const parsed = parseYaml(content) as {postgresql?: PostgresValues} | null;
-  const pg = parsed?.postgresql;
+function validatePostgresConfig(
+  pg: PostgresStorageConfig | undefined
+): PostgresStorageConfig {
   if (!pg) {
-    throw new Error(`values file ${path} missing 'postgresql' block`);
+    throw new Error(
+      "missing 'storage.postgresql' block in .arkrc.yaml"
+    );
   }
   for (const key of ['host', 'user', 'passwordSecretName'] as const) {
     if (!pg[key]) {
       throw new Error(
-        `values file ${path} missing required field postgresql.${key}`
+        `missing required field storage.postgresql.${key} in .arkrc.yaml`
       );
     }
   }
@@ -60,15 +49,33 @@ function loadPostgresValues(path: string): PostgresValues {
 function backendInstallArgs(
   service: ArkService,
   backend: Backend,
-  valuesPath?: string,
-  values?: PostgresValues
+  values?: PostgresStorageConfig
 ): string[] {
   if (backend === 'etcd') return [];
-  if (service.helmReleaseName === 'ark-apiserver' && valuesPath) {
-    return ['--values', valuesPath];
-  }
-  if (service.helmReleaseName === 'ark-controller' && values) {
+  if (!values) return [];
+  if (service.helmReleaseName === 'ark-controller') {
     return ['--set', 'storage.backend=postgresql'];
+  }
+  if (service.helmReleaseName === 'ark-apiserver') {
+    const args: string[] = [];
+    args.push('--set', `postgresql.host=${values.host}`);
+    if (values.port !== undefined)
+      args.push('--set', `postgresql.port=${values.port}`);
+    if (values.database)
+      args.push('--set', `postgresql.database=${values.database}`);
+    args.push('--set', `postgresql.user=${values.user}`);
+    args.push(
+      '--set',
+      `postgresql.passwordSecretName=${values.passwordSecretName}`
+    );
+    if (values.passwordSecretKey)
+      args.push(
+        '--set',
+        `postgresql.passwordSecretKey=${values.passwordSecretKey}`
+      );
+    if (values.sslMode)
+      args.push('--set', `postgresql.sslMode=${values.sslMode}`);
+    return args;
   }
   return [];
 }
@@ -249,7 +256,6 @@ export async function installArk(
     arkVersion?: string;
     marketplaceVersion?: string;
     backend?: string;
-    values?: string;
   } = {}
 ) {
   // Validate version strings
@@ -281,27 +287,22 @@ export async function installArk(
   output.success(`connected to cluster: ${chalk.bold(clusterInfo.context)}`);
   console.log(); // Add blank line after cluster info
 
-  const backend: Backend = (options.backend ?? 'etcd') as Backend;
-  if (backend !== 'etcd' && backend !== 'postgresql') {
+  const requestedBackend = options.backend ?? config.storage?.backend ?? 'etcd';
+  if (requestedBackend !== 'etcd' && requestedBackend !== 'postgresql') {
     output.error(
-      `Invalid --backend value: ${options.backend}. Expected 'etcd' or 'postgresql'.`
+      `Invalid backend value: ${requestedBackend}. Expected 'etcd' or 'postgresql'.`
     );
     process.exit(1);
   }
+  const backend: Backend = requestedBackend;
 
-  let postgresValues: PostgresValues | undefined;
+  let postgresValues: PostgresStorageConfig | undefined;
   if (backend === 'postgresql') {
-    if (!options.values) {
-      output.error(
-        `--backend postgresql requires --values <path> pointing at a YAML file with a 'postgresql' block`
-      );
-      process.exit(1);
-    }
     try {
-      postgresValues = loadPostgresValues(options.values);
+      postgresValues = validatePostgresConfig(config.storage?.postgresql);
     } catch (err) {
       output.error(
-        `Failed to load values file: ${err instanceof Error ? err.message : String(err)}`
+        `${err instanceof Error ? err.message : String(err)}`
       );
       process.exit(1);
     }
@@ -379,7 +380,7 @@ export async function installArk(
           options.verbose,
           options.arkVersion,
           options.marketplaceVersion,
-          backendInstallArgs(service, backend, options.values, postgresValues)
+          backendInstallArgs(service, backend, postgresValues)
         );
         output.success(`${service.name} installed successfully`);
       } catch (error) {
@@ -565,7 +566,7 @@ export async function installArk(
           options.verbose,
           options.arkVersion,
           options.marketplaceVersion,
-          backendInstallArgs(service, backend, options.values, postgresValues)
+          backendInstallArgs(service, backend, postgresValues)
         );
 
         console.log(); // Add blank line after command output
@@ -617,7 +618,7 @@ export async function installArk(
           options.verbose,
           options.arkVersion,
           options.marketplaceVersion,
-          backendInstallArgs(service, backend, options.values, postgresValues)
+          backendInstallArgs(service, backend, postgresValues)
         );
         console.log(); // Add blank line after command output
       } catch (error) {
@@ -714,11 +715,7 @@ export function createInstallCommand(config: ArkConfig) {
     )
     .option(
       '--backend <type>',
-      "storage backend: 'etcd' (default) or 'postgresql'"
-    )
-    .option(
-      '--values <path>',
-      "path to YAML values file with a 'postgresql' block (required when --backend postgresql)"
+      "storage backend: 'etcd' (default) or 'postgresql' (overrides storage.backend in .arkrc.yaml)"
     )
     .option('-v, --verbose', 'show commands being executed')
     .action(async (services, options) => {
