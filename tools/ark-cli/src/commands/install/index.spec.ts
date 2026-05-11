@@ -1,5 +1,8 @@
 import {vi} from 'vitest';
 import {Command} from 'commander';
+import {writeFileSync} from 'fs';
+import {tmpdir} from 'os';
+import {join} from 'path';
 
 const mockExeca = vi.fn(() => Promise.resolve()) as any;
 vi.mock('execa', () => ({
@@ -17,11 +20,6 @@ vi.mock('inquirer', () => ({
 const mockGetClusterInfo = vi.fn() as any;
 vi.mock('../../lib/cluster.js', () => ({
   getClusterInfo: mockGetClusterInfo,
-}));
-
-const mockDetectStorageBackend = vi.fn().mockResolvedValue('etcd');
-vi.mock('../../lib/readinessChecks.js', () => ({
-  detectStorageBackend: mockDetectStorageBackend,
 }));
 
 const mockGetInstallableServices = vi.fn() as any;
@@ -1082,6 +1080,180 @@ describe('install command', () => {
       expect(helmInstallCalls[1][1]).toContain('ark-api');
       expect(helmInstallCalls[2][1]).toContain('ark-broker');
       expect(helmInstallCalls[3][1]).toContain('ark-dashboard');
+    });
+  });
+
+  describe('--backend flag', () => {
+    const writeTempValues = (content: string) => {
+      const file = join(
+        tmpdir(),
+        `ark-values-${Date.now()}-${Math.random()}.yaml`
+      );
+      writeFileSync(file, content);
+      return file;
+    };
+
+    it('rejects unknown backend value', async () => {
+      const command = createInstallCommand(mockConfig);
+
+      await expect(
+        command.parseAsync(['node', 'test', '--backend', 'mysql'])
+      ).rejects.toThrow('process.exit called');
+
+      expect(mockOutput.error).toHaveBeenCalledWith(
+        "Invalid --backend value: mysql. Expected 'etcd' or 'postgresql'."
+      );
+      expect(mockExit).toHaveBeenCalledWith(1);
+    });
+
+    it('errors when --backend postgresql is used without --values', async () => {
+      const command = createInstallCommand(mockConfig);
+
+      await expect(
+        command.parseAsync(['node', 'test', '--backend', 'postgresql'])
+      ).rejects.toThrow('process.exit called');
+
+      expect(mockOutput.error).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '--backend postgresql requires --values <path>'
+        )
+      );
+      expect(mockExit).toHaveBeenCalledWith(1);
+    });
+
+    it('errors when values file is missing required fields', async () => {
+      const file = writeTempValues('postgresql:\n  host: db\n');
+
+      const command = createInstallCommand(mockConfig);
+
+      await expect(
+        command.parseAsync([
+          'node',
+          'test',
+          '--backend',
+          'postgresql',
+          '--values',
+          file,
+        ])
+      ).rejects.toThrow('process.exit called');
+
+      expect(mockOutput.error).toHaveBeenCalledWith(
+        expect.stringContaining('missing required field postgresql.user')
+      );
+    });
+
+    it('passes storage.backend=postgresql to ark-controller (postgres connection details go only to ark-apiserver)', async () => {
+      const file = writeTempValues(
+        [
+          'postgresql:',
+          '  host: db.example.com',
+          '  user: ark_user',
+          '  passwordSecretName: my-secret',
+        ].join('\n')
+      );
+      const mockService = {
+        name: 'ark-controller',
+        helmReleaseName: 'ark-controller',
+        chartPath: './charts/ark-controller',
+        namespace: 'ark-system',
+        installArgs: ['--create-namespace', '--set', 'rbac.enable=true'],
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-controller': mockService,
+      });
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync([
+        'node',
+        'test',
+        'ark-controller',
+        '--backend',
+        'postgresql',
+        '--values',
+        file,
+      ]);
+
+      const installCall = mockExeca.mock.calls.find(
+        (call: any) =>
+          call[0] === 'helm' &&
+          call[1][0] === 'upgrade' &&
+          call[1].includes('ark-controller')
+      );
+      expect(installCall).toBeDefined();
+      const args = installCall![1];
+      expect(args).toContain('storage.backend=postgresql');
+      expect(args.join(' ')).not.toContain('storage.postgresql.host');
+    });
+
+    it('passes --values to ark-apiserver in postgresql mode', async () => {
+      const file = writeTempValues(
+        [
+          'postgresql:',
+          '  host: db.example.com',
+          '  user: ark_user',
+          '  passwordSecretName: my-secret',
+        ].join('\n')
+      );
+      const mockService = {
+        name: 'ark-apiserver',
+        helmReleaseName: 'ark-apiserver',
+        chartPath: './charts/ark-apiserver',
+        namespace: 'ark-system',
+        requiresBackend: 'postgresql',
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-apiserver': mockService,
+      });
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync([
+        'node',
+        'test',
+        'ark-apiserver',
+        '--backend',
+        'postgresql',
+        '--values',
+        file,
+      ]);
+
+      const installCall = mockExeca.mock.calls.find(
+        (call: any) =>
+          call[0] === 'helm' &&
+          call[1][0] === 'upgrade' &&
+          call[1].includes('ark-apiserver')
+      );
+      expect(installCall).toBeDefined();
+      const args = installCall![1];
+      expect(args).toContain('--values');
+      expect(args).toContain(file);
+      expect(args).not.toContain('storage.backend=postgresql');
+    });
+
+    it('does not append backend args in etcd mode (default)', async () => {
+      const mockService = {
+        name: 'ark-controller',
+        helmReleaseName: 'ark-controller',
+        chartPath: './charts/ark-controller',
+        namespace: 'ark-system',
+        installArgs: ['--create-namespace', '--set', 'rbac.enable=true'],
+      };
+      mockGetInstallableServices.mockReturnValue({
+        'ark-controller': mockService,
+      });
+      mockExeca.mockResolvedValue({stdout: ''});
+
+      const command = createInstallCommand(mockConfig);
+      await command.parseAsync(['node', 'test', 'ark-controller']);
+
+      const installCall = mockExeca.mock.calls.find(
+        (call: any) => call[0] === 'helm' && call[1][0] === 'upgrade'
+      );
+      expect(installCall).toBeDefined();
+      const args = installCall![1];
+      expect(args.join(' ')).not.toContain('storage.backend');
+      expect(args.join(' ')).not.toContain('storage.postgresql');
     });
   });
 

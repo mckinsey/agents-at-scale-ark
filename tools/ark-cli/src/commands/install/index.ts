@@ -25,7 +25,53 @@ import {
   type WaitProgress,
 } from '../../lib/waitForReady.js';
 import {parseTimeoutToSeconds} from '../../lib/timeout.js';
-import {detectStorageBackend} from '../../lib/readinessChecks.js';
+import {readFileSync} from 'fs';
+import {parse as parseYaml} from 'yaml';
+
+type Backend = 'etcd' | 'postgresql';
+
+interface PostgresValues {
+  host: string;
+  port?: number | string;
+  database?: string;
+  user: string;
+  passwordSecretName: string;
+  passwordSecretKey?: string;
+  sslMode?: string;
+}
+
+function loadPostgresValues(path: string): PostgresValues {
+  const content = readFileSync(path, 'utf8');
+  const parsed = parseYaml(content) as {postgresql?: PostgresValues} | null;
+  const pg = parsed?.postgresql;
+  if (!pg) {
+    throw new Error(`values file ${path} missing 'postgresql' block`);
+  }
+  for (const key of ['host', 'user', 'passwordSecretName'] as const) {
+    if (!pg[key]) {
+      throw new Error(
+        `values file ${path} missing required field postgresql.${key}`
+      );
+    }
+  }
+  return pg;
+}
+
+function backendInstallArgs(
+  service: ArkService,
+  backend: Backend,
+  valuesPath?: string,
+  values?: PostgresValues
+): string[] {
+  if (backend === 'etcd') return [];
+  if (service.helmReleaseName === 'ark-apiserver' && valuesPath) {
+    return ['--values', valuesPath];
+  }
+  if (service.helmReleaseName === 'ark-controller' && values) {
+    return ['--set', 'storage.backend=postgresql'];
+  }
+  return [];
+}
 
 function isValidVersion(version: string): boolean {
   return /^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$/.test(version);
@@ -129,7 +175,7 @@ async function installService(
   verbose: boolean = false,
   arkVersionOverride?: string,
   marketplaceVersionOverride?: string,
-  backend?: 'etcd' | 'postgresql'
+  extraArgs?: string[]
 ) {
   await uninstallPrerequisites(service, verbose);
   await checkAndCleanFailedRelease(
@@ -180,6 +226,8 @@ async function installService(
   // Add any additional install args
   helmArgs.push(...(service.installArgs || []));
 
+  if (extraArgs) helmArgs.push(...extraArgs);
+
   await execute(
     'helm',
     helmArgs,
@@ -200,6 +248,8 @@ export async function installArk(
     verbose?: boolean;
     arkVersion?: string;
     marketplaceVersion?: string;
+    backend?: string;
+    values?: string;
   } = {}
 ) {
   // Validate version strings
@@ -231,7 +281,31 @@ export async function installArk(
   output.success(`connected to cluster: ${chalk.bold(clusterInfo.context)}`);
   console.log(); // Add blank line after cluster info
 
-  const backend = await detectStorageBackend();
+  const backend: Backend = (options.backend ?? 'etcd') as Backend;
+  if (backend !== 'etcd' && backend !== 'postgresql') {
+    output.error(
+      `Invalid --backend value: ${options.backend}. Expected 'etcd' or 'postgresql'.`
+    );
+    process.exit(1);
+  }
+
+  let postgresValues: PostgresValues | undefined;
+  if (backend === 'postgresql') {
+    if (!options.values) {
+      output.error(
+        `--backend postgresql requires --values <path> pointing at a YAML file with a 'postgresql' block`
+      );
+      process.exit(1);
+    }
+    try {
+      postgresValues = loadPostgresValues(options.values);
+    } catch (err) {
+      output.error(
+        `Failed to load values file: ${err instanceof Error ? err.message : String(err)}`
+      );
+      process.exit(1);
+    }
+  }
 
   // If specific services are requested, install only those services
   if (serviceNames.length > 0) {
@@ -273,7 +347,8 @@ export async function installArk(
             service,
             options.verbose,
             options.arkVersion,
-            options.marketplaceVersion
+            options.marketplaceVersion,
+            []
           );
           output.success(`${service.name} installed successfully`);
         } catch (error) {
@@ -303,7 +378,8 @@ export async function installArk(
           service,
           options.verbose,
           options.arkVersion,
-          options.marketplaceVersion
+          options.marketplaceVersion,
+          backendInstallArgs(service, backend, options.values, postgresValues)
         );
         output.success(`${service.name} installed successfully`);
       } catch (error) {
@@ -488,7 +564,8 @@ export async function installArk(
           service,
           options.verbose,
           options.arkVersion,
-          options.marketplaceVersion
+          options.marketplaceVersion,
+          backendInstallArgs(service, backend, options.values, postgresValues)
         );
 
         console.log(); // Add blank line after command output
@@ -539,7 +616,8 @@ export async function installArk(
           service,
           options.verbose,
           options.arkVersion,
-          options.marketplaceVersion
+          options.marketplaceVersion,
+          backendInstallArgs(service, backend, options.values, postgresValues)
         );
         console.log(); // Add blank line after command output
       } catch (error) {
@@ -633,6 +711,14 @@ export function createInstallCommand(config: ArkConfig) {
     .option(
       '--wait-for-ready <timeout>',
       'wait for Ark to be ready after installation (e.g., 30s, 2m)'
+    )
+    .option(
+      '--backend <type>',
+      "storage backend: 'etcd' (default) or 'postgresql'"
+    )
+    .option(
+      '--values <path>',
+      "path to YAML values file with a 'postgresql' block (required when --backend postgresql)"
     )
     .option('-v, --verbose', 'show commands being executed')
     .action(async (services, options) => {
