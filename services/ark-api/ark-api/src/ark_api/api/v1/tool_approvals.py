@@ -15,7 +15,7 @@ from ...models.tool_approvals import (
     ToolCallAnnotations,
     ExecutionContext,
     QueryReference,
-    ApproverRef,
+    ToolApprovalApproverRef,
     ToolApprovalRequestStatus,
     ApprovalDecision,
     ApprovalDecisionRequest,

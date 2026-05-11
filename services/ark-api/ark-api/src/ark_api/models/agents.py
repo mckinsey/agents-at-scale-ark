@@ -73,7 +73,7 @@ class AgentLabelSelector(BaseModel):
     matchExpressions: Optional[List[AgentLabelSelectorRequirement]] = None
 
 
-class ApproverRef(BaseModel):
+class AgentToolApproverRef(BaseModel):
     """Reference to an approver for tool interactions."""
     user: Optional[str] = None
     role: Optional[str] = None
@@ -82,7 +82,7 @@ class ApproverRef(BaseModel):
 
 class ToolInteractionApprovalConfig(BaseModel):
     """Approval-specific interaction configuration."""
-    approvers: Optional[List[ApproverRef]] = None
+    approvers: Optional[List[AgentToolApproverRef]] = None
     reasonRequired: Optional[bool] = None
 
 

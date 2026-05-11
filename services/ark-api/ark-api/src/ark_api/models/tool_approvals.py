@@ -34,7 +34,7 @@ class QueryReference(BaseModel):
     namespace: str
 
 
-class ApproverRef(BaseModel):
+class ToolApprovalApproverRef(BaseModel):
     role: Optional[str] = None
     user: Optional[str] = None
     group: Optional[str] = None
@@ -83,7 +83,7 @@ class ToolApprovalDetailResponse(BaseModel):
     toolCalls: List[ToolCallInfo]
     timeout: Optional[str] = None
     onTimeout: Optional[str] = None
-    approvers: Optional[List[ApproverRef]] = None
+    approvers: Optional[List[ToolApprovalApproverRef]] = None
     reasonRequired: Optional[bool] = None
     executionContext: ExecutionContext
     status: Optional[ToolApprovalRequestStatus] = None
