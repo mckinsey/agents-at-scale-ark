@@ -39,6 +39,10 @@ import {
   agentsService,
   toolsService,
 } from '@/lib/services';
+import {
+  inlineToolsMockService,
+  type InlineToolLanguage,
+} from '@/lib/services/inline-tools-mock';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { groupToolsByLabel } from '@/lib/utils/groupToolsByLabels';
 
@@ -73,11 +77,12 @@ export const ToolsSection = forwardRef<
     const loadData = async () => {
       setLoading(true);
       try {
-        const [toolsData, agentsData] = await Promise.all([
+        const [toolsData, inlineToolsData, agentsData] = await Promise.all([
           toolsService.getAll(),
+          inlineToolsMockService.getAll(),
           agentsService.getAll(),
         ]);
-        setTools(toolsData);
+        setTools([...toolsData, ...inlineToolsData]);
         setAgents(agentsData);
       } catch (error) {
         console.error('Failed to load data:', error);
@@ -115,7 +120,14 @@ export const ToolsSection = forwardRef<
       return;
     }
     try {
-      await toolsService.delete(identifier);
+      const target = tools.find(
+        tool => (tool.name || tool.type) === identifier,
+      );
+      if (target?.type === 'inline') {
+        await inlineToolsMockService.delete(identifier);
+      } else {
+        await toolsService.delete(identifier);
+      }
       setTools(tools.filter(tool => (tool.name || tool.type) !== identifier));
       toast.success('Tool Deleted', {
         description: 'Successfully deleted tool',
@@ -143,15 +155,34 @@ export const ToolsSection = forwardRef<
     inputSchema?: Record<string, unknown>;
     annotations?: Record<string, string>;
     url?: string;
+    agent?: string;
+    team?: string;
+    inline?: { source: string; language?: InlineToolLanguage };
   }) => {
     try {
-      await toolsService.create({ ...toolSpec, namespace });
+      if (toolSpec.type === 'inline') {
+        if (!toolSpec.inline) {
+          throw new Error('Inline source is required');
+        }
+        await inlineToolsMockService.create({
+          name: toolSpec.name,
+          description: toolSpec.description,
+          inputSchema: toolSpec.inputSchema,
+          annotations: toolSpec.annotations,
+          inline: toolSpec.inline,
+        });
+      } else {
+        await toolsService.create({ ...toolSpec, namespace });
+      }
       toast.success('Tool Created', {
         description: `Successfully created ${toolSpec.name}`,
       });
 
-      const updatedTools = await toolsService.getAll();
-      setTools(updatedTools);
+      const [updatedTools, updatedInlineTools] = await Promise.all([
+        toolsService.getAll(),
+        inlineToolsMockService.getAll(),
+      ]);
+      setTools([...updatedTools, ...updatedInlineTools]);
     } catch (error) {
       toast.error('Failed to Create Tool', {
         description:
