@@ -66,16 +66,6 @@ deployments:
                 - DAC_OVERRIDE
         httpRoute:
           enabled: true
-        extraPVCs:
-          - name: ark-api-venv
-            size: 2Gi
-        extraVolumes:
-          - name: venv
-            persistentVolumeClaim:
-              claimName: ark-api-venv
-        extraVolumeMounts:
-          - name: venv
-            mountPath: /app/ark-api/.venv
 
 dev:
   ark-api:
@@ -97,8 +87,6 @@ dev:
         startContainer: true
         disableDownload: true
         uploadExcludeFile: .dockerignore
-        excludePaths:
-          - ark-api/.venv/
       - path: ./out:/app/ark-api/out/
         startContainer: true
         disableDownload: true
